@@ -1,3 +1,4 @@
+import { Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Exit, Layer, Schema } from "effect";
@@ -6,11 +7,23 @@ import { ImportData } from "#pantry/cli/import.ts";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { successEnvelope } from "#pantry/cli/output.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { comparePackage } from "#pantry/export/compare.ts";
+import { compareWithRecord } from "#pantry/export/package.ts";
 import { captureCli, packageCopy } from "#pantry/test/cli.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
+
+/**
+ * The report the exporter gives for the package a run stored: `compareWithRecord` of its id, the
+ * comparison `roundtrip` prints, read again from the database.
+ */
+const recordReport = Effect.fn("test.output.db.recordReport")(function* recordReport(
+  packageId: string,
+) {
+  const id = Uuid.parse(packageId);
+
+  return id.ok ? yield* compareWithRecord(id.value) : assert.fail(`${packageId} is not a UUID`);
+});
 
 /**
  * The envelope of `import`, as a reader decodes it from a line of standard output.
@@ -76,33 +89,35 @@ describe.skipIf(!hasLease)(
         }),
       );
 
-      it.effect("--json roundtrip prints the report's entries and no differing", () =>
-        Effect.gen(function* roundtripJson() {
-          const copy = yield* packageCopy(fixtures.simple, "copy-output-json-simple");
-          const { exit, stderr, stdout } = yield* captureCli([
-            "--json",
-            "roundtrip",
-            "--yes",
-            copy,
-          ]);
+      it.effect(
+        "--json roundtrip prints the exporter's report of the stored package, no differing",
+        () =>
+          // Oracle: the exporter's `compareWithRecord` of the package id the envelope names, read
+          // again from the database, and the committed schema of the envelope.
+          Effect.gen(function* roundtripJson() {
+            const copy = yield* packageCopy(fixtures.simple, "copy-output-json-simple");
+            const { exit, stderr, stdout } = yield* captureCli([
+              "--json",
+              "roundtrip",
+              "--yes",
+              copy,
+            ]);
 
-          assert.isTrue(Exit.isSuccess(exit), stderr);
-          assert.strictEqual(stdout.split("\n").length, 1);
+            assert.isTrue(Exit.isSuccess(exit), stderr);
+            assert.strictEqual(stdout.split("\n").length, 1);
 
-          const envelope = Schema.decodeUnknownSync(roundtripEnvelope)(stdout);
-          const report = yield* comparePackage(copy, "work/export/copy-output-json-simple");
+            const envelope = Schema.decodeUnknownSync(roundtripEnvelope)(stdout);
 
-          assert.isTrue(envelope.ok);
-          if ("dry_run" in envelope.data) {
-            assert.fail("a real roundtrip printed the dry-run arm");
-          }
+            assert.isTrue(envelope.ok);
+            if ("dry_run" in envelope.data) {
+              assert.fail("a real roundtrip printed the dry-run arm");
+            }
 
-          assert.strictEqual(envelope.data.differing, 0);
-          assert.deepStrictEqual(
-            envelope.data.entries.map(({ path }) => path),
-            report.map(({ path }) => path),
-          );
-        }),
+            assert.strictEqual(envelope.data.differing, 0);
+            assert.deepStrictEqual(envelope.data.entries, [
+              ...(yield* recordReport(envelope.data.package_id)),
+            ]);
+          }),
       );
 
       it.effect("--output jsonl roundtrip prints one object per entry, then the summary", () =>
@@ -119,8 +134,8 @@ describe.skipIf(!hasLease)(
           assert.isTrue(Exit.isSuccess(exit), stderr);
 
           const lines = stdout.split("\n");
-          const report = yield* comparePackage(copy, "work/export/copy-output-jsonl-simple");
           const summary = Schema.decodeUnknownSync(summaryEnvelope)(lines.at(-1));
+          const report = yield* recordReport(summary.data.package_id);
 
           assert.strictEqual(lines.length, report.length + 1);
           assert.deepStrictEqual(

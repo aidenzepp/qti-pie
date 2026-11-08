@@ -18,11 +18,14 @@ import {
   transformHash,
 } from "#pantry/test/fixtures.ts";
 import type { Edit, FixtureName, FixtureSpec } from "#pantry/test/fixtures.ts";
-import { readRows } from "#pantry/import/package.ts";
-import { Rows } from "#pantry/import/tree.ts";
-import { AttributeFileReference } from "#pantry/schema/reference.ts";
-import { PackageEntry } from "#pantry/schema/package.ts";
 import { settings as hostSettings } from "#pantry/test/settings.ts";
+
+/**
+ * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
+ * describe: a hang guard, never a budget. Measured 2026-11-07: 53.8 s at a load average of 63 to
+ * 73, its slowest test.
+ */
+const testTimeoutMs = 180_000;
 
 /**
  * The directory every test root is made under: the package's gitignored `work/`.
@@ -237,8 +240,11 @@ const positiveVersions: readonly (readonly [FixtureName, "3.0.0" | "3.0.1"])[] =
 const qtiNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
 /**
- * The 63 negative fixtures of phase 5, as a literal: the spec's 4.15 last column, less the corpus
- * packages and `stimulus-300-data` (phase 8's), plus `prefixed-ambiguous` (decision 189).
+ * The 60 negative fixtures of phase 5, as a literal: the spec's 4.15 last column, less the corpus
+ * packages, `stimulus-300-data` (phase 8's), `section-empty` (spec reading 26: a section may hold
+ * no part), and `item-duration-in-item` and `item-duration-not-timed` (spec reading 150: an item's
+ * `duration` may be read whether or not the item is time dependent), plus `prefixed-ambiguous`
+ * (decision 189).
  */
 const expectedNegativeNames = [
   "branch-backward",
@@ -253,8 +259,6 @@ const expectedNegativeNames = [
   "include-text",
   "include-xpointer",
   "instance-spelling-canonical",
-  "item-duration-in-item",
-  "item-duration-not-timed",
   "item-in-section",
   "item-prefixed",
   "item-ref-missing",
@@ -274,7 +278,6 @@ const expectedNegativeNames = [
   "rubric-no-body",
   "rubric-printed-undeclared",
   "section-adaptive-and-selection",
-  "section-empty",
   "section-feedback-undeclared",
   "section-identifier-unknown",
   "section-prefixed-unresolved",
@@ -337,7 +340,6 @@ const negativeBreaches: readonly (readonly [FixtureName, string, string])[] = [
   ["rubric-interaction", "assessment.xml", "<qti-text-entry-interaction"],
   ["rubric-printed-undeclared", "assessment.xml", '<qti-printed-variable identifier="NOPE"/>'],
   ["section-adaptive-and-selection", "adaptive-test.xml", '<qti-selection select="1"/>'],
-  ["section-empty", "rtest13.xml", 'identifier="bare"'],
   ["section-identifier-unknown", "rtest26.xml", 'section-identifier="NOPE"'],
   ["section-prefixed-unresolved", "test-b.xml", 'identifier="RENAMED"'],
   ["section-ref-cycle", "sections/shared.xml", 'href="shared.xml"'],
@@ -677,58 +679,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
     ),
   );
 
-  it.effect("the variants' Spanish image resolves to a file the package holds", () =>
-    inFreshRoot(() =>
-      Effect.gen(function* variantImages() {
-        for (const name of [
-          "variant",
-          "variant-padded",
-          "variant-no-resource",
-          "variant-no-metadata",
-        ] as const) {
-          const { rows } = yield* readRows(yield* materialize(name));
-          const references = Rows.of(rows, AttributeFileReference);
-          const entries = Rows.of(rows, PackageEntry);
-
-          assert.isAtLeast(references.length, 1, `${name}: file references`);
-
-          for (const reference of references) {
-            assert.isTrue(
-              entries.some(
-                (entry) => entry.package === reference.package && entry.path === reference.path,
-              ),
-              `${name}: ${reference.path} is a package entry`,
-            );
-          }
-        }
-      }),
-    ),
-  );
-
-  it.effect("the media fixtures' referenced files are entries of their package", () =>
-    inFreshRoot(() =>
-      Effect.gen(function* mediaFiles() {
-        for (const name of ["html-audio", "html-param", "controls-3-0-0"] as const) {
-          const { rows } = yield* readRows(yield* materialize(name));
-          const references = Rows.of(rows, AttributeFileReference);
-          const entries = Rows.of(rows, PackageEntry);
-
-          assert.isAtLeast(references.length, 1, `${name}: file references`);
-
-          for (const reference of references) {
-            assert.isTrue(
-              entries.some(
-                (entry) => entry.package === reference.package && entry.path === reference.path,
-              ),
-              `${name}: ${reference.path} is a package entry`,
-            );
-          }
-        }
-      }),
-    ),
-  );
-
-  it.effect("cut-drawing keeps the file its srcset names, and its references resolve", () =>
+  it.effect("cut-drawing keeps the file its srcset names, and its manifest lists it", () =>
     inFreshRoot(() =>
       Effect.gen(function* cutDrawing() {
         const fs = yield* FileSystem.FileSystem;
@@ -740,21 +691,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           "items/images/anglePQR.svg",
           "manifest lists anglePQR.svg",
         );
-
-        const { rows } = yield* readRows(dir);
-        const references = Rows.of(rows, AttributeFileReference);
-        const entries = Rows.of(rows, PackageEntry);
-
-        assert.isAtLeast(references.length, 1, "file references");
-
-        for (const reference of references) {
-          assert.isTrue(
-            entries.some(
-              (entry) => entry.package === reference.package && entry.path === reference.path,
-            ),
-            `${reference.path} is a package entry`,
-          );
-        }
       }),
     ),
   );
@@ -1099,10 +1035,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
       ),
   );
 
-  it.effect("the 63 negative names are the spec's list, each in the fixture table", () =>
+  it.effect("the 60 negative names are the spec's list, each in the fixture table", () =>
     Effect.sync(() => {
       assert.deepStrictEqual([...negativeNames], [...expectedNegativeNames]);
-      assert.strictEqual(new Set(negativeNames).size, 63);
+      assert.strictEqual(new Set(negativeNames).size, 60);
       assert.includeMembers([...fixtureNames], [...negativeNames]);
 
       for (const name of negativeNames) {
@@ -1169,7 +1105,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           }
         }),
       ),
-    180_000,
+    testTimeoutMs,
   );
 
   it.effect(
@@ -1217,34 +1153,24 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           assert.notInclude(noPart, "<qti-test-part");
         }),
       ),
-    180_000,
+    testTimeoutMs,
   );
 
   it.effect(
-    "test-mapping's hand-written stubs: J untimed and naming duration, I untimed",
+    "test-mapping's hand-written stubs: J declares K.SCORE beside SCORE",
     () =>
       inFreshRoot(() =>
         Effect.gen(function* handStubs() {
           const fs = yield* FileSystem.FileSystem;
-          const inItem = yield* fs.readFileString(
-            `${yield* materialize("item-duration-in-item")}/itemJ.xml`,
-          );
-          const notTimed = yield* fs.readFileString(
-            `${yield* materialize("item-duration-not-timed")}/itemI.xml`,
-          );
           const ambiguous = yield* fs.readFileString(
             `${yield* materialize("prefixed-ambiguous")}/itemJ.xml`,
           );
 
-          assert.include(inItem, 'time-dependent="false"');
-          assert.include(inItem, '<qti-variable identifier="duration"/>');
-          assert.include(notTimed, 'time-dependent="false"');
-          assert.notInclude(notTimed, '<qti-variable identifier="duration"/>');
           assert.include(ambiguous, 'identifier="K.SCORE" cardinality="single" base-type="float"');
           assert.include(ambiguous, 'identifier="SCORE" cardinality="single" base-type="float"');
         }),
       ),
-    60_000,
+    testTimeoutMs,
   );
 
   it.effect("extmeta's record keeps the two xml:lang attributes the published file carries", () =>

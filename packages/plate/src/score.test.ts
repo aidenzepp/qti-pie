@@ -984,12 +984,10 @@ describe("score", () => {
 
   it("[I-5] fails RecordRequired, naming the item, when an item whose template processing runs is scored with no record", () => {
     assert.deepStrictEqual(
-      Option.map(
-        failureOf(score(templated, { RESPONSE: identifiers("single", "B") })),
-        (failure) =>
-          failure._tag === "RecordRequired"
-            ? [failure._tag, failure.document, failure.item]
-            : [failure._tag],
+      Option.map(failureOf(score(templated, { RESPONSE: identifiers("single", "B") })), (failure) =>
+        failure._tag === "RecordRequired"
+          ? [failure._tag, failure.document, failure.item]
+          : [failure._tag],
       ),
       Option.some(["RecordRequired", "items/templated.xml", "templated"]),
     );

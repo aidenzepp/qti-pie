@@ -29,6 +29,7 @@
   "include": ["packages", "tools", "vite.config.ts"],
   "exclude": [
     "**/node_modules",
+    "**/work",
     "packages/plate/**/*.dom.ts",
     "packages/plate/**/*.dom.test.ts",
     "packages/plate/**/*.tsx"

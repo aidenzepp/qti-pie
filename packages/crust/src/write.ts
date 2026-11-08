@@ -1,6 +1,9 @@
 import { Effect, Option } from "effect";
+import { codePointOf } from "#crust/charset.ts";
 import { EncodeError } from "#crust/errors.ts";
-import type { Attribute, Child, XmlDocument, XmlDeclaration } from "#crust/tree.ts";
+import { preorder, tour } from "#crust/tour.ts";
+import type { Step } from "#crust/tour.ts";
+import type { Attribute, Child, Element, XmlDocument, XmlDeclaration } from "#crust/tree.ts";
 
 /**
  * How the writer treats code points above the highest one the label's encoder represents.
@@ -35,7 +38,7 @@ const characterReference = (codePoint: number): string =>
  * Whether `character` lies above the threshold; with no threshold nothing does.
  */
 const isAbove = (character: string, threshold: number): boolean =>
-  (character.codePointAt(0) ?? 0) > threshold;
+  codePointOf(character) > threshold;
 
 /**
  * Escape an attribute value, writing each code point above `threshold` as a character reference.
@@ -45,7 +48,7 @@ const escapeAttribute = (value: string, threshold: number): string => {
 
   for (const character of value) {
     escaped += isAbove(character, threshold)
-      ? characterReference(character.codePointAt(0) ?? 0)
+      ? characterReference(codePointOf(character))
       : (attributeEscapes.get(character) ?? character);
   }
 
@@ -72,14 +75,25 @@ const renderValue = (attribute: Attribute, threshold: number): string => {
 /**
  * Escape a plain text run: `&`, `<`, the `>` that ends `]]>`, and CR; code points above `threshold`
  * become character references.
+ *
+ * XML 1.0 section 2.4 has a `>` escaped "when it appears in the string "]]>" in content", a string
+ * the content's characters make whatever text runs hold them, so a `>` that opens a run is escaped
+ * after a plain run that ends `]]`.
+ *
+ * @param value - The run's text.
+ * @param threshold - The highest code point the run writes as itself.
+ * @param before - The last two characters of the plain text run written just before, empty when
+ *   anything else came before.
+ * @returns The run's markup.
+ * @see {@link https://www.w3.org/TR/2008/REC-xml-20081126/#syntax | XML 1.0 (Fifth Edition), section 2.4}
  */
-const escapeText = (value: string, threshold: number): string => {
+const escapeText = (value: string, threshold: number, before: string): string => {
   let escaped = "";
-  let previous = "";
+  let previous = before;
 
   for (const character of value) {
     if (isAbove(character, threshold)) {
-      escaped += characterReference(character.codePointAt(0) ?? 0);
+      escaped += characterReference(codePointOf(character));
     } else if (character === "&") {
       escaped += "&amp;";
     } else if (character === "<") {
@@ -118,7 +132,7 @@ const renderCdata = (value: string, threshold: number): string => {
   for (const character of value) {
     if (isAbove(character, threshold) || character === "\r") {
       rendered += current === "" ? "" : section(current);
-      rendered += characterReference(character.codePointAt(0) ?? 0);
+      rendered += characterReference(codePointOf(character));
       current = "";
     } else {
       current += character;
@@ -129,12 +143,16 @@ const renderCdata = (value: string, threshold: number): string => {
 };
 
 /**
- * Render a node: an element with its attributes in stored order, as `<x/>` when it has no children,
- * or one of the leaf kinds.
+ * Render a node that holds no other node: a text run, a comment, a processing instruction or an
+ * entity reference.
+ *
+ * @param node - The node to render.
+ * @param threshold - The highest code point a text run writes as itself.
+ * @returns The node's markup.
  */
-const renderNode = (node: Child, threshold: number): string => {
+const renderLeaf = (node: Exclude<Child, Element>, threshold: number): string => {
   if (node.kind === "text") {
-    return node.cdata ? renderCdata(node.value, threshold) : escapeText(node.value, threshold);
+    return node.cdata ? renderCdata(node.value, threshold) : escapeText(node.value, threshold, "");
   }
 
   if (node.kind === "comment") {
@@ -145,21 +163,67 @@ const renderNode = (node: Child, threshold: number): string => {
     return `<?${node.target}${node.data === "" ? "" : ` ${node.data}`}?>`;
   }
 
-  if (node.kind === "entityRef") {
-    return `&${node.name};`;
-  }
+  return `&${node.name};`;
+};
 
-  const attributes = node.attributes
+/**
+ * Render an element's attributes in stored order, each led by a space.
+ *
+ * @param element - The element whose attributes to render.
+ * @param threshold - The highest code point an attribute value writes as itself.
+ * @returns The attributes' markup, empty when the element has none.
+ */
+const renderAttributes = (element: Element, threshold: number): string =>
+  element.attributes
     .map((attribute) => ` ${attribute.qname}="${renderValue(attribute, threshold)}"`)
     .join("");
 
-  if (node.children.length === 0) {
-    return `<${node.qname}${attributes}/>`;
+/**
+ * Render one step of a tour: an element's start tag with its attributes in stored order, as `<x/>`
+ * when it has no children and with nothing at its close, else its end tag at its close; or a leaf.
+ *
+ * @param step - The step.
+ * @param threshold - The highest code point a text run or an attribute value writes as itself.
+ * @returns The step's markup.
+ */
+const renderStep = (step: Step, threshold: number): string => {
+  if (step.kind === "leaf") {
+    return renderLeaf(step.node, threshold);
   }
 
-  const children = node.children.map((child) => renderNode(child, threshold)).join("");
+  const { element } = step;
+  if (step.kind === "close") {
+    return element.children.length === 0 ? "" : `</${element.qname}>`;
+  }
 
-  return `<${node.qname}${attributes}>${children}</${node.qname}>`;
+  return `<${element.qname}${renderAttributes(element, threshold)}${element.children.length === 0 ? "/" : ""}>`;
+};
+
+/**
+ * Render a node and everything below it, in document order, by its {@link tour}, so a tree of any
+ * depth or width renders without recursion.
+ *
+ * Adjacent plain text runs are one stretch of content, so each run is escaped knowing the last two
+ * characters of the plain run just before it ({@link escapeText}).
+ *
+ * @param node - The node to render.
+ * @param threshold - The highest code point a text run or an attribute value writes as itself.
+ * @returns The node's markup.
+ */
+const renderNode = (node: Child, threshold: number): string => {
+  const parts: string[] = [];
+  let before = "";
+  for (const step of tour(node)) {
+    if (step.kind === "leaf" && step.node.kind === "text" && !step.node.cdata) {
+      parts.push(escapeText(step.node.value, threshold, before));
+      before = (before + step.node.value).slice(-2);
+    } else {
+      parts.push(renderStep(step, threshold));
+      before = "";
+    }
+  }
+
+  return parts.join("");
 };
 
 /**
@@ -185,7 +249,7 @@ const renderDeclaration = (declaration: XmlDeclaration): string => {
 const firstAbove = (value: string, threshold: number): number | undefined => {
   for (const character of value) {
     if (isAbove(character, threshold)) {
-      return character.codePointAt(0);
+      return codePointOf(character);
     }
   }
 
@@ -206,10 +270,15 @@ const unwritable = (
 };
 
 /**
- * The first construct under `node`, itself included, that cannot carry a character reference and
- * holds a code point above `threshold`, in document order.
+ * The first construct of `node` itself, its children aside, that cannot carry a character
+ * reference and holds a code point above `threshold`: an element's name, then each attribute's
+ * name and recorded reference names in stored order.
+ *
+ * @param node - The node to search.
+ * @param threshold - The highest code point the encoder carries as itself.
+ * @returns The failure for the first such construct, or `undefined` when there is none.
  */
-const findInNode = (node: Child, threshold: number): EncodeError | undefined => {
+const findInOwn = (node: Child, threshold: number): EncodeError | undefined => {
   if (node.kind === "text") {
     return undefined;
   }
@@ -244,9 +313,29 @@ const findInNode = (node: Child, threshold: number): EncodeError | undefined => 
     }
   }
 
-  return node.children
-    .map((child) => findInNode(child, threshold))
-    .find((error) => error !== undefined);
+  return undefined;
+};
+
+/**
+ * The first construct under `node`, itself included, that cannot carry a character reference and
+ * holds a code point above `threshold`, in document order.
+ *
+ * The node is visited by its {@link preorder}, so a tree of any depth or width is searched without
+ * recursion, and the search stops at the first failure.
+ *
+ * @param node - The node to search.
+ * @param threshold - The highest code point the encoder carries as itself.
+ * @returns The failure for the first such construct, or `undefined` when there is none.
+ */
+const findInNode = (node: Child, threshold: number): EncodeError | undefined => {
+  for (const visited of preorder(node)) {
+    const found = findInOwn(visited, threshold);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+
+  return undefined;
 };
 
 /**

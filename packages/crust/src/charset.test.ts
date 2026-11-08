@@ -80,8 +80,8 @@ describe("classify", () => {
     Effect.sync(() => {
       assert.deepStrictEqual(classify("utf-8"), { canonical: "UTF-8", class: "utf8" });
       assert.deepStrictEqual(classify("UTF-16"), { canonical: "UTF-16", class: "utf16" });
-      assert.deepStrictEqual(classify("utf-16le"), { canonical: "UTF-16LE", class: "utf16" });
-      assert.deepStrictEqual(classify("UTF-16BE"), { canonical: "UTF-16BE", class: "utf16" });
+      assert.deepStrictEqual(classify("utf-16le"), { canonical: "UTF-16LE", class: "utf16le" });
+      assert.deepStrictEqual(classify("UTF-16BE"), { canonical: "UTF-16BE", class: "utf16be" });
     }),
   );
 
@@ -103,6 +103,8 @@ describe("threshold", () => {
       assert.deepStrictEqual(threshold("ascii"), Option.some(0x7f));
       assert.deepStrictEqual(threshold("utf8"), Option.none());
       assert.deepStrictEqual(threshold("utf16"), Option.none());
+      assert.deepStrictEqual(threshold("utf16be"), Option.none());
+      assert.deepStrictEqual(threshold("utf16le"), Option.none());
       assert.deepStrictEqual(threshold("decode-only"), Option.none());
     }),
   );

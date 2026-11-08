@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { lexProlog, substitute } from "#crust/dtd.ts";
-import type { AttlistEntry } from "#crust/dtd.ts";
+import type { AttlistEntry, ValuePiece } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
 
 /**
@@ -25,6 +25,14 @@ const attlistOf = (text: string, element: string) =>
  */
 const refusalOf = (text: string) => Effect.flip(lexProlog(text));
 
+/**
+ * A default value of one text piece.
+ *
+ * @param value - The text.
+ * @returns The pieces.
+ */
+const textDefault = (value: string): readonly ValuePiece[] => [{ kind: "text", text: value }];
+
 describe("the XML declaration", () => {
   it.effect("is read field by field, as written", () =>
     Effect.gen(function* readsFields() {
@@ -40,24 +48,32 @@ describe("the XML declaration", () => {
           version: "1.1",
         }),
       );
-      assert.isFalse(prolog.standalone);
+      assert.deepStrictEqual(prolog.undeclared, {
+        _tag: "refused",
+        why: "the document has no external subset and its internal subset references no parameter entity",
+      });
     }),
   );
 
-  it.effect("leaves an absent field as None and reports standalone yes as true", () =>
-    Effect.gen(function* readsAbsentFields() {
-      const prolog = yield* lexProlog('<?xml version="1.0" standalone="yes"?><a/>');
+  it.effect(
+    "leaves an absent field as None and refuses undeclared entities under standalone yes",
+    () =>
+      Effect.gen(function* readsAbsentFields() {
+        const prolog = yield* lexProlog('<?xml version="1.0" standalone="yes"?><a/>');
 
-      assert.deepStrictEqual(
-        prolog.declaration,
-        Option.some({
-          encoding: Option.none(),
-          standalone: Option.some("yes"),
-          version: "1.0",
-        }),
-      );
-      assert.isTrue(prolog.standalone);
-    }),
+        assert.deepStrictEqual(
+          prolog.declaration,
+          Option.some({
+            encoding: Option.none(),
+            standalone: Option.some("yes"),
+            version: "1.0",
+          }),
+        );
+        assert.deepStrictEqual(prolog.undeclared, {
+          _tag: "refused",
+          why: 'the document says standalone="yes"',
+        });
+      }),
   );
 
   it.effect("is absent for a document that starts with another processing instruction", () =>
@@ -65,7 +81,7 @@ describe("the XML declaration", () => {
       const prolog = yield* lexProlog('<?xml-stylesheet href="s.css"?><a/>');
 
       assert.isTrue(Option.isNone(prolog.declaration));
-      assert.isFalse(prolog.standalone);
+      assert.strictEqual(prolog.undeclared._tag, "refused");
     }),
   );
 
@@ -76,7 +92,6 @@ describe("the XML declaration", () => {
       assert.instanceOf(error, WellFormednessError);
       assert.strictEqual(error.line, 2);
       assert.strictEqual(error.column, 11);
-      assert.isFalse(error.afterSubstitution);
     }),
   );
 
@@ -98,18 +113,24 @@ describe("the document type declaration", () => {
 
       assert.deepStrictEqual(prolog.doctype, Option.some(doctype));
       assert.strictEqual(prolog.bodyStart, text.indexOf("\n<a/>"));
-      assert.isTrue(prolog.externalSubset);
+      assert.deepStrictEqual(prolog.undeclared, { _tag: "kept" });
     }),
   );
 
-  it.effect("marks a PUBLIC identifier as an external subset and a bare name as none", () =>
-    Effect.gen(function* readsExternalIds() {
-      const pub = yield* lexProlog('<!DOCTYPE a PUBLIC "-//X//EN" "x.dtd"><a/>');
-      const bare = yield* lexProlog("<!DOCTYPE a [<!ENTITY e 'v'>]><a/>");
+  it.effect(
+    "keeps undeclared entities under a PUBLIC identifier, refuses them under a bare name, and refuses them under standalone yes with an external subset",
+    () =>
+      Effect.gen(function* readsExternalIds() {
+        const pub = yield* lexProlog('<!DOCTYPE a PUBLIC "-//X//EN" "x.dtd"><a/>');
+        const bare = yield* lexProlog("<!DOCTYPE a [<!ENTITY e 'v'>]><a/>");
+        const standalone = yield* lexProlog(
+          '<?xml version="1.0" standalone="yes"?><!DOCTYPE a SYSTEM "a.dtd"><a/>',
+        );
 
-      assert.isTrue(pub.externalSubset);
-      assert.isFalse(bare.externalSubset);
-    }),
+        assert.deepStrictEqual(pub.undeclared, { _tag: "kept" });
+        assert.strictEqual(bare.undeclared._tag, "refused");
+        assert.strictEqual(standalone.undeclared._tag, "refused");
+      }),
   );
 
   it.effect("is not confused by brackets, quotes and angle brackets inside literals", () =>
@@ -131,7 +152,7 @@ describe("the document type declaration", () => {
         const prolog = yield* lexProlog(text);
 
         assert.isTrue(Option.isNone(prolog.doctype));
-        assert.isFalse(prolog.externalSubset);
+        assert.strictEqual(prolog.undeclared._tag, "refused");
         assert.strictEqual(prolog.bodyStart, text.indexOf("<a/>"));
       }),
   );
@@ -186,7 +207,6 @@ describe("general entities", () => {
       assert.instanceOf(error, WellFormednessError);
       assert.strictEqual(error.line, 1);
       assert.strictEqual(error.column, 43);
-      assert.isFalse(error.afterSubstitution);
     }),
   );
 
@@ -381,8 +401,8 @@ describe("attribute-list declarations", () => {
       );
 
       assert.deepStrictEqual(table, [
-        ["x", { default: Option.some("v"), type: "CDATA" }],
-        ["y", { default: Option.some("d"), type: "CDATA" }],
+        ["x", { default: Option.some(textDefault("v")), type: "CDATA" }],
+        ["y", { default: Option.some(textDefault("d")), type: "CDATA" }],
         ["z", { default: Option.none(), type: "CDATA" }],
         ["w", { default: Option.none(), type: "CDATA" }],
       ]);
@@ -392,13 +412,13 @@ describe("attribute-list declarations", () => {
   it.effect("expand the general entities declared before the list in a default", () =>
     Effect.gen(function* expandsEntities() {
       assert.deepStrictEqual(yield* defaultOf('<!ENTITY e "x&#9;y">'), [
-        ["d", { default: Option.some("1x y2"), type: "CDATA" }],
+        ["d", { default: Option.some(textDefault("1x y2")), type: "CDATA" }],
       ]);
       assert.deepStrictEqual(yield* defaultOf('<!ENTITY f "q"><!ENTITY e "x&f;y">'), [
-        ["d", { default: Option.some("1xqy2"), type: "CDATA" }],
+        ["d", { default: Option.some(textDefault("1xqy2")), type: "CDATA" }],
       ]);
       assert.deepStrictEqual(yield* defaultOf('<!ENTITY e "x&lt;y">'), [
-        ["d", { default: Option.some("1x<y2"), type: "CDATA" }],
+        ["d", { default: Option.some(textDefault("1x<y2")), type: "CDATA" }],
       ]);
     }),
   );
@@ -413,15 +433,65 @@ describe("attribute-list declarations", () => {
     }),
   );
 
-  it.effect("keep an entity declared after the list as written in a default", () =>
-    Effect.gen(function* keepsLaterEntity() {
-      const table = yield* attlistOf(
-        '<!DOCTYPE a [<!ATTLIST a d CDATA "1&e;2"><!ENTITY e "x">]><a/>',
-        "a",
-      );
+  it.effect(
+    "keep an entity the internal subset never declares as a reference piece where an external subset may declare it",
+    () =>
+      Effect.gen(function* keepsUndeclaredEntity() {
+        const table = yield* attlistOf(
+          '<!DOCTYPE a SYSTEM "a.dtd" [<!ATTLIST a d CDATA "1&u;2">]><a/>',
+          "a",
+        );
 
-      assert.deepStrictEqual(table, [["d", { default: Option.some("1&e;2"), type: "CDATA" }]]);
-    }),
+        assert.deepStrictEqual(table, [
+          [
+            "d",
+            {
+              default: Option.some<readonly ValuePiece[]>([
+                { kind: "text", text: "1" },
+                { kind: "reference", name: "u" },
+                { kind: "text", text: "2" },
+              ]),
+              type: "CDATA",
+            },
+          ],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "refuse an entity a default names before the internal subset declares it, beside an external subset too",
+    () =>
+      Effect.gen(function* refusesEarlyReference() {
+        for (const declaration of ['<!ENTITY e "x">', '<!ENTITY e SYSTEM "e.ent">']) {
+          const error = yield* refusalOf(
+            `<!DOCTYPE a SYSTEM "a.dtd" [<!ATTLIST a d CDATA "1&e;2">${declaration}]><a/>`,
+          );
+
+          assert.instanceOf(error, ReaderRefusal);
+          assert.include(
+            error._tag === "ReaderRefusal" ? `${error.rule}: ${error.detail}` : "",
+            'undeclared-entity: the entity "e" is referenced in the default of attribute "d" of element "a" before the internal subset declares it',
+            declaration,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "refuse an entity a default names before any declaration of it, in a document with no external subset",
+    () =>
+      Effect.gen(function* refusesLaterEntity() {
+        const error = yield* refusalOf(
+          '<!DOCTYPE a [<!ATTLIST a d CDATA "1&e;2"><!ENTITY e "x">]><a/>',
+        );
+
+        assert.instanceOf(error, ReaderRefusal);
+        assert.strictEqual(error._tag === "ReaderRefusal" && error.rule, "undeclared-entity");
+        assert.include(
+          error._tag === "ReaderRefusal" ? error.detail : "",
+          'the entity "e" is referenced in the default of attribute "d" of element "a" before the internal subset declares it, so the document is not well-formed',
+        );
+      }),
   );
 
   it.effect("table the tokenized types and an enumeration by their type", () =>
@@ -433,8 +503,8 @@ describe("attribute-list declarations", () => {
 
       assert.deepStrictEqual(table, [
         ["i", { default: Option.none(), type: "ID" }],
-        ["n", { default: Option.some(" p  q "), type: "NMTOKENS" }],
-        ["k", { default: Option.some("p"), type: "( p | q )" }],
+        ["n", { default: Option.some(textDefault(" p  q ")), type: "NMTOKENS" }],
+        ["k", { default: Option.some(textDefault("p")), type: "( p | q )" }],
         ["o", { default: Option.none(), type: "NOTATION" }],
       ]);
     }),
@@ -450,7 +520,7 @@ describe("attribute-list declarations", () => {
         );
 
         assert.deepStrictEqual(table, [
-          ["x", { default: Option.some("a&b€\nc d e"), type: "CDATA" }],
+          ["x", { default: Option.some(textDefault("a&b€\nc d e")), type: "CDATA" }],
         ]);
       }),
   );
@@ -463,8 +533,8 @@ describe("attribute-list declarations", () => {
       );
 
       assert.deepStrictEqual(table, [
-        ["x", { default: Option.some("1"), type: "CDATA" }],
-        ["y", { default: Option.some("3"), type: "CDATA" }],
+        ["x", { default: Option.some(textDefault("1")), type: "CDATA" }],
+        ["y", { default: Option.some(textDefault("3")), type: "CDATA" }],
       ]);
     }),
   );
@@ -546,7 +616,7 @@ const substituted = (text: string) =>
 describe("substituting entities", () => {
   it.effect("puts the replacement text of a content reference into the body as markup", () =>
     Effect.gen(function* substitutesContent() {
-      const { body } = yield* substituted('<!DOCTYPE a [<!ENTITY m "<b>x</b>">]><a>1&m;2</a>');
+      const body = yield* substituted('<!DOCTYPE a [<!ENTITY m "<b>x</b>">]><a>1&m;2</a>');
 
       assert.strictEqual(body, '<!DOCTYPE a [<!ENTITY m "<b>x</b>">]><a>1<b>x</b>2</a>');
     }),
@@ -554,7 +624,7 @@ describe("substituting entities", () => {
 
   it.effect("rescans the replacement text for further references", () =>
     Effect.gen(function* rescans() {
-      const { body } = yield* substituted(
+      const body = yield* substituted(
         '<!DOCTYPE a [<!ENTITY x "1"><!ENTITY y "&x;&x;"><!ENTITY z "[&y;]">]><a>&z;</a>',
       );
 
@@ -564,7 +634,7 @@ describe("substituting entities", () => {
 
   it.effect("substitutes a line feed of the replacement text into an attribute literal", () =>
     Effect.gen(function* substitutesLineFeed() {
-      const { body } = yield* substituted('<!DOCTYPE a [<!ENTITY n "p&#10;q">]><a t="&n;"/>');
+      const body = yield* substituted('<!DOCTYPE a [<!ENTITY n "p&#10;q">]><a t="&n;"/>');
 
       assert.isTrue(body.endsWith('<a t="p\nq"/>'));
     }),
@@ -572,7 +642,7 @@ describe("substituting entities", () => {
 
   it.effect("writes a quote of the replacement text in an attribute literal as a reference", () =>
     Effect.gen(function* substitutesQuote() {
-      const { body } = yield* substituted(
+      const body = yield* substituted(
         "<!DOCTYPE a [<!ENTITY q 'say \"hi\" it&#39;s'>]><a t=\"&q;\" u='&q;'/>",
       );
 
@@ -584,7 +654,7 @@ describe("substituting entities", () => {
 
   it.effect("leaves a character reference the document wrote as written in an attribute", () =>
     Effect.gen(function* keepsCharacterReference() {
-      const { body } = yield* substituted('<!DOCTYPE a [<!ENTITY n "x">]><a t="&#10;&n;"/>');
+      const body = yield* substituted('<!DOCTYPE a [<!ENTITY n "x">]><a t="&#10;&n;"/>');
 
       assert.isTrue(body.endsWith('<a t="&#10;x"/>'));
     }),
@@ -592,7 +662,7 @@ describe("substituting entities", () => {
 
   it.effect("leaves a '<' of replacement text in an attribute for the parser to refuse", () =>
     Effect.gen(function* keepsAngle() {
-      const { body } = yield* substituted('<!DOCTYPE a [<!ENTITY l "<">]><a t="&l;"/>');
+      const body = yield* substituted('<!DOCTYPE a [<!ENTITY l "<">]><a t="&l;"/>');
 
       assert.isTrue(body.endsWith('<a t="<"/>'));
     }),
@@ -600,7 +670,7 @@ describe("substituting entities", () => {
 
   it.effect("expands a reference nested in the replacement text of an attribute reference", () =>
     Effect.gen(function* nestsInAttribute() {
-      const { body } = yield* substituted(
+      const body = yield* substituted(
         '<!DOCTYPE a [<!ENTITY x "\'"><!ENTITY y "[&x;]">]><a t="&y;"/>',
       );
 
@@ -611,18 +681,9 @@ describe("substituting entities", () => {
   it.effect("leaves references inside a comment, a PI and a CDATA section untouched", () =>
     Effect.gen(function* skipsHidden() {
       const text = '<!DOCTYPE a [<!ENTITY m "X">]><a><!-- &m; --><?t &m;?><![CDATA[&m;]]>&m;</a>';
-      const { body } = yield* substituted(text);
+      const body = yield* substituted(text);
 
       assert.isTrue(body.endsWith("<a><!-- &m; --><?t &m;?><![CDATA[&m;]]>X</a>"));
-    }),
-  );
-
-  it.effect("leaves predefined and undeclared references untouched", () =>
-    Effect.gen(function* leavesOthers() {
-      const text = '<!DOCTYPE a [<!ENTITY m "X">]><a t="&amp;&unknown;">&lt;&unknown;&#65;</a>';
-      const { body } = yield* substituted(text);
-
-      assert.strictEqual(body, text);
     }),
   );
 
@@ -630,42 +691,9 @@ describe("substituting entities", () => {
     Effect.gen(function* keepsProlog() {
       const text = '<?xml version="1.0"?>\n<!DOCTYPE a [<!ENTITY m "X">]>\n<a>&m;</a>';
       const prolog = yield* lexProlog(text);
-      const { body } = yield* substitute(text, prolog);
+      const body = yield* substitute(text, prolog);
 
       assert.strictEqual(body.slice(0, prolog.bodyStart), text.slice(0, prolog.bodyStart));
-    }),
-  );
-
-  it.effect("reports a substitution only after the first one", () =>
-    Effect.gen(function* reportsAfter() {
-      const text = '<!DOCTYPE a [<!ENTITY m "XYZ">]><a><b/>&m;<c/></a>';
-      const { afterSubstitution, body } = yield* substituted(text);
-      const reference = body.lastIndexOf("XYZ");
-
-      assert.isFalse(afterSubstitution(0));
-      assert.isFalse(afterSubstitution(reference));
-      assert.isTrue(afterSubstitution(reference + 1));
-      assert.isTrue(afterSubstitution(body.length));
-    }),
-  );
-
-  it.effect("reports a document without a substitution as never after one", () =>
-    Effect.gen(function* reportsNever() {
-      const { afterSubstitution, body } = yield* substituted("<a>&lt;</a>");
-
-      assert.isFalse(afterSubstitution(body.length));
-    }),
-  );
-
-  it.effect("reports after an empty replacement from the offset the reference stood at", () =>
-    Effect.gen(function* reportsEmpty() {
-      const { afterSubstitution, body } = yield* substituted(
-        '<!DOCTYPE a [<!ENTITY e "">]><a>&e;<b/></a>',
-      );
-      const next = body.indexOf("<b/>");
-
-      assert.isFalse(afterSubstitution(next - 1));
-      assert.isTrue(afterSubstitution(next));
     }),
   );
 });
@@ -720,14 +748,6 @@ describe("the expansion budget", () => {
     }),
   );
 
-  it.effect("counts nothing when no parameter entity is used between declarations", () =>
-    Effect.gen(function* countsNothing() {
-      const prolog = yield* lexProlog('<!DOCTYPE a [<!ENTITY e "x">]><a/>');
-
-      assert.strictEqual(prolog.expanded, 0);
-    }),
-  );
-
   it.effect("tables a chain of 20,000 general entities without refusing it", () =>
     Effect.gen(function* tablesLongChain() {
       // Declared from the outermost entity inward, so the search descends the whole chain at once.
@@ -765,7 +785,7 @@ describe("the expansion budget", () => {
         subset += `<!ENTITY e${n} "&e${n - 1};">`;
       }
       const text = `<!DOCTYPE a [${subset}]><a>&e19;</a>`;
-      const { body } = yield* lexProlog(text).pipe(Effect.flatMap((p) => substitute(text, p)));
+      const body = yield* lexProlog(text).pipe(Effect.flatMap((p) => substitute(text, p)));
 
       assert.isTrue(body.endsWith("<a>x</a>"));
     }),

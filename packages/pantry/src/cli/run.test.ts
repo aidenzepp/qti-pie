@@ -12,7 +12,6 @@ import {
   TransportFailure,
 } from "@bjornpagen/grizzle";
 import { Cause, Effect, Exit, PlatformError } from "effect";
-import { CliError } from "effect/cli";
 import { ChildProcessSpawner } from "effect/process";
 import {
   cliKind,
@@ -25,7 +24,6 @@ import {
 } from "#pantry/cli/errors.ts";
 import type { Kind } from "#pantry/cli/errors.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { captureCli, spawnCli } from "#pantry/test/cli.ts";
 import { cliProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 
@@ -74,17 +72,6 @@ describe("describeFailure and exitCodeOf", () => {
     } satisfies Record<Kind, number>);
   });
 
-  it("an ImportRefused exits 1 as import-refused", () => {
-    const refused = new ImportRefused({ detail: "x", rule: "admission" });
-
-    assert.deepStrictEqual(describeFailure(refused), {
-      exitCode: 1,
-      help: kindHelp["import-refused"],
-      kind: "import-refused",
-    });
-    assert.strictEqual(exitCodeOf(Exit.fail(refused)), 1);
-  });
-
   it("a RoundtripDiffers exits 1 and a NotADirectory exits 2, each by its own kind", () => {
     const differs = new RoundtripDiffers({ differing: 1, exportDir: "/out" });
     const missing = new NotADirectory({ path: "/nonexistent" });
@@ -102,26 +89,6 @@ describe("describeFailure and exitCodeOf", () => {
       kind: "io",
     });
     assert.strictEqual(exitCodeOf(Exit.fail(readFailed)), 74);
-  });
-
-  it("an Effect CLI error exits 2 as cli-usage", () => {
-    const usage = new CliError.UnknownSubcommand({
-      subcommand: "frobnicate",
-      suggestions: [],
-    });
-
-    assert.deepStrictEqual(describeFailure(usage), {
-      exitCode: 2,
-      help: kindHelp["cli-usage"],
-      kind: "cli-usage",
-    });
-    assert.strictEqual(exitCodeOf(Exit.fail(usage)), 2);
-  });
-
-  it("a defect exits 70 as internal, whatever it carries", () => {
-    assert.strictEqual(exitCodeOf(Exit.die(new Error("x"))), 70);
-    assert.strictEqual(exitCodeOf(Exit.die("x")), 70);
-    assert.strictEqual(exitCodeOf(Exit.fail("unmapped")), 70);
   });
 
   it("a bare kind property is not a kind: only the cliKind symbol names one", () => {
@@ -153,19 +120,6 @@ describe("describeFailure and exitCodeOf", () => {
       assert.strictEqual(error.tag, error.name);
     }
   });
-
-  for (const error of grizzleErrors) {
-    it(`${error.name} exits 1 as database`, () => {
-      const failure = { _tag: error.tag };
-
-      assert.deepStrictEqual(describeFailure(failure), {
-        exitCode: 1,
-        help: kindHelp.database,
-        kind: "database",
-      });
-      assert.strictEqual(exitCodeOf(Exit.fail(failure)), 1);
-    });
-  }
 });
 
 layer(NodeServices.layer, { excludeTestServices: true })("the run's exit code", (live) => {

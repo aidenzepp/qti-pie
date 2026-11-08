@@ -61,6 +61,12 @@ pnpm --filter @qti-pie/pantry test
 
 Tests that need the database use the local cluster. Agents start at [`AGENTS.md`](../../AGENTS.md).
 
+The vocabulary's derivations and the XSD differentials read the 23 XSDs that
+[`src/vocab/derive/sources.ts`](src/vocab/derive/sources.ts) pins by URL and SHA-256, all published by 1EdTech under
+`https://purl.imsglobal.org/spec/`. They are cached outside the repository, in `~/.cache/gr8des/qti3/xsd/`:
+`pnpm --filter @qti-pie/pantry run fetch-xsds` downloads them there and checks each digest. Without them those tests
+are skipped, or fail naming that command.
+
 ## License
 
 MIT

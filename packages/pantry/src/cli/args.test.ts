@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Result } from "effect";
-import { BadPackageId, requirePackageId } from "#pantry/cli/args.ts";
+import { Effect, FileSystem, PlatformError, Record as Rec, Result } from "effect";
+import { BadPackageId, requirePackage, requirePackageId } from "#pantry/cli/args.ts";
+import { NotADirectory } from "#pantry/cli/errors.ts";
 
 describe("requirePackageId", () => {
   it.effect("refuses text that is not a UUID with BadPackageId", () =>
@@ -25,5 +26,56 @@ describe("requirePackageId", () => {
 
       assert.strictEqual(id, text);
     }),
+  );
+});
+
+/**
+ * Every reason a file system call fails with, each once, so the guard below is checked over all of
+ * them.
+ */
+const systemReasons = Rec.keys({
+  AlreadyExists: null,
+  BadResource: null,
+  Busy: null,
+  InvalidData: null,
+  NotFound: null,
+  PermissionDenied: null,
+  TimedOut: null,
+  UnexpectedEof: null,
+  Unknown: null,
+  WouldBlock: null,
+  WriteZero: null,
+} satisfies Record<PlatformError.SystemErrorTag, null>);
+
+describe("requirePackage", () => {
+  it.effect(
+    "refuses a path that is not there as NotADirectory, and passes every other failure to read it through as itself",
+    () =>
+      Effect.gen(function* everyReason() {
+        for (const reason of systemReasons) {
+          const failure = PlatformError.systemError({
+            _tag: reason,
+            method: "stat",
+            module: "FileSystem",
+            pathOrDescriptor: "package",
+          });
+          const result = yield* Effect.result(
+            requirePackage("package").pipe(
+              Effect.provide(FileSystem.layerNoop({ stat: () => Effect.fail(failure) })),
+            ),
+          );
+
+          assert.isTrue(Result.isFailure(result), reason);
+          if (Result.isSuccess(result)) {
+            return;
+          }
+
+          if (reason === "NotFound") {
+            assert.instanceOf(result.failure, NotADirectory, reason);
+          } else {
+            assert.strictEqual(result.failure, failure, reason);
+          }
+        }
+      }),
   );
 });

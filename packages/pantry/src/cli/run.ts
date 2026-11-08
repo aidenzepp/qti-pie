@@ -1,15 +1,16 @@
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Cause, Effect, Exit, Option, Stdio } from "effect";
 import { CliConfig, CliError, CliOutput, Command } from "effect/cli";
 import { builtIns } from "#pantry/cli/config.ts";
 import { describeFailure, kindExitCode } from "#pantry/cli/errors.ts";
-import { modeOfArguments, modeOfEnvironment } from "#pantry/cli/output.ts";
+import { defaultOutputMode, modeOfArguments, modeOfEnvironment } from "#pantry/cli/output.ts";
 import {
   commandOfArguments,
+  followsValuedFlag,
   formatterFor,
   presenterFor,
   printFailures,
-  valuedGlobalFlags,
 } from "#pantry/cli/present.ts";
 
 /**
@@ -26,9 +27,7 @@ export const rewriteVerbose = (args: readonly string[]): readonly string[] => {
   const end = args.indexOf("--");
 
   return args.map((arg, index) =>
-    arg === "-v" &&
-    (end === -1 || index < end) &&
-    !valuedGlobalFlags.includes(args[index - 1] ?? "")
+    arg === "-v" && (end === -1 || index < end) && !followsValuedFlag(args, index)
       ? "--verbose"
       : arg,
   );
@@ -52,14 +51,19 @@ export const runCli = <Name extends string, Input, ContextInput, E, R>(
     // under `--json` is JSON too.
     const stdio = yield* Stdio.Stdio;
     const args = rewriteVerbose(yield* stdio.args);
+    // The line's mode, else the environment's, which is read only when the line names none.
+    const named = modeOfArguments(args);
+    const mode = Option.getOrElse(
+      Option.isSome(named) ? named : yield* modeOfEnvironment,
+      () => defaultOutputMode,
+    );
     const shown = {
       command: commandOfArguments(
         args,
         command.subcommands.flatMap(({ commands }) => commands.map(({ name }) => name)),
         command.name,
       ),
-      mode:
-        modeOfArguments(args) ?? Option.getOrElse(yield* modeOfEnvironment, () => "text" as const),
+      mode,
     } as const;
 
     return yield* Command.run(command, config).pipe(

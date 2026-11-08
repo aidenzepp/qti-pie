@@ -14,9 +14,20 @@ export const corpusRequested = Config.String("GR8DES_CORPUS").pipe(
 );
 
 /**
- * Both settings, resolved once at load through the default provider.
+ * Whether `GR8DES_GENETIC=1` asks for the genetic searches' long budget, beside the bounded one
+ * every free run spends.
  */
-export const settings = Effect.runSync(Config.all({ corpusRequested, leaseDatabase }));
+export const geneticRequested = Config.String("GR8DES_GENETIC").pipe(
+  Config.withDefault(""),
+  Config.map((value) => value === "1"),
+);
+
+/**
+ * The settings, resolved once at load through the default provider.
+ */
+export const settings = Effect.runSync(
+  Config.all({ corpusRequested, geneticRequested, leaseDatabase }),
+);
 
 /**
  * Whether this run holds a lease, so the database suites may run.
@@ -38,33 +49,17 @@ export const leaseTestTimeoutMs = 49_000;
 /**
  * The timeout, in milliseconds, for the `layer` hook that builds `AuthorAppLayer`.
  *
- * The hook decodes the 120 MB migrations snapshot and compiles the login, and with no
- * `timeout` option it falls to vitest's 10 s `hookTimeout`, which the parallel leased full suite
- * exceeded under load averages of 8 to 15 on 14 CPUs (merges `8b3f2a65`, `1a3d4f4c`, `998fe309`
- * and `655ddd9f`). Measured on 2026-11-02 at `ae520e6` with the snapshot at 120,065,687 bytes
- * and no database: five quiet builds had a median of 7.35 s, and six concurrent builds, one per
- * test file that builds the layer, had a maximum of 9.29 s at load averages of 4 to 6, each
- * process peaking near 1.5 GB resident. The budget is the larger of twice that maximum
- * (18.6 s) and 20 s, the floor being twice the default.
+ * The hook reads and decodes the migrations snapshot and builds grizzle's `DbLayer`, which compiles
+ * every program of the login's workloads and opens its pool, so it is CPU-bound and slows with the
+ * machine's load. Measured 2026-11-07 at `4e82dde5`, the snapshot at 21,856,162 bytes, on the lease
+ * with the other lanes running: a cold build, the first in its process as each lease file's hook
+ * is, took 32.1 s at a load average of 31 to 36 (0.6 s of it the snapshot), and 31.3, 25.0, 14.5
+ * and 12.7 s at a load average of 28 to 33. The 20 s this held before, twice a build at a load of 4
+ * to 6 on 2026-11-02, timed out `qti/interactions.db.test.ts`'s hook in the database run of
+ * `88946fff` and again run alone. The value is twice the slowest, rounded up to the next 1,000.
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
-export const authorLayerHookTimeoutMs = 20_000;
-
-/**
- * The timeout, in milliseconds, for the `layer` hook that builds `AuthorAppLayer` beside a
- * `FixtureRowsLayer`.
- *
- * The hook builds `AuthorAppLayer` and a `FixtureRowsLayer` that reads 11 fixtures through
- * `rowsOfPackage` (`rules.packaging.test.ts`) or its own fixture set (`content-a.test.ts`), and
- * with no `timeout` option it fell to vitest's 10 s `hookTimeout`, which both files exceeded: the
- * first alone on a lease, the second under the leased full suite. Measured on 2026-11-03 at
- * `922fe9b` on a lease: five quiet runs per file had a median of 9.43 s for
- * `rules.packaging.test.ts` and 9.26 s for `content-a.test.ts`, and six concurrent runs per file
- * had a maximum of 10.50 s (`content-a.test.ts`; 10.28 s for the other) at load averages of 9 to 11.
- * The budget is the larger of twice that maximum (21 s) and 20 s, the floor being twice the
- * default. Raise it only on a new measurement recorded here, never to make a run pass.
- */
-export const fixtureRowsLayerHookTimeoutMs = 21_000;
+export const authorLayerHookTimeoutMs = 65_000;
 
 /**
  * The timeout, in milliseconds, for one test that spawns the CLI as a child process.
@@ -74,7 +69,8 @@ export const fixtureRowsLayerHookTimeoutMs = 21_000;
  * CPUs (merges `8b3f2a65`, `1a3d4f4c`, `998fe309` and `655ddd9f`). Measured on 2026-11-02 at
  * `ae520e6`: fifteen quiet spawns had a median of 3.8 s, and spawns beside six concurrent
  * layer builds had a maximum of 4.5 s at load averages of 4 to 6. The budget is the larger of
- * twice that maximum (9 s) and 10 s, the floor being twice the default.
+ * twice that maximum (9 s) and 10 s, the floor being twice the default. Measured 2026-11-07: 3.0 s
+ * at a load average of 63 to 73, the slowest CLI process test of the free project.
  * A test file whose handlers load the engine loads it first in a `beforeAll` under
  * `engineLoadHookTimeoutMs`, so no test pays that load.
  * Raise it only on a new measurement recorded here, never to make a run pass.
@@ -89,65 +85,37 @@ export const cliProcessTestTimeoutMs = 10_000;
  * beside the parallel CLI set: 13 concurrent loads took 15.5 to 15.8 s at load averages of 9 to 26.
  * Measured on 2026-11-04 at `0f3e8e4` (grizzle trunk), from `packages/pantry`: three batches of
  * thirteen concurrent runs (vitest's default worker count on 14 CPUs, `availableParallelism() - 1`)
- * of one process that imports the six modules `preloadEngine` imports. Batch 1 took 22328, 22477,
- * 22507, 22925, 22874, 22928, 22735, 22402, 22445, 23119, 22230, 22696 and 22438 ms at a one-minute
- * load average of 119.6 before and 105.7 after. Batch 2 took 26114, 26314, 26108, 26539, 26527,
- * 26273, 26278, 26006, 26575, 26013, 25572, 26055 and 25194 ms at 105.7 before and 107.2 after.
- * Batch 3 took 26744, 26963, 26263, 26243, 26812, 26878, 26923, 26880, 26130, 26925, 26937, 26081
- * and 27104 ms at 107.2 before and 102.5 after. The maximum is 27104 ms. A batch at the lowest load
- * sampled (21.1 in 20 minutes; the batch started at 25.8 and ended at 28.1) took 8137 to 8343 ms.
- * The budget is the larger of twice the maximum (54.2 s) and 20 s, rounded up to the next second.
+ * of one process that imports the six modules `preloadEngine` imported then. Batch 1 took 22328,
+ * 22477, 22507, 22925, 22874, 22928, 22735, 22402, 22445, 23119, 22230, 22696 and 22438 ms at a
+ * one-minute load average of 119.6 before and 105.7 after. Batch 2 took 26114, 26314, 26108, 26539,
+ * 26527, 26273, 26278, 26006, 26575, 26013, 25572, 26055 and 25194 ms at 105.7 before and 107.2
+ * after. Batch 3 took 26744, 26963, 26263, 26243, 26812, 26878, 26923, 26880, 26130, 26925, 26937,
+ * 26081 and 27104 ms at 107.2 before and 102.5 after. The maximum is 27104 ms. A batch at the
+ * lowest load sampled (21.1 in 20 minutes; the batch started at 25.8 and ended at 28.1) took 8137
+ * to 8343 ms. The budget is the larger of twice the maximum (54.2 s) and 20 s, rounded up to the
+ * next second.
+ *
+ * Since Q5's CLI fix (2026-11-05) `preloadEngine` imports four modules, not six, and the
+ * measurements above are of the six. Q5's re-measurement of the four, batch 2, had a maximum of
+ * 37.3 s at load averages of 34 to 45, which this rule turns into 75 s.
+ *
+ * After W5's cutover (2026-11-06, measured by seat Q5.18) the four modules load the new grammar
+ * installation, schema and import program. Three batches of nine concurrent processes (this
+ * machine's `availableParallelism() - 1`, 10 CPUs) took 41401 to 44313 ms at one-minute load
+ * averages of 40.7 to 43.2, 42232 to 45512 ms at 43.2 to 43.8, and 45546 to 48499 ms at 43.8 to
+ * 46.8, each process near 1 GB resident. The maximum is 48499 ms, and the rule gives 97 s. Per
+ * module, at a load near 44: `install.ts` 16.5 to 22.1 s, `import/write.ts` 8.8 s, `qti/schema.ts`
+ * 6.3 s, grizzle 3.4 s and `refusal.ts` 1.0 to 4.9 s.
+ *
+ * `import/write.ts`'s 8.8 s was not its own maps (30 ms and 3 MB, measured alone on 2026-11-06 by
+ * seat PS) but the author role it imported: `qti/schema.ts` (1.6 s, 63 MB) and `role(...)` in
+ * `qti/roles.ts` (2.0 s, 271 MB) at a load of 27. Since `changeSetOf` takes the role from its
+ * caller, the five modules `preloadEngine` imports load neither. Three batches of nine concurrent
+ * processes then took 17442 to 17694 ms at one-minute load averages of 21.5 to 23.4, 12749 to 13229
+ * ms at 22.3 to 23.4, and 11972 to 12361 ms at 21.7 to 22.3, each process 597 to 691 MB resident.
+ * The rule gives 36 s for that maximum, but at half Q5.18's load, so the budget stays at Q5.18's
+ * measurement. Measured 2026-11-07: 36.9 s at a load average of 80 to 83, `cli/import.test.ts`'s
+ * hook beside one other suite, which the budget is over twice.
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
-export const engineLoadHookTimeoutMs = 55_000;
-
-/**
- * The timeout, in milliseconds, for the one test that materializes the 19 `cut-*` fixtures and
- * renders each to the oracle's bytes.
- *
- * `global-setup.ts` materializes only `simple` and four packages, so this test cuts and writes
- * the 19 items itself, and vitest's 5 s default was exceeded under load (a fresh tree timed out at
- * 5033 ms at a load average of 20.6; that figure is censored by the timeout, so the true time was
- * longer). Measured on 2026-11-02 at `d2ee380`, with no `cut-*` directory in the fixtures root:
- * three cold runs alone took 2902, 2821 and 2699 ms at load averages of 8.75, 8.37 and 8.53, and
- * six concurrent cold runs, each with its own fixtures root, took 3265, 3279, 3289, 3289, 3343 and
- * 3249 ms at a load average of 8.1. The budget is the larger of twice the maximum (3343 ms, so
- * 6.7 s) and 10 s, the floor being twice the default, rounded up to the next second.
- * Raise it only on a new measurement recorded here, never to make a run pass.
- */
-export const cutItemRenderTestTimeoutMs = 10_000;
-
-/**
- * The timeout, in milliseconds, for each spawn of `scripts/seed-sql.ts` that a test makes; a test
- * that spawns it more than once takes this times its number of spawns.
- *
- * Each spawn loads the whole Qti schema, which the CLI start `cliProcessTestTimeoutMs` measures
- * does not. Measured on 2026-11-03 at `a776f20`, from `packages/pantry`, with the printed seed read
- * to its end: three serial spawns alone took 642, 635 and 673 ms at a one-minute load average of
- * 20.4 before and after, and three runs of 13 concurrent spawns (vitest's default worker count on
- * 14 CPUs, `availableParallelism() - 1`) took 1640 to 1740 ms (maximum 1740 ms), 1399 to 1461 ms
- * and 1498 to 1596 ms, at load averages of 20.4, 20.4 and 20.1 before and 20.4, 20.1 and 20.1
- * after. The budget is the larger of twice the concurrent maximum (3.5 s) and 10 s, the floor being
- * twice the default, rounded up to the next second. Raise it only on a new measurement recorded
- * here, never to make a run pass.
- */
-export const seedSqlProcessTestTimeoutMs = 10_000;
-
-/**
- * The timeout, in milliseconds, for each test that calls `printSeed([])`, which spawns
- * `scripts/seed-sql.ts` and prints the whole seed (about 4.4 MB of SQL).
- *
- * `seedSqlProcessTestTimeoutMs` measures a spawn that prints a small part, and vitest's 5 s
- * default was exceeded by the full print in most free-project runs while other seats ran suites.
- * Measured on 2026-11-04 at `5d49713`, from `packages/pantry`, with one process that calls
- * `printSeed([])` the way the tests do: three serial runs alone took 3022, 4445 and 3567 ms at a
- * one-minute load average of 86.1 before and 86.9 after, and three batches of 13 concurrent runs
- * (vitest's default worker count on 14 CPUs, `availableParallelism() - 1`) took 5243, 5135, 4956,
- * 5009, 4911, 5050, 4668, 4896, 5025, 5045, 5042, 5197 and 4921 ms at 86.3 before and 87.5 after
- * (batch 1), 4983, 4394, 4634, 4821, 5026, 4735, 4856, 4888, 4802, 5108, 4715, 4750 and 5053 ms at
- * 87.5 before and 90.9 after (batch 2), and 6305, 5843, 5676, 5802, 5366, 6228, 5773, 5537, 6325,
- * 6266, 6264, 5969 and 6163 ms at 90.9 before and 93.7 after (batch 3). The concurrent maximum is
- * 6325 ms. The budget is the larger of twice the concurrent maximum (12.7 s) and 10 s, rounded up
- * to the next second. Raise it only on a new measurement recorded here, never to make a run pass.
- */
-export const seedPrintTestTimeoutMs = 13_000;
+export const engineLoadHookTimeoutMs = 97_000;

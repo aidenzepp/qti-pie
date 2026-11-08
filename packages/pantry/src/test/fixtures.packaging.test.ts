@@ -269,7 +269,7 @@ interface ContentCut {
 }
 
 /**
- * The seven positives of the cut with their 14 negatives.
+ * The eight positives of the cut with their 19 negatives.
  */
 const contentCuts: readonly ContentCut[] = [
   {
@@ -295,6 +295,23 @@ const contentCuts: readonly ContentCut[] = [
   { member: ltiMember, name: "lti300", negatives: ["lti300-as-301"], resources: 1 },
   { member: simpleMember, name: "bytes", negatives: ["bytes-webcontent-item"], resources: 10 },
   { member: simpleMember, name: "resproc", negatives: ["resproc-webcontent"], resources: 2 },
+  {
+    member: simpleMember,
+    name: "rtest01",
+    negatives: [
+      "rtest01-include-root",
+      "rtest01-include-target",
+      "rtest01-fragment-identifier",
+      "rtest01-fragment-context",
+      "rtest01-cycle",
+      "rtest01-hottext-key",
+      "rtest01-choice-variable",
+      "rtest01-template-reference",
+      "rtest01-fragment-lang",
+      "rtest01-rule-variable",
+    ],
+    resources: 5,
+  },
 ];
 
 /**
@@ -534,7 +551,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
         new Set(metadataNames.map((name) => transformHash(specOf(name), FIXTURES_VERSION))).size,
         metadataNames.length,
       );
-      assert.strictEqual(contentNames.length, 21);
+      assert.strictEqual(contentNames.length, 32);
       assert.strictEqual(
         new Set(contentNames.map((name) => transformHash(specOf(name), FIXTURES_VERSION))).size,
         contentNames.length,
