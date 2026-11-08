@@ -15,7 +15,6 @@ import {
   floatOrRefOf,
   intOrIdentifierOf,
   integerOrRefOf,
-  isUnlanded,
   stringOrRefOf,
 } from "#plate/model/expression.ts";
 import type { DeclarationFacet, ExpressionKind, ReferenceEntry } from "#plate/model/expression.ts";
@@ -114,18 +113,6 @@ const kindCounts = (families: readonly object[]): ReadonlyMap<string, number> =>
  * Each of the 64 kinds, counted once.
  */
 const once = Object.fromEntries(expressionKinds.map((kind) => [kind, 1]));
-
-/**
- * Report whether a kind is landed in all three of its tables: its rule is not the unlanded rule,
- * its reader spec is not the stub, and its evaluator is not the stub marker.
- *
- * @param kind The kind.
- * @returns Whether every table holds a landed entry for the kind.
- */
-const landedEverywhere = (kind: ExpressionKind): boolean =>
-  !isUnlanded(kindRules[kind]) &&
-  kindReaders[kind]._tag !== "unlanded" &&
-  evaluators[kind] !== "unlanded";
 
 /**
  * The declaration facet of each kind whose `identifier` names a declaration, by kind: a variable
@@ -311,18 +298,7 @@ describe("the expression families", () => {
 });
 
 describe("kindRules", () => {
-  it("holds the unlanded rule for no kind, the stub reader spec for none and the stub marker for none, since qti-field-value, the last, has landed", () => {
-    assert.deepStrictEqual(
-      {
-        evaluators: expressionKinds.filter((kind) => evaluators[kind] === "unlanded"),
-        readers: expressionKinds.filter((kind) => kindReaders[kind]._tag === "unlanded"),
-        rules: expressionKinds.filter((kind) => isUnlanded(kindRules[kind])),
-      },
-      { evaluators: [], readers: [], rules: [] },
-    );
-  });
-
-  it("declares the declaration facet of each kind landed in all three tables that names a declaration, and none on any other kind", () => {
+  it("declares the declaration facet of each kind that names a declaration, and none on any other kind", () => {
     assert.deepStrictEqual(
       Object.fromEntries(
         expressionKinds.flatMap((kind) => {
@@ -331,27 +307,16 @@ describe("kindRules", () => {
           return facet === undefined ? [] : [[kind, facet]];
         }),
       ),
-      Object.fromEntries(
-        expressionKinds.flatMap((kind) => {
-          const facet = declarationFacets[kind];
-
-          return facet === undefined || !landedEverywhere(kind) ? [] : [[kind, facet]];
-        }),
-      ),
+      declarationFacets,
     );
   });
 
-  it("declares a reference facet only on a kind landed in all three tables, with the entries its attributes give", () => {
+  it("declares a reference facet only on a kind with an attribute that admits a variable's name, with the entries its attributes give", () => {
     const declaring = expressionKinds.filter((kind) => kindRules[kind].references.length > 0);
 
     assert.deepStrictEqual(
       Object.fromEntries(declaring.map((kind) => [kind, byAttribute(kindRules[kind].references)])),
-      Object.fromEntries(
-        declaring.map((kind) => [
-          kind,
-          landedEverywhere(kind) ? byAttribute(referenceFacets[kind] ?? []) : [],
-        ]),
-      ),
+      Object.fromEntries(declaring.map((kind) => [kind, byAttribute(referenceFacets[kind] ?? [])])),
     );
   });
 
@@ -414,11 +379,12 @@ describe("kindReaders", () => {
   });
 });
 
-describe("the landing", () => {
-  it("[I-9a] runs each of the 64 kinds, qti-field-value among them: its reader spec, its kind rule and its evaluator are landed, none a stub", () => {
-    assert.deepStrictEqual(
-      expressionKinds.filter((kind) => !landedEverywhere(kind)),
-      [],
-    );
+describe("the registry", () => {
+  it("[I-9a] holds every kind landed: each of the 64 kinds has a kind rule, a reader spec and an evaluator function", () => {
+    for (const kind of expressionKinds) {
+      assert.isFunction(kindRules[kind].resultType, `qti-${kind}'s kind rule`);
+      assert.include(["custom", "generic"], kindReaders[kind]._tag, `qti-${kind}'s reader spec`);
+      assert.isFunction(evaluators[kind], `qti-${kind}'s evaluator`);
+    }
   });
 });

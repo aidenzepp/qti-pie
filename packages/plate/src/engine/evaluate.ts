@@ -1,6 +1,6 @@
 /**
- * The evaluator: the response rules and the registry's landed expression kinds run over an item's
- * rule tree, as pure functions of the item and the variables of one attempt.
+ * The evaluator: the response rules and the registry's expression kinds run over an item's rule
+ * tree, as pure functions of the item and the variables of one attempt.
  *
  * {@link runRules} runs response rules in order, and {@link evaluateExpression} gives the value of
  * one expression. They take rules the item model ({@link Item}) built, the declarations those rules
@@ -23,7 +23,7 @@
  *
  * @module
  */
-import { Data, Option, Result } from "effect";
+import { Option, Result } from "effect";
 import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/failures.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
 import { arithmeticEvaluators } from "#plate/engine/expressions/arithmetic.ts";
@@ -185,17 +185,10 @@ export type Evaluator<K extends ExpressionKind> = (
 ) => Result.Result<Value, EngineFailure>;
 
 /**
- * The stub marker: the entry of a kind its family has not landed (ruling R2). A test tells it from
- * a landed entry, which is a function. The dispatcher never reaches it on a checked item, because
- * the reader marks an unlanded kind, so its processing never runs.
- */
-export type Unlanded = "unlanded";
-
-/**
- * A family's table: one entry per kind of the family, its evaluator or the stub marker.
+ * A family's table: one entry per kind of the family, its evaluator.
  */
 export type FamilyTable<K extends ExpressionKind> = {
-  readonly [P in K]: Evaluator<P> | Unlanded;
+  readonly [P in K]: Evaluator<P>;
 };
 
 /**
@@ -216,26 +209,6 @@ export const evaluators: FamilyTable<ExpressionKind> = {
 };
 
 /**
- * The dispatcher reached a kind whose family holds the stub marker, a defect of the engine that no
- * checked item can cause.
- *
- * It cannot occur: the item model's reader marks every kind its family has not landed, so a
- * processing that holds one is none and never runs, and the validator holds such a kind untyped
- * (rulings R2 and R3). It is thrown, never returned, so {@link EngineFailure} holds only failures a
- * caller can cause, and it is not exported.
- */
-class UnlandedKindDefect extends Data.TaggedError("UnlandedKindDefect")<{
-  readonly kind: ExpressionKind;
-}> {
-  /**
-   * The kind reached, and what to do with it.
-   */
-  override get message(): string {
-    return `The engine reached qti-${this.kind}, whose evaluator has not landed, though the item model marks such a kind. This is a defect in the engine; report it with the item that caused it.`;
-  }
-}
-
-/**
  * Give the value of an expression through its kind's entry in {@link evaluators}.
  *
  * The kind and the variant are passed apart so the entry the kind indexes takes that variant.
@@ -244,18 +217,13 @@ class UnlandedKindDefect extends Data.TaggedError("UnlandedKindDefect")<{
  * @param expression The expression.
  * @param scope The item and the variables of the attempt.
  * @returns The expression's value, or the first {@link EngineFailure} of its evaluation.
- * @throws {UnlandedKindDefect} When the kind's entry is the stub marker, which no checked item
- *   reaches.
  */
 const dispatch = <K extends ExpressionKind>(
   kind: K,
   expression: Variants[K],
   scope: Scope,
 ): Result.Result<Value, EngineFailure> => {
-  const entry: Evaluator<K> | Unlanded = evaluators[kind];
-  if (entry === "unlanded") {
-    throw new UnlandedKindDefect({ kind });
-  }
+  const entry: Evaluator<K> = evaluators[kind];
 
   // oxlint-disable-next-line eslint/no-use-before-define -- `dispatch` and `evaluate` are mutually recursive, as operands nest; the call runs only after both are defined.
   return entry(expression, scope, evaluate);
@@ -288,7 +256,7 @@ export const isTrue = (value: Value): boolean => {
 };
 
 /**
- * Give the value of an expression of a landed kind.
+ * Give the value of an expression.
  *
  * Each kind's evaluator in its family's table gives the value, and its doc says what that value
  * is. Operands are evaluated left to right, and the first failure is the result.

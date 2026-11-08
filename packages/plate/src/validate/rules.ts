@@ -24,7 +24,6 @@ import {
   expressionKinds,
   floatOrRefOf,
   integerOrRefOf,
-  isUnlanded,
   singleOf,
   stringOrRefOf,
 } from "#plate/model/expression.ts";
@@ -1842,12 +1841,10 @@ const resultAttributes = (
  * same way, and its {@link resultAttributes}. The qti package types expressions alike
  * (`resultType` in `packages/pantry/src/processing/types.ts`).
  *
- * An expression is untyped (none) when its element is no expression kind, when its kind's rule is
- * the unlanded rule, when any of its operands is untyped, or when its declaration facet names no
- * variable (ruling R3). Untyped is not judged, so a processing that holds a kind its family has
- * not landed is accepted untyped, and the qti package's typing of that kind returns family by
- * family as each lands (spec Q15, ruled B). Untyped is not a landed kind's `unknown` or `any`,
- * which pass up as the qti package passes them and satisfy every rule.
+ * An expression is untyped (none) when its element is no expression kind, when any of its operands
+ * is untyped, or when its declaration facet names no variable (ruling R3). Untyped is not judged,
+ * and it is not a kind's `unknown` or `any`, which pass up as the qti package passes them and
+ * satisfy every rule.
  *
  * Each type is kept in the context, so an expression is typed once however many of its ancestors
  * judge their operands.
@@ -1867,9 +1864,6 @@ const expressionType = (
 
   const type = Option.flatMap(kindOf(expression), (kind) => {
     const rule: KindRule = kindRules[kind];
-    if (isUnlanded(rule)) {
-      return Option.none();
-    }
 
     return Option.flatMap(
       Option.all(operandsOf(expression).map((operand) => expressionType(operand, context))),
@@ -2379,7 +2373,7 @@ const lookupOperandType = (
  * rules out `base-type` integer (`info.txt:71457`; G-R3 199). One with no `base-type` is not
  * refused, and is a float (`testRules` in `#plate/model/expressions/test.ts`). A `base-type`
  * outside the vocabulary is the structural validator's refusal, so it is not judged here. It reads
- * the two attributes alone, so it judges the kind whether its family has landed or not.
+ * the two attributes alone.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -3244,10 +3238,10 @@ const setCorrectResponses = (
  * kind's rule, the variables its reference attributes name, a read template processing may not
  * make, and the kind and type of the variables a `qti-printed-variable` or a `template-identifier`
  * names. Each expression is typed through its kind's rule in the registry (`kindRules` in
- * `#plate/model/expressions/read.ts`), and one whose kind's family has not landed is untyped and
- * not judged. The variable, type and reference rules judge inline response processing and template
- * processing alike, as the qti package does. A field of a record declaration's value that lacks its
- * `field-identifier` or its `base-type` is `missing-attribute` ({@link recordFieldAttributes}).
+ * `#plate/model/expressions/read.ts`). The variable, type and reference rules judge inline response
+ * processing and template processing alike, as the qti package does. A field of a record
+ * declaration's value that lacks its `field-identifier` or its `base-type` is `missing-attribute`
+ * ({@link recordFieldAttributes}).
  *
  * The rules judge exactly what the structural walk checks, and only an item they can read whole:
  *
