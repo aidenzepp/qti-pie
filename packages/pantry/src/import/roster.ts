@@ -15,7 +15,6 @@
  */
 import { insertableNamesOf } from "@bjornpagen/grizzle";
 import { Struct } from "effect";
-import type { OverlayRows } from "#pantry/import/overlays/index.ts";
 import {
   Comment,
   Doctype,
@@ -68,15 +67,22 @@ export const writtenNames = sorted(insertableNamesOf(Qti));
 export const documentLayerNames = sorted(Struct.keys(documentLayer));
 
 /**
- * Every overlay's relation name, in code point order: each written relation but the two roots and
- * the document layer's.
+ * Every relation an import writes directly, by its name: `Qti`'s own record of its relations, at
+ * `writtenNames`. A const of its own: given to `Struct.omit` as a nested call, `Struct.pick`'s
+ * result is inferred with no keys, and the names omitted from it are refused.
  */
-// SAFETY: `readProgram` (`#pantry/import/program.ts`) builds `PackageInputs`, keyed by every written
-// name, from `OverlayRows`, `DocumentLayerRows`, `Node` and `Package`, so the written names less
-// those of the roots and the document layer are keys of `OverlayRows`; `roster.test.ts` holds them
-// to exactly the keys `overlayPartsOf` gives. The filter tests membership of `documentLayer` at run
-// time, which no type narrows by, and grizzle's names know nothing of the overlays.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-export const overlayNames = writtenNames.filter(
-  (name) => name !== "Node" && name !== "Package" && !Object.hasOwn(documentLayer, name),
-) as readonly (keyof OverlayRows)[];
+const writtenRelations = Struct.pick(Qti.relations, writtenNames);
+
+/**
+ * Every overlay's relation, by its name: each written relation but the two roots, `Node` and
+ * `Package`, and the document layer's. A record read from the schema's own, so a relation a module
+ * adds joins it with no edit here, and its keys are names the type checker knows: `overlayRowsOf`
+ * (`#pantry/import/overlays/index.ts`) unions `OverlayRows` at exactly these.
+ */
+const overlayRelations = Struct.omit(writtenRelations, ["Node", "Package", ...documentLayerNames]);
+
+/**
+ * Every overlay's relation name, the keys of `overlayRelations`, in code point order.
+ * `roster.test.ts` holds them to exactly the relations the overlay builders write.
+ */
+export const overlayNames = sorted(Struct.keys(overlayRelations));
