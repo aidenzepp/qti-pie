@@ -4413,38 +4413,34 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    // A template that writes no cardinality, or one outside its domain, is refused by AL3
-    // ("required-attribute") or that domain alone, as an outcome is under "Feedback outcome type":
-    // it has no `DeclarationName` for a reference to read (spec reading 158).
-    const typed = cardinalityOf(overlay, template);
-    if (Option.isNone(typed)) {
-      return [];
-    }
-
-    // A record is neither, judged by its cardinality alone; a template is judged by its base type
-    // where it has one, and one with none, unwritten or spelling nothing, is Declaration base
-    // type's or its value domain's alone (lane NIL's audit, B12), as "Feedback outcome type" reads
-    // an outcome.
-    const cardinality = typed.value;
+    // Each half judges the template where what it reads spells something (spec readings 158 and
+    // 159, decision 432), as "Feedback outcome type" judges an outcome: its cardinality where it
+    // has one, a record's being neither; its base type where it has one. One unwritten, or
+    // spelling nothing, is AL3's, Declaration base type's or its value domain's alone (lane NIL's
+    // audit, B11 and B12).
+    const cardinality = cardinalityOf(overlay, template);
     const baseType = baseTypeOf(overlay, template);
 
-    return (cardinality === "single" || cardinality === "multiple") &&
-      Option.isNone(typeBreach(baseType, (held) => held === "identifier"))
-      ? []
-      : [
+    return Option.exists(cardinality, (held) => held !== "single" && held !== "multiple") ||
+      Option.isSome(typeBreach(baseType, (held) => held === "identifier"))
+      ? [
           {
             keys: {
               ...Option.match(baseType, {
                 onNone: () => ({}),
                 onSome: (held) => ({ baseType: held }),
               }),
-              cardinality,
+              ...Option.match(cardinality, {
+                onNone: () => ({}),
+                onSome: (held) => ({ cardinality: held }),
+              }),
               identifier: named.value,
               kind: node.kind,
             },
             law: "Template variable type",
           },
-        ];
+        ]
+      : [];
   },
   (node, overlay) =>
     node.kind === "qti-associable-hotspot" &&

@@ -62,10 +62,12 @@ import {
   SectionScope,
   SectionTemplateName,
   SectionTemplateRef,
+  SectionTemplateRefCardinality,
   SectionTemplateRefDeclaration,
   Slider,
   PrintedVariableRef,
   TemplateRef,
+  TemplateRefCardinality,
   TemplateRefDeclaration,
 } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
@@ -372,8 +374,8 @@ const templateOf = (fields: Partial<Fact<typeof TemplateRef>> = {}) =>
   }) satisfies Fact<typeof TemplateRef>;
 
 /**
- * The declaration a stray choice's template reference names: a declared single identifier
- * template.
+ * The declaration a stray choice's template reference names: a declared identifier template with a
+ * cardinality, which its {@link templateCardinalityOf} row holds (spec reading 159, decision 432).
  *
  * @param fields - The fields the case sets.
  * @returns The row.
@@ -400,6 +402,25 @@ const feedbackCardinalityOf = (cardinality: string) => {
 
   return { attribute, cardinality, declaration: stray, node } satisfies Fact<
     typeof FeedbackRefCardinality
+  >;
+};
+
+/**
+ * The cardinality of the template a stray template reference names, the row "Template variable
+ * type" judges it on (decision 432).
+ *
+ * @param cardinality - The template's cardinality.
+ * @param kind - The reference's kind.
+ * @returns The row.
+ */
+const templateCardinalityOf = (
+  cardinality: string,
+  kind: Fact<typeof TemplateRef>["kind"] = templateOf().kind,
+) => {
+  const { attribute, node } = templateOf();
+
+  return { attribute, cardinality, declaration: stray, kind, node } satisfies Fact<
+    typeof TemplateRefCardinality
   >;
 };
 
@@ -1075,11 +1096,12 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a choice's or template element's template variable of another type, in an item's or a section's placement, and accepts a portable custom interaction's, by Template variable type",
         () =>
-          // Oracle: PostgreSQL, the `Template_variable_type` check over the declaration rows
-          // (reading R15-l), on each of the two relations that hold a template reference's
-          // declaration: it judges a record by its cardinality, and a base type is judged by the
-          // containment into the identifier-typed DeclarationBaseType rows (reading 153), which a
-          // stray row cannot reach, as "Feedback outcome type" is.
+          // Oracle: PostgreSQL, the `Template_variable_type` check over the cardinality rows
+          // (reading R15-l; spec reading 159, decision 432: a row of the reference's own where its
+          // template has a cardinality), on each of the two relations that hold a template
+          // reference's cardinality: it judges a record by its cardinality, and a base type is
+          // judged by the containment into the identifier-typed DeclarationBaseType rows (reading
+          // 153), which a stray row cannot reach, as "Feedback outcome type" is.
           // Bound: a record template named by a choice, refused; an identifier template of
           // multiple cardinality named by a choice, and a record template named by a PCI's
           // qti-template-variable, accepted by this check; the placed section reference of a
@@ -1089,32 +1111,28 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const wrong = yield* db.apply(
               ChangeSet.empty(Author)
                 .insert(TemplateRef, [templateOf()])
-                .insert(TemplateRefDeclaration, [
-                  templateDeclarationOf({ baseTypes: 0n, cardinality: "record" }),
-                ]),
+                .insert(TemplateRefDeclaration, [templateDeclarationOf({ baseTypes: 0n })])
+                .insert(TemplateRefCardinality, [templateCardinalityOf("record")]),
               {},
             );
             assert.isTrue(
-              rejectedBy(wrong, checkNamed("TemplateRefDeclaration", "Template_variable_type")),
+              rejectedBy(wrong, checkNamed("TemplateRefCardinality", "Template_variable_type")),
             );
 
-            for (const row of [
-              templateDeclarationOf({ cardinality: "multiple" }),
-              templateDeclarationOf({
-                baseTypes: 0n,
-                cardinality: "record",
-                kind: "qti-template-variable",
-              }),
-            ]) {
+            for (const { baseTypes, cardinality, kind } of [
+              { baseTypes: 1n, cardinality: "multiple", kind: "qti-simple-choice" },
+              { baseTypes: 0n, cardinality: "record", kind: "qti-template-variable" },
+            ] as const) {
               const outcome = yield* db.apply(
                 ChangeSet.empty(Author)
-                  .insert(TemplateRef, [templateOf({ kind: row.kind })])
-                  .insert(TemplateRefDeclaration, [row]),
+                  .insert(TemplateRef, [templateOf({ kind })])
+                  .insert(TemplateRefDeclaration, [templateDeclarationOf({ baseTypes, kind })])
+                  .insert(TemplateRefCardinality, [templateCardinalityOf(cardinality, kind)]),
                 {},
               );
               assert.isFalse(
-                rejectedBy(outcome, checkNamed("TemplateRefDeclaration", "Template_variable_type")),
-                `${row.kind} ${row.baseTypes} ${row.cardinality}`,
+                rejectedBy(outcome, checkNamed("TemplateRefCardinality", "Template_variable_type")),
+                `${kind} ${baseTypes} ${cardinality}`,
               );
             }
 
@@ -1134,17 +1152,17 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                 ])
                 .insert(SectionTemplateRef, [{ ...templateOf(), ...placement }])
                 .insert(SectionTemplateRefDeclaration, [
-                  {
-                    ...templateDeclarationOf({ baseTypes: 0n, cardinality: "record" }),
-                    ...placement,
-                  },
+                  { ...templateDeclarationOf({ baseTypes: 0n }), ...placement },
+                ])
+                .insert(SectionTemplateRefCardinality, [
+                  { ...templateCardinalityOf("record"), instance: placement.instance },
                 ]),
               {},
             );
             assert.isTrue(
               rejectedBy(
                 placed,
-                checkNamed("SectionTemplateRefDeclaration", "Template_variable_type"),
+                checkNamed("SectionTemplateRefCardinality", "Template_variable_type"),
               ),
             );
           }),

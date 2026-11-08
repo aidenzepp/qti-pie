@@ -99,9 +99,11 @@ import type {
   SectionScope,
   SectionTemplateName,
   SectionTemplateRef,
+  SectionTemplateRefCardinality,
   SectionTemplateRefDeclaration,
   Slider,
   TemplateRef,
+  TemplateRefCardinality,
   TemplateRefDeclaration,
 } from "#pantry/qti/interactions.ts";
 
@@ -167,6 +169,7 @@ export interface InteractionRows {
   readonly SectionTemplateName: ReadonlyMap<string, Addition<typeof SectionTemplateName>>;
   readonly Slider: ReadonlyMap<string, Addition<typeof Slider>>;
   readonly TemplateRef: ReadonlyMap<string, Addition<typeof TemplateRef>>;
+  readonly TemplateRefCardinality: ReadonlyMap<string, Addition<typeof TemplateRefCardinality>>;
   readonly TemplateRefDeclaration: ReadonlyMap<string, Addition<typeof TemplateRefDeclaration>>;
 }
 
@@ -492,15 +495,39 @@ const declarationIn = (
 
 /**
  * The rows of one content reference relation, of its declarations, and of its declarations'
- * cardinalities where each has one (spec reading 159), each keyed alike. Only a feedback's
- * cardinality rows are a relation's ({@link FeedbackRefCardinality}): "Feedback outcome type" is
- * the one law over a content reference that reads its variable's cardinality.
+ * cardinalities where each has one (spec reading 159), each keyed alike. Only a feedback's and a
+ * template's cardinality rows are a relation's ({@link FeedbackRefCardinality},
+ * {@link TemplateRefCardinality}, the latter with its reference's kind, {@link kindedOf}):
+ * "Feedback outcome type" and "Template variable type" are the laws over a content reference that
+ * read its variable's cardinality (decision 432).
  */
 interface ReferenceRows<Reference, Declared, Cardinal> {
   readonly cardinalities: ReadonlyMap<string, Cardinal>;
   readonly declarations: ReadonlyMap<string, Declared>;
   readonly references: ReadonlyMap<string, Reference>;
 }
+
+/**
+ * Give each of a template reference relation's cardinality rows its reference's kind, which
+ * "Template variable type" reads (a portable custom interaction's `qti-template-variable` is free;
+ * decision 432): each cardinality row's key is its reference's.
+ *
+ * @param rows - The relation's references and cardinality rows, keyed alike.
+ * @param rows.cardinalities - The cardinality rows.
+ * @param rows.references - The references.
+ * @returns Each cardinality row with its reference's kind, under its key.
+ */
+const kindedOf = <Row extends object, Reference extends { readonly kind: unknown }>(rows: {
+  readonly cardinalities: ReadonlyMap<string, Row>;
+  readonly references: ReadonlyMap<string, Reference>;
+}): ReadonlyMap<string, Row & { readonly kind: Reference["kind"] }> =>
+  new Map(
+    [...rows.cardinalities].flatMap(([key, row]) =>
+      Option.toArray(Option.fromUndefinedOr(rows.references.get(key))).map(
+        ({ kind }) => [key, { ...row, kind }] as const,
+      ),
+    ),
+  );
 
 /**
  * Find the response declaration a binding names among its item's named declarations, the first in
@@ -1294,6 +1321,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     SectionTemplateName: sectionNamesOf(context, read, sectionTemplates, unfragmentedRoots),
     Slider: slidersOf(context),
     TemplateRef: templates.references,
+    TemplateRefCardinality: kindedOf(templates),
     TemplateRefDeclaration: templates.declarations,
   };
 };
@@ -1374,6 +1402,10 @@ export interface SectionRows {
   >;
   readonly SectionScope: ReadonlyMap<string, Addition<typeof SectionScope>>;
   readonly SectionTemplateRef: ReadonlyMap<string, Addition<typeof SectionTemplateRef>>;
+  readonly SectionTemplateRefCardinality: ReadonlyMap<
+    string,
+    Addition<typeof SectionTemplateRefCardinality>
+  >;
   readonly SectionTemplateRefDeclaration: ReadonlyMap<
     string,
     Addition<typeof SectionTemplateRefDeclaration>
@@ -1524,9 +1556,9 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
  * and of an included fragment under an item, and under it each of the document's references of each
  * class, under the assembly's root kind, with its declaration row where the name is that of an
  * assembly's declaration of a kind it may name, whatever its cardinality spells, and a feedback's
- * cardinality row where that declaration has one (spec reading 159): a built-in of the assembly's
- * root has none, and its law reads `BuiltInVariable`; a name no allowed declaration holds has none,
- * and its law refuses it (lane NIL's NS2: never the nil uuid).
+ * or a template's cardinality row where that declaration has one (spec reading 159, decision 432):
+ * a built-in of the assembly's root has none, and its law reads `BuiltInVariable`; a name no
+ * allowed declaration holds has none, and its law refuses it (lane NIL's NS2: never the nil uuid).
  *
  * @param input - The package's rows the placements read.
  * @param input.baseTypes - Every declaration's base type, where it has one (Q5.08's
@@ -1613,6 +1645,7 @@ export const sectionRowsOf = (input: {
       ),
     ),
     SectionTemplateRef: templates.references,
+    SectionTemplateRefCardinality: kindedOf(templates),
     SectionTemplateRefDeclaration: templates.declarations,
   };
 };

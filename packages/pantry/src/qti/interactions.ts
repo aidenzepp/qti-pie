@@ -1272,6 +1272,27 @@ export const TemplateRefDeclaration = relation(
 );
 
 /**
+ * A {@link TemplateRefDeclaration}'s template beside its cardinality, keyed as it is, where the
+ * template has one (spec reading 159, decision 432): `declaration`, its declaration row's, `kind`,
+ * the reference's, and `cardinality`, the template's {@link DeclarationCardinality}'s, which
+ * "Template variable type" holds to single or multiple unless the reference is a portable custom
+ * interaction's `qti-template-variable`, which states no type. A template whose cardinality is
+ * unwritten or spells nothing leaves its reference none, so the law reads no cardinality the
+ * template does not have, and AL3 or its value domain refuses it alone (spec reading 158).
+ */
+export const TemplateRefCardinality = relation(
+  "TemplateRefCardinality",
+  {
+    attribute: closedId(AttributeName),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
+  },
+  ["node", "attribute"],
+);
+
+/**
  * The outcome or template declaration a {@link PrintedVariableRef} names, keyed as it is, where its
  * document declares one of its name.
  */
@@ -1539,6 +1560,23 @@ export const SectionTemplateRefDeclaration = relation(
 );
 
 /**
+ * A {@link SectionTemplateRefDeclaration}'s template beside its cardinality, keyed as it is, where
+ * the template has one, as {@link TemplateRefCardinality} is an own template reference's.
+ */
+export const SectionTemplateRefCardinality = relation(
+  "SectionTemplateRefCardinality",
+  {
+    attribute: closedId(AttributeName),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    instance: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
+  },
+  ["instance", "node", "attribute"],
+);
+
+/**
  * The context declaration a {@link SectionContextRef} names among its assembly's declarations,
  * keyed as it is, where the assembly declares one of its name.
  */
@@ -1634,9 +1672,11 @@ export const interactionRelations = {
   SectionScope,
   SectionTemplateName,
   SectionTemplateRef,
+  SectionTemplateRefCardinality,
   SectionTemplateRefDeclaration,
   Slider,
   TemplateRef,
+  TemplateRefCardinality,
   TemplateRefDeclaration,
 };
 
@@ -2413,11 +2453,15 @@ const identifierTyped = on(
  *   through `declarationIdentifierRef` whatever its cardinality spells (spec reading 159); and a
  *   built-in's of that root is one its kind and attribute may name there, under its reference's law
  *   ("Feedback reference", "Template reference", "Printed variable reference", "Context variable
- *   reference"); and "Feedback outcome type" (reading 77: an outcome of base type identifier,
- *   single or multiple; the one built-in a feedback may name, `completionStatus`, is a single
- *   identifier, §2.2.2.3), its cardinality half over the feedback's cardinality rows
+ *   reference"); "Feedback outcome type" (reading 77: an outcome of base type identifier, single or
+ *   multiple; the one built-in a feedback may name, `completionStatus`, is a single identifier,
+ *   §2.2.2.3), its cardinality half over the feedback's cardinality rows
  *   ({@link FeedbackRefCardinality}, {@link SectionFeedbackRefCardinality}), each where the outcome
- *   has a cardinality, and its base type half over the declaration rows where it has a base type.
+ *   has a cardinality, and its base type half over the declaration rows where it has a base type;
+ *   and "Template variable type" (reading R15-l: a template element's or a choice's template
+ *   variable of base type identifier, single or multiple, a portable custom interaction's free),
+ *   its halves read the same way, the cardinality half over {@link TemplateRefCardinality} and
+ *   {@link SectionTemplateRefCardinality} (decision 432).
  */
 export const interactionLawsByName = {
   ...pipe(contentReferences, Rec.map(contentReferenceLaws)),
@@ -3309,7 +3353,28 @@ export const interactionLawsByName = {
     ),
   ],
   "Template variable type": [
-    check("Template_variable_type", TemplateRefDeclaration, (r) =>
+    // Each half judges the template where what it reads spells something (spec readings 158 and
+    // 159, decision 432), as "Feedback outcome type" judges an outcome: its cardinality, where it
+    // has one, its reference's cardinality row's, copied from its declaration row and
+    // `DeclarationCardinality`; its base type, where it has one, its `DeclarationBaseType`'s. A
+    // portable custom interaction's template variable is free.
+    contained(
+      on(
+        select(TemplateRefDeclaration, (r) => r.eq(r.cardinalities, 1n)),
+        "node",
+        "attribute",
+      ),
+      on(TemplateRefCardinality, "node", "attribute"),
+    ),
+    contained(
+      on(TemplateRefCardinality, "node", "attribute", "declaration", "kind"),
+      on(TemplateRefDeclaration, "node", "attribute", "declaration", "kind"),
+    ),
+    contained(
+      on(TemplateRefCardinality, "declaration", "cardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
+    ),
+    check("Template_variable_type", TemplateRefCardinality, (r) =>
       r.or(r.eq(r.kind, templateVariableKind), r.in(r.cardinality, feedbackCardinalities)),
     ),
     contained(
@@ -3321,7 +3386,24 @@ export const interactionLawsByName = {
       ),
       identifierTyped,
     ),
-    check("Template_variable_type", SectionTemplateRefDeclaration, (r) =>
+    contained(
+      on(
+        select(SectionTemplateRefDeclaration, (r) => r.eq(r.cardinalities, 1n)),
+        "instance",
+        "node",
+        "attribute",
+      ),
+      on(SectionTemplateRefCardinality, "instance", "node", "attribute"),
+    ),
+    contained(
+      on(SectionTemplateRefCardinality, "instance", "node", "attribute", "declaration", "kind"),
+      on(SectionTemplateRefDeclaration, "instance", "node", "attribute", "declaration", "kind"),
+    ),
+    contained(
+      on(SectionTemplateRefCardinality, "declaration", "cardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
+    ),
+    check("Template_variable_type", SectionTemplateRefCardinality, (r) =>
       r.or(r.eq(r.kind, templateVariableKind), r.in(r.cardinality, feedbackCardinalities)),
     ),
     contained(

@@ -153,9 +153,11 @@ import {
   SectionScope,
   SectionTemplateName,
   SectionTemplateRef,
+  SectionTemplateRefCardinality,
   SectionTemplateRefDeclaration,
   Slider,
   TemplateRef,
+  TemplateRefCardinality,
   TemplateRefDeclaration,
 } from "#pantry/qti/interactions.ts";
 import {
@@ -846,9 +848,11 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     SectionScope,
     SectionTemplateName,
     SectionTemplateRef,
+    SectionTemplateRefCardinality,
     SectionTemplateRefDeclaration,
     Slider,
     TemplateRef,
+    TemplateRefCardinality,
     TemplateRefDeclaration,
   ].map(
     ({ name, primaryKey }) =>
