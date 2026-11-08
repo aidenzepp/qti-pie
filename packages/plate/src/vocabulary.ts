@@ -368,10 +368,10 @@ export const renders = {
       on: declarations,
       when: { kind: "attribute-value", name: "base-type", value: "file" },
     },
-    // A record response declaration is the item model's to mark: it holds one in `Item.records`,
-    // with no mark, and marks one of base type `file`, or with a field of it, itself (`buildItem`),
-    // since this condition cannot see a field's base type. A test's outcome declarations take this
-    // rule too.
+    // A record response declaration is the item model's to mark, since this condition cannot see a
+    // field's base type: it holds one in `Item.records` with no mark, and marks one itself
+    // (`buildItem`) when its own base type, or a field's, is `file`. A test's outcome declarations
+    // take this rule too.
     {
       feature: 'cardinality="record"',
       on: ["qti-outcome-declaration", "qti-template-declaration"],
