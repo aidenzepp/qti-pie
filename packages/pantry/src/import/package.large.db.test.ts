@@ -1,23 +1,36 @@
 /**
  * A package past one Bind message (plan W5, Q5.20; fin.md §4.5a; the operator's ruling of
  * 2026-11-05 on issue #3): the every-relation package (`#pantry/test/gen/every-relation.ts`) with a
- * bulk of binary entries whose record alone is longer than PostgreSQL's longest message, imported
- * in one transaction and exported back equal.
+ * bulk of binary entries whose record, as grizzle writes it, is longer than PostgreSQL's longest
+ * message, imported in one transaction and exported back equal.
  *
  * A package's record is one `Entry` family under its `Package` row, every entry's bytes as read in
- * a grizzle `bytes` field (`#pantry/import/record.ts`), written in binary in one ChangeSet step, at
- * most grizzle's `bytesMaxLength` bytes a value. One statement's Bind message carries at most
- * 1,073,741,822 bytes (PostgreSQL's `PQ_LARGE_MESSAGE_LIMIT`, grizzle's `messageMaxBytes`). A
- * family past it is written by grizzle as one count update and consecutive inserts in ascending
- * slot order, in the same transaction, and never refused as `InputTooLarge` (fin.md §4.5a,
- * grizzle's W2.P1). So the importer never splits a package: the whole package is one transaction,
- * however large.
+ * a grizzle `bytes` field (`#pantry/import/record.ts`), written in one ChangeSet step, at most
+ * grizzle's `bytesMaxLength` bytes a value. grizzle 1.0.0-beta.1 writes a family member's bytes as
+ * their hex text, `\x` and two digits a byte, in a text array (grizzle-engine
+ * `scalar/values/bytes.ts` `bytesText`), not in binary as its README says. One statement's Bind
+ * message carries at most 1,073,741,822 bytes (PostgreSQL's `PQ_LARGE_MESSAGE_LIMIT`, grizzle's
+ * `messageMaxBytes`). A family past it is written by grizzle as one count update and consecutive
+ * inserts in ascending slot order, in the same transaction, and never refused as `InputTooLarge`
+ * (fin.md §4.5a, grizzle's W2.P1). So the importer never splits a package: the whole package is one
+ * transaction, however large.
  *
- * Written to run at N1 on the lease, never by a hand. It holds about 1 GiB of entry bytes on the
- * JavaScript heap as the import reads them and again as the export reads them back, each value read
- * through its hex text one row at a time, within Node's default heap of about 4 GB; on disk the
- * bulk's entries are hard links to one file, and the export writes them out whole under the
- * package's `work/`, removed when the test ends.
+ * The bulk is 8 entries of 64 MiB: 512 MiB of bytes, whose text is past the Bind bound. Twice as
+ * many, past it in raw bytes, make about 2 GiB of text, which grizzle 1.0.0-beta.1 sends as one
+ * TLS write that Node refuses (`SSL_write` takes an `int` length), so it loses the connection after
+ * sending COMMIT and answers `CommitUnknown`. The bulk returns to 16 once grizzle writes a family's
+ * bytes in binary and bounds a flight.
+ *
+ * Written to run at N1 on the lease, never by a hand. The import holds each entry's bytes once as
+ * read, 512 MiB outside the JavaScript heap, and grizzle's write holds for each value an admitted
+ * copy, its hex text as the fact's identity and again as its row's text, and each statement's
+ * literal: up to 2.8 GB of heap outlived a full collection during the apply, from 0.6 GB before
+ * it. The export reads the record in one result, every value's hex text beside its bytes. Measured
+ * 2026-11-07, this ran out of heap under `--max-old-space-size` 2,560 MiB and passed under 3,072;
+ * the database project's workers run with twice the least both large files passed under
+ * (`vite.config.ts`), until grizzle's after-beta "bytes past 268,435,443" item removes those
+ * copies. On disk the bulk's entries are hard links to one file, and the export writes them out
+ * whole under the package's `work/`, removed when the test ends.
  *
  * @see {@link https://www.postgresql.org/docs/19/protocol-message-formats.html | PostgreSQL 19, §54.7 Message Formats}
  */
@@ -38,16 +51,21 @@ import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-rela
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**
- * The bytes of each bulk entry: 64 MiB, one `bytes` value within grizzle's `bytesMaxLength`, so the
- * Bind bound admits fifteen of them in one statement.
+ * The bytes of each bulk entry: 64 MiB, one `bytes` value within grizzle's `bytesMaxLength`.
  */
 const bulkEntryBytes = 64 * 1024 * 1024;
 
 /**
- * The bulk's entries: the fewest whose record content alone, in raw bytes, is past
- * {@link messageMaxBytes}.
+ * The text grizzle's family write carries for one bulk entry: its hex form, `\x` and two digits a
+ * byte (grizzle-engine `scalar/values/bytes.ts` `bytesText`).
  */
-const bulkEntries = Math.floor(messageMaxBytes.value / bulkEntryBytes) + 1;
+const bulkEntryTextBytes = "\\x".length + 2 * bulkEntryBytes;
+
+/**
+ * The bulk's entries: the fewest whose text, as the family write carries it, is past
+ * {@link messageMaxBytes}: 8.
+ */
+const bulkEntries = Math.floor(messageMaxBytes.value / bulkEntryTextBytes) + 1;
 
 /**
  * The timeout of the test: it sends past a gibibyte to the server and reads it back.
@@ -110,7 +128,7 @@ describe.skipIf(!hasLease)(
           // inserted its whole record, though no one statement can carry it; and the export gives
           // back every entry of the source, byte for byte or canonically.
           // Bound: the every-relation package of 3 choices, 2 hottexts and 2 hotspots, with
-          // 16 bulk entries of 64 MiB, the fewest past the Bind bound.
+          // 8 bulk entries of 64 MiB, the fewest whose text passes the Bind bound.
           Effect.gen(function* pastOneBind() {
             const fs = yield* FileSystem.FileSystem;
             const path = yield* Path.Path;
@@ -125,7 +143,11 @@ describe.skipIf(!hasLease)(
               bytesMaxLength.value,
               "a bulk entry is one bytes value",
             );
-            assert.isAbove(recordBytes, messageMaxBytes.value, "the record fits one Bind message");
+            assert.isAbove(
+              bulkEntries * bulkEntryTextBytes,
+              messageMaxBytes.value,
+              "the bulk's text fits one Bind message",
+            );
 
             const source = yield* scopedPackage(entries);
             const [importElapsed, id] = yield* Effect.timed(importPackage(source));
