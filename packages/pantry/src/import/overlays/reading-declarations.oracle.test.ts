@@ -11,17 +11,20 @@
  * the null-object declaration codes (its lookup document, `qti-outcome-declaration`, no
  * cardinality, no base type) where it named none, and a reference the table `none`; and the law
  * oracle stood a name mapped from an undeclared source as an outcome, a kind no declaration gave
- * it.
+ * it. A reading in place of a literal is judged under "Reference type" over the declaration it
+ * reads (P24): a built-in is refused, and a declaration must be an outcome or a template, of the
+ * literal's base type where it has one and single where it has a cardinality; the law oracle judged
+ * no test-level reading under it before, where the import's rows did.
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`): no
  * case shows a disagreement but a class a lane's open fix owns (`known`).
  *
- * Bound: a test's outcome processing reading one of {@link names}' ten names by each of
- * {@link readers}' two ways, beside each of {@link mappings}' four mappings on its item ref: 80
+ * Bound: a test's outcome processing reading one of {@link names}' fourteen names by each of
+ * {@link readers}' three ways, beside each of {@link mappings}' six mappings on its item ref: 252
  * packages; and an item's map response, map response point and lookup naming a declaration that
  * holds each of {@link heldTables}' five table states, a built-in variable or nothing, the lookup
- * of an integer or a float: 28 packages; 108, exhausted.
+ * of an integer or a float: 28 packages; 280, exhausted.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -61,16 +64,23 @@ const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 const itemType = "imsqti_item_xmlv3p0";
 
 /**
- * The names a test's outcome processing reads, each with what it names: the item ref's mapped `M`,
- * its item's declared outcome `O` and response `R`, its item's built-ins `numAttempts` (a
- * response), `completionStatus` (an outcome) and `QTI_CONTEXT` (a context variable), the section's
- * and the test's own `duration` (a response), and a name nothing declares, unprefixed and through
- * the item ref (information model §2.2.2, §2.2.2.1, §7.48; spec readings 29, 48 and 86).
+ * The names a test's outcome processing reads, each with what it names: the item ref's mapped `M`;
+ * its item's declarations ({@link itemDeclarations}): a single integer outcome `O`, a response `R`,
+ * a single float outcome `F`, an outcome `U` of no cardinality and no base type, and a multiple
+ * integer template `T`; the test's own single float outcome `SCORE`; its item's built-ins
+ * `numAttempts` (a response), `completionStatus` (an outcome) and `QTI_CONTEXT` (a context
+ * variable), the section's and the test's own `duration` (a response); and a name nothing declares,
+ * unprefixed and through the item ref (information model §2.2.2, §2.2.2.1, §7.48; spec readings
+ * 29, 48 and 86).
  */
 const names = [
   { name: "ref.M", what: "mapped" },
   { name: "ref.O", what: "declared outcome" },
   { name: "ref.R", what: "declared response" },
+  { name: "ref.F", what: "declared float outcome" },
+  { name: "ref.U", what: "declared untyped outcome" },
+  { name: "ref.T", what: "declared multiple template" },
+  { name: "SCORE", what: "the test's float outcome" },
   { name: "ref.numAttempts", what: "item built-in response" },
   { name: "ref.completionStatus", what: "item built-in outcome" },
   { name: "ref.QTI_CONTEXT", what: "item built-in context" },
@@ -81,21 +91,36 @@ const names = [
 ] as const;
 
 /**
- * The ways the test's outcome processing reads a name by `identifier`: a variable, which names a
- * variable of any kind, and a correct, which names a response alone (§7.10.1). A reading in place
- * of a literal is left out: the law oracle judges no test-level reading under "Reference type",
- * where the import does, a gap of the oracle's own this box does not reach.
+ * The ways the test's outcome processing reads a name: a variable, which names a variable of any
+ * kind; a correct, which names a response alone (§7.10.1); and a random integer's `max`, in place
+ * of a literal, which a single integer outcome or template may stand for (P24, line 9889 of
+ * `info301.txt`).
  */
 const readers = [
   { expression: (name: string) => `<qti-variable identifier="${name}"/>`, reader: "variable" },
   { expression: (name: string) => `<qti-correct identifier="${name}"/>`, reader: "correct" },
+  {
+    expression: (name: string) => `<qti-random-integer min="0" max="${name}"/>`,
+    reader: "stand-in",
+  },
 ] as const;
 
 /**
  * The variable mappings on the item ref: none, or `M` mapped from the item's outcome `O`, its
- * response `R`, or `X`, which the item declares nothing under.
+ * response `R`, its float outcome `F`, its template `T`, or `X`, which it declares nothing under.
  */
-const mappings = ["none", "O", "R", "X"] as const;
+const mappings = ["none", "O", "R", "F", "T", "X"] as const;
+
+/**
+ * The declarations of the item a test's item ref names, in the order its content model takes them.
+ */
+const itemDeclarations = [
+  `<qti-response-declaration identifier="R" cardinality="single" base-type="identifier"/>`,
+  `<qti-outcome-declaration identifier="O" cardinality="single" base-type="integer"/>`,
+  `<qti-outcome-declaration identifier="F" cardinality="single" base-type="float"/>`,
+  `<qti-outcome-declaration identifier="U"/>`,
+  `<qti-template-declaration identifier="T" cardinality="multiple" base-type="integer"/>`,
+].join("");
 
 /**
  * What a declaration an item's reference names holds: none of its tables, a mapping, an area
@@ -234,8 +259,8 @@ const itemOf = (declarations: string, processing: string): Uint8Array =>
 
 /**
  * Write a case's package: a test whose item ref maps the case's mapping and whose outcome
- * processing reads the case's name, over an item that declares a response `R` and an outcome `O`;
- * or an item whose response processing claims a table of what it names.
+ * processing reads the case's name, over an item that declares {@link itemDeclarations}; or an
+ * item whose response processing claims a table of what it names.
  *
  * @param held - The case.
  * @returns Its entries.
@@ -273,13 +298,7 @@ const packageOf = (held: Case): PackageEntries => {
       ]),
     ],
     ["test.xml", test],
-    [
-      "item.xml",
-      itemOf(
-        `<qti-response-declaration identifier="R" cardinality="single" base-type="identifier"/><qti-outcome-declaration identifier="O" cardinality="single" base-type="integer"/>`,
-        "",
-      ),
-    ],
+    ["item.xml", itemOf(itemDeclarations, "")],
   ]);
 };
 
@@ -308,7 +327,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
             return yield* exhaust(
               {
-                box: "a test's variable or correct reading the item ref's mapped M, its item's declared O or R, its built-ins numAttempts, completionStatus or QTI_CONTEXT, the section's or the test's duration, or nothing, beside no mapping or one from O, R or an undeclared X; and an item's map response, map response point or lookup naming a declaration that holds no table, a mapping, an area mapping, a match table or an interpolation table, a built-in, or nothing",
+                box: "a test's variable, correct or random integer's max reading the item ref's mapped M, its item's declared O, R, F, U or T, the test's SCORE, its built-ins numAttempts, completionStatus or QTI_CONTEXT, the section's or the test's duration, or nothing, beside no mapping or one from O, R, F, T or an undeclared X; and an item's map response, map response point or lookup naming a declaration that holds no table, a mapping, an area mapping, a match table or an interpolation table, a built-in, or nothing",
                 caseHang: Duration.minutes(5),
                 coverage: requiredInSpace<Noted>(
                   pipe(

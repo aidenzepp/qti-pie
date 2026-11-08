@@ -611,12 +611,13 @@ const expressionBreachesOf = (typed: Typed): readonly Breach[] =>
 
 /**
  * The base type a variable named in place of a literal must have (`ReferenceBase`, rule P24): a
- * string for a pattern, a float for a random float's bounds, an integer for every other.
+ * string for a pattern, a float for a random float's bounds, an integer for every other,
+ * re-exported for the test-level readings (`#pantry/test/oracle-laws/tests.ts`).
  *
  * @param grammar - The composed grammar.
  * @returns Each (kind, attribute)'s base, by `kind attribute`.
  */
-const referenceBasesOf = (grammar: ComposedGrammar): ReadonlyMap<string, string> =>
+export const referenceBasesOf = (grammar: ComposedGrammar): ReadonlyMap<string, string> =>
   new Map(
     referenceBaseRows(grammar.references.variableReference.rows).map(
       ({ attribute, base, kind }) => [`${kind} ${attribute}`, base],
