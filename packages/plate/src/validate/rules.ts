@@ -2082,20 +2082,32 @@ const lookupTableRequirements = (
 };
 
 /**
+ * The base types a lookup operand may have whatever its table: those of the table that reads the
+ * most, the `qti-interpolation-table` (reading 28).
+ */
+const anyLookupOperand: readonly BaseType[] = lookupOperands["qti-interpolation-table"];
+
+/**
  * Apply `expression-type` to a `qti-lookup-outcome-value`'s operand (reading 28).
  *
  * The operand is a single integer, float or duration, and an integer when the outcome holds a
  * `qti-match-table` (operator ruling `96840ced`, Q15 B). An operand that is untyped
  * ({@link expressionType}) is accepted. An outcome that is undeclared or holds no lookup table is
- * not judged here: they are `undeclared-variable`'s refusal and {@link lookupTableRequirements}'s.
- * The qti package refuses the same as P22 (`checkLookup` in
+ * not judged against a table here: they are `undeclared-variable`'s refusal and
+ * {@link lookupTableRequirements}'s. The qti package refuses the same as P22 (`checkLookup` in
  * `packages/pantry/src/processing/check.ts`).
+ *
+ * A target no declaration answers but the context's typer does (`typeUnanswered`: a test's
+ * prefixed target, `I1.SCORE`, or any name in a section) still needs a single integer, float or
+ * duration operand: `checkLookup`'s first branch judges the operand for every target, before it
+ * reads any declaration. That refusal has no `table`, since the outcome's table is its item's, not
+ * the test's to judge.
  *
  * @param source The document.
  * @param visit The element's visit.
  * @param context The item's declarations and the parents the walk has met.
  * @returns The refusal at the `qti-lookup-outcome-value`'s path when its operand's type is not one
- *   its table allows; none for any other element.
+ *   its table allows, or one no lookup reads; none for any other element.
  */
 const lookupOperandType = (
   source: SourceDocument,
@@ -2112,10 +2124,11 @@ const lookupOperandType = (
   }
 
   const identifier = identifierOf(attribute.value);
-  const table = Option.flatMap(
-    Option.fromUndefinedOr(context.outcomes.get(identifier)),
-    lookupTableOf,
-  );
+  const declaration = context.outcomes.get(identifier);
+  const table =
+    declaration === undefined
+      ? Option.map(context.typeUnanswered(identifier), () => Option.none<LookupTable>())
+      : Option.map(lookupTableOf(declaration), Option.some);
   const operand = Option.flatMap(operandOf(visit.element), (expression) =>
     expressionType(expression, context),
   );
@@ -2123,7 +2136,12 @@ const lookupOperandType = (
     return [];
   }
 
-  return accepts(operand.value, lookupOperands[table.value], ["single"])
+  const allowed = Option.match(table.value, {
+    onNone: () => anyLookupOperand,
+    onSome: (local) => lookupOperands[local],
+  });
+
+  return accepts(operand.value, allowed, ["single"])
     ? []
     : [
         refusal(source, "expression-type", visit.path, {
@@ -2132,7 +2150,10 @@ const lookupOperandType = (
           expressionCardinality: operand.value.cardinality,
           identifier,
           reading: "28",
-          table: table.value,
+          ...Option.match(table.value, {
+            onNone: () => ({}),
+            onSome: (local) => ({ table: local }),
+          }),
         }),
       ];
 };
@@ -2283,6 +2304,41 @@ const valuesOf = (written: string, entry: ReferenceEntry): readonly string[] =>
   entry.list ? written.split(/[\t\n\r ]+/u).filter((token) => token !== "") : [written];
 
 /**
+ * Give the names a reference attribute's value may name, which a string's classifier reads: the
+ * document's declared names and built-ins, and the name a value braces when no declaration and no
+ * built-in answers it but the context's typer types it (`typeUnanswered`) other than `unknown`.
+ *
+ * That last is a test's prefixed read a package resolves (`{I1.N}`), which the qti package reads
+ * as a reference (`patternOrRef` in `packages/pantry/src/processing/parse.ts`) and judges through
+ * the variable it resolves to (`checkAttributeReference` in
+ * `packages/pantry/src/processing/check.ts`, P24). A test checked alone types every prefixed read
+ * `unknown`, and a section every name, so a braced name there stays literal text (ruling R1), as a
+ * braced name no reading resolves (`{I9.X}`) does through a package; an item's typer answers
+ * nothing.
+ *
+ * @param value One value of the attribute, as written.
+ * @param declared The document's declared names and built-ins.
+ * @param names The document's built-ins and the typer of a name nothing else answers.
+ * @returns The names the value may name.
+ */
+const namableBy = (
+  value: string,
+  declared: ReadonlySet<string>,
+  names: Names,
+): ReadonlySet<string> => {
+  const braced = value.startsWith("{") && value.endsWith("}") ? value.slice(1, -1) : "";
+  const typed =
+    braced !== "" &&
+    !declared.has(braced) &&
+    Option.exists(
+      names.typeUnanswered(braced),
+      (type) => type.baseType !== "unknown" || type.cardinality !== "unknown",
+    );
+
+  return typed ? new Set([...declared, braced]) : declared;
+};
+
+/**
  * Apply `undeclared-variable` and `expression-type` to the variables an expression's reference
  * attributes name, as its kind's reference facet lists them (`references` of its rule in the
  * registry). The qti package refuses the same as P8 and P24 (`checkAttributeReference` in
@@ -2315,8 +2371,9 @@ const valuesOf = (written: string, entry: ReferenceEntry): readonly string[] =>
  * In a test's processing a name its typer answers (`typeUnanswered`), which no declaration and no
  * built-in does, is a prefixed read: it is never `undeclared-variable`, and it is P24's when its
  * type does not agree with the entry's single base type, as the qti package's
- * `checkAttributeReference` judges the variable it resolves to. In a section every name is typed
- * `unknown`, so none is refused.
+ * `checkAttributeReference` judges the variable it resolves to. A string attribute's braced name
+ * is such a read only when the typer types it other than `unknown` ({@link namableBy}). In a
+ * section every name is typed `unknown`, so none is refused.
  *
  * It reads only the facet entries it is given, so it judges any kind whose rule declares them.
  *
@@ -2351,7 +2408,7 @@ export const referenceRefusals = (
     ]);
 
     return valuesOf(written.value.value, entry).flatMap((value) => {
-      const classified = classifiers[entry.baseType](value, declared);
+      const classified = classifiers[entry.baseType](value, namableBy(value, declared, names));
       if (classified._tag === "literal" || !isNcName(classified.identifier)) {
         return [];
       }
@@ -3086,9 +3143,14 @@ const testProcessingBuiltIns: ReadonlyMap<string, NamedVariable> = new Map(
  *
  * A test's is its outcome and context declarations, the four built-ins its processing reads
  * ({@link testProcessingBuiltIns}), and the typer of a prefixed read: a name with a `.` that no
- * declaration answers whole. A section's is no declaration and no built-in, with every name typed
- * `unknown`: a section resolves its names in each test that holds it (reading 5), so only the rules
- * that need no declaration judge it.
+ * declaration answers whole. A dotted name the test declares whole is that declaration and never a
+ * prefixed read (reading 37), whatever kind of variable the reference expects: where it expects
+ * another kind ({@link variableType}), a `qti-map-response` or a `qti-correct` of a test outcome
+ * `A.B`, or a `qti-set-outcome-value` of a context variable `C.X`, nothing answers it, and it is
+ * refused `undeclared-variable` as its undotted form is (pantry P8 and P27, whose `DeclaredRefKind`
+ * admits only a declaration of the kind). A section's is no declaration and no built-in, with every
+ * name typed `unknown`: a section resolves its names in each test that holds it (reading 5), so
+ * only the rules that need no declaration judge it.
  *
  * @param source The document.
  * @param typePrefixed The typer of a test's prefixed reads.
@@ -3101,13 +3163,19 @@ const processingScope = (
   Pick<Context, "builtIns" | "declarer" | "outcomes" | "typeUnanswered" | "variables">
 > => {
   if (isQti(source.root, (local) => local === "qti-assessment-test")) {
+    const variables = new Map(
+      variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)]),
+    );
+
     return Option.some({
       builtIns: testProcessingBuiltIns,
       declarer: "test",
       outcomes: declarationsOf(source, "qti-outcome-declaration"),
       typeUnanswered: (identifier) =>
-        identifier.includes(".") ? Option.some(typePrefixed(identifier)) : Option.none(),
-      variables: new Map(variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
+        identifier.includes(".") && !variables.has(identifier)
+          ? Option.some(typePrefixed(identifier))
+          : Option.none(),
+      variables,
     });
   }
 

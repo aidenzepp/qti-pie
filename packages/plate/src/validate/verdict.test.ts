@@ -1335,6 +1335,66 @@ describe("check, the base types of a test's SCORE, MAXSCORE and PASSED", () => {
   });
 });
 
+/**
+ * Construct a test whose outcome processing looks `I1.SCORE`, which it reads through its item ref
+ * `I1`, up with an operand.
+ *
+ * @param operand The lookup's operand.
+ * @returns The test.
+ */
+const lookingUp = (operand: SourceElement): SourceDocument =>
+  assessmentTest(
+    [itemRef("I1")],
+    [
+      outcome("SCORE", "float"),
+      el(
+        "qti-outcome-processing",
+        [],
+        [el("qti-lookup-outcome-value", [attr("identifier", "I1.SCORE")], [operand])],
+      ),
+    ],
+  );
+
+describe("check, a test's lookup of an outcome it reads through an item ref (reading 28; pantry P22)", () => {
+  it("[T-9] refuses, in the test's own verdict, the lookup operand of a dotted target that is a string, as expression-type with reading 28 and no table, and accepts an integer one, its processing marked", () => {
+    const refused = verdictOf(
+      lookingUp(el("qti-base-value", [attr("base-type", "string")], [text("x")])),
+    );
+    const accepted = verdictOf(
+      lookingUp(el("qti-base-value", [attr("base-type", "integer")], [text("1")])),
+    );
+
+    assert.strictEqual(refused.verdict, "refused");
+    assert.deepStrictEqual(
+      refused.verdict === "refused"
+        ? refused.refusals.map((refusal) => ({
+            detail: refusal.detail,
+            location: refusal.location,
+            rule: refusal.rule,
+          }))
+        : [],
+      [
+        {
+          detail: {
+            element: "qti-lookup-outcome-value",
+            expressionBaseType: "string",
+            expressionCardinality: "single",
+            identifier: "I1.SCORE",
+            reading: "28",
+          },
+          location: {
+            kind: "path",
+            path: "qti-assessment-test/qti-outcome-processing/qti-lookup-outcome-value",
+          },
+          rule: "expression-type",
+        },
+      ],
+    );
+    // The engine holds no item's outcome to set, so the accepted test's processing is marked.
+    acceptedTestOf(accepted, "accepted-with-unsupported");
+  });
+});
+
 describe("check, every QTI 3 root", () => {
   it.effect(
     "[T-4] [S-0] accepts BGtest.xml as a test it delivers in full",
@@ -2121,6 +2181,22 @@ const m2Wordings: readonly {
     name: "lom-title",
     spans: ["choice.xml", "choice", "Unattended Luggage", "Metadata Example Item #1", "title"],
   },
+  {
+    args: [
+      "expression-type",
+      "tests/test.xml",
+      { kind: "path", path: "qti-assessment-test/qti-outcome-processing/qti-lookup-outcome-value" },
+      {
+        element: "qti-lookup-outcome-value",
+        expressionBaseType: "string",
+        expressionCardinality: "single",
+        identifier: "I1.SCORE",
+        reading: "28",
+      },
+    ],
+    name: "expression-type of a dotted lookup",
+    spans: ["qti-lookup-outcome-value", "I1.SCORE", "string", "integer", "float", "duration"],
+  },
 ];
 
 describe("describeRefusal", () => {
@@ -2772,6 +2848,29 @@ describe("describeRefusal", () => {
       sentence,
       "To make it valid: set `completionStatus` with a `qti-set-outcome-value`, or name a declared outcome.",
     );
+  });
+
+  it("[T-9] words the lookup operand of a dotted target by what every lookup reads, and names no table (reading 28)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        element: "qti-lookup-outcome-value",
+        expressionBaseType: "string",
+        expressionCardinality: "single",
+        identifier: "I1.SCORE",
+        reading: "28",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-lookup-outcome-value` looks `I1.SCORE` up with a single `string` value, but a lookup reads only a single `integer`, `float` or `duration` value (reading 28).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: look `I1.SCORE` up with a single `integer`, `float` or `duration` value.",
+    );
+    assert.notInclude(sentence, "table");
+    assert.notInclude(sentence, "sets");
   });
 
   it("names a dotted name that resolves to no item ref, test part or section variable (reading 48)", () => {
