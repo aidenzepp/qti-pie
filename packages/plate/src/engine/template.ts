@@ -464,12 +464,11 @@ const runSequence = (
  * The run starts from the declared state: each template variable at the default the test gives
  * it, else its declared default, else NULL of its type, and no correct response or default set.
  * The test's defaults are checked first, where they are applied ({@link checkTemplateDefaults}).
- * The rules run in order, each seeing
- * what the rules before it left; `qti-set-template-value` sets its template variable, and
- * `qti-set-correct-response` and `qti-set-default-value` write the result's `correct` and
- * `defaults`, never the item. A `qti-template-condition` runs its first branch whose condition is
- * a single boolean `true`, else its `qti-template-else`; a `qti-exit-template` ends the run,
- * nested or not, keeping what is set.
+ * The rules run in order, each seeing what the rules before it left; `qti-set-template-value` sets
+ * its template variable, and `qti-set-correct-response` and `qti-set-default-value` write the
+ * result's `correct` and `defaults`, never the item. A `qti-template-condition` runs its first
+ * branch whose condition is a single boolean `true`, else its `qti-template-else`; a
+ * `qti-exit-template` ends the run, nested or not, keeping what is set.
  *
  * A `qti-template-constraint` that is false or NULL restarts the run from the declared state, the
  * test's defaults included, since the test redefines the declared state for this item, both

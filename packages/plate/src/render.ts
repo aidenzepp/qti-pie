@@ -349,11 +349,10 @@ const interactionRenderer =
  * It prints everything or nothing. First, an item whose `unprinted` names a printed variable or a
  * parameter whose text passed its bound, 1,000,000 or the budget `redact` ran under, fails
  * {@link OutputTooLarge} naming the bound, which limit it is and the variable, before anything is
- * built. Then it counts
- * the characters of HTML as it writes them, as a string's `length` counts them, and stops at the
- * first chunk that would pass the configuration's `outputBudget`: HTML of exactly `outputBudget`
- * characters is returned, and one more fails {@link OutputTooLarge} with none of the page built or
- * returned.
+ * built. Then it counts the characters of HTML as it writes them, as a string's `length` counts
+ * them, and stops at the first chunk that would pass the configuration's `outputBudget`: HTML of
+ * exactly `outputBudget` characters is returned, and one more fails {@link OutputTooLarge} with
+ * none of the page built or returned.
  *
  * @example
  *   const rendered = render(redact(accepted, undefined, configuration), configuration, {

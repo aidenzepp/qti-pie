@@ -750,13 +750,13 @@ export const partStarted = (
 
 /**
  * Mark a session item presented and start its first attempt: its record becomes the one
- * `firstAttempt` starts for the item's instance under the session's seed, from the template
- * defaults given, as {@link present} describes.
+ * `firstAttempt` starts for the item's instance under the session's processing seed, from the
+ * template defaults given, as {@link present} describes.
  *
  * @param item The session item, not yet presented.
  * @param accepted The item it delivers.
  * @param datestamp The time of the transition, in ISO 8601.
- * @param seed The session's seed.
+ * @param seed The session's processing seed.
  * @param templateDefaults The item ref's template defaults, already checked against the item.
  * @returns The item, presented.
  * @throws {FirstAttemptDefect} When `firstAttempt` fails, which no checked item can cause once its
