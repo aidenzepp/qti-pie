@@ -159,7 +159,8 @@ describe("the walk corpus", { tags: ["corpus"] }, () => {
         const walk = yield* written;
 
         assert.include(walk.items, "inline.xml");
-        assert.isAbove(walk.items.length, 4);
+        assert.include(walk.items, "choices.xml");
+        assert.isAbove(walk.items.length, 5);
         for (const item of walk.items) {
           const verdict = yield* open(item, readWritten(item));
           assert.strictEqual(verdict.verdict, "accepted", item);
