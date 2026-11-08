@@ -404,7 +404,7 @@ export const fixed = {
     fix: "NS1 (FB-EXPR): a declared reference's declaration is a row of its own, VariableRefDeclaration or PlacedVariableRefDeclaration, so one that names a built-in or nothing holds no nil uuid",
     owner: "NIL",
   },
-  "import-only-law: Binding cardinality, contained BindingDeclaration(node) in CountBound(node)": {
+  "import-only-law: Binding cardinality, contained BindingCardinality(node) in MostCount(node)": {
     files: [
       [
         "choice.xml",
@@ -413,7 +413,7 @@ export const fixed = {
 <qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-response-declaration identifier="RESPONSE"/><qti-item-body>
         
         
-        <qti-choice-interaction response-identifier="RESPONSE" max-choices="1abc">
+        <qti-choice-interaction response-identifier="RESPONSE" max-choices="2">
             
             
             
@@ -442,7 +442,7 @@ export const fixed = {
 </manifest>`,
       ],
     ],
-    fix: "B11: a declaration whose cardinality spells nothing has no row, so no binding of it writes a BindingDeclaration or a CountBound row",
+    fix: "B11 and reading 159: a declaration whose cardinality spells nothing is read as having none, never as single, so a binding of it is declared but has no BindingCardinality row, which Binding cardinality reads",
     owner: "NIL",
   },
   "import-only-law: Binding declared, contained BoundVariable(node, attribute, kind, document, identifier) in BindingDeclaration(node, attribute, kind, document, identifier)":

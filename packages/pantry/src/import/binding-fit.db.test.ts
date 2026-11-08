@@ -6,18 +6,19 @@
  * the nil declaration's `single` and no base type, where the oracle refuses it under "Binding
  * declared" alone. A declared binding now has its `BindingDeclaration` (or
  * `PlacedBindingDeclaration`) row and an undeclared one none, whose existence law is "Binding
- * declared", and the fit laws read the declaration rows (`#pantry/qti/interactions.ts`; lane NIL's
- * audit, B1 and B2). This suite holds the database to that over every site and state the host guard
- * (`src/test/binding-fit.oracle.test.ts`) exhausts. Under the old sentinel, a binding renamed to an
- * undeclared name, an outcome or a built-in, at a site whose nil or borrowed type its interaction
- * does not fit, refused under BindingFit: the containment into the closed `BindingFit` is a CHECK
- * on the binding's table, which PostgreSQL judges as the row is inserted, before the deferred
- * `declarationRef` that "Binding declared" was.
+ * declared", and the fit laws read the binding's cardinality row (`#pantry/qti/interactions.ts`;
+ * lane NIL's audit, B1 and B2). This suite holds the database to that over every site and state the
+ * host guard (`src/test/binding-fit.oracle.test.ts`) exhausts. Under the old sentinel, a binding
+ * renamed to an undeclared name, an outcome or a built-in, at a site whose nil or borrowed type its
+ * interaction does not fit, refused under BindingFit: the containment into the closed `BindingFit`
+ * is a CHECK on the binding's table, which PostgreSQL judges as the row is inserted, before the
+ * deferred `declarationRef` that "Binding declared" was.
  *
  * A declaration that writes no cardinality, an empty one, one no cardinality spells or a padded one
- * has no `Declaration` row, and no declaration row stands beside its bindings
- * (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`; lane NIL's audit, B11), so AL3
- * or the value domain refuses it alone, as the oracle names it (the ruling of 2026-11-06). Before,
+ * has no `DeclarationCardinality` row, so its bindings have their declaration rows and no
+ * cardinality rows (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`; spec readings
+ * 158 and 159), and AL3 or the value domain refuses it alone, as the oracle names it (the ruling
+ * of 2026-11-06). Before,
  * it was held as `single`, which `Declaration`'s own `E1_derived` refused too, and this suite
  * tolerated that rule for those four states; it now holds every state to the oracle alike.
  */
