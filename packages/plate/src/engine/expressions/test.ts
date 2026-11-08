@@ -160,9 +160,7 @@ const noRecords: ReadonlyMap<string, RecordDeclaration> = new Map();
  * @returns The record.
  */
 const recordValue = (item: ScopeItem, identifier: string): RecordValue =>
-  Object.hasOwn(item.record.records, identifier)
-    ? (item.record.records[identifier] ?? nullRecord)
-    : nullRecord;
+  Option.getOrElse(own(item.record.records, identifier), () => nullRecord);
 
 /**
  * Report whether an item was responded to: some declared response holds a value that differs from
@@ -185,14 +183,13 @@ const respondedTo = (item: ScopeItem): Result.Result<boolean, UnknownIdentifierE
     ),
     (differs) =>
       differs.includes(true) ||
-      Array.from(
-        (item.records ?? noRecords).values(),
+      [...(item.records ?? noRecords).values()].some(
         (declaration) =>
           !sameRecord(
             recordValue(item, declaration.identifier),
             Option.getOrElse(declaration.defaultValue, () => nullRecord),
           ),
-      ).includes(true),
+      ),
   );
 
 /**
@@ -324,8 +321,8 @@ const evaluateNumberCorrect: Evaluator<"number-correct"> = (expression, scope) =
 /**
  * Give the value of a `qti-number-incorrect`: the number of items its filters keep that were
  * attempted at least once (`info.txt:9336`), whose every declared response, of a type the value
- * model holds or not, has a correct response, and at least one of which does not match it
- * ({@link judged}): an unheld response reads NULL, which matches none.
+ * model holds or not, a record response among them, has a correct response, and at least one of
+ * which does not match it ({@link judged}): an unheld response reads NULL, which matches none.
  *
  * An item is attempted once an attempt has started, which is once it is presented ("items with
  * which the user has interacted, whether or not they provided a response", `info.txt:9340`): its

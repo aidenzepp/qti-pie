@@ -12,8 +12,9 @@
  * It value-imports only `effect`'s `Option` and `Result`, `#plate/engine/failures.ts`,
  * `#plate/engine/numbers.ts`, `#plate/engine/scope.ts`, `#plate/model/record.ts` and
  * `#plate/model/values.ts`, and reads `Variables`, `Scope` and `Evaluate` from
- * `#plate/engine/evaluate.ts` and the expression and reference types from
- * `#plate/model/expression.ts` as types, so every expression family may import it.
+ * `#plate/engine/evaluate.ts`, the expression and reference types from
+ * `#plate/model/expression.ts` and `RecordDeclaration` from `#plate/model/item.ts` as types, so
+ * every expression family may import it.
  *
  * @module
  */
@@ -47,7 +48,7 @@ import type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
  * @param values The responses, the record responses' records, the outcomes, the template values
  *   or an override map, if any.
  * @param identifier The identifier.
- * @returns The value, or none when the map holds no value by that name.
+ * @returns The value or the record, or none when the map holds none by that name.
  */
 export const own = <A extends RecordValue | Value>(
   values: Readonly<Record<string, A>> | undefined,
@@ -322,10 +323,11 @@ const prefixedOf = (variables: Variables, name: string): Option.Option<PrefixedR
   );
 
 /**
- * Report whether a `qti-correct` or a `qti-default` names a variable of the run's own holder, so
- * that, as {@link prefixedRead}'s callers read it, the name is never read through an item ref: for
- * `qti-correct` a response the holder declares; for `qti-default` a response, an outcome or a
- * template variable it declares, or a built-in the run holds ({@link builtInType}).
+ * Report whether a `qti-correct` or a `qti-default` names a variable of the run's own holder, which
+ * is then never read through an item ref, as their value reads decide (`namedResponse` and
+ * `evaluateDefault` in `#plate/engine/expressions/references.ts`): for `qti-correct` a response
+ * the holder declares; for `qti-default` a response, an outcome or a template variable it
+ * declares, or a built-in the run holds ({@link builtInType}).
  *
  * @param kind The kind.
  * @param identifier The name it writes.
@@ -342,6 +344,18 @@ const holderNames = (kind: "correct" | "default", identifier: string, scope: Sco
         templates.has(identifier) ||
         Option.isSome(builtInType(scope.variables, identifier));
 };
+
+/**
+ * Give the record a record response declares for a `qti-correct` or a `qti-default` of it: its
+ * correct response or its default, the NULL record when it declares none. Template processing
+ * never sets either, so the declaration's is the only one.
+ *
+ * @param kind The kind that reads it.
+ * @param declared The record response's declaration.
+ * @returns The declared record.
+ */
+const declaredRecord = (kind: "correct" | "default", declared: RecordDeclaration): RecordValue =>
+  Option.getOrElse(kind === "correct" ? declared.correct : declared.defaultValue, () => nullRecord);
 
 /**
  * Give the record an operand names, when it names a record response: a `qti-variable` the record
@@ -382,14 +396,11 @@ const recordOf = (operand: Expression, scope: Scope): Option.Option<RecordValue>
   }
 
   const { identifier, kind } = operand;
-  const declaredRecord = (declared: RecordDeclaration): RecordValue =>
-    Option.getOrElse(
-      kind === "correct" ? declared.correct : declared.defaultValue,
-      () => nullRecord,
-    );
 
   return Option.orElse(
-    Option.map(Option.fromUndefinedOr(scope.item.records?.get(identifier)), declaredRecord),
+    Option.map(Option.fromUndefinedOr(scope.item.records?.get(identifier)), (declared) =>
+      declaredRecord(kind, declared),
+    ),
     () =>
       holderNames(kind, identifier, scope)
         ? Option.none()
@@ -397,7 +408,7 @@ const recordOf = (operand: Expression, scope: Scope): Option.Option<RecordValue>
             named.kind === "record"
               ? Option.map(
                   Option.fromUndefinedOr(item.records?.get(named.identifier)),
-                  (declared) => (occurrence === 1n ? declaredRecord(declared) : nullRecord),
+                  (declared) => (occurrence === 1n ? declaredRecord(kind, declared) : nullRecord),
                 )
               : Option.none(),
           ),

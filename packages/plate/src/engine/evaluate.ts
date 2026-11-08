@@ -61,14 +61,15 @@ export {
 export type { EngineFailure } from "#plate/engine/failures.ts";
 
 /**
- * The variables of one attempt: each response, each outcome and each template variable by
- * identifier, the correct responses and defaults template processing set, and the attempt count.
+ * The variables of one attempt: each response, each record response's record, each outcome and
+ * each template variable by identifier, the correct responses and defaults template processing
+ * set, and the attempt count.
  *
- * Responses, outcomes and template variables share one identifier space, because declaration
- * identifiers are unique together, so a `qti-variable` names at most one of them. The outcomes hold
- * the built-in outcome `completionStatus` beside the declared ones where the item holds it
- * (`holdsCompletionStatus` in `#plate/model/record.ts`), since it is "declared implicitly"
- * (`info.txt:8488`): no response, outcome or template variable then shares its name.
+ * Responses, record responses, outcomes and template variables share one identifier space, because
+ * declaration identifiers are unique together, so a `qti-variable` names at most one of them. The
+ * outcomes hold the built-in outcome `completionStatus` beside the declared ones where the item
+ * holds it (`holdsCompletionStatus` in `#plate/model/record.ts`), since it is "declared
+ * implicitly" (`info.txt:8488`): no response, outcome or template variable then shares its name.
  */
 export interface Variables {
   /**
