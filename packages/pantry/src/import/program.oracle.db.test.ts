@@ -28,7 +28,7 @@ import { describe, inject } from "vitest";
 import { loginConnection } from "#pantry/db/connection.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importPackage, WrapApply } from "#pantry/import/package.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
@@ -501,7 +501,9 @@ describe.skipIf(!hasLease)(
         Effect.gen(function* noRow() {
           const before = yield* storedPackages;
           const failed = yield* Effect.flip(
-            importPackage(fixtures.simple, { wrapApply: () => Effect.fail(new CommitUnknown()) }),
+            importPackage(fixtures.simple).pipe(
+              Effect.provideService(WrapApply, () => Effect.fail(new CommitUnknown())),
+            ),
           );
 
           assert.strictEqual(failed._tag, "CommitUnknown");
@@ -1197,9 +1199,11 @@ describe.skipIf(!hasLease)(
         // Oracle: the specification as a checker, `CommitUnknown`'s resolution: the apply ran and
         // committed, so the package is read back and the import answers its id.
         Effect.gen(function* readsBack() {
-          const id = yield* importPackage(fixtures.simple, {
-            wrapApply: (apply) => Effect.andThen(apply, Effect.fail(new CommitUnknown())),
-          });
+          const id = yield* importPackage(fixtures.simple).pipe(
+            Effect.provideService(WrapApply, (apply) =>
+              Effect.andThen(apply, Effect.fail(new CommitUnknown())),
+            ),
+          );
           const db = yield* Db.open(AuthorApp.roles.author, {});
 
           assert.lengthOf(yield* (yield* db.execute(packageById, { id })).collect, 1);

@@ -2,7 +2,7 @@
  * One transaction per package (plan W5, Q5.20; the operator's ruling of 2026-11-05 on issue #3),
  * over the every-relation package (`#pantry/test/gen/every-relation.ts`), whose import writes a row
  * of every stored relation of `Qti`: its ChangeSet compiles, it imports in one transaction, its
- * export gives back its source, and a failure injected through `ImportOptions.wrapApply` while the
+ * export gives back its source, and a failure injected through `WrapApply` while the
  * import's transaction runs leaves no row of it.
  *
  * The oracles are PostgreSQL's own: the catalog and the system columns of every table of the
@@ -32,8 +32,7 @@ import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
-import { importPackage } from "#pantry/import/package.ts";
-import type { ImportOptions } from "#pantry/import/package.ts";
+import { importPackage, WrapApply } from "#pantry/import/package.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
@@ -232,13 +231,12 @@ const packageXid = (client: Client, id: string) =>
  * Import the every-relation package of member counts, its directory removed with the scope.
  *
  * @param members - The counts it is drawn by.
- * @param options - The import's options.
  * @returns The package's directory and its id.
  */
-const importDrawn = (members: MemberCounts, options?: ImportOptions) =>
+const importDrawn = (members: MemberCounts) =>
   Effect.gen(function* importsDrawn() {
     const dir = yield* scopedPackage(everyRelationPackage(members));
-    const id = yield* importPackage(dir, options);
+    const id = yield* importPackage(dir);
 
     return { dir, id };
   });
@@ -472,7 +470,7 @@ describe.skipIf(!hasLease)(
           // Oracle: PostgreSQL's catalog. A second session holds one table the import writes in
           // SHARE mode, which blocks the import's INSERT into it and nothing else, so the import's
           // one transaction stops there with every statement before it run. The failure injected
-          // through `wrapApply` then interrupts the apply (grizzle cancels the statement and
+          // through `WrapApply` then interrupts the apply (grizzle cancels the statement and
           // destroys its session, README "Transactions and concurrency") and fails it as
           // `CommitUnknown`, whose read-back finds no package. Every table's count is then what it
           // was before the import.
@@ -537,7 +535,7 @@ describe.skipIf(!hasLease)(
                     yield* rowsOf(holder, `LOCK TABLE ${table} IN SHARE MODE`);
 
                     const failed = yield* Effect.flip(
-                      importDrawn(members, { wrapApply: held }),
+                      importDrawn(members).pipe(Effect.provideService(WrapApply, held)),
                     ).pipe(
                       Effect.tap(() =>
                         Ref.get(waiter).pipe(

@@ -18,7 +18,18 @@ import {
   TransientFailure,
 } from "@bjornpagen/grizzle";
 import type { ApplyError, DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
-import { Clock, Duration, Effect, Option, Random, Ref, Result, Schedule, Schema } from "effect";
+import {
+  Clock,
+  Context,
+  Duration,
+  Effect,
+  Option,
+  Random,
+  Ref,
+  Result,
+  Schedule,
+  Schema,
+} from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
@@ -40,42 +51,44 @@ const retryBound = Duration.seconds(30);
 const retryDelayCap = Duration.seconds(1);
 
 /**
- * The retry between attempts at the database, bounded by elapsed time and not by count.
+ * The schedule the import retries `Db.open` and `db.apply` on after a transient refusal. Its
+ * default is the production schedule, so a caller provides nothing; a test provides another
+ * through `Effect.provideService`, to give up sooner than the bound allows.
  *
- * A serialization failure never depends on the call's inputs, and under contention PostgreSQL
- * expects many attempts, so a count says nothing about how long the contention lasts. The wait
- * starts at 50 ms and doubles, is capped at one second so the retries keep sampling while the
- * burst thins out, and is then drawn uniformly from zero to that wait, so attempts that collided do
- * not retry together. The retries stop at the first attempt that ends after thirty seconds, and
- * that attempt's failure is the call's.
+ * The default is bounded by elapsed time and not by count. A serialization failure never depends
+ * on the call's inputs, and under contention PostgreSQL expects many attempts, so a count says
+ * nothing about how long the contention lasts. The wait starts at 50 ms and doubles, is capped at
+ * one second so the retries keep sampling while the burst thins out, and is then drawn uniformly
+ * from zero to that wait, so attempts that collided do not retry together. The retries stop at the
+ * first attempt that ends after thirty seconds, and that attempt's failure is the call's.
  */
-export const retrySchedule = Schedule.exponential("50 millis", 2).pipe(
-  Schedule.modifyDelay(
-    Effect.fnUntraced(function* jitters({ duration }) {
-      const random = yield* Random.next;
+export const RetrySchedule = Context.Reference<Schedule.Schedule<unknown>>(
+  "pantry/import/package/RetrySchedule",
+  {
+    defaultValue: () =>
+      Schedule.exponential("50 millis", 2).pipe(
+        Schedule.modifyDelay(
+          Effect.fnUntraced(function* jitters({ duration }) {
+            const random = yield* Random.next;
 
-      return Duration.times(Duration.min(duration, retryDelayCap), random);
-    }),
-  ),
-  Schedule.upTo({ duration: retryBound }),
+            return Duration.times(Duration.min(duration, retryDelayCap), random);
+          }),
+        ),
+        Schedule.upTo({ duration: retryBound }),
+      ),
+  },
 );
 
 /**
- * What a caller may replace in {@link importPackage}: how the database calls are retried, and what
- * runs in place of the apply, so a test can inject a failure the cluster will not raise on demand.
+ * What runs each attempt of the import's apply: by default the attempt as it is, so a caller
+ * provides nothing. A test provides a wrap through `Effect.provideService` to inject a failure
+ * the cluster will not raise on demand (a `TransientFailure`, a `CommitUnknown` before or after
+ * the apply ran, an interruption while it waits on a lock), and the import's retries and its
+ * read-back then meet that failure as they would meet the database's.
  */
-export interface ImportOptions {
-  /**
-   * The schedule of the retries of `Db.open` and `db.apply`. Defaults to {@link retrySchedule}.
-   */
-  readonly schedule?: Schedule.Schedule<unknown>;
-  /**
-   * Wraps each attempt of the apply, in place of running it as is. Defaults to running it.
-   */
-  readonly wrapApply?: <A, E, R>(
-    apply: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E | ApplyError, R>;
-}
+export const WrapApply = Context.Reference<
+  <A>(apply: Effect.Effect<A, ApplyError>) => Effect.Effect<A, ApplyError>
+>("pantry/import/package/WrapApply", { defaultValue: () => (apply) => apply });
 
 /**
  * Whether the database refused an attempt for a reason outside the call's inputs, so the same call
@@ -190,10 +203,10 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
  * `db.apply` are retried on a transient refusal and on nothing else. When the commit's outcome is
  * unknown the package row is read back by its id ({@link settleCommitUnknown}): present, the import
  * was accepted; absent, the error is the answer; a read-back that fails is `CommitUnresolved`. The
- * same package imported twice is two packages, each with its own ids.
+ * same package imported twice is two packages, each with its own ids. The retries run on
+ * {@link RetrySchedule}, and each attempt of the apply through {@link WrapApply}.
  *
  * @param dir - The package directory or `.zip` file.
- * @param options - Replacements for the retry schedule and the apply step, for tests.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rule the package
  *   broke, whether the reader, the codec or the database refused it; with the platform's error
  *   when the directory cannot be read; with `CommitUnresolved` when the commit's outcome is
@@ -202,14 +215,13 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
  */
 export const importPackage = Effect.fn("import.importPackage")(function* importPackage(
   dir: string,
-  options: ImportOptions = {},
 ): Effect.fn.Return<
   Uuid,
   ImportRefused | PlatformError.PlatformError | ApplyError | OpenError | CommitUnresolved,
   FileSystem.FileSystem | DbLayer<typeof Author>
 > {
-  const schedule = options.schedule ?? retrySchedule;
-  const wrap = options.wrapApply ?? (<A, E, R>(apply: Effect.Effect<A, E, R>) => apply);
+  const schedule = yield* RetrySchedule;
+  const wrap = yield* WrapApply;
   const program = yield* readProgram(dir);
   const { packageId } = program;
   const changes = changeSetOf(AuthorApp.roles.author.role, program.inputs);

@@ -1,7 +1,8 @@
 /**
- * The importer's front door (`#pantry/import/package.ts`): its retry schedule and the read-back
- * that settles a `CommitUnknown` on the host, and on the lease its verdicts, its retries and
- * `CommitUnknown`'s resolution.
+ * The importer's front door (`#pantry/import/package.ts`): its retry schedule, as
+ * `RetrySchedule`'s default gives it, and the read-back that settles a `CommitUnknown` on the host,
+ * and on the lease its verdicts, its retries and `CommitUnknown`'s resolution, with the failures
+ * injected through `WrapApply`.
  *
  * A verdict on the lease is judged against the law oracle (`#pantry/test/oracle-verdict.ts`
  * `oracleVerdict`, a second implementation): a package the oracle accepts commits, and one it
@@ -19,6 +20,7 @@ import {
   v,
 } from "@bjornpagen/grizzle";
 import type {
+  ApplyError,
   ReadError,
   SerializationFailure,
   ServerError,
@@ -34,8 +36,9 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import {
   CommitUnresolved,
   importPackage,
-  retrySchedule,
+  RetrySchedule,
   settleCommitUnknown,
+  WrapApply,
 } from "#pantry/import/package.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
@@ -105,8 +108,8 @@ const serializationFailure = new TransientFailure({
 });
 
 /**
- * What a run of `retrySchedule` against a failure that never clears did: the clock reading at each
- * attempt, in milliseconds after the first, and whether the retry gave up.
+ * What a run of the default `RetrySchedule` against a failure that never clears did: the clock
+ * reading at each attempt, in milliseconds after the first, and whether the retry gave up.
  */
 interface RetryRun {
   readonly attemptAt: readonly number[];
@@ -114,8 +117,8 @@ interface RetryRun {
 }
 
 /**
- * Run `retrySchedule` against an effect that always fails, on the test clock, and advance the clock
- * well past the schedule's bound.
+ * Run the default `RetrySchedule`, read unprovided as the import reads it, against an effect that
+ * always fails, on the test clock, and advance the clock well past the schedule's bound.
  */
 const runRetrySchedule = Effect.gen(function* runRetrySchedule() {
   const attemptAt = yield* Ref.make<readonly number[]>([]);
@@ -127,7 +130,7 @@ const runRetrySchedule = Effect.gen(function* runRetrySchedule() {
 
     return yield* Effect.fail("transient");
   });
-  const fiber = yield* Effect.forkChild(Effect.result(Effect.retry(attempt, retrySchedule)));
+  const fiber = yield* Effect.forkChild(Effect.result(Effect.retry(attempt, yield* RetrySchedule)));
 
   yield* TestClock.adjust("120 seconds");
 
@@ -137,7 +140,7 @@ const runRetrySchedule = Effect.gen(function* runRetrySchedule() {
   return run;
 });
 
-describe("retrySchedule", () => {
+describe("RetrySchedule's default", () => {
   plainIt.effect("keeps retrying past the fifth retry while under its time bound", () =>
     // Oracle: the specification as a checker, the schedule's contract: bounded by elapsed time,
     // not by count.
@@ -206,7 +209,7 @@ describe("import/package.test.ts, the retry budget", () => {
     // Oracle: the specification as a checker, the schedule's time bound, under which three
     // transient failures are retried.
     Effect.gen(function* survives() {
-      assert.strictEqual(yield* attemptsUnder(retrySchedule, 3), 4);
+      assert.strictEqual(yield* attemptsUnder(yield* RetrySchedule, 3), 4);
     }),
   );
 
@@ -427,14 +430,15 @@ describe.skipIf(!hasLease)(
         // Oracle: the specification as a checker, the retry rule: a transient failure is retried.
         Effect.gen(function* retriesTransient() {
           const attempts = yield* Ref.make(0);
-          const id: Uuid = yield* importPackage(fixtures.simple, {
-            wrapApply: <A, E, R>(apply: Effect.Effect<A, E, R>) =>
+          const id: Uuid = yield* importPackage(fixtures.simple).pipe(
+            Effect.provideService(WrapApply, <A>(apply: Effect.Effect<A, ApplyError>) =>
               Effect.flatMap(
                 Ref.getAndUpdate(attempts, (n) => n + 1),
-                (n): Effect.Effect<A, E | TransientFailure, R> =>
+                (n): Effect.Effect<A, ApplyError> =>
                   n === 0 ? Effect.fail(serializationFailure) : apply,
               ),
-          });
+            ),
+          );
 
           assert.match(id, uuidPattern);
           assert.isAtLeast(yield* Ref.get(attempts), 2);
@@ -447,14 +451,15 @@ describe.skipIf(!hasLease)(
         Effect.gen(function* givesUp() {
           const attempts = yield* Ref.make(0);
           const result = yield* Effect.result(
-            importPackage(fixtures.simple, {
-              schedule: quickly,
-              wrapApply: () =>
+            importPackage(fixtures.simple).pipe(
+              Effect.provideService(RetrySchedule, quickly),
+              Effect.provideService(WrapApply, () =>
                 Effect.andThen(
                   Ref.update(attempts, (n) => n + 1),
                   Effect.fail(serializationFailure),
                 ),
-            }),
+              ),
+            ),
           );
 
           assert.strictEqual(
@@ -469,9 +474,11 @@ describe.skipIf(!hasLease)(
         // Oracle: the specification as a checker, `CommitUnknown`'s resolution: the apply ran and
         // committed, so the package is read back and the import answers its id.
         Effect.gen(function* readsBack() {
-          const id = yield* importPackage(fixtures.simple, {
-            wrapApply: (apply) => Effect.andThen(apply, Effect.fail(new CommitUnknown())),
-          });
+          const id = yield* importPackage(fixtures.simple).pipe(
+            Effect.provideService(WrapApply, (apply) =>
+              Effect.andThen(apply, Effect.fail(new CommitUnknown())),
+            ),
+          );
           const db = yield* Db.open(AuthorApp.roles.author, {});
 
           assert.lengthOf(yield* (yield* db.execute(packageRows, { id })).collect, 1);
@@ -483,7 +490,9 @@ describe.skipIf(!hasLease)(
         // read back, so the error is the answer.
         Effect.gen(function* notThere() {
           const result = yield* Effect.result(
-            importPackage(fixtures.simple, { wrapApply: () => Effect.fail(new CommitUnknown()) }),
+            importPackage(fixtures.simple).pipe(
+              Effect.provideService(WrapApply, () => Effect.fail(new CommitUnknown())),
+            ),
           );
 
           assert.isTrue(Result.isFailure(result) && result.failure._tag === "CommitUnknown");
