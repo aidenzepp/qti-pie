@@ -20,7 +20,7 @@
  * - **Over each template default of a test** (`TemplateDefault`): `Template default type`, its
  *   expression's type against its item's template declaration's.
  */
-import { Option } from "effect";
+import { Array as Arr, Option } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import {
   conditionKinds,
@@ -180,12 +180,13 @@ const valueBaseOf = (baseType: Option.Option<string>): string =>
 
 /**
  * One variable reference a processing element makes, resolved: the attribute, the name, the
- * declaration it names or the built-in it is, and its type.
+ * declaration it names or the built-in it is, and its type. `declarationKind` is the declaration's
+ * kind, or the kind a built-in stands as, and none for a name that resolves to nothing.
  */
 interface Reference {
   readonly attribute: string;
   readonly declaration: Option.Option<Row>;
-  readonly declarationKind: string;
+  readonly declarationKind: Option.Option<string>;
   readonly identifier: string;
   readonly node: Row;
   readonly resolution: "builtIn" | "declared" | "unresolved";
@@ -404,7 +405,7 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
                 return {
                   attribute,
                   declaration: Option.some(declaration),
-                  declarationKind: declaration.kind,
+                  declarationKind: Option.some(declaration.kind),
                   identifier,
                   node,
                   resolution: "declared",
@@ -425,7 +426,7 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
                 ? {
                     attribute,
                     declaration: Option.none(),
-                    declarationKind: "none",
+                    declarationKind: Option.none(),
                     identifier,
                     node,
                     resolution: "unresolved",
@@ -434,7 +435,7 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
                 : {
                     attribute,
                     declaration: Option.none(),
-                    declarationKind: builtIn.declaration,
+                    declarationKind: Option.some(builtIn.declaration),
                     identifier,
                     node,
                     resolution: "builtIn",
@@ -625,14 +626,14 @@ const referenceBasesOf = (grammar: ComposedGrammar): ReadonlyMap<string, string>
 /**
  * What the reference laws read of one reference: its own fields, its element's first expression's
  * type, none where it holds no expression, the table its declaration holds of those its element
- * reads, and its element's language.
+ * reads, none where it holds none of them or names no declaration, and its element's language.
  */
 interface Read {
   readonly heldType: Option.Option<Type>;
   readonly language: string;
   readonly reference: Reference;
   readonly referenceBase: string;
-  readonly table: string;
+  readonly table: Option.Option<string>;
 }
 
 /**
@@ -666,14 +667,15 @@ const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean]
     ({ heldType, reference, table }) =>
       reference.attribute === "identifier" &&
       reference.node.kind === lookupKind &&
-      ((reference.resolution === "declared" && table === "none") ||
+      ((reference.resolution === "declared" && Option.isNone(table)) ||
         Option.exists(
           heldType,
           (held) =>
             !(
               (held.cardinality === "single" || held.cardinality === "unknown") &&
               ["duration", "float", "integer", "any", "unknown"].includes(held.base) &&
-              (table !== "qti-match-table" || ["integer", "any", "unknown"].includes(held.base))
+              (!Option.contains(table, "qti-match-table") ||
+                ["integer", "any", "unknown"].includes(held.base))
             ),
         )),
   ],
@@ -684,8 +686,8 @@ const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean]
       reference.resolution !== "unresolved" &&
       !(
         reference.resolution === "declared" &&
-        ["qti-outcome-declaration", "qti-template-declaration"].includes(
-          reference.declarationKind,
+        Option.exists(reference.declarationKind, (kind) =>
+          ["qti-outcome-declaration", "qti-template-declaration"].includes(kind),
         ) &&
         (reference.type.base === referenceBase || silent.has(reference.type.base)) &&
         (reference.type.cardinality === "single" || reference.type.cardinality === "unknown")
@@ -697,8 +699,8 @@ const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean]
       language === "template" &&
       typings.has(reference.node.kind) &&
       ((reference.resolution === "declared" &&
-        ["qti-outcome-declaration", "qti-response-declaration"].includes(
-          reference.declarationKind,
+        Option.exists(reference.declarationKind, (kind) =>
+          ["qti-outcome-declaration", "qti-response-declaration"].includes(kind),
         )) ||
         (reference.resolution === "builtIn" && reference.identifier !== "QTI_CONTEXT")),
   ],
@@ -710,10 +712,10 @@ const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean]
         reference.node.kind === "qti-map-response-point") &&
       reference.resolution === "declared" &&
       !(
-        reference.declarationKind === "qti-response-declaration" &&
-        ((reference.node.kind === "qti-map-response" && table === "qti-mapping") ||
+        Option.contains(reference.declarationKind, "qti-response-declaration") &&
+        ((reference.node.kind === "qti-map-response" && Option.contains(table, "qti-mapping")) ||
           (reference.node.kind === "qti-map-response-point" &&
-            table === "qti-area-mapping" &&
+            Option.contains(table, "qti-area-mapping") &&
             (reference.type.base === "point" || silent.has(reference.type.base))))
       ),
   ],
@@ -724,9 +726,8 @@ const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean]
 
       return (
         reference.attribute === "identifier" &&
-        reference.resolution !== "unresolved" &&
         allowed.length > 0 &&
-        !allowed.includes(reference.declarationKind)
+        Option.exists(reference.declarationKind, (kind) => !allowed.includes(kind))
       );
     },
   ],
@@ -748,11 +749,12 @@ const referenceBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly B
     const { node } = reference;
     const held = elementsOf(rows, node.id).find(({ kind }) => typings.has(kind));
     const tables = tableKinds.get(node.kind) ?? [];
-    const table = Option.match(reference.declaration, {
-      onNone: () => "none",
-      onSome: (declaration) =>
-        elementsOf(rows, declaration.id).find(({ kind }) => tables.includes(kind))?.kind ?? "none",
-    });
+    const table = reference.declaration.pipe(
+      Option.flatMap((declaration) =>
+        Arr.findFirst(elementsOf(rows, declaration.id), ({ kind }) => tables.includes(kind)),
+      ),
+      Option.map(({ kind }) => kind),
+    );
     const read: Read = {
       heldType: Option.map(Option.fromNullishOr(held), typed.typeOf),
       language: typed.languageOf(node),
@@ -766,13 +768,16 @@ const referenceBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly B
       base: read.referenceBase,
       baseType: reference.type.base,
       cardinality: reference.type.cardinality,
-      declarationKind: reference.declarationKind,
+      ...Option.match(reference.declarationKind, {
+        onNone: () => ({}),
+        onSome: (declarationKind) => ({ declarationKind }),
+      }),
       ...Option.match(read.heldType, {
         onNone: () => ({}),
         onSome: (type) => ({ heldBase: type.base, heldCardinality: type.cardinality }),
       }),
       identifier: reference.identifier,
-      table: table === "none" ? "" : table,
+      ...Option.match(table, { onNone: () => ({}), onSome: (claimed) => ({ table: claimed }) }),
     };
 
     return referenceLaws.flatMap(([law, breaks]) =>

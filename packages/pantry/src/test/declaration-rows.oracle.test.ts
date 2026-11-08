@@ -80,9 +80,10 @@ const readRow = Schema.decodeUnknownSync(ReadSchema);
 
 /**
  * The relations whose rows hang from a declaration whatever its cardinality spells, each naming it
- * by its `declaration`: its values and its tables, and the declaration rows of the bindings, the
- * references and the lookups that resolve its name (spec reading 159). Every other row that names
- * it reads its cardinality.
+ * by its `declaration`: its values and its tables, the declaration rows of the bindings, the
+ * references, the readings and the lookups that resolve its name (spec reading 159), and the table
+ * claims of the references that read one of its tables. Every other row that names it reads its
+ * cardinality.
  */
 const hanging: ReadonlySet<string> = new Set([
   "AreaMapping",
@@ -98,7 +99,7 @@ const hanging: ReadonlySet<string> = new Set([
   "PlacedBindingDeclaration",
   "PlacedVariableRefDeclaration",
   "PrintedVariableRefDeclaration",
-  "Reading",
+  "ReadingDeclaration",
   "SectionContextRefDeclaration",
   "SectionFeedbackRefDeclaration",
   "SectionPrintedRefDeclaration",
@@ -107,6 +108,7 @@ const hanging: ReadonlySet<string> = new Set([
   "TemplateRefDeclaration",
   "Value",
   "VariableRefDeclaration",
+  "VariableRefTable",
 ]);
 
 /**

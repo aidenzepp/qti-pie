@@ -514,11 +514,11 @@ export const resolutions = ["declared", "builtIn", "unresolved"] as const;
  * The tables a processing reference needs its declaration to hold, in code order: the
  * `ReferencedTable` roster's handles. `qti-map-response` needs a `qti-mapping` and
  * `qti-map-response-point` a `qti-area-mapping` (information model §2.11.3.29 and §2.11.3.30);
- * `qti-lookup-outcome-value` a `qti-match-table` or a `qti-interpolation-table` (§2.5.1.4); every
- * other reference `none`.
+ * `qti-lookup-outcome-value` a `qti-match-table` or a `qti-interpolation-table` (§2.5.1.4). Every
+ * other reference needs none, and claims none: a claim is a row of its own (`VariableRefTable`), so
+ * no handle stands for its absence.
  */
 export const referencedTables = [
-  "none",
   "qti-mapping",
   "qti-area-mapping",
   "qti-match-table",

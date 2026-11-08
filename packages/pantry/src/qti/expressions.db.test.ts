@@ -54,12 +54,14 @@ import {
   ProcessingTemplate,
   Reading,
   ReadingCardinality,
+  ReadingDeclaration,
   ReferenceDocument,
   TemplateDefaultCardinality,
   TemplateDefaultTarget,
   TestReference,
   VariableRef,
   VariableRefDeclaration,
+  VariableRefTable,
 } from "#pantry/qti/expressions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
@@ -164,7 +166,6 @@ const referenceRow = (
   parent: strayNode,
   resolution: "unresolved",
   rootKind: "qti-response-processing",
-  table: "none",
   ...fields,
 });
 
@@ -194,17 +195,20 @@ const documentOf = (reference: Addition<typeof VariableRef>): Addition<typeof Do
 
 /**
  * The change that writes a reference beside its document, the immutable owner of its family, with
- * its declaration and its held type where the case writes them, each copying the reference.
+ * its declaration, its held type and the table it claims where the case writes them, each copying
+ * the reference.
  *
  * @param reference - The reference.
  * @param declaration - The declaration's fields the case sets, or none for no declaration row.
  * @param held - The held type's fields the case sets, or none for no held type row.
+ * @param table - The table it claims, or none for no claim row.
  * @returns The change.
  */
 const referenceChange = (
   reference: Addition<typeof VariableRef>,
   declaration: Partial<Addition<typeof VariableRefDeclaration>> | undefined,
   held?: Partial<Addition<typeof HeldType>>,
+  table?: Addition<typeof VariableRefTable>["table"],
 ) =>
   ChangeSet.empty(Author)
     .insert(Document, [documentOf(reference)])
@@ -227,8 +231,21 @@ const referenceChange = (
               kind: reference.kind,
               language: reference.language,
               node: reference.node,
-              table: reference.table,
               ...declaration,
+            },
+          ],
+    )
+    .insert(
+      VariableRefTable,
+      table === undefined
+        ? []
+        : [
+            {
+              attribute: reference.attribute,
+              declaration: declaration?.declaration ?? strayNode,
+              kind: reference.kind,
+              node: reference.node,
+              table,
             },
           ],
     )
@@ -247,7 +264,7 @@ const referenceChange = (
               kind: reference.kind,
               language: reference.language,
               node: reference.node,
-              table: reference.table,
+              resolution: reference.resolution,
               ...held,
             },
           ],
@@ -300,6 +317,20 @@ const typeOver = (
 };
 
 /**
+ * Whether an outcome names a containment of one relation's rows into another's among its laws.
+ *
+ * @param outcome - The apply's outcome.
+ * @param from - The relation the containment reads.
+ * @param to - The relation it reads into.
+ * @returns Whether it does.
+ */
+const namesContained = (outcome: ApplyOutcome<unknown>, from: string, to: string): boolean =>
+  outcome.kind === "invariant-rejected" &&
+  outcome.refused.laws.some(
+    (law) => law.kind === "contained" && law.from.relation === from && law.to.relation === to,
+  );
+
+/**
  * Whether an outcome names a check of a relation among its laws.
  *
  * @param outcome - The apply's outcome.
@@ -323,10 +354,6 @@ const names = (outcome: ApplyOutcome<unknown>, relation: string, name: string): 
 const readingRow = (fields: Partial<Addition<typeof Reading>>): Addition<typeof Reading> => ({
   assembly: strayNode,
   attribute: "identifier",
-  declBaseTypes: 1n,
-  declCardinalities: 1n,
-  declaration: nodeOf(50),
-  declarationKind: "qti-outcome-declaration",
   declared: true,
   form: "unsplit",
   found: true,
@@ -348,6 +375,17 @@ const readingRow = (fields: Partial<Addition<typeof Reading>>): Addition<typeof 
   variable: "OUT",
   ...fields,
 });
+
+/**
+ * The declaration every declared reading of a case reads: `OUT`'s, an outcome with a cardinality
+ * and a base type.
+ */
+const readDeclaration = {
+  declBaseTypes: 1n,
+  declCardinalities: 1n,
+  declaration: nodeOf(50),
+  declarationKind: "qti-outcome-declaration",
+} as const satisfies Partial<Addition<typeof ReadingDeclaration>>;
 
 /**
  * A split reading through item ref `a`, which names an item whose `SCORE` is declared.
@@ -386,7 +424,8 @@ const allDigits = /^[0-9]+$/u;
  *   name is its segments joined and is read once unsplit and once at each dot, a numbered segment
  *   once less where it is the last; a section's has no segments and is read once), stated since the
  *   case states fewer readings than the name has;
- * - The readings;
+ * - The readings, and each declared or mapped one's `ReadingDeclaration`, {@link readDeclaration}
+ *   (every such reading a case states resolves);
  * - The `MappingLookup` row of each reading through an item ref (a split or numbered reading of a
  *   found item ref), at the item ref and the reading's variable, its verdict the reading's
  *   `mapped`: grizzle installs the reading's foreign key into it immediate, since its deferral rule
@@ -436,6 +475,24 @@ const readingFacts = (
       relation: AssembledReference,
     },
     ...readings.map((reading) => ({ fact: reading, relation: Reading })),
+    ...readings
+      .filter(({ source }) => source === "declared" || source === "mapped")
+      .map((reading) => ({
+        fact: {
+          ...readDeclaration,
+          assembly: reading.assembly,
+          attribute: reading.attribute,
+          form: reading.form,
+          kind: reading.kind,
+          lookupDocument: reading.lookupDocument,
+          named: reading.named,
+          node: reading.node,
+          source: reading.source,
+          split: reading.split,
+          variable: reading.variable,
+        },
+        relation: ReadingDeclaration,
+      })),
     ...readings
       .filter(
         ({ form, found, namedKind }) =>
@@ -633,6 +690,13 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             readonly repaired: Partial<Addition<typeof VariableRef>>;
             readonly repairedDeclaration?: Partial<Addition<typeof VariableRefDeclaration>>;
             readonly repairedHeld?: Partial<Addition<typeof HeldType>>;
+            readonly repairedTable?: Addition<typeof VariableRefTable>["table"];
+            readonly table?: Addition<typeof VariableRefTable>["table"];
+            /**
+             * The relation a containment the case breaks reads into, where the law is a
+             * containment of `on`'s rows, not a CHECK.
+             */
+            readonly to?: "VariableRefTable";
           }[] = [
             {
               broken: referenceRow({ rootKind: "qti-assessment-item" }),
@@ -660,7 +724,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 baseType: "integer",
                 cardinality: "single",
                 kind: "qti-lookup-outcome-value",
-                table: "qti-interpolation-table",
               }),
               declaration: {},
               held: { heldBase: "string", heldCardinality: "single" },
@@ -668,6 +731,23 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               on: "HeldType",
               repaired: {},
               repairedHeld: { heldBase: "float" },
+              table: "qti-interpolation-table",
+            },
+            {
+              broken: referenceRow({
+                ...declared,
+                baseType: "integer",
+                cardinality: "single",
+                kind: "qti-lookup-outcome-value",
+              }),
+              declaration: {},
+              held: { heldBase: "float", heldCardinality: "single" },
+              law: "Lookup_type",
+              on: "HeldType",
+              repaired: {},
+              repairedTable: "qti-interpolation-table",
+              table: "qti-match-table",
+              to: "VariableRefTable",
             },
             {
               broken: referenceRow({
@@ -678,8 +758,10 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               }),
               declaration: {},
               law: "Lookup_type",
-              on: "VariableRef",
-              repaired: { table: "qti-interpolation-table" },
+              on: "VariableRefDeclaration",
+              repaired: {},
+              repairedTable: "qti-interpolation-table",
+              to: "VariableRefTable",
             },
             {
               broken: referenceRow({
@@ -717,11 +799,26 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 cardinality: "single",
                 kind: "qti-map-response",
               }),
+              declaration: { declarationKind: "qti-outcome-declaration" },
+              law: "Mapped_response",
+              on: "VariableRefDeclaration",
+              repaired: {},
+              repairedDeclaration: { declarationKind: "qti-response-declaration" },
+              table: "qti-mapping",
+            },
+            {
+              broken: referenceRow({
+                ...declared,
+                baseType: "integer",
+                cardinality: "single",
+                kind: "qti-map-response",
+              }),
               declaration: { declarationKind: "qti-response-declaration" },
               law: "Mapped_response",
               on: "VariableRefDeclaration",
-              repaired: { table: "qti-mapping" },
-              repairedDeclaration: { table: "qti-mapping" },
+              repaired: {},
+              repairedTable: "qti-mapping",
+              to: "VariableRefTable",
             },
           ];
           for (const {
@@ -733,19 +830,25 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             repaired,
             repairedDeclaration,
             repairedHeld,
+            repairedTable,
+            table,
+            to,
           } of cases) {
-            const refused = yield* db.apply(referenceChange(broken, declaration, held), {});
+            const refused = yield* db.apply(referenceChange(broken, declaration, held, table), {});
             const kept = yield* db.apply(
               referenceChange(
                 { ...broken, ...repaired },
                 declaration === undefined ? undefined : { ...declaration, ...repairedDeclaration },
                 held === undefined ? undefined : { ...held, ...repairedHeld },
+                repairedTable ?? table,
               ),
               {},
             );
+            const breaks = (outcome: ApplyOutcome<unknown>): boolean =>
+              to === undefined ? names(outcome, on, law) : namesContained(outcome, on, to);
 
-            assert.isTrue(names(refused, on, law), law);
-            assert.isFalse(names(kept, on, law), law);
+            assert.isTrue(breaks(refused), law);
+            assert.isFalse(breaks(kept), law);
           }
         }),
       );
@@ -831,14 +934,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
           // with its reference's owners.
           Effect.gen(function* readingLaws() {
             const client = yield* loginSession;
-            const undeclared = {
-              declBaseTypes: 0n,
-              declCardinalities: 0n,
-              declaration: strayNode,
-              declarationKind: "qti-outcome-declaration",
-              declared: false,
-              source: "none",
-            } as const;
+            const undeclared = { declared: false, source: "none" } as const;
             const standIn = readingRow({ attribute: "max", kind: "qti-random-integer" });
             const cardinalityOf = (
               declCardinality: Addition<typeof ReadingCardinality>["declCardinality"],
@@ -848,7 +944,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                   assembly: standIn.assembly,
                   attribute: standIn.attribute,
                   declCardinality,
-                  declaration: standIn.declaration,
+                  declaration: readDeclaration.declaration,
                   form: standIn.form,
                   node: standIn.node,
                   split: standIn.split,
@@ -1036,17 +1132,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               yield* judged(
                 client,
                 statedInserts(
-                  readingFacts([
-                    first,
-                    {
-                      ...second,
-                      declBaseTypes: 0n,
-                      declCardinalities: 0n,
-                      declaration: nodeOf(70),
-                      declared: false,
-                      source: "none",
-                    },
-                  ]),
+                  readingFacts([first, { ...second, declared: false, source: "none" }]),
                 ),
               ),
               key,

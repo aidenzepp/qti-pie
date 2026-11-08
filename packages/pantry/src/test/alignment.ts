@@ -1021,6 +1021,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    166,
+    {
+      owner:
+        "the import's `ReadingDeclaration`, a resolving declared or mapped reading's declaration as a row of its own, justified by `declarationIdentifierRef` or by its mapping's `MappingSourceDeclaration`, a mapped reading's forced in under \"Variable mapping source\", with \"Variable kind\" judging a built-in reading by its scope's root (`readsAllowedBuiltIn`); and `VariableRefTable`, a declared reference's table claim as a row of its own, forced in under \"Mapped response\" and \"Lookup type\" (`src/qti/expressions.ts`; `readingOf` and `referenceDeclarationsOf`, `src/import/overlays/expressions.ts`); the law oracle's reading kinds, a mapped name's its source's declaration's or none (`readingsOf`, `src/test/oracle-laws/tests.ts`), and its references' tables and kinds, none where they have none (`referenceBreachesOf`, `src/test/oracle-laws/expressions.ts`); held by `src/import/overlays/reading-declarations.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

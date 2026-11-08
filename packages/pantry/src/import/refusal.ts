@@ -68,6 +68,7 @@ import {
   ProcessingTemplate,
   Reading,
   ReadingCardinality,
+  ReadingDeclaration,
   ReferenceDocument,
   ReferenceSegment,
   SectionIdentifier,
@@ -80,6 +81,7 @@ import {
   VariableRef,
   VariableRefCardinality,
   VariableRefDeclaration,
+  VariableRefTable,
 } from "#pantry/qti/expressions.ts";
 import {
   chardataLawsByName,
@@ -853,6 +855,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     ProcessingTemplate,
     Reading,
     ReadingCardinality,
+    ReadingDeclaration,
     ReferenceDocument,
     ReferenceSegment,
     SectionIdentifier,
@@ -864,6 +867,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     VariableRef,
     VariableRefCardinality,
     VariableRefDeclaration,
+    VariableRefTable,
   ].map(
     ({ name, primaryKey }) =>
       [

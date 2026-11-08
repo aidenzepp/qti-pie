@@ -649,10 +649,11 @@ const lookUp = (input: PackageRows, assembled: Assembled, name: string): Option.
  */
 interface Read {
   /**
-   * The declaration kind its variable is, or stands as for a built-in or a mapped variable; `none`
-   * where it names none.
+   * The declaration kind its variable is, or stands as for a built-in or a mapped variable; none
+   * where it names no declaration and no built-in, or a mapping whose source its item declares
+   * nothing under.
    */
-  readonly declarationKind: string;
+  readonly declarationKind: Option.Option<string>;
   readonly form: "numbered" | "split" | "unsplit";
   readonly placements: number;
   readonly resolves: boolean;
@@ -710,7 +711,9 @@ const readingsOf = (
   const sectionBuiltIns = builtIns.get(testKinds.section) ?? new Map<string, string>();
   const unsplitSource = sourceOf(testDeclared.has(identifier), testBuiltIns.has(identifier));
   const unsplit: Read = {
-    declarationKind: testDeclared.get(identifier)?.[0] ?? testBuiltIns.get(identifier) ?? "none",
+    declarationKind: Option.fromNullishOr(
+      testDeclared.get(identifier)?.[0] ?? testBuiltIns.get(identifier),
+    ),
     form: "unsplit",
     placements: 1,
     resolves: unsplitSource !== "none",
@@ -725,7 +728,7 @@ const readingsOf = (
   ): Read => {
     const looked = lookUp(input, assembled, scope);
     const resolved = Option.match(looked, {
-      onNone: () => ({ declarationKind: "none", source: "none" as const }),
+      onNone: () => ({ declarationKind: Option.none(), source: "none" as const }),
       onSome: (held): Pick<Read, "declarationKind" | "source"> => {
         if (held.kind === testKinds.itemRef) {
           const declarations = Option.match(held.item, {
@@ -741,32 +744,34 @@ const readingsOf = (
               Option.contains(typedValueOf(held.referrer.rows, id, "target-identifier"), variable),
           );
           if (declared !== undefined) {
-            return { declarationKind: declared, source: "declared" };
+            return { declarationKind: Option.some(declared), source: "declared" };
           }
 
           if (mapping !== undefined) {
-            // A mapped name stands as its source's declaration, an outcome where it names one.
-            const source = Option.getOrElse(
-              typedValueOf(held.referrer.rows, mapping.id, "source-identifier"),
-              () => "",
-            );
-
+            // A mapped name stands as its source's declaration (information model §7.48), none
+            // where its item declares nothing under the source, which "Variable mapping source"
+            // refuses: no law over a declaration judges a name that stands as none.
             return {
-              declarationKind: declarations.get(source)?.[0] ?? "qti-outcome-declaration",
+              declarationKind: Option.flatMap(
+                typedValueOf(held.referrer.rows, mapping.id, "source-identifier"),
+                (source) => Option.fromNullishOr(declarations.get(source)?.[0]),
+              ),
               source: "mapped",
             };
           }
 
-          const builtIn = itemBuiltIns.get(variable);
-
-          return builtIn === undefined
-            ? { declarationKind: "none", source: "none" }
-            : { declarationKind: builtIn, source: "builtIn" };
+          return Option.match(Option.fromNullishOr(itemBuiltIns.get(variable)), {
+            onNone: () => ({ declarationKind: Option.none(), source: "none" }),
+            onSome: (builtIn) => ({ declarationKind: Option.some(builtIn), source: "builtIn" }),
+          });
         }
 
         return form === "split" && durationScopes.has(held.kind) && variable === "duration"
-          ? { declarationKind: sectionBuiltIns.get(variable) ?? "none", source: "builtIn" }
-          : { declarationKind: "none", source: "none" };
+          ? {
+              declarationKind: Option.fromNullishOr(sectionBuiltIns.get(variable)),
+              source: "builtIn",
+            }
+          : { declarationKind: Option.none(), source: "none" };
       },
     });
     const { source } = resolved;
@@ -1052,7 +1057,9 @@ const referenceLawsOf = (
               attribute === "identifier" &&
               allowed.length > 0 &&
               ((setterKinds.has(node.kind) && resolving.length === 0) ||
-                resolving.some(({ declarationKind }) => !allowed.includes(declarationKind)));
+                resolving.some(({ declarationKind }) =>
+                  Option.exists(declarationKind, (kind) => !allowed.includes(kind)),
+                ));
 
             return [
               ...(prefixed ? [breachAt(rows, node, "Prefixed reference", keys)] : []),
@@ -1062,7 +1069,7 @@ const referenceLawsOf = (
                     breachAt(rows, node, "Variable kind", {
                       allowed: allowed.join(" "),
                       declarationKind: resolving
-                        .map(({ declarationKind }) => declarationKind)
+                        .flatMap(({ declarationKind }) => Option.toArray(declarationKind))
                         .join(" "),
                       identifier,
                     }),

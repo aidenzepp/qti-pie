@@ -3037,3 +3037,32 @@ against it. A reading that is not an information-model-over-XSD case says which 
      scan of their XML entries. This binds pantry and plate alike. This is not a case of documents in conflict: the
      normative sources agree. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05,
      from seat SWEEP-A1ORDER.)
+166. **A reference that names no declaration holds no declaration row, and stands as no declaration kind: a test's
+     reading of a built-in variable, of nothing, or through a variable mapping whose source its item declares nothing
+     under has no declaration, and a processing reference that claims no table of its declaration has no claim.** The
+     information model maps a name to the item's own variable: "Variable mappings allow outcome variables declared with
+     the name source-identifier in the corresponding item to be treated as if they were declared with the name
+     target-identifier during outcome processing" (section 7.48, line 112601 of `info301.txt`), so a mapped name stands
+     as the item's declaration of its source, and where the item declares nothing under the source there is no variable
+     to stand as, and "Variable mapping source" refuses the mapping (A34). A built-in variable stands as the declaration
+     kind `BuiltInVariable` gives it under its scope's root (section 2.2.2, section 2.2.2.1; reading 29), which
+     "Variable kind" judges as it judges a declaration's, and which "Reference type" refuses in place of a literal,
+     which is "replaced with the value of a template or outcome variable of base-type integer and single cardinality"
+     (line 9889, P24); neither reads a declaration it does not have. A map response, a map response point and a lookup
+     claim the table their declaration holds of those they read (sections 2.11.3.29, 2.11.3.30, 2.5.1.4), and one whose
+     declaration holds none claims none, which "Mapped response" or "Lookup type" refuses. AGENTS.md's Schema intent
+     settles the representation: a value that may be missing is a row of its own relation, never a sentinel. In the
+     importer a resolving reading's declaration is a row of its own, `ReadingDeclaration`, only where its variable is
+     declared, or mapped from a declared source, and a reference's table claim is a row of its own, `VariableRefTable`,
+     only where it claims one (`src/qti/expressions.ts`; `readingOf` and `referenceDeclarationsOf`,
+     `src/import/overlays/expressions.ts`); the law oracle reads the same (`readingsOf`,
+     `src/test/oracle-laws/tests.ts`, a mapped name standing as its source's declaration kind, none where its item
+     declares nothing under the source; `referenceBreachesOf`, `src/test/oracle-laws/expressions.ts`, a reference's
+     table and declaration kind none where it has none). This sets aside the null-object declaration codes a reading
+     held where it named no declaration (its lookup document, `qti-outcome-declaration`, no cardinality and no base
+     type), the table `none` a reference held where it claimed none, and both sides' reading of a name mapped from an
+     undeclared source as an outcome, under which a reading of it by an element that names no outcome, a correct, broke
+     "Variable kind" beside "Variable mapping source" on a kind no declaration gave it. The corpus moves no verdict:
+     none of its 29 zips writes a variable mapping, by a scan of their XML entries. This binds pantry and plate alike.
+     This is not a case of documents in conflict. (Decided 2026-11-08 by the coordinator, under the operator's standing
+     ruling of 2026-11-05, from seat SWEEP-REFNONE.)

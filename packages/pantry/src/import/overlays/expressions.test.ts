@@ -512,13 +512,26 @@ const resolves = (v: Reference, rows: ExpressionRows): boolean => {
 };
 
 /**
- * `E1_derived`'s claimed table: none, or the one the reference's element reads, where declared.
+ * The table a reference claims of its declaration (`VariableRefTable`), none where it claims none.
  *
  * @param v - The reference.
+ * @param rows - The rows.
+ * @returns The table, if any.
+ */
+const tableOf = (v: Reference, rows: ExpressionRows): string | undefined =>
+  rows.VariableRefTable.get(JSON.stringify([v.node, v.attribute]))?.table;
+
+/**
+ * `E1_derived`'s claimed table: none, or, by a declared reference's `identifier`, one its element
+ * reads, of its declaration, its claim's kind and declaration copied from its declaration row.
+ *
+ * @param v - The reference.
+ * @param rows - The rows.
  * @returns Whether its claim is lawful.
  */
-const claims = (v: Reference): boolean => {
-  if (v.table === "none") {
+const claims = (v: Reference, rows: ExpressionRows): boolean => {
+  const claim = rows.VariableRefTable.get(JSON.stringify([v.node, v.attribute]));
+  if (claim === undefined) {
     return true;
   }
 
@@ -531,7 +544,9 @@ const claims = (v: Reference): boolean => {
     v.attribute === "identifier" &&
     v.resolution === "declared" &&
     ["qti-map-response", "qti-map-response-point", lookupKindHandle].includes(v.kind) &&
-    wanted.includes(v.table)
+    wanted.includes(claim.table) &&
+    claim.kind === v.kind &&
+    claim.declaration === declarationOf(v, rows)?.declaration
   );
 };
 
@@ -566,7 +581,7 @@ const referenceLawsOnHost: readonly (readonly [
   Law,
   (v: Reference, rows: ExpressionRows) => boolean,
 ])[] = [
-  ["E1_derived", (v, rows) => spells(v) && resolves(v, rows) && claims(v) && copies(v, rows)],
+  ["E1_derived", (v, rows) => spells(v) && resolves(v, rows) && claims(v, rows) && copies(v, rows)],
   [
     "Variable_declared",
     (v) => v.rootKind !== "qti-assessment-item" || v.resolution !== "unresolved",
@@ -580,11 +595,11 @@ const referenceLawsOnHost: readonly (readonly [
   ],
   [
     "Lookup_type",
-    (v) =>
+    (v, rows) =>
       v.attribute !== "identifier" ||
       v.kind !== lookupKindHandle ||
       v.resolution !== "declared" ||
-      ["qti-match-table", "qti-interpolation-table"].includes(v.table),
+      ["qti-match-table", "qti-interpolation-table"].includes(tableOf(v, rows) ?? ""),
   ],
   [
     "Reference_type",
@@ -616,9 +631,9 @@ const referenceLawsOnHost: readonly (readonly [
       !["qti-map-response", "qti-map-response-point"].includes(v.kind) ||
       v.resolution !== "declared" ||
       (declarationKindOf(v, rows) === "qti-response-declaration" &&
-        ((v.kind === "qti-map-response" && v.table === "qti-mapping") ||
+        ((v.kind === "qti-map-response" && tableOf(v, rows) === "qti-mapping") ||
           (v.kind === "qti-map-response-point" &&
-            v.table === "qti-area-mapping" &&
+            tableOf(v, rows) === "qti-area-mapping" &&
             ["point", "any", "unknown"].includes(v.baseType)))),
   ],
 ];
@@ -629,9 +644,10 @@ const referenceLawsOnHost: readonly (readonly [
 type Held = ExpressionRows["HeldType"] extends ReadonlyMap<string, infer R> ? R : never;
 
 /**
- * Each law over a setter's or a lookup's held type, judged over its row.
+ * Each law over a setter's or a lookup's held type, judged over its row and the table its lookup
+ * claims, by its node and `identifier`.
  */
-const heldLawsOnHost: readonly (readonly [Law, (h: Held) => boolean])[] = [
+const heldLawsOnHost: readonly (readonly [Law, (h: Held, rows: ExpressionRows) => boolean])[] = [
   [
     "Set_type",
     (h) =>
@@ -643,11 +659,13 @@ const heldLawsOnHost: readonly (readonly [Law, (h: Held) => boolean])[] = [
   ],
   [
     "Lookup_type",
-    (h) =>
+    (h, rows) =>
       h.kind !== lookupKindHandle ||
       (["single", "unknown"].includes(h.heldCardinality) &&
         ["duration", "float", "integer", "any", "unknown"].includes(h.heldBase) &&
-        (h.table !== "qti-match-table" || ["integer", "any", "unknown"].includes(h.heldBase))),
+        (rows.VariableRefTable.get(JSON.stringify([h.node, "identifier"]))?.table !==
+          "qti-match-table" ||
+          ["integer", "any", "unknown"].includes(h.heldBase))),
   ],
 ];
 
@@ -767,7 +785,7 @@ const breachesOf = (rows: ExpressionRows): ReadonlySet<Law> => {
 
   for (const h of rows.HeldType.values()) {
     for (const [law, holds] of heldLawsOnHost) {
-      if (!holds(h)) {
+      if (!holds(h, rows)) {
         broken.add(law);
       }
     }
@@ -2084,8 +2102,8 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
       // declares and which tables each declaration holds, against the lookups the builder writes
       // (M2): a reference that names no declaration has an absent row, every row says what the
       // document declares, every test variables' unwritten `base-type` is `unknown`, and every
-      // table a map response claims is the table its declaration holds, `none` where it holds
-      // none.
+      // table a map response claims is the table its declaration holds, no claim row where it
+      // holds none.
       // Bound: every fixture, 37 documents.
       Effect.gen(function* claimsProved() {
         for (const { file } of frozen) {
@@ -2132,8 +2150,9 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
               reference.kind === "qti-map-response"
             ) {
               assert.strictEqual(
-                reference.table,
-                holds.has("qti-mapping") ? "qti-mapping" : "none",
+                rows.VariableRefTable.get(JSON.stringify([reference.node, reference.attribute]))
+                  ?.table,
+                holds.has("qti-mapping") ? "qti-mapping" : undefined,
                 file,
               );
             }

@@ -49,6 +49,8 @@ import type {
 import type {
   Expression,
   MappingSourceDeclaration,
+  Reading,
+  ReadingDeclaration,
   TemplateDefaultTarget,
 } from "#pantry/qti/expressions.ts";
 import type { VariableMapping } from "#pantry/qti/tests.ts";
@@ -338,8 +340,16 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
   [{ kind: "key", side: ["VariableMapping", "parent", "target"] }, "Variable mapping target"],
   [
     {
+      from: ["Reading", "assembly", "node", "attribute", "form", "split", "named"],
+      kind: "contained",
+      to: ["ReadingDeclaration", "assembly", "node", "attribute", "form", "split", "named"],
+    },
+    "Variable mapping source",
+  ],
+  [
+    {
       from: [
-        "Reading",
+        "ReadingDeclaration",
         "named",
         "variable",
         "declaration",
@@ -358,7 +368,7 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "declBaseTypes",
       ],
     },
-    "Variable mapping source",
+    "E1 derived",
   ],
   [
     {
@@ -612,32 +622,89 @@ const keyBreaches = (rows: HostRows): readonly HostBreach[] =>
   );
 
 /**
- * The breaches of each mapped reading's declaration, its mapping's source's.
+ * The setters, whose prefixed readings resolve nothing (spec reading 112).
+ */
+const setters: ReadonlySet<string> = new Set([
+  "qti-lookup-outcome-value",
+  "qti-set-correct-response",
+  "qti-set-default-value",
+  "qti-set-outcome-value",
+  "qti-set-template-value",
+]);
+
+/**
+ * Whether a reading resolves (spec readings 48 and 88): it reads a variable a source names, a
+ * setter's only unsplit, and, numbered, through an item ref a replacement can repeat, at a number
+ * of at least 1.
+ *
+ * @param reading - The reading.
+ * @returns Whether it resolves.
+ */
+const readingResolves = (reading: Addition<typeof Reading>): boolean =>
+  reading.form !== "name" &&
+  reading.source !== "none" &&
+  (reading.form === "unsplit" || !setters.has(reading.kind)) &&
+  (reading.form !== "numbered" ||
+    (reading.replaced && /^[0-9]*[1-9][0-9]*$/u.test(reading.number)));
+
+/**
+ * The key a reading's declaration row copies of its reading: the reading's key and the item ref it
+ * reads through.
+ *
+ * @param row - The reading or its declaration row.
+ * @returns The key's text.
+ */
+const readingKeyOf = (
+  row: Addition<typeof Reading> | Addition<typeof ReadingDeclaration>,
+): string =>
+  JSON.stringify([row.assembly, row.node, row.attribute, row.form, String(row.split), row.named]);
+
+/**
+ * The breaches of each resolving mapped reading's declaration, its mapping's source's, a row of its
+ * own: one through a mapping whose source its item declares nothing under has none, which
+ * "Variable mapping source" refuses, and a declaration row is its mapping's source's.
  *
  * @param rows - The rows.
  * @returns The breaches.
  */
-const readingBreaches = (rows: HostRows): readonly HostBreach[] =>
-  [...rows.inputs.Reading.values()]
-    .filter(({ source }) => source === "mapped")
-    .flatMap((reading) => {
-      // A containment holds where any row of its target matches, so two mappings of one target,
-      // which the key over (itemRef, target) refuses on its own, leave the reading's copy to either.
-      const held = rows.sources.some(
-        (source) =>
-          source.itemRef === reading.named &&
-          source.target === reading.variable &&
-          source.declaration === reading.declaration &&
-          source.declarationKind === reading.declarationKind &&
-          source.declBaseTypes === reading.declBaseTypes &&
-          source.declCardinalities === reading.declCardinalities,
-      );
-      const mapping = rows.mappings.find(
-        ({ parent, target }) => parent === reading.named && target === reading.variable,
-      );
+const readingBreaches = (rows: HostRows): readonly HostBreach[] => {
+  const declared = new Set([...rows.inputs.ReadingDeclaration.values()].map(readingKeyOf));
 
-      return unless(held, "Variable mapping source", mapping?.source ?? reading.variable);
-    });
+  return [
+    ...[...rows.inputs.Reading.values()]
+      .filter((reading) => reading.source === "mapped" && readingResolves(reading))
+      .flatMap((reading) => {
+        const mapping = rows.mappings.find(
+          ({ parent, target }) => parent === reading.named && target === reading.variable,
+        );
+
+        return unless(
+          declared.has(readingKeyOf(reading)),
+          "Variable mapping source",
+          mapping?.source ?? reading.variable,
+        );
+      }),
+    ...[...rows.inputs.ReadingDeclaration.values()]
+      .filter(({ source }) => source === "mapped")
+      .flatMap((declaration) =>
+        // A containment holds where any row of its target matches, so two mappings of one target,
+        // which the key over (itemRef, target) refuses on its own, leave the reading's copy to either.
+        unless(
+          rows.sources.some(
+            (source) =>
+              source.itemRef === declaration.named &&
+              source.target === declaration.variable &&
+              source.declaration === declaration.declaration &&
+              source.declarationKind === declaration.declarationKind &&
+              source.declBaseTypes === declaration.declBaseTypes &&
+              source.declCardinalities === declaration.declCardinalities,
+          ),
+          "E1 derived",
+          declaration.variable,
+        ),
+      ),
+  ];
+};
 
 /**
  * The breaches of `MappingLookup`'s forced and justified rows: each mapping's target mapped, and
