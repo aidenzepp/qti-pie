@@ -949,4 +949,78 @@ describe("testScopeOf over built models", () => {
         );
       }),
   );
+
+  it.effect(
+    "[I-1] [T-9] testScopeOf reads a record response declaration the item model holds as NULL of cardinality record, with whether it declares a correct response",
+    () =>
+      Effect.gen(function* recordResponsesScope() {
+        const item = yield* buildItem(
+          doc(
+            "items/ITEM1.xml",
+            el(
+              "qti-assessment-item",
+              [attr("identifier", "ITEM1"), attr("title", "Item one")],
+              [
+                el(
+                  "qti-response-declaration",
+                  [attr("cardinality", "record"), attr("identifier", "KEYED")],
+                  [
+                    el(
+                      "qti-correct-response",
+                      [],
+                      [
+                        el(
+                          "qti-value",
+                          [attr("base-type", "string"), attr("field-identifier", "stringValue")],
+                          [text("12")],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                el("qti-response-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "OPEN"),
+                ]),
+                el("qti-item-body"),
+              ],
+            ),
+          ),
+        );
+        const scope = testScopeOf(
+          yield* buildTest(testDocument([])),
+          new Map([["ITEM1", acceptForTest(item)]]),
+          { items: [sessionItem(fresh(item, "sitting.1"), 1, true)] },
+          new Map(),
+          Option.none(),
+        );
+        const recordType: DeclaredType = { baseType: "file", cardinality: "record" };
+
+        // The item model holds both, so the scope reads them through the item's records.
+        assert.deepStrictEqual([...(item.records?.keys() ?? [])], ["KEYED", "OPEN"]);
+        assert.isUndefined(item.unheld);
+        assert.deepStrictEqual(
+          scope.items.map((entry) => entry.unheld),
+          [
+            new Map([
+              ["KEYED", recordType],
+              ["OPEN", recordType],
+            ]),
+          ],
+        );
+        assert.deepStrictEqual(
+          scope.items.map((entry) => entry.unheldResponses),
+          [
+            new Map([
+              ["KEYED", true],
+              ["OPEN", false],
+            ]),
+          ],
+        );
+        assert.deepStrictEqual(Result.getOrThrow(prefixedVariable(scope, "ITEM1.KEYED")).reading, {
+          kind: "unheld",
+          type: recordType,
+        });
+      }),
+  );
 });

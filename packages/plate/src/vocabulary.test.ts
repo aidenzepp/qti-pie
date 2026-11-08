@@ -387,6 +387,22 @@ describe("the closed value sets", () => {
     }
   });
 
+  it("[I-1] puts the record mark on outcome and template declarations, never on a record response declaration, which the item model holds", () => {
+    assert.deepStrictEqual(
+      renders.marks.find((mark) => mark.feature === 'cardinality="record"'),
+      {
+        feature: 'cardinality="record"',
+        on: ["qti-outcome-declaration", "qti-template-declaration"],
+        when: { kind: "attribute-value", name: "cardinality", value: "record" },
+      },
+    );
+    // The control: a file declaration is marked whatever its kind.
+    assert.include(
+      renders.marks.find((mark) => mark.feature === 'base-type="file"')?.on ?? [],
+      "qti-response-declaration",
+    );
+  });
+
   it("has every engine name in elements", () => {
     assert.includeMembers([...renders.elements], [...renders.engine]);
   });

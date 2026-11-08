@@ -61,7 +61,13 @@ import type { ExpressionReading } from "#plate/model/expressions/read.ts";
 import { translate } from "#plate/model/regex.ts";
 import { templateRules } from "#plate/model/template.ts";
 import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
-import type { ModelledBaseType, RecordValue, Single, Value } from "#plate/model/values.ts";
+import type {
+  ModelledBaseType,
+  RecordField,
+  RecordValue,
+  Single,
+  Value,
+} from "#plate/model/values.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import {
   // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
@@ -722,11 +728,13 @@ interface UnheldType {
 
 /**
  * A response, outcome or template declaration of a type the value model holds no value of: base
- * type `file`, or cardinality `record`. A record's `base-type` is optional, so it is none when the
- * declaration writes none. `kind` names the declaration; a response's `declaresCorrect` is whether
- * it holds a `qti-correct-response`, which a test's `qti-number-correct` and
- * `qti-number-incorrect` read, since they consider only an item whose every response declares one.
- * An outcome or template declaration has no correct response.
+ * type `file`, an outcome or template declaration of cardinality `record`, or a record response
+ * declaration with a field of base type `file`; the model holds every other record response in
+ * {@link Item.records}. A record's `base-type` is optional, so it is none when the declaration
+ * writes none. `kind` names the declaration; a response's `declaresCorrect` is whether it holds a
+ * `qti-correct-response`, which a test's `qti-number-correct` and `qti-number-incorrect` read,
+ * since they consider only an item whose every response declares one. An outcome or template
+ * declaration has no correct response.
  */
 export type UnheldDeclaration = UnheldType &
   (
@@ -738,13 +746,13 @@ export type UnheldDeclaration = UnheldType &
  * A valid `qti-assessment-item` as plate models it.
  *
  * `responses`, `outcomes` and `templates` hold the declarations of modelled base types and
- * cardinalities, in document order; every other declaration is a mark, and `unheld` holds those of
- * base type `file` or cardinality `record` by identifier. `processing` is none when the item has no
- * response processing, or when plate cannot run it, which `unsupported` then marks. Plate cannot
- * run it beside a `qti-template-processing` that does not run (`templateProcessing` none, an
- * element in it marked), which may set a value response processing reads, such as a correct
- * response. `unsupported` lists every feature not rendered, in document order, each once per
- * feature and path.
+ * cardinalities, in document order, and `records` the record response declarations; every other
+ * declaration is a mark, and `unheld` holds those by identifier ({@link UnheldDeclaration}).
+ * `processing` is none when the item has no response processing, or when plate cannot run it,
+ * which `unsupported` then marks. Plate cannot run it beside a `qti-template-processing` that does
+ * not run (`templateProcessing` none, an element in it marked), which may set a value response
+ * processing reads, such as a correct response. `unsupported` lists every feature not rendered, in
+ * document order, each once per feature and path.
  */
 export interface Item {
   readonly body: readonly BodyNode[];
@@ -778,10 +786,11 @@ export interface Item {
   readonly templates: ReadonlyMap<string, TemplateDeclaration>;
   readonly title: string;
   /**
-   * The response, outcome and template declarations of base type `file` or cardinality `record`,
-   * keyed by identifier, which a test's processing reads through an item ref as NULL of their
-   * declared type. Absent when the item makes no such declaration, so `buildItem` gives it only
-   * when the item makes one, and an item built by hand may leave it out.
+   * The declarations the model holds no value of, keyed by identifier: those of base type `file`,
+   * the outcome and template declarations of cardinality `record`, and a record response
+   * declaration with a field of base type `file`. A test's processing reads each through an item
+   * ref as NULL of its declared type. Absent when the item makes no such declaration, so
+   * `buildItem` gives it only when the item makes one, and an item built by hand may leave it out.
    */
   readonly unheld?: ReadonlyMap<string, UnheldDeclaration>;
   readonly unsupported: readonly UnsupportedFeature[];
@@ -1116,7 +1125,8 @@ const declared = (
 
 /**
  * Read a declaration the model holds no value of because of its type: one of base type `file`,
- * or of cardinality `record`, whose `base-type` is optional.
+ * or of cardinality `record`, whose `base-type` is optional. `buildItem` reads a record response
+ * declaration here only when it does not hold it in `records` ({@link recordResponse}).
  *
  * @param build The build.
  * @param declaration A response, outcome or template declaration.
@@ -1246,6 +1256,160 @@ const areaMappingOf = (build: Build, mapping: SourceElement): Effect.Effect<Area
       percent: read.some(({ percent }) => percent),
       upperBound,
     };
+  });
+
+/**
+ * The key of the mark a record response declaration of base type `file`, or with a field of it,
+ * carries: the one `renders` gives an outcome or template declaration of cardinality `record`.
+ */
+const recordMark = 'cardinality="record"';
+
+/**
+ * A field one `qti-value` of a record declaration's value writes: its identifier and its value,
+ * none when the value is NULL; or `file`, a field of base type `file`, which the value model holds
+ * no value of.
+ */
+type WrittenField =
+  | { readonly identifier: string; readonly kind: "field"; readonly value: Option.Option<Single> }
+  | { readonly kind: "file" };
+
+/**
+ * Read the field a `qti-value` of a record declaration's value writes: the one its
+ * `field-identifier` names, as `identifierOf` reads it, of the `base-type` it writes, its value its
+ * text as `parseElementText` reads that base type (reading 7).
+ *
+ * @param build The build.
+ * @param value The `qti-value`.
+ * @returns The field, `file` when its base type is `file`; or the refusal `missing-attribute` when
+ *   it lacks `field-identifier` or `base-type`, `attribute-type` when its base type is outside the
+ *   list, or `value-type` when its text is outside its base type's lexical space.
+ */
+const writtenField = (
+  build: ModelWalk,
+  value: SourceElement,
+): Effect.Effect<WrittenField, Refusal> =>
+  Effect.gen(function* readWrittenField() {
+    const identifier = yield* identifierAttribute(build, value, "field-identifier");
+    const baseType = yield* Effect.flatMap(
+      requiredAttribute(build, value, "base-type"),
+      (attribute) => listed(build, value, "base-type", attribute, baseTypes),
+    );
+    if (!isModelled(baseType)) {
+      const file: WrittenField = { kind: "file" };
+
+      return file;
+    }
+
+    const single = yield* typed(
+      build,
+      pathOf(build, value),
+      parseElementText(baseType, textOf(value)),
+    );
+    const field: WrittenField = { identifier, kind: "field", value: single };
+
+    return field;
+  });
+
+/**
+ * Read the fields a record declaration's `qti-correct-response` or `qti-default-value` writes, one
+ * per `qti-value`, in document order.
+ *
+ * @param build The build.
+ * @param declaration The record declaration.
+ * @param local The container's name, `qti-correct-response` or `qti-default-value`.
+ * @returns The fields, none when the declaration has no such container, or the refusal
+ *   {@link writtenField} gives.
+ */
+const writtenFields = (
+  build: ModelWalk,
+  declaration: SourceElement,
+  local: string,
+): Effect.Effect<Option.Option<readonly WrittenField[]>, Refusal> =>
+  Effect.transposeOption(
+    Option.map(Arr.head(childrenNamed(declaration, local)), (container) =>
+      Effect.forEach(childrenNamed(container, "qti-value"), (value) => writtenField(build, value)),
+    ),
+  );
+
+/**
+ * Construct the record some written fields give. A NULL field is no field, so fields that are all
+ * NULL give the NULL record, and of the fields that name one identifier the first written is kept
+ * (G-R4, pending: each identifier once, the first written kept).
+ *
+ * @param fields The fields, in document order, none of base type `file`.
+ * @returns The record.
+ */
+const recordOf = (fields: readonly WrittenField[]): RecordValue => {
+  const named = new Set<string>();
+  const kept: RecordField[] = [];
+  for (const field of fields) {
+    if (field.kind === "field" && Option.isSome(field.value) && !named.has(field.identifier)) {
+      named.add(field.identifier);
+      kept.push({ identifier: field.identifier, value: field.value.value });
+    }
+  }
+
+  return { cardinality: "record", fields: kept };
+};
+
+/**
+ * What the model reads of a `qti-response-declaration`: a record response it holds; `file`, a
+ * record response of base type `file` or with a field of it, which it holds no value of; or
+ * `other`, a declaration of another cardinality.
+ */
+type RecordResponse =
+  | { readonly declaration: RecordDeclaration; readonly kind: "held" }
+  | { readonly kind: "file" | "other" };
+
+/**
+ * Read a `qti-response-declaration` of cardinality `record`, whatever interaction binds it: its
+ * `qti-correct-response` and its `qti-default-value` each give the record its fields write
+ * ({@link recordOf}). The declaration's own `base-type` types none of them (G-R4, pending), but one
+ * of `file` keeps the declaration unheld, as a field of `file` does, since the verdict marks it
+ * `base-type="file"`, so the model holds no record of it either.
+ *
+ * @param build The build.
+ * @param declaration The declaration.
+ * @returns The record response, `held` or `file`, or `other` when its cardinality is not `record`;
+ *   or a refusal when `identifier` or `cardinality` is missing, a value is outside its list, or a
+ *   field is refused ({@link writtenField}).
+ */
+const recordResponse = (
+  build: ModelWalk,
+  declaration: SourceElement,
+): Effect.Effect<RecordResponse, Refusal> =>
+  Effect.gen(function* readRecordResponse() {
+    const { baseType, cardinality, identifier } = yield* writtenType(build, declaration);
+    if (!Option.exists(cardinality, (read) => read === "record")) {
+      const other: RecordResponse = { kind: "other" };
+
+      return other;
+    }
+
+    const correct = yield* writtenFields(build, declaration, "qti-correct-response");
+    const defaultValue = yield* writtenFields(build, declaration, "qti-default-value");
+    const fields = [correct, defaultValue].flatMap((written) =>
+      Option.getOrElse(written, () => []),
+    );
+    if (
+      Option.exists(baseType, (type) => type === "file") ||
+      fields.some((field) => field.kind === "file")
+    ) {
+      const file: RecordResponse = { kind: "file" };
+
+      return file;
+    }
+
+    const held: RecordResponse = {
+      declaration: {
+        correct: correct.pipe(Option.map(recordOf)),
+        defaultValue: defaultValue.pipe(Option.map(recordOf)),
+        identifier,
+      },
+      kind: "held",
+    };
+
+    return held;
   });
 
 /**
@@ -2774,10 +2938,11 @@ type SettingKind = Extract<Rule | TemplateRule, { readonly identifier: string }>
  * sets; `qti-set-template-value` sets a template variable, `qti-set-correct-response` a response,
  * and `qti-set-default-value` a response or an outcome (`targetOf` in
  * `#plate/engine/template.ts`). The names it finds are valid content, never refused (reading 1,
- * rule `5b8ee08b`): a response, an outcome or a template variable the model does not hold (base
- * type `file`, cardinality `record`, or no base type), a template variable beside template
- * processing that does not run, the built-in variable `duration`, read or set, which the engine
- * holds no value for, and the built-in `completionStatus` where a declaration names it.
+ * rule `5b8ee08b`): a response, an outcome or a template variable the engine does not hold (base
+ * type `file`, cardinality `record`, a record response the model holds in `records` among them, or
+ * no base type), a template variable beside template processing that does not run, the built-in
+ * variable `duration`, read or set, which the engine holds no value for, and the built-in
+ * `completionStatus` where a declaration names it.
  * Reading 29 makes an item's `duration` a single float, so it is a valid name in an item's rules.
  * In template processing it also finds `QTI_CONTEXT` and each variable a `qti-context-declaration`
  * declares: template processing may read them (`info.txt:22601`, and a reference to `QTI_CONTEXT`
@@ -3388,21 +3553,25 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * identifier it does not hold is the mark `variable:<identifier>` at the processing element's path,
  * each such need unmet its mark there (`mapping:<identifier>`, `area-mapping:<identifier>` or
  * `outcome-type:<identifier>`), such a point mapping the mark `area-coords-percent` there, and the
- * processing is then none. A response, outcome or template declaration of base type `file` or
- * cardinality `record` is held in `unheld`, beside its mark, and `unheld` is absent when there is
- * none. Template declarations of modelled types are read into `templates`, and a
- * `qti-template-processing` into `templateProcessing` through `templateRules` in
- * `#plate/model/template.ts`, which marks what the engine does not run as response processing's
- * reader does. Its rules are kept only when the engine holds every name they read and set while
- * they run: each name {@link unheldIdentifiers} finds, such as `QTI_CONTEXT`, a context variable,
- * or a template variable, response or outcome the model does not hold, is the mark
- * `variable:<identifier>` at the `qti-template-processing` element's path, and the template
- * processing is then none. Nothing is refused: such an item is accepted with that mark. A template
- * variable the model holds is one the engine holds, unless the item's `qti-template-processing`
- * does not run: then no template variable is held, so a tree that reads one is marked
- * `variable:<identifier>`, and the item has no processing, whatever the tree, since that template
- * processing may set a template variable, a default value or a correct response, so a score
- * computed without it could be wrong.
+ * processing is then none. A response declaration of cardinality `record` is held in `records`,
+ * with no mark, whatever interaction binds it: its `qti-correct-response` and `qti-default-value`
+ * are read field by field ({@link recordResponse}). The engine holds no record, so a processing
+ * that reads one is still marked `variable:<identifier>`, and a text interaction bound to one keeps
+ * its notice. A declaration of base type `file`, an outcome or template declaration of cardinality
+ * `record`, and a record response of base type `file` or with a field of it, are held in `unheld`,
+ * beside their mark. `records` and `unheld` are each absent when empty. Template declarations of
+ * modelled types are read into `templates`, and a `qti-template-processing` into
+ * `templateProcessing` through `templateRules` in `#plate/model/template.ts`, which marks what the
+ * engine does not run as response processing's reader does. Its rules are kept only when the engine
+ * holds every name they read and set while they run: each name {@link unheldIdentifiers} finds,
+ * such as `QTI_CONTEXT`, a context variable, or a template variable, response or outcome the model
+ * does not hold, is the mark `variable:<identifier>` at the `qti-template-processing` element's
+ * path, and the template processing is then none. Nothing is refused: such an item is accepted with
+ * that mark. A template variable the model holds is one the engine holds, unless the item's
+ * `qti-template-processing` does not run: then no template variable is held, so a tree that reads
+ * one is marked `variable:<identifier>`, and the item has no processing, whatever the tree, since
+ * that template processing may set a template variable, a default value or a correct response, so a
+ * score computed without it could be wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
@@ -3428,6 +3597,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     const responses = new Map<string, ResponseDeclaration>();
     const outcomes = new Map<string, OutcomeDeclaration>();
     const templateDeclarations = new Map<string, TemplateDeclaration>();
+    const records = new Map<string, RecordDeclaration>();
     const unheld = new Map<string, UnheldDeclaration>();
     const holdUnheld = (
       declaration: SourceElement,
@@ -3461,6 +3631,14 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
         );
       } else if (part.local === "qti-response-declaration") {
         markElement(build, part, false);
+
+        const recordRead = yield* recordResponse(build, part);
+        // Placed where `markElement` places an outcome's record mark: after its other marks, before
+        // those of the elements below it.
+        if (recordRead.kind === "file") {
+          record(build, { feature: recordMark, path: pathOf(build, part), shown: "mark" });
+        }
+
         markUnreadWithin(build, part);
 
         const read = yield* responseDeclaration(build, part);
@@ -3468,7 +3646,11 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
           responses.set(read.value.identifier, read.value);
         }
 
-        yield* holdUnheld(part, "response");
+        if (recordRead.kind === "held") {
+          records.set(recordRead.declaration.identifier, recordRead.declaration);
+        } else {
+          yield* holdUnheld(part, "response");
+        }
       } else if (part.local === "qti-outcome-declaration") {
         markElement(build, part, false);
         markUnreadWithin(build, part);
@@ -3560,7 +3742,9 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       unsupported: build.unsupported,
     };
 
-    // `unheld` is absent when the item makes no file or record declaration, as a model built by hand
-    // leaves it out.
-    return unheld.size === 0 ? built : { ...built, unheld };
+    // `records` is absent when the item makes no record response declaration it holds, and `unheld`
+    // when it makes no declaration it holds no value of, as a model built by hand leaves them out.
+    const recorded: Item = records.size === 0 ? built : { ...built, records };
+
+    return unheld.size === 0 ? recorded : { ...recorded, unheld };
   });

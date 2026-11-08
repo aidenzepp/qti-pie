@@ -269,13 +269,16 @@ export interface Renders {
   /**
    * The features recorded on the verdict with no body notice. A declaration the model does not hold
    * carries one: its base type (`file`, or `base-type=""` when it has none) or
-   * `cardinality="record"`. Beyond these, a `qti-*` element outside the item body and outside
-   * `elements` is a mark keyed by its own name, response processing by a template URI outside the
-   * built-ins is a mark keyed `template="<uri>"`, inline response processing with an element
-   * outside `engine` and the registry's landed expression kinds is a mark keyed by that element's
-   * name (an XInclude `include` there is keyed `xi:include`), and the text family's reader marks a
-   * `qti-pattern-match` literal it cannot compile `pattern`, a `qti-inside` coordinate written with
-   * `%` `area-coords-percent`, and every `qti-custom-operator` by its own name.
+   * `cardinality="record"`, which an outcome or template declaration of that cardinality carries,
+   * and a record response declaration only when the item model marks it, for a `file` base type of
+   * its own or of a field, since the model holds every other. Beyond these, a `qti-*` element
+   * outside the item body and outside `elements` is a mark keyed by its own name, response
+   * processing by a template URI outside the built-ins is a mark keyed `template="<uri>"`, inline
+   * response processing with an element outside `engine` and the registry's landed expression kinds
+   * is a mark keyed by that element's name (an XInclude `include` there is keyed `xi:include`), and
+   * the text family's reader marks a `qti-pattern-match` literal it cannot compile `pattern`, a
+   * `qti-inside` coordinate written with `%` `area-coords-percent`, and every `qti-custom-operator`
+   * by its own name.
    */
   readonly marks: readonly FeatureRule[];
   /**
@@ -366,9 +369,13 @@ export const renders = {
       on: declarations,
       when: { kind: "attribute-value", name: "base-type", value: "file" },
     },
+    // A record response declaration is the item model's to mark: it holds one in `Item.records`,
+    // with no mark, and marks one of base type `file`, or with a field of it, itself (`buildItem`),
+    // since this condition cannot see a field's base type. A test's outcome declarations take this
+    // rule too.
     {
       feature: 'cardinality="record"',
-      on: declarations,
+      on: ["qti-outcome-declaration", "qti-template-declaration"],
       when: { kind: "attribute-value", name: "cardinality", value: "record" },
     },
     // A declaration with no base type is keyed `base-type=""`, as an interaction bound to one is.
