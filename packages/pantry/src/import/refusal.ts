@@ -21,7 +21,7 @@
  *   grammar's rows; for a content-order law it names the positions `Follow` allows next, each with
  *   its XSD particle. There is no catalog of messages.
  */
-import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
+import { lawsOf, patternLawsOf, sameLaw } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, Statement, Witness } from "@bjornpagen/grizzle";
 import {
   Array as Arr,
@@ -99,7 +99,7 @@ import {
   XmlVersion,
 } from "#pantry/qti/chardata.ts";
 import { readerOrigin, RefusalOrigin } from "#pantry/package/refusal-origin.ts";
-import { anyText, keyText, namespaceText } from "#pantry/qti/limits.ts";
+import { keyText, namespaceText } from "#pantry/qti/limits.ts";
 import {
   AriaElement,
   AriaRange,
@@ -389,16 +389,6 @@ export interface TextType {
 }
 
 /**
- * Whether a value is a text field type ({@link TextType}), read by its shape. The guard reads the
- * value itself, never a decoded copy, so {@link textLaws} finds it by its identity.
- */
-const isTextType: (value: unknown) => value is TextType = Schema.is(
-  Schema.Struct({
-    pattern: Schema.Struct({ flags: Schema.Literals(["su", "u"]), source: Schema.String }),
-  }),
-);
-
-/**
  * A field PostgreSQL or grizzle writes, read from its descriptor: the type `generated(type, term)`
  * or `accumulated(type, start)` declared it of (grizzle's `schema/relation.ts` `generatedField`
  * and `accumulatedField`), which grizzle's installation types its column by.
@@ -409,17 +399,13 @@ const Written = Schema.Union([
 ]);
 
 /**
- * An ordinary relation as {@link patternLawsOf} reads it, its fields' descriptors as they are. A
- * closed relation is of another kind, and its payloads state no law.
+ * A relation with fields, its fields' descriptors as they are: decoding passes each descriptor
+ * through by its identity, so {@link textLaws} finds a field's type by it.
  */
-const Ordinary = Schema.Struct({
-  fields: Schema.Record(Schema.String, Schema.Unknown),
-  kind: Schema.Literal("relation"),
-  name: Schema.String,
-});
+const Fielded = Schema.Struct({ fields: Schema.Record(Schema.String, Schema.Unknown) });
 
 /**
- * A text field whose type no row of the table names: its relation and its field.
+ * A field whose pattern law no row of the table names: its relation and its field.
  */
 export interface UnnamedText {
   readonly field: string;
@@ -427,57 +413,65 @@ export interface UnnamedText {
 }
 
 /**
- * Build the pattern law of each text field of a schema's ordinary relations, as its domain's CHECK
- * reports it, with the name of its type's row.
- *
- * Grizzle states one law per stored field a text domain types, spelled as the field declares its
- * pattern (`physical/install/compile.ts` `textDomainConstraintLaws` of the vendored engine): every
- * field of an ordinary relation, a generated or accumulated one included, whose type is a text of a
- * pattern some text breaks. Two fields of one pattern share one domain and are two laws, so a
- * refusal names the field whose value broke it, and each field's law takes its own type's name. A
- * type of `plain` is a tautology, which grizzle installs as plain text, so its fields state none.
+ * Read the type a pattern law's field is declared of: a generated or accumulated field's declared
+ * type, any other field's descriptor itself. A schema holds each relation under its own name
+ * (grizzle's `schema/schema.ts` `underOwnName`), so the law's relation is its key there.
  *
  * @param relations - The schema's `relations`.
- * @param names - Each text type, by its identity, with the law its pattern states.
- * @param plain - The text types whose pattern is a tautology.
- * @returns The laws, one per text field; or the first field whose type neither holds.
+ * @param law - A pattern law of the schema's.
+ * @returns The field's type; none where the schema holds no such field.
  */
-export const patternLawsOf = (
+const fieldTypeOf = (
   relations: AnySchema["relations"],
-  names: ReadonlyMap<TextType, LawName>,
-  plain: ReadonlySet<TextType>,
-): Result.Result<readonly (readonly [LawOf<"pattern">, LawName])[], UnnamedText> => {
-  const named: (readonly [LawOf<"pattern">, LawName])[] = [];
-  const ordinary = Object.values(relations).flatMap((member) =>
-    Option.toArray(Schema.decodeUnknownOption(Ordinary)(member)),
-  );
-  for (const { fields, name: relation } of ordinary) {
-    for (const [field, descriptor] of Object.entries(fields)) {
-      // The type grizzle's installation types the field's column by: a generated or accumulated
-      // field's declared type, any other field's descriptor itself.
-      const type = Option.match(Schema.decodeUnknownOption(Written)(descriptor), {
+  { field, relation }: LawOf<"pattern">,
+): Option.Option<unknown> =>
+  pipe(
+    Schema.decodeUnknownOption(Fielded)(relations[relation]),
+    Option.flatMap(({ fields }) => Option.fromUndefinedOr(fields[field])),
+    Option.map((descriptor) =>
+      Option.match(Schema.decodeUnknownOption(Written)(descriptor), {
         onNone: () => descriptor,
         onSome: (written) => (written.writing === "generated" ? written.type : written.field),
-      });
-      if (isTextType(type) && !plain.has(type)) {
-        const name = names.get(type);
-        if (name === undefined) {
-          return Result.fail({ field, relation });
-        }
+      }),
+    ),
+  );
 
-        const { flags, source } = type.pattern;
-        named.push([{ field, flags, kind: "pattern", relation, source }, name]);
-      }
-    }
-  }
+/**
+ * Name each pattern law a schema states by its field's type's row.
+ *
+ * The laws are grizzle's (`patternLawsOf`), the ones its installation lists its text domains'
+ * CHECKs with: one per stored field whose pattern states a law, spelled as the field declares its
+ * pattern, by relation name, each relation's fields in declared order. A tautology, a contract's
+ * pattern and a closed relation's payload state none. Two fields of one language share one domain
+ * and are two laws, so a refusal names the field whose value broke it, and each field's law takes
+ * its own type's name.
+ *
+ * @param built - The schema.
+ * @param names - Each text type, by its identity, with the law its pattern states.
+ * @returns The laws, each with its name; or the first law whose field's type no row names.
+ */
+export const namedPatternLaws = (
+  built: AnySchema,
+  names: ReadonlyMap<TextType, LawName>,
+): Result.Result<readonly (readonly [LawOf<"pattern">, LawName])[], UnnamedText> => {
+  const byType: ReadonlyMap<unknown, LawName> = names;
 
-  return Result.succeed(named);
+  return Result.all(
+    patternLawsOf(built).map((law) =>
+      pipe(
+        fieldTypeOf(built.relations, law),
+        Option.flatMap((type) => Option.fromUndefinedOr(byType.get(type))),
+        Option.map((name) => [law, name] as const),
+        Result.fromOption(() => ({ field: law.field, relation: law.relation })),
+      ),
+    ),
+  );
 };
 
 /**
  * The law each text type of Qti's fields states, by the type's identity: the one object its module
  * exports and its relations type their fields by, so a bound that moves moves its row. Every text
- * field's pattern law is named by its type's row ({@link patternLawsOf}), in the classes of the
+ * field's pattern law is named by its type's row ({@link namedPatternLaws}), in the classes of the
  * orchestrator's ruling of 2026-11-06:
  *
  * - A bound on a text is "Key text bound", a stated limit. `keyText` and `namespaceText` hold any
@@ -538,23 +532,15 @@ export const textLaws: ReadonlyMap<TextType, LawName> = new Map<TextType, LawNam
 ]);
 
 /**
- * The text types whose pattern is a tautology, which grizzle installs as plain text, with no domain
- * and so no law (`physical/ddl/domains.ts` `structuralRegex` and `text/refinement.ts` of the
- * vendored engine): `anyText`, a package's name. Grizzle reports no reading of whether a type's
- * pattern is a tautology, so its type is listed here, beside the named ones.
- */
-export const plainTexts: ReadonlySet<TextType> = new Set([anyText]);
-
-/**
- * Every pattern law Qti states, one per text field, each named by its type's row of
- * {@link textLaws}. The table is a constant no caller can repair, so a text field whose type has
- * no row fails the module's load, naming the field.
+ * Every pattern law Qti states, one per field whose pattern states one, each named by its type's
+ * row of {@link textLaws}. The table is a constant no caller can repair, so a law whose field's
+ * type has no row fails the module's load, naming the field.
  */
 const patternLaws = Result.getOrThrowWith(
-  patternLawsOf(Qti.relations, textLaws, plainTexts),
+  namedPatternLaws(Qti, textLaws),
   ({ field, relation }) =>
     new Error(
-      `${relation}.${field} is typed by a text type no row of textLaws in src/import/refusal.ts names. Export the type from its module, type the field by that one object, and give it a row of textLaws, or of plainTexts if its pattern is a tautology.`,
+      `${relation}.${field} states a pattern law, and no row of textLaws in src/import/refusal.ts names its type. Export the type from its module, type the field by that one object, and give the type a row of textLaws.`,
     ),
 );
 

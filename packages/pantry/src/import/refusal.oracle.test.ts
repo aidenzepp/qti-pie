@@ -20,6 +20,7 @@ import {
   natural,
   on,
   ordered,
+  patternLawsOf,
   pg,
   pred,
   relation,
@@ -58,9 +59,8 @@ import {
   ImportRule,
   lawNameOf,
   limitRules,
+  namedPatternLaws,
   owedRules,
-  patternLawsOf,
-  plainTexts,
   refusalOfLaws,
   ruleOfError,
   ruleOfLaws,
@@ -68,6 +68,7 @@ import {
   textLaws,
 } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
+import { anyText } from "#pantry/qti/limits.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import type { ReadRefusal, Rule } from "#pantry/import/refusal.ts";
 import {
@@ -1667,6 +1668,16 @@ const textFields = (
 };
 
 /**
+ * The text types of Qti whose pattern every text matches and that carry no byte bound, so a field
+ * of one states no pattern law: `anyText` (`src/qti/limits.ts`), `str.regex("^.*$", "su")` built
+ * without `str.bytes`, the type of a text no law reads. Stated here by hand from its declaration,
+ * apart from grizzle's erasure of a tautology (`text/refinement.ts` of the vendored engine), for
+ * the census to hold grizzle's reading to; a bounded text of the same pattern, such as `keyText`,
+ * is another object and states its law.
+ */
+const tautologies: ReadonlySet<unknown> = new Set([anyText]);
+
+/**
  * File a law for {@link missingFrom}: a pattern law by its field, any other by its kind.
  *
  * @param law - The law.
@@ -1775,11 +1786,11 @@ const statementLawsOf = Fn.memoize((built: AnySchema): readonly Law[] =>
 );
 
 describe("the pattern laws, one per field", () => {
-  it("names each text field by its own type's row, a generated field's included, and refuses a field whose type no row holds", () => {
-    // Oracle: grizzle's installation, one pattern law per stored field a text domain types
-    // (`physical/install/compile.ts` `textDomainConstraintLaws` of the vendored engine), a
-    // tautology's field none. Live: two types of one pattern under two names, a generated field
-    // of one of them, a plain field. Wild: a field whose type no row holds.
+  it("names each law grizzle states by its field's own type's row, a generated field's included, and refuses a law whose field's type no row holds", () => {
+    // Oracle: grizzle's `patternLawsOf`, one pattern law per stored field whose pattern states
+    // one, by relation name and declared field order, a tautology's field none. Live: two types of
+    // one pattern under two names, a generated field of one of them, a tautology's field, which
+    // states no law, so no row names it. Wild: a field whose type no row holds.
     const code = str.regex("^[a-z]*$");
     const alias = str.regex("^[a-z]*$");
     const plain = str.regex("^.*$", "su");
@@ -1789,15 +1800,15 @@ describe("the pattern laws, one per field", () => {
       ["id"],
       (r) => ({ joined: generated(code, Compute.concat(r.code, r.alias)) }),
     );
+    const club = schema("Club", { Club }, []);
 
     assert.deepStrictEqual(
-      patternLawsOf(
-        { Club },
+      namedPatternLaws(
+        club,
         new Map([
           [code, "Key text bound"],
           [alias, "XML production"],
         ]),
-        new Set([plain]),
       ),
       Result.succeed([
         [clubLaw("alias"), "XML production"],
@@ -1806,7 +1817,7 @@ describe("the pattern laws, one per field", () => {
       ]),
     );
     assert.deepStrictEqual(
-      patternLawsOf({ Club }, new Map([[code, "Key text bound"]]), new Set([plain])),
+      namedPatternLaws(club, new Map([[code, "Key text bound"]])),
       Result.fail({ field: "alias", relation: "Club" }),
     );
   });
@@ -1867,36 +1878,37 @@ describe("the census of the composed Qti schema", () => {
   );
 
   it.effect(
-    "states the pattern law of every text field of Qti's ordinary relations, one per field, and no other",
+    "states the pattern law of every text field of Qti's stored relations but a tautology's, one per field, and no other",
     () =>
-      // Oracle: grizzle's installation, one pattern law per stored field a text domain types, a
-      // generated or accumulated field included, a tautology's field none
-      // (`physical/install/compile.ts` `textDomainConstraintLaws` of the vendored engine), read
-      // here from the schema apart from `refusal.ts`'s reading.
+      // Oracle: the schema read here apart from grizzle's reading, one pattern law per text field
+      // of a stored relation, a generated or accumulated field included, but a field of
+      // `tautologies`, held both ways to grizzle's `patternLawsOf` and to the laws the table
+      // names, so a law either drops or invents fails here.
       Effect.gen(function* patterns() {
         const Qti = yield* composedQti;
         const fields = textFields(Qti.relations);
-        const plain: ReadonlySet<unknown> = plainTexts;
-        const owed = fields.flatMap(({ law, type }) => (plain.has(type) ? [] : [law]));
+        const owed = fields.flatMap(({ law, type }) => (tautologies.has(type) ? [] : [law]));
+        const granted = patternLawsOf(Qti);
         const stated = statedLaws().flatMap(([law]) => (law.kind === "pattern" ? [law] : []));
-        const typed: ReadonlySet<unknown> = new Set(fields.map(({ type }) => type));
+        const typed: ReadonlySet<unknown> = new Set(
+          fields.flatMap(({ type }) => (tautologies.has(type) ? [] : [type])),
+        );
 
+        assert.isNotEmpty(owed, "Qti declares no text field the census reads");
+        for (const [laws, among, missing] of [
+          [owed, granted, "text fields whose pattern law grizzle states not"],
+          [granted, owed, "pattern laws grizzle states of no text field"],
+          [granted, stated, "pattern laws grizzle states that the table names not"],
+          [stated, granted, "pattern laws the table names that grizzle states not"],
+        ] as const) {
+          assert.deepStrictEqual(missingFrom(laws, among), [], missing);
+        }
         assert.deepStrictEqual(
-          missingFrom(owed, stated),
-          [],
-          "text fields whose pattern law the table states not",
-        );
-        assert.deepStrictEqual(
-          missingFrom(stated, owed),
-          [],
-          "pattern laws the table states of no text field",
-        );
-        assert.deepStrictEqual(
-          [...textLaws.keys(), ...plainTexts]
+          [...textLaws.keys()]
             .filter((type) => !typed.has(type))
             .map(({ pattern }) => Formatter.format(pattern)),
           [],
-          "rows of textLaws or plainTexts that type no field",
+          "rows of textLaws that type no field with a pattern law",
         );
       }),
     testTimeoutMs,
