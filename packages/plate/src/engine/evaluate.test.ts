@@ -1426,7 +1426,7 @@ describe("map-response", () => {
     assert.deepStrictEqual(mapped("CITY", []), floatValue(0));
   });
 
-  it("a value two entries match maps by the first in document order (placeholder while spec §12 Q5 is open)", () => {
+  it("a value two entries match maps by the first in document order", () => {
     assert.deepStrictEqual(mapped("TIED", [stringOf("York")]), floatValue(0.5));
   });
 
