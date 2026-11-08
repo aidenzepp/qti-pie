@@ -27,7 +27,7 @@ import type { Item } from "#plate/model/item.ts";
 import { refIdentifiersIn } from "#plate/model/item-refs.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import type { Test, TestPart } from "#plate/model/test.ts";
-import { isNullResponse, isRecordValue, match, sameRecord } from "#plate/model/values.ts";
+import { atDefault, isNullResponse } from "#plate/model/values.ts";
 import type { ResponseValue } from "#plate/model/values.ts";
 import { postingsIn, redactStructure } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
@@ -49,6 +49,7 @@ import {
   partStarted,
   present,
   recordStep,
+  valuesOf,
   withItem,
 } from "#plate/session/start.ts";
 import type { InvalidTime } from "#plate/session/start.ts";
@@ -296,38 +297,6 @@ export const deliveredItem = (
         }),
       );
 };
-
-/**
- * Give the responses an item's attempt is processed with: each saved response, else its record's,
- * which holds NULL or, once the item is presented, its default (D4-11): the one its template
- * processing set, else its declared one. A record response's comes from the record's `records`,
- * the rest from its `responses`.
- *
- * @param item The session item.
- * @returns The responses, by identifier.
- */
-const valuesOf = (item: SessionItem): Responses => {
-  const held: Responses = { ...item.record.responses, ...item.record.records };
-
-  return Option.match(item.saved, {
-    onNone: () => held,
-    onSome: (saved) => ({ ...held, ...saved }),
-  });
-};
-
-/**
- * Report whether a response's value is its default: a value that matches it (`match`), or a record
- * that holds the same fields in any order (`sameRecord`). A value is never a record's default, nor
- * a record a value's.
- *
- * @param value The value given, not NULL.
- * @param fallback The response's default.
- * @returns Whether `value` is `fallback`.
- */
-const atDefault = (value: ResponseValue, fallback: ResponseValue): boolean =>
-  isRecordValue(value)
-    ? isRecordValue(fallback) && sameRecord(value, fallback)
-    : !isRecordValue(fallback) && match(value, fallback);
 
 /**
  * Say whether an item's responses skip it.

@@ -1175,13 +1175,15 @@ const inspect = (
   });
 
 /**
- * Give an item's values: each response's saved value, else its record's, a record response's from
- * the record's `records` and the rest from its `responses`.
+ * Give an item's values, which its view shows and its attempt is processed with: each saved
+ * response, else its record's, which holds NULL or, once the item is presented, its default
+ * (D4-11): the one its template processing set, else its declared one. A record response's comes
+ * from the record's `records`, the rest from its `responses`.
  *
  * @param item The session item.
  * @returns The values, by response identifier.
  */
-const valuesOf = (item: SessionItem): Responses => {
+export const valuesOf = (item: SessionItem): Responses => {
   const held: Responses = { ...item.record.responses, ...item.record.records };
 
   return Option.match(item.saved, {

@@ -36,6 +36,7 @@ import {
   isNullResponse,
   match,
   nullOf,
+  nullRecord,
   sameRecord,
 } from "#plate/model/values.ts";
 import type { ModelledBaseType, RecordValue, Single, Value } from "#plate/model/values.ts";
@@ -144,11 +145,6 @@ const defaultOf = (item: ScopeItem, declaration: ResponseDeclaration): Value =>
     ),
     () => nullOf(declaration.baseType, declaration.cardinality),
   );
-
-/**
- * The NULL record: a record with no field.
- */
-const nullRecord: RecordValue = { cardinality: "record", fields: [] };
 
 /**
  * The record responses the scope reads of an item that declares none.

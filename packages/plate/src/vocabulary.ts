@@ -123,13 +123,13 @@ const declarations = [
  * The response rules of the engine: `qti-response-condition` with its three branches,
  * `qti-set-outcome-value`, `qti-lookup-outcome-value`, `qti-exit-response`, and
  * `qti-response-processing-fragment`, whose rules run in its place. The expression kinds the engine
- * runs are not listed here: they are the registry's landed kinds (`landedKinds` in
- * `#plate/model/expressions/read.ts`), which the item model reads, so a family lands a kind with no
- * edit here.
+ * runs are not listed here: it runs each of the 64 (`expressionKinds` in
+ * `#plate/model/expression.ts`), which the item model reads through the registry
+ * (`#plate/model/expressions/read.ts`).
  *
- * An inline `qti-response-processing` that uses only these rules and landed expression kinds
- * becomes a rule tree; one that uses any other element is a mark keyed by that element's name, and
- * one that holds an XInclude `include` is the mark `xi:include`, since it is never fetched.
+ * An inline `qti-response-processing` that uses only these rules and expression kinds becomes a
+ * rule tree; one that uses any other element is a mark keyed by that element's name, and one that
+ * holds an XInclude `include` is the mark `xi:include`, since it is never fetched.
  */
 const engine = [
   "qti-response-condition",
@@ -147,13 +147,12 @@ const engine = [
  * `qti-template-else-if` and a `qti-template-else` hold (`qti-set-template-value`,
  * `qti-set-correct-response`, `qti-set-default-value`, `qti-template-condition`,
  * `qti-template-constraint` and `qti-exit-template`), and the three parts of a
- * `qti-template-condition`. The expression kinds they hold are the registry's landed kinds, as for
+ * `qti-template-condition`. The expression kinds they hold are every one the registry reads, as for
  * {@link engine}.
  *
  * The item model reads template processing through these (`templateRules` in
- * `#plate/model/template.ts`): template processing that holds any other element, or an expression
- * kind the registry has not landed, is none, and that element is a mark keyed by its name. This is
- * the one list of these names.
+ * `#plate/model/template.ts`): template processing that holds any other element is none, and that
+ * element is a mark keyed by its name. This is the one list of these names.
  */
 const templateRules = [
   "qti-set-template-value",
@@ -256,14 +255,13 @@ export interface Renders {
    * template declarations, the template processing and its template rules, and
    * `qti-printed-variable`, `qti-template-block` (whose content is its `qti-content-body`'s) and
    * `qti-template-inline`, which the item model holds as body nodes. The item model also reads the
-   * element of each expression kind the registry has landed (`landedKinds` in
-   * `#plate/model/expressions/read.ts`). Every element in the QTI namespace without the `qti-`
-   * prefix is HTML and renders as itself.
+   * element of each of the 64 expression kinds (`expressionKinds` in `#plate/model/expression.ts`).
+   * Every element in the QTI namespace without the `qti-` prefix is HTML and renders as itself.
    */
   readonly elements: readonly string[];
   /**
-   * The response rules the engine runs. The expression kinds it runs are the registry's landed
-   * kinds, which the item model reads.
+   * The response rules the engine runs. The expression kinds it runs are every one the item model
+   * reads.
    */
   readonly engine: readonly string[];
   /**
@@ -274,11 +272,11 @@ export interface Renders {
    * its own or of a field, since the model holds every other. Beyond these, a `qti-*` element
    * outside the item body and outside `elements` is a mark keyed by its own name, response
    * processing by a template URI outside the built-ins is a mark keyed `template="<uri>"`, inline
-   * response processing with an element outside `engine` and the registry's landed expression kinds
-   * is a mark keyed by that element's name (an XInclude `include` there is keyed `xi:include`), the
-   * text family's reader marks a `qti-pattern-match` literal it cannot compile `pattern`, a
-   * `qti-inside` coordinate written with `%` `area-coords-percent`, and every `qti-custom-operator`
-   * by its own name, and the template processing reader marks a `qti-set-correct-response` or
+   * response processing with an element outside `engine` and the expression kinds is a mark keyed
+   * by that element's name (an XInclude `include` there is keyed `xi:include`), the text family's
+   * reader marks a `qti-pattern-match` literal it cannot compile `pattern`, a `qti-inside`
+   * coordinate written with `%` `area-coords-percent`, and every `qti-custom-operator` by its own
+   * name, and the template processing reader marks a `qti-set-correct-response` or
    * `qti-set-default-value` that sets a record response `record-set`.
    */
   readonly marks: readonly FeatureRule[];
@@ -290,7 +288,7 @@ export interface Renders {
   readonly notices: readonly FeatureRule[];
   /**
    * The template rules the item model reads template processing through. The expression kinds
-   * they hold are the registry's landed kinds, as for `engine`.
+   * they hold are every one the item model reads, as for `engine`.
    */
   readonly templateRules: readonly string[];
 }

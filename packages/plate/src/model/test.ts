@@ -15,7 +15,6 @@
 import { Array as Arr, Effect, Option, pipe } from "effect";
 import { attributePath, walk, xincludeNamespace } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { occurrenceOf } from "#plate/engine/scope.ts";
 import {
   attributeOf,
   childrenNamed,
@@ -33,6 +32,7 @@ import {
   requiredAttribute,
   requiredValue,
   valueOf,
+  xmlWhitespaceRun,
   xsBoolean,
   xsBooleanOf,
 } from "#plate/model/attributes.ts";
@@ -41,8 +41,9 @@ import type { Branch, Expression, KindRule, Rule } from "#plate/model/expression
 import { kindRules, readExpression } from "#plate/model/expressions/read.ts";
 import { testRules } from "#plate/model/expressions/test.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
-import { outcomeDeclaration, pathsOf, xmlWhitespaceRun } from "#plate/model/item.ts";
+import { outcomeDeclaration, pathsOf } from "#plate/model/item.ts";
 import type { OutcomeDeclaration, UnsupportedFeature } from "#plate/model/item.ts";
+import { occurrenceOf } from "#plate/model/item-refs.ts";
 import { integerLexical, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import { navigationModes, renders, submissionModes, testMarks } from "#plate/vocabulary.ts";
@@ -1363,15 +1364,14 @@ interface ReadProcessing {
  * Read a test's `qti-outcome-processing` into the rules it runs.
  *
  * Its rules are read into the item model's {@link Rule} union, each expression through the
- * registry's generic reader. It is `marked`, and nothing is refused, when the engine cannot run
- * it: an element the reader marks at its path (an expression kind the registry has not landed, an
- * `xi:include`, a rule of a malformed shape), a name the engine does not hold in a test
- * ({@link unheldNames}, and a `qti-test-variables` that names `duration`,
- * {@link collectsDurations}), each the mark `variable:<name>` at the processing element's path, as
- * the item model marks an item's, or, in a test that references a section document, an
- * outcome-only expression, each marked by its name at its own path ({@link outcomeOnlyMarks}): the
- * engine delivers no section document's item, so it would count the test document's own items
- * alone. Otherwise it `runs` with its rules.
+ * registry's generic reader. It is `marked`, and nothing is refused, when the engine cannot run it:
+ * an element the reader marks at its path (an `xi:include`, a rule of a malformed shape), a name
+ * the engine does not hold in a test ({@link unheldNames}, and a `qti-test-variables` that names
+ * `duration`, {@link collectsDurations}), each the mark `variable:<name>` at the processing
+ * element's path, as the item model marks an item's, or, in a test that references a section
+ * document, an outcome-only expression, each marked by its name at its own path
+ * ({@link outcomeOnlyMarks}): the engine delivers no section document's item, so it would count the
+ * test document's own items alone. Otherwise it `runs` with its rules.
  *
  * @param build The build.
  * @param element The `qti-outcome-processing` element.
@@ -1429,11 +1429,10 @@ interface ReadDefault {
  * processing resolves (G-R3, pending: of those, the engine holds in a template default only the
  * test's declared outcomes, the test's own `duration`, which reads NULL there, and an item's
  * variables read by a prefixed name, as in outcome processing). It is left out, and nothing is
- * refused, when the engine cannot apply it: an element the reader marks at its path (an expression
- * kind the registry has not landed, an `xi:include`, a default that does not hold exactly one
- * expression), or a name the engine does not hold in a test ({@link addUnheldReads}, and a
- * `qti-test-variables` that names `duration`, {@link collectsDurations}), each the mark
- * `variable:<name>` at the default's path.
+ * refused, when the engine cannot apply it: an element the reader marks at its path (an
+ * `xi:include`, a default that does not hold exactly one expression), or a name the engine does not
+ * hold in a test ({@link addUnheldReads}, and a `qti-test-variables` that names `duration`,
+ * {@link collectsDurations}), each the mark `variable:<name>` at the default's path.
  *
  * @param build The build.
  * @param names What the test's processing resolves a name against.

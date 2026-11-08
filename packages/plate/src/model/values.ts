@@ -267,6 +267,11 @@ export const nullOf = (baseType: ModelledBaseType, cardinality: Value["cardinali
 });
 
 /**
+ * The NULL record: a record with no field, since a NULL field is no field.
+ */
+export const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+/**
  * Report whether a value is NULL.
  *
  * @param value The value to test.
@@ -675,3 +680,17 @@ export const match = (left: Value, right: Value): boolean => {
         return other !== undefined && sameSingle(single, other);
       });
 };
+
+/**
+ * Report whether a response's value is its default, as skipping and Results Reporting's answered
+ * status read it: a value that matches it ({@link match}), or a record that holds the same fields
+ * in any order ({@link sameRecord}). A value is never a record's default, nor a record a value's.
+ *
+ * @param value The value given, not NULL.
+ * @param fallback The response's default.
+ * @returns Whether `value` is `fallback`.
+ */
+export const atDefault = (value: ResponseValue, fallback: ResponseValue): boolean =>
+  isRecordValue(value)
+    ? isRecordValue(fallback) && sameRecord(value, fallback)
+    : !isRecordValue(fallback) && match(value, fallback);

@@ -318,6 +318,12 @@ export const requiredValue = (
 export const identifierOf = (written: string): string => trimXmlSpace(written);
 
 /**
+ * A run of XML whitespace, which separates the tokens of an XSD list and which a collapsed value
+ * reads as one space. It is global, as `replaceAll` requires; `split` ignores the flag.
+ */
+export const xmlWhitespaceRun = /[\t\n\r ]+/gu;
+
+/**
  * Read an identifier attribute the element must carry, as `identifierOf` reads it.
  *
  * @param build The build.

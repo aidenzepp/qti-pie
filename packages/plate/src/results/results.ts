@@ -40,15 +40,8 @@ import {
   startingValue,
 } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import {
-  isNcName,
-  isNullResponse,
-  isRecordValue,
-  match,
-  nullOf,
-  sameRecord,
-} from "#plate/model/values.ts";
-import type { ModelledBaseType, RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
+import { atDefault, isNcName, isNullResponse, nullOf, nullRecord } from "#plate/model/values.ts";
+import type { ModelledBaseType, ResponseValue, Value } from "#plate/model/values.ts";
 import { defaultOutputBudget } from "#plate/output-budget.ts";
 import { choiceOrder, hiddenOnlyResponses, redactStructure } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
@@ -313,11 +306,6 @@ const fieldElement = (field: ResultField): Element =>
   );
 
 /**
- * The NULL record: no field. A record response the values reported lack holds it.
- */
-const nullRecord: RecordValue = { cardinality: "record", fields: [] };
-
-/**
  * Give an optional attribute, none when it has no value.
  *
  * @param local Its name.
@@ -473,20 +461,6 @@ const attemptsOf = (presented: boolean, processed: number, limit: number): Attem
 
   return { started, status: limit > 0 && processed >= limit ? "final" : "pendingSubmission" };
 };
-
-/**
- * Report whether a response's value is its default: a value that matches it (`match`), or a record
- * that holds the same fields in any order (`sameRecord`). A value is never a record's default, nor
- * a record a value's.
- *
- * @param value The value reported, not NULL.
- * @param fallback The response's default.
- * @returns Whether `value` is `fallback`.
- */
-const atDefault = (value: ResponseValue, fallback: ResponseValue): boolean =>
-  isRecordValue(value)
-    ? isRecordValue(fallback) && sameRecord(value, fallback)
-    : !isRecordValue(fallback) && match(value, fallback);
 
 /**
  * Give a response's answered status by Results Reporting 2.7.1's criteria.

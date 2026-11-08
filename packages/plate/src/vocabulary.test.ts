@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { landedKinds } from "#plate/model/expressions/read.ts";
+import { expressionKinds } from "#plate/model/expression.ts";
 import { packageTables } from "#plate/package/tables.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { tables } from "#plate/validate/tables.ts";
@@ -443,9 +443,9 @@ describe("the closed value sets", () => {
     assert.sameMembers([...renders.templateRules], [...new Set(admitted)]);
   });
 
-  it("reads, with the registry's landed kinds, every response-processing element the engine read before the registry", () => {
+  it("reads, with every expression kind's element, every response-processing element the engine read before the registry", () => {
     assert.includeMembers(
-      [...renders.elements, ...landedKinds.map((kind) => `qti-${kind}`)],
+      [...renders.elements, ...expressionKinds.map((kind) => `qti-${kind}`)],
       [
         ...renders.engine,
         "qti-match",

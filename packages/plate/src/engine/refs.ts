@@ -33,25 +33,26 @@ import type {
 } from "#plate/model/expression.ts";
 import type { RecordDeclaration } from "#plate/model/item.ts";
 import { completionStatus, completionStatusType } from "#plate/model/record.ts";
-import { nullOf } from "#plate/model/values.ts";
+import { nullOf, nullRecord } from "#plate/model/values.ts";
 import type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 
 /**
- * Look up a value by identifier among a map's own keys.
+ * Look up a value or a record by identifier among a map's own keys.
  *
  * The variables come from plain objects, which inherit `Object.prototype`, and `constructor` or
  * `toString` is a valid identifier; reading only own keys keeps an inherited member from being
  * read as a value. A map the variables do not carry, such as the template values of an attempt
  * given none, holds no value by any name.
  *
- * @param values The responses, the outcomes, the template values or an override map, if any.
+ * @param values The responses, the record responses' records, the outcomes, the template values
+ *   or an override map, if any.
  * @param identifier The identifier.
  * @returns The value, or none when the map holds no value by that name.
  */
-export const own = (
-  values: Readonly<Record<string, Value>> | undefined,
+export const own = <A extends RecordValue | Value>(
+  values: Readonly<Record<string, A>> | undefined,
   identifier: string,
-): Option.Option<Value> =>
+): Option.Option<A> =>
   values !== undefined && Object.hasOwn(values, identifier)
     ? Option.fromUndefinedOr(values[identifier])
     : Option.none();
@@ -228,26 +229,6 @@ export interface VariableRead {
 }
 
 /**
- * Look up a record by identifier among a records map's own keys, as {@link own} looks up a value.
- *
- * @param records The record responses the run holds, if any.
- * @param identifier The identifier.
- * @returns The record, or none when the map holds no record by that name.
- */
-const ownRecord = (
-  records: Readonly<Record<string, RecordValue>> | undefined,
-  identifier: string,
-): Option.Option<RecordValue> =>
-  records !== undefined && Object.hasOwn(records, identifier)
-    ? Option.fromUndefinedOr(records[identifier])
-    : Option.none();
-
-/**
- * The NULL record: a record with no field.
- */
-const nullRecord: RecordValue = { cardinality: "record", fields: [] };
-
-/**
  * Give the value the run's own variables hold by an identifier: the response, the outcome or the
  * template variable of that identifier, the built-in `completionStatus` among the outcomes, else
  * the built-in variable of that name ({@link builtInValue}).
@@ -295,7 +276,7 @@ export const variableRead = (
   variables: Variables,
   identifier: string,
 ): Result.Result<VariableRead, RecordOperandError | UnknownIdentifierError> => {
-  if (Option.isSome(ownRecord(variables.records, identifier))) {
+  if (Option.isSome(own(variables.records, identifier))) {
     return Result.fail(new RecordOperandError({ identifier }));
   }
 
@@ -387,7 +368,7 @@ const recordOf = (operand: Expression, scope: Scope): Option.Option<RecordValue>
   if (operand.kind === "variable") {
     const { identifier } = operand;
 
-    return Option.orElse(ownRecord(variables.records, identifier), () =>
+    return Option.orElse(own(variables.records, identifier), () =>
       Option.isSome(directValue(variables, identifier))
         ? Option.none()
         : Option.flatMap(prefixedOf(variables, identifier), ({ reading }) =>

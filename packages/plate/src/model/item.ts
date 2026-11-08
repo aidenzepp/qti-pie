@@ -39,6 +39,7 @@ import {
   textOf,
   typed,
   valueOf,
+  xmlWhitespaceRun,
   xsBoolean,
   xsBooleanOf,
   xsInt,
@@ -56,8 +57,8 @@ import type {
   Rule,
   TemplateRule,
 } from "#plate/model/expression.ts";
-import { integerOrRefOf } from "#plate/model/expression.ts";
-import { kindRules, landedKinds, readExpression } from "#plate/model/expressions/read.ts";
+import { expressionKinds, integerOrRefOf } from "#plate/model/expression.ts";
+import { kindRules, readExpression } from "#plate/model/expressions/read.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
 import { translate } from "#plate/model/regex.ts";
 import { templateRules } from "#plate/model/template.ts";
@@ -842,12 +843,12 @@ interface Build extends ModelWalk {
 
 /**
  * The `qti-*` elements the model reads or renders: those `renders` lists, the engine's response
- * rules and the template rules among them, and the element of each expression kind the registry has
- * landed.
+ * rules and the template rules among them, and the element of each of the 64 expression kinds,
+ * every one of which the registry reads.
  */
 const readElements: ReadonlySet<string> = new Set([
   ...renders.elements,
-  ...landedKinds.map((kind) => `qti-${kind}`),
+  ...expressionKinds.map((kind) => `qti-${kind}`),
 ]);
 
 /**
@@ -1455,11 +1456,6 @@ const responseDeclaration = (
 
     return Option.some({ ...read.value, areaMapping, correct, defaultValue, mapping });
   });
-
-/**
- * A run of XML whitespace, which an XSD list or a collapsed value reads as one space.
- */
-export const xmlWhitespaceRun = /[\t\n\r ]+/gu;
 
 /**
  * Read an outcome declaration's `view`, an XSD list of {@link outcomeViews}: its tokens are the
@@ -2410,8 +2406,8 @@ const readingOf = (build: Build): ExpressionReading => ({
  * `#plate/model/expressions/read.ts`), each kind by its family's reader spec.
  *
  * Every operand is read, so every element the engine does not run is marked, not only the first. A
- * kind whose family has not landed is marked `qti-<kind>` at its path. A `qti-variable`'s optional
- * `weight-identifier` is read and held; an item's processing never evaluates it.
+ * `qti-variable`'s optional `weight-identifier` is read and held; an item's processing never
+ * evaluates it.
  *
  * @param build The build.
  * @param element The expression element.

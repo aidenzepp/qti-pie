@@ -69,9 +69,10 @@ interface Requirement {
  * The binding each interaction plate renders requires, by its information-model class, quoted from
  * QTI 3.0's information model.
  *
- * This is what QTI allows, not what plate renders: a Text Entry bound to `record` or an Extended
- * Text bound to `multiple` is valid and becomes a notice (`renders` in the vocabulary), so it is
- * not refused here. Other interactions' bindings are not checked.
+ * This is what QTI allows, not what plate renders: a binding QTI allows and plate does not render,
+ * such as a Text Entry bound to a record response with a `file` field, is valid and becomes a
+ * notice (`renders` in the vocabulary), so it is not refused here. Other interactions' bindings are
+ * not checked.
  */
 const requirements = {
   // "The qti-choice-interaction must be bound to a response variable with a base-type of identifier
@@ -344,7 +345,7 @@ const duplicateIdentifier = (
  * Reading 19: an Extended Text bound to a `multiple` or `ordered` declaration carries `max-strings`
  * (the information model requires it of a container binding; the XSD makes it optional because it
  * cannot see the binding). Without it the interaction is `missing-attribute`; the binding itself
- * stays valid and keeps its notice.
+ * stays valid.
  *
  * @param source The document.
  * @param visit The interaction's visit.
