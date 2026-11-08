@@ -1071,6 +1071,32 @@ describe("runAttempt", () => {
       );
     }),
   );
+
+  it.effect("[T-14] keeps the record's records, the record responses' values, unchanged", () =>
+    Effect.gen(function* keepsRecords() {
+      const item = yield* buildItem(bg007);
+      const record: ItemRecord = {
+        ...fresh(item, instance),
+        records: {
+          DETAIL: {
+            cardinality: "record",
+            fields: [{ identifier: "stringValue", value: { baseType: "string", value: "12" } }],
+          },
+          EMPTY: { cardinality: "record", fields: [] },
+        },
+      };
+
+      const first = yield* Effect.fromResult(
+        runAttempt(item, record, { RESPONSE: identifierValue("true") }),
+      );
+      const second = yield* Effect.fromResult(
+        runAttempt(item, first, { RESPONSE: identifierValue("false") }),
+      );
+
+      assert.deepStrictEqual([first.records, second.records], [record.records, record.records]);
+      assert.strictEqual(second.numAttempts, 2);
+    }),
+  );
 });
 
 describe("firstAttempt", () => {

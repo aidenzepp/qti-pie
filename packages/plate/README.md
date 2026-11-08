@@ -311,7 +311,7 @@ export const step = (
 ## Records
 
 The host stores two records as JSON and hands each back on the next request. plate writes both.
-Each function that reads one back checks that it has version 3, that each field has its type, and
+Each function that reads one back checks that it has version 4, that each field has its type, and
 that each value is well formed. `restore` also checks that each response and outcome in an item's
 record fits the item's declarations, as `results` does, and refuses another item's record with
 `RecordMismatch`, as `score` does. For an item whose template processing runs, `score` and
@@ -337,10 +337,10 @@ one does not fit. Keep the stored session where only your server can change it.
 
 | Record | Holds | Written by | Read by |
 | --- | --- | --- | --- |
-| `StoredRecord`, `version: 3` | One item's seed, template values, attempts, responses and outcomes, with the correct responses and defaults its template processing set | `begin`, `score` | `score`, `restore`, `results` |
-| `StoredTestSession`, `version: 3` | A test session, with its processing seed and its shuffle seed, its items' records, saved responses and template defaults, its position and its parts, and the test's outcomes with the count of its outcome processing runs | `encodeSession` | `decodeSession`, `results` |
+| `StoredRecord`, `version: 4` | One item's seed, template values, attempts, responses and outcomes, with the correct responses and defaults its template processing set | `begin`, `score` | `score`, `restore`, `results` |
+| `StoredTestSession`, `version: 4` | A test session, with its processing seed and its shuffle seed, its items' records, saved responses and template defaults, its position and its parts, and the test's outcomes with the count of its outcome processing runs | `encodeSession` | `decodeSession`, `results` |
 
-plate reads only version 3, and refuses a record of another version with `InvalidRecord` or
+plate reads only version 4, and refuses a record of another version with `InvalidRecord` or
 `InvalidSession`. A change to either form is a changelog entry. The TSDoc on each type documents
 its fields.
 

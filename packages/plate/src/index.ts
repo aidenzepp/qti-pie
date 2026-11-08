@@ -90,7 +90,7 @@ export {
 
 export { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
 
-export type { Value } from "#plate/model/values.ts";
+export type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 
 export type {
   NavigationItem,

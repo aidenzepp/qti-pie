@@ -86,7 +86,7 @@ export const TestSessionSchema = Schema.Struct({
 );
 
 /**
- * A test session in the form the host stores: JSON-safe data that names its version, `3`. Every
+ * A test session in the form the host stores: JSON-safe data that names its version, `4`. Every
  * value is written as the stored item record writes it, integers as their decimal digits, so no
  * integer is rounded on the way through the host, the test's `outcomes` among them; each item's
  * `record` is a stored item record, its seed, template values, correct responses and defaults with
@@ -184,7 +184,7 @@ export class InvalidSession extends Data.TaggedError("InvalidSession")<{
    */
   readonly stage: SessionStage;
   /**
-   * The value the stored session holds under `version`, which is `3` when something else is
+   * The value the stored session holds under `version`, which is `4` when something else is
    * wrong; none when it is not an object or names no version, and at stage `encode`, where no
    * stored session was read.
    */
