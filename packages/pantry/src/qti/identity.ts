@@ -78,7 +78,9 @@
  * is ASCII's, and both sides compare by `Compute.lowerAscii`: {@link LomLanguage}'s `tag` and
  * {@link GeneralLang}'s `value`. An empty `xml:lang`, or one of whitespace alone, states no
  * language ("there is no language information available", XML 1.0 §2.12), so it asks for no
- * listing.
+ * listing; nor does a form that is no language tag once collapsed, which identifies no language
+ * (RFC 5646 §2.1), so its value domain refuses it alone (spec reading 164,
+ * {@link statedLanguagePattern}).
  *
  * Every copy of an attribute into an overlay follows C18 the other way round, from
  * `select(Attribute, φ)` into the overlay, beside a key over the same selection whose UNIQUE serves
@@ -119,6 +121,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
+import { languageTag } from "#pantry/grammar/attributes.ts";
 import { ncNamePattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeGrammar,
@@ -142,6 +145,7 @@ import {
   LomGeneral,
   LomObject,
   LomRecord,
+  ObjectLang,
   recordDocumentTypes,
   ResourceLomGeneral,
 } from "#pantry/qti/metadata.ts";
@@ -172,6 +176,15 @@ export const idValuePattern = "^[^\\t\\n\\r ]+$";
  * no {@link DocumentId}, so its value domain refuses it alone (spec reading 156).
  */
 export const namingPattern = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
+
+/**
+ * An `xml:lang` form that states a language once collapsed: a well-formed BCP 47 tag
+ * (`languageTag`, spec reading 129) with XML whitespace around it, which collapsing strips, since a
+ * tag holds none. Any other form states no language and asks no record to list it: the empty one
+ * and one of whitespace alone (XML 1.0 §2.12), and one that is no tag, which identifies no language
+ * (RFC 5646 §2.1), so its value domain refuses it alone (spec reading 164).
+ */
+export const statedLanguagePattern = `^[\\t\\n\\r ]*(?:${languageTag})[\\t\\n\\r ]*$`;
 
 /**
  * The nil uuid: the start of the owner-axis copy of `document`, which every member's owner
@@ -364,8 +377,9 @@ export const DocumentGenerals = relation(
  * One language of a document that one of the general categories describing it lists, keyed by
  * (category, form): R26's witness.
  *
- * - `lang` is the document's `xml:lang` form ({@link DocumentLang}), and `value` its value collapsed
- *   and case-folded, `lowerAscii(collapse(lang))`, nonempty since the form states a language;
+ * - `lang` is the document's `xml:lang` form ({@link DocumentLang}), one that states a language
+ *   ({@link statedLanguagePattern}), and `value` its value collapsed and case-folded,
+ *   `lowerAscii(collapse(lang))`;
  * - `value` is a language the category lists ({@link ResourceLomLanguageSet}).
  */
 export const GeneralLang = relation(
@@ -805,10 +819,10 @@ const lomLanguages = select(Node, (n) =>
 const namingGenerals = select(GeneralNamed, (g) => g.ne(g.named, "none"));
 
 /**
- * The forms that state a language: every `xml:lang` but an empty one or one of whitespace alone,
- * which states none (XML 1.0 §2.12).
+ * The forms that state a language ({@link statedLanguagePattern}): every `xml:lang` that is a
+ * language tag once collapsed.
  */
-const statedLangs = select(DocumentLang, (d) => d.not(Compute.matches(d.lang, spacePattern)));
+const statedLangs = select(DocumentLang, (d) => Compute.matches(d.lang, statedLanguagePattern));
 
 /**
  * The SSML attributes reading 3's laws read, the source of {@link SsmlAttribute}.
@@ -909,7 +923,7 @@ export const documentLang = contained(
  * The forms of an item's assembly that state a language, as {@link statedLangs} are a document's.
  */
 const statedAssembledLangs = select(AssembledLang, (a) =>
-  a.not(Compute.matches(a.lang, spacePattern)),
+  Compute.matches(a.lang, statedLanguagePattern),
 );
 
 /**
@@ -978,7 +992,9 @@ export const ssmlLexiconReference = contained(
  *   target" over the assembly, so an item's IDREF may name its fragment's ID and a fragment's its
  *   item's;
  * - **DocumentLang:** each `xml:lang` copied into its `XmlLang` row and each row an attribute's, the
- *   counted family, and each form carried (`E1_derived`);
+ *   counted family, and each form carried (`E1_derived`); and each assessment object's `ObjectLang`
+ *   (`#pantry/qti/metadata.ts`) an attribute's, through the key over every `xml:lang` (the one-way
+ *   rule), its node an assessment object's root by its counted family;
  * - **ResourceLomLanguageSet:** each general category's `lom:language` copied into its `LomLanguage`
  *   row, its category its parent and its language its string value, and each row an element's; its
  *   tag the value case-folded, the counted family over the tags, and each language listed
@@ -1099,6 +1115,7 @@ export const identityLawsByName = {
       on(XmlLang, "node", "document", "lang"),
     ),
     contained(on(XmlLang, "node"), on(langAttributes, "node")),
+    contained(on(ObjectLang, "node"), on(langAttributes, "node")),
     langFamily,
     check("E1_derived", DocumentLang, (d) => d.gt(d.carriers, 0n)),
     contained(
@@ -1120,7 +1137,10 @@ export const identityLawsByName = {
     generalLangFamily,
     contained(on(GeneralLang, "general", "document"), on(GeneralObject, "general", "document")),
     check("E1_derived", GeneralLang, (g) =>
-      g.and(g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))), g.ne(g.value, "")),
+      g.and(
+        g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))),
+        Compute.matches(g.lang, statedLanguagePattern),
+      ),
     ),
     documentLangFamily,
     placedLangFamily,
@@ -1140,7 +1160,10 @@ export const identityLawsByName = {
       on(GeneralObject, "general", "document"),
     ),
     check("E1_derived", PlacedGeneralLang, (g) =>
-      g.and(g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))), g.ne(g.value, "")),
+      g.and(
+        g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))),
+        Compute.matches(g.lang, statedLanguagePattern),
+      ),
     ),
     key(on(ssmlAttributes, "node", "name")),
     contained(

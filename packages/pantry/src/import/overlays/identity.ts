@@ -29,6 +29,7 @@ import {
   lowerAscii,
   namesNoDocument,
   piecesOf,
+  statesLanguage,
   stringValuesOf,
 } from "#pantry/import/overlays/metadata.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
@@ -62,7 +63,7 @@ import type {
   TextIdref,
   XmlLang,
 } from "#pantry/qti/identity.ts";
-import { noLanguage, objectTypes, recordDocumentTypes } from "#pantry/qti/metadata.ts";
+import { objectTypes, recordDocumentTypes } from "#pantry/qti/metadata.ts";
 import { itemKind, testKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 
@@ -872,7 +873,8 @@ export const placedIdRowsOf = (input: {
 /**
  * Build a package's R26 witnesses from every document's identity rows: for each general category
  * that describes a document ({@link IdentityRows.GeneralObject}, the manifest's) and each of the
- * document's `xml:lang` forms that states a language, a {@link GeneralLang} row where the category
+ * document's `xml:lang` forms that states a language, a language tag once collapsed
+ * ({@link statesLanguage}, spec reading 164), a {@link GeneralLang} row where the category
  * lists the form's value, collapsed and case-folded, among its case-folded languages
  * ({@link IdentityRows.ResourceLomLanguageSet}). A
  * form no category lists has no witness, so its count falls short of its document's categories and
@@ -898,7 +900,7 @@ export const languageRowsOf = (documents: readonly IdentityRows[]): LanguageRows
     (form) => form.document,
   )) {
     const value = lowerAscii(collapse(lang));
-    if (value !== noLanguage && listed.has(headingKey([general, value]))) {
+    if (statesLanguage(value) && listed.has(headingKey([general, value]))) {
       witnesses.set(headingKey([general, lang]), { document, general, lang, value });
     }
   }
@@ -960,7 +962,7 @@ export const placedLanguageRowsOf = (
     (object) => object.document,
   )) {
     const value = lowerAscii(collapse(lang));
-    if (value !== noLanguage && listed.has(headingKey([general, value]))) {
+    if (statesLanguage(value) && listed.has(headingKey([general, value]))) {
       witnesses.set(headingKey([general, lang]), { assembly, general, lang, value });
     }
   }

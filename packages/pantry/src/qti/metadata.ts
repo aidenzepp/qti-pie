@@ -474,7 +474,9 @@ export const ObjectTitle = relation(
 /**
  * An assessment object's `xml:lang`, keyed by its root: its lexical form as written, and `langTag`,
  * its value collapsed (an `xs:language`) and case-folded (`Compute.lowerAscii`), as `lom-title`
- * compares it.
+ * compares it. A root has a row exactly where it writes the attribute: copied from it here, and
+ * back into every `xml:lang` (`#pantry/qti/identity.ts`), whose key over `node` the way back reads,
+ * since this selection states none of its own.
  */
 export const ObjectLang = relation("ObjectLang", { lang: keyText, langTag: keyText, node: uuid }, [
   "node",
@@ -857,7 +859,8 @@ const spelledUsageBaseTypes = select(Attribute, (a) =>
  *   with `langs` counting its `xml:lang` and its language's compared form; and each of its
  *   `identifier` (in pieces), `title` and `xml:lang` is copied into its own row,
  *   {@link ObjectIdentifier}, {@link ObjectTitle} or {@link ObjectLang}, with its compared form,
- *   and no such row stands without its attribute ("E1 derived", spec reading 148).
+ *   and no such row stands without its attribute, an {@link ObjectLang} by the way back
+ *   `#pantry/qti/identity.ts` states ("E1 derived", spec reading 148).
  * - **`lom-identifier`:** a general entry of a naming record makes its record's
  *   {@link LomObjectIdentifier} exist, whose document is its record's object's, whose identifier is
  *   that document's, and whose entry is a general entry of the record with that token.

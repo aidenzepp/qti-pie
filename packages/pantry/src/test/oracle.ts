@@ -66,6 +66,7 @@ import {
   admittedOf,
   attributeCounts,
   governorOf,
+  languageTag,
   openDomain,
   requiredOf,
   textDomainOf,
@@ -348,6 +349,13 @@ const identity: Slot = { elements: 0n, state: 0 };
  */
 const caseFolded = (tag: string): string =>
   tag.replaceAll(/[A-Z]/gu, (capital) => capital.toLowerCase());
+
+/**
+ * A well-formed BCP 47 language tag as a whole text, RFC 5646's `Language-Tag` as the grammar reads
+ * it (`languageTag`, spec reading 129): the value of an `xml:lang` that states a language. A form
+ * whose collapsed value is no tag identifies no language (RFC 5646 §2.1; spec reading 164).
+ */
+const languageTagForm = new RegExp(`^(?:${languageTag})$`, patternFlags);
 
 /**
  * Split a collapsed list form into its tokens.
@@ -4895,9 +4903,11 @@ const mergedDocumentsOf = (
  * (spec reading 117): its own, and those of every fragment its includes splice in; a fragment a
  * test places is a known under-refusal, which reading 117 lists.
  *
- * An `xml:lang` is read by its value, its form collapsed, and one that is empty or all whitespace
- * states no language (XML 1.0 §2.12); a LOM `language` is its text as written. The two compare as
- * tags, without regard to case (RFC 5646 §2.1.1).
+ * An `xml:lang` is read by its value, its form collapsed, and states a language only where that
+ * value is a language tag: an empty one or one of whitespace alone states none (XML 1.0 §2.12), and
+ * one that is no tag identifies none (RFC 5646 §2.1), so its value domain refuses it alone (spec
+ * reading 164); a LOM `language` is its text as written. The two compare as tags, without regard to
+ * case (RFC 5646 §2.1.1).
  *
  * @param documents - The documents the manifest lists that shredded.
  * @param manifest - The manifest's view.
@@ -4964,7 +4974,7 @@ const documentLangBreaches = (
       const value = caseFolded(collapsed(form));
       const missing = generals.filter((general) => !languagesOf(general).includes(value));
 
-      return value === "" || missing.length === 0
+      return !languageTagForm.test(value) || missing.length === 0
         ? []
         : [
             {

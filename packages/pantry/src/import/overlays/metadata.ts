@@ -153,9 +153,20 @@ const objects: ReadonlySet<string> = new Set(objectKinds);
 
 /**
  * A well-formed language tag as a whole text, the compared form of an `xml:lang` that states a
- * language (spec reading 151).
+ * language (spec readings 151 and 164).
  */
 const languageTagForm = new RegExp(languageTagPattern, patternFlags);
+
+/**
+ * Decide whether an `xml:lang` states a language by its compared form, its value collapsed and
+ * case-folded: where the form is a well-formed language tag (spec readings 151 and 164). The empty
+ * form, and one that is no tag, states none, so `lom-title` reads no language and
+ * `document-lang` asks no record to list it.
+ *
+ * @param compared - The compared form, {@link noLanguage} where the attribute is unwritten.
+ * @returns Whether it states a language.
+ */
+export const statesLanguage = (compared: string): boolean => languageTagForm.test(compared);
 
 /**
  * The usage statistics, as a set.
@@ -1008,7 +1019,7 @@ export const namedDocumentOf = (
  * @returns Whether the string's language is the object's.
  */
 const inLanguage = (string: Addition<typeof LomTitleString>, lang: string): boolean =>
-  !languageTagForm.test(lang) || string.languageTag === noLanguage || string.languageTag === lang;
+  !statesLanguage(lang) || string.languageTag === noLanguage || string.languageTag === lang;
 
 /**
  * Build a naming record's {@link LomObjectIdentifier} row: its witness the first general entry of

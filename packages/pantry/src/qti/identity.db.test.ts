@@ -680,21 +680,22 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
   );
 
   it.effect(
-    "refuses a stated xml:lang form whose listing categories fall short of its document's, by Document lang, and accepts an equal count, an unstated form and a document no category describes",
+    "refuses a stated xml:lang form whose listing categories fall short of its document's, by Document lang, and accepts an equal count, an unstated form, one that is no tag and a document no category describes",
     () =>
       // Oracle: PostgreSQL, the foreign key of `documentLang`, against QTI 3.0 Metadata §2.7.1.3
       // ("There must be one value for each of the languages referred to by the language
       // attributes"), counted: a form that states a language is listed by as many general
       // categories (`DocumentLang.generals`, its witnesses) as describe its document
       // (`DocumentGenerals.generals`), and an empty or all-whitespace form states none (XML 1.0
-      // §2.12). Its target holds no field beyond the two it names, so PostgreSQL judges it at the
+      // §2.12), nor does one that is no language tag once collapsed (RFC 5646 §2.1, spec reading
+      // 164). Its target holds no field beyond the two it names, so PostgreSQL judges it at the
       // form's INSERT (README, "Direct SQL access": a foreign key is deferred to COMMIT only as a
       // family's proof needs, or when its target has another field or it lies on a cycle); it is
       // set immediate too, which PostgreSQL takes as a no-op on a key it does not defer, so the
       // case holds wherever grizzle places it.
-      // Bound: a stated form listed by none of one category; listed by it; the empty form and a
-      // form of whitespace alone beside one category; a stated form of a document no category
-      // describes.
+      // Bound: a stated form listed by none of one category; listed by it; the empty form, a form
+      // of whitespace alone and one that is no tag beside one category; a stated form of a
+      // document no category describes.
       Effect.gen(function* documentLangLaw() {
         const client = yield* loginSession;
         const law = yield* constraintDescribed(
@@ -707,6 +708,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
           ["a stated form its one category lists", [described(1n), form("en", 1n)], false],
           ["the empty form", [described(1n), form("", 0n)], false],
           ["a form of whitespace alone", [described(1n), form(" \t", 0n)], false],
+          ["a form that is no tag", [described(1n), form("en_GB", 0n)], false],
           ["a document no category describes", [described(0n), form("en", 0n)], false],
         ] as const) {
           assertVerdict(
@@ -725,17 +727,20 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
     "refuses an R26 witness whose value is not its form's collapsed value, by E1_derived, and accepts the collapsed value",
     () =>
       // Oracle: PostgreSQL, `GeneralLang`'s `E1_derived` CHECK, `value = lowerAscii(collapse(lang))`
-      // and nonempty, against XML Schema 1.0 Part 2 §3.3.3: an xs:language's value is its form
-      // collapsed, outer whitespace removed, and a form that states a language has a nonempty
-      // one. Each case states its document's one category and its form, so the witness's owner
-      // axis and the form's own key hold at their INSERTs and the CHECK is the verdict.
-      // Bound: another value, whitespace kept in the value, an empty value, and the control.
+      // of a form that states a language, against XML Schema 1.0 Part 2 §3.3.3: an xs:language's
+      // value is its form collapsed, outer whitespace removed, and a form states a language only
+      // where that value is a language tag (spec reading 164). Each case states its document's
+      // one category and its form, so the witness's owner axis and the form's own key hold at
+      // their INSERTs and the CHECK is the verdict.
+      // Bound: another value, whitespace kept in the value, an empty value, the value of a form
+      // that is no tag, and the control.
       Effect.gen(function* witnessSplit() {
         const client = yield* loginSession;
         for (const [label, lang, value] of [
           ["another value", "en", "fr"],
           ["whitespace kept in the value", " en", " en"],
           ["an empty value", " ", ""],
+          ["the value of a form that is no tag", "en_GB", "en_gb"],
           ["the collapsed value", " fr\n", "fr"],
         ] as const) {
           assertVerdict(

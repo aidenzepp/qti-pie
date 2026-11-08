@@ -1005,6 +1005,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    164,
+    {
+      owner:
+        "the schema's stated `xml:lang` forms, `statedLanguagePattern` over the grammar's one `languageTag`, read by `statedLangs`, `statedAssembledLangs` and R26's witnesses' `E1_derived` (`GeneralLang`, `PlacedGeneralLang`, `src/qti/identity.ts`); the import's `statesLanguage` (`src/import/overlays/metadata.ts`), read by `languageRowsOf` and `placedLanguageRowsOf` (`src/import/overlays/identity.ts`) and by lom-title's `inLanguage`; the oracle's Document lang (`documentLangBreaches`, `languageTagForm`, `src/test/oracle.ts`); held by `src/import/overlays/document-lang.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

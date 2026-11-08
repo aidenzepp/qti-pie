@@ -2995,3 +2995,21 @@ against it. A reading that is not an information-model-over-XSD case says which 
      the 14 zips that hold one writes `visible` (4 of them false, none of them with `keep-together="false"`), by a scan
      of their XML entries. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
      2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat SWEEP-VISIBLE.)
+164. **An `xml:lang` that is no language tag once collapsed states no language, so `document-lang` asks no record to
+     list it, and its value domain alone refuses it.** QTI 3.0 Metadata asks for "one value for each of the languages
+     referred to by the language attributes on the associated assessmentItem, test or object bank and its
+     'bodyElements'" (section 2.7.1.3, normative by its section 1.2). An `xml:lang` refers to a language by a language
+     identifier as BCP 47 defines it (XML 1.0, section 2.12), read by its value, its form collapsed (reading 134). A
+     form whose value RFC 5646's ABNF does not produce is no language tag (sections 2.1 and 2.2.9), so it identifies no
+     language, as reading 151 reads it for `lom-title`, and refers to none a record could list. Reading 129 refuses it
+     under `attribute-lexical`, since a form outside a type's lexical space denotes no value of it (XML Schema Part 2,
+     section 2.3), as reading 152 reads a name that names nothing. So `en_GB`, `a-value` and `english language`, on a
+     root or on a body element, ask no record for a language, as the empty form and one of whitespace alone already did
+     not, and AL1 alone refuses them. This sets aside reading 134's listing of every other form, under which the
+     importer, the schema (`statedLangs`, `src/qti/identity.ts`) and the law oracle (`documentLangBreaches`,
+     `src/test/oracle.ts`) asked each record for `en_gb` beside AL1, a value no tag has, and the last sentence of
+     reading 151, which left `document-lang` to reading 134. The schema states the forms that state a language once
+     (`statedLanguagePattern`, over the grammar's one `languageTag`), R26's witnesses are of those forms only, and the
+     importer writes them by the same test (`statesLanguage`, `src/import/overlays/metadata.ts`). This binds pantry and
+     plate alike. This is not a case of documents in conflict. (Decided 2026-11-08 by the coordinator, under the
+     operator's standing ruling of 2026-11-05, from seat SWEEP-DELETELANG.)
