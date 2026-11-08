@@ -154,7 +154,9 @@ export interface ItemFilters {
  * What a test-level read of an item variable gives: `held`, a value of a type the value model
  * holds, NULL included; `record`, the record a record response holds, the NULL record included;
  * or `unheld`, NULL of a declared type the value model does not hold, base type `file` or a record
- * outcome, template or context variable.
+ * outcome or template variable. A context variable read through an item ref is not read:
+ * `openPackage` marks the processing that reads it (repair9-9), and in documents opened apart the
+ * read fails {@link UnknownIdentifierError}.
  */
 export type Reading =
   | { readonly kind: "held"; readonly value: Value }
@@ -383,9 +385,11 @@ export const itemName = (item: ScopeItem, name: string): Option.Option<ItemName>
 const held = (value: Value): Reading => ({ kind: "held", value });
 
 /**
- * Give NULL of a declared type: a record outcome, template or context variable reads the `unheld`
- * NULL, as does a variable of base type `file` (G-R4, pending: a record outcome, template or
- * context variable read through an item ref reads NULL).
+ * Give NULL of a declared type: a record outcome or template variable reads the `unheld` NULL, as
+ * does a variable of base type `file` (G-R4, pending: a record outcome or template variable read
+ * through an item ref reads NULL). A context variable read through an item ref is not read:
+ * `openPackage` marks the processing that reads it (repair9-9), and in documents opened apart the
+ * read fails {@link UnknownIdentifierError}.
  *
  * @param type The type.
  * @returns The `held` NULL of a type the value model holds, else the `unheld` NULL.
@@ -418,8 +422,10 @@ const absentReading = (named: ItemName): Reading =>
  * - A template variable reads the record's value; with none, because the item has not been presented
  *   or its template processing does not run, it reads NULL of its declared type (G-R3, pending: an
  *   item variable with no value reads NULL; Admission A3).
- * - A variable of base type `file`, and a record outcome, template or context variable, reads NULL of
- *   its declared type, which the record never holds (G-R3, pending; G-R4, pending).
+ * - A variable of base type `file`, and a record outcome or template variable, reads NULL of its
+ *   declared type, which the record never holds (G-R3, pending; G-R4, pending). A context variable
+ *   read through an item ref is not read: `openPackage` marks the processing that reads it
+ *   (repair9-9), and in documents opened apart the read fails {@link UnknownIdentifierError}.
  * - The built-in `numAttempts` reads the started attempt count ({@link ScopeItem.numAttempts}), a
  *   single integer, and `completionStatus` the record's outcome of that name. The engine holds no
  *   item's `duration`, and the test model marks a processing that reads it, so it is the record's

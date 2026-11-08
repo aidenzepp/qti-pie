@@ -109,8 +109,8 @@ const fieldOf = (record: RecordValue, identifier: string): Option.Option<Value> 
  * the information model says ("If there is no field with that identifier then the result of the
  * operator is NULL"), when the record is NULL, and when the operand gives a value that is not a
  * record, which on a checked item only `qti-null` and `qti-custom-operator` can, each a NULL of no
- * known cardinality, since the kind's rule refuses an operand of any other known cardinality (P23)
- * (G-R4, pending: a lacking field, a NULL record and an operand that is not a record each give
+ * known cardinality, since the kind's rule refuses an operand of any other known cardinality (P23;
+ * G-R4, pending: a lacking field, a NULL record and an operand that is not a record each give
  * NULL).
  *
  * @param expression The `qti-field-value`.

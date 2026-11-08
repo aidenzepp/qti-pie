@@ -829,14 +829,15 @@ const evaluateRandomInteger: Evaluator<"random-integer"> = (expression, scope) =
 
 /**
  * Give the float a `qti-random-float`'s `min` or `max` stands for: its literal, or the value of the
- * float variable it names, through `referenceValue` with the kind's checked float facet.
+ * float variable it names, through {@link referenceValue} with the kind's checked float facet.
  *
  * @param variables The variables of the attempt.
  * @param reference The attribute's value.
  * @returns The float; none when the named variable holds NULL or a value that is not a single
- *   float, which the validator refuses (P24) on a checked item; or the failure `referenceValue`
- *   gives: a `RecordOperandError` for a record response, which P24 refuses on a checked item, or an
- *   {@link UnknownIdentifierError} when it names a variable the variables hold no value of.
+ *   float, which the validator refuses (P24) on a checked item; or the failure
+ *   {@link referenceValue} gives: a {@link RecordOperandError} for a record response, which P24
+ *   refuses on a checked item, or an {@link UnknownIdentifierError} when it names a variable the
+ *   variables hold no value of.
  */
 const referenceFloat = (
   variables: Variables,
