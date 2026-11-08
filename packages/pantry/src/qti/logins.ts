@@ -1,6 +1,6 @@
 /**
  * The login that opens a connection: the author application, over the author role, with the export
- * scan and the import's write program as its workload.
+ * scan and the import's write program as its workload, built over any `Qti` schema value.
  *
  * The import's write program is declared with no rows, so that grizzle compiles it wherever it
  * compiles a workload: `grizzle generate`, `grizzle check` and every `DbLayer` startup. A schema
@@ -12,20 +12,13 @@
  * Description.
  */
 import { login, workload } from "@bjornpagen/grizzle";
-import { pipe, Record as Rec } from "effect";
-import { documentScan, documentsOf, entriesOf } from "#pantry/export/scan.ts";
+import { Function as Fn, pipe, Record as Rec } from "effect";
+import { exportQueriesOf } from "#pantry/export/scan.ts";
 import { writtenRelations } from "#pantry/import/roster.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
-import { Author } from "#pantry/qti/roles.ts";
+import { authorRoleOf } from "#pantry/qti/roles.ts";
 import { Qti } from "#pantry/qti/schema.ts";
-
-/**
- * The author application's workload: one document's ordered scan, the documents of a package and
- * a package's record, each compiled once when the login's `DbLayer` is built, its access paths
- * earning their indexes (the W5 amendment's C20).
- */
-export const exportWork = workload(Author, { documentScan, documentsOf, entriesOf });
 
 /**
  * A package's inputs with no row: each written relation's empty keyed set.
@@ -36,19 +29,43 @@ const noInputs: PackageInputs = pipe(
 );
 
 /**
- * The import's write program: `changeSetOf`'s ChangeSet with no rows. grizzle compiles a ChangeSet
- * from its Description, which names each insert and none of its rows, so this is the program every
- * package's import compiles. It is declared to be compiled, never run: the schema's own compile
- * already refuses a column or a relation no write fills, so compiling it guards the refusals of the
- * write program itself, an insert outside the author role (`OutsideRole`) and a stratum no order of
- * its statements keeps every key at (`UnorderableStratum`).
+ * Build the author application's login over a `Qti` schema, `qti__author_app` where it is
+ * installed, over its author role (`#pantry/qti/roles.ts` `authorRoleOf`), with two workloads:
+ *
+ * - **the export's reads**: one document's ordered scan, the documents of a package and a package's
+ *   record (`#pantry/export/scan.ts` `exportQueriesOf`), each compiled once when the login's
+ *   `DbLayer` is built, its access paths earning their indexes (the W5 amendment's C20);
+ * - **the import's write program**: `changeSetOf`'s ChangeSet with no rows. grizzle compiles a
+ *   ChangeSet from its Description, which names each insert and none of its rows, so this is the
+ *   program every package's import compiles. It is declared to be compiled, never run: the schema's
+ *   own compile already refuses a column or a relation no write fills, so compiling it guards the
+ *   refusals of the write program itself, an insert outside the author role (`OutsideRole`) and a
+ *   stratum no order of its statements keeps every key at (`UnorderableStratum`).
+ *
+ * Its name is the one every earlier installation used, so a migration from scratch needs no
+ * `--rename @…`. Built once per schema value, since grizzle puts a role in one login only.
+ *
+ * @param qti - The `Qti` schema, built for an install's policy or none
+ *   (`#pantry/qti/schema.ts` `qtiSchema`).
+ * @returns The login.
  */
-export const importWork = workload(Author, { importWrite: changeSetOf(Author, noInputs) });
+export const authorAppOf = Fn.memoize((qti: typeof Qti) => {
+  const author = authorRoleOf(qti);
+
+  return login(qti, "author_app", [author], {
+    workload: [
+      workload(author, exportQueriesOf(qti)),
+      workload(author, { importWrite: changeSetOf(author, noInputs) }),
+    ],
+  });
+});
 
 /**
- * The author application's login, `qti__author_app` on the cluster. Its name is the one every
- * earlier installation used, so a migration from scratch needs no `--rename @…`.
+ * The author application's login over the `Qti` this process opens.
  */
-export const AuthorApp = login(Qti, "author_app", [Author], {
-  workload: [exportWork, importWork],
-});
+export const AuthorApp = authorAppOf(Qti);
+
+/**
+ * The author application's workloads: the export's reads, and the import's write program.
+ */
+export const [exportWork, importWork] = AuthorApp.workload;
