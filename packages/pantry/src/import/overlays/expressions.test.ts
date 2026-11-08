@@ -659,10 +659,10 @@ const attributeDerives = (
 ): boolean => {
   if (!x.written) {
     return (
-      x.attribute === "base-type" &&
       x.kind === "qti-test-variables" &&
       x.lexical === "" &&
-      x.baseType === "unknown"
+      ((x.attribute === "base-type" && ["float", "unknown"].includes(x.baseType)) ||
+        x.attribute === "weight-identifier")
     );
   }
 
@@ -719,7 +719,22 @@ const overlayBreaches = (rows: ExpressionRows): ReadonlySet<Law> => {
       broken.add("E1_derived");
     }
 
-    if (x.attribute === "weight-identifier" && !["float", "unknown"].includes(x.baseType)) {
+    // An unwritten base-type is unknown exactly where its weight is unwritten, float exactly where
+    // it is written, and every test variables has its weight's row (decision 434).
+    const weight = rows.ExpressionAttribute.get(JSON.stringify([x.node, "weight-identifier"]));
+    if (
+      x.attribute === "base-type" &&
+      !x.written &&
+      (weight === undefined || weight.written !== (x.baseType === "float"))
+    ) {
+      broken.add("E1_derived");
+    }
+
+    if (
+      x.attribute === "weight-identifier" &&
+      x.written &&
+      !["float", "unknown"].includes(x.baseType)
+    ) {
       broken.add("Weighted_base");
     }
   }
@@ -2088,12 +2103,20 @@ const declarationsInTree = (
 };
 
 describe("import/overlays/expressions.ts, the claims a reference proves", () => {
-  it("types a test variables that writes no base-type unknown, by an unwritten row of its own", () => {
-    // Oracle: the information model's TestVariables (§2.11.4.8: a base-type, where written,
-    // selects the variables matched; none written, every one), read as `E1_derived`'s two arms
-    // over `ExpressionAttribute`: the attribute written, its lexical form and the base type it
-    // spells; unwritten, an empty form and `unknown`. Bound: the attribute written and unwritten.
-    for (const written of [false, true]) {
+  it("types a test variables that writes no base-type unknown, or float where it is weighted, by unwritten rows of its own", () => {
+    // Oracle: the information model's TestVariables (§7.39.6: a base-type, where written,
+    // selects the variables matched and is the result's; none written, every integer and float
+    // one), read as `E1_derived`'s two arms over `ExpressionAttribute`: the attribute written, its
+    // lexical form and the base type it spells; unwritten, an empty form and `unknown`, with no
+    // weight written; float with one written (§7.39.5: "When a weighting is specified the result
+    // of the expression always has base-type float"), the weight's own row written or not.
+    // Bound: the base-type and the weight each written and unwritten.
+    for (const [written, weighted] of [
+      [false, false],
+      [false, true],
+      [true, false],
+      [true, true],
+    ] as const) {
       const tree = documentOfRoot(
         el(
           "qti-assessment-test",
@@ -2117,6 +2140,7 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
                         el("qti-test-variables", [
                           ["variable-identifier", "SCORE"],
                           ...(written ? ([["base-type", "float"]] as const) : []),
+                          ...(weighted ? ([["weight-identifier", "W"]] as const) : []),
                         ]),
                       ],
                     ),
@@ -2131,15 +2155,21 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
       const variables = [...rows.Expression.values()].find(
         ({ kind }) => kind === "qti-test-variables",
       );
-      const typing = rows.ExpressionAttribute.get(JSON.stringify([variables?.node, "base-type"]));
+      const shown = (attribute: string) => {
+        const row = rows.ExpressionAttribute.get(JSON.stringify([variables?.node, attribute]));
+
+        return row === undefined
+          ? undefined
+          : { baseType: row.baseType, lexical: row.lexical, written: row.written };
+      };
+      const baseType = written || weighted ? "float" : "unknown";
 
       assert.deepStrictEqual(
-        typing === undefined
-          ? undefined
-          : { baseType: typing.baseType, lexical: typing.lexical, written: typing.written },
-        written
-          ? { baseType: "float", lexical: "float", written: true }
-          : { baseType: "unknown", lexical: "", written: false },
+        [shown("base-type"), shown("weight-identifier")],
+        [
+          { baseType, lexical: written ? "float" : "", written },
+          { baseType, lexical: weighted ? "W" : "", written: weighted },
+        ],
       );
     }
   });

@@ -950,7 +950,7 @@ export const lawTable = {
   "Weighted base": {
     rule: "P29",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_TestVariables.Attr_weight-identifier (§7.39.5, TestVariables: 'The behaviour of this characterisic is only defined if the base-type attribute is float or omitted . When a weighting is specified the result of the expression always has base-type float'): with a weight-identifier, a base-type, where written, is float (expressions.ts Weighted_base; the old checker's P29)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_TestVariables.Attr_weight-identifier (§7.39.5, TestVariables: 'The behaviour of this characterisic is only defined if the base-type attribute is float or omitted . When a weighting is specified the result of the expression always has base-type float'): with a weight-identifier, a base-type, where written, is float, so a weighted test variables with another base-type, whose behaviour the section leaves undefined, is refused (expressions.ts Weighted_base; the old checker's P29); with none written, the weighted test variables is float, which the law E1 derived states over its unwritten base-type (expressions.ts ExpressionAttribute; spec reading 167)",
   },
   "XML production": {
     rule: "well-formedness",

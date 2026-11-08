@@ -448,6 +448,16 @@ export const assemblyNames = [
 ] as const;
 
 /**
+ * The names of the weighted test variables fixtures over `test-mapping`, whose item refs carry
+ * `rtest04.xml`'s weights (decision 434, spec reading 167): `weighted-sum-float` sets a float
+ * single outcome from `rtest04.xml`'s weighted sum of a `qti-test-variables` that writes no
+ * `base-type` (accepted: the weighted test variables is float, its sum float), and
+ * `weighted-variables-integer` sets an integer multiple outcome from the same test variables
+ * (refused under "Set type": a weighted test variables with no `base-type` is float, §7.39.5).
+ */
+export const weightedNames = ["weighted-sum-float", "weighted-variables-integer"] as const;
+
+/**
  * The names of phase 9's catalog positives: the five catalog items of `BPIG_22April` cut as they
  * are (`cut-catalog-supports`, `cut-catalog-multiple`, `cut-catalog-nodes`,
  * `cut-catalog-reference` and `cut-catalog-rubric`), `catalog-300` (the first at 3.0.0) and eight
@@ -829,6 +839,7 @@ export const fixtureNames = [
   ...negativeNames,
   ...restoredNames,
   ...assemblyNames,
+  ...weightedNames,
   ...catalogNames,
   ...companionNames,
   ...catalogNegativeNames,
@@ -3957,7 +3968,8 @@ const negativeOver = (
   name:
     | (typeof negativeNames)[number]
     | (typeof restoredNames)[number]
-    | (typeof assemblyNames)[number],
+    | (typeof assemblyNames)[number]
+    | (typeof weightedNames)[number],
   base: (typeof testNames)[number],
   edits: readonly Edit[] = [],
 ): FixtureSpec => {
@@ -4754,6 +4766,59 @@ const assemblySpecs: Record<(typeof assemblyNames)[number], FixtureSpec> = {
       "",
     ),
   ]),
+};
+
+/**
+ * Set an outcome of `test-mapping` that it declares beside its own, in its outcome processing.
+ *
+ * @param name - The fixture's name.
+ * @param declaration - The outcome's declaration.
+ * @param outcome - The outcome it sets.
+ * @param expression - The expression it sets it to.
+ * @returns The spec.
+ */
+const weightedOver = (
+  name: (typeof weightedNames)[number],
+  declaration: string,
+  outcome: string,
+  expression: string,
+): FixtureSpec =>
+  negativeOver(name, "test-mapping", [
+    replaceIn(
+      "rtest26.xml",
+      '    <qti-outcome-declaration identifier="TIMED" cardinality="single" base-type="float"/>',
+      [
+        '    <qti-outcome-declaration identifier="TIMED" cardinality="single" base-type="float"/>',
+        `    ${declaration}`,
+      ].join("\n"),
+    ),
+    replaceIn(
+      "rtest26.xml",
+      "    </qti-outcome-processing>",
+      [setOutcome(outcome, expression), "    </qti-outcome-processing>"].join("\n"),
+    ),
+  ]);
+
+/**
+ * The weighted test variables a weighted fixture sets an outcome from: `rtest04.xml`'s, with a
+ * `weight-identifier` and no `base-type`.
+ */
+const weightedVariables =
+  '<qti-test-variables variable-identifier="SCORE" weight-identifier="WEIGHT"/>';
+
+const weightedSpecs: Record<(typeof weightedNames)[number], FixtureSpec> = {
+  "weighted-sum-float": weightedOver(
+    "weighted-sum-float",
+    '<qti-outcome-declaration identifier="WSUM" cardinality="single" base-type="float"/>',
+    "WSUM",
+    `<qti-sum>${weightedVariables}</qti-sum>`,
+  ),
+  "weighted-variables-integer": weightedOver(
+    "weighted-variables-integer",
+    '<qti-outcome-declaration identifier="NS" cardinality="multiple" base-type="integer"/>',
+    "NS",
+    weightedVariables,
+  ),
 };
 
 /**
@@ -6570,6 +6635,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...negativeSpecs,
   ...restoredSpecs,
   ...assemblySpecs,
+  ...weightedSpecs,
   ...catalogSpecs,
   ...companionSpecs,
   ...catalogNegativeSpecs,

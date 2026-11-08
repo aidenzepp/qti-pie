@@ -1042,6 +1042,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    167,
+    {
+      owner:
+        "`E1_derived` over `ExpressionAttribute` (`src/qti/expressions.ts`): every test variables has a `weight-identifier` row, unwritten where it writes none, and its unwritten `base-type` is `unknown` only where that weight is unwritten and float only where it is written (the containments into the keyed `weightAttributes` and `writtenWeights`); `Weighted_base` refuses a written non-float `base-type` beside a written weight; the import's `attributeBaseOf` (`src/import/overlays/expressions.ts`) and the oracle's (`src/test/oracle-laws/expressions.ts`) type a weighted test variables with no `base-type` float. The prefixed read and the unweighted untyped test variables stay `unknown`, the reading's stated limits. Held by `src/test/weighted-test-variables.oracle.test.ts` and `src/import/overlays/expressions.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**
