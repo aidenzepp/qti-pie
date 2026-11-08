@@ -3087,6 +3087,64 @@ describe("describeRefusal", () => {
     assert.include(sentence, matchCorrectUri);
   });
 
+  it("words a dotted map-response or map-response-point whose response lacks what it needs as a response of the item an item ref names, fixed in that item, never asking to declare the dotted name (dotted mapping remedy)", () => {
+    const cases = [
+      ["qti-map-response", { child: "qti-mapping" }, "with a `qti-mapping`", "a `qti-mapping`"],
+      [
+        "qti-map-response-point",
+        { baseType: "point", child: "qti-area-mapping" },
+        "of base type `point` with a `qti-area-mapping`",
+        "a `qti-area-mapping` and the base type `point`",
+      ],
+    ] as const;
+
+    for (const [element, needs, lacks, gives] of cases) {
+      const sentence = describeRefusal(
+        refusalOf("template-requirements", {
+          ...needs,
+          declaration: "qti-response-declaration",
+          element,
+          identifier: "ITEM1.UNMAPPED",
+          prefix: "ITEM1",
+        }),
+      );
+
+      assert.include(
+        sentence,
+        `\`${element}\` reads \`ITEM1.UNMAPPED\`, a response of the item that item ref \`ITEM1\` names, and that item does not declare it ${lacks}.`,
+        element,
+      );
+      assert.include(
+        sentence,
+        `To make it valid: give that response ${gives} in the item that item ref \`ITEM1\` names.`,
+        element,
+      );
+      assert.notInclude(sentence, "declare `ITEM1.UNMAPPED`", element);
+      assert.notInclude(sentence, "the item has none", element);
+    }
+  });
+
+  it("keeps the declaration fix for an item's own map-response, whose refusal has no prefix (dotted mapping remedy, control)", () => {
+    const sentence = describeRefusal(
+      refusalOf("template-requirements", {
+        child: "qti-mapping",
+        declaration: "qti-response-declaration",
+        element: "qti-map-response",
+        identifier: "RESPONSE",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-map-response` needs `RESPONSE` in a `qti-response-declaration` with a `qti-mapping`, and the item has none.",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: declare `RESPONSE` in a `qti-response-declaration` with a `qti-mapping`.",
+    );
+    assert.notInclude(sentence, "item ref");
+  });
+
   it.each(m2Wordings)("writes the author facts of $name in code spans", ({ args, spans }) => {
     const [rule] = args;
     const sentence = describeRefusal(refusalAt(...args));
