@@ -233,13 +233,24 @@ export const nullOf = (baseType: ModelledBaseType, cardinality: Value["cardinali
 export const isNull = (value: Value): boolean => value.values.length === 0;
 
 /**
+ * Say what to write for a duration: its seconds as an xs:double, never an ISO 8601 duration. A
+ * parse failure ({@link InvalidValue}) and a `value-type` refusal's wording say it in these words,
+ * so the two say one thing.
+ *
+ * @param literal How to write each literal the words name, such as `90.5`: as given in a plain
+ *   message, or in a code span in Markdown.
+ * @returns The words, which follow "write".
+ */
+export const durationForm = (literal: (text: string) => string): string =>
+  `its seconds as a decimal or exponent number such as ${literal("90.5")}, or ${literal("INF")}, ${literal("-INF")} or ${literal("NaN")}, never an ISO 8601 duration such as ${literal("PT1M30.5S")}`;
+
+/**
  * The lexical form each base type takes, in the words a parse failure uses to say what to write.
  */
 const expected = {
   boolean: "true or false",
   directedPair: "two NCNames separated by whitespace, such as A B",
-  duration:
-    "its seconds as a decimal or exponent number such as 90.5, or INF, -INF or NaN, never an ISO 8601 duration such as PT1M30.5S",
+  duration: durationForm((text) => text),
   float: "a decimal or exponent number such as 2.5 or 1E3, or INF, -INF or NaN",
   identifier: "an NCName: a letter or _ first, then letters, digits, -, _ or .",
   integer: "decimal digits with an optional sign, such as -12",
