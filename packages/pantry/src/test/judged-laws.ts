@@ -4,10 +4,11 @@
  * as it names an outcome's.
  *
  * `#pantry/test/key-copies.ts` reads each statement's laws ({@link judgedOf}) and containments
- * ({@link containmentsIn}) from the statement alone; this module pairs each with the law `lawsOf`
- * states for it, and {@link checkConstraintOf} gives a check's installed name from its law. It reads
- * grizzle's values, so the law oracle reaches it from none of its modules: the oracle is a second
- * implementation, and reads no value of grizzle's (`src/grammar/purity.test.ts`).
+ * ({@link containmentsIn}) from the statement alone, but an `alternatives`' laws, which it reads
+ * from the laws `lawsOf` states for it, since it holds no side; this module pairs each with the law
+ * `lawsOf` states for it, and {@link checkConstraintOf} gives a check's installed name from its law.
+ * It reads grizzle's values, so the law oracle reaches it from none of its modules: the oracle is a
+ * second implementation, and reads no value of grizzle's (`src/grammar/purity.test.ts`).
  */
 import { constraintNameOf, lawsOf } from "@bjornpagen/grizzle";
 import type { Law, LawSourceSide } from "@bjornpagen/grizzle";
@@ -106,7 +107,7 @@ const statementLawsOf = Fn.memoize((schema: typeof Qti) => lawsOf(schema));
 export const judgedLaws: (schema: typeof Qti) => readonly JudgedLaw[] = Fn.memoize(
   (schema: typeof Qti): readonly JudgedLaw[] =>
     statementLawsOf(schema).flatMap(({ laws, statement }) =>
-      judgedOf(statement).map((judged) => statedAs(judged, laws)),
+      judgedOf(statement, laws).map((judged) => statedAs(judged, laws)),
     ),
 );
 

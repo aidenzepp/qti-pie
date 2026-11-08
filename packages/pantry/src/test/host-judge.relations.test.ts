@@ -13,11 +13,17 @@
  * laws a package's rows break names each by its law, never by its shape. A law whose sides'
  * selections were left out was no law `sameLaw` knows, so every containment and key over a
  * selection went unnamed (6caa20ef).
+ *
+ * And both host judges, this one and the genetic search's (`evaluatedLaws` of
+ * `#pantry/test/gen/genetic/host-laws.ts`), read every containment and key `Qti` states, whatever
+ * kind of statement states it, so a law never drops out of either judge with its statement's kind:
+ * an `alternatives`, which holds no side, states its containments only as its laws.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option } from "effect";
-import { lawNameOf } from "#pantry/import/refusal.ts";
+import { lawNameOf, statedLaws } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/schema.ts";
+import { evaluatedLaws } from "#pantry/test/gen/genetic/host-laws.ts";
 import { modelledRelations } from "#pantry/test/host-judge.ts";
 import { containmentsOf, judgedLaws } from "#pantry/test/judged-laws.ts";
 
@@ -59,6 +65,29 @@ describe("the host judge's model of a schema", () => {
     );
 
     assert.deepStrictEqual(unnamed, [], "containments the refusal names none of");
+  });
+
+  it("judges every containment and key Qti states, in both host judges, whatever statement states it", () => {
+    // Oracle: the laws Qti states, as the refusal names them (`statedLaws`, from grizzle's
+    // `lawsOf`). Bound: every containment and key of every statement of Qti, an alternatives'
+    // among them.
+    const stated = statedLaws().flatMap(([law]) =>
+      law.kind === "contained" || law.kind === "key" ? [Formatter.format(law)] : [],
+    );
+    const judges = [
+      ["the host judge", judgedLaws(Qti).map(({ law }) => law)],
+      ["the genetic search", evaluatedLaws],
+    ] as const;
+
+    for (const [judge, laws] of judges) {
+      const held = new Set(laws.map((law) => Formatter.format(law)));
+
+      assert.deepStrictEqual(
+        stated.filter((law) => !held.has(law)),
+        [],
+        `laws Qti states that ${judge} judges not`,
+      );
+    }
   });
 
   it("fails by name on each member it cannot read", () => {

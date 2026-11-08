@@ -8,8 +8,9 @@
  * list written here:
  *
  * - A key over a relation or a selection of one: no two selected rows share the key's fields;
- * - A containment, either way of a mirrors: every selected row's terms are a tuple of the target, a
- *   closed relation's facts or the import's own rows of a stored relation;
+ * - A containment, either way of a mirrors, or one an alternatives states: every selected row's terms
+ *   are a tuple of the target, a closed relation's facts or the import's own rows of a stored
+ *   relation;
  * - A check: no row of its relation makes its predicate false, as PostgreSQL's CHECK reads it, a
  *   closed read and the `Compute` functions it calls included, NULL passing;
  * - A pattern: every value of a field whose type states it matches it;
@@ -302,10 +303,12 @@ const StoredSide = Schema.Struct({
 
 /**
  * The schema of the stored statements this module evaluates: a key, a containment or a mirrors,
- * and a check whose predicate it reads.
+ * an alternatives, which holds no side and states its containments only as its laws, and a check
+ * whose predicate it reads.
  */
 const StoredStatement = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("key"), side: StoredSide }),
+  Schema.Struct({ kind: Schema.Literal("alternatives") }),
   Schema.Struct({
     kind: Schema.Literals(["contained", "mirrors"]),
     left: StoredSide,
@@ -391,8 +394,28 @@ const sideOf = (side: typeof StoredSide.Type): ReadSide => {
 };
 
 /**
+ * Read a law side as grizzle's `lawsOf` names it as a stored side ({@link StoredSide}): a selection
+ * whose predicate is the conjunction of its selection's conjuncts, or a whole relation where it has
+ * none, and its terms as a stored side holds them.
+ *
+ * @param side - The side.
+ * @returns The stored side, or none where a conjunct or a constant does not decode, which leaves
+ *   its law unevaluated, as a statement that does not decode is.
+ */
+const storedSideOf = (side: LawSourceSide): Option.Option<typeof StoredSide.Type> =>
+  Schema.decodeUnknownOption(StoredSide)({
+    source: Arr.isReadonlyArrayNonEmpty(side.selection.conjuncts)
+      ? {
+          desc: { predicate: { args: side.selection.conjuncts, kind: "and" } },
+          relation: { name: side.relation },
+        }
+      : { name: side.relation },
+    terms: side.terms.map((term) => (term.kind === "field" ? term.field : term)),
+  });
+
+/**
  * A statement this module evaluates, with its law as grizzle's `lawsOf` names it: a key's, a
- * check's, or one containment's, a mirrors' each its own.
+ * check's, or one containment's, a mirrors' or an alternatives' each its own.
  */
 type Evaluated =
   | { readonly kind: "key"; readonly law: Law; readonly side: Side }
@@ -436,7 +459,8 @@ const sameSide = (law: LawSourceSide, read: LawSourceSide): boolean =>
 /**
  * Read the statements of one stored statement this module evaluates, each with its law: a key's, a
  * check's, a containment's, and both containments of a mirrors, each the law of `laws` whose sides
- * are its own.
+ * are its own; and each containment of an alternatives, read from its law, since the statement
+ * holds no side.
  *
  * @param read - The stored statement.
  * @param laws - Its laws, as grizzle's `lawsOf` names them.
@@ -465,6 +489,21 @@ const evaluatedOf = (
     const { side } = sideOf(read.side);
 
     return laws.flatMap((law) => (law.kind === "key" ? [{ kind: "key" as const, law, side }] : []));
+  }
+
+  if (read.kind === "alternatives") {
+    return laws.flatMap((law) =>
+      law.kind === "contained"
+        ? Option.toArray(
+            Option.zipWith(storedSideOf(law.from), storedSideOf(law.to), (from, to) => ({
+              from: sideOf(from).side,
+              kind: "contained" as const,
+              law,
+              to: sideOf(to).side,
+            })),
+          )
+        : [],
+    );
   }
 
   const left = sideOf(read.left);
@@ -506,6 +545,12 @@ const stored = statementLaws.flatMap(({ laws, statement }) =>
  * Every statement of `Qti` this module evaluates.
  */
 const evaluated: readonly Evaluated[] = stored.flatMap(({ laws, read }) => evaluatedOf(read, laws));
+
+/**
+ * The law of every statement of `Qti` this module evaluates, as grizzle's `lawsOf` names it, so a
+ * test can hold it to the laws `Qti` states (`src/test/host-judge.relations.test.ts`).
+ */
+export const evaluatedLaws: readonly Law[] = evaluated.map(({ law }) => law);
 
 /**
  * Each check's law name, by the check's law.

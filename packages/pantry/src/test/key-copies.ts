@@ -1020,14 +1020,20 @@ const forcedBy =
     evaluate(term, row, equation) === false;
 
 /**
+ * A side's relation, by name, and its selection's predicate, none for a whole relation.
+ */
+interface Source {
+  readonly name: string;
+  readonly predicate: Option.Option<Term>;
+}
+
+/**
  * Read a stored side's relation and its selection's predicate.
  *
  * @param side - The side.
  * @returns The relation's name and the predicate, none for a whole relation.
  */
-const sourceOf = (
-  side: StoredSide,
-): { readonly name: string; readonly predicate: Option.Option<Term> } =>
+const sourceOf = (side: StoredSide): Source =>
   "desc" in side.source
     ? {
         name: side.source.relation.name,
@@ -1664,13 +1670,12 @@ const unreadIn = (below: readonly Term[]): readonly string[] => [
 ];
 
 /**
- * Read a stored side's relation and selection as the host judges them.
+ * Read a side's relation and selection as the host judges them.
  *
- * @param side - The side.
+ * @param source - The side's relation and predicate ({@link sourceOf}, {@link lawSourceOf}).
  * @returns Its relation, its selection, and the fields and unread terms the selection holds.
  */
-const selectionOf = (side: StoredSide): Omit<JudgedSide, "law"> => {
-  const source = sourceOf(side);
+const selectionOf = (source: Source): Omit<JudgedSide, "law"> => {
   const below = Option.match(source.predicate, { onNone: () => [], onSome: subtermsOf });
 
   return {
@@ -1689,7 +1694,7 @@ const selectionOf = (side: StoredSide): Omit<JudgedSide, "law"> => {
  * @returns Its relation, terms, selection, and the fields and unread terms the selection holds.
  */
 export const judgedSideOf = (side: StoredSide): JudgedSide => ({
-  ...selectionOf(side),
+  ...selectionOf(sourceOf(side)),
   law: lawSideOf(side),
 });
 
@@ -1709,9 +1714,34 @@ export interface JudgedSourceSide extends Omit<JudgedSide, "law"> {
  *   the selection holds.
  */
 const judgedSourceSideOf = (side: StoredSide): JudgedSourceSide => ({
-  ...selectionOf(side),
+  ...selectionOf(sourceOf(side)),
   law: lawSourceSideOf(side),
 });
+
+/**
+ * Read a law side as grizzle's `lawsOf` names it, its selection included: its relation, and the
+ * conjunction of its selection's conjuncts as its predicate, none where it has none.
+ *
+ * @param side - The side.
+ * @returns Its relation and predicate, or none where a conjunct does not decode as a stored term,
+ *   which leaves its law unjudged, as a statement that does not decode is.
+ */
+const lawSourceOf = (side: LawSourceSide): Option.Option<Source> =>
+  Arr.isReadonlyArrayNonEmpty(side.selection.conjuncts)
+    ? Option.map(
+        Schema.decodeUnknownOption(StoredTermSchema)({
+          args: side.selection.conjuncts,
+          kind: "and",
+        }),
+        (conjunction) => ({ name: side.relation, predicate: Option.some(termOf(conjunction)) }),
+      )
+    : Option.some({ name: side.relation, predicate: Option.none() });
+
+/**
+ * An `alternatives` statement as grizzle keeps it: its kind alone, since it holds no side, and
+ * states its containments only as the laws `lawsOf` gives for it.
+ */
+const AlternativesSchema = Schema.Struct({ kind: Schema.Literal("alternatives") });
 
 /**
  * A law the schema states that the host judges over rows: a containment, each half of a `mirrors`
@@ -1759,13 +1789,33 @@ const containedOf = (left: StoredSide, right: StoredSide): JudgedLaw => ({
 /**
  * Read one statement as the laws the host judges it by, each law as this module reads it from the
  * statement, its sides' selections left out: `#pantry/test/judged-laws.ts` names each as grizzle's
- * `lawsOf` does, outside the law oracle's modules.
+ * `lawsOf` does, outside the law oracle's modules. An `alternatives` statement holds no side, so
+ * its containments are read from its laws, each side with its selection.
  *
  * @param statement - The statement as the schema states it.
- * @returns Its laws: two for a `mirrors`, one for a containment, a check or a key, none for any
- *   other statement.
+ * @param laws - Its laws, as grizzle's `lawsOf` names them.
+ * @returns Its laws: two for a `mirrors`, one for a containment, a check or a key, each of its
+ *   containments for an `alternatives`, none for any other statement.
  */
-export const judgedOf = (statement: (typeof Qti.statements)[number]): readonly JudgedLaw[] => {
+export const judgedOf = (
+  statement: (typeof Qti.statements)[number],
+  laws: readonly Law[],
+): readonly JudgedLaw[] => {
+  if (Schema.is(AlternativesSchema)(statement)) {
+    return laws.flatMap((law): readonly JudgedLaw[] =>
+      law.kind === "contained"
+        ? Option.toArray(
+            Option.zipWith(lawSourceOf(law.from), lawSourceOf(law.to), (from, to) => ({
+              from: { ...selectionOf(from), law: law.from },
+              kind: "contained" as const,
+              law,
+              to: { ...selectionOf(to), law: law.to },
+            })),
+          )
+        : [],
+    );
+  }
+
   const keyed = Option.map(
     Schema.decodeUnknownOption(KeyStatementSchema)(statement),
     ({ side }): readonly JudgedLaw[] => [

@@ -42,6 +42,7 @@
  */
 import {
   accumulated,
+  alternatives,
   check,
   closed,
   closedId,
@@ -182,8 +183,9 @@ export const RoundingMode = relation(
 
 /**
  * A rounding operator that has both a `figures` and a mode in force, keyed by its node: the
- * `both` arm of its {@link Rounding} row's `holds`, with its {@link RoundingFigures}' `figures` and
- * its {@link RoundingMode}'s `mode`, the two reading 119 judges together ({@link roundingFigures}).
+ * `both` arm of its {@link Rounding} row's `holds`, which grizzle's `alternatives` states, with its
+ * {@link RoundingFigures}' `figures` and its {@link RoundingMode}'s `mode`, the two reading 119
+ * judges together ({@link roundingFigures}).
  */
 export const RoundingModeFigures = relation(
   "RoundingModeFigures",
@@ -294,14 +296,6 @@ const writtenModesInForce = select(RoundingMode, (m) => m.eq(m.modeWritten, true
 const figuredRoundings = select(Rounding, (r) => r.in(r.holds, ["figures", "both"]));
 
 /**
- * The rounding operators that hold both a `figures` and a mode in force, each of which has its
- * {@link RoundingModeFigures} row: the `both` arm, stated as the two containments grizzle's
- * `alternatives` would state of its one arm, since the importer's refusal tables read no
- * `alternatives` statement.
- */
-const bothHeld = select(Rounding, (r) => r.eq(r.holds, "both"));
-
-/**
  * The rounding operators that hold a mode in force.
  */
 const modedRoundings = select(Rounding, (r) => r.in(r.holds, ["mode", "both"]));
@@ -387,8 +381,8 @@ export const tolerancePositive = check("Equal_tolerance", ToleranceToken, (x) =>
  *   `holds` proved by its `figures` (both ways) and its mode in force (`E1_derived`), and its
  *   `modeWritten` by its `rounding-mode` (both ways); its `figures` copied into
  *   {@link RoundingFigures} and collapsed, its mode in force into {@link RoundingMode}, written or
- *   the default; its `both` arm, {@link RoundingModeFigures}, copying both; and reading 119,
- *   {@link roundingFigures};
+ *   the default; its `both` arm, {@link RoundingModeFigures}, an `alternatives` arm, copying both;
+ *   and reading 119, {@link roundingFigures};
  * - **Tolerance:** each `tolerance` copied into its row, both ways; its values a family whose
  *   concatenation is the value, or none for a value of whitespace alone, each value a maximal run
  *   of no whitespace (`E1_derived`);
@@ -444,7 +438,7 @@ export const operatorLawsByName = {
         m.and(m.eq(m.kind, "qti-equal-rounded"), m.eq(m.mode, equalRoundedMode)),
       ),
     ),
-    mirrors(on(bothHeld, "node"), on(RoundingModeFigures, "node")),
+    alternatives(Rounding, "holds", RoundingHolds, { both: RoundingModeFigures }),
     contained(on(RoundingModeFigures, "node", "figures"), on(RoundingFigures, "node", "figures")),
     contained(on(RoundingModeFigures, "node", "mode"), on(RoundingMode, "node", "mode")),
     contained(on(toleranceAttributes, "node", "lexical"), on(Tolerance, "node", "lexical")),
