@@ -31,7 +31,7 @@ import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { renderTextEntry } from "#plate/interactions/text-entry.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { ResponseValue } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
 import type {
   EmitState,
@@ -52,12 +52,13 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * configuration's. `names`, `values` and `posted` are keyed by response identifier: the name a
  * response's controls post under (`entryName(instance, response)` when absent), the value they show
  * (NULL when absent), and the strings a refused post sent, which the controls show instead of
- * `values` when `messages` is not empty. `messages` are a refused post's validation messages: each
- * marks its response's controls invalid, and the first invalid Control takes `autofocus`.
- * `disabled` disables every control. `mode` is the state the item is shown in, `answering` when
- * absent, which the Root's `data-mode` names: `review` and `solution` mark every interaction not
- * editable, and `solution` shows the correct responses only when the author passes them as
- * `values`.
+ * `values` when `messages` is not empty. A record value restores its `stringValue` once its
+ * interaction can take one; until then it shows nothing. `messages` are a refused post's validation
+ * messages: each marks its response's controls invalid, and the first invalid Control takes
+ * `autofocus`. `disabled` disables every control. `mode` is the state the item is shown in,
+ * `answering` when absent, which the Root's `data-mode` names: `review` and `solution` mark every
+ * interaction not editable, and `solution` shows the correct responses only when the author passes
+ * them as `values`.
  */
 export interface Options {
   readonly assetBase?: string;
@@ -68,7 +69,7 @@ export interface Options {
   readonly names?: Readonly<Record<string, string>>;
   readonly parts?: PartOverrides;
   readonly posted?: Readonly<Record<string, readonly string[]>>;
-  readonly values?: Readonly<Record<string, Value>>;
+  readonly values?: Readonly<Record<string, ResponseValue>>;
 }
 
 /**

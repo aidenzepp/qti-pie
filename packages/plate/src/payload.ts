@@ -52,8 +52,8 @@ import type {
 } from "#plate/model/item.ts";
 import { outcomeDefaults, unrunTemplateProcessing } from "#plate/model/record.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
-import { format, nullOf } from "#plate/model/values.ts";
-import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
+import type { ModelledBaseType, ResponseValue, Single, Value } from "#plate/model/values.ts";
 import { clampOutputBudget, defaultOutputBudget } from "#plate/output-budget.ts";
 
 /**
@@ -114,9 +114,9 @@ export interface View {
   readonly seed?: string;
   /**
    * The value each response's controls show, such as its `defaultValue` or a value the author's
-   * flow recorded; NULL when absent.
+   * flow recorded; NULL when absent. A record shows nothing: no interaction is bound to one yet.
    */
-  readonly values: ReadonlyMap<string, Value>;
+  readonly values: ReadonlyMap<string, ResponseValue>;
 }
 
 /**
@@ -653,12 +653,17 @@ export const identifyMessages = (
 /**
  * Give the values the view shows for a response.
  *
+ * A record gives none: no interaction is bound to a record response yet, so none can show one.
+ *
  * @param build The build.
  * @param response The response identifier.
- * @returns Its values, none when it is NULL or the view gives none.
+ * @returns Its values, none when it is NULL, a record, or the view gives none.
  */
-const shown = (build: Pick<Build, "values">, response: string): readonly Single[] =>
-  build.values.get(response)?.values ?? [];
+const shown = (build: Pick<Build, "values">, response: string): readonly Single[] => {
+  const value = build.values.get(response);
+
+  return value === undefined || isRecordValue(value) ? [] : value.values;
+};
 
 /**
  * Give the name a response's controls post under.
