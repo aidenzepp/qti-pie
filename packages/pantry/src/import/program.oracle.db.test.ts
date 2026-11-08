@@ -448,7 +448,8 @@ const metadataVerdicts: readonly (readonly [FixtureName, readonly string[]])[] =
   ["usage3-padded", []],
   ["usage3-float-padded", []],
   ["usage3-feb-30", ["attribute-lexical"]],
-  ["usage3-integer-float", ["typed-copy"]],
+  // Accepted: its `0.87` under `integer` is outside a record, so untyped text (reading 105).
+  ["usage3-integer-float", []],
 ];
 
 describe.skipIf(!hasLease)(
