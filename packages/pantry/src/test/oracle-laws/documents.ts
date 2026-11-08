@@ -287,7 +287,8 @@ const valueSetLawsOf = (
  *
  * @param rows - The document.
  * @param node - The declaration.
- * @param sessionVariables - The built-in session variables, which must not be declared.
+ * @param sessionVariables - The built-in session variables of the document's root, which must not be
+ *   declared there: an item's three, a test's `duration` (reading 168).
  * @param grammar - The composed grammar.
  * @returns The breaches.
  */
@@ -513,9 +514,12 @@ export const documentDocumentBreaches = (
   rows: View,
   grammar: ComposedGrammar,
 ): readonly Breach[] => {
+  const rootKind = Option.match(rows.root, { onNone: () => "", onSome: ({ kind }) => kind });
   const sessionVariables = new Set(
     grammar.references.builtIn.rows
-      .filter(({ declaration }) => declaration !== "qti-context-declaration")
+      .filter(
+        ({ declaration, root }) => root === rootKind && declaration !== "qti-context-declaration",
+      )
       .map(({ variable }) => variable),
   );
 

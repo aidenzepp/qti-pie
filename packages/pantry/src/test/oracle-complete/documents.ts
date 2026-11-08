@@ -182,13 +182,19 @@ export const documentMutations = {
     ]),
     over: "package",
   },
-  // Declaration not reserved (reading 72): a declaration of a built-in session variable, in an item
-  // or the test.
+  // Declaration not reserved (readings 72 and 168): a declaration of a built-in session variable
+  // where it is reserved: any of the three in an item, `duration` in the test.
   "Declaration not reserved": {
     mutate: oneOf([
       declaredAfterOutcome(
         (source) =>
           `<qti-outcome-declaration identifier="${source.draw(element(["completionStatus", "numAttempts", "duration"]))}" cardinality="single" base-type="integer"/>`,
+        declaringItems,
+      ),
+      declaredAfterOutcome(
+        () =>
+          '<qti-outcome-declaration identifier="duration" cardinality="single" base-type="integer"/>',
+        ["test.xml"],
       ),
     ]),
     over: "package",
