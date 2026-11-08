@@ -22,10 +22,19 @@ import {
   familyOf,
   judgeOne,
   movedBy,
+  recordsClassOf,
+  sameSignature,
   shownDisagreement,
+  shownSignature,
   signatureOf,
 } from "#pantry/test/gen/genetic/judge.ts";
-import type { Bench, Disagreement, Feature, Judged } from "#pantry/test/gen/genetic/judge.ts";
+import type {
+  Bench,
+  Disagreement,
+  Feature,
+  Judged,
+  Signature,
+} from "#pantry/test/gen/genetic/judge.ts";
 import { noised } from "#pantry/test/gen/genetic/noise.ts";
 import type { Noise } from "#pantry/test/gen/genetic/noise.ts";
 import { mutationOf, operators } from "#pantry/test/gen/genetic/mutate.ts";
@@ -95,7 +104,7 @@ export interface Reduced {
   readonly genome: Genome;
   readonly lineage: readonly string[];
   readonly package: string;
-  readonly signature: string;
+  readonly signature: Signature;
   readonly tries: number;
 }
 
@@ -143,7 +152,7 @@ export interface Isolation {
  * of each law's isolation.
  */
 export interface HuntReport {
-  readonly evolved: Evolved<Genome, Feature, Disagreement>;
+  readonly evolved: Evolved<Genome, Feature, Disagreement, Signature>;
   readonly isolation: Isolation;
   readonly reduced: readonly Reduced[];
 }
@@ -155,8 +164,7 @@ export interface HuntReport {
  * @param bench - The bench the judge reads.
  * @param budget - The run's budget.
  * @param tries - The most candidates each reduction judges.
- * @param recorded - The signatures already recorded, whose classes are reported as first found,
- *   unreduced.
+ * @param recorded - The classes already recorded, which are reported as first found, unreduced.
  * @param sketch - The run.
  * @param isolating - The isolation phase's budget: after breeding, each law raised but never broken
  *   alone has a package that raised it reduced toward it alone, a cut kept only where the law
@@ -168,10 +176,22 @@ export const hunt = Effect.fnUntraced(function* hunt(
   bench: Bench,
   budget: Budget,
   tries: number,
-  recorded: ReadonlySet<string>,
+  recorded: readonly Signature[],
   sketch: RunSketch,
   isolating: Isolating = noIsolation,
 ) {
+  const classes: Signature[] = [];
+  const classOf = (disagreement: Disagreement): Signature => {
+    const signature = signatureOf(disagreement);
+    const held = classes.find((kept) => sameSignature(kept, signature));
+    if (held !== undefined) {
+      return held;
+    }
+
+    classes.push(signature);
+
+    return signature;
+  };
   let judged = 0;
   const judgeAt = (genome: Genome) => {
     judged += 1;
@@ -220,13 +240,13 @@ export const hunt = Effect.fnUntraced(function* hunt(
       );
     }
   };
-  const rewarded = new Set<string>();
+  const rewarded = new Set<Signature>();
   const reward = (genome: Genome, judgment: Judged): Judged => {
     isolate(genome, judgment);
 
     const operator = breeding.lastEdit.get(genome);
     for (const disagreement of judgment.disagreements) {
-      const signature = signatureOf(disagreement);
+      const signature = classOf(disagreement);
       if (!rewarded.has(signature)) {
         rewarded.add(signature);
         if (operator !== undefined) {
@@ -251,7 +271,7 @@ export const hunt = Effect.fnUntraced(function* hunt(
       judge: judgeAll,
       mutate: mutationOf(breeding),
       seeds: corpus.seeds.map(({ genome }) => genome),
-      signatureOf,
+      signatureOf: classOf,
     },
     budget,
     sketch.seed,
@@ -267,17 +287,17 @@ export const hunt = Effect.fnUntraced(function* hunt(
         (genomes) =>
           Effect.forEach([...genomes], (candidate) =>
             Effect.map(shown(candidate), ({ disagreements }) =>
-              disagreements.some((disagreement) => signatureOf(disagreement) === signature),
+              disagreements.some((disagreement) => recordsClassOf([signature], disagreement)),
             ),
           ),
-        recorded.has(signature) ? 0 : tries,
+        recorded.some((held) => sameSignature(held, signature)) ? 0 : tries,
         1,
       );
       const last = yield* shown(genome);
 
       return {
         disagreement:
-          last?.disagreements.find((disagreement) => signatureOf(disagreement) === signature) ??
+          last?.disagreements.find((disagreement) => recordsClassOf([signature], disagreement)) ??
           found.disagreement,
         genome,
         lineage: found.lineage,
@@ -326,7 +346,7 @@ export const hunt = Effect.fnUntraced(function* hunt(
         genome,
         lineage: [`isolated toward ${law} alone`],
         package: "",
-        signature: signatureOf(disagreement),
+        signature: classOf(disagreement),
         tries: isolating.tries,
       }));
     }),
@@ -357,7 +377,7 @@ export const shownReport = (report: HuntReport): string =>
   report.reduced
     .map(
       ({ disagreement, lineage, package: shown, signature, tries }) =>
-        `== ${signature}\n${shownDisagreement(disagreement)}\nbred by: ${lineage.join("; ") || "a seed, unedited"}\nreduced in ${String(tries)} tries to:\n${shown}`,
+        `== ${shownSignature(signature)}\n${shownDisagreement(disagreement)}\nbred by: ${lineage.join("; ") || "a seed, unedited"}\nreduced in ${String(tries)} tries to:\n${shown}`,
     )
     .join("\n\n");
 

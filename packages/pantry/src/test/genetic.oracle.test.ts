@@ -11,9 +11,10 @@
  * - Each known entry's package (`#pantry/test/gen/genetic/known.ts`) must still show its class, so an
  *   entry its owner's fix closed fails as stale until the fix's commit deletes it, and each fixed
  *   entry's must never show its class again;
- * - Each known and fixed entry's signature names only relations and fields `Qti` has, since one that
- *   names a relation or a field a later commit removed can never show, and a fixed entry keyed by
- *   it guards nothing;
+ * - Each known and fixed entry's signature is a class some package can show: a law the host judges
+ *   (grizzle's `sameLaw` holds it one of them, its selections included), or a uuid field it holds
+ *   to the mint, since a law no statement states, or a field a later commit removed, can never
+ *   show, and a fixed entry keyed by it guards nothing;
  * - Each planted value-domain case (`#pantry/test/gen/genetic/planted.ts`) lies inside its domain's
  *   lexical space and outside its facets, which the oracle refuses and today's database does not,
  *   so the two disagree on it while it waits on its owner's fix, and must agree on it once the fix
@@ -38,23 +39,25 @@ import { int } from "@grizzle/testing/gen";
 import { boundedShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
+import { sameLaw } from "@bjornpagen/grizzle";
 import { grammar } from "#pantry/grammar/install.ts";
-import { Qti } from "#pantry/qti/schema.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { corpusOf } from "#pantry/test/gen/genetic/corpus.ts";
 import { residualsOf } from "#pantry/test/gen/genetic/engine.ts";
 import type { Budget } from "#pantry/test/gen/genetic/engine.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
+import { judgedLaws, uuidFields } from "#pantry/test/gen/genetic/host-laws.ts";
 import {
   familyOf,
   judgeOne,
+  recordsClassOf,
+  sameSignature,
   shownDisagreement,
-  signatureOf,
+  shownSignature,
 } from "#pantry/test/gen/genetic/judge.ts";
+import type { Feature, Signature } from "#pantry/test/gen/genetic/judge.ts";
 import { fixed, known, knownEntries } from "#pantry/test/gen/genetic/known.ts";
-import type { Known } from "#pantry/test/gen/genetic/known.ts";
 import { plantedCases } from "#pantry/test/gen/genetic/planted.ts";
-import type { Feature } from "#pantry/test/gen/genetic/judge.ts";
 import {
   hunt,
   runLiteral,
@@ -106,113 +109,114 @@ const chosen = {
  * The known entries, which must still show their class, then the fixed ones, which must not.
  */
 const knownList = [
-  ...Object.entries<Known>(known).map(([signature, entry]) => ({ entry, shows: true, signature })),
-  ...Object.entries<Known>(fixed).map(([signature, entry]) => ({ entry, shows: false, signature })),
+  ...known.map((entry) => ({ entry, shows: true })),
+  ...fixed.map((entry) => ({ entry, shows: false })),
 ];
 
 /**
- * Each relation of `Qti`, and each field of its heading as `Relation.field`, the names a signature
- * may hold.
- */
-const qtiNames: ReadonlySet<string> = new Set(
-  Object.values(Qti.relations).flatMap(({ heading, name }) => [
-    name,
-    ...Object.keys(heading).map((field) => `${name}.${field}`),
-  ]),
-);
-
-/**
- * A `Relation.field` in a signature: a dangling uuid's field, a field a key text is past its bound
- * in, or a fold's family.
- */
-const fieldPattern = /\b[A-Z]\w*\.\w+/gu;
-
-/**
- * A check's relation in a signature: `check <name> on Relation`.
- */
-const checkPattern = /\bcheck \w+ on [A-Z]\w*/gu;
-
-/**
- * A side of a containment or a fold in a signature: `Relation(term, ...)`, each term a field,
- * `pred(field)` or `constant(value)`, as `#pantry/test/key-copies.ts` `identityOf` writes it.
- */
-const sidePattern = /\b[A-Z]\w*\((?:[^()]|\([^()]*\))*\)/gu;
-
-/**
- * Read the relations and fields a side of a containment or a fold names: its relation, and each
- * term's field as `Relation.field`, a constant naming none.
+ * Whether some package can show a signature's class: for a law the rows break, a law the host
+ * judges, which grizzle's `sameLaw` holds one of {@link judgedLaws}, its selections included; for
+ * a dangling uuid, a uuid field the host holds to the mint. Any other class names a law by its
+ * name, which the type keeps to the law table, or a rule or a noise, which nothing removes.
  *
- * @param side - The side, as {@link sidePattern} matches it.
- * @returns The names.
+ * @param signature - The signature.
+ * @returns Whether it can show.
  */
-const sideNames = (side: string): readonly string[] => {
-  const open = side.indexOf("(");
-  const relation = side.slice(0, open);
-
-  return [
-    relation,
-    ...side
-      .slice(open + 1, -1)
-      .split(", ")
-      .flatMap((term) => {
-        if (term.startsWith("constant(")) {
-          return [];
-        }
-
-        return [`${relation}.${term.startsWith("pred(") ? term.slice("pred(".length, -1) : term}`];
-      }),
-  ];
+const canShow = (signature: Signature): boolean => {
+  switch (signature.kind) {
+    case "import-only-law": {
+      return judgedLaws.some(
+        (law) => law.kind === signature.law.kind && sameLaw(law, signature.law),
+      );
+    }
+    case "dangling-uuid": {
+      return Option.exists(Option.fromUndefinedOr(uuidFields.get(signature.relation)), (fields) =>
+        fields.includes(signature.field),
+      );
+    }
+    case "codec-import-only":
+    case "codec-oracle-only":
+    case "codec-rule":
+    case "import-died":
+    case "lone-refusal":
+    case "noise-moved":
+    case "oracle-died":
+    case "oracle-only-law": {
+      return true;
+    }
+    default: {
+      return signature satisfies never;
+    }
+  }
 };
 
 /**
- * Read the relations and fields a signature names, as `#pantry/test/gen/genetic/judge.ts`
- * `signatureOf` writes them from the host's witnesses: each `Relation.field`, each check's
- * relation and each side of a containment or a fold with its terms' fields. A signature of a law's
- * name, a rule or a refusal names none.
- *
- * @param signature - The signature.
- * @returns The names, each once.
+ * Signatures that no package can show, one of each shape {@link canShow} reads: four this file once
+ * kept, each naming a relation or a field `Qti` no longer has, and the containment of a
+ * declaration's cardinality in its attribute with its selections dropped, which the text keys this
+ * file once held wrote for two laws `Qti` states, its `base-type` and its `cardinality`
+ * attribute's, and no law of `Qti` is: the guard below must refuse each.
  */
-const namedIn = (signature: string): ReadonlySet<string> =>
-  new Set([
-    ...Array.from(signature.matchAll(fieldPattern), ([named]) => named),
-    ...Array.from(signature.matchAll(checkPattern), ([named]) =>
-      named.slice(named.lastIndexOf(" ") + 1),
-    ),
-    ...Array.from(signature.matchAll(sidePattern), ([side]) => sideNames(side)).flat(),
-  ]);
+const unshowable: readonly Signature[] = [
+  { field: "declaration", kind: "dangling-uuid", relation: "VariableRef" },
+  {
+    kind: "import-only-law",
+    law: { kind: "check", name: "E1_derived", relation: "MappingSource" },
+  },
+  {
+    kind: "import-only-law",
+    law: {
+      field: "stringPiece",
+      flags: "u",
+      kind: "pattern",
+      relation: "Node",
+      source: "^[\\s\\S]*$",
+    },
+  },
+  {
+    kind: "import-only-law",
+    law: {
+      from: {
+        relation: "Attribute",
+        selection: { conjuncts: [] },
+        terms: [
+          { field: "node", kind: "field" },
+          { field: "lexical", kind: "field" },
+        ],
+      },
+      kind: "contained",
+      to: {
+        relation: "AssessmentObject",
+        selection: { conjuncts: [] },
+        terms: [
+          { field: "node", kind: "field" },
+          { field: "identifierLexical", kind: "field" },
+        ],
+      },
+    },
+  },
+  {
+    kind: "import-only-law",
+    law: {
+      from: {
+        relation: "DeclarationCardinality",
+        selection: { conjuncts: [] },
+        terms: [{ field: "node", kind: "field" }],
+      },
+      kind: "contained",
+      to: {
+        relation: "Attribute",
+        selection: { conjuncts: [] },
+        terms: [{ field: "node", kind: "field" }],
+      },
+    },
+  },
+];
 
 /**
- * Read the names a signature holds that `Qti` has no relation or field of.
- *
- * @param signature - The signature.
- * @returns Each such name.
+ * The classes the known entries record, which the search reports unreduced and does not fail on.
  */
-const goneIn = (signature: string): readonly string[] =>
-  [...namedIn(signature)].filter((name) => !qtiNames.has(name));
-
-/**
- * Signatures this file once kept, each naming a relation or a field `Qti` no longer has, one of
- * each shape {@link namedIn} reads, with the name gone: the guard below must refuse each.
- */
-const goneSignatures = [
-  ["dangling-uuid: VariableRef.declaration", "VariableRef.declaration"],
-  ["import-only-law: Key text bound, a text past Node.stringPiece's bound", "Node.stringPiece"],
-  [
-    "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, identifierLexical)",
-    "AssessmentObject.identifierLexical",
-  ],
-  [
-    "import-only-law: E1 derived, contained Expression(parent, baseType, cardinality) in VariableRef(node, heldBase, heldCardinality)",
-    "VariableRef.heldBase",
-  ],
-  ["import-only-law: E1 derived, check E1_derived on MappingSource", "MappingSource"],
-] as const;
-
-/**
- * The signatures the known entries record, which the search reports unreduced and does not fail on.
- */
-const recorded: ReadonlySet<string> = new Set(Object.keys(known));
+const recorded: readonly Signature[] = known.map(({ signature }) => signature);
 
 /**
  * Each feature over the rotating runs, with the runs that showed it, for the residual printed after
@@ -278,7 +282,11 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 coverage: noCoverage,
                 generator: int(0, knownList.length - 1),
                 limit: knownList.length,
-                literal: (at) => knownList[at]?.signature ?? String(at),
+                literal: (at) => {
+                  const held = knownList[at];
+
+                  return held === undefined ? String(at) : shownSignature(held.entry.signature);
+                },
                 oracle: {
                   kind: "second-implementation",
                   name: "the law oracle against readProgram's refusal and its rows' host laws",
@@ -290,22 +298,19 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   const held = knownList[at];
                   assert.isDefined(held, `no known entry ${String(at)}`);
                   if (held !== undefined) {
-                    const { entry, shows, signature } = held;
+                    const { entry, shows } = held;
                     const judged = yield* judgeOne(yield* genomeOf(knownEntries(entry)), bench, at);
-                    const signatures = judged.disagreements.map(signatureOf);
-                    if (shows) {
-                      assert.include(
-                        signatures,
-                        signature,
-                        `stale: ${signature} no longer shows, which waits on ${entry.owner}'s fix (${entry.fix}); delete its entry from #pantry/test/gen/genetic/known.ts in the fix's commit, or move it to fixed`,
-                      );
-                    } else {
-                      assert.notInclude(
-                        signatures,
-                        signature,
-                        `${signature} shows again, which ${entry.owner}'s fix (${entry.fix}) closed`,
-                      );
-                    }
+                    const signature = shownSignature(entry.signature);
+                    const shown = judged.disagreements.map(shownDisagreement).join("; ") || "none";
+                    assert.strictEqual(
+                      judged.disagreements.some((disagreement) =>
+                        recordsClassOf([entry.signature], disagreement),
+                      ),
+                      shows,
+                      shows
+                        ? `stale: ${signature} no longer shows, which waits on ${entry.owner}'s fix (${entry.fix}); delete its entry from #pantry/test/gen/genetic/known.ts in the fix's commit, or move it to fixed (its package shows ${shown})`
+                        : `${signature} shows again, which ${entry.owner}'s fix (${entry.fix}) closed (its package shows ${shown})`,
+                    );
                   }
                 }),
             );
@@ -314,20 +319,22 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       testTimeoutMs,
     );
 
-    it.effect("names only relations and fields Qti has in every known and fixed signature", () =>
-      // Oracle: Qti's own relations and their fields. Bound: every known and fixed entry's
-      // signature, and one signature of each shape whose name Qti no longer has.
+    it.effect("keys every known and fixed entry by a class some package can show", () =>
+      // Oracle: grizzle's sameLaw against the laws the host judges, and the uuid fields it holds
+      // to the mint. Bound: every known and fixed entry's signature, and one unshowable signature
+      // of each shape.
       Effect.sync(() => {
-        for (const [signature, gone] of goneSignatures) {
-          assert.include(goneIn(signature), gone, `the guard reads no ${gone} in ${signature}`);
-        }
-
         assert.deepStrictEqual(
-          knownList.flatMap(({ signature }) =>
-            goneIn(signature).map((name) => `${signature}: ${name}`),
+          unshowable.filter(canShow).map(shownSignature),
+          [],
+          "the guard admits a signature no package can show",
+        );
+        assert.deepStrictEqual(
+          knownList.flatMap(({ entry }) =>
+            canShow(entry.signature) ? [] : [shownSignature(entry.signature)],
           ),
           [],
-          "these signatures name a relation or a field Qti no longer has, so they can never show and their entries guard nothing; plant the behaviour each entry's fix removed, judge its package, and rekey it to the signature that shows, or delete it where none can",
+          "these signatures key a law the host does not judge, which no statement of Qti states, or a uuid field it does not hold, so they can never show and their entries guard nothing; plant the behaviour each entry's fix removed, judge its package, and rekey it to the signature that shows, or delete it where none can",
         );
       }),
     );
@@ -457,14 +464,14 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     }
                   }
 
-                  const unrecorded = report.reduced.filter(
-                    ({ signature }) => !recorded.has(signature),
+                  const unrecorded = report.reduced.filter(({ signature }) =>
+                    recorded.every((held) => !sameSignature(held, signature)),
                   );
                   console.log(
                     `genetic run ${runLiteral(sketch)}: ${shownResidual(report)}; ${String(report.reduced.length - unrecorded.length)} known classes met`,
                   );
                   assert.deepStrictEqual(
-                    unrecorded.map(({ signature }) => signature),
+                    unrecorded.map(({ signature }) => shownSignature(signature)),
                     [],
                     `the import's host path and the law oracle disagree in classes no known entry records:\n\n${shownReport({ ...report, reduced: unrecorded })}`,
                   );

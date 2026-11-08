@@ -616,9 +616,10 @@ const namedLaws: readonly (readonly [Law, LawName])[] = [
 ];
 
 /**
- * Write a law as a broken law's witness names it, the text the genetic search's known
- * disagreements are keyed by (`known.ts`): a check by its name and its relation, a containment or a
- * fold as `key-copies.ts`'s `identityOf` writes it, any other law as grizzle reports it.
+ * Write a law as a broken law's witness shows it: a check by its name and its relation, a
+ * containment or a fold as `key-copies.ts`'s `identityOf` writes it, its selections left out, any
+ * other law as grizzle reports it. The witness only shows the law: the genetic search keys a class
+ * by the law itself (`judge.ts` `signatureOf`).
  *
  * @param law - The law.
  * @returns Its text.
@@ -739,11 +740,15 @@ const patternFields: ReadonlyMap<PatternLaw, readonly (readonly [string, string]
 })();
 
 /**
- * Each field's pattern law, by `Relation.field`.
+ * Each `keyText` field the import writes, by `Relation.field`, with its pattern law: the law the
+ * database refuses a text past the bound by. An accumulated or generated `keyText` field, which
+ * the database computes and the import never writes, has no pattern law here.
  */
-const fieldPatterns: ReadonlyMap<string, PatternLaw> = new Map(
+const boundFields: ReadonlyMap<string, PatternLaw> = new Map(
   [...patternFields].flatMap(([law, fields]) =>
-    fields.map(([relation, field]) => [`${relation}.${field}`, law] as const),
+    fields.flatMap(([relation, field]) =>
+      keyTextFields.has(`${relation}.${field}`) ? [[`${relation}.${field}`, law] as const] : [],
+    ),
   ),
 );
 
@@ -830,9 +835,10 @@ const generatedVerdictOf = (
 };
 
 /**
- * Each stored relation's uuid fields, by relation.
+ * Each stored relation's uuid fields, by relation: the fields the rows are held to the program's
+ * mint by.
  */
-const uuidFields: ReadonlyMap<string, readonly string[]> = new Map(
+export const uuidFields: ReadonlyMap<string, readonly string[]> = new Map(
   [...relations].map(([name, { fields }]) => [
     name,
     Object.entries(fields).flatMap(([field, { sql }]) => (sql === "uuid" ? [field] : [])),
@@ -1637,27 +1643,54 @@ export const viewOf = (inputs: PackageInputs): View => {
 };
 
 /**
+ * The first law of a name the rows break: the law, as an `invariant-rejected` outcome names it,
+ * and the witness, the law as {@link shownOf} writes it and the tuple that breaks it.
+ */
+export interface Broken {
+  readonly law: Law;
+  readonly witness: string;
+}
+
+/**
+ * A uuid the rows name that the program did not mint: the field that holds it, and the uuid.
+ */
+export interface Dangling {
+  readonly field: string;
+  readonly relation: string;
+  readonly value: string;
+}
+
+/**
+ * Every law {@link hostVerdictOf} can find broken: each law of {@link evaluatedLaws}, each field's
+ * pattern law and each generated field's law, that has a name. A law outside it the host never
+ * finds broken.
+ */
+export const judgedLaws: readonly Law[] = [
+  ...new Set([...evaluatedLaws, ...patternFields.keys(), ...generatedRelations.keys()]),
+].filter((law) => namesOf.has(law) || checkLaws.has(law));
+
+/**
  * What the host judges of a program's rows:
  *
- * - `broken`, each law some statement of which the rows break, with the tuple that breaks it, and
- *   `brokenLaws`, those statements as laws;
+ * - `broken`, each law name some statement of which the rows break, with the first law of it they
+ *   break and its witness, and `brokenLaws`, every statement they break as its law;
  * - `held`, each law every statement and check of which was evaluated and held, so its database
  *   verdict is known;
- * - `overLong`, each `keyText` field, as `Relation.field`, that holds a text past the bound;
- * - `dangling`, each uuid field, as `Relation.field = value`, that names an id the program did not
- *   mint;
+ * - `overLong`, each `keyText` field the import writes, as `Relation.field`, that holds a text past
+ *   the bound, with its pattern law;
+ * - `dangling`, each uuid a row names that the program did not mint;
  * - `written`, each relation the program writes as rows, none of them perhaps.
  */
 export interface HostVerdict {
-  readonly broken: ReadonlyMap<LawName, string>;
+  readonly broken: ReadonlyMap<LawName, Broken>;
   /**
    * Each statement the rows break, as an `invariant-rejected` outcome would name its law, a key
    * text past its bound as its field type's pattern law: what `ruleOfLaws` names the refusal by.
    */
   readonly brokenLaws: readonly Law[];
-  readonly dangling: readonly string[];
+  readonly dangling: readonly Dangling[];
   readonly held: ReadonlySet<LawName>;
-  readonly overLong: ReadonlySet<string>;
+  readonly overLong: ReadonlyMap<string, PatternLaw>;
   readonly written: ReadonlySet<string>;
 }
 
@@ -1680,11 +1713,11 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
       ([law, relation]) => [law, generatedVerdictOf(view, law, relation, patterns)] as const,
     ),
   ]);
-  const broken = new Map<LawName, string>();
+  const broken = new Map<LawName, Broken>();
   for (const [law, verdict] of verdicts) {
     const name = namesOf.get(law) ?? checkLaws.get(law);
     if (verdict.kind === "broken" && name !== undefined && !broken.has(name)) {
-      broken.set(name, `${shownOf(law)}: ${verdict.witness}`);
+      broken.set(name, { law, witness: `${shownOf(law)}: ${verdict.witness}` });
     }
   }
 
@@ -1703,31 +1736,22 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
         ),
     ),
   );
-  const overLong = new Set<string>();
-  const boundLaws = new Set<Law>();
-  const dangling = new Set<string>();
+  const overLong = new Map<string, PatternLaw>();
+  const dangling = new Map<string, Dangling>();
   for (const [relation, rows] of view) {
     const uuids = uuidFields.get(relation) ?? [];
     for (const row of rows) {
       for (const [field, value] of Object.entries(row)) {
-        if (
-          Predicate.isString(value) &&
-          keyTextFields.has(`${relation}.${field}`) &&
-          utf8Length(value) > keyTextBytes
-        ) {
-          overLong.add(`${relation}.${field}`);
-
-          const bound = fieldPatterns.get(`${relation}.${field}`);
-          if (bound !== undefined) {
-            boundLaws.add(bound);
-          }
+        const bound = boundFields.get(`${relation}.${field}`);
+        if (bound !== undefined && Predicate.isString(value) && utf8Length(value) > keyTextBytes) {
+          overLong.set(`${relation}.${field}`, bound);
         }
       }
 
       for (const field of uuids) {
         const value = row[field];
         if (Predicate.isString(value) && !minted.has(value)) {
-          dangling.add(`${relation}.${field} = ${value}`);
+          dangling.set(`${relation}.${field} = ${value}`, { field, relation, value });
         }
       }
     }
@@ -1736,14 +1760,14 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
   const brokenLaws = [
     ...new Set([
       ...[...verdicts].flatMap(([law, verdict]) => (verdict.kind === "broken" ? [law] : [])),
-      ...boundLaws,
+      ...overLong.values(),
     ]),
   ];
 
   return {
     broken,
     brokenLaws,
-    dangling: [...dangling],
+    dangling: [...dangling.values()],
     held,
     overLong,
     written: new Set(view.keys()),

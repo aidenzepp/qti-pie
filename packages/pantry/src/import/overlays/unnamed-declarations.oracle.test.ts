@@ -29,7 +29,14 @@ import { Duration, Effect } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
-import { judgeOne, shownDisagreement, signatureOf } from "#pantry/test/gen/genetic/judge.ts";
+import {
+  judgeOne,
+  recordsClassOf,
+  sameSignature,
+  shownDisagreement,
+  shownSignature,
+} from "#pantry/test/gen/genetic/judge.ts";
+import type { Signature } from "#pantry/test/gen/genetic/judge.ts";
 import { fixed, known } from "#pantry/test/gen/genetic/known.ts";
 import { keyTextBytes } from "#pantry/qti/limits.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
@@ -44,17 +51,81 @@ const laws = lawsOf(grammar);
  * The classes this reading closed, `fixed`'s entries for an identifier that names nothing, which
  * no case may show whatever `known` records.
  */
-const closed: ReadonlySet<string> = new Set([
-  "import-only-law: Declaration overlay, contained Node(id) in Declaration(node)",
-  "import-only-law: Mapping overlay, contained Attribute(node, lexical) in MapKey(node, key)",
-]);
+const closed: readonly Signature[] = [
+  {
+    kind: "import-only-law",
+    law: {
+      from: {
+        relation: "Node",
+        selection: {
+          conjuncts: [
+            {
+              arg: { field: "kind", kind: "field" },
+              kind: "in",
+              values: [
+                "qti-context-declaration",
+                "qti-outcome-declaration",
+                "qti-response-declaration",
+                "qti-template-declaration",
+              ],
+            },
+          ],
+        },
+        terms: [{ field: "id", kind: "field" }],
+      },
+      kind: "contained",
+      to: {
+        relation: "Declaration",
+        selection: { conjuncts: [] },
+        terms: [{ field: "node", kind: "field" }],
+      },
+    },
+  },
+  {
+    kind: "import-only-law",
+    law: {
+      from: {
+        relation: "Attribute",
+        selection: {
+          conjuncts: [
+            {
+              kind: "compare",
+              left: { field: "kind", kind: "field" },
+              op: "eq",
+              right: { kind: "literal", type: undefined, value: "qti-map-entry" },
+            },
+            {
+              kind: "compare",
+              left: { field: "name", kind: "field" },
+              op: "eq",
+              right: { kind: "literal", type: undefined, value: "map-key" },
+            },
+          ],
+        },
+        terms: [
+          { field: "node", kind: "field" },
+          { field: "lexical", kind: "field" },
+        ],
+      },
+      kind: "contained",
+      to: {
+        relation: "MapKey",
+        selection: { conjuncts: [] },
+        terms: [
+          { field: "node", kind: "field" },
+          { field: "key", kind: "field" },
+        ],
+      },
+    },
+  },
+];
 
 /**
  * The signatures of the disagreements a lane's open fix owns (`#pantry/test/gen/genetic/known.ts`),
  * which the box sets aside, but for the classes it guards.
  */
-const recorded: ReadonlySet<string> = new Set(
-  Object.keys(known).filter((signature) => !closed.has(signature)),
+const recorded: readonly Signature[] = known.flatMap(({ signature }) =>
+  closed.some((shut) => sameSignature(shut, signature)) ? [] : [signature],
 );
 
 /**
@@ -156,7 +227,11 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             const directory = yield* scratchDirectory("unnamed-declarations-");
             const bench = { directory, grammar, laws };
             assert.deepStrictEqual(
-              [...closed].filter((signature) => !(signature in fixed)),
+              closed.flatMap((signature) =>
+                fixed.some((entry) => sameSignature(entry.signature, signature))
+                  ? []
+                  : [shownSignature(signature)],
+              ),
               [],
               "fixed records each class this reading closed",
             );
@@ -203,7 +278,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                   assert.deepStrictEqual(
                     judged.disagreements
-                      .filter((disagreement) => !recorded.has(signatureOf(disagreement)))
+                      .filter((disagreement) => !recordsClassOf(recorded, disagreement))
                       .map(shownDisagreement),
                     [],
                     `${held.identifier.attribute || "no identifier"}, ${held.mapping.name}${held.twin ? ", beside its twin" : ""}: the oracle ${judged.summary.oracle}; the import ${judged.summary.import}`,
