@@ -65,6 +65,7 @@ export type { EngineFailure } from "#plate/engine/evaluate.ts";
 
 export {
   OutcomeMismatchError,
+  RecordOperandError,
   UnknownIdentifierError,
   UnmappedResponseError,
 } from "#plate/engine/evaluate.ts";
@@ -76,6 +77,8 @@ export type {
   InstanceRequirement,
   Partition,
   PostedBaseType,
+  RecordBinding,
+  ValueBinding,
 } from "#plate/form/encoding.ts";
 
 export {
@@ -90,7 +93,7 @@ export {
 
 export { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
 
-export type { Value } from "#plate/model/values.ts";
+export type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 
 export type {
   NavigationItem,

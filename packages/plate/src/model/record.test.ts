@@ -119,6 +119,7 @@ describe("fresh", () => {
         SCORE: float(1),
         completionStatus: identifierValue("not_attempted"),
       },
+      records: {},
       responses: { RESPONSE: { baseType: "identifier", cardinality: "single", values: [] } },
       seed: "",
       templates: {},
@@ -132,6 +133,10 @@ describe("fresh", () => {
       [record.seed, record.templates, record.correct, record.defaults],
       ["", {}, {}, {}],
     );
+  });
+
+  it("[T-14] starts with no record response's value: an empty records map", () => {
+    assert.deepStrictEqual(fresh(bg007Item, "i1").records, {});
   });
 
   it("[I-2] gives the same outcomes as outcomeDefaults", () => {

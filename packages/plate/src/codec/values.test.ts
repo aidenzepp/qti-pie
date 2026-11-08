@@ -1,9 +1,20 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SingleSchema } from "#plate/codec/values.ts";
-import { decodeStoredFloat, ValueSchema } from "#plate/codec/values.ts";
+import {
+  decodeStoredFloat,
+  RecordValueSchema,
+  ResponseValueSchema,
+  ValueSchema,
+} from "#plate/codec/values.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import type {
+  ModelledBaseType,
+  RecordValue,
+  ResponseValue,
+  Single,
+  Value,
+} from "#plate/model/values.ts";
 
 /**
  * Whether two types are the same type, not merely assignable to each other: `true` only when the
@@ -22,6 +33,18 @@ const valuePinned: Equals<typeof ValueSchema.Type, Value> = true;
  * {@link SingleSchema}'s type is the plain {@link Single}; `tsc` refuses this line when they part.
  */
 const singlePinned: Equals<typeof SingleSchema.Type, Single> = true;
+
+/**
+ * {@link RecordValueSchema}'s type is the plain {@link RecordValue}; `tsc` refuses this line when
+ * they part.
+ */
+const recordPinned: Equals<typeof RecordValueSchema.Type, RecordValue> = true;
+
+/**
+ * {@link ResponseValueSchema}'s type is the plain {@link ResponseValue}; `tsc` refuses this line
+ * when they part.
+ */
+const responsePinned: Equals<typeof ResponseValueSchema.Type, ResponseValue> = true;
 
 /**
  * Construct a value for a test.
@@ -266,6 +289,103 @@ describe("ValueSchema", () => {
   });
 });
 
+/**
+ * A record of the fields a Text Entry's post gives: its text, an integer of 400 digits, and a float
+ * that is infinite.
+ */
+const posted: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "stringValue", value: { baseType: "string", value: "  12 " } },
+    { identifier: "integerValue", value: { baseType: "integer", value: 10n ** 399n + 7n } },
+    { identifier: "floatValue", value: { baseType: "float", value: Number.POSITIVE_INFINITY } },
+  ],
+};
+
+/**
+ * Records {@link RecordValueSchema} refuses, by what is wrong with each, typed as the plain record
+ * would be had it been built by hand: an identifier that is not an NCName, an identifier written
+ * twice, a field of base type `file`, which the value model holds no value of, and a field holding
+ * the empty string, which is NULL, and a NULL field is no field.
+ */
+const malformedRecords = {
+  "a field holding the empty string": {
+    cardinality: "record",
+    fields: [{ identifier: "stringValue", value: { baseType: "string", value: "" } }],
+  },
+  "a field of base type file": {
+    cardinality: "record",
+    fields: [{ identifier: "upload", value: { baseType: "file", value: "a.txt" } }],
+  },
+  "an identifier that is not an NCName": {
+    cardinality: "record",
+    fields: [{ identifier: "1st", value: { baseType: "string", value: "a" } }],
+  },
+  "an identifier written twice": {
+    cardinality: "record",
+    fields: [
+      { identifier: "stringValue", value: { baseType: "string", value: "a" } },
+      { identifier: "stringValue", value: { baseType: "string", value: "b" } },
+    ],
+  },
+};
+
+describe("RecordValueSchema", () => {
+  it.effect(
+    "[T-14] round-trips a record through JSON text: a 400-digit integer exact and an infinite float by name",
+    () =>
+      Effect.gen(function* recordRoundTrips() {
+        const encoded = yield* Schema.encodeEffect(RecordValueSchema)(posted);
+
+        assert.deepStrictEqual(
+          encoded.fields.map((field) => [field.identifier, field.value.value]),
+          [
+            ["stringValue", "  12 "],
+            ["integerValue", String(10n ** 399n + 7n)],
+            ["floatValue", "INF"],
+          ],
+        );
+        assert.strictEqual(String(encoded.fields[1]?.value.value).length, 400);
+
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the record survives JSON text, the form a host stores.
+        const handedBack: unknown = JSON.parse(JSON.stringify(encoded));
+        assert.deepStrictEqual(
+          yield* Schema.decodeUnknownEffect(RecordValueSchema)(handedBack),
+          posted,
+        );
+        assert.deepStrictEqual(
+          yield* Schema.decodeUnknownEffect(ResponseValueSchema)(handedBack),
+          posted,
+        );
+      }),
+  );
+
+  it("[T-14] takes a record with no field, the NULL record", () => {
+    assert.isTrue(Schema.is(RecordValueSchema)({ cardinality: "record", fields: [] }));
+  });
+
+  it("[T-14] refuses, decoding and encoding alike, a non-NCName identifier, a repeated identifier, a field of base type file and an empty string", () => {
+    for (const [problem, malformed] of Object.entries(malformedRecords)) {
+      // oxlint-disable-next-line unicorn/prefer-structured-clone -- The decode reads the record as JSON text, the form a host stores.
+      const stored: unknown = JSON.parse(JSON.stringify(malformed));
+
+      assert.isTrue(
+        Result.isFailure(Schema.decodeUnknownResult(RecordValueSchema)(stored)),
+        problem,
+      );
+      assert.isTrue(
+        Result.isFailure(Schema.decodeUnknownResult(ResponseValueSchema)(stored)),
+        problem,
+      );
+      assert.isTrue(
+        Result.isFailure(Schema.encodeUnknownResult(RecordValueSchema)(malformed)),
+        problem,
+      );
+      assert.isFalse(Schema.is(RecordValueSchema)(malformed), problem);
+    }
+  });
+});
+
 describe("decodeStoredFloat", () => {
   it("reads a stored float as the number it stands for, and refuses a name the codec never writes", () => {
     for (const [stored, number] of [
@@ -289,5 +409,6 @@ describe("the plain types", () => {
   it("are the Schemas' types", () => {
     assert.isTrue(valuePinned);
     assert.isTrue(singlePinned);
+    assert.isTrue(recordPinned && responsePinned);
   });
 });

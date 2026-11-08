@@ -24,7 +24,7 @@ import type { Element } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import { message } from "#plate/messages.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
-import { format } from "#plate/model/values.ts";
+import { format, isRecordValue } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { redact, render } from "#plate/render.ts";
 import { solution } from "#plate/solution.ts";
@@ -372,6 +372,7 @@ const viewOf = Effect.fn("viewOf")(function* viewOf(mode: ShownMode) {
   );
   const correct = solution(accepted)[responses.labelled];
   assert.isDefined(correct, `${corpusItem} declares ${responses.labelled}`);
+  assert(!isRecordValue(correct), `${corpusItem}'s ${responses.labelled} is not a record response`);
   if (mode === "solution") {
     return { accepted, value: correct };
   }

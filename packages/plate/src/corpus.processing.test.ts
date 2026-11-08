@@ -6,9 +6,8 @@ import { qtiNamespace } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { score, solution } from "#plate/index.ts";
 import type { Accepted, StoredRecord } from "#plate/index.ts";
-import { expressionKinds, isUnlanded } from "#plate/model/expression.ts";
-import { kindRules } from "#plate/model/expressions/read.ts";
 import type { SolutionRecord } from "#plate/model/record.ts";
+import { splitResponses } from "#plate/score.ts";
 import { isNull, trimXmlSpace } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 import { acceptedOf, begunUnder, openCorpus, sweepSeeds, templated } from "#plate/test/sweep.ts";
@@ -19,16 +18,6 @@ import { acceptedOf, begunUnder, openCorpus, sweepSeeds, templated } from "#plat
  * bound leaves room for a slow machine without letting a hung run stall the suite.
  */
 const sweepTimeoutMs = 600_000;
-
-/**
- * The element marks of the kinds a later stage of this plan owns: `qti-<kind>` for each kind whose
- * rule the registry still holds as unlanded. `src/model/expression.test.ts`'s roster pins that set
- * to its 14 kinds by owner, so the sweep allows exactly those, and a kind that lands stops being
- * allowed here with no edit.
- */
-const laterKindMarks: ReadonlySet<string> = new Set(
-  expressionKinds.filter((kind) => isUnlanded(kindRules[kind])).map((kind) => `qti-${kind}`),
-);
 
 /**
  * The marks of an element the model reads but does not run (9.21's `qti-custom-operator` aside):
@@ -220,7 +209,9 @@ const correctResponsesOf = (
   record?: SolutionRecord,
 ): Readonly<Record<string, Value>> =>
   Object.fromEntries(
-    Object.entries(solution(accepted, record)).filter(([, correct]) => !isNull(correct)),
+    Object.entries(splitResponses(solution(accepted, record)).responses).filter(
+      ([, correct]) => !isNull(correct),
+    ),
   );
 
 /**
@@ -314,16 +305,14 @@ const processingMarks = (swept: Swept): readonly { feature: string; path: string
   swept.accepted.item.unsupported.filter((mark) => atProcessing(mark.path));
 
 /**
- * Report whether property 1 allows a mark on an item's response processing: a later stage's kind,
- * a mark of an element read but not run, `qti-custom-operator`, or a variable the engine holds no
- * value of.
+ * Report whether property 1 allows a mark on an item's response processing: a mark of an element
+ * read but not run, `qti-custom-operator`, or a variable the engine holds no value of.
  *
  * @param swept The item.
  * @param feature The mark's feature.
  * @returns Whether one of the three groups holds it.
  */
 const isAllowed = (swept: Swept, feature: string): boolean =>
-  laterKindMarks.has(feature) ||
   unrunMarks.has(feature) ||
   feature === customOperatorMark ||
   (feature.startsWith(variablePrefix) && swept.unheld.has(feature.slice(variablePrefix.length)));
@@ -442,7 +431,7 @@ const scoringProblems = (items: readonly Swept[]): readonly string[] =>
 
 describe("the inline response processing sweep over the corpus", { tags: ["corpus"] }, () => {
   it.effect(
-    "[I-9a] marks each item's inline processing only with a kind a later stage owns, an element read but not run, or a variable the engine holds no value of",
+    "[I-9a] marks each item's inline processing only with an element read but not run, qti-custom-operator, or a variable the engine holds no value of",
     () =>
       Effect.gen(function* everyMarkExcused() {
         const problems = (yield* sweptItems).flatMap((swept) =>

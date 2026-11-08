@@ -12,17 +12,22 @@
  */
 import { Array as Arr, Data, Option, Result, Schema, SchemaTransformation } from "effect";
 import { ItemRecordSchema, storedVersion, versionIssue, versionOf } from "#plate/codec/record.ts";
-import { ValueSchema } from "#plate/codec/values.ts";
+import { ResponseValueSchema, ValueSchema } from "#plate/codec/values.ts";
 import type { OutcomeDeclaration } from "#plate/model/item.ts";
 import type { TemplateDefault } from "#plate/model/test.ts";
 import type { SessionItem, SessionPart, TestSession } from "#plate/session/session.ts";
 import type { NavigationMode } from "#plate/vocabulary.ts";
 
 /**
- * Values by identifier: an item's saved responses, first outcomes or template defaults, or the
- * test's outcomes.
+ * Values by identifier: an item's first outcomes or template defaults, or the test's outcomes.
  */
 const ValuesSchema = Schema.Record(Schema.String, ValueSchema);
+
+/**
+ * An item's saved responses by identifier, each a value or, for a record response, a record, as
+ * the session's `Responses` holds them.
+ */
+const SavedSchema = Schema.Record(Schema.String, ResponseValueSchema);
 
 /**
  * The Schema of one item of a test session. `saved`, `firstOutcomes` and `templateDefaults` are
@@ -35,7 +40,7 @@ const SessionItemSchema = Schema.Struct({
   presented: Schema.Boolean,
   record: ItemRecordSchema,
   ref: Schema.String,
-  saved: Schema.OptionFromOptionalKey(ValuesSchema),
+  saved: Schema.OptionFromOptionalKey(SavedSchema),
   sequenceIndex: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   templateDefaults: Schema.OptionFromOptionalKey(ValuesSchema),
 });
@@ -86,7 +91,7 @@ export const TestSessionSchema = Schema.Struct({
 );
 
 /**
- * A test session in the form the host stores: JSON-safe data that names its version, `3`. Every
+ * A test session in the form the host stores: JSON-safe data that names its version, `4`. Every
  * value is written as the stored item record writes it, integers as their decimal digits, so no
  * integer is rounded on the way through the host, the test's `outcomes` among them; each item's
  * `record` is a stored item record, its seed, template values, correct responses and defaults with
@@ -184,7 +189,7 @@ export class InvalidSession extends Data.TaggedError("InvalidSession")<{
    */
   readonly stage: SessionStage;
   /**
-   * The value the stored session holds under `version`, which is `3` when something else is
+   * The value the stored session holds under `version`, which is `4` when something else is
    * wrong; none when it is not an object or names no version, and at stage `encode`, where no
    * stored session was read.
    */

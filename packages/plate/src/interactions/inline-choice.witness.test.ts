@@ -24,9 +24,9 @@ import type {
   Node,
   Redacted,
   Rendered,
+  ResponseValue,
   StoredRecord,
   ValidationMessage,
-  Value,
 } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
@@ -318,7 +318,7 @@ const walk = (page: Element, keys: readonly Key[]): Posts =>
  * for each, and `checkResponses`' messages.
  */
 interface Posted {
-  readonly decoded: Readonly<Record<string, Value | Malformed>>;
+  readonly decoded: Readonly<Record<string, ResponseValue | Malformed>>;
   readonly messages: readonly ValidationMessage[];
   readonly sent: Readonly<Record<string, readonly string[]>>;
 }

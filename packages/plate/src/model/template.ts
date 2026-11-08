@@ -6,9 +6,9 @@
  * `#plate/vocabulary.ts`) and each expression through the registry's generic reader
  * (`readExpression` in `#plate/model/expressions/read.ts`), in the reading context the item model
  * builds, so the marks it records join the item's. Template processing that holds any element
- * outside that list, an expression kind the registry has not landed, or a rule of a malformed
- * shape is none, each such element marked, as response processing is. It value-imports the
- * registry, the attribute leaf and the vocabulary, never `#plate/model/item.ts`, which imports it.
+ * outside that list, a rule of a malformed shape, or a rule that sets a record response is none,
+ * each such element marked, as response processing is. It value-imports the registry, the attribute
+ * leaf and the vocabulary, never `#plate/model/item.ts`, which imports it.
  *
  * @module
  */
@@ -27,11 +27,19 @@ import { renders } from "#plate/vocabulary.ts";
 type TemplateRuleName = (typeof renders.templateRules)[number];
 
 /**
+ * What template processing reads through: the item's {@link ExpressionReading}, and the identifiers
+ * of the item's record responses, which no template rule the engine runs may set.
+ */
+interface TemplateReading extends ExpressionReading {
+  readonly recordResponses: ReadonlySet<string>;
+}
+
+/**
  * How one template rule element reads: into its rule, none when it holds anything the engine does
  * not run, or a refusal.
  */
 type RuleReader = (
-  reading: ExpressionReading,
+  reading: TemplateReading,
   element: SourceElement,
 ) => Effect.Effect<Option.Option<TemplateRule>, Refusal>;
 
@@ -57,7 +65,7 @@ const branchOf = (when: Expression, then: readonly TemplateRule[]): TemplateBran
  * refusal.
  */
 const sequence = (
-  reading: ExpressionReading,
+  reading: TemplateReading,
   elements: readonly SourceElement[],
 ): Effect.Effect<Option.Option<readonly TemplateRule[]>, Refusal> =>
   pipe(
@@ -77,7 +85,7 @@ const sequence = (
  *   run; or a refusal.
  */
 const soleExpression = (
-  reading: ExpressionReading,
+  reading: TemplateReading,
   element: SourceElement,
 ): Effect.Effect<Option.Option<Expression>, Refusal> => {
   const [operand, ...extra] = elementsOf(element);
@@ -91,20 +99,34 @@ const soleExpression = (
  * Read a rule that names its target variable and holds one expression: a
  * `qti-set-template-value`, a `qti-set-correct-response` or a `qti-set-default-value`.
  *
+ * A `qti-set-correct-response` or `qti-set-default-value` whose target is a record response is
+ * marked `record-set` at the rule, and its expression is still read, so what it holds is marked
+ * too. An expression gives a value, never a record, so the engine sets no record, and such
+ * template processing does not run (G-R4, pending: a rule that sets a record response is marked
+ * `record-set`, and the response keeps the default and the correct response its declaration
+ * writes). A record outcome or template variable is not a record response; a rule that sets one
+ * is marked as a name the engine does not hold (`unheldIdentifiers` in `#plate/model/item.ts`).
+ *
  * @param kind The rule's kind.
- * @returns Its reader: the rule, none when the element does not hold exactly one expression or its
- *   expression holds an element the engine does not run, or a refusal.
+ * @returns Its reader: the rule, none when it sets a record response, when the element does not
+ *   hold exactly one expression or when its expression holds an element the engine does not run,
+ *   or a refusal.
  */
 const setting =
   (kind: "set-correct-response" | "set-default-value" | "set-template-value"): RuleReader =>
   (reading, element) =>
     Effect.gen(function* readSetting() {
       const identifier = yield* identifierAttribute(reading.walk, element, "identifier");
+      const setsRecord = kind !== "set-template-value" && reading.recordResponses.has(identifier);
+      if (setsRecord) {
+        yield* reading.mark(element, "record-set");
+      }
+
       const read = yield* soleExpression(reading, element);
 
-      return read.pipe(
-        Option.map((expression): TemplateRule => ({ expression, identifier, kind })),
-      );
+      return setsRecord
+        ? Option.none()
+        : read.pipe(Option.map((expression): TemplateRule => ({ expression, identifier, kind })));
     });
 
 /**
@@ -134,7 +156,7 @@ const constraint: RuleReader = (reading, element) =>
  *   refusal.
  */
 const branch = (
-  reading: ExpressionReading,
+  reading: TemplateReading,
   element: SourceElement,
 ): Effect.Effect<Option.Option<TemplateBranch>, Refusal> =>
   Effect.gen(function* readTemplateBranch() {
@@ -229,7 +251,7 @@ const readers = {
  * @returns The rule, none when it holds an element the engine does not run, or a refusal.
  */
 const rule = (
-  reading: ExpressionReading,
+  reading: TemplateReading,
   element: SourceElement,
 ): Effect.Effect<Option.Option<TemplateRule>, Refusal> =>
   Option.match(
@@ -243,14 +265,16 @@ const rule = (
 /**
  * Read a `qti-template-processing` into its template rules, in document order.
  *
- * A rule element outside the vocabulary's template rules, an expression kind the registry has not
- * landed, or a rule of a malformed shape (a setting rule or a constraint without exactly one
- * expression, a branch with no condition, a stray part in a condition) is marked at its path, and
- * the whole processing is then none, as `rules` in `#plate/model/item.ts` reads response
- * processing. A `qti-exit-template` is read whatever it holds, as a `qti-exit-response` is.
+ * A rule element outside the vocabulary's template rules, a rule of a malformed shape (a setting
+ * rule or a constraint without exactly one expression, a branch with no condition, a stray part in
+ * a condition), or a rule that sets a record response (`record-set`, {@link setting}) is marked at
+ * its path, and the whole processing is then none, as `rules` in `#plate/model/item.ts` reads
+ * response processing. A `qti-exit-template` is read whatever it holds, as a `qti-exit-response`
+ * is.
  *
  * @param reading The item's reading context, which `#plate/model/item.ts` builds for its build.
  * @param processing The `qti-template-processing` element.
+ * @param recordResponses The identifiers of the item's record responses.
  * @returns The rules, none when any holds an element the engine does not run, each such element
  *   marked; or the refusal an attribute gives: `value-type` for a `qti-base-value` outside its
  *   lexical space and, in a document the validator refuses first, `missing-attribute` for a rule
@@ -259,5 +283,6 @@ const rule = (
 export const templateRules = (
   reading: ExpressionReading,
   processing: SourceElement,
+  recordResponses: ReadonlySet<string>,
 ): Effect.Effect<Option.Option<readonly TemplateRule[]>, Refusal> =>
-  sequence(reading, elementsOf(processing));
+  sequence({ ...reading, recordResponses }, elementsOf(processing));

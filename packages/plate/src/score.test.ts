@@ -5,20 +5,21 @@ import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { StoredRecord } from "#plate/codec/record.ts";
 import { Configuration, configure } from "#plate/configuration.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
-import { Malformed } from "#plate/form/encoding.ts";
+import { decode, Malformed } from "#plate/form/encoding.ts";
 import type { PostedBaseType } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
 import type {
   ChoiceInteraction,
   InlineChoiceInteraction,
   Item,
+  ResponseDeclaration,
   TemplateVisibility,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { redact, render } from "#plate/render.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { fitting, score, tierA } from "#plate/score.ts";
@@ -82,6 +83,7 @@ const number: TextEntryInteraction = {
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "integer",
+  cardinality: "single",
   class: "",
   expectedLength: Option.none(),
   kind: "text-entry",
@@ -215,6 +217,60 @@ const item: Item = {
  * The item as `check` would accept it, through the tests' named seam.
  */
 const accepted = acceptForTest(item);
+
+/**
+ * A record response's answer as a host builds it by hand: a Text Entry's text, with the numbers
+ * read from it.
+ */
+const recordAnswer: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "stringValue", value: { baseType: "string", value: "  12 " } },
+    { identifier: "floatValue", value: { baseType: "float", value: 12 } },
+    { identifier: "integerValue", value: { baseType: "integer", value: 12n } },
+  ],
+};
+
+/**
+ * The single string response `TEXT`, which no interaction binds.
+ */
+const textDeclaration: ResponseDeclaration = {
+  areaMapping: Option.none(),
+  baseType: "string",
+  cardinality: "single",
+  correct: Option.none(),
+  defaultValue: Option.none(),
+  identifier: "TEXT",
+  mapping: Option.none(),
+};
+
+/**
+ * {@link item} with the record response `RREC` and the string response `TEXT` beside its own,
+ * neither bound by an interaction, as `check` would accept it.
+ */
+const recordAccepted = acceptForTest({
+  ...item,
+  document: "items/recorded.xml",
+  identifier: "recorded",
+  records: new Map([
+    ["RREC", { correct: Option.none(), defaultValue: Option.none(), identifier: "RREC" }],
+  ]),
+  responses: new Map([...item.responses, ["TEXT", textDeclaration]]),
+});
+
+/**
+ * Give an `InvalidResponses` failure's tag, response, problem and expected type, or the tag alone
+ * of any other failure.
+ *
+ * @param result What `score` returned.
+ * @returns Those facts, or none when it succeeded.
+ */
+const responseFailureOf = (result: ReturnType<typeof score>): Option.Option<readonly unknown[]> =>
+  Option.map(Result.getFailure(result), (failure) =>
+    failure._tag === "InvalidResponses"
+      ? [failure._tag, failure.response, failure.problem, failure.expected]
+      : [failure._tag],
+  );
 
 /**
  * A required Inline Choice of choices `A`, `B` and `C`, bound to the single identifier response
@@ -867,6 +923,88 @@ describe("score", () => {
   });
 
   it.effect(
+    "[T-14] writes a record response's record into the stored records beside responses, keeps it on the next score, and refuses either kind posted for the other: cardinality",
+    () =>
+      Effect.gen(function* recordsBesideResponses() {
+        const stored = yield* Effect.fromResult(
+          score(recordAccepted, { RESPONSE: identifiers("single", "A"), RREC: recordAnswer }),
+        );
+        const decoded = yield* Effect.fromResult(decodeRecord(stored));
+        const again = yield* Effect.fromResult(
+          decodeRecord(yield* Effect.fromResult(score(recordAccepted, {}, stored))),
+        );
+
+        assert.deepStrictEqual(decoded.records, { RREC: recordAnswer });
+        assert.isFalse(Object.hasOwn(decoded.responses, "RREC"));
+        assert.deepStrictEqual(outcomeOf(stored, "SCORE"), [1]);
+        assert.deepStrictEqual(again.records, { RREC: recordAnswer });
+        assert.deepStrictEqual(
+          responseFailureOf(score(recordAccepted, { TEXT: recordAnswer })),
+          Option.some([
+            "InvalidResponses",
+            "TEXT",
+            "cardinality",
+            Option.some({ baseType: "string", cardinality: "single" }),
+          ]),
+        );
+        assert.deepStrictEqual(
+          responseFailureOf(
+            score(recordAccepted, {
+              RREC: {
+                baseType: "string",
+                cardinality: "single",
+                values: [{ baseType: "string", value: "  12 " }],
+              },
+            }),
+          ),
+          Option.some([
+            "InvalidResponses",
+            "RREC",
+            "cardinality",
+            Option.some({ cardinality: "record" }),
+          ]),
+        );
+      }),
+  );
+
+  it("[T-14] refuses a host-built record with a repeated identifier, a non-NCName identifier or a file field: not-a-value, and stores no record", () => {
+    const malformed = {
+      "a field of base type file": {
+        cardinality: "record",
+        fields: [{ identifier: "upload", value: { baseType: "file", value: "a.txt" } }],
+      },
+      "an identifier that is not an NCName": {
+        cardinality: "record",
+        fields: [{ identifier: "1st", value: { baseType: "string", value: "a" } }],
+      },
+      "an identifier written twice": {
+        cardinality: "record",
+        fields: [
+          { identifier: "stringValue", value: { baseType: "string", value: "a" } },
+          { identifier: "stringValue", value: { baseType: "string", value: "b" } },
+        ],
+      },
+    };
+
+    for (const [problem, posted] of Object.entries(malformed)) {
+      // @ts-expect-error -- each record breaks a rule of RecordValue that score must refuse.
+      const attempt = score(recordAccepted, { RESPONSE: identifiers("single", "A"), RREC: posted });
+
+      assert.isTrue(Result.isFailure(attempt), problem);
+      assert.deepStrictEqual(
+        responseFailureOf(attempt),
+        Option.some([
+          "InvalidResponses",
+          "RREC",
+          "not-a-value",
+          Option.some({ cardinality: "record" }),
+        ]),
+        problem,
+      );
+    }
+  });
+
+  it.effect(
     "takes a single duration response of an item that declares it duration (duration is scored)",
     () =>
       Effect.gen(function* scoresDuration() {
@@ -1456,6 +1594,113 @@ describe("score over a response value two map entries match", () => {
   );
 });
 
+/**
+ * A hand-built item document whose `record` response `R`, which a Text Entry binds, sets the float
+ * `SCORE` from its field `integerValue` through `qti-field-value`. `open` accepts it: a `record`
+ * declaration types none of its fields, so the check cannot see that the field is an integer.
+ */
+const integerFieldDocument = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="field-typed" title="Field typed" time-dependent="false" adaptive="false">
+  <qti-response-declaration identifier="R" cardinality="record"/>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>
+  <qti-item-body><p>How many? <qti-text-entry-interaction response-identifier="R"/></p></qti-item-body>
+  <qti-response-processing>
+    <qti-set-outcome-value identifier="SCORE"><qti-field-value field-identifier="integerValue"><qti-variable identifier="R"/></qti-field-value></qti-set-outcome-value>
+  </qti-response-processing>
+</qti-assessment-item>
+`;
+
+/**
+ * A hand-built item document like {@link integerFieldDocument}, whose rule sets the integer outcome
+ * `COUNT` from the `qti-sum` of `R`'s field `integerValue` and the float 2.0. `open` accepts it:
+ * the sum's base type follows the field's, which a `record` declaration does not type, so the check
+ * cannot see that the sum of an integer and a float is a float.
+ */
+const integerSumDocument = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="field-typed" title="Field typed" time-dependent="false" adaptive="false">
+  <qti-response-declaration identifier="R" cardinality="record"/>
+  <qti-outcome-declaration identifier="COUNT" cardinality="single" base-type="integer"/>
+  <qti-item-body><p>How many? <qti-text-entry-interaction response-identifier="R"/></p></qti-item-body>
+  <qti-response-processing>
+    <qti-set-outcome-value identifier="COUNT"><qti-sum><qti-field-value field-identifier="integerValue"><qti-variable identifier="R"/></qti-field-value><qti-base-value base-type="float">2.0</qti-base-value></qti-sum></qti-set-outcome-value>
+  </qti-response-processing>
+</qti-assessment-item>
+`;
+
+/**
+ * Decode a Text Entry's posted text into the record `R` takes, as a host's `decode` does.
+ *
+ * @param text The text the candidate typed.
+ * @returns The record.
+ */
+const typedRecord = (text: string): RecordValue =>
+  Result.getOrElse(
+    decode([["field-typed.R", text]], { cardinality: "record", name: "field-typed.R" }),
+    (failure) => assert.fail(`decode refused ${text}: ${failure._tag}`),
+  );
+
+describe("score over a record field set into a variable", () => {
+  it.effect(
+    "[I-9a] returns OutcomeMismatchError for SCORE, never a throw, when a float SCORE is set from a field of another base type: integerValue of 12; abc has no integerValue and scores SCORE NULL",
+    () =>
+      Effect.gen(function* fieldOfAnotherBaseType() {
+        const verdict = yield* open(
+          "items/field-typed.xml",
+          new TextEncoder().encode(integerFieldDocument),
+        );
+        const opened = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`The item is ${verdict.verdict}, not accepted.`),
+        );
+        const mismatch = Option.getOrElse(failureOf(score(opened, { R: typedRecord("12") })), () =>
+          assert.fail("score succeeded on 12"),
+        );
+
+        assert.deepStrictEqual(
+          mismatch._tag === "OutcomeMismatchError"
+            ? [mismatch._tag, mismatch.identifier, mismatch.actual, mismatch.expected]
+            : [mismatch._tag],
+          ["OutcomeMismatchError", "SCORE", "integer single", "float single"],
+        );
+
+        const stored = yield* Effect.fromResult(score(opened, { R: typedRecord("abc") }));
+
+        assert.deepStrictEqual(stored.outcomes["SCORE"], {
+          baseType: "float",
+          cardinality: "single",
+          values: [],
+        });
+      }),
+  );
+
+  it.effect(
+    "[I-9a] type follows a field: an integer COUNT set from the qti-sum of integerValue and 2.0, which open accepts, returns OutcomeMismatchError for 12, never a throw",
+    () =>
+      Effect.gen(function* sumOverField() {
+        const verdict = yield* open(
+          "items/field-typed.xml",
+          new TextEncoder().encode(integerSumDocument),
+        );
+        const opened = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`The item is ${verdict.verdict}, not accepted.`),
+        );
+        const returned = Result.getOrElse(
+          Result.try(() => score(opened, { R: typedRecord("12") })),
+          () => assert.fail("score threw instead of returning its failure"),
+        );
+        const mismatch = Option.getOrElse(failureOf(returned), () =>
+          assert.fail("score succeeded on 12"),
+        );
+
+        assert.deepStrictEqual(
+          mismatch._tag === "OutcomeMismatchError"
+            ? [mismatch._tag, mismatch.identifier, mismatch.actual, mismatch.expected]
+            : [mismatch._tag],
+          ["OutcomeMismatchError", "COUNT", "float single", "integer single"],
+        );
+      }),
+  );
+});
+
 describe("fitting", () => {
   it("[I-9a] accepts a record that holds the built-in completionStatus and one that lacks it, and refuses one of another type", () => {
     const record = fresh(item, "");
@@ -1643,6 +1888,7 @@ describe("the public surface", () => {
         "OutputTooLarge",
         "PartSwapRefused",
         "RecordMismatch",
+        "RecordOperandError",
         "RecordRequired",
         "ResponsesRefused",
         "ResultItemMissing",

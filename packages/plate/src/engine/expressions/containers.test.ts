@@ -1,10 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option, Result } from "effect";
+import { Effect, Option, Result } from "effect";
+import { attr, el, text } from "#plate/document/source.ts";
+import type { SourceElement } from "#plate/document/source.ts";
+import { runRules } from "#plate/engine/evaluate.ts";
 import type { Evaluate, Variables } from "#plate/engine/evaluate.ts";
 import { containersEvaluators } from "#plate/engine/expressions/containers.ts";
 import { drawBelow, drawFloat, drawStream } from "#plate/engine/random.ts";
 import type { Draw } from "#plate/engine/random.ts";
-import { isUnlanded } from "#plate/model/expression.ts";
 import type {
   Expression,
   ExpressionType,
@@ -12,10 +14,22 @@ import type {
   ResultAttributes,
 } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
+import { buildItem } from "#plate/model/item.ts";
+import { outcomeDefaults } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Single, Value } from "#plate/model/values.ts";
+import type { RecordValue, Single, Value } from "#plate/model/values.ts";
 import { bg007Item, float, integer } from "#plate/test/fixtures.ts";
-import { assertKindType, evaluateIn, operandOf, scopeOf } from "#plate/test/processing.ts";
+import {
+  assertKindType,
+  evaluateIn,
+  expressionElement,
+  operandOf,
+  outcomeDeclaration,
+  processingItem,
+  scopeOf,
+  setOutcomeElement,
+  variableElement,
+} from "#plate/test/processing.ts";
 
 /**
  * The variables of an attempt with no response and no outcome.
@@ -573,7 +587,7 @@ describe("the containers family's evaluators over an untyped operand", () => {
     );
   });
 
-  it("hold the kinds the engine treats as untyped to the kind rules: each landed kind whose rule gives no base type over an unknown operand, and at which position", () => {
+  it("hold the kinds the engine treats as untyped to the kind rules: each kind whose rule gives no base type over an unknown operand, and at which position", () => {
     const unknown1: ExpressionType = { baseType: "unknown", cardinality: "single" };
     const integer1: ExpressionType = { baseType: "integer", cardinality: "single" };
     const attributes: ResultAttributes = {
@@ -582,10 +596,6 @@ describe("the containers family's evaluators over an untyped operand", () => {
       name: "abs",
     };
     const passing = Object.entries(kindRules).flatMap(([kind, rule]) => {
-      if (isUnlanded(rule)) {
-        return [];
-      }
-
       if (rule.resultType([integer1, integer1], attributes).baseType === "unknown") {
         return [[kind, "always"] as const];
       }
@@ -603,6 +613,7 @@ describe("the containers family's evaluators over an untyped operand", () => {
     assert.deepStrictEqual(Object.fromEntries(passing), {
       "custom-operator": "always",
       delete: "2",
+      "field-value": "always",
       index: "1",
       max: "1 2",
       min: "1 2",
@@ -674,10 +685,6 @@ describe("the containers family's bound on a computed container (operator ruling
 
   it("[I-9a] qti-repeat evaluates its operands once and repeats that pass's values, so an operand whose later values would grow past 1,000,000 is never evaluated again", () => {
     const { repeat } = containersEvaluators;
-    assert.notStrictEqual(repeat, "unlanded", "qti-repeat is landed");
-    if (repeat === "unlanded") {
-      return;
-    }
 
     let evaluations = 0;
     const growing: Evaluate = () => {
@@ -843,10 +850,6 @@ describe("the containers family's drawing qti-repeat (an operand holds a random 
 
   it("[I-9a] checks the running size before each pass's values are added, so a pass that would grow the container past 1,000,000 values gives NULL", () => {
     const { repeat } = containersEvaluators;
-    assert.notStrictEqual(repeat, "unlanded", "qti-repeat is landed");
-    if (repeat === "unlanded") {
-      return;
-    }
 
     let passes = 0;
     const growing: Evaluate = () => {
@@ -914,5 +917,287 @@ describe("the containers family's drawing qti-repeat (an operand holds a random 
       assertUnset(evaluated(expression, variables, draw), expected);
       assert.strictEqual(draw(), after(key, 0)(), `${title}: the next draw is the key's first`);
     }
+  });
+});
+
+/**
+ * Construct a `qti-value` that writes one field of a record response's declared value.
+ *
+ * @param identifier The `field-identifier`.
+ * @param baseType The field's `base-type`.
+ * @param written The value's text.
+ * @returns The value element.
+ */
+const fieldElement = (identifier: string, baseType: string, written: string): SourceElement =>
+  el(
+    "qti-value",
+    [attr("base-type", baseType), attr("field-identifier", identifier)],
+    [text(written)],
+  );
+
+/**
+ * The record response `R`, as a Text Entry bound to a record would post it: its correct response
+ * the text `12.5` read into its `stringValue` and `floatValue`, and its default the text `abc`
+ * read into its `stringValue` alone.
+ */
+const recordResponse: SourceElement = el(
+  "qti-response-declaration",
+  [attr("cardinality", "record"), attr("identifier", "R")],
+  [
+    el(
+      "qti-correct-response",
+      [],
+      [fieldElement("stringValue", "string", "12.5"), fieldElement("floatValue", "float", "12.5")],
+    ),
+    el("qti-default-value", [], [fieldElement("stringValue", "string", "abc")]),
+  ],
+);
+
+/**
+ * Construct a `qti-field-value` of one field of an operand.
+ *
+ * @param identifier The `field-identifier`.
+ * @param operand The record it reads.
+ * @returns The expression element.
+ */
+const fieldValueOf = (identifier: string, operand: SourceElement): SourceElement =>
+  expressionElement("field-value", [attr("field-identifier", identifier)], [operand]);
+
+/**
+ * Construct a `qti-is-null` of an operand.
+ *
+ * @param operand The operand.
+ * @returns The expression element.
+ */
+const isNullOf = (operand: SourceElement): SourceElement =>
+  expressionElement("is-null", [], [operand]);
+
+/**
+ * Construct a record of fields, each a single.
+ *
+ * @param fields The fields, by identifier, in order.
+ * @returns The record.
+ */
+const recordOf = (fields: Readonly<Record<string, Single>>): RecordValue => ({
+  cardinality: "record",
+  fields: Object.entries(fields).map(([identifier, value]) => ({ identifier, value })),
+});
+
+/**
+ * The record a post of `12.5` gives (R-c): its text, and the float it reads as.
+ */
+const twelveAndAHalf: RecordValue = recordOf({
+  floatValue: { baseType: "float", value: 12.5 },
+  stringValue: { baseType: "string", value: "12.5" },
+});
+
+/**
+ * Build an item that declares {@link recordResponse} and the outcomes given, whose response
+ * processing sets each outcome to its expression, and run that processing over a record of `R`,
+ * after checking that the item model holds `R` as a record, marks nothing, and keeps the
+ * processing, so it runs where the base marked it.
+ *
+ * @param outcomes Each outcome's identifier, base type and the expression it is set to, in order.
+ * @param record The value of `R` the attempt holds.
+ * @returns The outcomes after the run.
+ */
+const recordRun = (
+  outcomes: readonly (readonly [string, string, SourceElement])[],
+  record: RecordValue,
+) =>
+  Effect.gen(function* runOverRecord() {
+    const item = yield* buildItem(
+      processingItem(
+        [
+          recordResponse,
+          ...outcomes.map(([identifier, baseType]) => outcomeDeclaration(identifier, baseType)),
+        ],
+        outcomes.map(([identifier, , expression]) => setOutcomeElement(identifier, expression)),
+      ),
+    );
+    assert.deepStrictEqual([...(item.records?.keys() ?? [])], ["R"]);
+    assert.deepStrictEqual(item.unsupported, []);
+    assert.isTrue(Option.isSome(item.processing), "the processing runs");
+    if (Option.isNone(item.processing)) {
+      return {};
+    }
+
+    const run = yield* Effect.fromResult(
+      runRules(item.processing.value, item, {
+        numAttempts: 1n,
+        outcomes: outcomeDefaults(item),
+        records: { R: record },
+        responses: {},
+      }),
+    );
+
+    return run.outcomes;
+  });
+
+/**
+ * The single boolean value of a truth.
+ *
+ * @param held The truth.
+ * @returns The value.
+ */
+const booleanValue = (held: boolean): Value => ({
+  baseType: "boolean",
+  cardinality: "single",
+  values: [{ baseType: "boolean", value: held }],
+});
+
+/**
+ * The single string value of a text.
+ *
+ * @param written The text.
+ * @returns The value.
+ */
+const stringValue = (written: string): Value => ({
+  baseType: "string",
+  cardinality: "single",
+  values: [{ baseType: "string", value: written }],
+});
+
+describe("qti-field-value, qti-is-null and qti-match over a record response", () => {
+  it.effect(
+    "[I-9a] reads a record field: SCORE set to the floatValue of the record response scores the record's float",
+    () =>
+      Effect.gen(function* scoresFloatField() {
+        const outcomes = yield* recordRun(
+          [["SCORE", "float", fieldValueOf("floatValue", variableElement("R"))]],
+          twelveAndAHalf,
+        );
+
+        assert.deepStrictEqual(outcomes["SCORE"], float(12.5));
+      }),
+  );
+
+  it.effect(
+    "[I-9a] reads a record field: a field the record lacks, and every field of a NULL record, is NULL",
+    () =>
+      Effect.gen(function* lacksField() {
+        const lacking = [
+          "LACKS",
+          "boolean",
+          isNullOf(fieldValueOf("exponent", variableElement("R"))),
+        ] as const;
+        const textField = [
+          "TEXT",
+          "string",
+          fieldValueOf("stringValue", variableElement("R")),
+        ] as const;
+
+        const held = yield* recordRun([lacking, textField], twelveAndAHalf);
+        const empty = yield* recordRun([lacking, textField], recordOf({}));
+
+        assert.deepStrictEqual(
+          [held["LACKS"], held["TEXT"]],
+          [booleanValue(true), stringValue("12.5")],
+        );
+        assert.deepStrictEqual(
+          [empty["LACKS"], empty["TEXT"]],
+          [booleanValue(true), nullOf("string", "single")],
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-9a] reads a record field: qti-is-null of a NULL record is true, and of a record with a field false",
+    () =>
+      Effect.gen(function* isNullRecord() {
+        const emptiness = [["EMPTY", "boolean", isNullOf(variableElement("R"))]] as const;
+
+        const empty = yield* recordRun(emptiness, recordOf({}));
+        const held = yield* recordRun(emptiness, twelveAndAHalf);
+
+        assert.deepStrictEqual(
+          [empty["EMPTY"], held["EMPTY"]],
+          [booleanValue(true), booleanValue(false)],
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-9a] reads a record field of qti-default and of qti-correct: the declared default and correct response",
+    () =>
+      Effect.gen(function* readsDeclared() {
+        const outcomes = yield* recordRun(
+          [
+            [
+              "DEFAULT",
+              "string",
+              fieldValueOf("stringValue", el("qti-default", [attr("identifier", "R")])),
+            ],
+            [
+              "CORRECT",
+              "float",
+              fieldValueOf("floatValue", el("qti-correct", [attr("identifier", "R")])),
+            ],
+          ],
+          recordOf({}),
+        );
+
+        assert.deepStrictEqual(
+          [outcomes["DEFAULT"], outcomes["CORRECT"]],
+          [stringValue("abc"), float(12.5)],
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-9a] reads a record field through qti-match: the response matches its correct response when the records are equal, not when it holds a field more, and is NULL when it is NULL",
+    () =>
+      Effect.gen(function* matchesRecords() {
+        const matching = [
+          [
+            "MATCHED",
+            "boolean",
+            expressionElement(
+              "match",
+              [],
+              [variableElement("R"), el("qti-correct", [attr("identifier", "R")])],
+            ),
+          ],
+        ] as const;
+        const reordered = recordOf({
+          floatValue: { baseType: "float", value: 12.5 },
+          stringValue: { baseType: "string", value: "12.5" },
+        });
+        const more = recordOf({
+          exponent: { baseType: "integer", value: 3n },
+          floatValue: { baseType: "float", value: 12.5 },
+          stringValue: { baseType: "string", value: "12.5" },
+        });
+
+        const equal = yield* recordRun(matching, reordered);
+        const longer = yield* recordRun(matching, more);
+        const empty = yield* recordRun(matching, recordOf({}));
+
+        assert.deepStrictEqual(
+          [equal["MATCHED"], longer["MATCHED"], empty["MATCHED"]],
+          [booleanValue(true), booleanValue(false), nullOf("boolean", "single")],
+        );
+      }),
+  );
+
+  it.effect("[I-9a] reads a record field of qti-null as NULL", () =>
+    Effect.gen(function* fieldOfNull() {
+      const outcomes = yield* recordRun(
+        [["NONE", "boolean", isNullOf(fieldValueOf("stringValue", el("qti-null")))]],
+        twelveAndAHalf,
+      );
+
+      assert.deepStrictEqual(outcomes["NONE"], booleanValue(true));
+    }),
+  );
+
+  it("[I-9a] gives NULL for a container built over a qti-field-value, whose base type the model leaves unknown", () => {
+    const field: Expression = {
+      fieldIdentifier: "stringValue",
+      kind: "field-value",
+      operands: [operandOf(one("A"))],
+    };
+
+    assert.deepStrictEqual(evaluated(besideOf(field, one("B"))), bag());
   });
 });

@@ -10,7 +10,7 @@
 import { Option } from "effect";
 import type { Item, OutcomeDeclaration } from "#plate/model/item.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 
 /**
  * One item's session as the renderer holds it, each value of base type integer an exact `bigint`.
@@ -21,10 +21,11 @@ import type { Value } from "#plate/model/values.ts";
  * refused post is no state of the record: `score` returns no record for it, and a host that counts
  * refused posts keeps that count itself.
  * `responses` and `outcomes` hold every modelled variable by identifier, NULL included, and
- * `outcomes` the built-in `completionStatus` too where the item holds it
- * ({@link holdsCompletionStatus}). A record written before the built-in was held lacks it, and an
- * attempt starts it at `unknown`. `notices` names the unsupported features the item shows as
- * notices.
+ * `records` holds each record response's value beside `responses`, by the response's identifier;
+ * template processing never sets one. `outcomes` holds the built-in `completionStatus` too where
+ * the item holds it ({@link holdsCompletionStatus}). A record written before the built-in was held
+ * lacks it, and an attempt starts it at `unknown`. `notices` names the unsupported features the
+ * item shows as notices.
  *
  * `seed` is the seed the record started under: the host's string, used as given, or the one
  * `begin`, `startTest` or `score` drew when the host gave none. `templates` holds the template
@@ -48,6 +49,7 @@ export interface ItemRecord {
   readonly notices: readonly string[];
   readonly numAttempts: number;
   readonly outcomes: { readonly [identifier: string]: Value };
+  readonly records: { readonly [identifier: string]: RecordValue };
   readonly responses: { readonly [identifier: string]: Value };
   readonly seed: string;
   readonly templates: { readonly [identifier: string]: Value };
@@ -73,12 +75,13 @@ export type SolutionRecord = Pick<ItemRecord, "correct">;
 
 /**
  * The part of an {@link ItemRecord} a test's outcome processing reads through the test scope
- * (`#plate/engine/scope.ts`): the responses, the outcomes and the template values, and the correct
- * responses and defaults template processing set. It holds no seed.
+ * (`#plate/engine/scope.ts`): the responses and the record responses' records, the outcomes and
+ * the template values, and the correct responses and defaults template processing set. It holds
+ * no seed.
  */
 export type ScopeRecord = Pick<
   ItemRecord,
-  "correct" | "defaults" | "outcomes" | "responses" | "templates"
+  "correct" | "defaults" | "outcomes" | "records" | "responses" | "templates"
 >;
 
 /**
@@ -220,8 +223,8 @@ export const outcomeDefaults = (item: Item): ItemRecord["outcomes"] => {
  * @param instance The host's name for this use of the item, which scopes its ids.
  * @returns The record: every response NULL, the outcomes at {@link outcomeDefaults}, the
  *   built-in `completionStatus` `not_attempted` among them, no attempts, the features of
- *   `item.unsupported` shown as notices, the seed `""`, and no template value, correct response
- *   or default.
+ *   `item.unsupported` shown as notices, the seed `""`, and no record response's value, template
+ *   value, correct response or default.
  */
 export const fresh = (item: Item, instance: string): ItemRecord => ({
   attempt: "none",
@@ -234,6 +237,7 @@ export const fresh = (item: Item, instance: string): ItemRecord => ({
   notices: item.unsupported.flatMap((entry) => (entry.shown === "notice" ? [entry.feature] : [])),
   numAttempts: 0,
   outcomes: outcomeDefaults(item),
+  records: {},
   responses: Object.fromEntries(
     Array.from(item.responses, ([identifier, response]) => [
       identifier,

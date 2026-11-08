@@ -123,13 +123,13 @@ const declarations = [
  * The response rules of the engine: `qti-response-condition` with its three branches,
  * `qti-set-outcome-value`, `qti-lookup-outcome-value`, `qti-exit-response`, and
  * `qti-response-processing-fragment`, whose rules run in its place. The expression kinds the engine
- * runs are not listed here: they are the registry's landed kinds (`landedKinds` in
- * `#plate/model/expressions/read.ts`), which the item model reads, so a family lands a kind with no
- * edit here.
+ * runs are not listed here: it runs each of the 64 (`expressionKinds` in
+ * `#plate/model/expression.ts`), which the item model reads through the registry
+ * (`#plate/model/expressions/read.ts`).
  *
- * An inline `qti-response-processing` that uses only these rules and landed expression kinds
- * becomes a rule tree; one that uses any other element is a mark keyed by that element's name, and
- * one that holds an XInclude `include` is the mark `xi:include`, since it is never fetched.
+ * An inline `qti-response-processing` that uses only these rules and expression kinds becomes a
+ * rule tree; one that uses any other element is a mark keyed by that element's name, and one that
+ * holds an XInclude `include` is the mark `xi:include`, since it is never fetched.
  */
 const engine = [
   "qti-response-condition",
@@ -147,13 +147,12 @@ const engine = [
  * `qti-template-else-if` and a `qti-template-else` hold (`qti-set-template-value`,
  * `qti-set-correct-response`, `qti-set-default-value`, `qti-template-condition`,
  * `qti-template-constraint` and `qti-exit-template`), and the three parts of a
- * `qti-template-condition`. The expression kinds they hold are the registry's landed kinds, as for
+ * `qti-template-condition`. The expression kinds they hold are every one the registry reads, as for
  * {@link engine}.
  *
  * The item model reads template processing through these (`templateRules` in
- * `#plate/model/template.ts`): template processing that holds any other element, or an expression
- * kind the registry has not landed, is none, and that element is a mark keyed by its name. This is
- * the one list of these names.
+ * `#plate/model/template.ts`): template processing that holds any other element is none, and that
+ * element is a mark keyed by its name. This is the one list of these names.
  */
 const templateRules = [
   "qti-set-template-value",
@@ -194,7 +193,6 @@ export interface FormattedBindingRule extends BindingRule {
  * - `attribute-value`: the element's attribute `name` has the value `value`.
  * - `attribute-true`: the element's `xs:boolean` attribute `name` is true: `true` or `1` once its
  *   outer whitespace goes, as XSD reads it (reading Q8).
- * - `cardinality`: the response declaration the interaction binds has this cardinality.
  * - `integer-above`: the element's attribute `name`, its outer whitespace gone, reads as an integer
  *   greater than `limit`. A value that is not an integer never is.
  * - `not-text-safe`: some descendant of one of the element's `qti-inline-choice` children is neither
@@ -212,7 +210,6 @@ export type Condition =
   | { readonly kind: "attribute"; readonly name: string }
   | { readonly kind: "attribute-value"; readonly name: string; readonly value: string }
   | { readonly kind: "attribute-true"; readonly name: string }
-  | { readonly cardinality: Cardinality; readonly kind: "cardinality" }
   | { readonly kind: "integer-above"; readonly limit: bigint; readonly name: string }
   | { readonly elements: readonly string[]; readonly kind: "not-text-safe" }
   | { readonly kind: "refused-pattern"; readonly name: string }
@@ -237,7 +234,9 @@ export interface FeatureRule {
  */
 export interface Renders {
   /**
-   * The interactions plate renders, each with the binding it renders with.
+   * The interactions plate renders, each with the binding it renders with. A Text Entry or an
+   * Extended Text also renders bound to a record response the item model holds, as the string
+   * control, since a record has no base type of its own: the text typed gives its fields.
    */
   readonly bindings: {
     readonly "qti-choice-interaction": BindingRule;
@@ -256,26 +255,29 @@ export interface Renders {
    * template declarations, the template processing and its template rules, and
    * `qti-printed-variable`, `qti-template-block` (whose content is its `qti-content-body`'s) and
    * `qti-template-inline`, which the item model holds as body nodes. The item model also reads the
-   * element of each expression kind the registry has landed (`landedKinds` in
-   * `#plate/model/expressions/read.ts`). Every element in the QTI namespace without the `qti-`
-   * prefix is HTML and renders as itself.
+   * element of each of the 64 expression kinds (`expressionKinds` in `#plate/model/expression.ts`).
+   * Every element in the QTI namespace without the `qti-` prefix is HTML and renders as itself.
    */
   readonly elements: readonly string[];
   /**
-   * The response rules the engine runs. The expression kinds it runs are the registry's landed
-   * kinds, which the item model reads.
+   * The response rules the engine runs. The expression kinds it runs are every one the item model
+   * reads.
    */
   readonly engine: readonly string[];
   /**
    * The features recorded on the verdict with no body notice. A declaration the model does not hold
    * carries one: its base type (`file`, or `base-type=""` when it has none) or
-   * `cardinality="record"`. Beyond these, a `qti-*` element outside the item body and outside
-   * `elements` is a mark keyed by its own name, response processing by a template URI outside the
-   * built-ins is a mark keyed `template="<uri>"`, inline response processing with an element
-   * outside `engine` and the registry's landed expression kinds is a mark keyed by that element's
-   * name (an XInclude `include` there is keyed `xi:include`), and the text family's reader marks a
-   * `qti-pattern-match` literal it cannot compile `pattern`, a `qti-inside` coordinate written with
-   * `%` `area-coords-percent`, and every `qti-custom-operator` by its own name.
+   * `cardinality="record"`, which an outcome or template declaration of that cardinality carries,
+   * and a record response declaration only when the item model marks it, for a `file` base type of
+   * its own or of a field, since the model holds every other. Beyond these, a `qti-*` element
+   * outside the item body and outside `elements` is a mark keyed by its own name, response
+   * processing by a template URI outside the built-ins is a mark keyed `template="<uri>"`, inline
+   * response processing with an element outside `engine` and the expression kinds is a mark keyed
+   * by that element's name (an XInclude `include` there is keyed `xi:include`), the text family's
+   * reader marks a `qti-pattern-match` literal it cannot compile `pattern`, a `qti-inside`
+   * coordinate written with `%` `area-coords-percent`, and every `qti-custom-operator` by its own
+   * name, and the template processing reader marks a `qti-set-correct-response` or
+   * `qti-set-default-value` that sets a record response `record-set`.
    */
   readonly marks: readonly FeatureRule[];
   /**
@@ -286,7 +288,7 @@ export interface Renders {
   readonly notices: readonly FeatureRule[];
   /**
    * The template rules the item model reads template processing through. The expression kinds
-   * they hold are the registry's landed kinds, as for `engine`.
+   * they hold are every one the item model reads, as for `engine`.
    */
   readonly templateRules: readonly string[];
 }
@@ -366,9 +368,13 @@ export const renders = {
       on: declarations,
       when: { kind: "attribute-value", name: "base-type", value: "file" },
     },
+    // A record response declaration is the item model's to mark, since this condition cannot see a
+    // field's base type: it holds one in `Item.records` with no mark, and marks one itself
+    // (`buildItem`) when its own base type, or a field's, is `file`. A test's outcome declarations
+    // take this rule too.
     {
       feature: 'cardinality="record"',
-      on: declarations,
+      on: ["qti-outcome-declaration", "qti-template-declaration"],
       when: { kind: "attribute-value", name: "cardinality", value: "record" },
     },
     // A declaration with no base type is keyed `base-type=""`, as an interaction bound to one is.
@@ -394,11 +400,6 @@ export const renders = {
       feature: "pattern-mask",
       on: textInteractions,
       when: { kind: "refused-pattern", name: "pattern-mask" },
-    },
-    {
-      feature: 'cardinality="record"',
-      on: textInteractions,
-      when: { cardinality: "record", kind: "cardinality" },
     },
     // An Inline Choice with a choice a native option cannot show is shown whole as this notice
     // (I8); nothing is refused for it.

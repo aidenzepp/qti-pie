@@ -696,23 +696,81 @@ describe("the containers family's reader specs and kind rules", () => {
   });
 
   it.effect(
-    "qti-field-value stays a stub: it is marked at its path and the processing runs none",
+    "[I-9a] reads a qti-field-value of a record response, its field-identifier with its outer whitespace gone, and keeps the processing with no mark",
     () =>
-      Effect.gen(function* marksStub() {
-        const field = expressionElement(
-          "field-value",
-          [attr("field-identifier", "f")],
-          [variableElement("RESPONSE")],
-        );
+      Effect.gen(function* readsFieldValue() {
         const built = yield* buildItem(
-          outItem("identifier", "single", field, [responseDeclaration("RESPONSE", "identifier")]),
+          outItem(
+            "string",
+            "single",
+            expressionElement(
+              "field-value",
+              [attr("field-identifier", " stringValue ")],
+              [variableElement("ANSWER")],
+            ),
+            [
+              el("qti-response-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "ANSWER"),
+              ]),
+            ],
+          ),
         );
 
-        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, []);
         assert.deepStrictEqual(
-          built.unsupported.map((mark) => mark.feature),
-          [field.local],
+          built.processing,
+          Option.some([
+            {
+              expression: {
+                fieldIdentifier: "stringValue",
+                kind: "field-value",
+                operands: [
+                  {
+                    identifier: "ANSWER",
+                    kind: "variable",
+                    operands: [],
+                    weightIdentifier: Option.none(),
+                  },
+                ],
+              },
+              identifier: "OUT",
+              kind: "set-outcome",
+            },
+          ]),
         );
       }),
   );
+
+  it("[I-9a] refuses a qti-field-value of a single identifier at the qti-field-value, its operand not a record (P23)", () => {
+    assert.deepStrictEqual(
+      refusalsOf(
+        outItem(
+          "identifier",
+          "single",
+          expressionElement(
+            "field-value",
+            [attr("field-identifier", "f")],
+            [variableElement("RESPONSE")],
+          ),
+          [responseDeclaration("RESPONSE", "identifier")],
+        ),
+      ),
+      [
+        {
+          detail: {
+            acceptsBaseTypes: "any",
+            acceptsCardinalities: "record",
+            check: "operand",
+            element: "qti-field-value",
+            expressionBaseType: "identifier",
+            expressionCardinality: "single",
+            operand: "1",
+          },
+          path: `${setOut}/qti-field-value`,
+          rule: "expression-type",
+        },
+      ],
+    );
+  });
 });

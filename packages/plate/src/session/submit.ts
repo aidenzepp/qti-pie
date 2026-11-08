@@ -27,7 +27,8 @@ import type { Item } from "#plate/model/item.ts";
 import { refIdentifiersIn } from "#plate/model/item-refs.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import type { Test, TestPart } from "#plate/model/test.ts";
-import { isNull, match } from "#plate/model/values.ts";
+import { atDefault, isNullResponse } from "#plate/model/values.ts";
+import type { ResponseValue } from "#plate/model/values.ts";
 import { postingsIn, redactStructure } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
@@ -48,6 +49,7 @@ import {
   partStarted,
   present,
   recordStep,
+  valuesOf,
   withItem,
 } from "#plate/session/start.ts";
 import type { InvalidTime } from "#plate/session/start.ts";
@@ -297,20 +299,6 @@ export const deliveredItem = (
 };
 
 /**
- * Give the responses an item's attempt is processed with: each saved response, else its record's,
- * which holds NULL or, once the item is presented, its default (D4-11): the one its template
- * processing set, else its declared one.
- *
- * @param item The session item.
- * @returns The responses, by identifier.
- */
-const valuesOf = (item: SessionItem): Responses =>
-  Option.match(item.saved, {
-    onNone: () => item.record.responses,
-    onSome: (saved) => ({ ...item.record.responses, ...saved }),
-  });
-
-/**
  * Say whether an item's responses skip it.
  *
  * The information model defines an item as skipped when every response variable is submitted with
@@ -321,7 +309,9 @@ const valuesOf = (item: SessionItem): Responses =>
  * (`qti-set-default-value`, `info.txt:65219`), else its declaration's `qti-default-value`. So a
  * response left at a default template processing set skips the item as one left at a declared
  * default does, and a value equal to the declared default answers it when template processing set
- * another.
+ * another. A record response counts beside the others: it is at its default when it holds the
+ * fields of its declared one, in any order (`sameRecord`), since template processing never sets a
+ * record, and a NULL record, one with no field, is NULL.
  *
  * Only the responses a rendered page can post count: those `postings` lists for the item redacted
  * under its record (ruling R2 of phase 4's repair, 2026-11-06), read through `redactStructure`,
@@ -350,27 +340,29 @@ const skipped = (
   const posted = new Set(
     postingsIn(redactStructure(item, record), instance).map(({ identifier }) => identifier),
   );
-  const declarations = [...item.responses.values()].filter(({ identifier }) =>
-    posted.has(identifier),
-  );
+  const counted: readonly {
+    readonly fallback: Option.Option<ResponseValue>;
+    readonly identifier: string;
+  }[] = [
+    ...Array.from(item.responses.values(), ({ defaultValue, identifier }) => ({
+      fallback: Option.orElse(own(record.defaults, identifier), () => defaultValue),
+      identifier,
+    })),
+    ...Array.from(item.records?.values() ?? [], ({ defaultValue, identifier }) => ({
+      fallback: defaultValue,
+      identifier,
+    })),
+  ].filter(({ identifier }) => posted.has(identifier));
 
   return (
-    declarations.length > 0 &&
-    declarations.every((declaration) => {
-      const value = Object.hasOwn(values, declaration.identifier)
-        ? values[declaration.identifier]
-        : undefined;
+    counted.length > 0 &&
+    counted.every(({ fallback, identifier }) => {
+      const value = Object.hasOwn(values, identifier) ? values[identifier] : undefined;
 
       return (
         value === undefined ||
-        isNull(value) ||
-        Option.exists(
-          Option.orElse(
-            own(record.defaults, declaration.identifier),
-            () => declaration.defaultValue,
-          ),
-          (fallback) => match(value, fallback),
-        )
+        isNullResponse(value) ||
+        Option.exists(fallback, (declared) => atDefault(value, declared))
       );
     })
   );
@@ -545,14 +537,14 @@ const partEnded = (
  * reached its effective attempt limit above 0 is `attempts-exhausted`, and an item closed otherwise
  * `item-closed`; under `allow-skipping` false an item whose every response a page can post is NULL
  * or its default, the one its record's template processing set or else its declared one, is
- * `skipping-not-allowed`; under `validate-responses` true, responses `checkResponses` gives
- * messages for are `responses-invalid`. `checkResponses` judges them under the item's record, the
- * template values its page was shown with, so a choice its template hides is refused and one it
- * shows is judged as the page showed it, and an interaction a hidden template block holds is not
- * judged. Otherwise `score` runs over the item's record with its saved responses, and its
- * failures, `ResponsesRefused` among them, pass through. The test's outcome processing then runs
- * over the session, and its `EngineFailure` passes through. The item stays current: moving on is a
- * move's.
+ * `skipping-not-allowed`, a record response counted beside the others; under `validate-responses`
+ * true, responses `checkResponses` gives messages for, a record response's typed text among them,
+ * are `responses-invalid`. `checkResponses` judges them under the item's record, the template
+ * values its page was shown with, so a choice its template hides is refused and one it shows is
+ * judged as the page showed it, and an interaction a hidden template block holds is not judged.
+ * Otherwise `score` runs over the item's record with its saved responses, and its failures,
+ * `ResponsesRefused` among them, pass through. The test's outcome processing then runs over the
+ * session, and its `EngineFailure` passes through. The item stays current: moving on is a move's.
  *
  * @example
  *   submitItem(test, items, session, { intent: { kind: "submit-item" }, responses }, configuration, {

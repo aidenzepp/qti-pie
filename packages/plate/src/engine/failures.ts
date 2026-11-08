@@ -1,7 +1,8 @@
 /**
  * The failures the engine returns, a leaf the evaluator, the reference resolver and the expression
  * families share: the rules name an identifier the item or the variables do not hold, set a
- * variable to a value of another type, or map a response that has no mapping.
+ * variable to a value of another type, map a response that has no mapping, or read a record
+ * response as a value.
  *
  * Each is a failure the caller can cause, since the variables come from the record the host hands
  * back, and a test's template defaults from a test checked apart from its items, so the engine
@@ -136,7 +137,41 @@ export class UnmappedResponseError extends Data.TaggedError("UnmappedResponseErr
 }
 
 /**
- * A failure the engine returns: the rules name an identifier the item or the variables do not hold,
- * set a variable to a value of another type, or map a response that has no mapping.
+ * The failure of a value read that finds a record response: a `qti-variable`, or an attribute that
+ * names a variable, whose name the variables hold a record of (`Variables.records`), anywhere but
+ * as the operand of the three kinds that read a record whole, `qti-field-value`, `qti-is-null` and
+ * `qti-match`.
+ *
+ * An evaluator takes and gives a value of a base type and a single, multiple or ordered
+ * cardinality, which a record is not. On a checked item no path reaches it: every other kind's rule
+ * refuses an operand of cardinality `record`, as the qti package's do (P23), and so does every rule
+ * that sets a variable to an expression of another type (P20). Where documents are checked apart, a
+ * read the checks never judged together may find a record, and this is that read's typed failure,
+ * which the engine returns and never throws.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpFieldValue
  */
-export type EngineFailure = OutcomeMismatchError | UnknownIdentifierError | UnmappedResponseError;
+export class RecordOperandError extends Data.TaggedError("RecordOperandError")<{
+  /**
+   * The identifier of the record response the rules read as a value.
+   */
+  readonly identifier: string;
+}> {
+  /**
+   * The variable, why it cannot be read as a value, and the three kinds that read it, in one line.
+   */
+  override get message(): string {
+    return `The rules read the record response ${JSON.stringify(this.identifier)} as a value, and a record has no value of one base type: read one of its fields with qti-field-value, or read it whole with qti-is-null or qti-match.`;
+  }
+}
+
+/**
+ * A failure the engine returns: the rules name an identifier the item or the variables do not hold,
+ * set a variable to a value of another type, map a response that has no mapping, or read a record
+ * response as a value.
+ */
+export type EngineFailure =
+  | OutcomeMismatchError
+  | RecordOperandError
+  | UnknownIdentifierError
+  | UnmappedResponseError;

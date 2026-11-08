@@ -526,6 +526,21 @@ describe("ledger/report.ts", () => {
     }),
   );
 
+  it.effect("no stage claim: no claim's source names a plan stage, and I-19 alone is limited", () =>
+    Effect.gen(function* noStageClaim() {
+      const built = yield* fixtureLedger;
+
+      assert.deepStrictEqual(
+        claims.filter((claim) => /\bstages?\b|\bM\d+\.|\bP\d+R-/u.test(claim.source)),
+        [],
+      );
+      assert.deepStrictEqual(
+        built.rows.filter((row) => row.state === "limited").map((row) => row.id),
+        ["I-19"],
+      );
+    }),
+  );
+
   it.effect("a row no test carries is unsupported-with-notice", () =>
     Effect.gen(function* none() {
       const row = rowOf(yield* fixtureLedger, "A-1");
@@ -787,7 +802,7 @@ describe("ledger/report.ts", () => {
       const built = yield* fixtureLedger;
 
       assert.deepStrictEqual(built.headlines, {
-        advanced: { covered: 1, excluded: 0, limited: 1, "unsupported-with-notice": 28 },
+        advanced: { covered: 1, excluded: 0, limited: 0, "unsupported-with-notice": 29 },
         basic: { covered: 6, excluded: 0, limited: 1, "unsupported-with-notice": 11 },
         elective: { covered: 0, excluded: 2, limited: 0, "unsupported-with-notice": 88 },
         elevated: { covered: 0, excluded: 0, limited: 0, "unsupported-with-notice": 12 },

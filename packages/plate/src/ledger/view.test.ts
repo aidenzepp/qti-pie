@@ -525,10 +525,9 @@ describe("ledger/view.ts", () => {
       `I-19 QTI Shared Interaction Vocabulary Subset: ${claim.source}`,
     );
     assert.isAtLeast(limitedAt, 0);
-    assert.include(
-      lines.slice(limitedAt + 1, lines.indexOf("", limitedAt)),
+    assert.deepStrictEqual(lines.slice(limitedAt + 1, lines.indexOf("", limitedAt)), [
       `I-19 QTI Shared Interaction Vocabulary Subset: ${claim.source}`,
-    );
+    ]);
   });
 
   it("links each proof to its test file and its fixture documents", () => {

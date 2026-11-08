@@ -14,7 +14,7 @@ import { drawBelow, drawStream, outcomeLabel } from "#plate/engine/random.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { results } from "#plate/results/results.ts";
 import { ResponsesRefused, score as scoreResponses } from "#plate/score.ts";
 import { attemptLimits } from "#plate/session/control.ts";
@@ -23,7 +23,7 @@ import { itemView, present, recordStep, startTest } from "#plate/session/start.t
 import { SubmissionRefused, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
 import type { SubmissionRule } from "#plate/session/submit.ts";
 import { open } from "#plate/validate/open.ts";
-import { acceptedItem } from "#plate/validate/verdict.ts";
+import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -1266,6 +1266,68 @@ describe("submitItem", () => {
         assert.deepStrictEqual(scoreOf(itemAt(answered, 1).record), scored(1));
       }),
   );
+
+  it.effect(
+    "[T-14] saves a step's record on an item with a record response, and submit-item scores it into the item record's records, apart from its responses",
+    () =>
+      Effect.gen(function* savesAndScoresRecord() {
+        const built = yield* builtDelivery(
+          "recorded",
+          [partOf("part", ["recorded"])],
+          [["recorded", choiceItemXml("recorded")]],
+        );
+        const plain = built.items.get("recorded") ?? assert.fail("recorded is not delivered");
+        const delivery: Delivery = {
+          items: new Map([
+            [
+              "recorded",
+              acceptForTest({
+                ...plain.item,
+                records: new Map([
+                  [
+                    "RREC",
+                    { correct: Option.none(), defaultValue: Option.none(), identifier: "RREC" },
+                  ],
+                ]),
+              }),
+            ],
+          ]),
+          test: built.test,
+        };
+        const answer: RecordValue = {
+          cardinality: "record",
+          fields: [
+            { identifier: "stringValue", value: { baseType: "string", value: "-0.050" } },
+            { identifier: "floatValue", value: { baseType: "float", value: -0.05 } },
+          ],
+        };
+        const configuration = yield* configure({});
+        const saved = accepted(
+          recordStep(
+            started(delivery, configuration),
+            stepOf("submit-item", { RESPONSE: chosen("A"), RREC: answer }),
+            after(2),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          itemAt(saved, 1).saved,
+          Option.some({ RESPONSE: chosen("A"), RREC: answer }),
+        );
+
+        const submitted = accepted(
+          submitItem(delivery.test, delivery.items, saved, stepOf("submit-item"), configuration, {
+            now: after(5),
+          }),
+        );
+        const { record } = itemAt(submitted, 1);
+
+        assert.deepStrictEqual(record.records, { RREC: answer });
+        assert.isFalse(Object.hasOwn(record.responses, "RREC"));
+        assert.deepStrictEqual(scoreOf(record), scored(1));
+        assert.deepStrictEqual(itemAt(submitted, 1).saved, Option.none());
+      }),
+  );
 });
 
 describe("submitPart", () => {
@@ -2310,6 +2372,147 @@ describe("a nonlinear item ref's template defaults when its part starts", () => 
           itemAt(ended, 2).record.templates["U"],
           nullOf("duration", "single"),
         );
+      }),
+  );
+});
+
+/**
+ * Write the text of a hand-built item whose one response is the record response `ANSWER`, bound to
+ * a Text Entry, with no response processing.
+ *
+ * @param identifier The item's identifier.
+ * @param options What the item adds.
+ * @param options.defaultValue The `qti-value` elements of `ANSWER`'s declared default, as text,
+ *   when it declares one.
+ * @param options.patternMask The Text Entry's `pattern-mask`, when it sets one.
+ * @returns The item's text.
+ */
+const recordItemXml = (
+  identifier: string,
+  options: { readonly defaultValue?: string; readonly patternMask?: string } = {},
+): string =>
+  [
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-response-declaration identifier="ANSWER" cardinality="record">',
+    options.defaultValue === undefined
+      ? ""
+      : `<qti-default-value>${options.defaultValue}</qti-default-value>`,
+    "</qti-response-declaration>",
+    "<qti-item-body><p>Your number: ",
+    `<qti-text-entry-interaction response-identifier="ANSWER"${options.patternMask === undefined ? "" : ` pattern-mask="${options.patternMask}"`}/>`,
+    "</p></qti-item-body>",
+    "</qti-assessment-item>",
+  ].join("");
+
+/**
+ * Construct the record a candidate's text gives, holding only its `stringValue`, as a host may
+ * build it; the NULL record for empty text.
+ *
+ * @param text The text as typed.
+ * @returns The record.
+ */
+const typedRecord = (text: string): RecordValue => ({
+  cardinality: "record",
+  fields:
+    text === "" ? [] : [{ identifier: "stringValue", value: { baseType: "string", value: text } }],
+});
+
+describe("submitItem and a record response", () => {
+  it.effect(
+    '[Q-20] refuses a skipped record answer in a linear part under allow-skipping="false": an empty submission, the NULL record and the declared default are skipping-not-allowed, and one that posts text is accepted',
+    () =>
+      Effect.gen(function* skippedRecordAnswer() {
+        const configuration = yield* configure({});
+        const begunWith = Effect.fnUntraced(function* begunWith(xml: string) {
+          const delivery = yield* builtDelivery(
+            "linear",
+            [
+              partOf("part", ["recorded"], {
+                control: 'allow-skipping="false"',
+                navigation: "linear",
+              }),
+            ],
+            [["recorded", xml]],
+          );
+
+          return (seconds: number, responses?: Responses) =>
+            submitItem(
+              delivery.test,
+              delivery.items,
+              started(delivery, configuration),
+              stepOf("submit-item", responses),
+              configuration,
+              { now: after(seconds) },
+            );
+        });
+        const bare = yield* begunWith(recordItemXml("bare"));
+        const defaulted = yield* begunWith(
+          recordItemXml("defaulted", {
+            defaultValue: [
+              '<qti-value field-identifier="stringValue" base-type="string">0</qti-value>',
+              '<qti-value field-identifier="integerValue" base-type="integer">0</qti-value>',
+            ].join(""),
+          }),
+        );
+        const answer = typedRecord("12");
+        const reordered: RecordValue = {
+          cardinality: "record",
+          fields: [
+            { identifier: "integerValue", value: { baseType: "integer", value: 0n } },
+            { identifier: "stringValue", value: { baseType: "string", value: "0" } },
+          ],
+        };
+
+        assert.strictEqual(refusedRule(bare(5)), "skipping-not-allowed");
+        assert.strictEqual(
+          refusedRule(bare(6, { ANSWER: typedRecord("") })),
+          "skipping-not-allowed",
+        );
+        assert.strictEqual(refusedRule(defaulted(7)), "skipping-not-allowed");
+        assert.strictEqual(
+          refusedRule(defaulted(8, { ANSWER: reordered })),
+          "skipping-not-allowed",
+        );
+
+        const answered = itemAt(accepted(bare(9, { ANSWER: answer })), 1).record;
+
+        assert.strictEqual(answered.numAttempts, 1);
+        assert.deepStrictEqual(answered.records["ANSWER"], answer);
+        assert.strictEqual(
+          itemAt(accepted(defaulted(10, { ANSWER: typedRecord("0") })), 1).record.numAttempts,
+          1,
+        );
+      }),
+  );
+
+  it.effect(
+    '[Q-20] under validate-responses="true" judges a record-bound Text Entry against its pattern-mask as typed: 12.0 is responses-invalid, and 12 is accepted',
+    () =>
+      Effect.gen(function* judgedRecord() {
+        const delivery = yield* builtDelivery(
+          "masked",
+          [partOf("part", ["masked"], { control: 'validate-responses="true"' })],
+          [["masked", recordItemXml("masked", { patternMask: "[0-9]+" })]],
+        );
+        const configuration = yield* configure({});
+        const begun = started(delivery, configuration);
+        const submit = (text: string, seconds: number) =>
+          submitItem(
+            delivery.test,
+            delivery.items,
+            begun,
+            stepOf("submit-item", { ANSWER: typedRecord(text) }),
+            configuration,
+            { now: after(seconds) },
+          );
+        const failure = refusal(submit("12.0", 5));
+
+        assert.strictEqual(failure.rule, "responses-invalid");
+        assert.deepStrictEqual(
+          failure.messages.map((message) => message.response),
+          ["ANSWER"],
+        );
+        assert.strictEqual(itemAt(accepted(submit("12", 6)), 1).record.numAttempts, 1);
       }),
   );
 });

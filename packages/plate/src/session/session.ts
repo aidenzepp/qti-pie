@@ -10,13 +10,14 @@
  */
 import type { Option } from "effect";
 import type { ItemRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { ResponseValue, Value } from "#plate/model/values.ts";
 
 /**
  * The values a candidate gave an item, by response identifier, each value of base type integer an
- * exact `bigint`.
+ * exact `bigint`: a {@link Value} for a response of a modelled base type and cardinality, and a
+ * `RecordValue` for a record response.
  */
-export type Responses = Readonly<Record<string, Value>>;
+export type Responses = Readonly<Record<string, ResponseValue>>;
 
 /**
  * Where a test part stands: `pending` before the candidate reaches it, `current` while they are

@@ -28,7 +28,7 @@ import type { PrintOptions } from "#plate/engine/format.ts";
 import { integerOf } from "#plate/engine/numbers.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
-import { entryName, isPosted } from "#plate/form/encoding.ts";
+import { entryName, isPosted, recordText } from "#plate/form/encoding.ts";
 import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
@@ -52,8 +52,8 @@ import type {
 } from "#plate/model/item.ts";
 import { outcomeDefaults, unrunTemplateProcessing } from "#plate/model/record.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
-import { format, nullOf } from "#plate/model/values.ts";
-import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
+import type { ModelledBaseType, ResponseValue, Single, Value } from "#plate/model/values.ts";
 import { clampOutputBudget, defaultOutputBudget } from "#plate/output-budget.ts";
 
 /**
@@ -114,9 +114,10 @@ export interface View {
   readonly seed?: string;
   /**
    * The value each response's controls show, such as its `defaultValue` or a value the author's
-   * flow recorded; NULL when absent.
+   * flow recorded; NULL when absent. A record shows its `stringValue`, the text it was typed as,
+   * and a record without one shows an empty control.
    */
-  readonly values: ReadonlyMap<string, Value>;
+  readonly values: ReadonlyMap<string, ResponseValue>;
 }
 
 /**
@@ -379,11 +380,11 @@ export interface ExtendedTextPayload extends TextControlPayload {
   readonly format: ExtendedTextInteraction["format"];
   readonly kind: "extended-text";
   /**
-   * The number of Controls (Q9): 1 for a `single` binding; for a container, `max-strings` when it
-   * is from 1 to 10, else the greater of 10 and `min-strings`, so `max-strings="0"` and an absent
-   * one give at least 10 (reading 53). It also covers every member of the value or post it
-   * restores, up to a nonzero `max-strings`. At most 100 (Q23), and 0 when `min-strings` exceeds
-   * 100.
+   * The number of Controls (Q9): 1 for a `single` or a `record` binding; for a container,
+   * `max-strings` when it is from 1 to 10, else the greater of 10 and `min-strings`, so
+   * `max-strings="0"` and an absent one give at least 10 (reading 53). It also covers every member
+   * of the value or post it restores, up to a nonzero `max-strings`. At most 100 (Q23), and 0 when
+   * `min-strings` exceeds 100.
    */
   readonly n: number;
   /**
@@ -437,22 +438,26 @@ export interface Payload {
 }
 
 /**
- * A response's binding as the page may know it: its identifier, base type and cardinality, with no
- * correct response, mapping or default.
+ * A response's binding as the page may know it, with no correct response, mapping or default: for
+ * a response of a base type its identifier, base type and cardinality, and for a record response
+ * its identifier and the cardinality `record`, since a record has no base type of its own.
  */
-export interface ResponseBinding {
-  readonly baseType: ModelledBaseType;
-  readonly cardinality: Value["cardinality"];
-  readonly identifier: string;
-}
+export type ResponseBinding =
+  | {
+      readonly baseType: ModelledBaseType;
+      readonly cardinality: Value["cardinality"];
+      readonly identifier: string;
+    }
+  | { readonly cardinality: "record"; readonly identifier: string };
 
 /**
  * The fields of an item the page may know, which {@link redactItem} copies by name.
  *
- * `responses` lists the response bindings in document order, every response but those only content
- * the page does not see binds ({@link hiddenOnlyResponses}), and `notices` the features the body
- * shows as notices. Exported for the codec of {@link Redacted}'s JSON form, whose Schema's type it
- * is; `src/index.ts` does not export it.
+ * `responses` lists the response bindings, every response but those only content the page does not
+ * see binds ({@link hiddenOnlyResponses}): those of a base type in document order, then the record
+ * responses in document order. `notices` lists the features the body shows as notices. Exported for
+ * the codec of {@link Redacted}'s JSON form, whose Schema's type it is; `src/index.ts` does not
+ * export it.
  */
 export interface RedactedFields {
   readonly body: readonly BodyNode[];
@@ -653,12 +658,24 @@ export const identifyMessages = (
 /**
  * Give the values the view shows for a response.
  *
+ * A record shows its `stringValue` field ({@link recordText}), the text it was typed as, in the
+ * string control a text interaction binds to it, so the text the candidate typed comes back as
+ * typed. A record without that field, such as the NULL record or a correct response that declares
+ * none, leaves the control empty. Restored text counts toward the output budget as any other.
+ *
  * @param build The build.
  * @param response The response identifier.
- * @returns Its values, none when it is NULL or the view gives none.
+ * @returns Its values, a record's `stringValue` alone; none when it is NULL, a record without a
+ *   `stringValue`, or the view gives none.
  */
-const shown = (build: Pick<Build, "values">, response: string): readonly Single[] =>
-  build.values.get(response)?.values ?? [];
+const shown = (build: Pick<Build, "values">, response: string): readonly Single[] => {
+  const value = build.values.get(response);
+  if (value === undefined) {
+    return [];
+  }
+
+  return isRecordValue(value) ? recordText(value) : value.values;
+};
 
 /**
  * Give the name a response's controls post under.
@@ -945,11 +962,13 @@ interface Controls {
 /**
  * Count the Controls an Extended Text renders.
  *
- * Q9 gives a container `max-strings` Controls when it is from 1 to 10, else the greater of 10 and
- * `min-strings`; `max-strings="0"` restricts nothing (reading 53). So restoring drops no answer
- * silently, `n` also covers each member the restored or posted value holds, up to `max-strings`
- * when it restricts and up to the cap of 100 (Q23). Over the cap, the first 100 show beside the
- * cap's notice; a `min-strings` above 100 leaves no Control, the notice in their place.
+ * A `single` binding and a record one have one Control, the string control a record's text is
+ * typed in. Q9 gives a container `max-strings` Controls when it is from 1 to 10, else the greater
+ * of 10 and `min-strings`; `max-strings="0"` restricts nothing (reading 53). So restoring drops no
+ * answer silently, `n` also covers each member the restored or posted value holds, up to
+ * `max-strings` when it restricts and up to the cap of 100 (Q23). Over the cap, the first 100 show
+ * beside the cap's notice; a `min-strings` above 100 leaves no Control, the notice in their place,
+ * for any binding.
  *
  * @param interaction The Extended Text.
  * @param members How many members the value or post to restore holds.
@@ -960,7 +979,7 @@ const controlsOf = (interaction: ExtendedTextInteraction, members: number): Cont
     return { n: 0, overCap: true };
   }
 
-  if (interaction.cardinality === "single") {
+  if (interaction.cardinality === "single" || interaction.cardinality === "record") {
     return { n: 1, overCap: false };
   }
 
@@ -1894,18 +1913,23 @@ const printBody = (
 };
 
 /**
- * Give the response bindings a redaction lists: each response the item declares, in document
- * order, but the hidden-only ones.
+ * Give the response bindings a redaction lists: each response the item declares but the
+ * hidden-only ones, those of a base type in document order, then the record responses in document
+ * order. The item keeps the two kinds in two maps, so their order across the two is not kept.
  *
  * @param item The item.
  * @param hiddenOnly The responses only content the page does not see binds.
  * @returns The bindings.
  */
-const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly ResponseBinding[] =>
-  [...item.responses.values()].flatMap(
+const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly ResponseBinding[] => [
+  ...[...item.responses.values()].flatMap(
     ({ baseType, cardinality, identifier }): readonly ResponseBinding[] =>
       hiddenOnly.has(identifier) ? [] : [{ baseType, cardinality, identifier }],
-  );
+  ),
+  ...[...(item.records?.values() ?? [])].flatMap(({ identifier }): readonly ResponseBinding[] =>
+    hiddenOnly.has(identifier) ? [] : [{ cardinality: "record", identifier }],
+  ),
+];
 
 /**
  * Copy the parts of an item the page may know: the allowlist, and the only way to make a
@@ -2099,10 +2123,29 @@ export interface Posting {
   /**
    * The number base its integer is written in: the `base` of the first Text Entry or Extended
    * Text, in document order, that binds the response, and 10 when only a Choice or an Inline
-   * Choice binds it.
+   * Choice binds it. `decode` does not apply it to a record.
    */
   readonly options: DecodeOptions;
 }
+
+/**
+ * Give the binding a response travels through the form under: a `RecordBinding` for a record
+ * response, a `ValueBinding` for a response of a base type a phase-1 interaction posts, and
+ * none for a response of any other base type, which no Control posts.
+ *
+ * @param response The response's binding as the page knows it.
+ * @param name The entry name its Controls post under.
+ * @returns Its form binding, or none.
+ */
+const formBinding = (response: ResponseBinding, name: string): Option.Option<Binding> => {
+  if (response.cardinality === "record") {
+    return Option.some({ cardinality: "record", name });
+  }
+
+  const { baseType, cardinality } = response;
+
+  return isPosted(baseType) ? Option.some({ baseType, cardinality, name }) : Option.none();
+};
 
 /**
  * Give the number base an interaction's posted text is read in: a Text Entry's or an Extended
@@ -2150,28 +2193,30 @@ export const postingsIn = (
     }
   }
 
-  return redaction.responses.flatMap(
-    ({ baseType, cardinality, identifier }): readonly Posting[] => {
-      const bound = byResponse.get(identifier) ?? [];
-      if (!isPosted(baseType) || bound.length === 0) {
-        return [];
-      }
+  return redaction.responses.flatMap((response): readonly Posting[] => {
+    const { identifier } = response;
+    const bound = byResponse.get(identifier) ?? [];
+    const binding = formBinding(response, entryName(instance, identifier));
+    if (Option.isNone(binding) || bound.length === 0) {
+      return [];
+    }
 
-      return [
-        {
-          binding: { baseType, cardinality, name: entryName(instance, identifier) },
-          identifier,
-          options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
-        },
-      ];
-    },
-  );
+    return [
+      {
+        binding: binding.value,
+        identifier,
+        options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
+      },
+    ];
+  });
 };
 
 /**
- * Give the postings of a redacted item in one instance: one for each response of a posted base
- * type that an interaction in the body binds, in the order of the item's `responses`, so a host
- * decodes each from its form with the base its interaction declares instead of assuming base 10.
+ * Give the postings of a redacted item in one instance: one for each record response, and each
+ * response of a posted base type, that an interaction in the body binds, in the order of the
+ * item's `responses`, so a host decodes each from its form with the base its interaction declares
+ * instead of assuming base 10. A record response's binding is a `RecordBinding`, which
+ * `decode` reads as a record.
  *
  * A declared response that no interaction binds has no posting. The form has no Control for it,
  * so a post never carries it, and decoding it would give NULL. A host that saved that NULL would

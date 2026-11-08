@@ -6,6 +6,7 @@ import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/docu
 import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
+import type { ValueBinding } from "#plate/form/encoding.ts";
 import { encodeRedacted } from "#plate/codec/redacted.ts";
 import { interactionsIn as bodyInteractions } from "#plate/model/interactions.ts";
 import type {
@@ -120,6 +121,7 @@ const textEntry = (response: string): TextEntryInteraction => ({
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "string",
+  cardinality: "single",
   class: "",
   expectedLength: Option.none(),
   kind: "text-entry",
@@ -2841,7 +2843,7 @@ describe("choiceOrder", () => {
  */
 const postingOf = (
   identifier: string,
-  baseType: Posting["binding"]["baseType"],
+  baseType: ValueBinding["baseType"],
   base: number,
 ): Posting => ({
   binding: { baseType, cardinality: "single", name: entryName(instance, identifier) },
@@ -2968,6 +2970,35 @@ describe("postings", () => {
       ),
       Option.some(["Malformed", "single-many"]),
     );
+  });
+
+  it("[Q-20] record binding in the page: postings gives a record response a Text Entry binds its RecordBinding, after the responses of a base type, and none to a record response no interaction binds", () => {
+    const answer = { correct: Option.none(), defaultValue: Option.none(), identifier: "ANSWER" };
+    const recorded: Item = {
+      ...item,
+      body: [choice, textEntry("ANSWER")],
+      records: new Map([
+        ["ANSWER", answer],
+        ["UNBOUND", { ...answer, identifier: "UNBOUND" }],
+      ]),
+    };
+    const shown = redactItem(recorded);
+
+    assert.deepStrictEqual(
+      shown.responses.filter((binding) => binding.cardinality === "record"),
+      [
+        { cardinality: "record", identifier: "ANSWER" },
+        { cardinality: "record", identifier: "UNBOUND" },
+      ],
+    );
+    assert.deepStrictEqual(postings(shown, instance), [
+      postingOf("CAPITAL", "identifier", 10),
+      {
+        binding: { cardinality: "record", name: entryName(instance, "ANSWER") },
+        identifier: "ANSWER",
+        options: { base: 10 },
+      },
+    ]);
   });
 
   it("gives no posting to a declared response no interaction binds, so a post carries nothing over its record value", () => {
@@ -4000,5 +4031,76 @@ describe("redactItem names which limit a text passed", () => {
       redaction.unprinted,
       Option.some({ bound: 1_000_000, identifier: "S", limit: "text", path: slotPath(1) }),
     );
+  });
+});
+
+/**
+ * An item whose paragraph holds a Text Entry bound to the record response `NUMBER` and whose body
+ * then holds an Extended Text bound to the record response `WORKING`, with a `max-strings` and a
+ * `min-strings` a record binding does not count.
+ */
+const recordBound: SourceDocument = doc(
+  "items/record-bound.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "record-bound"), attr("time-dependent", "false"), attr("title", "Number")],
+    [
+      el("qti-response-declaration", [attr("cardinality", "record"), attr("identifier", "NUMBER")]),
+      el("qti-response-declaration", [
+        attr("cardinality", "record"),
+        attr("identifier", "WORKING"),
+      ]),
+      el(
+        "qti-item-body",
+        [],
+        [
+          el(
+            "p",
+            [],
+            [
+              sourceText("Your number: "),
+              el("qti-text-entry-interaction", [attr("response-identifier", "NUMBER")]),
+            ],
+          ),
+          el("qti-extended-text-interaction", [
+            attr("max-strings", "4"),
+            attr("min-strings", "2"),
+            attr("response-identifier", "WORKING"),
+          ]),
+        ],
+      ),
+    ],
+  ),
+);
+
+describe("a record-bound control", () => {
+  it("[Q-20] [Q-5] gives a record-bound control the string control's payload with no notice, each posting under its response's one name, and postings a RecordBinding for each", () => {
+    const shown = redactItem(acceptedFrom(recordBound));
+    const built = payload(shown, answering);
+    const entry = textEntryFor(built, "NUMBER");
+    const working = extendedTextFor(built, "WORKING");
+
+    assert.deepStrictEqual(shown.notices, []);
+    assert.deepStrictEqual(built.notices, []);
+    assert.deepStrictEqual(
+      [entry.baseType, entry.formName, entry.restore],
+      ["string", entryName(instance, "NUMBER"), ""],
+    );
+    assert.deepStrictEqual(
+      [working.baseType, working.cardinality, working.formName, working.n, working.notice],
+      ["string", "record", entryName(instance, "WORKING"), 1, Option.none()],
+    );
+    assert.deepStrictEqual(postings(shown, instance), [
+      {
+        binding: { cardinality: "record", name: entryName(instance, "NUMBER") },
+        identifier: "NUMBER",
+        options: { base: 10 },
+      },
+      {
+        binding: { cardinality: "record", name: entryName(instance, "WORKING") },
+        identifier: "WORKING",
+        options: { base: 10 },
+      },
+    ]);
   });
 });

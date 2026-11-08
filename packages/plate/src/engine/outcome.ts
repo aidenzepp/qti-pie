@@ -25,6 +25,7 @@ import { attemptsStarted } from "#plate/engine/scope.ts";
 import type { DeclaredType, ScopeItem, TestScope } from "#plate/engine/scope.ts";
 import type {
   Item,
+  RecordDeclaration,
   ResponseDeclaration,
   TemplateDeclaration,
   UnheldDeclaration,
@@ -110,11 +111,12 @@ export const runOutcomes = (
 };
 
 /**
- * An item the host passed for an item ref, as the scope reads it: the item's declarations, and its
- * declarations of a type the value model does not hold. An accepted item passes as it is.
+ * An item the host passed for an item ref, as the scope reads it: the item's declarations, its
+ * record responses, and its declarations of a type the value model does not hold. An accepted item
+ * passes as it is.
  */
 interface DeliveredItem {
-  readonly item: Declarations & Pick<Item, "unheld">;
+  readonly item: Declarations & Pick<Item, "records" | "unheld">;
 }
 
 /**
@@ -200,6 +202,17 @@ const undelivered: DeliveredItem["item"] = {
 };
 
 /**
+ * The record responses the scope reads of an item that declares none.
+ */
+const noRecords: ReadonlyMap<string, RecordDeclaration> = new Map();
+
+/**
+ * The declarations of a type the value model does not hold that the scope reads of an item that
+ * makes none.
+ */
+const noUnheld: ReadonlyMap<string, UnheldDeclaration> = new Map();
+
+/**
  * Give one session item's entry in the scope.
  *
  * @param sessionItem The session item.
@@ -217,7 +230,7 @@ const entryOf = (
   const { category, mappings, weights } = Option.getOrElse(ref, () => unreferenced);
   const item = Option.match(delivered, { onNone: () => undelivered, onSome: (each) => each.item });
   const { record } = sessionItem;
-  const unheld: ReadonlyMap<string, UnheldDeclaration> = item.unheld ?? new Map();
+  const unheld = item.unheld ?? noUnheld;
 
   return {
     categories: category,
@@ -229,9 +242,11 @@ const entryOf = (
       correct: record.correct,
       defaults: record.defaults,
       outcomes: record.outcomes,
+      records: record.records,
       responses: record.responses,
       templates: record.templates,
     },
+    records: item.records ?? noRecords,
     ref: sessionItem.ref,
     unheld: new Map(
       Array.from(unheld, ([identifier, declaration]) => [identifier, declaredTypeOf(declaration)]),
@@ -253,10 +268,11 @@ const entryOf = (
  * The entries follow the session's items, in the order the candidate meets them, whatever order the
  * items map was built in, since an aggregate's float sum depends on the order of its operands: two
  * hosts that build the map apart get one scope. Each entry holds its item ref's categories, weights
- * and variable mappings, its item's declarations, those of a type the value model does not hold
- * among them (with whether each such response declares a correct response), its record's responses,
- * outcomes, template values, and the correct responses and defaults its template processing set (no
- * seed), whether it was presented, and the attempts it has started under its item ref's limit
+ * and variable mappings, its item's declarations, its record responses (`ScopeItem.records`) and
+ * those of a type the value model does not hold among them (with whether each unheld response
+ * declares a correct response), its record's responses, record responses' records, outcomes,
+ * template values, and the correct responses and defaults its template processing set (no seed),
+ * whether it was presented, and the attempts it has started under its item ref's limit
  * (`attemptsStarted`, the count the results report writes). The scope holds every part's and every
  * section's item refs at any depth, and the names the test declares: its outcomes' identifiers and
  * every identifier its outcome and context declarations declare (`Test.declared`).

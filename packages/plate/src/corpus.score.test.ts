@@ -20,6 +20,7 @@ import type {
 import { outcomeDefaults } from "#plate/model/record.ts";
 import { format, isNull, trimXmlSpace } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
+import { splitResponses } from "#plate/score.ts";
 import { acceptedOf, begunUnder, openCorpus, sweepSeeds, templated } from "#plate/test/sweep.ts";
 import { templatePrefixes } from "#plate/vocabulary.ts";
 
@@ -277,7 +278,7 @@ const begun = (accepted: Accepted, seed: string): Result.Result<Begun, string> =
   Result.mapBoth(begunUnder(accepted, seed), {
     onFailure: (error) => `begin or the record's decoding failed: ${error._tag}: ${error.message}`,
     onSuccess: ({ decoded, stored }): Begun => ({
-      correct: solution(accepted, decoded),
+      correct: splitResponses(solution(accepted, decoded)).responses,
       record: stored,
       seed,
     }),

@@ -6,12 +6,12 @@ import type { StoredRecord } from "#plate/codec/record.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { restore } from "#plate/restore.ts";
 import { score } from "#plate/score.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { open } from "#plate/validate/open.ts";
-import { acceptedItem } from "#plate/validate/verdict.ts";
+import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * BG007, a true-or-false Choice bound to the single identifier response `RESPONSE`, by its path
@@ -155,6 +155,41 @@ describe("restore", { tags: ["corpus"] }, () => {
               : Option.none(),
           ),
           Option.some(["beginnersguide007", "template_digging"]),
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-14] [Q-20] restores the record: gives back a record holding a record response's record under records and among its values, and refuses one under an item that declares no record response: InvalidRecord",
+    () =>
+      Effect.gen(function* restoresRecords() {
+        const { accepted } = yield* scored();
+        const recorded = acceptForTest({
+          ...accepted.item,
+          records: new Map([
+            ["RREC", { correct: Option.none(), defaultValue: Option.none(), identifier: "RREC" }],
+          ]),
+        });
+        const answer: RecordValue = {
+          cardinality: "record",
+          fields: [
+            { identifier: "stringValue", value: { baseType: "string", value: "1.5e3" } },
+            { identifier: "exponent", value: { baseType: "integer", value: 3n } },
+          ],
+        };
+        const stored = yield* Effect.fromResult(
+          score(recorded, { RESPONSE: chosen, RREC: answer }),
+        );
+        const record = yield* Effect.fromResult(decodeRecord(stored));
+
+        assert.deepStrictEqual(record.records, { RREC: answer });
+        assert.deepStrictEqual(
+          Result.getSuccess(restore(recorded, stored)),
+          Option.some({ record, values: { RESPONSE: chosen, RREC: answer } }),
+        );
+        assert.deepStrictEqual(
+          failureOf(restore(accepted, stored)),
+          Option.some(["InvalidRecord", "decode"]),
         );
       }),
   );
