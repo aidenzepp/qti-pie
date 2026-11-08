@@ -25,7 +25,7 @@
  * the tree and every overlay builder name each node by one id ({@link NodeIds}).
  */
 import { Bits, ChangeSet } from "@bjornpagen/grizzle";
-import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import type { Addition, InsertAllRowsOf, Uuid } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Order, Struct } from "effect";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import {
@@ -44,8 +44,6 @@ import { contextAt, contextsOf } from "#pantry/import/context.ts";
 import { foldAt, foldOf, governorOf, textDomainOf } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
-import type { PackageRecord } from "#pantry/import/record.ts";
-import type { OverlayRows } from "#pantry/import/overlays/index.ts";
 import type { documentLayer } from "#pantry/import/roster.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { endsOf } from "#pantry/model/folds.ts";
@@ -69,6 +67,7 @@ import type {
 import type { Document, Namespace } from "#pantry/qti/chardata.ts";
 import type { Node } from "#pantry/qti/node.ts";
 import type { Author } from "#pantry/qti/roles.ts";
+import type { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * The ids one document's rows are written under, and where it stands in its package: every overlay
@@ -343,15 +342,19 @@ export type DocumentLayerRows = {
 };
 
 /**
- * Every input of one package's ChangeSet, each a keyed set: the `Package` row with its record
- * nested, each document's `Node` root with its tree nested, both keyed by their id, the document
- * layer's flat rows, and every overlay's.
+ * Every input of one package's ChangeSet, a keyed set of each relation `insertAll` takes over `Qti`
+ * (`writtenNames` of `#pantry/import/roster.ts`), its rows typed as grizzle's `InsertAllRowsOf`
+ * types that insert's: the `Package` row with its record nested and each document's `Node` root
+ * with its tree nested, both keyed by their id, the document layer's flat rows
+ * ({@link DocumentLayerRows}), and every overlay's (`OverlayRows`). `readProgram` builds it from
+ * those, so each builder's row types are held to grizzle's here.
  */
-export type PackageInputs = DocumentLayerRows &
-  OverlayRows & {
-    readonly Node: ReadonlyMap<string, NodeRoot>;
-    readonly Package: ReadonlyMap<string, PackageRecord>;
-  };
+export type PackageInputs = {
+  readonly [Name in keyof InsertAllRowsOf<typeof Qti>]: ReadonlyMap<
+    string,
+    InsertAllRowsOf<typeof Qti>[Name][number]
+  >;
+};
 
 /**
  * A `Position` handle, a node's content-automaton state.
