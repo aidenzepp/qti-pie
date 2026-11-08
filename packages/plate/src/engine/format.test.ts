@@ -205,6 +205,31 @@ describe("formatPrinted: the default form, with no format (G-R2, pending)", () =
       "choiceA",
     );
   });
+
+  it("[I-9a] prints a duration as a float of its seconds prints, with and without a format, power-form included", () => {
+    const seconds = [90.5, 0.1 + 0.2, 1e21, -0, Number.NaN, Number.POSITIVE_INFINITY, -1.5];
+    for (const value of seconds) {
+      const duration = single({ baseType: "duration", value });
+      for (const options of [
+        {},
+        { format: "%.2f" },
+        { format: "Took %e s" },
+        { format: "%i" },
+        { powerForm: true },
+      ] satisfies readonly PrintOptions[]) {
+        assert.strictEqual(
+          printed(duration, options),
+          printed(float(value), options),
+          `${String(value)} ${JSON.stringify(options)}`,
+        );
+      }
+    }
+    assert.strictEqual(printed(single({ baseType: "duration", value: 90.5 })), "90.5");
+    assert.strictEqual(
+      printed(single({ baseType: "duration", value: 90.456 }), { format: "%.2f" }),
+      "90.46",
+    );
+  });
 });
 
 describe("formatPrinted: NULL and containers (G-R2, pending)", () => {

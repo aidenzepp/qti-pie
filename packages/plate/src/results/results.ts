@@ -23,6 +23,7 @@ import type { SessionMismatch, StoredTestSession } from "#plate/codec/session.ts
 import type { Configuration } from "#plate/configuration.ts";
 import { xmlnsNamespace } from "#plate/document/source.ts";
 import { writeDocument } from "#plate/document/write.ts";
+import { attemptsStarted } from "#plate/engine/scope.ts";
 import { isXmlText } from "#plate/form/encoding.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type {
@@ -41,6 +42,7 @@ import {
 import type { ItemRecord } from "#plate/model/record.ts";
 import { isNcName, isNull, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
+import { defaultOutputBudget } from "#plate/output-budget.ts";
 import { choiceOrder, hiddenOnlyResponses, redactStructure } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { resultValue, resultValues } from "#plate/results/values.ts";
@@ -49,9 +51,10 @@ import { belonging, fitting } from "#plate/score.ts";
 import type { RecordMismatch } from "#plate/score.ts";
 import { itemConfiguration, sessionControls } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
+import { elapsedSeconds } from "#plate/session/elapsed.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
-import type { AnsweredStatus, SessionStatus, TestMark } from "#plate/vocabulary.ts";
+import type { AnsweredStatus, SessionStatus } from "#plate/vocabulary.ts";
 
 /**
  * The namespace of every element a result holds.
@@ -176,17 +179,11 @@ const judging: Configuration = {
   headingLevel: 2,
   locale: "en",
   maxAttempts: 1,
-  outputBudget: 16_777_216,
+  outputBudget: defaultOutputBudget,
   showFeedback: false,
   showSolution: false,
   validateResponses: true,
 };
-
-/**
- * The test mark of outcome processing, which M2 does not run, so a test that has it reports no
- * outcome of its own.
- */
-const outcomeProcessing: TestMark = "qti-outcome-processing";
 
 /**
  * What a result says about one item: where it sits, how its session stands, and the values to
@@ -310,7 +307,7 @@ const optional = (local: string, value: Option.Option<string>): readonly Attribu
 const declared = (
   identifier: string,
   cardinality: Value["cardinality"],
-  baseType: ModelledBaseType | "duration",
+  baseType: ModelledBaseType,
 ): readonly Attribute[] => [
   attribute("identifier", identifier),
   attribute("cardinality", cardinality),
@@ -424,11 +421,13 @@ const templateVariables = (
 /**
  * Derive an item session's built-in attempt count and status, with nothing stored for either.
  *
- * An attempt starts at the item's first presentation, and again at once after each submission
- * that leaves the item open. So a presented item has started one more attempt than it has
- * processed, unless its last submission reached its effective limit and closed it. Results
- * Reporting 2.7.7: `initial` exactly when none has started, `final` when the item closed at a
- * submission, and `pendingSubmission` while a started attempt is unprocessed.
+ * The count is `attemptsStarted`'s in `#plate/engine/scope.ts`, the one a test's outcome
+ * processing reads through the test scope, so the report and the processing cannot disagree: an
+ * attempt starts at the item's first presentation, and again at once after each submission that
+ * leaves the item open, so a presented item has started one more attempt than it has processed,
+ * unless its last submission reached its effective limit and closed it. Results Reporting 2.7.7:
+ * `initial` exactly when none has started, `final` when the item closed at a submission, and
+ * `pendingSubmission` while a started attempt is unprocessed.
  *
  * @param presented Whether the candidate was shown the item.
  * @param processed The record's count of processed attempts.
@@ -436,13 +435,12 @@ const templateVariables = (
  * @returns The attempts started and the session status.
  */
 const attemptsOf = (presented: boolean, processed: number, limit: number): Attempts => {
+  const started = attemptsStarted(presented, processed, limit);
   if (!presented) {
-    return { started: 0, status: "initial" };
+    return { started, status: "initial" };
   }
 
-  return limit > 0 && processed >= limit
-    ? { started: processed, status: "final" }
-    : { started: processed + 1, status: "pendingSubmission" };
+  return { started, status: limit > 0 && processed >= limit ? "final" : "pendingSubmission" };
 };
 
 /**
@@ -751,36 +749,25 @@ const timed = (session: TestSession): Result.Result<TestSession, InvalidSession>
 };
 
 /**
- * Give the time between two ISO 8601 times in seconds, truncated to a tenth of a second, and 0
- * when the second is not later.
- *
- * @param from The earlier time.
- * @param to The later time.
- * @returns The seconds between them.
- */
-const secondsBetween = (from: string, to: string): number =>
-  Math.max(Math.trunc((Date.parse(to) - Date.parse(from)) / 100) / 10, 0);
-
-/**
  * Give the order a shuffled Choice or a shuffled Inline Choice was presented in, as `render`
  * presents it ({@link choiceOrder}), and none for any other interaction: a Choice or an Inline
  * Choice not shuffled keeps document order, and a Text Entry or an Extended Text has no choices.
  *
  * @param interaction The interaction as the page showed it, holding only the choices shown.
- * @param seed The session's seed.
+ * @param seed The seed its shuffle was keyed by, none when it had none.
  * @param instance The item instance it was rendered under.
  * @returns The choice identifiers, space-separated, or none.
  */
 const choiceSequence = (
   interaction: Interaction,
-  seed: string,
+  seed: Option.Option<string>,
   instance: string,
 ): Option.Option<string> => {
   switch (interaction.kind) {
     case "choice":
     case "inline-choice": {
       return interaction.shuffle
-        ? Option.some(choiceOrder(interaction, Option.some(seed), instance).join(" "))
+        ? Option.some(choiceOrder(interaction, seed, instance).join(" "))
         : Option.none();
     }
     case "extended-text":
@@ -806,14 +793,16 @@ const choiceSequence = (
  *
  * @param item The item.
  * @param templates The template values of the record the page was shown under.
- * @param seed The session's seed.
+ * @param seed The session's shuffle seed, which keyed the page's shuffles as `itemView`'s
+ *   configuration does: none when it has none, so the order followed the instance alone. Never the
+ *   session's processing seed.
  * @param instance The item instance it was rendered under.
  * @returns The choice identifiers, space-separated, by the interaction's response identifier.
  */
 const choiceSequences = (
   item: Item,
   templates: ItemRecord["templates"],
-  seed: string,
+  seed: Option.Option<string>,
   instance: string,
 ): ReadonlyMap<string, string> =>
   new Map(
@@ -886,9 +875,9 @@ const deliveredItem = (
  * is 0, since a delivery engine that does not limit attempts reports only the first outcomes of a
  * non-adaptive item, and the record's otherwise: the last processed, or the starting values before
  * any. A presented shuffled Choice or Inline Choice carries the order it was presented in, under
- * the session's seed and the item's instance `<session instance>.<sequenceIndex>`, listing only the
- * choices the record's template values showed. Its template values, and the defaults its answered
- * status reads, are its record's.
+ * the session's shuffle seed (none when it has none) and the item's instance
+ * `<session instance>.<sequenceIndex>`, listing only the choices the record's template values
+ * showed. Its template values, and the defaults its answered status reads, are its record's.
  *
  * @param test The test.
  * @param controls The session control of each of the test's item refs, by identifier, as
@@ -950,7 +939,7 @@ const sessionItemReport = (
         ? choiceSequences(
             document.item,
             entry.record.templates,
-            session.seed,
+            session.shuffleSeed,
             `${session.instance}.${String(entry.sequenceIndex)}`,
           )
         : new Map(),
@@ -960,14 +949,45 @@ const sessionItemReport = (
   });
 
 /**
+ * Write a test's own outcome variables by the state of its outcome processing: each at its
+ * starting value when the test has none (`absent`); each as the session holds it when the engine
+ * runs it (`runs`), which is as the last run left it, or at its starting value before the first;
+ * and none when the engine cannot run it (`marked`), so no default reads as a score. Nothing here
+ * runs the processing: the session's transitions do.
+ *
+ * @param test The test.
+ * @param session The session, whose outcomes `decodeSession` checked against the test's
+ *   declarations.
+ * @returns The `outcomeVariable` elements, one per declared outcome in declaration order, or none.
+ */
+const testOutcomes = (test: AcceptedTest["test"], session: TestSession): readonly Element[] => {
+  switch (test.outcomeProcessing.kind) {
+    case "absent": {
+      return outcomeVariables(test.outcomes, {});
+    }
+    case "marked": {
+      return [];
+    }
+    case "runs": {
+      return outcomeVariables(test.outcomes, session.outcomes);
+    }
+    default: {
+      return test.outcomeProcessing satisfies never;
+    }
+  }
+};
+
+/**
  * Write the result of a test session.
  *
  * The test result holds the built-in `duration`, from the session's start to its last change in
- * seconds, of base type duration (reading 29). The test's own outcomes are written at their
- * starting values only when it has no outcome processing, which M2 does not run, so no default
- * reads as a score. Then one item result per session item, in sequence order. Every item ref's
- * session control is resolved in one walk of the test (`sessionControls`), since resolving each
- * item's alone walks the test up to its ref again, which grows with the square of the item count.
+ * seconds, of base type duration (reading 29). The test's own outcomes follow ({@link
+ * testOutcomes}): as the last run of its outcome processing left them when the engine runs it, at
+ * their starting values when it has none, and not at all when the engine cannot run it, so no
+ * default reads as a score. Then one item result per session item, in sequence order. Every item
+ * ref's session control is resolved in one walk of the test (`sessionControls`), since resolving
+ * each item's alone walks the test up to its ref again, which grows with the square of the item
+ * count.
  *
  * @param input The test, its items, the stored session and the context.
  * @returns The document's text, or the failure of its context, its session or an item.
@@ -990,9 +1010,7 @@ const testResults = (
     }
 
     const { test } = input.test;
-    const outcomes = input.test.unsupported.some((mark) => mark.feature === outcomeProcessing)
-      ? []
-      : outcomeVariables(test.outcomes, {});
+    const outcomes = testOutcomes(test, session);
 
     return documentOf([
       context,
@@ -1002,7 +1020,7 @@ const testResults = (
         [
           builtInResponse("duration", {
             baseType: "duration",
-            value: secondsBetween(session.started, session.updated),
+            value: elapsedSeconds(Date.parse(session.started), Date.parse(session.updated)),
           }),
           ...outcomes,
         ],

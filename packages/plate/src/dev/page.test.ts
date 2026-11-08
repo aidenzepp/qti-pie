@@ -7,6 +7,7 @@ import type { DefaultTreeAdapterTypes } from "parse5";
 import { groupVerdicts, openMember, verdictCache, verdictOrder } from "#plate/dev/listing.ts";
 import { testField } from "#plate/dev/packages.ts";
 import { createHandler } from "#plate/dev/page.ts";
+import { sessionStore } from "#plate/dev/store.ts";
 import type { Handler, PlaygroundSettings } from "#plate/dev/page.ts";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
 import { h } from "#plate/emit/node.ts";
@@ -2033,6 +2034,31 @@ describe("dev/page.ts: M2's routes", { tags: ["corpus"] }, () => {
         assert.strictEqual(startGet.response.status, 405, "a Start is a POST");
         assert.strictEqual(startGet.response.headers.get("allow"), "POST");
         assert.strictEqual(listingPost.response.status, 405);
+      }),
+  );
+
+  it.effect(
+    "starts a test session through the playground's Start route under the playground's fixed seed as its processing seed, kept apart from the configuration's shuffle seed, and draws one with no fixed seed",
+    () =>
+      Effect.gen(function* processingSeedRoute() {
+        const provider = ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: fixturesRoot });
+        const storedUnder = Effect.fnUntraced(function* storedUnder(seed?: string) {
+          const tests = sessionStore();
+          const settings: PlaygroundSettings = { configuration: { seed: "7" }, provider, tests };
+          const location = yield* startFixture(
+            createHandler(seed === undefined ? settings : { ...settings, seed }),
+          );
+
+          return Option.getOrElse(tests.get(location.slice("/sessions/".length)), () =>
+            assert.fail("the playground stored no session"),
+          ).session;
+        });
+        const fixed = yield* storedUnder("playground-seed");
+        const drawn = yield* storedUnder();
+
+        assert.deepStrictEqual([fixed.seed, fixed.shuffleSeed], ["playground-seed", "7"]);
+        assert.match(drawn.seed, /^[0-9a-f]{32}$/u);
+        assert.strictEqual(drawn.shuffleSeed, "7");
       }),
   );
 

@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { afterAll, assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result, Schema } from "effect";
 import { storedVersion } from "#plate/codec/record.ts";
+import { expressionKinds } from "#plate/model/expression.ts";
+import { landedKinds } from "#plate/model/expressions/read.ts";
 import {
   acceptedItem,
   configure,
@@ -50,7 +52,8 @@ const opening = [
 const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
 
 /**
- * The README's sections: the eleven it had before M2, the four M2 adds and the one M3.b-2 adds.
+ * The README's sections: the eleven it had before M2, the four M2 adds, the one M3.b-2 adds and
+ * the one M3.b-3 adds.
  */
 const headings = [
   "## Install",
@@ -62,6 +65,7 @@ const headings = [
   "## Interactions",
   "## Scoring",
   "## Template processing",
+  "## Outcome processing",
   "## Server and browser",
   "## Hosts",
   "## Styling",
@@ -98,6 +102,20 @@ const recipes = [
  * The records a host stores, each documented as versioned JSON.
  */
 const records = ["StoredRecord", "StoredTestSession"] as const;
+
+/**
+ * The eight expressions only a test's outcome processing may hold, each as the README names it.
+ */
+const outcomeOnly = [
+  "qti-number-correct",
+  "qti-number-incorrect",
+  "qti-number-presented",
+  "qti-number-responded",
+  "qti-number-selected",
+  "qti-outcome-minimum",
+  "qti-outcome-maximum",
+  "qti-test-variables",
+] as const;
 
 /**
  * The package's name, which a host imports plate's surface through.
@@ -272,6 +290,27 @@ const sectionOf = (heading: string): string => {
 
   return (end === -1 ? rest : rest.slice(0, end)).map(({ line }) => line).join("\n");
 };
+
+/**
+ * Give the paragraphs of one section, each on one line: its blocks between blank lines, with each
+ * line break read as a space, so a phrase the README wraps still matches.
+ *
+ * @param heading The section's heading line, such as `## Records`.
+ * @returns The section's paragraphs, list items and table rows among them as their blocks are.
+ */
+const paragraphsOf = (heading: string): readonly string[] =>
+  sectionOf(heading)
+    .split(/\n{2,}/u)
+    .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+/**
+ * Give one section as a single line: every run of whitespace read as one space, so a phrase the
+ * README wraps, inside a list item's indented lines or across table rows, still matches.
+ *
+ * @param heading The section's heading line, such as `## Outcome processing`.
+ * @returns The section's text on one line.
+ */
+const flatSectionOf = (heading: string): string => sectionOf(heading).replaceAll(/\s+/gu, " ");
 
 /**
  * Give the fenced code blocks of a Markdown text.
@@ -482,7 +521,7 @@ describe("README.md", () => {
     );
   });
 
-  it('says configure reads a seed of "" as no seed', () => {
+  it('says configure reads a seed of "" as no seed, so a startTest session\'s shuffles follow the instance alone', () => {
     const paragraphs = markdownLines(readme())
       .filter(({ code }) => !code)
       .map(({ line }) => line)
@@ -494,9 +533,10 @@ describe("README.md", () => {
       paragraphs.some(
         (paragraph) =>
           /`configure` reads a `seed` of `""` as no seed/u.test(paragraph) &&
-          paragraph.includes("`startTest`"),
+          paragraph.includes("`startTest`") &&
+          paragraph.includes("follow the instance alone"),
       ),
-      'a paragraph says configure reads a seed of "" as no seed, so startTest draws one',
+      'a paragraph says configure reads a seed of "" as no seed, so a startTest session\'s shuffles follow the instance alone',
     );
   });
 
@@ -680,6 +720,221 @@ describe("README.md", () => {
       ),
       "a paragraph of Scoring says a test's SCORE and MAXSCORE may have any base type",
     );
+  });
+
+  it("[T-9] says, of outcome processing in the README, that each run starts from the declared defaults after an individual part's item, after a simultaneous part and at the test's close", () => {
+    const section = sectionOf("## Outcome processing");
+    const runs = section
+      .split("\n")
+      .filter((line) => line.startsWith("- after") || line.startsWith("- once"));
+
+    assert.include(section.replaceAll("\n", " "), "each time from the declared defaults");
+    assert.lengthOf(runs, 3, "Outcome processing lists the three times a run happens");
+    assert.isTrue(
+      runs.some((line) => line.includes("individual part")),
+      "a run follows the submission of an individual part's item",
+    );
+    assert.isTrue(
+      runs.some((line) => line.includes("simultaneous part")),
+      "a run follows a simultaneous part's submission",
+    );
+    assert.isTrue(
+      runs.some((line) => line.includes("test closes")),
+      "a run happens when the test closes",
+    );
+  });
+
+  it("[T-9] says what results write of a test's own outcomes with no outcome processing and with a marked one", () => {
+    assert.isTrue(
+      paragraphsOf("## Outcome processing").some(
+        (paragraph) =>
+          paragraph.includes("`results` writes the test's outcomes as the session holds them") &&
+          paragraph.includes("no outcome processing writes its outcomes' defaults") &&
+          paragraph.includes("the verdict marks writes none of its own"),
+      ),
+      "a paragraph of Outcome processing says what results write for each state",
+    );
+  });
+
+  it("[T-9] names in Outcome processing each of the eight expressions only a test may hold", () => {
+    const section = sectionOf("## Outcome processing");
+
+    for (const kind of outcomeOnly) {
+      assert.include(section, `\`${kind}\``);
+    }
+  });
+
+  it("[T-9] gives in Scoring the number of expressions plate runs and names qti-field-value as the one left", () => {
+    const unlanded = expressionKinds.filter((kind) => !landedKinds.includes(kind));
+
+    assert.deepStrictEqual(unlanded, ["field-value"]);
+    assert.isTrue(
+      paragraphsOf("## Scoring").some(
+        (paragraph) =>
+          paragraph.includes(
+            `Of the ${String(expressionKinds.length)} expressions QTI 3.0 defines, plate runs ${String(landedKinds.length)}.`,
+          ) && paragraph.includes("`qti-field-value`"),
+      ),
+      "a paragraph of Scoring gives the count of expressions plate runs and names qti-field-value",
+    );
+  });
+
+  it("[T-9] says in Scoring that a duration is held in seconds and that open refuses an ISO 8601 one with value-type", () => {
+    assert.isTrue(
+      paragraphsOf("## Scoring").some(
+        (paragraph) =>
+          paragraph.includes("A duration is a number of seconds") &&
+          paragraph.includes("`PT1M30.5S`") &&
+          paragraph.includes("`value-type`") &&
+          paragraph.includes("`qti-duration-lt`") &&
+          paragraph.includes("`qti-duration-gte`"),
+      ),
+      "a paragraph of Scoring says how a duration is held, written and compared",
+    );
+  });
+
+  it("[T-9] says in Template processing when a test session evaluates an item ref's template defaults, and that one that does not fit is EngineFailure", () => {
+    const section = sectionOf("## Template processing").replaceAll("\n", " ");
+
+    for (const sentence of [
+      "an item ref's `qti-template-default` gives a template variable the value its template processing starts from",
+      "A linear part evaluates an item's defaults when it first shows the item",
+      "A nonlinear part evaluates the defaults of all its items when it starts",
+      "`startTest` fails with `EngineFailure` when a default of its first part",
+      "`advance` fails with it",
+    ]) {
+      assert.include(section, sentence);
+    }
+  });
+
+  it("[T-9] names EngineFailure in the Functions table's startTest row", () => {
+    const row =
+      sectionOf("## Functions")
+        .split("\n")
+        .find((line) => line.startsWith("| `startTest` |")) ??
+      assert.fail("the Functions table has no startTest row");
+
+    assert.include(row, "`EngineFailure`");
+  });
+
+  it("[T-9] lists in Records what decodeSession refuses of a session that does not fit the test it is given", () => {
+    const section = sectionOf("## Records");
+    const listed = section.split("\n").filter((line) => line.startsWith("- "));
+
+    assert.include(
+      section.replaceAll("\n", " "),
+      "It refuses with `InvalidSession` a session that does not fit",
+    );
+    for (const field of ["items", "parts", "record", "dates", "position", "outcomes"]) {
+      assert.isTrue(
+        listed.some((line) => line.includes(field)),
+        `Records lists what decodeSession checks of a session's ${field}`,
+      );
+    }
+    assert.notInclude(section, "does not check the session's items");
+  });
+
+  it("[T-9] names OutputTooLarge's limit field and redact's range for a budget in Scoring's time-limit paragraph", () => {
+    assert.isTrue(
+      paragraphsOf("## Scoring").some(
+        (paragraph) =>
+          paragraph.includes("time limit") &&
+          paragraph.includes("`limit`") &&
+          paragraph.includes('`"text"`') &&
+          paragraph.includes('`"budget"`') &&
+          paragraph.includes("outside 1 to 536,870,888"),
+      ),
+      "the paragraph of Scoring that advises a time limit names limit and redact's range",
+    );
+  });
+
+  it("[T-9] states the gate repair in the README: the marks, the NULL reads, the attempts a test reads, the new refusals and the seed itemView carries", () => {
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "the `duration` of a part, a section or an item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`",
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that does not start with a part, section or item ref of the test document itself",
+      "So do a `qti-variable`, `qti-correct` or `qti-default` of a `file` or `record` variable",
+      "A test's `qti-default` of its own `duration` gives NULL of a single duration",
+      "A test reads an item's `numAttempts` as the number of attempts started, the count `results` writes",
+      "`qti-number-correct` and `qti-number-incorrect` consider an item's `file` and `record` responses",
+      "| A `qti-lookup-outcome-value` of a dotted name whose value is not a single `integer`, `float` or `duration` | `expression-type` | P22 |",
+      "A dotted name the test declares whole, such as an outcome named `S.TOTAL`, is that declaration",
+      "| A dotted name, read or set, that two readings resolve | `ambiguous-reference` | `prefixed-ref` |",
+      '`pattern="{ITEM1.N}"`',
+      "| A dotted `qti-correct` that reads anything but a response *(pending)* | `undeclared-variable` | none |",
+      "plate and pantry differ in the last three rows",
+      "judges its expressions under each test that reaches it",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
+    assert.notInclude(outcomes, "the last two rows");
+    assert.include(
+      flatSectionOf("## Server and browser"),
+      "`itemView`'s configuration never carries the processing seed",
+    );
+  });
+
+  it("states round 9h in the README: a value two map entries match maps by the first listed, the XSD cache's folders and the tag of the tests that read the Results Reporting XSD, and a section ref's outcome-only mark", () => {
+    assert.include(
+      flatSectionOf("## Scoring"),
+      "A value that two or more entries of a `qti-mapping` match maps by the first entry listed, as a point that two areas of a `qti-area-mapping` hold maps by the first area listed.",
+    );
+
+    const development = flatSectionOf("## Development");
+
+    for (const fragment of [
+      "every other XSD in its publisher's folder: `cpext/`, `csm/`, `drd/`, `lom/`, `mathml/`, `ssml/`, `w3/` and `xlink/`",
+      "keeps the ASI, metadata, content-packaging and Results Reporting XSDs at its top",
+      "[`src/test/xsd-layout.ts`](src/test/xsd-layout.ts) lists each file",
+      "The tests that validate against the Results Reporting XSD carry the tag `results-xsd`",
+    ]) {
+      assert.include(development, fragment);
+    }
+
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    assert.include(outcomes, "when the processing holds one of the eight expressions above");
+    assert.include(
+      outcomes,
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that does not start with a part, section or item ref of the test document itself",
+    );
+  });
+
+  it("states repair round 9 in the README: the misplaced mapping, the template default keys decodeSession checks, an identifier given twice, the weighted and collected types, and an item's context variable a test reads", () => {
+    const scoring = flatSectionOf("## Scoring");
+
+    assert.include(
+      scoring,
+      "| A `qti-mapping` in a response declaration of base type `file` or `duration`, or of cardinality `record`, or a `qti-area-mapping` in one whose base type is not `point` | `misplaced-element` | `mapping-base-type`, `area-mapping-point` |",
+    );
+    assert.notInclude(scoring, "first entry listed *(pending)*");
+
+    const recordsSection = flatSectionOf("## Records");
+
+    for (const fragment of [
+      "- in a nonlinear part that has started, an item's template defaults are not keyed by exactly the template variables its item ref's `qti-template-default`s set",
+      "`decodeSession` does not check the values of an item's template defaults",
+    ]) {
+      assert.include(recordsSection, fragment);
+    }
+    assert.notInclude(recordsSection, "`decodeSession` does not check an item's template defaults");
+
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "reads an item's context variable through its item ref",
+      "there its processing runs and fails at that read with `UnknownIdentifierError`. `open` accepts these",
+      "- A weighted `qti-variable` that reads an item's `integer` or `float` variable through its item ref is a `float` of that variable's cardinality",
+      "- `qti-outcome-minimum` and `qti-outcome-maximum` give a multiple `float`.",
+      "a multiple `integer` when every single `integer` or `float` declaration is `integer`, and a multiple `float` otherwise",
+      "`open` checks a test without its items, so it types this collection unknown.",
+      "so plate may refuse a package that pantry accepts, but only one that would fail at run time.",
+      "| A part, section or item ref identifier given twice across a test and the section documents it reaches, refused at the second | `duplicate-identifier` | `structure-identifier` |",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
+    assert.notInclude(outcomes, "plate holds no value of it *(pending)*");
   });
 
   it.effect("runs the plain server action on a base-16 Text Entry, which scores ff as 255", () =>

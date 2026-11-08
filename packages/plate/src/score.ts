@@ -26,6 +26,7 @@ import {
 } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
+import { defaultOutputBudget } from "#plate/output-budget.ts";
 import { hiddenOnlyResponses } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
@@ -77,8 +78,7 @@ export class RecordRequired extends Data.TaggedError("RecordRequired")<{
  * Why a response is not one {@link score} takes.
  *
  * - `undeclared`: the item scores no response by that identifier. It declares none, or declares one
- *   the renderer does not score: base type `duration` or `file`, cardinality `record`, or no base
- *   type.
+ *   the renderer does not score: base type `file`, cardinality `record`, or no base type.
  * - `not-a-value`: it is not a value at all (an integer as a number rather than a `bigint`, an empty
  *   string, two values in a single, …).
  * - `base-type`: a value of another base type than its declaration's.
@@ -115,7 +115,7 @@ export class InvalidResponses extends Data.TaggedError("InvalidResponses")<{
 
     return Option.match(this.expected, {
       onNone: () =>
-        `The responses hold ${name}, but the item scores no response by that identifier: it declares none, or declares one the renderer does not score (base type duration or file, cardinality record, or no base type). Leave ${name} out of the responses.`,
+        `The responses hold ${name}, but the item scores no response by that identifier: it declares none, or declares one the renderer does not score (base type file, cardinality record, or no base type). Leave ${name} out of the responses.`,
       onSome: ({ baseType, cardinality }) =>
         `The response ${name} ${problemWords[this.problem]}. Pass a value of base type ${baseType} and cardinality ${cardinality}, an integer as a bigint and NULL as no values, as decode gives it.`,
     });
@@ -159,7 +159,7 @@ export const tierA: Configuration = {
   headingLevel: 2,
   locale: "en",
   maxAttempts: 1,
-  outputBudget: 16_777_216,
+  outputBudget: defaultOutputBudget,
   showFeedback: false,
   showSolution: false,
   validateResponses: false,

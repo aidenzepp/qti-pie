@@ -639,11 +639,22 @@ export interface ExpressionType {
  * - `baseType` and `cardinality`: the type of the declaration the kind's declaration facet names, or
  *   `qti-base-value`'s or `qti-test-variables`' `base-type`.
  * - `name`: the operator name of `qti-math-operator` or `qti-stats-operator`.
+ * - `weighted`: true when the expression carries a `weight-identifier`, as a `qti-variable` or a
+ *   `qti-test-variables` of a test's outcome processing may. A weighted `qti-test-variables` with
+ *   no `base-type` is a float (G-R3 199). A weighted `qti-variable` is typed by its caller, which
+ *   alone knows whether the name is a prefixed read of an item variable (G-R3 198).
+ * - `collected`: the base type an unweighted `qti-test-variables` with no `base-type` takes from the
+ *   test's items (G-R3 199): `integer` when every single integer or float declaration of the
+ *   variable it names, in every item of the test, is integer, else `float`. Only a caller that
+ *   holds the test's items can fill it in; a test checked alone leaves it absent, so the kind is
+ *   unknown there.
  */
 export interface ResultAttributes {
   readonly baseType?: ExpressionType["baseType"];
   readonly cardinality?: ExpressionType["cardinality"];
+  readonly collected?: ExpressionType["baseType"];
   readonly name?: string;
+  readonly weighted?: boolean;
 }
 
 /**

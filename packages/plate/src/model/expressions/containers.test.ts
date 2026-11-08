@@ -536,7 +536,7 @@ describe("the containers family's reader specs and kind rules", () => {
         expressionElement(
           "member",
           [],
-          [baseValueElement("duration", "PT1S"), variableElement("BAG")],
+          [baseValueElement("duration", "1"), variableElement("BAG")],
         ),
         [["1", "duration", "single", notDuration, "single"]],
       ],
@@ -621,7 +621,7 @@ describe("the containers family's reader specs and kind rules", () => {
             expressionElement(
               "delete",
               [],
-              [baseValueElement("duration", "PT1S"), variableElement("TIMES")],
+              [baseValueElement("duration", "1"), variableElement("TIMES")],
             ),
           ],
         ),

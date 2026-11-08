@@ -1,10 +1,22 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Result } from "effect";
-import type { Variables } from "#plate/engine/evaluate.ts";
+import type { Declarations, Variables } from "#plate/engine/evaluate.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
-import { builtInType, referenceValue, variableValue } from "#plate/engine/refs.ts";
-import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import {
+  builtInType,
+  builtInValue,
+  referenceInteger,
+  referenceValue,
+  variableValue,
+} from "#plate/engine/refs.ts";
+import type { ScopeItem, TestScope } from "#plate/engine/scope.ts";
+import type {
+  OutcomeDeclaration,
+  ResponseDeclaration,
+  TemplateDeclaration,
+} from "#plate/model/item.ts";
+import { isNull, nullOf } from "#plate/model/values.ts";
+import type { ModelledBaseType, Value } from "#plate/model/values.ts";
 
 /**
  * A single identifier response value.
@@ -154,10 +166,10 @@ describe("variableValue", () => {
 });
 
 describe("builtInType", () => {
-  it("[I-9a] names the type of each built-in the engine holds: completionStatus a single identifier, numAttempts a single integer", () => {
+  it("[I-9a] names the type of each built-in an item's run holds: completionStatus a single identifier, numAttempts a single integer, and no duration", () => {
     assert.deepStrictEqual(
       ["completionStatus", "numAttempts", "duration", "QTI_CONTEXT", "constructor"].map((name) =>
-        builtInType(name),
+        builtInType(variables, name),
       ),
       [
         Option.some({ baseType: "identifier", cardinality: "single" }),
@@ -330,6 +342,281 @@ describe("referenceValue", () => {
         }),
       ),
       nullOf("float", "single"),
+    );
+  });
+});
+
+/**
+ * Construct a single outcome declaration with no default and no reporting attributes.
+ *
+ * @param identifier Its identifier.
+ * @param baseType Its base type.
+ * @returns The declaration.
+ */
+const outcomeOf = (identifier: string, baseType: ModelledBaseType): OutcomeDeclaration => ({
+  baseType,
+  cardinality: "single",
+  defaultValue: Option.none(),
+  identifier,
+  interpretation: Option.none(),
+  longInterpretation: Option.none(),
+  lookupTable: Option.none(),
+  masteryValue: Option.none(),
+  normalMaximum: Option.none(),
+  normalMinimum: Option.none(),
+  view: Option.none(),
+});
+
+/**
+ * A single identifier response declaration, `RESPONSE`, with no correct response or mapping.
+ */
+const responseDeclaration: ResponseDeclaration = {
+  areaMapping: Option.none(),
+  baseType: "identifier",
+  cardinality: "single",
+  correct: Option.none(),
+  defaultValue: Option.none(),
+  identifier: "RESPONSE",
+  mapping: Option.none(),
+};
+
+/**
+ * A single integer template variable, `T`, with no default.
+ */
+const templateDeclaration: TemplateDeclaration = {
+  baseType: "integer",
+  cardinality: "single",
+  defaultValue: Option.none(),
+  identifier: "T",
+  mathVariable: false,
+  paramVariable: false,
+};
+
+/**
+ * The declarations of each item below: a response `RESPONSE`, float outcomes `SCORE` and `NOTA`,
+ * an integer outcome `N` and a template variable `T`.
+ */
+const itemDeclarations: Declarations = {
+  outcomes: new Map([
+    ["N", outcomeOf("N", "integer")],
+    ["NOTA", outcomeOf("NOTA", "float")],
+    ["SCORE", outcomeOf("SCORE", "float")],
+  ]),
+  responses: new Map([["RESPONSE", responseDeclaration]]),
+  templates: new Map([["T", templateDeclaration]]),
+};
+
+/**
+ * Construct a single float value.
+ *
+ * @param value The number.
+ * @returns The value.
+ */
+const floatOf = (value: number): Value => ({
+  baseType: "float",
+  cardinality: "single",
+  values: [{ baseType: "float", value }],
+});
+
+/**
+ * A presented item, `ITEM1`, with three started attempts: its record holds `RESPONSE`, `SCORE`
+ * 1.5, `NOTA` 0.5, `N` 4 and the template value `T`. It maps nothing and declares a `file`
+ * response `UPLOAD`.
+ */
+const firstItem: ScopeItem = {
+  categories: [],
+  declarations: itemDeclarations,
+  mappings: new Map(),
+  numAttempts: 3,
+  presented: true,
+  record: {
+    correct: {},
+    defaults: {},
+    outcomes: { N: count, NOTA: floatOf(0.5), SCORE: floatOf(1.5) },
+    responses: { RESPONSE: answer },
+    templates: { T: count },
+  },
+  ref: "ITEM1",
+  unheld: new Map([["UPLOAD", { baseType: "file", cardinality: "single" }]]),
+  weights: new Map(),
+};
+
+/**
+ * An item not yet presented, `ITEM2`, whose record holds no template value. Its item ref maps its
+ * `NOTA` to `SCORE`.
+ */
+const secondItem: ScopeItem = {
+  ...firstItem,
+  mappings: new Map([["SCORE", "NOTA"]]),
+  numAttempts: 0,
+  presented: false,
+  record: {
+    correct: {},
+    defaults: {},
+    outcomes: { N: count, NOTA: floatOf(0.75), SCORE: floatOf(0) },
+    responses: { RESPONSE: nullOf("identifier", "single") },
+    templates: {},
+  },
+  ref: "ITEM2",
+};
+
+/**
+ * A test of one part `P1` holding `ITEM1` and `ITEM2`, which declares the outcome `TOTAL` and ran
+ * for 90.5 seconds.
+ */
+const testScope: TestScope = {
+  declared: new Set(["TOTAL"]),
+  duration: Option.some(90.5),
+  items: [firstItem, secondItem],
+  parts: new Map([["P1", ["ITEM1", "ITEM2"]]]),
+  sections: new Map(),
+};
+
+/**
+ * The variables of a test's run: its outcome `TOTAL` and its test scope.
+ */
+const testRun: Variables = { outcomes: { TOTAL: score }, responses: {}, test: testScope };
+
+describe("a test's run reads a prefixed name through its item ref [T-9]", () => {
+  it("[T-9] variableValue gives ITEM1.SCORE read through its item ref: the item's outcome as its record holds it", () => {
+    assert.deepStrictEqual(Result.getOrThrow(variableValue(testRun, "ITEM1.SCORE")), floatOf(1.5));
+  });
+
+  it("[T-9] variableValue gives ITEM1.1.SCORE, the first occurrence, read through its item ref as ITEM1.SCORE", () => {
+    assert.deepStrictEqual(
+      Result.getOrThrow(variableValue(testRun, "ITEM1.1.SCORE")),
+      floatOf(1.5),
+    );
+  });
+
+  it("[T-9] variableValue gives ITEM1.2.SCORE read through its item ref as NULL of a single float: no second occurrence exists (G-R3, pending)", () => {
+    assert.deepStrictEqual(
+      Result.getOrThrow(variableValue(testRun, "ITEM1.2.SCORE")),
+      nullOf("float", "single"),
+    );
+  });
+
+  it("[T-9] variableValue gives a mapping target read through its item ref before the item's own declaration of that name", () => {
+    assert.deepStrictEqual(Result.getOrThrow(variableValue(testRun, "ITEM2.SCORE")), floatOf(0.75));
+  });
+
+  it("[T-9] variableValue gives ITEM1.numAttempts read through its item ref: the count of attempts started, a single integer", () => {
+    assert.deepStrictEqual(Result.getOrThrow(variableValue(testRun, "ITEM1.numAttempts")), {
+      baseType: "integer",
+      cardinality: "single",
+      values: [{ baseType: "integer", value: 3n }],
+    });
+  });
+
+  it("[T-9] variableValue gives ITEM2.T read through its item ref as NULL of its declared type: the item is not yet presented (G-R3, pending)", () => {
+    assert.deepStrictEqual(
+      Result.getOrThrow(variableValue(testRun, "ITEM2.T")),
+      nullOf("integer", "single"),
+    );
+  });
+
+  it("[T-9] variableValue gives ITEM1.UPLOAD, a file response, read through its item ref as a NULL (G-R3, pending)", () => {
+    assert.isTrue(isNull(Result.getOrThrow(variableValue(testRun, "ITEM1.UPLOAD"))));
+  });
+
+  it("[T-9] variableValue gives the run's own outcome named ITEM1.SCORE before any read through its item ref", () => {
+    const named: Variables = {
+      ...testRun,
+      outcomes: { ...testRun.outcomes, "ITEM1.SCORE": count },
+    };
+
+    assert.deepStrictEqual(Result.getOrThrow(variableValue(named, "ITEM1.SCORE")), count);
+  });
+
+  it("[T-9] variableValue without a test scope makes no read through its item ref: ITEM1.SCORE is the record's gap", () => {
+    const failure = failureOf(variableValue(variables, "ITEM1.SCORE"));
+
+    assert.deepStrictEqual(
+      {
+        _tag: failure._tag,
+        holder: failure.holder,
+        identifier: failure.identifier,
+        role: failure.role,
+      },
+      {
+        _tag: "UnknownIdentifierError",
+        holder: "record",
+        identifier: "ITEM1.SCORE",
+        role: "variable",
+      },
+    );
+  });
+
+  it("[T-9] builtInValue gives the test's own duration, not a read through its item ref: its seconds as a single duration", () => {
+    assert.deepStrictEqual(
+      [builtInValue(testRun, "duration"), Result.getOrThrow(variableValue(testRun, "duration"))],
+      [
+        Option.some({
+          baseType: "duration",
+          cardinality: "single",
+          values: [{ baseType: "duration", value: 90.5 }],
+        }),
+        {
+          baseType: "duration",
+          cardinality: "single",
+          values: [{ baseType: "duration", value: 90.5 }],
+        },
+      ],
+    );
+  });
+
+  it("[T-9] builtInValue gives the test's duration as NULL of a single duration when its scope holds no time, not a read through its item ref (G-R3, pending)", () => {
+    const untimed: Variables = { ...testRun, test: { ...testScope, duration: Option.none() } };
+
+    assert.deepStrictEqual(
+      builtInValue(untimed, "duration"),
+      Option.some(nullOf("duration", "single")),
+    );
+  });
+
+  it("[T-9] builtInValue gives no duration without a test scope, so an item's duration stays unheld, with no read through its item ref", () => {
+    assert.isTrue(Option.isNone(builtInValue({ ...variables, numAttempts: 1n }, "duration")));
+  });
+
+  it("[T-9] referenceInteger gives qti-index's n naming ITEM1.N read through its item ref", () => {
+    assert.deepStrictEqual(
+      Result.getOrThrow(referenceInteger(testRun, { _tag: "ref", identifier: "ITEM1.N" })),
+      Option.some(4n),
+    );
+  });
+
+  it("[T-9] referenceValue keeps NULL at an unchecked site for ITEM1.SCORE, with no read through its item ref (9.11)", () => {
+    assert.deepStrictEqual(
+      Result.getOrThrow(
+        referenceValue(testRun, {
+          baseType: "float",
+          checked: false,
+          reference: { _tag: "ref", identifier: "ITEM1.SCORE" },
+        }),
+      ),
+      nullOf("float", "single"),
+    );
+  });
+});
+
+describe("builtInType in a test's run [T-9]", () => {
+  it("[T-9] names the test's own duration a single duration in a test's run, timed or untimed, beside completionStatus and numAttempts: a built-in declares no default, so its qti-default is NULL of that type", () => {
+    const untimed: Variables = { ...testRun, test: { ...testScope, duration: Option.none() } };
+
+    assert.deepStrictEqual(
+      [
+        ...["duration", "completionStatus", "numAttempts", "QTI_CONTEXT"].map((name) =>
+          builtInType(testRun, name),
+        ),
+        builtInType(untimed, "duration"),
+      ],
+      [
+        Option.some({ baseType: "duration", cardinality: "single" }),
+        Option.some({ baseType: "identifier", cardinality: "single" }),
+        Option.some({ baseType: "integer", cardinality: "single" }),
+        Option.none(),
+        Option.some({ baseType: "duration", cardinality: "single" }),
+      ],
     );
   });
 });

@@ -8,9 +8,12 @@ import type {
   SourceElement,
 } from "#plate/document/source.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
-import type { ReferenceEntry } from "#plate/model/expression.ts";
-import { checkRules, referenceRefusals } from "#plate/validate/rules.ts";
+import { singleOf } from "#plate/model/expression.ts";
+import type { ExpressionType, ReferenceEntry } from "#plate/model/expression.ts";
+import { checkRules, processingRefusals, referenceRefusals } from "#plate/validate/rules.ts";
+import type { CollectedTyper, PrefixedTyper } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
+import { check } from "#plate/validate/verdict.ts";
 
 /**
  * The location every hand-built item in these tests carries.
@@ -465,6 +468,27 @@ const templateRead = (path: string, facts: Readonly<Record<string, string>>) => 
   detail: { check: "template-read", ...facts },
   path,
   rule: "expression-type" as const,
+});
+
+/**
+ * Construct a `qti-variable` weighted by `W`.
+ *
+ * @param identifier The variable it reads.
+ * @returns The expression.
+ */
+const weighted = (identifier: string): SourceElement =>
+  el("qti-variable", [attr("identifier", identifier), attr("weight-identifier", "W")]);
+
+/**
+ * The refusal of a weighted `qti-variable` that a rule holds as its expression (reading 23).
+ *
+ * @param rulePath The rule's path.
+ * @returns The refusal, reduced.
+ */
+const weightPlaced = (rulePath: string) => ({
+  detail: { attribute: "weight-identifier", element: "qti-variable", reading: "23" },
+  path: `${rulePath}/qti-variable/@weight-identifier`,
+  rule: "expression-placement" as const,
 });
 
 /**
@@ -1620,6 +1644,32 @@ describe("checkRules", () => {
 
         assert.deepStrictEqual([judged(timed(declared)), judged(declared)], [[], []]);
       });
+    });
+  });
+
+  describe("expression-placement (reading 23)", () => {
+    it("[I-9a] refuses a weighted variable in an item's response processing as expression-placement at its weight-identifier, and accepts it unweighted (pantry P12, VariableWeightInTest)", () => {
+      const declared = [outcome("SCORE"), outcome("W")];
+
+      assert.deepStrictEqual(
+        [
+          judged(settingOutcome(declared, "SCORE", weighted("W"))),
+          judged(settingOutcome(declared, "SCORE", variable("W"))),
+        ],
+        [[weightPlaced("qti-assessment-item/qti-response-processing/qti-set-outcome-value")], []],
+      );
+    });
+
+    it("[I-9a] refuses a weighted variable in an item's template processing the same way (pantry P12)", () => {
+      const declared = [declaration("qti-template-declaration", "F", "single", "float")];
+
+      assert.deepStrictEqual(
+        [
+          judged(item(declared, [], [templateProcessing(setTemplate("F", weighted("F")))])),
+          judged(item(declared, [], [templateProcessing(setTemplate("F", variable("F")))])),
+        ],
+        [[weightPlaced("qti-assessment-item/qti-template-processing/qti-set-template-value")], []],
+      );
     });
   });
 
@@ -3073,6 +3123,1103 @@ describe("referenceRefusals", () => {
       mistyped("qti-pattern-match", "pattern", "string", "RESPONSE"),
     ]);
   });
+});
+
+/**
+ * The location of the hand-built test {@link scoringTest} builds.
+ */
+const testLocation = "tests/rules.xml";
+
+/**
+ * Construct a hand-built test with declarations, one part, one section and the item ref `ITEM1`,
+ * whose outcome processing holds the given rules.
+ *
+ * @param declarations The test's declarations, in document order.
+ * @param rules The rules of its `qti-outcome-processing`.
+ * @returns The test as a source document.
+ */
+const ruledTest = (
+  declarations: readonly SourceElement[],
+  rules: readonly SourceElement[],
+): SourceDocument =>
+  doc(
+    testLocation,
+    el(
+      "qti-assessment-test",
+      [attr("identifier", "T"), attr("title", "Test")],
+      [
+        ...declarations,
+        el(
+          "qti-test-part",
+          [
+            attr("identifier", "P"),
+            attr("navigation-mode", "linear"),
+            attr("submission-mode", "individual"),
+          ],
+          [
+            el(
+              "qti-assessment-section",
+              [attr("identifier", "S"), attr("title", "S"), attr("visible", "true")],
+              [
+                el("qti-assessment-item-ref", [
+                  attr("href", "items/ITEM1.xml"),
+                  attr("identifier", "ITEM1"),
+                ]),
+              ],
+            ),
+          ],
+        ),
+        el("qti-outcome-processing", [], rules),
+      ],
+    ),
+  );
+
+/**
+ * Construct a hand-built test with a float `SCORE`, one part, one section and the item ref
+ * `ITEM1`, whose outcome processing sets `SCORE` to an expression.
+ *
+ * @param expression The expression.
+ * @returns The test as a source document.
+ */
+const scoringTest = (expression: SourceElement): SourceDocument =>
+  ruledTest([outcome("SCORE")], [setScore(expression)]);
+
+/**
+ * The path of a rule of a {@link ruledTest}'s outcome processing.
+ *
+ * @param local The rule's local name.
+ * @returns Its path, as a refusal's location writes it.
+ */
+const outcomeRulePath = (local: string): string =>
+  `qti-assessment-test/qti-outcome-processing/${local}`;
+
+/**
+ * Construct a typer that gives one prefixed read a type and every other name `unknown`.
+ *
+ * @param name The prefixed read it types.
+ * @param baseType The base type it gives that read, single.
+ * @returns The typer.
+ */
+const typing =
+  (name: string, baseType: "float" | "integer" | "string"): PrefixedTyper =>
+  (read) =>
+    read === name ? singleOf(baseType) : { baseType: "unknown", cardinality: "unknown" };
+
+/**
+ * The typer a test checked alone passes: every prefixed read `unknown`, which satisfies every rule.
+ *
+ * @returns The type `unknown`.
+ */
+const unknownTyping: PrefixedTyper = () => ({ baseType: "unknown", cardinality: "unknown" });
+
+/**
+ * Check a test with {@link processingRefusals} under a typer.
+ *
+ * @param source The test.
+ * @param typePrefixed The typer of its prefixed reads.
+ * @param templateDefaultType The typer of its template defaults' targets, none for every default
+ *   unless given.
+ * @param reaching For a section, the test it is judged under, none unless given.
+ * @returns The refusals, reduced to their rule, path and detail.
+ */
+const processed = (
+  source: SourceDocument,
+  typePrefixed: PrefixedTyper,
+  templateDefaultType?: (templateDefault: SourceElement) => Option.Option<ExpressionType>,
+  reaching?: SourceDocument,
+) =>
+  processingRefusals(
+    source,
+    tables,
+    typePrefixed,
+    templateDefaultType,
+    Option.fromUndefinedOr(reaching),
+  ).map((refusal) => ({
+    detail: refusal.detail,
+    path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
+    rule: refusal.rule,
+  }));
+
+/**
+ * Construct a hand-built section document `S` with the item ref `ITEM1`, whose pre-condition is an
+ * expression.
+ *
+ * @param condition The pre-condition's expression.
+ * @returns The section as a source document.
+ */
+const conditionedSection = (condition: SourceElement): SourceDocument =>
+  doc(
+    "tests/section.xml",
+    el(
+      "qti-assessment-section",
+      [attr("identifier", "S"), attr("title", "S"), attr("visible", "true")],
+      [
+        el("qti-pre-condition", [], [condition]),
+        el("qti-assessment-item-ref", [
+          attr("href", "items/ITEM1.xml"),
+          attr("identifier", "ITEM1"),
+        ]),
+      ],
+    ),
+  );
+
+/**
+ * Construct a `qti-gt` of a variable over the float 1, whose operands must each be a single integer
+ * or float.
+ *
+ * @param identifier The variable's name.
+ * @returns The expression.
+ */
+const greaterThanOne = (identifier: string): SourceElement =>
+  el("qti-gt", [], [variable(identifier), baseValue("float", "1")]);
+
+/**
+ * Construct a {@link scoringTest} that sets `SCORE` to itself rounded to `ITEM1.N` decimal places,
+ * a prefixed read in a reference attribute.
+ *
+ * @returns The test.
+ */
+const roundedByItem = (): SourceDocument =>
+  scoringTest(
+    el(
+      "qti-round-to",
+      [attr("figures", "ITEM1.N"), attr("rounding-mode", "decimalPlaces")],
+      [variable("SCORE")],
+    ),
+  );
+
+/**
+ * A template default of `ITEM1`'s template variable `T` to the string `x`.
+ */
+const stringDefault = el(
+  "qti-template-default",
+  [attr("template-identifier", "T")],
+  [baseValue("string", "x")],
+);
+
+/**
+ * A hand-built test with a float `SCORE`, one part, one section and the item ref `ITEM1`, which
+ * holds {@link stringDefault}.
+ */
+const defaultingTest = doc(
+  testLocation,
+  el(
+    "qti-assessment-test",
+    [attr("identifier", "T"), attr("title", "Test")],
+    [
+      outcome("SCORE"),
+      el(
+        "qti-test-part",
+        [
+          attr("identifier", "P"),
+          attr("navigation-mode", "linear"),
+          attr("submission-mode", "individual"),
+        ],
+        [
+          el(
+            "qti-assessment-section",
+            [attr("identifier", "S"), attr("title", "S"), attr("visible", "true")],
+            [
+              el(
+                "qti-assessment-item-ref",
+                [attr("href", "items/ITEM1.xml"), attr("identifier", "ITEM1")],
+                [stringDefault],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+/**
+ * Construct a typer of template defaults' targets that gives {@link stringDefault}'s a single type.
+ *
+ * @param baseType The base type it gives that target.
+ * @returns The typer.
+ */
+const defaultTyping =
+  (baseType: "integer" | "string") =>
+  (templateDefault: SourceElement): Option.Option<ExpressionType> =>
+    templateDefault === stringDefault ? Option.some(singleOf(baseType)) : Option.none();
+
+/**
+ * Check a {@link ruledTest} whose outcome processing sets `SCORE` to an expression that names a
+ * test outcome, under a typer that types the name a float, as a package would type a prefixed read.
+ *
+ * @param identifier The outcome's identifier, which the test declares.
+ * @param local The naming expression's local name, such as `qti-map-response`.
+ * @returns The refusals.
+ */
+const namingResponse = (identifier: string, local: string) =>
+  processed(
+    ruledTest([outcome("SCORE"), outcome(identifier)], [setScore(variable(identifier, local))]),
+    typing(identifier, "float"),
+  );
+
+/**
+ * The refusal of a {@link namingResponse} test: its expression names no response, and the test,
+ * which declares none, is the declarer.
+ *
+ * @param identifier The name the expression gives.
+ * @param local The expression's local name.
+ * @returns The one refusal, reduced as {@link processed} reduces it.
+ */
+const noResponse = (identifier: string, local: string) => [
+  {
+    detail: { declarer: "test", element: local, expected: "response", identifier },
+    path: `${outcomeRulePath("qti-set-outcome-value")}/${local}`,
+    rule: "undeclared-variable",
+  },
+];
+
+/**
+ * Check a {@link ruledTest} that declares a context variable and sets it with a
+ * `qti-set-outcome-value`, under a typer that types the name a float.
+ *
+ * @param identifier The context variable's identifier.
+ * @returns The refusals.
+ */
+const settingContext = (identifier: string) =>
+  processed(
+    ruledTest(
+      [declaration("qti-context-declaration", identifier, "single", "float"), outcome("SCORE")],
+      [setOutcome(identifier, baseValue("float", "1"))],
+    ),
+    typing(identifier, "float"),
+  );
+
+/**
+ * Check a {@link ruledTest} that declares the float outcome `A.B` whole and sets `SCORE` to its
+ * `qti-variable` and to its `qti-default`.
+ *
+ * @param typePrefixed The typer of its prefixed reads.
+ * @returns The refusals.
+ */
+const readingWhole = (typePrefixed: PrefixedTyper) =>
+  processed(
+    ruledTest(
+      [outcome("SCORE"), outcome("A.B")],
+      [setScore(variable("A.B")), setScore(variable("A.B", "qti-default"))],
+    ),
+    typePrefixed,
+  );
+
+/**
+ * Check a {@link ruledTest} that looks `I1.SCORE`, a prefixed read, up with an operand.
+ *
+ * @param operand The lookup's operand.
+ * @param typePrefixed The typer of its prefixed reads, every one `unknown` unless given.
+ * @returns The refusals.
+ */
+const lookingUpDotted = (operand: SourceElement, typePrefixed: PrefixedTyper = unknownTyping) =>
+  processed(ruledTest([outcome("SCORE")], [lookup("I1.SCORE", operand)]), typePrefixed);
+
+/**
+ * Check a {@link ruledTest} that sets a boolean `PASSED` to a `qti-pattern-match` of a string.
+ *
+ * @param pattern The match's `pattern`.
+ * @param typePrefixed The typer of its prefixed reads.
+ * @returns The refusals.
+ */
+const matchingPattern = (pattern: string, typePrefixed: PrefixedTyper) =>
+  processed(
+    ruledTest(
+      [outcome("PASSED", "boolean")],
+      [
+        setOutcome(
+          "PASSED",
+          el("qti-pattern-match", [attr("pattern", pattern)], [baseValue("string", "x")]),
+        ),
+      ],
+    ),
+    typePrefixed,
+  );
+
+/**
+ * The typer of {@link weightedReads}: `ITEM1.INT` an integer, `ITEM1.FLT` a float and
+ * `ITEM1.RESPONSE` an identifier, each single, and every other name `unknown`.
+ *
+ * @param read The prefixed read.
+ * @returns Its type.
+ */
+const itemTyping: PrefixedTyper = (read) =>
+  Option.match(
+    Option.fromUndefinedOr(
+      new Map<string, ExpressionType["baseType"]>([
+        ["ITEM1.FLT", "float"],
+        ["ITEM1.INT", "integer"],
+        ["ITEM1.RESPONSE", "identifier"],
+      ]).get(read),
+    ),
+    {
+      onNone: () => ({ baseType: "unknown", cardinality: "unknown" }),
+      onSome: singleOf,
+    },
+  );
+
+/**
+ * Construct a `qti-variable` weighted by the weight `W`.
+ *
+ * @param identifier The name it reads.
+ * @returns The expression.
+ */
+const weightedVariable = (identifier: string): SourceElement =>
+  el("qti-variable", [attr("identifier", identifier), attr("weight-identifier", "W")]);
+
+/**
+ * Check a {@link ruledTest} with the float `F`, the integer `N` and `K` and the boolean `B` whose
+ * outcome processing sets one of them to an expression, under a typer.
+ *
+ * @param target The outcome it sets.
+ * @param expression The expression.
+ * @param typePrefixed The typer of its prefixed reads, {@link itemTyping} unless given.
+ * @returns The refusals.
+ */
+const weightedReads = (
+  target: "B" | "F" | "N",
+  expression: SourceElement,
+  typePrefixed: PrefixedTyper = itemTyping,
+) =>
+  processed(
+    ruledTest(
+      [outcome("F"), outcome("N", "integer"), outcome("K", "integer"), outcome("B", "boolean")],
+      [setOutcome(target, expression)],
+    ),
+    typePrefixed,
+  );
+
+/**
+ * The refusal of a {@link weightedReads} test that sets the integer `N` to a single float.
+ */
+const floatIntoN = [
+  {
+    detail: {
+      element: "qti-set-outcome-value",
+      expressionBaseType: "float",
+      expressionCardinality: "single",
+      identifier: "N",
+      outcomeBaseType: "integer",
+      outcomeCardinality: "single",
+    },
+    path: outcomeRulePath("qti-set-outcome-value"),
+    rule: "expression-type",
+  },
+];
+
+/**
+ * Check a {@link ruledTest} with the float multiple `ALL` and the float single `SUM` whose outcome
+ * processing sets one of them from an unweighted `qti-test-variables` of `PTS` with no
+ * `base-type`, `SUM` through `qti-sum`, every prefixed read `unknown`.
+ *
+ * @param target The outcome it sets.
+ * @param typeCollected The typer of a collection's base type, none unless given.
+ * @returns The refusals, reduced to their rule, path and detail.
+ */
+const collectedReads = (target: "ALL" | "SUM", typeCollected?: CollectedTyper) => {
+  const collection = el("qti-test-variables", [attr("variable-identifier", "PTS")]);
+
+  return processingRefusals(
+    ruledTest(
+      [
+        el("qti-outcome-declaration", [
+          attr("identifier", "ALL"),
+          attr("cardinality", "multiple"),
+          attr("base-type", "float"),
+        ]),
+        outcome("SUM"),
+      ],
+      [setOutcome(target, target === "ALL" ? collection : el("qti-sum", [], [collection]))],
+    ),
+    tables,
+    unknownTyping,
+    undefined,
+    Option.none(),
+    typeCollected,
+  ).map((refusal) => ({
+    detail: refusal.detail,
+    path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
+    rule: refusal.rule,
+  }));
+};
+
+/**
+ * A collected typer that gives every collection an integer, as items that declare it integer do.
+ *
+ * @returns The base type `integer`.
+ */
+const integerTyping: CollectedTyper = () => "integer";
+
+/**
+ * A collected typer that gives every collection a float, as an item that declares it float does.
+ *
+ * @returns The base type `float`.
+ */
+const floatTyping: CollectedTyper = () => "float";
+
+/**
+ * The refusal of a {@link collectedReads} test that sets its target from an integer collection.
+ *
+ * @param target The outcome it sets.
+ * @returns The refusal, an integer of the target's cardinality into a float.
+ */
+const integerInto = (target: "ALL" | "SUM") => [
+  {
+    detail: {
+      element: "qti-set-outcome-value",
+      expressionBaseType: "integer",
+      expressionCardinality: target === "ALL" ? "multiple" : "single",
+      identifier: target,
+      outcomeBaseType: "float",
+      outcomeCardinality: target === "ALL" ? "multiple" : "single",
+    },
+    path: outcomeRulePath("qti-set-outcome-value"),
+    rule: "expression-type",
+  },
+];
+
+describe("processingRefusals", () => {
+  it("[T-9] judges a template default against the template variable it sets where the caller types it, and judges none it is not given (pantry P20, templateOf)", () => {
+    assert.deepStrictEqual(
+      [
+        processed(defaultingTest, unknownTyping, defaultTyping("integer")),
+        processed(defaultingTest, unknownTyping, defaultTyping("string")),
+        processed(defaultingTest, unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: {
+              element: "qti-template-default",
+              expressionBaseType: "string",
+              expressionCardinality: "single",
+              identifier: "T",
+              outcomeBaseType: "integer",
+              outcomeCardinality: "single",
+              targetKind: "template",
+            },
+            path: "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref/qti-template-default",
+            rule: "expression-type",
+          },
+        ],
+        [],
+        [],
+      ],
+    );
+  });
+
+  it("[T-9] types a prefixed read with the typer it is given, so a string ITEM1.SCORE cannot set a float SCORE (pantry P20)", () => {
+    assert.deepStrictEqual(
+      [
+        processed(scoringTest(variable("ITEM1.SCORE")), typing("ITEM1.SCORE", "string")),
+        processed(scoringTest(variable("ITEM1.SCORE")), typing("ITEM1.SCORE", "float")),
+      ],
+      [
+        [
+          {
+            detail: {
+              element: "qti-set-outcome-value",
+              expressionBaseType: "string",
+              expressionCardinality: "single",
+              identifier: "SCORE",
+              outcomeBaseType: "float",
+              outcomeCardinality: "single",
+            },
+            path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
+            rule: "expression-type",
+          },
+        ],
+        [],
+      ],
+    );
+  });
+
+  it("[T-9] weighted read is a float: a weighted ITEM1.INT, an integer item variable read through its prefix, sets the float F and is refused setting the integer N, which the unweighted read sets (G-R3 198, pantry P20)", () => {
+    assert.deepStrictEqual(
+      [
+        weightedReads("F", weightedVariable("ITEM1.INT")),
+        weightedReads("N", weightedVariable("ITEM1.INT")),
+        weightedReads("N", variable("ITEM1.INT")),
+      ],
+      [[], floatIntoN, []],
+    );
+  });
+
+  it("[T-9] weighted read is a float only of an integer read through its prefix: a weighted ITEM1.FLT stays a float, a weighted ITEM1.RESPONSE keeps identifier, a weighted K the test declares keeps integer, and under the unknown typer a weighted read stays unknown (G-R3 186 and 198)", () => {
+    const matched = el(
+      "qti-match",
+      [],
+      [weightedVariable("ITEM1.RESPONSE"), baseValue("identifier", "A")],
+    );
+
+    assert.deepStrictEqual(
+      [
+        weightedReads("F", weightedVariable("ITEM1.FLT")),
+        weightedReads("N", weightedVariable("ITEM1.FLT")),
+        weightedReads("B", matched),
+        weightedReads("N", weightedVariable("K")),
+        weightedReads("N", weightedVariable("ITEM1.INT"), unknownTyping),
+      ],
+      [[], floatIntoN, [], [], []],
+    );
+  });
+
+  it("[T-9] collection typed from the items: an integer PTS collected with no base-type is refused setting the float multiple ALL and, summed, the float SUM, a float PTS sets both, and with no collected typer the collection is unknown and sets both (G-R3 199, pantry P20)", () => {
+    assert.deepStrictEqual(
+      [
+        collectedReads("ALL", integerTyping),
+        collectedReads("SUM", integerTyping),
+        collectedReads("ALL", floatTyping),
+        collectedReads("SUM", floatTyping),
+        collectedReads("ALL"),
+        collectedReads("SUM"),
+      ],
+      [integerInto("ALL"), integerInto("SUM"), [], [], [], []],
+    );
+  });
+
+  it("[T-9] judges a prefixed name in a reference attribute by the type the typer gives it (pantry P24)", () => {
+    assert.deepStrictEqual(
+      [
+        processed(roundedByItem(), typing("ITEM1.N", "string")),
+        processed(roundedByItem(), typing("ITEM1.N", "integer")),
+      ],
+      [
+        [
+          {
+            detail: {
+              attribute: "figures",
+              check: "reference",
+              element: "qti-round-to",
+              expectedBaseType: "integer",
+              identifier: "ITEM1.N",
+            },
+            path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-round-to",
+            rule: "expression-type",
+          },
+        ],
+        [],
+      ],
+    );
+  });
+
+  it("[T-9] gives nothing for an item, whose processing checkRules judges, and checkRules nothing for a test", () => {
+    const undeclaredItem = item(
+      [outcome("SCORE")],
+      [],
+      [processing(undefined, [setScore(variable("NOPE"))])],
+    );
+    const undeclaredTest = scoringTest(variable("NOPE"));
+
+    assert.deepStrictEqual(
+      [
+        processingRefusals(undeclaredItem, tables, typing("NOPE", "float")).length,
+        checkRules(undeclaredItem, tables).map((refusal) => refusal.rule),
+        checkRules(undeclaredTest, tables).length,
+        processingRefusals(undeclaredTest, tables, typing("NOPE", "float")).map(
+          (refusal) => refusal.rule,
+        ),
+      ],
+      [0, ["undeclared-variable"], 0, ["undeclared-variable"]],
+    );
+  });
+
+  it("[T-9] refuses an unprefixed map-response in a test, which names a test outcome and no response, as undeclared-variable expecting a response, and accepts a prefixed one in a test alone (pantry P27)", () => {
+    const rulePath = "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value";
+
+    assert.deepStrictEqual(
+      [
+        processed(scoringTest(variable("SCORE", "qti-map-response")), unknownTyping),
+        processed(scoringTest(mapPoint("SCORE")), unknownTyping),
+        processed(scoringTest(variable("ITEM1.RESPONSE", "qti-map-response")), unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: {
+              declarer: "test",
+              element: "qti-map-response",
+              expected: "response",
+              identifier: "SCORE",
+            },
+            path: `${rulePath}/qti-map-response`,
+            rule: "undeclared-variable",
+          },
+        ],
+        [
+          {
+            detail: {
+              declarer: "test",
+              element: "qti-map-response-point",
+              expected: "response",
+              identifier: "SCORE",
+            },
+            path: `${rulePath}/qti-map-response-point`,
+            rule: "undeclared-variable",
+          },
+        ],
+        [],
+      ],
+    );
+  });
+
+  it("[T-9] judges a section document under a test that reaches it when given one: NOPE refused as undeclared-variable, a prefixed read by the reaching test's typer, the test's SCORE accepted, and with none every name unknown, as the section alone", () => {
+    const reaching = scoringTest(baseValue("float", "1"));
+    const conditionPath = "qti-assessment-section/qti-pre-condition";
+
+    assert.deepStrictEqual(
+      [
+        processed(conditionedSection(variable("NOPE")), unknownTyping, undefined, reaching),
+        processed(
+          conditionedSection(greaterThanOne("ITEM1.STR")),
+          typing("ITEM1.STR", "string"),
+          undefined,
+          reaching,
+        ),
+        processed(conditionedSection(greaterThanOne("SCORE")), unknownTyping, undefined, reaching),
+        processed(conditionedSection(variable("NOPE")), unknownTyping),
+        processed(conditionedSection(greaterThanOne("ITEM1.STR")), typing("ITEM1.STR", "string")),
+      ],
+      [
+        [
+          {
+            detail: {
+              declarer: "test",
+              element: "qti-variable",
+              expected: "variable",
+              identifier: "NOPE",
+            },
+            path: `${conditionPath}/qti-variable`,
+            rule: "undeclared-variable",
+          },
+        ],
+        [
+          {
+            detail: {
+              acceptsBaseTypes: "integer float",
+              acceptsCardinalities: "single",
+              check: "operand",
+              element: "qti-gt",
+              expressionBaseType: "string",
+              expressionCardinality: "single",
+              operand: "1",
+            },
+            path: `${conditionPath}/qti-gt`,
+            rule: "expression-type",
+          },
+        ],
+        [],
+        [],
+        [],
+      ],
+    );
+  });
+
+  it("[T-9] names the test as the declarer of a name nothing answers in a test's outcome processing or in a section document a test reaches: its qti-variable of NOPE, its qti-round-to's figures of NOPE, the section's pre-condition over NOPE, and a qti-map-response of the test outcome A.B it declares whole", () => {
+    const reaching = scoringTest(baseValue("float", "1"));
+
+    assert.deepStrictEqual(
+      [
+        processed(scoringTest(variable("NOPE")), unknownTyping),
+        processed(
+          scoringTest(
+            el(
+              "qti-round-to",
+              [attr("figures", "NOPE"), attr("rounding-mode", "decimalPlaces")],
+              [variable("SCORE")],
+            ),
+          ),
+          unknownTyping,
+        ),
+        processed(conditionedSection(variable("NOPE")), unknownTyping, undefined, reaching),
+        namingResponse("A.B", "qti-map-response"),
+      ],
+      [
+        [
+          {
+            detail: {
+              declarer: "test",
+              element: "qti-variable",
+              expected: "variable",
+              identifier: "NOPE",
+            },
+            path: `${outcomeRulePath("qti-set-outcome-value")}/qti-variable`,
+            rule: "undeclared-variable",
+          },
+        ],
+        [
+          {
+            detail: {
+              attribute: "figures",
+              declarer: "test",
+              element: "qti-round-to",
+              expected: "variable",
+              identifier: "NOPE",
+            },
+            path: `${outcomeRulePath("qti-set-outcome-value")}/qti-round-to`,
+            rule: "undeclared-variable",
+          },
+        ],
+        [
+          {
+            detail: {
+              declarer: "test",
+              element: "qti-variable",
+              expected: "variable",
+              identifier: "NOPE",
+            },
+            path: "qti-assessment-section/qti-pre-condition/qti-variable",
+            rule: "undeclared-variable",
+          },
+        ],
+        noResponse("A.B", "qti-map-response"),
+      ],
+    );
+  });
+
+  it("[T-9] refuses a qti-base-value in a test's outcome processing or a section's pre-condition whose text is outside its base type as value-type, and accepts one inside it (pantry P7)", () => {
+    const section = (written: string): SourceDocument =>
+      doc(
+        "tests/section.xml",
+        el(
+          "qti-assessment-section",
+          [attr("identifier", "S"), attr("title", "S"), attr("visible", "true")],
+          [
+            el("qti-pre-condition", [], [baseValue("boolean", written)]),
+            el("qti-assessment-item-ref", [
+              attr("href", "items/ITEM1.xml"),
+              attr("identifier", "ITEM1"),
+            ]),
+          ],
+        ),
+      );
+
+    assert.deepStrictEqual(
+      [
+        processed(scoringTest(baseValue("float", "abc")), unknownTyping),
+        processed(section("maybe"), unknownTyping),
+        processed(scoringTest(baseValue("float", "1.5")), unknownTyping),
+        processed(section("true"), unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: { baseType: "float", lexical: "abc" },
+            path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-base-value",
+            rule: "value-type",
+          },
+        ],
+        [
+          {
+            detail: { baseType: "boolean", lexical: "maybe" },
+            path: "qti-assessment-section/qti-pre-condition/qti-base-value",
+            rule: "value-type",
+          },
+        ],
+        [],
+        [],
+      ],
+    );
+  });
+
+  it("[T-9] leaves an item's run unchanged: a dotted name the item does not declare stays undeclared-variable (reading 37)", () => {
+    assert.deepStrictEqual(settingScore(variable("ITEM1.SCORE")), [
+      {
+        detail: { element: "qti-variable", expected: "variable", identifier: "ITEM1.SCORE" },
+        path: "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-variable",
+        rule: "undeclared-variable",
+      },
+    ]);
+  });
+
+  it("[T-9] refuses a qti-map-response or a qti-correct of a dotted outcome the test declares whole, a whole name of another kind, as undeclared-variable expecting a response, as their undotted forms are (reading 37; pantry P8, P27)", () => {
+    assert.deepStrictEqual(
+      [
+        namingResponse("A.B", "qti-map-response"),
+        namingResponse("A.B", "qti-correct"),
+        namingResponse("A", "qti-map-response"),
+        namingResponse("A", "qti-correct"),
+      ],
+      [
+        noResponse("A.B", "qti-map-response"),
+        noResponse("A.B", "qti-correct"),
+        noResponse("A", "qti-map-response"),
+        noResponse("A", "qti-correct"),
+      ],
+    );
+  });
+
+  it("[T-9] refuses a qti-set-outcome-value of a dotted context variable the test declares whole, a whole name of another kind, as undeclared-variable expecting an outcome, as its undotted form is (reading 37; pantry P8)", () => {
+    assert.deepStrictEqual(
+      [settingContext("C.X"), settingContext("C")],
+      ["C.X", "C"].map((identifier) => [
+        {
+          detail: {
+            declarer: "test",
+            element: "qti-set-outcome-value",
+            expected: "outcome",
+            identifier,
+          },
+          path: outcomeRulePath("qti-set-outcome-value"),
+          rule: "undeclared-variable",
+        },
+      ]),
+    );
+  });
+
+  it("[T-9] reads a whole name of another kind's own declaration where any variable may be named: a qti-variable and a qti-default of A.B are accepted, typed by A.B's declaration and not by the typer (reading 37)", () => {
+    assert.deepStrictEqual(
+      [readingWhole(unknownTyping), readingWhole(typing("A.B", "string"))],
+      [[], []],
+    );
+  });
+
+  it("[T-9] refuses the lookup operand of a dotted target the typer answers when it is not a single integer, float or duration, with no table (reading 28; pantry P22, checkLookup)", () => {
+    assert.deepStrictEqual(
+      [
+        lookingUpDotted(baseValue("string", "x")),
+        lookingUpDotted(baseValue("string", "x"), typing("I1.SCORE", "float")),
+        lookingUpDotted(baseValue("integer", "1")),
+        lookingUpDotted(baseValue("float", "1.5")),
+      ],
+      [
+        [
+          {
+            detail: {
+              element: "qti-lookup-outcome-value",
+              expressionBaseType: "string",
+              expressionCardinality: "single",
+              identifier: "I1.SCORE",
+              reading: "28",
+            },
+            path: outcomeRulePath("qti-lookup-outcome-value"),
+            rule: "expression-type",
+          },
+        ],
+        [
+          {
+            detail: {
+              element: "qti-lookup-outcome-value",
+              expressionBaseType: "string",
+              expressionCardinality: "single",
+              identifier: "I1.SCORE",
+              reading: "28",
+            },
+            path: outcomeRulePath("qti-lookup-outcome-value"),
+            rule: "expression-type",
+          },
+        ],
+        [],
+        [],
+      ],
+    );
+  });
+
+  it("[T-9] keeps the lookup operand of a declared table outcome judged against its table, beside a lookup operand of a dotted target (reading 28)", () => {
+    const tabled = outcome("SCORE", "float", [
+      el(
+        "qti-match-table",
+        [],
+        [el("qti-match-table-entry", [attr("source-value", "1"), attr("target-value", "2")])],
+      ),
+    ]);
+
+    assert.deepStrictEqual(
+      [
+        processed(ruledTest([tabled], [lookup("SCORE", baseValue("float", "1.5"))]), unknownTyping),
+        processed(ruledTest([tabled], [lookup("SCORE", baseValue("integer", "1"))]), unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: {
+              element: "qti-lookup-outcome-value",
+              expressionBaseType: "float",
+              expressionCardinality: "single",
+              identifier: "SCORE",
+              reading: "28",
+              table: "qti-match-table",
+            },
+            path: outcomeRulePath("qti-lookup-outcome-value"),
+            rule: "expression-type",
+          },
+        ],
+        [],
+      ],
+    );
+  });
+
+  it("[T-9] judges a braced prefixed name the typer types as a reference: an integer {I1.N} is P24 at qti-pattern-match's pattern, a string {I1.STR} is accepted, and under the unknown typer both stay literal text (ruling R1; pantry P24, checkAttributeReference)", () => {
+    assert.deepStrictEqual(
+      [
+        matchingPattern("{I1.N}", typing("I1.N", "integer")),
+        matchingPattern("{I1.STR}", typing("I1.STR", "string")),
+        matchingPattern("{I1.N}", unknownTyping),
+        matchingPattern("{I1.STR}", unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: {
+              attribute: "pattern",
+              check: "reference",
+              element: "qti-pattern-match",
+              expectedBaseType: "string",
+              identifier: "I1.N",
+            },
+            path: `${outcomeRulePath("qti-set-outcome-value")}/qti-pattern-match`,
+            rule: "expression-type",
+          },
+        ],
+        [],
+        [],
+        [],
+      ],
+    );
+  });
+});
+
+/**
+ * What one refusal reduces to in these tests: its rule, its path and its detail.
+ */
+type Judged = ReturnType<typeof judged>[number];
+
+/**
+ * Check a document whole, as `open` does, and reduce a refusing verdict's refusals as
+ * {@link judged} does. A test's declarations are judged by the test model's builder, which no rule
+ * of `processingRefusals` runs, so only the whole check reaches a test outcome's default value.
+ *
+ * @param source The document.
+ * @returns The refusals, reduced; empty for an accepting verdict.
+ */
+const verdictRefusals = (source: SourceDocument): readonly Judged[] => {
+  const verdict = check(source, tables);
+  assert.notStrictEqual(verdict.verdict, "unchecked");
+
+  return verdict.verdict === "refused"
+    ? verdict.refusals.map((refusal) => ({
+        detail: refusal.detail,
+        path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
+        rule: refusal.rule,
+      }))
+    : [];
+};
+
+/**
+ * Construct a rule that sets the boolean outcome `PASSED` to a `qti-base-value` of base type
+ * boolean.
+ *
+ * @param written The value's text, as written.
+ * @returns The `qti-set-outcome-value`.
+ */
+const setPassed = (written: string): SourceElement =>
+  el("qti-set-outcome-value", [attr("identifier", "PASSED")], [baseValue("boolean", written)]);
+
+/**
+ * One place plate reads a boolean value's text, with the path a refusal of it is at.
+ */
+interface BooleanPlace {
+  /**
+   * Judge a document that holds the value at this place.
+   */
+  readonly judge: (written: string) => readonly Judged[];
+  /**
+   * The place, as a case's title names it.
+   */
+  readonly name: string;
+  /**
+   * The path of the value's element.
+   */
+  readonly path: string;
+  /**
+   * The feature tag a case at this place carries, with its space: `[I-1]` where it judges a
+   * response declaration, else none.
+   */
+  readonly tag: string;
+}
+
+/**
+ * The five places a boolean `qti-value` or `qti-base-value` is read from its text: an item's
+ * response and template declarations and its response processing, and a test's outcome
+ * declaration and outcome processing.
+ */
+const booleanPlaces: readonly BooleanPlace[] = [
+  {
+    judge: (written) =>
+      judged(
+        item(
+          [response("RESPONSE", "single", "boolean", [values("qti-correct-response", written)])],
+          [],
+        ),
+      ),
+    name: "a response's qti-correct-response",
+    path: "qti-assessment-item/qti-response-declaration/qti-correct-response/qti-value",
+    tag: "[I-1] ",
+  },
+  {
+    judge: (written) =>
+      judged(
+        item(
+          [
+            el(
+              "qti-template-declaration",
+              [
+                attr("identifier", "T"),
+                attr("cardinality", "single"),
+                attr("base-type", "boolean"),
+              ],
+              [values("qti-default-value", written)],
+            ),
+          ],
+          [],
+        ),
+      ),
+    name: "a template's qti-default-value",
+    path: "qti-assessment-item/qti-template-declaration/qti-default-value/qti-value",
+    tag: "",
+  },
+  {
+    judge: (written) =>
+      judged(
+        item([outcome("PASSED", "boolean")], [], [processing(undefined, [setPassed(written)])]),
+      ),
+    name: "response processing's qti-base-value",
+    path: "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-base-value",
+    tag: "",
+  },
+  {
+    judge: (written) =>
+      verdictRefusals(
+        ruledTest([outcome("PASSED", "boolean", [values("qti-default-value", written)])], []),
+      ),
+    name: "a test outcome's qti-default-value",
+    path: "qti-assessment-test/qti-outcome-declaration/qti-default-value/qti-value",
+    tag: "",
+  },
+  {
+    judge: (written) =>
+      processed(ruledTest([outcome("PASSED", "boolean")], [setPassed(written)]), unknownTyping),
+    name: "a test's outcome processing's qti-base-value",
+    path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-base-value",
+    tag: "",
+  },
+];
+
+describe("a boolean qti-value or qti-base-value is true or false (reading 34)", () => {
+  for (const place of booleanPlaces) {
+    for (const lexical of ["1", "0", "TRUE"]) {
+      it(`${place.tag}refuses the boolean value text '${lexical}' in ${place.name} as value-type`, () => {
+        assert.deepStrictEqual(place.judge(lexical), [
+          { detail: { baseType: "boolean", lexical }, path: place.path, rule: "value-type" },
+        ]);
+      });
+    }
+
+    it(`${place.tag}accepts the boolean value text ' true ' in ${place.name}, its outer whitespace trimmed (reading 7)`, () => {
+      assert.deepStrictEqual(place.judge(" true "), []);
+    });
+  }
 });
 
 /**

@@ -1,8 +1,14 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import type { Item } from "#plate/model/item.ts";
-import { fresh, holdsCompletionStatus, outcomeDefaults } from "#plate/model/record.ts";
+import {
+  fresh,
+  holdsCompletionStatus,
+  outcomeDefaults,
+  unrunTemplateProcessing,
+} from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
+import { redactItem } from "#plate/payload.ts";
 import { bg007Item, float, integer } from "#plate/test/fixtures.ts";
 
 /**
@@ -41,6 +47,57 @@ const declaringCompletionStatus: Item = {
       },
     ],
   ]),
+};
+
+/**
+ * BG007's item with a template variable `T`, defaulting to 3, that a paragraph prints, and a
+ * `qti-template-processing` the engine does not run, which the item marks.
+ */
+const unrunPrinting: Item = {
+  ...bg007Item,
+  body: [
+    {
+      attributes: [],
+      children: [
+        {
+          base: { _tag: "literal", value: 10n },
+          delimiter: ";",
+          field: Option.none(),
+          format: Option.none(),
+          identifier: "T",
+          index: Option.none(),
+          kind: "printed-variable",
+          mappingIndicator: "=",
+          path: "qti-assessment-item/qti-item-body/p/qti-printed-variable",
+          powerForm: false,
+        },
+      ],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  templates: new Map([
+    [
+      "T",
+      {
+        baseType: "integer",
+        cardinality: "single",
+        defaultValue: Option.some(integer(3n)),
+        identifier: "T",
+        mathVariable: false,
+        paramVariable: false,
+      },
+    ],
+  ]),
+  unsupported: [
+    ...bg007Item.unsupported,
+    {
+      feature: "qti-template-processing",
+      path: "qti-assessment-item/qti-template-processing",
+      shown: "mark",
+    },
+  ],
 };
 
 describe("fresh", () => {
@@ -95,5 +152,18 @@ describe("fresh", () => {
       outcomeDefaults(declaringCompletionStatus)["completionStatus"],
       integer(0n),
     );
+  });
+
+  it("[I-5] gives notice lists that differ from a redaction's under a template processing that does not run: the redaction names the printed template variable it shows as a notice, and the record does not (D8-2)", () => {
+    assert.isTrue(unrunTemplateProcessing(unrunPrinting));
+    assert.deepStrictEqual(fresh(unrunPrinting, "i1").notices, ["qti-hotspot-interaction"]);
+    assert.deepStrictEqual(redactItem(unrunPrinting).notices, [
+      "qti-printed-variable",
+      "qti-hotspot-interaction",
+    ]);
+    assert.deepStrictEqual(redactItem(unrunPrinting, fresh(unrunPrinting, "i1")).notices, [
+      "qti-printed-variable",
+      "qti-hotspot-interaction",
+    ]);
   });
 });

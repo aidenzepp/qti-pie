@@ -5,6 +5,7 @@ import type { SourceChild, SourceDocument, SourceElement } from "#plate/document
 import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/evaluate.ts";
 import { drawBelow, drawStream, responseLabel, templateLabel } from "#plate/engine/random.ts";
+import { checkTemplateDefaults } from "#plate/engine/template.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type { Item } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
@@ -504,8 +505,29 @@ const declaresTemplates = itemDocument(
 );
 
 /**
+ * An item that declares {@link threeByDefault} and `U`, an integer with no default, whose template
+ * processing sets `U` to `T` plus 1.
+ */
+const readsTemplate = itemDocument(
+  trueFalse,
+  threeByDefault,
+  declaration("qti-template-declaration", "U", "integer"),
+  el(
+    "qti-template-processing",
+    [],
+    [
+      templateSetting(
+        "qti-set-template-value",
+        "U",
+        el("qti-sum", [], [variableOf("T"), baseValue("integer", "1")]),
+      ),
+    ],
+  ),
+);
+
+/**
  * An item that declares {@link threeByDefault} under a template processing the engine does not
- * run: it sets `T` from a `qti-duration-lt`, a kind the engine has not landed, which the item model
+ * run: it sets `T` from a `qti-field-value`, a kind the engine has not landed, which the item model
  * marks.
  */
 const marksTemplates = itemDocument(
@@ -518,7 +540,7 @@ const marksTemplates = itemDocument(
       templateSetting(
         "qti-set-template-value",
         "T",
-        el("qti-duration-lt", [], [el("qti-null"), el("qti-null")]),
+        el("qti-field-value", [attr("field-identifier", "f")], [el("qti-null")]),
       ),
     ],
   ),
@@ -1150,5 +1172,116 @@ describe("firstAttempt", () => {
         },
       );
     }),
+  );
+});
+
+describe("firstAttempt with an item ref's template defaults", () => {
+  it.effect(
+    "[T-9] starts the declared state the test sets before the item's template processing reads it",
+    () =>
+      Effect.gen(function* startsAtTestDefault() {
+        const item = yield* buildItem(readsTemplate);
+
+        const record = yield* Effect.fromResult(
+          firstAttempt(item, { instance, seed: "7", templateDefaults: { T: integerValue(10n) } }),
+        );
+
+        assert.isTrue(Option.isSome(item.templateProcessing));
+        assert.deepStrictEqual(record.templates, { T: integerValue(10n), U: integerValue(11n) });
+      }),
+  );
+
+  it.effect(
+    "[T-9] holds an item with no template processing at the declared state the test sets",
+    () =>
+      Effect.gen(function* holdsUnprocessedAtTestDefault() {
+        const item = yield* buildItem(declaresTemplates);
+
+        const record = yield* Effect.fromResult(
+          firstAttempt(item, { instance, seed: "7", templateDefaults: { T: integerValue(10n) } }),
+        );
+
+        assert.deepStrictEqual(record.templates, {
+          T: integerValue(10n),
+          U: nullOf("integer", "single"),
+        });
+        assert.deepStrictEqual([record.correct, record.defaults], [{}, {}]);
+      }),
+  );
+
+  it.effect(
+    "[T-9] holds a marked item's template variables at the declared state the test sets, though its processing does not run",
+    () =>
+      Effect.gen(function* holdsMarkedAtTestDefault() {
+        const item = yield* buildItem(marksTemplates);
+
+        const record = yield* Effect.fromResult(
+          firstAttempt(item, { instance, seed: "7", templateDefaults: { T: integerValue(10n) } }),
+        );
+
+        assert.isTrue(Option.isNone(item.templateProcessing));
+        assert.deepStrictEqual(record.templates, { T: integerValue(10n) });
+        assert.deepStrictEqual([record.correct, record.defaults], [{}, {}]);
+      }),
+  );
+
+  it.effect(
+    "[T-9] tells a misfit default from the item's own failure: checkTemplateDefaults fails it on a sound item, and firstAttempt runs the declared state the test sets once it is checked",
+    () =>
+      Effect.gen(function* checksBeforeFirstAttempt() {
+        const item = yield* buildItem(readsTemplate);
+
+        const misfit = failureOf(checkTemplateDefaults(item, { T: stringValue("ten") }));
+        const checked = yield* Effect.fromResult(
+          checkTemplateDefaults(item, { T: integerValue(10n) }),
+        );
+        const record = yield* Effect.fromResult(
+          firstAttempt(item, { instance, seed: "7", templateDefaults: checked }),
+        );
+
+        assert.instanceOf(misfit, OutcomeMismatchError);
+        assert.deepStrictEqual(
+          { _tag: misfit._tag, actual: misfit.actual, expected: misfit.expected },
+          { _tag: "OutcomeMismatchError", actual: "string single", expected: "integer single" },
+        );
+        assert.deepStrictEqual(record.templates, { T: integerValue(10n), U: integerValue(11n) });
+      }),
+  );
+
+  it.effect(
+    "[T-9] returns a misfit default as its failure, checking the declared state the test sets where it applies it",
+    () =>
+      Effect.gen(function* failsMisfitDefault() {
+        const processed = yield* buildItem(readsTemplate);
+        const marked = yield* buildItem(marksTemplates);
+
+        const unknown = failureOf(
+          firstAttempt(processed, {
+            instance,
+            seed: "7",
+            templateDefaults: { NOWHERE: integerValue(1n) },
+          }),
+        );
+        const mismatch = failureOf(
+          firstAttempt(marked, {
+            instance,
+            seed: "7",
+            templateDefaults: { T: stringValue("ten") },
+          }),
+        );
+
+        assert.deepStrictEqual(
+          unknown,
+          new UnknownIdentifierError({ holder: "item", identifier: "NOWHERE", role: "variable" }),
+        );
+        assert.deepStrictEqual(
+          mismatch,
+          new OutcomeMismatchError({
+            actual: "string single",
+            expected: "integer single",
+            identifier: "T",
+          }),
+        );
+      }),
   );
 });

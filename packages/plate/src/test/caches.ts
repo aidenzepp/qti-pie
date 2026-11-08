@@ -12,17 +12,23 @@
  * reads the response-processing templates or XML Schema Part 2 imports that cache's reader from
  * here. Nothing here fetches or writes a cache.
  *
+ * The XSDs are two caches in one folder: `qti-xsd`, every file `src/test/xsd-layout.ts` lists but
+ * the Results Reporting XSD, and `results-xsd`, that XSD and the one file it imports. Each probes
+ * every file it needs, so a partly fetched cache skips the tests that need the missing file.
+ *
  * @module
  * @see https://vitest.dev/guide/test-tags
  */
 import { access } from "node:fs/promises";
 import path from "node:path";
-import { Config, Console, Effect } from "effect";
+import { Config, Console, Effect, Option } from "effect";
 import { corpusRoot } from "#plate/document/corpus.ts";
 import { confPath } from "#plate/ledger/features.ts";
 import { xsdPart2CachePath } from "#plate/model/blocks.ts";
 import { webFeaturesPath } from "#plate/test/baseline.ts";
 import { xsdDirectory } from "#plate/test/xsd.ts";
+import type { XsdPath } from "#plate/test/xsd-layout.ts";
+import { cachedXsds, xsdPaths } from "#plate/test/xsd-layout.ts";
 
 /**
  * Where QTI 3's response-processing templates are cached, `.cache/gr8des/qti3/rptemplates` under
@@ -39,6 +45,17 @@ export const rptemplatesDirectory: Config.Config<string> = Config.String("HOME")
 export const xsdPart2Path: Config.Config<string> = Config.String("HOME").pipe(
   Config.map((home) => path.join(home, xsdPart2CachePath)),
 );
+
+/**
+ * The Results Reporting XSD's path under the XSD cache.
+ */
+const resultsXsd: XsdPath = "imsqti_resultv3p0_v1p0.xsd";
+
+/**
+ * The path under the XSD cache of the one XSD the Results Reporting XSD imports, for its `xml:`
+ * attributes.
+ */
+const xmlXsd: XsdPath = "w3/xml.xsd";
 
 /**
  * The setting that relocates a cache: `PLATE_CORPUS_DIR` names the corpus root itself, and `HOME`
@@ -71,6 +88,12 @@ export interface Cache {
    */
   readonly path: Config.Config<string>;
   /**
+   * The files the tests read, relative to {@link Cache.path}, a directory. The probe looks for
+   * each, in order, and names the first one missing. Absent when the tests need only `path`
+   * itself, which the probe then looks for.
+   */
+  readonly files?: readonly string[];
+  /**
    * How to put the cache at its path, as a clause that starts with a verb.
    */
   readonly fetch: string;
@@ -91,11 +114,20 @@ export const caches: readonly Cache[] = [
   },
   {
     fetch:
-      "fetch into that folder the 1EdTech QTI 3.0 XSDs whose SHA-256 src/package/tables.test.ts lists",
+      "fetch into .cache/gr8des/qti3/xsd under HOME every XSD that src/test/xsd-layout.ts lists but the Results Reporting XSD, each at the path and with the SHA-256 the table gives it",
+    files: xsdPaths.filter((file) => file !== resultsXsd),
     path: xsdDirectory,
     tag: "qti-xsd",
     variable: "HOME",
     what: "the QTI 3.0 XSDs",
+  },
+  {
+    fetch: `fetch ${cachedXsds[resultsXsd].url} into .cache/gr8des/qti3/xsd under HOME as ${resultsXsd}, and the XSD it imports as ${xmlXsd} there, each with the SHA-256 src/test/xsd-layout.ts lists`,
+    files: [resultsXsd, xmlXsd],
+    path: xsdDirectory,
+    tag: "results-xsd",
+    variable: "HOME",
+    what: "the QTI 3.0 Results Reporting XSD",
   },
   {
     fetch: "fetch QTI 3's rptemplates there",
@@ -155,7 +187,8 @@ export interface CacheTag {
 }
 
 /**
- * Probe one cache's path and give its test tag, printing one notice when the cache is missing.
+ * Probe one cache's path, or each of its files, and give its test tag, printing one notice that
+ * names the first missing path when any is missing.
  *
  * Any failure of `access` counts as missing: the tests could not read the cache either.
  *
@@ -166,14 +199,18 @@ export interface CacheTag {
  */
 const tagOf = Effect.fnUntraced(function* tagOf(cache: Cache, required: boolean) {
   const at = yield* cache.path;
-  const missing = yield* Effect.isFailure(Effect.tryPromise(() => access(at)));
+  const probes = cache.files?.map((file) => path.join(at, file)) ?? [at];
+  const absent = yield* Effect.findFirst(probes, (probe) =>
+    Effect.isFailure(Effect.tryPromise(() => access(probe))),
+  );
+  const missing = Option.isSome(absent);
   const repair = `${cache.fetch}, ${relocation[cache.variable]}`;
 
   if (missing) {
     yield* Console.error(
       required
-        ? `plate: the tests tagged ${cache.tag} will fail, because PLATE_REQUIRE_CACHES is set: they need ${cache.what}, and ${at} is missing. To make them pass, ${repair}.`
-        : `plate: the tests tagged ${cache.tag} are skipped: they need ${cache.what}, and ${at} is missing. To run them, ${repair}. Set PLATE_REQUIRE_CACHES=1 to make them fail instead.`,
+        ? `plate: the tests tagged ${cache.tag} will fail, because PLATE_REQUIRE_CACHES is set: they need ${cache.what}, and ${absent.value} is missing. To make them pass, ${repair}.`
+        : `plate: the tests tagged ${cache.tag} are skipped: they need ${cache.what}, and ${absent.value} is missing. To run them, ${repair}. Set PLATE_REQUIRE_CACHES=1 to make them fail instead.`,
     );
   }
 

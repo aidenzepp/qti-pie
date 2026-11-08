@@ -3523,7 +3523,7 @@ describe("redactItem on a printed variable whose text passes 1,000,000 character
           assert.deepStrictEqual(emptied.notices, []);
           assert.deepStrictEqual(
             emptied.unprinted,
-            Option.some({ bound: 1_000_000, identifier: "S", path: repeatedPath }),
+            Option.some({ bound: 1_000_000, identifier: "S", limit: "text", path: repeatedPath }),
           );
         }
       }),
@@ -3540,7 +3540,7 @@ describe("redactItem on a printed variable whose text passes 1,000,000 character
         assert.deepStrictEqual(paragraphOf(emptied), [text("Value: ")]);
         assert.deepStrictEqual(
           emptied.unprinted,
-          Option.some({ bound: 1_000_000, identifier: "S", path: repeatedPath }),
+          Option.some({ bound: 1_000_000, identifier: "S", limit: "text", path: repeatedPath }),
         );
       }),
   );
@@ -3719,7 +3719,12 @@ describe("redactItem records the first text past its bound on content the page s
 
     assert.deepStrictEqual(
       emptied.unprinted,
-      Option.some({ bound: 1_000_000, identifier: "ROUND", path: printedPaths[1] }),
+      Option.some({
+        bound: 1_000_000,
+        identifier: "ROUND",
+        limit: "text",
+        path: printedPaths[1],
+      }),
     );
     assert.deepStrictEqual(paragraphOf(emptied), texts("Score: ", "1.5"));
   });
@@ -3742,6 +3747,7 @@ describe("redactItem records the first text past its bound on content the page s
       Option.some({
         bound: 1_000_000,
         identifier: "SET",
+        limit: "text",
         path:
           setParameter?.kind === "element"
             ? setParameter.path
@@ -3774,7 +3780,12 @@ describe("redactItem records the first text past its bound on content the page s
     assert.strictEqual(lengthy.reads(), 0);
     assert.deepStrictEqual(
       redactItem(hidden, holding({ S: lengthy.value, VISIBLE: identifierValue("X") })).unprinted,
-      Option.some({ bound: 1_000_000, identifier: "S", path: `${blockPath}/qti-printed-variable` }),
+      Option.some({
+        bound: 1_000_000,
+        identifier: "S",
+        limit: "text",
+        path: `${blockPath}/qti-printed-variable`,
+      }),
       "shown",
     );
   });
@@ -3830,7 +3841,7 @@ describe("redactItem under an output budget", () => {
     );
     assert.deepStrictEqual(
       redaction.unprinted,
-      Option.some({ bound: 10_000, identifier: "S", path: slotPath(101) }),
+      Option.some({ bound: 10_000, identifier: "S", limit: "budget", path: slotPath(101) }),
     );
   });
 
@@ -3845,7 +3856,7 @@ describe("redactItem under an output budget", () => {
     assert.strictEqual(paragraphOf(under).length, 4499);
     assert.deepStrictEqual(
       under.unprinted,
-      Option.some({ bound: whole - 1, identifier: "S", path: slotPath(4500) }),
+      Option.some({ bound: whole - 1, identifier: "S", limit: "budget", path: slotPath(4500) }),
     );
   });
 
@@ -3877,7 +3888,7 @@ describe("redactItem under an output budget", () => {
     assert.strictEqual(paragraphOf(redaction).length, 16);
     assert.deepStrictEqual(
       redaction.unprinted,
-      Option.some({ bound: 16_777_216, identifier: "S", path: slotPath(17) }),
+      Option.some({ bound: 16_777_216, identifier: "S", limit: "budget", path: slotPath(17) }),
     );
   });
 
@@ -3897,6 +3908,7 @@ describe("redactItem under an output budget", () => {
       Option.some({
         bound: 7,
         identifier: "SET",
+        limit: "budget",
         path:
           setParameter?.kind === "element"
             ? setParameter.path
@@ -3909,5 +3921,84 @@ describe("redactItem under an output budget", () => {
       ["none", ""],
     ]);
     assert.isTrue(Option.isNone(fits.unprinted));
+  });
+});
+
+describe("redactItem clamps the output budget it is given", () => {
+  it("[I-5] clamps a budget of 0 to 1: one slot of 100 characters prints nothing and is recorded with the bound 1 and the limit budget", () => {
+    const redaction = redactItem(
+      slotted(1),
+      holding({ S: one({ baseType: "string", value: slotText }) }),
+      { outputBudget: 0 },
+    );
+
+    assert.deepStrictEqual(paragraphOf(redaction), []);
+    assert.deepStrictEqual(
+      redaction.unprinted,
+      Option.some({ bound: 1, identifier: "S", limit: "budget", path: slotPath(1) }),
+    );
+  });
+
+  it("[I-5] clamps a budget of NaN to the default, 16,777,216: 17 slots of 1,000,000 characters print 16 and record the 17th with that bound, as the default does", () => {
+    const value = counted(one({ baseType: "string", value: "y".repeat(1_000_000) }));
+    const redaction = redactItem(slotted(17), holding({ S: value.value }), {
+      outputBudget: Number.NaN,
+    });
+
+    assert.strictEqual(value.reads(), 17);
+    assert.strictEqual(paragraphOf(redaction).length, 16);
+    assert.deepStrictEqual(
+      redaction.unprinted,
+      Option.some({ bound: 16_777_216, identifier: "S", limit: "budget", path: slotPath(17) }),
+    );
+  });
+});
+
+describe("redactItem names which limit a text passed", () => {
+  it("[I-5] records which limit, the budget, when a budget of exactly 1,000,000 runs out across several variables: three slots of 300,000 characters print and the fourth is recorded with the bound 1,000,000 and the limit budget", () => {
+    const redaction = redactItem(
+      slotted(4),
+      holding({ S: one({ baseType: "string", value: "y".repeat(300_000) }) }),
+      { outputBudget: 1_000_000 },
+    );
+
+    assert.strictEqual(paragraphOf(redaction).length, 3);
+    assert.deepStrictEqual(
+      redaction.unprinted,
+      Option.some({ bound: 1_000_000, identifier: "S", limit: "budget", path: slotPath(4) }),
+    );
+  });
+
+  it("[I-5] records which limit, the text, under the default budget for a conversion wider than 1,000,000 characters", () => {
+    const widened: Item = {
+      ...templated,
+      body: [
+        {
+          attributes: [],
+          children: [{ ...printed("N", slotPath(1)), format: Option.some("%1000001i") }],
+          kind: "element",
+          path: `${bodyPath}/p`,
+          tag: "p",
+        },
+      ],
+    };
+
+    assert.deepStrictEqual(
+      redactItem(widened, holding({ N: integerValue(5n) })).unprinted,
+      Option.some({ bound: 1_000_000, identifier: "N", limit: "text", path: slotPath(1) }),
+    );
+  });
+
+  it("[I-5] records which limit, the text, under the default budget for a whole text longer than 1,000,000 characters", () => {
+    const redaction = redactItem(
+      slotted(1),
+      holding({ S: one({ baseType: "string", value: "y".repeat(1_000_001) }) }),
+    );
+
+    assert.deepStrictEqual(paragraphOf(redaction), []);
+    assert.deepStrictEqual(
+      redaction.unprinted,
+      Option.some({ bound: 1_000_000, identifier: "S", limit: "text", path: slotPath(1) }),
+    );
   });
 });

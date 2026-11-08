@@ -12,8 +12,9 @@
  * its template-set correct responses among them, which the author passes to `render` as `values`,
  * the only place a correct response reaches a page (T-k under A; the solution page is the part a
  * ruling of B drops). The summary is a page builder, {@link summaryPage}: the session page shows it
- * once the test has closed, and it is not routed here. The results document reports the session
- * under the store's `s-` id, which the Results XSD takes as an NCName.
+ * once the test has closed, and it is not routed here; after the items it lists the test's outcomes
+ * as the last outcome processing left them. The results document reports the session under the
+ * store's `s-` id, which the Results XSD takes as an NCName.
  *
  * The route returns the frame's {@link Page} for every HTML answer, so the playground's handler
  * writes it with the stylesheets, the theme box and the page headers, and a `Response` only for the
@@ -41,9 +42,11 @@ import type { SessionStore } from "#plate/dev/store.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { message, numeral } from "#plate/messages.ts";
+import type { Locale } from "#plate/messages.ts";
 import { isNull } from "#plate/model/values.ts";
 import { redact, render, renderStatus } from "#plate/render.ts";
 import { results } from "#plate/results/results.ts";
+import { resultValues } from "#plate/results/values.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import { itemView, permits } from "#plate/session/start.ts";
 import type { SummaryItem, TestSummary } from "#plate/session/start.ts";
@@ -386,10 +389,65 @@ const viewLine = (
   ]);
 
 /**
+ * Construct the summary's part for the test's own outcomes, by the state of its outcome processing.
+ *
+ * When the engine runs it, the part is a heading and a description list of each outcome the test
+ * declares, in declaration order: its identifier, then one `dd` per value in the lexical form
+ * results write (`resultValues`), or the catalog's word for NULL when it holds none; an outcome the
+ * session does not hold, which a session `decodeSession` checked against the test never lacks, is
+ * left out, and when that leaves no outcome the part is nothing. When the test has outcome
+ * processing the engine cannot run, the heading and the sentence that it did not run, so no
+ * starting value reads as a score. When the test has none, nothing.
+ *
+ * @param test The test the session was started from.
+ * @param session The closed session, which holds the outcomes the last run left.
+ * @param locale The locale of the page's words.
+ * @returns The part's nodes, none when there is nothing to list.
+ */
+const outcomesPart = (
+  test: AcceptedTest["test"],
+  session: TestSession,
+  locale: Locale,
+): readonly Node[] => {
+  const heading = h("h2", {}, [text(message(locale, "testOutcomes"))]);
+
+  switch (test.outcomeProcessing.kind) {
+    case "absent": {
+      return [];
+    }
+    case "marked": {
+      return [heading, h("p", {}, [text(message(locale, "outcomesNotRun"))])];
+    }
+    case "runs": {
+      const entries = [...test.outcomes.keys()].flatMap((identifier) => {
+        const value = session.outcomes[identifier];
+        if (value === undefined) {
+          return [];
+        }
+
+        const written = resultValues(value);
+
+        return [
+          h("dt", {}, [text(identifier)]),
+          ...(written.length === 0 ? [message(locale, "nullValue")] : written).map((each) =>
+            h("dd", {}, [text(each)]),
+          ),
+        ];
+      });
+
+      return entries.length === 0 ? [] : [heading, h("dl", {}, entries)];
+    }
+    default: {
+      return test.outcomeProcessing satisfies never;
+    }
+  }
+};
+
+/**
  * Construct the summary page of a closed test: the test's title, the Status part headed "Test
  * finished" with `autofocus`, an ordered list of the items, each with its state and its Review and
- * Solution links where `permits` allows them and the words why where not, then the link that
- * downloads the results.
+ * Solution links where `permits` allows them and the words why where not, the test's outcomes
+ * ({@link outcomesPart}), then the link that downloads the results.
  *
  * The session page shows it once `current` gives the summary. The Status region is scoped by the
  * session id, so its id is not the `<item instance>-status` a session form's action names, and a
@@ -460,6 +518,7 @@ export const summaryPage = (
             h("h1", {}, [text(testTitle)]),
             slot(0),
             h("ol", {}, items),
+            ...outcomesPart(test.test, session, locale),
             h("p", {}, [
               h("a", { download: true, href: `${base}/results.xml` }, [
                 text(message(locale, "downloadResults")),

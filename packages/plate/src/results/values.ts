@@ -6,7 +6,7 @@
  * form {@link format} writes, which `parseLexical` of `#plate/model/values.ts` reads back to the
  * same value: an integer as its exact digits at any size (reading 45), a float as its shortest
  * round trip with `INF`, `-INF` and `NaN`, and a point, pair or directed pair as its two parts
- * separated by one space. A duration is its seconds, written as a float is (reading 29).
+ * separated by one space. A duration is its seconds, written as a float is (readings 29 and 68).
  *
  * @module
  */
@@ -14,27 +14,25 @@ import { format } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
 /**
- * One value a result writes: a value of a modelled base type, or a duration as its seconds.
+ * One value a result writes: a value of the value model, a duration among them.
  *
- * The value model holds no duration, but every result reports the built-in `duration`: a single
- * float in an item and a value of base type duration in a test, part or section (reading 29), each
- * a count of seconds.
+ * Every result reports the built-in `duration`: a single float in an item and a value of base type
+ * duration in a test, part or section (reading 29), each a count of seconds, as the value model
+ * holds a duration.
  */
-export type ResultSingle = Single | { readonly baseType: "duration"; readonly value: number };
+export type ResultSingle = Single;
 
 /**
- * Write one value in the lexical form a result's `value` element holds.
+ * Write one value in the lexical form a result's `value` element holds, as {@link format} writes
+ * it.
  *
- * A duration is written as its seconds, `90.5` and never `PT1M30.5S`, in the form a float takes;
- * every other value is written as {@link format} writes it.
+ * A duration is written as its seconds, `90.5` and never `PT1M30.5S`, in the form a float takes,
+ * `INF`, `-INF` and `NaN` included (reading 68).
  *
  * @param single The value to write.
  * @returns Its lexical form.
  */
-export const resultValue = (single: ResultSingle): string =>
-  single.baseType === "duration"
-    ? format({ baseType: "float", value: single.value })
-    : format(single);
+export const resultValue = (single: ResultSingle): string => format(single);
 
 /**
  * Write the values of a QTI value in the lexical form a result's `value` element holds, one

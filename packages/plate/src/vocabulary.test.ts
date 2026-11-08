@@ -245,7 +245,6 @@ describe("the closed value sets", () => {
         [
           "string-identifier",
           'adaptive="true"',
-          'base-type="duration"',
           'base-type="file"',
           'cardinality="record"',
           'base-type=""',
@@ -693,15 +692,11 @@ describe("M2's closed sets", () => {
         "qti-time-limits",
         "qti-pre-condition",
         "qti-branch-rule",
-        "qti-outcome-processing",
         "qti-rubric-block",
         "qti-test-feedback",
         "qti-assessment-section-ref",
         "qti-stylesheet",
         "qti-context-declaration",
-        "qti-template-default",
-        "qti-variable-mapping",
-        "qti-weight",
         "xi:include",
         'allow-comment="true"',
         "max-attempts:negative",
@@ -709,5 +704,17 @@ describe("M2's closed sets", () => {
         "root:qti-assessment-stimulus",
       ],
     );
+  });
+
+  it("[T-9] keys neither outcome processing nor a weight, a variable mapping or a template default, which the test model reads and the session applies", () => {
+    const marks: readonly string[] = testMarks;
+    for (const read of [
+      "qti-outcome-processing",
+      "qti-template-default",
+      "qti-variable-mapping",
+      "qti-weight",
+    ]) {
+      assert.notInclude([...marks], read);
+    }
   });
 });

@@ -11,6 +11,12 @@
  * caller passed is an {@link EngineFailure} returned in a `Result`, as the evaluator returns it;
  * the first one ends the run.
  *
+ * A test may redefine an item's declared state: each `qti-template-default` of the item's ref
+ * sets a template variable's default, "evaluated at test-level" before "the templateProcessing
+ * rules of the item itself are followed" (`info.txt:46025`). {@link evaluateTemplateDefaults}
+ * evaluates an item ref's defaults over the test's names, {@link checkTemplateDefaults} checks them
+ * against the item, and {@link runTemplates} starts from them.
+ *
  * Value imports point one way: `#plate/engine/attempt.ts` to here, and here to the evaluator.
  *
  * @module
@@ -23,10 +29,17 @@ import {
   OutcomeMismatchError,
   UnknownIdentifierError,
 } from "#plate/engine/evaluate.ts";
-import type { EngineFailure } from "#plate/engine/evaluate.ts";
+import type { Declarations, EngineFailure, Variables } from "#plate/engine/evaluate.ts";
 import type { Draw } from "#plate/engine/random.ts";
+import type { TestScope } from "#plate/engine/scope.ts";
 import type { TemplateRule } from "#plate/model/expression.ts";
-import type { Expression, Item, TemplateDeclaration } from "#plate/model/item.ts";
+import type {
+  Expression,
+  Item,
+  ResponseDeclaration,
+  TemplateDeclaration,
+} from "#plate/model/item.ts";
+import type { TemplateDefault, Test } from "#plate/model/test.ts";
 import { isNull, nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
@@ -97,23 +110,28 @@ type Step =
   | { readonly kind: "restart" };
 
 /**
- * Give the state template processing starts from: each template variable at its declared default,
- * else NULL of its declared base type and cardinality, and no correct response or default set.
+ * Give the state template processing starts from: each template variable at the default the test
+ * gives it, else its declared default, else NULL of its declared base type and cardinality, and no
+ * correct response or default set.
  *
  * @param item The item, whose template declarations give each variable's type and default.
+ * @param given The test's defaults, checked against the item ({@link checkTemplateDefaults}).
  * @returns The declared state.
  */
-const declaredState = (item: Item): TemplateValues => ({
+const declaredState = (item: Item, given: Readonly<Record<string, Value>>): TemplateValues => ({
   correct: {},
   defaults: {},
-  templates: Object.fromEntries(
-    Array.from(item.templates, ([identifier, declaration]) => [
-      identifier,
-      Option.getOrElse(declaration.defaultValue, () =>
-        nullOf(declaration.baseType, declaration.cardinality),
-      ),
-    ]),
-  ),
+  templates: {
+    ...Object.fromEntries(
+      Array.from(item.templates, ([identifier, declaration]) => [
+        identifier,
+        Option.getOrElse(declaration.defaultValue, () =>
+          nullOf(declaration.baseType, declaration.cardinality),
+        ),
+      ]),
+    ),
+    ...given,
+  },
 });
 
 /**
@@ -176,12 +194,42 @@ const targetOf = (
 };
 
 /**
- * Set the variable a setting rule names to a value, in the map the rule writes ({@link setMaps}).
+ * Give the value a variable stores when it is set to a value.
  *
  * QTI assigns without conversion, as `qti-set-outcome-value` does (`setOutcome` in
  * `#plate/engine/evaluate.ts`): a value of another base type or cardinality fails, and a NULL,
- * which has no type to differ, is stored as the target's own NULL. So every value the maps hold is
- * of its target's declared type.
+ * which has no type to differ, is stored as the target's own NULL. So every value stored is of its
+ * target's declared type.
+ *
+ * @param target The variable's declared base type and cardinality.
+ * @param identifier The variable's identifier.
+ * @param value The value it is set to.
+ * @returns The value stored; or an {@link OutcomeMismatchError} when the value is not NULL and its
+ *   type differs from the target's.
+ */
+const fitted = (
+  target: Pick<TemplateDeclaration, "baseType" | "cardinality">,
+  identifier: string,
+  value: Value,
+): Result.Result<Value, OutcomeMismatchError> => {
+  if (isNull(value)) {
+    return Result.succeed(nullOf(target.baseType, target.cardinality));
+  }
+
+  return value.baseType === target.baseType && value.cardinality === target.cardinality
+    ? Result.succeed(value)
+    : Result.fail(
+        new OutcomeMismatchError({
+          actual: `${value.baseType} ${value.cardinality}`,
+          expected: `${target.baseType} ${target.cardinality}`,
+          identifier,
+        }),
+      );
+};
+
+/**
+ * Set the variable a setting rule names to a value, in the map the rule writes ({@link setMaps}),
+ * without conversion ({@link fitted}).
  *
  * @param item The item, whose declaration gives the target's type.
  * @param values What the rules before it left.
@@ -199,24 +247,113 @@ const assign = (
 ): Result.Result<TemplateValues, OutcomeMismatchError | UnknownIdentifierError> =>
   Result.gen(function* assignOneVariable() {
     const target = yield* targetOf(item, rule);
-    if (
-      !isNull(value) &&
-      (value.baseType !== target.baseType || value.cardinality !== target.cardinality)
-    ) {
-      return yield* Result.fail(
-        new OutcomeMismatchError({
-          actual: `${value.baseType} ${value.cardinality}`,
-          expected: `${target.baseType} ${target.cardinality}`,
-          identifier: rule.identifier,
-        }),
-      );
-    }
-
-    const stored = isNull(value) ? nullOf(target.baseType, target.cardinality) : value;
+    const stored = yield* fitted(target, rule.identifier, value);
     const map = setMaps[rule.kind];
 
     return { ...values, [map]: { ...values[map], [rule.identifier]: stored } };
   });
+
+/**
+ * Check an item ref's template defaults against the item, where the engine applies them.
+ *
+ * Each key must name a template variable the item declares, and each value is set to it as
+ * template processing sets one ({@link fitted}): without conversion, a NULL stored as the
+ * variable's own NULL. A test and its items each pass `check` apart, so a default that does not fit
+ * is caller input, returned and never thrown. A session checks the defaults before the item's
+ * first attempt (`firstAttempt` in `#plate/engine/attempt.ts`), so a failure of that attempt after
+ * a checked default is the item's own template processing; {@link runTemplates} checks them again
+ * where it applies them.
+ *
+ * @param item The item the defaults set: its template declarations.
+ * @param defaults The defaults, by template identifier, as {@link evaluateTemplateDefaults} gives
+ *   them.
+ * @returns The defaults as the item stores them, each a value of its variable's declared type; or
+ *   the first that does not fit, in the defaults' order: an {@link UnknownIdentifierError} (holder
+ *   `item`, role `variable`) when its key names no template variable of the item, or an
+ *   {@link OutcomeMismatchError} when its value is not NULL and its type differs from the
+ *   variable's.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_TemplateDefault
+ */
+export const checkTemplateDefaults = (
+  item: Pick<Item, "templates">,
+  defaults: Readonly<Record<string, Value>>,
+): Result.Result<Readonly<Record<string, Value>>, OutcomeMismatchError | UnknownIdentifierError> =>
+  Result.gen(function* checkEachTemplateDefault() {
+    const checked: (readonly [string, Value])[] = [];
+    for (const [identifier, value] of Object.entries(defaults)) {
+      const target = yield* Result.fromOption(
+        Option.fromUndefinedOr(item.templates.get(identifier)),
+        () => new UnknownIdentifierError({ holder: "item", identifier, role: "variable" }),
+      );
+      checked.push([identifier, yield* fitted(target, identifier, value)]);
+    }
+
+    return Object.fromEntries(checked);
+  });
+
+/**
+ * The declarations a test's holder makes of responses: none, since a test is not an item.
+ */
+const noResponses: ReadonlyMap<string, ResponseDeclaration> = new Map();
+
+/**
+ * The declarations a test's holder makes of template variables: none, since a test is not an item.
+ */
+const noTemplates: ReadonlyMap<string, TemplateDeclaration> = new Map();
+
+/**
+ * Evaluate an item ref's template defaults.
+ *
+ * Each expression is evaluated "at test-level" (`info.txt:46025`): over the test's declarations
+ * holder (its outcome declarations, no response and no template variable), with the test's
+ * outcomes at their current values, so a default reads an unprefixed test outcome as the session
+ * holds it, and the scope as `Variables.test`, so it reads a prefixed name through the item it
+ * names. The defaults are evaluated in document order from the one stream given, so two drawing
+ * defaults take its draws in turn. A later default of the same template variable replaces an
+ * earlier one. The values are the expressions' own; {@link checkTemplateDefaults} checks them
+ * against the item they set.
+ *
+ * @param defaults The item ref's template defaults, in document order (`ItemRef.templateDefaults`).
+ * @param test The test: its outcome declarations, the holder the expressions read.
+ * @param outcomes The test's outcome values as the session holds them (`TestSession.outcomes`).
+ * @param scope What the expressions read of the test's items. A template default's scope holds no
+ *   time, so the test's `duration` reads NULL.
+ * @param draw The one stream every random kind of the item ref's defaults draws from, in
+ *   evaluation order. A session passes `drawStream(session.seed, defaultLabel(session.instance,
+ *   sequenceIndex))` (`defaultLabel` in `#plate/engine/random.ts`) for the item at that place in
+ *   the sequence; the default key would draw the same numbers for every session.
+ * @returns Each default's value, by template identifier; or the first {@link EngineFailure}, after
+ *   which no default is evaluated: an {@link UnknownIdentifierError} (holder `record`) when an
+ *   expression reads a name the test's processing holds no value of, as in an outcome run, or any
+ *   other failure of the evaluator.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_TemplateDefault
+ */
+export const evaluateTemplateDefaults = (
+  defaults: readonly TemplateDefault[],
+  test: Pick<Test, "outcomes">,
+  outcomes: Readonly<Record<string, Value>>,
+  scope: TestScope,
+  draw: Draw,
+): Result.Result<Readonly<Record<string, Value>>, EngineFailure> => {
+  const holder: Declarations = {
+    outcomes: test.outcomes,
+    responses: noResponses,
+    templates: noTemplates,
+  };
+  const variables: Variables = { outcomes, responses: {}, test: scope };
+
+  return Result.gen(function* evaluateEachTemplateDefault() {
+    const evaluated: (readonly [string, Value])[] = [];
+    for (const { expression, templateIdentifier } of defaults) {
+      evaluated.push([
+        templateIdentifier,
+        yield* evaluateExpression(expression, holder, variables, draw),
+      ]);
+    }
+
+    return Object.fromEntries(evaluated);
+  });
+};
 
 /**
  * Choose the rules a `qti-template-condition` runs: those of its first branch whose condition is
@@ -324,15 +461,17 @@ const runSequence = (
 /**
  * Run an item's template processing.
  *
- * The run starts from the declared state: each template variable at its declared default, else
- * NULL of its type, and no correct response or default set. The rules run in order, each seeing
- * what the rules before it left; `qti-set-template-value` sets its template variable, and
- * `qti-set-correct-response` and `qti-set-default-value` write the result's `correct` and
- * `defaults`, never the item. A `qti-template-condition` runs its first branch whose condition is
- * a single boolean `true`, else its `qti-template-else`; a `qti-exit-template` ends the run,
- * nested or not, keeping what is set.
+ * The run starts from the declared state: each template variable at the default the test gives
+ * it, else its declared default, else NULL of its type, and no correct response or default set.
+ * The test's defaults are checked first, where they are applied ({@link checkTemplateDefaults}).
+ * The rules run in order, each seeing what the rules before it left; `qti-set-template-value` sets
+ * its template variable, and `qti-set-correct-response` and `qti-set-default-value` write the
+ * result's `correct` and `defaults`, never the item. A `qti-template-condition` runs its first
+ * branch whose condition is a single boolean `true`, else its `qti-template-else`; a
+ * `qti-exit-template` ends the run, nested or not, keeping what is set.
  *
- * A `qti-template-constraint` that is false or NULL restarts the run from the declared state, both
+ * A `qti-template-constraint` that is false or NULL restarts the run from the declared state, the
+ * test's defaults included, since the test redefines the declared state for this item, both
  * override maps emptied, "repeatedly until the expression is 'true' or the maximum number of
  * iterations is reached" (`info.txt:45736`). The run's constraints share one budget of 100
  * restarts (G-R2, pending). When it runs out, the declared state applies and processing continues
@@ -347,21 +486,25 @@ const runSequence = (
  * @param draw The one stream every random kind of the run draws from, in the order the rules
  *   evaluate them, restarts included: the caller's, keyed by the record's seed under the item's
  *   template label (`templateLabel` in `#plate/engine/random.ts`).
+ * @param templateDefaults The defaults the test's item ref gives the item's template variables, by
+ *   template identifier ({@link evaluateTemplateDefaults}); none by default.
  * @returns The template values and the correct responses and defaults set; or the first failure,
- *   after which no rule runs: an {@link UnknownIdentifierError} when an expression reads a variable
- *   template processing holds no value of, or a rule sets a variable the item does not declare in
- *   the kind the rule sets, an {@link OutcomeMismatchError} when a rule sets a variable to a value
- *   of another type that is not NULL, or any other failure of the evaluator.
+ *   after which no rule runs: an {@link UnknownIdentifierError} when a test's default names no
+ *   template variable of the item (holder `item`), an expression reads a variable template
+ *   processing holds no value of, or a rule sets a variable the item does not declare in the kind
+ *   the rule sets, an {@link OutcomeMismatchError} when a test's default or a rule sets a variable
+ *   to a value of another type that is not NULL, or any other failure of the evaluator.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_TemplateConstraint
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_TemplateDefault
  */
 export const runTemplates = (
   item: Item,
   rules: readonly TemplateRule[],
   draw: Draw,
-): Result.Result<TemplateValues, EngineFailure> => {
-  const declared = declaredState(item);
-
-  return Result.gen(function* runFromDeclaredState() {
+  templateDefaults: Readonly<Record<string, Value>> = {},
+): Result.Result<TemplateValues, EngineFailure> =>
+  Result.gen(function* runFromDeclaredState() {
+    const declared = declaredState(item, yield* checkTemplateDefaults(item, templateDefaults));
     let restarts = 0;
     let step = yield* runSequence(rules, { declared, draw, item, spent: false }, declared);
     while (step.kind === "restart") {
@@ -375,4 +518,3 @@ export const runTemplates = (
 
     return step.values;
   });
-};

@@ -377,15 +377,19 @@ interface AttributeName {
 }
 
 /**
- * A reading that places elements the XSD admits more widely: in a document whose root `roots`
- * accepts, each of `elements` must have `container` as its parent, or as an ancestor, or it is
- * `misplaced-element`. `requires` says where it must sit, for the wording.
+ * A reading, or a sentence of the information model, that places elements the XSD admits more
+ * widely: in a document whose root `roots` accepts, each of `elements` must have `container` as its
+ * parent, or as an ancestor, and `admits` must accept that container, or it is
+ * `misplaced-element`. `requires` says where it must sit, for the wording, and `reading` is the
+ * shared reading the refusal cites, none for a row the information model settles alone, whose line
+ * the row's comment gives.
  */
 interface Placement {
+  readonly admits: (container: SourceElement) => boolean;
   readonly container: string;
   readonly elements: readonly string[];
   readonly kind: "placement";
-  readonly reading: string;
+  readonly reading: Option.Option<string>;
   readonly requires: string;
   readonly roots: (root: SourceElement) => boolean;
   readonly within: "ancestor" | "parent";
@@ -477,8 +481,9 @@ type ReadingRow =
   | RetypedAttribute;
 
 /**
- * Accept every parent, for a child count that holds wherever its element sits, and every root, for
- * a placement that holds in every document.
+ * Accept every parent, for a child count that holds wherever its element sits, every root, for a
+ * placement that holds in every document, and every container, for a placement that asks nothing
+ * of its container but its name.
  *
  * @returns Always true.
  */
@@ -495,6 +500,85 @@ const anywhere = (): boolean => true;
 const outsideTests = (root: SourceElement): boolean =>
   root.namespace !== qtiNamespace ||
   (root.local !== "qti-assessment-test" && root.local !== "qti-assessment-section");
+
+/**
+ * Read the value an element gives an attribute in no namespace, for a row's condition: the value
+ * it writes, collapsed, or the default its table declares when it writes none.
+ *
+ * @param element The element.
+ * @param declared The attributes the element's table declares.
+ * @param local The attribute's local name.
+ * @returns The value, or none when the element writes none and its table declares no default, or
+ *   when the value written holds an unexpanded entity reference, whose value is unknown.
+ */
+const modeOf = (
+  element: SourceElement,
+  declared: readonly AttributeTable[],
+  local: string,
+): Option.Option<string> => {
+  const written = element.attributes.find(
+    (attribute) => attribute.namespace === "" && attribute.local === local,
+  );
+  if (written !== undefined) {
+    return written.references.length === 0 ? Option.some(collapse(written.value)) : Option.none();
+  }
+
+  return Option.fromUndefinedOr(
+    declared.find((declaration) => declaration.namespace === "" && declaration.local === local)
+      ?.default,
+  );
+};
+
+/**
+ * Report whether a declaration gives an attribute in no namespace one of some values, read as
+ * {@link modeOf} reads a row's condition. A response declaration's table declares no default for
+ * `base-type` or `cardinality`, so only a value written counts.
+ *
+ * @param declaration The declaration.
+ * @param local The attribute's local name.
+ * @param values The values.
+ * @returns Whether the declaration writes one of them; not when it writes none, or writes one that
+ *   holds an unexpanded entity reference, whose value is unknown.
+ */
+const declares = (declaration: SourceElement, local: string, values: readonly string[]): boolean =>
+  Option.exists(modeOf(declaration, [], local), (value) => values.includes(value));
+
+/**
+ * Report whether a declaration writes an attribute in no namespace whose value holds an unexpanded
+ * entity reference, and so is unknown.
+ *
+ * @param declaration The declaration.
+ * @param local The attribute's local name.
+ * @returns Whether its value is unknown.
+ */
+const unknownValue = (declaration: SourceElement, local: string): boolean =>
+  declaration.attributes.some(
+    (attribute) =>
+      attribute.namespace === "" && attribute.local === local && attribute.references.length > 0,
+  );
+
+/**
+ * Report whether a response declaration may hold a `qti-mapping`: its base type is neither `file`
+ * nor `duration` (info.txt:34086) and its cardinality is not `record` (info.txt:9306). A value that
+ * is unknown is not refused.
+ *
+ * @param declaration The response declaration.
+ * @returns Whether its mapping is placed.
+ */
+const holdsMapping = (declaration: SourceElement): boolean =>
+  !declares(declaration, "base-type", ["duration", "file"]) &&
+  !declares(declaration, "cardinality", ["record"]);
+
+/**
+ * Report whether a response declaration may hold a `qti-area-mapping`: its base type is `point`
+ * (info.txt:39388), or is unknown, which is not refused. A record declaration writes no base type,
+ * so it holds none.
+ *
+ * @param declaration The response declaration.
+ * @returns Whether its area mapping is placed.
+ */
+const holdsAreaMapping = (declaration: SourceElement): boolean =>
+  declares(declaration, "base-type", ["point"]) || unknownValue(declaration, "base-type");
 
 /**
  * The declarations whose `qti-default-value` and `qti-correct-response` hold their values.
@@ -660,7 +744,8 @@ const printfFormat = /^%[#0 +-]*(?:[1-9][0-9]*)?(?:\.[0-9]*)?[EefGgrRioXx]$/u;
  * verdict's wording cites; a `child-count` refusal carries `source`, a reading or a specification
  * line, instead, and so does the refusal of an information-model row, its line of `info.txt`. A
  * narrowed attribute that the information model settles carries, beside `source`, the `check` that
- * names its case and the qti package's rule, `pantry`.
+ * names its case and the qti package's rule, `pantry`. A placement the information model settles
+ * carries neither: its line and the qti package's rule are in the row's comment.
  */
 const readingRows: readonly ReadingRow[] = [
   // Reading 8 (spec-readings.md:65): a match table entry's `target-value` is a value of the
@@ -735,10 +820,11 @@ const readingRows: readonly ReadingRow[] = [
   // Reading 22 (spec-readings.md:141): a `qti-template-constraint` is a direct child of
   // `qti-template-processing`, where the XSD also admits it in the template conditions' branches.
   {
+    admits: anywhere,
     container: "qti-template-processing",
     elements: ["qti-template-constraint"],
     kind: "placement",
-    reading: "22",
+    reading: Option.some("22"),
     requires: "a direct child of qti-template-processing",
     roots: anywhere,
     within: "parent",
@@ -747,6 +833,7 @@ const readingRows: readonly ReadingRow[] = [
   // processing, so in an item, which holds none, every one is misplaced. In a test or a section the
   // test prose rules refuse a misplaced one as `expression-placement`, once.
   {
+    admits: anywhere,
     container: "qti-outcome-processing",
     elements: [
       "qti-number-correct",
@@ -759,7 +846,7 @@ const readingRows: readonly ReadingRow[] = [
       "qti-test-variables",
     ],
     kind: "placement",
-    reading: "23",
+    reading: Option.some("23"),
     requires: "inside qti-outcome-processing",
     roots: outsideTests,
     within: "ancestor",
@@ -791,13 +878,43 @@ const readingRows: readonly ReadingRow[] = [
   // refuses one in a graphic gap-match interaction's gap text. Where the reading is silent
   // (hottext, a gap text holding gaps), nothing is refused.
   {
+    admits: anywhere,
     container: "qti-gap-match-interaction",
     elements: ["qti-gap"],
     kind: "placement",
-    reading: "38",
+    reading: Option.some("38"),
     requires: "inside a qti-gap-match-interaction",
     roots: anywhere,
     within: "ancestor",
+  },
+  // The information model maps "a source set of any base-type (except file and duration)"
+  // (info.txt:34086), and `qti-map-response` "cannot be applied to variables of record
+  // cardinality" (info.txt:9306), so a response declaration of base type file or duration, or of
+  // cardinality record, holds no `qti-mapping`. No shared reading carries it; the qti package
+  // refuses it as `mapping-base-type`.
+  {
+    admits: holdsMapping,
+    container: "qti-response-declaration",
+    elements: ["qti-mapping"],
+    kind: "placement",
+    reading: Option.none(),
+    requires:
+      "in a qti-response-declaration whose base type is neither file nor duration and whose cardinality is not record",
+    roots: anywhere,
+    within: "parent",
+  },
+  // An area mapping "may only be present in declarations of variables with base-type point"
+  // (info.txt:39388). No shared reading carries it; the qti package refuses it as
+  // `area-mapping-point`.
+  {
+    admits: holdsAreaMapping,
+    container: "qti-response-declaration",
+    elements: ["qti-area-mapping"],
+    kind: "placement",
+    reading: Option.none(),
+    requires: "in a qti-response-declaration whose base type is point",
+    roots: anywhere,
+    within: "parent",
   },
   // Reading 46 (spec-readings.md:267): a count attribute holds a signed 64-bit integer, read
   // exactly: the eight interaction counts, `xs:nonNegativeInteger` in the XSD, and `figures` on
@@ -1017,34 +1134,6 @@ const integerFloors = rowsOf("integer-floor");
  * The rows that require an attribute under a mode.
  */
 const conditionalAttributes = rowsOf("conditional-attribute");
-
-/**
- * Read the value an element gives an attribute in no namespace, for a row's condition: the value
- * it writes, collapsed, or the default its table declares when it writes none.
- *
- * @param element The element.
- * @param declared The attributes the element's table declares.
- * @param local The attribute's local name.
- * @returns The value, or none when the element writes none and its table declares no default, or
- *   when the value written holds an unexpanded entity reference, whose value is unknown.
- */
-const modeOf = (
-  element: SourceElement,
-  declared: readonly AttributeTable[],
-  local: string,
-): Option.Option<string> => {
-  const written = element.attributes.find(
-    (attribute) => attribute.namespace === "" && attribute.local === local,
-  );
-  if (written !== undefined) {
-    return written.references.length === 0 ? Option.some(collapse(written.value)) : Option.none();
-  }
-
-  return Option.fromUndefinedOr(
-    declared.find((declaration) => declaration.namespace === "" && declaration.local === local)
-      ?.default,
-  );
-};
 
 /**
  * Report whether a row's condition holds on an element.
@@ -1849,20 +1938,23 @@ const checkConditional = (
  * @param row The placement.
  * @param element The element, one of the row's.
  * @param parents Each walked element's parent.
- * @returns Whether its parent, or one of its ancestors, is the row's container.
+ * @returns Whether its parent, or its nearest ancestor of the container's name, is the row's
+ *   container and the row admits it.
  */
 const isPlaced = (
   row: Placement,
   element: SourceElement,
   parents: ReadonlyMap<SourceElement, SourceElement>,
 ): boolean => {
-  if (row.within === "ancestor") {
-    return Option.isSome(enclosing(element, row.container, parents));
-  }
+  const container =
+    row.within === "ancestor"
+      ? enclosing(element, row.container, parents)
+      : Option.filter(
+          Option.fromUndefinedOr(parents.get(element)),
+          (parent) => parent.namespace === qtiNamespace && parent.local === row.container,
+        );
 
-  const parent = parents.get(element);
-
-  return parent?.namespace === qtiNamespace && parent.local === row.container;
+  return Option.exists(container, row.admits);
 };
 
 /**
@@ -1906,7 +1998,10 @@ const checkPlacement = (
     .map((row) =>
       refuse(source, "misplaced-element", path, {
         element: elementName(element),
-        reading: row.reading,
+        ...Option.match(row.reading, {
+          onNone: () => ({}),
+          onSome: (reading) => ({ reading }),
+        }),
         requires: row.requires,
       }),
     );

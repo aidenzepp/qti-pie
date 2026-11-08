@@ -73,7 +73,9 @@ const sessionTimeoutMs = 60_000;
 const instance = "4c7e1a2b-9d3f-4e8a-b6c5-0f1e2d3c4b5a";
 
 /**
- * The seed the host's configuration carries, which a session keeps.
+ * The seed the host's configuration carries, which a session keeps as its shuffle seed. Each
+ * sitting also passes it to `startTest` as the processing seed, so its pinned orders and scores
+ * stay the ones it had when one seed did both; a host passes two seeds apart.
  */
 const hostSeed = "3";
 
@@ -114,6 +116,7 @@ const fixtureLocation = "fixtures/m2";
 const corpusPackages = {
   begGuide: "QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip.d",
   case: "qtiv3-examples/packaging/CASE/CASE.zip.d",
+  externalMetadata: "qtiv3-examples/packaging/externalMetadata/externalMetadata.zip.d",
   lti: "qtiv3-examples/packaging/lti/lti.zip.d",
   minFiles: "qtiv3-examples/packaging/test_package_minfiles/test_package_minfiles.zip.d",
   pciItems: "qtiv3-examples/packaging/pci/pci_item_examples.zip.d",
@@ -754,7 +757,8 @@ const inspect = (delivery: Delivery, before: TestSession, after: TestSession, st
 };
 
 /**
- * Start a session of a delivery and check its first page.
+ * Start a session of a delivery under the processing seed {@link hostSeed} and check its first
+ * page.
  *
  * @param delivery The delivery.
  * @returns The sitting.
@@ -764,6 +768,7 @@ const begin = (delivery: Delivery): Sitting => {
     startTest(delivery.test, delivery.items, delivery.configuration, {
       instance,
       now: new Date(startedAt),
+      seed: hostSeed,
     }),
     "startTest",
   );
@@ -1138,7 +1143,7 @@ const submitPart: Intent = { kind: "submit-part" };
 
 describe("the M2 witness: the packages a test is delivered from", { tags: ["corpus"] }, () => {
   it.effect(
-    "[P-1] [P-4] openPackage gives each package its verdict: the fixture and BegGuide_March2025 accepted, CASE accepted with unsupported features, and test_package_minfiles, lti, testWithLti, sample_pci and pci_item_examples refused by their rules",
+    "[P-1] [P-4] openPackage gives each package its verdict: the fixture, BegGuide_March2025, CASE and externalMetadata accepted, and test_package_minfiles, lti, testWithLti, sample_pci and pci_item_examples refused by their rules",
     () =>
       Effect.gen(function* verdicts() {
         const fixture = yield* openFixture();
@@ -1166,9 +1171,18 @@ describe("the M2 witness: the packages a test is delivered from", { tags: ["corp
 
         const caseVerdict = yield* openCorpusPackage(corpusPackages.case);
 
-        assert.strictEqual(caseVerdict.verdict, "accepted-with-unsupported");
+        assert.strictEqual(caseVerdict.verdict, "accepted");
         assert.isTrue(
           acceptedOf(caseVerdict).tests.has(`${corpusPackages.case}/testitems/-TX_G06SAMP_000.xml`),
+        );
+
+        const externalMetadata = yield* openCorpusPackage(corpusPackages.externalMetadata);
+
+        assert.strictEqual(externalMetadata.verdict, "accepted");
+        assert.isTrue(
+          acceptedOf(externalMetadata).tests.has(
+            `${corpusPackages.externalMetadata}/testitems/-TX_G06SAMP_000.xml`,
+          ),
         );
 
         const minFiles = yield* openCorpusPackage(corpusPackages.minFiles);
@@ -1266,7 +1280,7 @@ describe("the M2 witness: a full session per mode combination, walked by keys th
           firstexample: { response: ["A"], score: ["1"] },
         });
       }),
-    { tags: ["corpus", "qti-xsd"], timeout: sessionTimeoutMs },
+    { tags: ["corpus", "results-xsd"], timeout: sessionTimeoutMs },
   );
   it.effect(
     "[T-4] [T-7] [T-14] [S-0] [S-7] [keyboard] CASE, linear and individual with max-attempts 2: a wrong first attempt scores 0 and leaves the item open, the second scores 1, Next submits each later item, the last Next closes the test, and the scores are 1, 1 and 1",
@@ -1312,7 +1326,7 @@ describe("the M2 witness: a full session per mode combination, walked by keys th
           "res_-TX_G06SAMP_005": { response: ["A_3"], score: ["1"] },
         });
       }),
-    { tags: ["corpus", "qti-xsd"], timeout: sessionTimeoutMs },
+    { tags: ["corpus", "results-xsd"], timeout: sessionTimeoutMs },
   );
 
   it.effect(
@@ -1371,7 +1385,7 @@ describe("the M2 witness: a full session per mode combination, walked by keys th
           "the result names the order the candidate saw",
         );
       }),
-    { tags: ["qti-xsd"], timeout: sessionTimeoutMs },
+    { tags: ["results-xsd"], timeout: sessionTimeoutMs },
   );
 });
 

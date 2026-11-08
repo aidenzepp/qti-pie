@@ -3,16 +3,18 @@
  * rule tree, as pure functions of the item and the variables of one attempt.
  *
  * {@link runRules} runs response rules in order, and {@link evaluateExpression} gives the value of
- * one expression. They take rules the item model ({@link Item}) built and variables that hold a
- * value for every modelled declaration and the built-in `completionStatus`, as the session record
- * does, and the attempt count the built-in `numAttempts` reads. A random kind draws from the one
- * stream ({@link Draw}) the call is given, in evaluation order. A rule that names an identifier
- * outside them, sets an outcome to a value of another type, or maps a response that has no mapping
- * is a failure of what the caller passed, and the caller can cause each one: the variables come
- * from a record the host hands back. An identifier the variables hold no value of is the record's
- * gap, and one the item declares nothing of is the item's; the failure says which. So the functions
- * stay plain and synchronous and return each failure, an {@link EngineFailure}, in a `Result`; the
- * first failure ends the run.
+ * one expression. They take rules the item model ({@link Item}) built, the declarations those rules
+ * read ({@link Declarations}: an item's, or a test's outcome declarations), and variables that hold
+ * a value for every modelled declaration and the built-in `completionStatus`, as the session record
+ * does, and the attempt count the built-in `numAttempts` reads. A test's run also carries the test
+ * scope (`Variables.test`), what its processing reads of the test's items. A random kind draws from
+ * the one stream ({@link Draw}) the call is given, in evaluation order. A rule that names an
+ * identifier outside them, sets an outcome to a value of another type, or maps a response that has
+ * no mapping is a failure of what the caller passed, and the caller can cause each one: the
+ * variables come from a record the host hands back. An identifier the variables hold no value of is
+ * the record's gap, and one the item declares nothing of is the item's; the failure says which. So
+ * the functions stay plain and synchronous and return each failure, an {@link EngineFailure}, in a
+ * `Result`; the first failure ends the run.
  *
  * Each expression kind's evaluator lives in its family's table under `#plate/engine/expressions/`,
  * and this module dispatches through the one table the ten make ({@link evaluators}). A family
@@ -38,6 +40,7 @@ import { numberOf, sameNumber, singleValue } from "#plate/engine/numbers.ts";
 import type { NumberSingle } from "#plate/engine/numbers.ts";
 import { drawStream } from "#plate/engine/random.ts";
 import type { Draw } from "#plate/engine/random.ts";
+import type { TestScope } from "#plate/engine/scope.ts";
 import type { ExpressionKind } from "#plate/model/expression.ts";
 import type { Expression, Item, LookupTable, OutcomeDeclaration, Rule } from "#plate/model/item.ts";
 import {
@@ -97,11 +100,27 @@ export interface Variables {
    * record holds no value of.
    */
   readonly templates?: Readonly<Record<string, Value>>;
+  /**
+   * What a test's outcome processing reads of the test's items, present only in a test's run: an
+   * item's processing runs without one. `#plate/engine/refs.ts` reads a prefixed name
+   * (`ITEMREF.VAR`) through it when the run's own variables hold no value by that name, and the
+   * outcome-only kinds read the test's items through it (`#plate/engine/scope.ts`).
+   */
+  readonly test?: TestScope;
 }
 
 /**
- * The evaluator's context: the item whose declarations give the correct responses, the mappings
- * and the area mappings, the variables of the attempt, and the stream its random kinds draw from.
+ * The declarations a run of rules reads: the outcomes it sets, and the responses and template
+ * variables whose declarations give the correct responses, the defaults, the mappings and the area
+ * mappings. An {@link Item} is one, and every item's processing passes its item. A test's holder is
+ * its outcome declarations with no response and no template variable, since a test is not an item.
+ */
+export type Declarations = Pick<Item, "outcomes" | "responses" | "templates">;
+
+/**
+ * The evaluator's context: the declarations holder whose declarations give the outcomes' types,
+ * the correct responses, the mappings and the area mappings, the variables of the run, and the
+ * stream its random kinds draw from.
  *
  * Every evaluator takes it whole, so a field the engine adds reaches every family with no change
  * to an evaluator's signature. The family tests build it only through `scopeOf` in
@@ -114,7 +133,10 @@ export interface Scope {
    * caller's scope, so it draws from the same stream.
    */
   readonly draw: Draw;
-  readonly item: Item;
+  /**
+   * The declarations holder: an item, or a test's outcome declarations ({@link Declarations}).
+   */
+  readonly item: Declarations;
   readonly variables: Variables;
 }
 
@@ -268,15 +290,16 @@ export const isTrue = (value: Value): boolean => {
  * cannot drift apart.
  *
  * @param expression The expression.
- * @param item The item, whose declarations give the correct responses, the mappings and the area
- *   mappings.
- * @param variables The variables of the attempt.
+ * @param item The declarations holder, an item or a test's outcome declarations, whose
+ *   declarations give the correct responses, the mappings and the area mappings.
+ * @param variables The variables of the run.
  * @param draw The stream the expression's random kinds draw from. Without one, the call builds the
  *   default stream, `drawStream("", "")`, afresh, which stands for "no draws expected": it serves
  *   tests and isolated evaluation. Every processing entry passes its own stream instead, keyed by
  *   the record's seed under its own label (`runAttempt` its response label, `firstAttempt` its
- *   template label), because an entry left on the default would draw the same numbers for every
- *   session and attempt, and no test would fail.
+ *   template label), or by a test session's processing seed under its own (an item ref's template
+ *   defaults the item's default label), because an entry left on the default would draw the same
+ *   numbers for every session and attempt, and no test would fail.
  * @returns The expression's value; or an {@link EngineFailure}: an {@link UnknownIdentifierError}
  *   when it names a variable or response that is not held, or an {@link UnmappedResponseError} when
  *   a `map-response` names a response with no mapping or a `map-response-point` one with no area
@@ -284,22 +307,22 @@ export const isTrue = (value: Value): boolean => {
  */
 export const evaluateExpression = (
   expression: Expression,
-  item: Item,
+  item: Declarations,
   variables: Variables,
   draw: Draw = drawStream("", ""),
 ): Result.Result<Value, EngineFailure> => evaluate(expression, { draw, item, variables });
 
 /**
  * Give the type of an outcome a rule sets: its modelled declaration's, else the built-in
- * `completionStatus`'s, a single identifier, where the item holds the built-in.
+ * `completionStatus`'s, a single identifier, where the holder holds the built-in.
  *
- * @param item The item.
+ * @param item The declarations holder.
  * @param identifier The outcome's identifier.
- * @returns The outcome's base type and cardinality, none when the item holds no outcome by that
+ * @returns The outcome's base type and cardinality, none when the holder holds no outcome by that
  *   name.
  */
 const outcomeType = (
-  item: Item,
+  item: Declarations,
   identifier: string,
 ): Option.Option<Pick<OutcomeDeclaration, "baseType" | "cardinality">> =>
   Option.orElse(Option.fromUndefinedOr(item.outcomes.get(identifier)), () =>
@@ -316,7 +339,7 @@ const outcomeType = (
  * NULL came with (spec §4.5): NULL is the absence of a value, so it has no type to differ from the
  * outcome's.
  *
- * @param item The item, whose declaration gives the outcome's type.
+ * @param item The declarations holder, whose declaration gives the outcome's type.
  * @param variables The variables before the rule.
  * @param identifier The outcome's identifier.
  * @param value The value to set.
@@ -326,7 +349,7 @@ const outcomeType = (
  *   the value is not NULL and its base type or cardinality differs from the outcome's.
  */
 const setOutcome = (
-  item: Item,
+  item: Declarations,
   variables: Variables,
   identifier: string,
   value: Value,
@@ -363,14 +386,14 @@ const setOutcome = (
  * condition that fails, are not evaluated.
  *
  * @param condition The `qti-response-condition`.
- * @param item The item.
+ * @param item The declarations holder.
  * @param variables The variables before the condition.
  * @param draw The run's stream.
  * @returns The chosen rules, or the first failure of a branch condition.
  */
 const chosenRules = (
   condition: Extract<Rule, { readonly kind: "condition" }>,
-  item: Item,
+  item: Declarations,
   variables: Variables,
   draw: Draw,
 ): Result.Result<readonly Rule[], EngineFailure> =>
@@ -438,12 +461,12 @@ const lookUp = (table: LookupTable, value: Value): Option.Option<Single> => {
  * `completionStatus`, whose NULL it stores; the validator refuses a lookup of the built-in
  * (`undeclared-variable`'s `built-in-target` check).
  *
- * @param item The item, whose outcome declaration holds the table.
+ * @param item The declarations holder, whose outcome declaration holds the table.
  * @param identifier The outcome's identifier.
  * @param value The expression's value.
  * @returns The value to set.
  */
-const lookedUp = (item: Item, identifier: string, value: Value): Value => {
+const lookedUp = (item: Declarations, identifier: string, value: Value): Value => {
   const target = Option.fromUndefinedOr(item.outcomes.get(identifier)).pipe(
     Option.flatMap((declared) => declared.lookupTable),
     Option.flatMap((table) => lookUp(table, value)),
@@ -472,14 +495,14 @@ interface Run {
  * value to ({@link lookedUp}), and an exit ends the run, at any depth.
  *
  * @param rule The rule.
- * @param item The item.
+ * @param item The declarations holder.
  * @param variables The variables before the rule.
  * @param draw The run's stream.
  * @returns The variables after it with whether it exited, or the first failure of the rule.
  */
 const runRule = (
   rule: Rule,
-  item: Item,
+  item: Declarations,
   variables: Variables,
   draw: Draw,
 ): Result.Result<Run, EngineFailure> =>
@@ -505,7 +528,7 @@ const runRule = (
  * Run response rules in order until one exits, each seeing the variables the rules before it left.
  *
  * @param rules The rules.
- * @param item The item.
+ * @param item The declarations holder.
  * @param variables The variables before the rules run.
  * @param draw The run's stream.
  * @returns The variables after the last rule run with whether an exit ended the run, or the first
@@ -513,7 +536,7 @@ const runRule = (
  */
 const runSequence = (
   rules: readonly Rule[],
-  item: Item,
+  item: Declarations,
   variables: Variables,
   draw: Draw,
 ): Result.Result<Run, EngineFailure> =>
@@ -538,16 +561,17 @@ const runSequence = (
  *
  * Only outcomes change; the responses are returned as given.
  *
- * @param rules The rules, as the item model built them.
- * @param item The item they belong to.
+ * @param rules The rules, as the item or test model built them.
+ * @param item The declarations holder they belong to: the item, or the test's outcome
+ *   declarations.
  * @param variables The variables before the rules run.
  * @param draw The one stream every rule's expressions draw from, in the order the rules run them.
  *   Without one, the call builds the default stream, `drawStream("", "")`, afresh, which stands for
  *   "no draws expected": it serves tests and isolated evaluation. Every processing entry passes its
  *   own stream instead, keyed by the record's seed under its own label (`runAttempt` its response
- *   label, `firstAttempt` its template label; outcome processing brings its own), because an entry
- *   left on the default would draw the same numbers for every session and attempt, and no test
- *   would fail.
+ *   label, `firstAttempt` its template label), or by a test session's processing seed under its
+ *   own (a run of the test's outcome processing its outcome label), because an entry left on the
+ *   default would draw the same numbers for every session and attempt, and no test would fail.
  * @returns The variables after the last rule run; or the first failure, after which no rule runs:
  *   an {@link UnknownIdentifierError} when a rule names an identifier the item or the variables do
  *   not hold in the role the rule reads it in, an {@link OutcomeMismatchError} when a rule sets an
@@ -557,7 +581,7 @@ const runSequence = (
  */
 export const runRules = (
   rules: readonly Rule[],
-  item: Item,
+  item: Declarations,
   variables: Variables,
   draw: Draw = drawStream("", ""),
 ): Result.Result<Variables, EngineFailure> =>

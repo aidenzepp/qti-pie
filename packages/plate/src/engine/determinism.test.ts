@@ -1,22 +1,29 @@
 /**
  * Criterion 7 in Node: one item with one seed gives the same template values, the same HTML and
- * the same outcomes on every run (`GOAL.md` criterion 7, H4).
+ * the same outcomes on every run, one test with one seed gives the same outcomes from each run of
+ * its outcome processing, and one item ref with one seed gives the same template defaults, and the
+ * same template values from them (`GOAL.md` criterion 7, H4).
  *
- * The item is `src/test/determinism.ts`'s hand-built fixture, which the page tests drive through
- * the same browser entries. Here it also runs through the Schema side (`open`, `begin`, `score`,
- * `restore`), which a page cannot load.
+ * The items and the test are `src/test/determinism.ts`'s hand-built fixture, which the page tests
+ * drive through the same browser entries. Here the item also runs through the Schema side (`open`,
+ * `begin`, `score`, `restore`), which a page cannot load.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { begin } from "#plate/begin.ts";
+import { runAttempt } from "#plate/engine/attempt.ts";
 import { sin } from "#plate/engine/math.ts";
 import {
+  defaultLabel,
   drawBelow,
   drawFloat,
   drawStream,
+  outcomeLabel,
   responseLabel,
   templateLabel,
 } from "#plate/engine/random.ts";
+import type { Draw } from "#plate/engine/random.ts";
+import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import { redact, render } from "#plate/render.ts";
@@ -28,11 +35,19 @@ import {
   determinismItem,
   determinismLocation,
   determinismResponses,
+  determinismScope,
   determinismSeed,
   determinismXml,
   observe,
+  observeDefaults,
+  observeOutcomes,
   otherSeed,
+  pickerInstance,
+  pickerItem,
+  pickerScope,
   pinned,
+  pinnedDefaultDraws,
+  pinnedOutcomeDraws,
   startRecord,
 } from "#plate/test/determinism.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
@@ -198,4 +213,197 @@ describe("criterion 7 in Node: the determinism fixture", () => {
         );
       }),
   );
+});
+
+/**
+ * The fixture item's pinned `SCORE`, which the fixture test reads as `ITEM1.SCORE`.
+ */
+const itemScore = 0.27261476873917745;
+
+/**
+ * What one run of the fixture test draws, replayed: `DRAWN`, `BONUS`, and the value `BONUS` would
+ * take had the branch not taken drawn first.
+ */
+interface Replayed {
+  readonly bonus: bigint;
+  readonly drawn: bigint;
+  readonly skipped: bigint;
+}
+
+/**
+ * The draws one run of the fixture test takes, in order, replayed from a stream apart from the
+ * evaluator: `DRAWN` from 1 to 100, then `BONUS` from 100 to 199 in the branch taken.
+ *
+ * @param draw The run's stream.
+ * @returns What the run draws.
+ */
+const replayed = (draw: Draw): Replayed => {
+  const drawn = 1n + drawBelow(draw, 100n);
+  const bonus = 100n + drawBelow(draw, 100n);
+  const skipped = 100n + drawBelow(draw, 100n);
+
+  return { bonus, drawn, skipped };
+};
+
+describe("criterion 7 in Node: the determinism fixture's test", () => {
+  it("gives the pinned outcome draws of runs 1 and 2 on two fresh starts", () => {
+    const starts = [
+      Result.getOrThrow(observeOutcomes()),
+      Result.getOrThrow(observeOutcomes()),
+    ] as const;
+
+    assert.notStrictEqual(starts[0], starts[1]);
+
+    for (const [index, start] of starts.entries()) {
+      assert.deepStrictEqual(start, pinnedOutcomeDraws, `start ${index + 1}`);
+    }
+
+    assert.notDeepEqual(
+      pinnedOutcomeDraws[0],
+      pinnedOutcomeDraws[1],
+      "run 2 draws apart from run 1",
+    );
+  });
+
+  it("gives other outcome draws under another seed", () => {
+    const other = Result.getOrThrow(observeOutcomes(otherSeed));
+
+    for (const [index, outcomes] of other.entries()) {
+      for (const drawn of ["DRAWN", "BONUS"]) {
+        assert.notDeepEqual(
+          outcomes[drawn],
+          pinnedOutcomeDraws[index]?.[drawn],
+          `run ${index + 1}, ${drawn}`,
+        );
+      }
+    }
+  });
+
+  it("replays the pinned outcome draws from the stream each run's label keys by the seed, not the default key's: DRAWN, then BONUS in the branch taken, no draw in the branch not taken", () => {
+    const fallback = replayed(drawStream("", ""));
+
+    for (const [index, outcomes] of pinnedOutcomeDraws.entries()) {
+      const run = index + 1;
+      const { bonus, drawn, skipped } = replayed(
+        drawStream(determinismSeed, outcomeLabel(determinismInstance, run)),
+      );
+
+      assert.deepStrictEqual(
+        [outcomes["DRAWN"], outcomes["BONUS"], outcomes["TOTAL"]],
+        [integer(drawn), integer(bonus), float(itemScore + Number(bonus))],
+        `run ${run}`,
+      );
+      assert.notStrictEqual(bonus, skipped, `run ${run}: BONUS had the branch not taken drawn`);
+      assert.notDeepEqual(
+        [outcomes["DRAWN"], outcomes["BONUS"]],
+        [integer(fallback.drawn), integer(fallback.bonus)],
+        `run ${run}: drawn on the default key`,
+      );
+    }
+  });
+
+  it("reads its outcome draws' ITEM1 from the fixture item's record after the pinned attempt", () => {
+    const after = Result.getOrThrow(
+      runAttempt(determinismItem, Result.getOrThrow(startRecord()), determinismResponses),
+    );
+    const [scoped] = determinismScope.items;
+
+    assert.deepStrictEqual(pinned.outcomes["SCORE"], float(itemScore));
+    assert.deepStrictEqual(scoped?.record, {
+      correct: after.correct,
+      defaults: after.defaults,
+      outcomes: after.outcomes,
+      responses: after.responses,
+      templates: after.templates,
+    });
+    assert.strictEqual(scoped?.numAttempts, after.numAttempts);
+  });
+});
+
+/**
+ * The defaults the picker item declares for `LOW` and `HIGH`, which the item ref's replace.
+ */
+const declaredBounds = [integer(1n), integer(2n)] as const;
+
+/**
+ * The draws the picker item ref's template defaults take, in document order, replayed from a
+ * stream apart from the evaluator: `LOW` from 1 to 9, then `HIGH` from 10 to 99.
+ *
+ * @param draw The item ref's stream.
+ * @returns `LOW` and `HIGH`.
+ */
+const replayedBounds = (draw: Draw): readonly [bigint, bigint] => {
+  const low = 1n + drawBelow(draw, 9n);
+  const high = 10n + drawBelow(draw, 90n);
+
+  return [low, high];
+};
+
+describe("criterion 7 in Node: the determinism fixture's template defaults", () => {
+  it("gives the pinned template default draws, and the template values from them, on two fresh starts", () => {
+    const starts = [
+      Result.getOrThrow(observeDefaults()),
+      Result.getOrThrow(observeDefaults()),
+    ] as const;
+
+    assert.notStrictEqual(starts[0], starts[1]);
+
+    for (const [index, start] of starts.entries()) {
+      assert.deepStrictEqual(start, pinnedDefaultDraws, `start ${index + 1}`);
+    }
+  });
+
+  it("gives other template default draws, and other template values, under another seed", () => {
+    const other = Result.getOrThrow(observeDefaults(otherSeed));
+
+    for (const drawn of ["LOW", "HIGH"]) {
+      assert.notDeepEqual(other.defaults[drawn], pinnedDefaultDraws.defaults[drawn], drawn);
+    }
+
+    for (const drawn of ["LOW", "HIGH", "PICK", "SPAN"]) {
+      assert.notDeepEqual(other.templates[drawn], pinnedDefaultDraws.templates[drawn], drawn);
+    }
+  });
+
+  it("replays the pinned template default draws from the stream defaultLabel keys by the seed, not the default key's: LOW, then HIGH, from one stream, then PICK from the item's own between them", () => {
+    const [low, high] = replayedBounds(
+      drawStream(determinismSeed, defaultLabel(determinismInstance, 1)),
+    );
+    const [fallbackLow, fallbackHigh] = replayedBounds(drawStream("", ""));
+    const pick =
+      low +
+      drawBelow(
+        drawStream(determinismSeed, templateLabel(pickerInstance, pickerItem.identifier)),
+        high - low + 1n,
+      );
+
+    assert.deepStrictEqual(pinnedDefaultDraws.defaults, { HIGH: integer(high), LOW: integer(low) });
+    assert.notDeepEqual([low, high], [fallbackLow, fallbackHigh], "drawn on the default key");
+    assert.deepStrictEqual(pinnedDefaultDraws.templates, {
+      HIGH: integer(high),
+      LOW: integer(low),
+      PICK: integer(pick),
+      SPAN: integer(high - low),
+    });
+    assert.notDeepEqual(
+      [integer(low), integer(high)],
+      [...declaredBounds],
+      "the item's template processing read its declared defaults",
+    );
+  });
+
+  it("evaluates its template default draws over a scope whose PICKER record is the one fresh starts for the item", () => {
+    const record = fresh(pickerItem, pickerInstance);
+    const [scoped] = pickerScope.items;
+
+    assert.deepStrictEqual(scoped?.record, {
+      correct: record.correct,
+      defaults: record.defaults,
+      outcomes: record.outcomes,
+      responses: record.responses,
+      templates: record.templates,
+    });
+    assert.strictEqual(scoped?.numAttempts, record.numAttempts);
+    assert.deepStrictEqual(scoped?.declarations.templates, pickerItem.templates);
+  });
 });

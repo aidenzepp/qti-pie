@@ -18,8 +18,7 @@ import { trimXmlSpace } from "#plate/model/values.ts";
 /**
  * The eleven QTI base types, as the `base-type` attribute spells them.
  *
- * The value model holds nine of them; a declaration of `duration` or `file` is a mark (see
- * {@link renders}).
+ * The value model holds ten of them; a declaration of `file` is a mark (see {@link renders}).
  */
 export const baseTypes = [
   "identifier",
@@ -269,7 +268,7 @@ export interface Renders {
   readonly engine: readonly string[];
   /**
    * The features recorded on the verdict with no body notice. A declaration the model does not hold
-   * carries one: its base type (`duration`, `file`, or `base-type=""` when it has none) or
+   * carries one: its base type (`file`, or `base-type=""` when it has none) or
    * `cardinality="record"`. Beyond these, a `qti-*` element outside the item body and outside
    * `elements` is a mark keyed by its own name, response processing by a template URI outside the
    * built-ins is a mark keyed `template="<uri>"`, inline response processing with an element
@@ -361,11 +360,6 @@ export const renders = {
       feature: 'adaptive="true"',
       on: ["qti-assessment-item"],
       when: { kind: "attribute-true", name: "adaptive" },
-    },
-    {
-      feature: 'base-type="duration"',
-      on: declarations,
-      when: { kind: "attribute-value", name: "base-type", value: "duration" },
     },
     {
       feature: 'base-type="file"',
@@ -819,7 +813,10 @@ export type AnsweredStatus = (typeof answeredStatuses)[number];
  * names is missing from the delivered sequence. `allow-comment="true"` is a session control that
  * asks for a comment box; `max-attempts:negative` is a negative `max-attempts`, delivered as no
  * limit; `root:<name>` is a section or a stimulus given as a document's root, which is not
- * delivered alone.
+ * delivered alone. A test's outcome processing, an item reference's `qti-weight`, its
+ * `qti-variable-mapping` and its `qti-template-default` are read into the test model, so none of
+ * them is a mark here: outcome processing or a template default the engine cannot run is marked by
+ * what it cannot run (`buildTest` in `#plate/model/test.ts`).
  */
 export const testMarks = [
   "qti-selection",
@@ -828,15 +825,11 @@ export const testMarks = [
   "qti-time-limits",
   "qti-pre-condition",
   "qti-branch-rule",
-  "qti-outcome-processing",
   "qti-rubric-block",
   "qti-test-feedback",
   "qti-assessment-section-ref",
   "qti-stylesheet",
   "qti-context-declaration",
-  "qti-template-default",
-  "qti-variable-mapping",
-  "qti-weight",
   "xi:include",
   'allow-comment="true"',
   "max-attempts:negative",

@@ -405,7 +405,7 @@ const keyMatches = (entry: MapEntry, single: Single): boolean =>
 
 /**
  * Give the value a mapping maps one response value to: the first matching entry's value in
- * document order (the engine's placeholder for map-entry ties), else the default.
+ * document order (the engine's rule for a value two entries match), else the default.
  *
  * @param mapping The mapping.
  * @param single The response value.
@@ -415,8 +415,8 @@ const mappedOf = (mapping: Mapping, single: Single): number =>
   mapping.entries.find((entry) => keyMatches(entry, single))?.value ?? mapping.defaultValue;
 
 /**
- * Report whether a response value matches at most one map key, so scoring it meets no map-entry
- * tie (P1§12 Q5).
+ * Report whether a response value matches at most one map key, so scoring it never leans on the
+ * rule that a value two entries match maps by the first listed.
  *
  * @param mapping The response's mapping, none when it has none.
  * @param single The response value.

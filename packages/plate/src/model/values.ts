@@ -10,7 +10,7 @@
 import { Data, Option, Result } from "effect";
 
 /**
- * The base types the value model holds values of: every QTI base type but `duration` and `file`.
+ * The base types the value model holds values of: every QTI base type but `file`.
  */
 export const modelledBaseTypes = [
   "identifier",
@@ -21,6 +21,7 @@ export const modelledBaseTypes = [
   "point",
   "pair",
   "directedPair",
+  "duration",
   "uri",
 ] as const;
 
@@ -37,8 +38,8 @@ export const modelledCardinalities = ["single", "multiple", "ordered"] as const;
 /**
  * Report whether the value model holds values of a base type.
  *
- * `duration` and `file` are valid QTI base types the value model does not hold, so their
- * declarations are marked unsupported rather than refused.
+ * `file` is a valid QTI base type the value model does not hold, so its declarations are marked
+ * unsupported rather than refused.
  *
  * @param baseType A `base-type` attribute value.
  * @returns Whether `baseType` is a {@link ModelledBaseType}.
@@ -172,11 +173,14 @@ export const doubleLexical =
 /**
  * One QTI value, tagged by its base type: a string for `identifier`, `string` and `uri`; a
  * `bigint` for `integer`; a number for `float`; a boolean for `boolean`; two `bigint`s for `point`,
- * the horizontal coordinate first; and two identifiers for `pair` and `directedPair`, the source
- * first.
+ * the horizontal coordinate first; two identifiers for `pair` and `directedPair`, the source
+ * first; and a number of seconds for `duration`.
  *
- * An integer, and each coordinate of a point, is exact at any size. A float is an xs:double.
- * `SingleSchema` in `#plate/codec/values.ts` checks and encodes this type at the boundaries.
+ * An integer, and each coordinate of a point, is exact at any size. A float is an xs:double. A
+ * duration is its seconds in an xs:double, never truncated (readings 29 and 68; G-R3, pending: a
+ * duration is a number of seconds, written as a float is). It is not numerical (G-R1, pending): no
+ * arithmetic takes one. `SingleSchema` in `#plate/codec/values.ts` checks and encodes this type at
+ * the boundaries.
  */
 export type Single =
   | { readonly baseType: "identifier"; readonly value: string }
@@ -187,6 +191,7 @@ export type Single =
   | { readonly baseType: "point"; readonly value: readonly [bigint, bigint] }
   | { readonly baseType: "pair"; readonly value: readonly [string, string] }
   | { readonly baseType: "directedPair"; readonly value: readonly [string, string] }
+  | { readonly baseType: "duration"; readonly value: number }
   | { readonly baseType: "uri"; readonly value: string };
 
 /**
@@ -228,11 +233,24 @@ export const nullOf = (baseType: ModelledBaseType, cardinality: Value["cardinali
 export const isNull = (value: Value): boolean => value.values.length === 0;
 
 /**
+ * Say what to write for a duration: its seconds as an xs:double, never an ISO 8601 duration. A
+ * parse failure ({@link InvalidValue}) and a `value-type` refusal's wording say it in these words,
+ * so the two say one thing.
+ *
+ * @param literal How to write each literal the words name, such as `90.5`: as given in a plain
+ *   message, or in a code span in Markdown.
+ * @returns The words, which follow "write".
+ */
+export const durationForm = (literal: (text: string) => string): string =>
+  `its seconds as a decimal or exponent number such as ${literal("90.5")}, or ${literal("INF")}, ${literal("-INF")} or ${literal("NaN")}, never an ISO 8601 duration such as ${literal("PT1M30.5S")}`;
+
+/**
  * The lexical form each base type takes, in the words a parse failure uses to say what to write.
  */
 const expected = {
   boolean: "true or false",
   directedPair: "two NCNames separated by whitespace, such as A B",
+  duration: durationForm((text) => text),
   float: "a decimal or exponent number such as 2.5 or 1E3, or INF, -INF or NaN",
   identifier: "an NCName: a letter or _ first, then letters, digits, -, _ or .",
   integer: "decimal digits with an optional sign, such as -12",
@@ -352,6 +370,10 @@ const readPair = (baseType: "pair" | "directedPair", lexical: string): Option.Op
 /**
  * How each base type reads its lexical form: the value it names, or none when the text is outside
  * the lexical space.
+ *
+ * A duration reads as a float does, its seconds in xs:double's lexical space: `90.5`, `INF`,
+ * `-INF`, `NaN` and a negative are durations, and an ISO 8601 duration such as `PT1M30.5S` is
+ * outside it (reading 68).
  */
 const readers = {
   boolean: (lexical: string) =>
@@ -360,6 +382,8 @@ const readers = {
       value: lexical === "true",
     }),
   directedPair: (lexical: string) => readPair("directedPair", lexical),
+  duration: (lexical: string) =>
+    valueIf(doubleLexical.test(lexical), { baseType: "duration", value: readDouble(lexical) }),
   float: (lexical: string) =>
     valueIf(doubleLexical.test(lexical), { baseType: "float", value: readDouble(lexical) }),
   identifier: (lexical: string) =>
@@ -375,7 +399,14 @@ const readers = {
  * Read text as a value of a base type, exactly as written.
  *
  * No whitespace is removed, so a padded attribute value is refused, as spec reading 7 rules for
- * typed values in attributes. A boolean is `true` or `false` only; `1` and `0` are refused.
+ * typed values in attributes.
+ *
+ * A boolean is `true` or `false` only; `1` and `0` are refused (reading 34). The QTI XSD does not
+ * decide: it types `qti-value` as `xs:normalizedString` and `qti-base-value` as `xs:string`. The
+ * information model does: its boolean base type is "the same as the set of values defined by the
+ * boolean primitiveType" (`info.txt:72950`), the primitive "with permitted values of "true" and
+ * "false"" (`info.txt:74908`). XML Schema's `1` and `0` belong only to the attributes the XSD types
+ * `xs:boolean`, which `xsBooleanOf` in `#plate/model/attributes.ts` reads.
  *
  * @param baseType The base type to read.
  * @param lexical The text, as written.
@@ -438,7 +469,8 @@ const formatFloat = (number: number): string => {
  * Write a value in its base type's lexical form.
  *
  * `String` writes the exact decimal digits of an integer of any size, never an exponent: no `+`,
- * no leading zeros, and `0` for a written `-0`. A point's coordinates are written the same way.
+ * no leading zeros, and `0` for a written `-0`. A point's coordinates are written the same way. A
+ * duration is written as its seconds, as a float is.
  *
  * @param single The value to write.
  * @returns The lexical form, which {@link parseLexical} reads back to the same value; a pair is its
@@ -453,7 +485,7 @@ export const format = (single: Single): string => {
     return String(single.value);
   }
 
-  if (single.baseType === "float") {
+  if (single.baseType === "float" || single.baseType === "duration") {
     return formatFloat(single.value);
   }
 
@@ -474,8 +506,8 @@ export const format = (single: Single): string => {
  * @param left One single.
  * @param right The other single.
  * @returns Whether they share a base type and are equal: a `pair` in either order, a
- *   `directedPair` in order, a `point` when both coordinates are equal, integers and floats by
- *   value (`===` compares two bigints by value) and strings by code point.
+ *   `directedPair` in order, a `point` when both coordinates are equal, integers, floats and
+ *   durations by value (`===` compares two bigints by value) and strings by code point.
  */
 export const sameSingle = (left: Single, right: Single): boolean => {
   if (left.baseType === "pair" && right.baseType === "pair") {

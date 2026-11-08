@@ -5,9 +5,10 @@
  *
  * Each saves the step through `recordStep` first, then enforces the item session control the test
  * sets, then runs `score` over each item's own record, whose instance is the session's instance, a
- * `.` and the item's sequence index. A refusal is a {@link SubmissionRefused} naming the rule it
- * breaks. Every function is pure: time is the `now` the host passes, and nothing is kept between
- * calls.
+ * `.` and the item's sequence index. After the items' response processing, and once more when the
+ * test closes, the test's outcome processing runs over the session (`runOutcomes`). A refusal is a
+ * {@link SubmissionRefused} naming the rule it breaks. Every function is pure: time is the `now`
+ * the host passes, and nothing is kept between calls.
  *
  * This is a boundary module, not a browser module: it calls `score`, which reads and writes the
  * stored record through its Schema codec.
@@ -19,6 +20,8 @@ import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord } from "#plate/codec/record.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
+import { runOutcomes, testScopeOf } from "#plate/engine/outcome.ts";
+import { drawStream, outcomeLabel } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
 import type { Item } from "#plate/model/item.ts";
 import { refIdentifiersIn } from "#plate/model/item-refs.ts";
@@ -35,12 +38,14 @@ import type {
   RecordRequired,
   ResponsesRefused,
 } from "#plate/score.ts";
-import { UnknownItemRef } from "#plate/session/control.ts";
+import { attemptLimits, UnknownItemRef } from "#plate/session/control.ts";
+import { elapsedSeconds } from "#plate/session/elapsed.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import {
   ItemNotInSession,
   TestNotDeliverable,
   itemView,
+  partStarted,
   present,
   recordStep,
   withItem,
@@ -157,9 +162,21 @@ type ScoreFailure =
 
 /**
  * Why {@link endPart}, or the end of a part, may fail: a refusal, a stored session that does not
- * fit the test or the items passed, or an invalid `now`.
+ * fit the test or the items passed, or an invalid `now`. An end that closes the test runs its
+ * outcome processing, which fails with an `EngineFailure` over a stored session whose item record
+ * lacks a value the processing reads. An end that moves on to a part gives template defaults: a
+ * nonlinear part's, every item's, as it starts, and a linear part's, its first item's, as that item
+ * is presented. Each fails with an `EngineFailure` when a default does not fit its item, which only
+ * a test and items checked apart can give, or reads a value the session's records lack.
+ *
+ * Processing that reads an item's context variable through its item ref (`ITEMREF.VAR` naming the
+ * item's `qti-context-declaration`) reads a value the engine never holds, since the item marks
+ * that declaration. `openPackage` marks such processing, and it never runs. A test and items
+ * checked apart, each `open`ed alone, cannot see an item's context declaration, so there a read of
+ * one fails `UnknownIdentifierError`: that is the path of documents checked apart (OD-P9-14).
  */
 export type PartEndFailure =
+  | EngineFailure
   | InvalidTime
   | ItemNotInSession
   | SubmissionRefused
@@ -168,9 +185,13 @@ export type PartEndFailure =
 
 /**
  * Why {@link submitItem} or {@link submitPart} may fail: a refusal, a part end's failures, or an
- * attempt `score` cannot run. For responses that break a tier (a) limit, {@link submitItem} passes
- * `score`'s `ResponsesRefused` through, and {@link submitPart} refuses with `responses-invalid`
- * naming the item.
+ * attempt `score` cannot run. The outcome processing {@link submitItem} runs after each submission
+ * fails as a closing part end's does ({@link PartEndFailure}): `openPackage` marks processing that
+ * reads an item's context variable through its item ref, and it never runs, while a test and items
+ * checked apart, each `open`ed alone, cannot see an item's context declaration, so there a read of
+ * one fails `UnknownIdentifierError` (OD-P9-14). For responses that break a tier (a) limit,
+ * {@link submitItem} passes `score`'s `ResponsesRefused` through, and {@link submitPart} refuses
+ * with `responses-invalid` naming the item.
  */
 export type SubmissionFailure = PartEndFailure | ScoreFailure;
 
@@ -415,10 +436,53 @@ const processedInPart = (
   );
 
 /**
+ * Run the test's outcome processing over a session once, and store what it leaves.
+ *
+ * Run `n` is `outcomeRuns + 1`. It starts every test outcome from its declared default, else its
+ * starting value (`info.txt:9236`), reads the test's items through the session's test scope, whose
+ * `duration` is the seconds from the session's start to `now` and whose items count the attempts
+ * they have started under their item refs' limits, as the results report does, and draws from
+ * `drawStream(session.seed, outcomeLabel(session.instance, n))`, the processing seed under its own
+ * label, never the default key. The session then holds the outcomes it left and `outcomeRuns` `n`.
+ * A test whose outcome processing is `absent`, or `marked` because the engine cannot run it, runs
+ * nothing: its outcomes stay at their defaults and no run is counted.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session, its items' attempts already processed.
+ * @param now The time of the transition.
+ * @returns The session after the run, or the {@link EngineFailure} the run failed with: a stored
+ *   item record that lacks a value the processing reads.
+ */
+const outcomesProcessed = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  now: Date,
+): Result.Result<TestSession, EngineFailure> => {
+  if (test.outcomeProcessing.kind !== "runs") {
+    return Result.succeed(session);
+  }
+
+  const run = session.outcomeRuns + 1;
+  const elapsed = elapsedSeconds(Date.parse(session.started), now.getTime());
+  const scope = testScopeOf(test, items, session, attemptLimits(test), Option.some(elapsed));
+
+  return Result.map(
+    runOutcomes(test, scope, drawStream(session.seed, outcomeLabel(session.instance, run))),
+    (outcomes) => ({ ...session, outcomeRuns: run, outcomes }),
+  );
+};
+
+/**
  * End a test part: move to the next part that holds an item, whose first item is presented, or
  * close the test when no such part follows.
  *
- * The parts between, which hold no item, end as the candidate reaches them, as at the start.
+ * The parts between, which hold no item, end as the candidate reaches them, as at the start. When
+ * the next part is nonlinear, its items' template defaults are evaluated as it starts, before its
+ * first item is presented (`partStarted`), over the test's outcomes as the session holds them:
+ * after a simultaneous part's submission, those its outcome run left. When the test closes, its
+ * outcome processing runs once more, at the same `now` as any run before it in the transition.
  *
  * @param test The test.
  * @param items The accepted items, keyed by item ref identifier.
@@ -426,7 +490,8 @@ const processedInPart = (
  * @param ending The index of the part that ends, among the test's parts.
  * @param now The time of the transition.
  * @returns The session after the part's end; {@link UnknownItemRef} when the session holds no item
- *   for the next part's first item ref; or a failure of `present`.
+ *   for the next part's first item ref; a failure of `partStarted` or of `present`; or the
+ *   `EngineFailure` of the closing outcome run.
  */
 const partEnded = (
   test: Test,
@@ -437,7 +502,7 @@ const partEnded = (
 ): Result.Result<TestSession, PartEndFailure> => {
   const next = Arr.findFirst(test.parts, (part, index) =>
     index > ending
-      ? Option.map(Arr.head(refIdentifiersIn(part.children)), (ref) => ({ index, ref }))
+      ? Option.map(Arr.head(refIdentifiersIn(part.children)), (ref) => ({ index, part, ref }))
       : Option.none(),
   );
   const reached = Option.match(next, {
@@ -456,18 +521,19 @@ const partEnded = (
   });
 
   return Option.match(next, {
-    onNone: () => Result.succeed({ ...session, parts, status: "closed" }),
-    onSome: ({ ref }) =>
-      Result.flatMap(
-        Result.fromOption(
-          Arr.findFirst(session.items, (item, position) =>
-            item.ref === ref ? Option.some([position, item] as const) : Option.none(),
+    onNone: () => outcomesProcessed(test, items, { ...session, parts, status: "closed" }, now),
+    onSome: ({ part, ref }) =>
+      Result.gen(function* startNextPart() {
+        const [position, item] = yield* Result.fromOption(
+          Arr.findFirst(session.items, (each, index) =>
+            each.ref === ref ? Option.some([index, each] as const) : Option.none(),
           ),
           () => new UnknownItemRef({ ref, test: test.identifier }),
-        ),
-        ([position, item]) =>
-          present(items, { ...session, parts, position }, item.sequenceIndex, now),
-      ),
+        );
+        const begun = yield* partStarted(test, items, { ...session, parts, position }, part);
+
+        return yield* present(test, items, begun, item.sequenceIndex, now);
+      }),
   });
 };
 
@@ -484,7 +550,8 @@ const partEnded = (
  * template values its page was shown with, so a choice its template hides is refused and one it
  * shows is judged as the page showed it, and an interaction a hidden template block holds is not
  * judged. Otherwise `score` runs over the item's record with its saved responses, and its
- * failures, `ResponsesRefused` among them, pass through. The item stays current: moving on is a
+ * failures, `ResponsesRefused` among them, pass through. The test's outcome processing then runs
+ * over the session, and its `EngineFailure` passes through. The item stays current: moving on is a
  * move's.
  *
  * @example
@@ -554,7 +621,12 @@ export const submitItem = (
 
     const done = yield* processed(accepted, item, values, saved.updated);
 
-    return { ...saved, items: withItem(saved, index, done) };
+    return yield* outcomesProcessed(
+      test.test,
+      items,
+      { ...saved, items: withItem(saved, index, done) },
+      context.now,
+    );
   });
 
 /**
@@ -565,10 +637,12 @@ export const submitItem = (
  * `wrong-submission-mode`. Each presented item of the part is processed once, in sequence, with its
  * saved responses over its record's; `allow-skipping` and `validate-responses` do not apply in a
  * simultaneous part. An item the candidate never saw is not processed: it closes as it is, with
- * NULL responses, its default outcomes and `numAttempts` 0. The part then ends as
- * {@link endPart} ends one. An attempt `score` cannot run fails the whole submission: where `score`
- * refuses an item's responses (tier (a)), the refusal is `responses-invalid` naming that item,
- * which need not be the current one, with `score`'s messages.
+ * NULL responses, its default outcomes and `numAttempts` 0. The test's outcome processing then runs
+ * once, over every item the part processed, and the part ends as {@link endPart} ends one, which
+ * runs it once more when the test closes. An attempt `score` cannot run, or an outcome run's
+ * `EngineFailure`, fails the whole submission: where `score` refuses an item's responses (tier
+ * (a)), the refusal is `responses-invalid` naming that item, which need not be the current one,
+ * with `score`'s messages.
  *
  * @param test The test the session was started from.
  * @param items The test's items, keyed by item ref identifier, as `startTest` took them.
@@ -611,7 +685,14 @@ export const submitPart = (
       ),
     );
 
-    return yield* partEnded(test.test, items, { ...saved, items: after }, index, context.now);
+    const afterRun = yield* outcomesProcessed(
+      test.test,
+      items,
+      { ...saved, items: after },
+      context.now,
+    );
+
+    return yield* partEnded(test.test, items, afterRun, index, context.now);
   });
 
 /**
@@ -621,7 +702,8 @@ export const submitPart = (
  * {@link submitPart}, is `wrong-submission-mode`. No item is processed: an item with saved,
  * unsubmitted responses keeps them, unscored, and every item of the part closes. The next part
  * that holds an item becomes current and its first item is presented, the parts between ending as
- * the candidate passes them; when none follows, the test closes.
+ * the candidate passes them; when none follows, the test closes and its outcome processing runs,
+ * its `duration` read at the close.
  *
  * @param test The test the session was started from.
  * @param items The test's items, keyed by item ref identifier, as `startTest` took them.

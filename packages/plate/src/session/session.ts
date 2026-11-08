@@ -76,6 +76,14 @@ export interface SessionItem {
    * The item's place in the sequence, counted from 1: a result's `sequenceIndex`.
    */
   readonly sequenceIndex: number;
+  /**
+   * The values its item ref's template defaults took, by template variable identifier, which its
+   * first attempt's template processing starts from. Present only on an item of a nonlinear part
+   * whose item ref has a template default, computed when that part starts; none on any other item:
+   * one whose item ref has no template default, or one of a linear part, which computes its item's
+   * defaults when the item is first presented and stores none here.
+   */
+  readonly templateDefaults: Option.Option<Readonly<Record<string, Value>>>;
 }
 
 /**
@@ -83,22 +91,34 @@ export interface SessionItem {
  * request to the next.
  *
  * `test` is the test's identifier and `document` the test document's location. `instance` is the
- * host's name for this sitting, which scopes every item's ids. `seed` is the seed the session
- * started with, always present: the host's, used as given, or the one `startTest` drew when the
- * configuration had none. It keys a shuffled Choice's order and every value an item's processing
- * draws, so a restored session presents the order and the values it showed. `started` and
- * `updated` are ISO 8601 UTC times: when the session started and when its last transition
- * happened. `position` is the index into `items` of the item shown now, counted from 0. `parts`
- * lists the test's parts in order, and `items` its items in the order the candidate meets them.
+ * host's name for this sitting, which scopes every item's ids. `seed` is the session's processing
+ * seed, always present: the one `startTest`'s context gave, used as given, or the one `startTest`
+ * drew when the context gave none, never the configuration's `seed`. It keys every value the
+ * session's processing draws, so a restored session holds the values it showed, and it is server
+ * data: it never reaches the page. `shuffleSeed` is the configuration's `seed` the session started
+ * under, none when the configuration had none; it alone orders a shuffled Choice or Inline Choice,
+ * so a restored session presents the order it showed, and with none a shuffle follows the instance
+ * alone. `started` and `updated` are ISO 8601 UTC times: when the session started and when its last
+ * transition happened. `position` is the index into `items` of the item shown now, counted from 0.
+ * `parts` lists the test's parts in order, and `items` its items in the order the candidate meets
+ * them.
+ *
+ * `outcomes` holds the test's outcomes by identifier, each exact as an item's are: at its declared
+ * default, else its starting value, when the session starts, and as the last run of the test's
+ * outcome processing left them after. `outcomeRuns` counts those runs, 0 when the session starts;
+ * the next run is number `outcomeRuns + 1`, and its number keys the values it draws.
  */
 export interface TestSession {
   readonly document: string;
   readonly instance: string;
   readonly items: readonly SessionItem[];
   readonly kind: "test";
+  readonly outcomeRuns: number;
+  readonly outcomes: Readonly<Record<string, Value>>;
   readonly parts: readonly SessionPart[];
   readonly position: number;
   readonly seed: string;
+  readonly shuffleSeed: Option.Option<string>;
   readonly started: string;
   readonly status: "closed" | "interacting";
   readonly test: string;

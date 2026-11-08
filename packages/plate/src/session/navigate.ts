@@ -13,6 +13,7 @@
  * @module
  */
 import { Array as Arr, Data, Option, Result } from "effect";
+import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { refIdentifiersIn } from "#plate/model/item-refs.ts";
 import type { Test, TestPart } from "#plate/model/test.ts";
 import { UnknownItemRef } from "#plate/session/control.ts";
@@ -338,8 +339,9 @@ export const moveTarget = (
  * The request's responses are saved on the current item first, through `recordStep`, which adds the
  * time the item was shown to its duration and makes `now` the item's datestamp and the session's
  * `updated`. The item the move reaches becomes current and is presented, which starts its first
- * attempt and writes its response defaults when the candidate meets it for the first time. `go` to
- * the current item saves and stays. A refused move returns no session, so it saves nothing.
+ * attempt and writes its response defaults when the candidate meets it for the first time, after
+ * the item ref's template defaults in a linear part, as `present` gives them. `go` to the current
+ * item saves and stays. A refused move returns no session, so it saves nothing.
  *
  * In a linear, individual part, `next` from an item with no processed attempt is refused
  * (`unsubmitted`): the item is submitted first, which a submission does, and then the move is
@@ -357,7 +359,8 @@ export const moveTarget = (
  *   `InvalidTime` for an invalid `now`; {@link ItemNotInSession} for a session whose position is
  *   past its items; {@link UnknownItemRef} when the test holds no item ref the current item names;
  *   `TestNotDeliverable` when the items have no entry for the item reached, or one from another
- *   document.
+ *   document; an `EngineFailure` when a template default of the item reached does not fit it, or
+ *   reads a value the session's records lack.
  */
 export const move = (
   test: AcceptedTest,
@@ -367,7 +370,7 @@ export const move = (
   now: Date,
 ): Result.Result<
   TestSession,
-  InvalidTime | ItemNotInSession | MoveRefused | TestNotDeliverable | UnknownItemRef
+  EngineFailure | InvalidTime | ItemNotInSession | MoveRefused | TestNotDeliverable | UnknownItemRef
 > =>
   Result.gen(function* moveOne() {
     const target = yield* moveTarget(test, session, step.intent);
@@ -380,5 +383,5 @@ export const move = (
       return saved;
     }
 
-    return yield* present(items, { ...saved, position }, target, now);
+    return yield* present(test.test, items, { ...saved, position }, target, now);
   });

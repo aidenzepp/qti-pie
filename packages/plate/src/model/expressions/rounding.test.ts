@@ -280,7 +280,7 @@ describe("the rounding family's reader specs and kind rules", () => {
 
   it("[I-9a] refuse each operand of the rounding kinds that is not a single number (expression-type, P23)", () => {
     const written = baseValueElement("string", "6.5");
-    const duration = baseValueElement("duration", "PT1S");
+    const duration = baseValueElement("duration", "1");
     const cases: readonly (readonly [string, SourceElement, string, string])[] = [
       ["integer", expressionElement("round", [], [written]), "1", "string"],
       ["integer", expressionElement("truncate", [], [duration]), "1", "duration"],

@@ -507,6 +507,38 @@ const failureOf = <E>(result: Result.Result<Rendered, E>): Option.Option<E> => {
 };
 
 /**
+ * A lowercase UUID v4: 32 hex digits in the 8-4-4-4-12 form, the version nibble 4 and the variant
+ * nibble 8 to b.
+ */
+const uuidV4 = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/u;
+
+/**
+ * Run an effect with `crypto.randomUUID` unreachable, as a page on plain HTTP has it (a browser
+ * gives it only in a secure context), and make it reachable again afterwards.
+ *
+ * In Node `randomUUID` lives on `Crypto.prototype`, so deleting it from `globalThis.crypto` would
+ * leave it reachable: this defines an own property, `undefined` and configurable, that shadows it,
+ * and deletes that property when the effect ends, however it ends.
+ *
+ * @param effect The effect to run without `randomUUID`.
+ * @returns The effect's result.
+ */
+const withoutRandomUuid = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      Object.defineProperty(globalThis.crypto, "randomUUID", {
+        configurable: true,
+        value: undefined,
+      });
+    }),
+    () => effect,
+    () =>
+      Effect.sync(() => {
+        Reflect.deleteProperty(globalThis.crypto, "randomUUID");
+      }),
+  );
+
+/**
  * Give the fields of an {@link InvalidInstance} a render failed with.
  *
  * @param result The result of a render.
@@ -1046,6 +1078,27 @@ describe("render, the instance token", () => {
     }),
   );
 
+  it.effect("draws a lowercase UUID v4 with crypto.randomUUID unreachable, as on plain HTTP", () =>
+    withoutRandomUuid(
+      Effect.gen(function* drawnWithoutRandomUuid() {
+        assert.throws(() => {
+          globalThis.crypto.randomUUID();
+        }, TypeError);
+
+        const configuration = yield* defaults;
+        const drawn = yield* Effect.fromResult(render(redacted, configuration));
+        assert.match(drawn.instance, uuidV4);
+        assert.deepStrictEqual(checkInstance(drawn.instance), Option.none());
+      }),
+    ).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          assert.match(globalThis.crypto.randomUUID(), uuidV4);
+        }),
+      ),
+    ),
+  );
+
   it.effect("returns the instance it used, which validates and partitions its entries", () =>
     Effect.gen(function* returnedToken() {
       const configuration = yield* defaults;
@@ -1245,7 +1298,11 @@ const sprawling: Item = {
 interface TooLarge {
   readonly budget: number;
   readonly item: string;
-  readonly printed: Option.Option<{ readonly bound: number; readonly identifier: string }>;
+  readonly printed: Option.Option<{
+    readonly bound: number;
+    readonly identifier: string;
+    readonly limit: "budget" | "text";
+  }>;
 }
 
 /**
@@ -1286,7 +1343,7 @@ describe("render, the output budget", () => {
           Option.some({
             budget: 16_777_216,
             item: "sprawling",
-            printed: Option.some({ bound: 16_777_216, identifier: "S" }),
+            printed: Option.some({ bound: 16_777_216, identifier: "S", limit: "budget" }),
           }),
         );
       }),
@@ -1327,7 +1384,7 @@ describe("render, the output budget", () => {
           Option.some({
             budget: 10_000,
             item: "slotted",
-            printed: Option.some({ bound: 10_000, identifier: "S" }),
+            printed: Option.some({ bound: 10_000, identifier: "S", limit: "budget" }),
           }),
         );
       }),
@@ -1530,7 +1587,7 @@ describe("render, a printed text past its bound", () => {
           Option.some({
             budget: 16_777_216,
             item: "widened",
-            printed: Option.some({ bound: 1_000_000, identifier: "N" }),
+            printed: Option.some({ bound: 1_000_000, identifier: "N", limit: "text" }),
           }),
         );
       }),
@@ -1548,7 +1605,7 @@ describe("render, a printed text past its bound", () => {
           Option.some({
             budget: 16_777_216,
             item: "lengthy",
-            printed: Option.some({ bound: 1_000_000, identifier: "S" }),
+            printed: Option.some({ bound: 1_000_000, identifier: "S", limit: "text" }),
           }),
         );
       }),
@@ -1566,7 +1623,7 @@ describe("render, a printed text past its bound", () => {
           Option.some({
             budget: 16_777_216,
             item: "passing",
-            printed: Option.some({ bound: 1_000_000, identifier: "P" }),
+            printed: Option.some({ bound: 1_000_000, identifier: "P", limit: "text" }),
           }),
         );
       }),
@@ -1600,6 +1657,42 @@ describe("render, a printed text past its bound", () => {
 
         assert.include(textOf(rootOf(longest)), `Value: ${"y".repeat(1_000_000)}`);
         assert.notInclude(hidden.html, "yyy");
+      }),
+  );
+
+  it.effect(
+    "[I-5] fails OutputTooLarge naming which limit S passed when both are 1,000,000: the budget when an outputBudget of 1,000,000 runs out across four slots of 300,000 characters, the text for one slot of 1,000,001 under the same budget",
+    () =>
+      Effect.gen(function* namesWhichLimit() {
+        const configuration = yield* configure({ outputBudget: 1_000_000 });
+        const quartered = acceptForTest({
+          ...sprawling,
+          body: [slotsOfS(4)],
+          identifier: "quartered",
+        });
+        const spent = redact(quartered, strings({ S: "y".repeat(300_000) }), configuration);
+        const long = redact(
+          acceptForTest(lengthy),
+          strings({ S: "y".repeat(1_000_001) }),
+          configuration,
+        );
+
+        assert.deepStrictEqual(
+          budgetFailure(render(spent, configuration, { instance })),
+          Option.some({
+            budget: 1_000_000,
+            item: "quartered",
+            printed: Option.some({ bound: 1_000_000, identifier: "S", limit: "budget" }),
+          }),
+        );
+        assert.deepStrictEqual(
+          budgetFailure(render(long, configuration, { instance })),
+          Option.some({
+            budget: 1_000_000,
+            item: "lengthy",
+            printed: Option.some({ bound: 1_000_000, identifier: "S", limit: "text" }),
+          }),
+        );
       }),
   );
 });
