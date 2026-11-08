@@ -536,16 +536,6 @@ const judged = (source: SourceDocument) =>
     };
   });
 
-/**
- * The child-count detail of an empty section (reading 26).
- */
-const sectionChildren = {
-  child: "qti-assessment-item-ref or qti-assessment-section or qti-assessment-section-ref",
-  element: "qti-assessment-section",
-  required: "at least one",
-  source: "reading 26",
-};
-
 describe("checkTestRules", () => {
   describe("duplicate-identifier", () => {
     it("refuses the second of two item refs named I1 in different sections", () => {
@@ -631,26 +621,19 @@ describe("checkTestRules", () => {
     });
   });
 
-  describe("child-count (reading 26)", () => {
-    it("refuses a section holding no item ref, section or section ref", () => {
-      assert.deepStrictEqual(judged(oneSection([rubricBlock(paragraph)])), [
-        { detail: sectionChildren, path: sectionPath, rule: "child-count" },
-      ]);
+  describe("a section's parts (reading 26: an assessment section may hold no part)", () => {
+    it("align-54 empty section D1: accepts a section holding a rubric block alone", () => {
+      assert.deepStrictEqual(judged(oneSection([rubricBlock(paragraph)])), []);
     });
 
-    it("refuses a section document whose root section is empty", () => {
-      assert.deepStrictEqual(judged(sectionDocument("S", [])), [
-        { detail: sectionChildren, path: "qti-assessment-section", rule: "child-count" },
-      ]);
+    it("align-54 empty section D1: accepts a section document whose root section holds nothing", () => {
+      assert.deepStrictEqual(judged(sectionDocument("S", [])), []);
     });
 
-    it("accepts a section holding only an item ref, only a section, or only a section ref", () => {
+    it("accepts a section holding only an item ref, a section, a section ref or an XInclude include", () => {
       assert.deepStrictEqual(judged(oneSection([itemRef("I1")])), []);
       assert.deepStrictEqual(judged(oneSection([section("S2", [itemRef("I1")])])), []);
       assert.deepStrictEqual(judged(oneSection([sectionRef("R1")])), []);
-    });
-
-    it("does not count a section whose children an XInclude include may supply", () => {
       assert.deepStrictEqual(
         judged(oneSection([el("include", [attr("href", "more.xml")], [], xincludeNamespace)])),
         [],
@@ -1506,7 +1489,6 @@ describe("checkTestRules", () => {
         ).map(({ path, rule }) => [rule, path]),
         [
           ["expression-placement", `${partPath}/qti-pre-condition/qti-gte/qti-number-selected`],
-          ["child-count", `${partPath}/qti-assessment-section[1]`],
           [
             "misplaced-element",
             `${partPath}/qti-assessment-section[1]/qti-rubric-block/qti-content-body/qti-choice-interaction`,

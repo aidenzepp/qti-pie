@@ -850,6 +850,43 @@ describe("startTest", () => {
         assert.deepStrictEqual(throughHost(delivery.test, unseeded), unseeded);
       }),
   );
+
+  it.effect(
+    "align-54 empty section D1: delivers a test whose part holds a rubric-only section beside an item section, numbering the item section's one item and presenting it",
+    () =>
+      Effect.gen(function* rubricOnlySection() {
+        const encoder = new TextEncoder();
+        const test = yield* openTest(
+          "tests/rubric.xml",
+          encoder.encode(
+            [
+              '<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="rubric" title="rubric">',
+              '<qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">',
+              '<qti-assessment-section identifier="instructions" title="Instructions" visible="true">',
+              '<qti-rubric-block view="candidate"><qti-content-body><p>Read each question.</p></qti-content-body></qti-rubric-block>',
+              '</qti-assessment-section><qti-assessment-section identifier="questions" title="Questions" visible="true">',
+              '<qti-assessment-item-ref identifier="first" href="first.xml"/>',
+              "</qti-assessment-section></qti-test-part></qti-assessment-test>",
+            ].join(""),
+          ),
+        );
+        const item = yield* openItem(
+          "tests/first.xml",
+          encoder.encode(
+            itemXml("first", { choices: ["A", "B"], defaultValue: false, shuffle: false }),
+          ),
+        );
+        const session = started({ items: new Map([["first", item]]), test }, yield* configure({}));
+
+        assert.deepStrictEqual(
+          session.items.map((entry) => [entry.sequenceIndex, entry.ref, entry.presented]),
+          [[1, "first", true]],
+        );
+        assert.deepStrictEqual(session.parts, [{ identifier: "part", status: "current" }]);
+        assert.strictEqual(session.status, "interacting");
+        assert.deepStrictEqual(throughHost(test, session), session);
+      }),
+  );
 });
 
 describe("current", () => {

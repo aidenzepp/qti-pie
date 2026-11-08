@@ -250,8 +250,8 @@ const noOutcomes: BuiltOutcomes = { declarations: "", rules: "" };
 /**
  * Write the text of a hand-built test, each part holding one section with its item refs, each ref
  * naming the document `<ref>.xml` beside the test. A part with no item ref holds a section ref,
- * which the test marks and does not deliver, since a section must hold a child (reading 26): such
- * a part delivers no item.
+ * which the test marks and does not deliver, so such a part delivers no item. An empty section,
+ * which reading 26 ("an assessment section may hold no part") accepts, would deliver none either.
  *
  * @param identifier The test's identifier.
  * @param parts The parts, in document order.
