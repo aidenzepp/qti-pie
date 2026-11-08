@@ -17,6 +17,9 @@
  * template defaults, are judged by the item's processing rules too (`processingRefusals`), against
  * the processing scope: a test's processing reads more built-ins than its printed variables name.
  *
+ * A field of a record declaration's value is judged as an item's is (`recordFieldRefusals`): it
+ * carries `field-identifier` and `base-type`, and its text is a value of its own `base-type`.
+ *
  * Two things a test may hold are valid here and are never refused. A dotted reference
  * (`ITEMREF.VAR`, `ITEMREF.N.VAR`, a part's or a section's `duration`) is valid in pre-conditions,
  * branch rules and outcome processing (readings 4, 5 and 37), and is typed `unknown` here
@@ -43,6 +46,7 @@ import {
   declarationsOf,
   printedVariableReferences,
   processingRefusals,
+  recordFieldRefusals,
 } from "#plate/validate/rules.ts";
 import type { NamedVariable, PrefixedTyper, VariableScope } from "#plate/validate/rules.ts";
 import { governingTables } from "#plate/validate/structure.ts";
@@ -490,7 +494,10 @@ const expressionPlacement = (
  * (`printedVariableReferences`): its `identifier` names an outcome the test declares, and its
  * `base` and `index`, written as a name, a single integer outcome the test declares, where a
  * context variable or a built-in of the test (`QTI_CONTEXT`, `duration`) is refused by its kind. A
- * section document's printed variables are not judged, since a section declares nothing.
+ * section document's printed variables are not judged, since a section declares nothing. A field of
+ * a record declaration's value that lacks `field-identifier` or `base-type` is `missing-attribute`,
+ * and one whose text is outside its own `base-type` is `value-type`, at the paths and with the
+ * details an item's gets (`recordFieldRefusals`, `info.txt:73046`).
  *
  * Its expressions are judged by the item's processing rules (`processingRefusals`, the qti
  * package's P8, P20 to P24 and P29), with every prefixed read typed `unknown`
@@ -545,6 +552,7 @@ export const checkTestRules = (source: SourceDocument, tables: Tables): readonly
       ...sectionChildCount(source, visit),
       ...misplacedInTestContent(source, visit, parents),
       ...expressionPlacement(source, visit, parents),
+      ...recordFieldRefusals(source, visit, parents),
       ...Option.match(scope, {
         onNone: () => [],
         onSome: (declared) => printedVariableReferences(source, visit, declared),
