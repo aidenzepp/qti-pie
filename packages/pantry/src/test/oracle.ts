@@ -1963,7 +1963,7 @@ const declaredWhiteSpaceOf = (attribute: FoldedAttribute<Composed>): OracleWhite
  * @param laws - The grammar's tables.
  * @returns The reading: each attribute's value, or none.
  */
-const typedReadingOf =
+export const typedReadingOf =
   (laws: Laws): TypedReading =>
   (attribute) =>
     Option.flatMap(compiledOf(laws, attribute), (held) =>

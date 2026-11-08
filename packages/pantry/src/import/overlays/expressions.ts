@@ -432,6 +432,15 @@ const basesOf = (types: readonly Typed[]): ReadonlySet<ValueBase> =>
 const noOperandBase = "any" satisfies ValueBase;
 
 /**
+ * NULL's type, `qti-null`'s: {@link noOperandBase}, of no cardinality. A Delete that has no second
+ * operand derives no container, so its result is NULL (information model, Table 6.9.20: "The result
+ * is a new container derived from the second sub-expression ... If either sub-expression is NULL
+ * the result of the operator is NULL"), as `resultDerived` of `#pantry/qti/expressions.ts` states
+ * over an empty `tailBaseTypes`.
+ */
+const nullType: Typed = { baseType: noOperandBase, cardinality: unknownType.cardinality };
+
+/**
  * The base type a set of operand bits gives a container or an index: {@link noOperandBase} for
  * none, the one for one, `unknown` for several (`resultDerived`'s container arm).
  *
@@ -551,9 +560,9 @@ const attributeBaseOf = (
 
 /**
  * The type a row holds, as a type alone: its base type and cardinality, `unknown` for none, the
- * type of a variable no declaration types and of an operand an expression lacks.
+ * type of a variable no declaration types.
  *
- * @param row - A typed row, an operand's type or a reference's, where it has one.
+ * @param row - A typed row, a reference's or its element's, where it has one.
  * @returns Its type.
  */
 const typeIn = (row: Option.Option<Typed>): Typed =>
@@ -679,7 +688,7 @@ const typeOf = (kind: string, inputs: TypeInputs): Typed => {
       };
     }
     case "second": {
-      return typeIn(Arr.get(inputs.operands, 1));
+      return Option.getOrElse(Arr.get(inputs.operands, 1), () => nullType);
     }
     case "declared": {
       return typeIn(inputs.reference);
