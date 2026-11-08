@@ -1884,8 +1884,6 @@ const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<
 /**
  * Word an `undeclared-variable` refusal, by the `check` its detail names.
  *
- * - `untimed-duration` (pantry's `item-duration`): the built-in `duration`, read where the item is
- *   not time dependent.
  * - `reading` (pantry's `prefixed-ref`): a dotted name that resolves to no variable of an item ref,
  *   test part or section, under reading 48 ("a dotted reference is accepted when exactly one
  *   reading names a real item ref, test part or section and its variable").
@@ -1923,13 +1921,6 @@ const undeclaredVariable = (refusal: Refusal): string => {
   });
 
   switch (fact(refusal, "check", "")) {
-    case "untimed-duration": {
-      return sentence(
-        refusal,
-        `${subject} ${Option.isSome(attribute) ? "names" : "reads"} the built-in ${identifier}, which an item that is not time dependent does not have${citation(refusal)}.`,
-        `declare the item ${code('time-dependent="true"')}, or read another variable`,
-      );
-    }
     case "reading": {
       return sentence(
         refusal,

@@ -25,9 +25,9 @@
  *     test's own item ref that does not is `item-ref-unresolved`;
  *   - Each dotted reference in the test that it does not declare whole, a name an expression reads or
  *     an outcome rule sets, is judged by reading 48 against the items the item refs resolve to, their
- *     variable mappings and the reach's parts and sections: one no reading resolves, or one that an
- *     expression reads as the `duration` of an item that is not time dependent, is
- *     `undeclared-variable`, and one two readings resolve is `ambiguous-reference`. A reference
+ *     variable mappings and the reach's parts and sections: one no reading resolves is
+ *     `undeclared-variable`, and one two readings resolve is `ambiguous-reference`. An item's
+ *     `duration` resolves whether or not the item is time dependent (reading 150). A reference
  *     attribute reads through an item ref only a template or outcome variable (`expression-type`), a
  *     `qti-correct` only a response (`undeclared-variable`), and a mapping expression only a response
  *     (`undeclared-variable`) with the mapping it needs (`template-requirements`);
@@ -76,7 +76,7 @@ import type {
   SourceElement,
   Visit,
 } from "#plate/document/source.ts";
-import { xmlWhitespaceRun, xsBooleanOf } from "#plate/model/attributes.ts";
+import { xmlWhitespaceRun } from "#plate/model/attributes.ts";
 import {
   expressionKinds,
   floatOrRefOf,
@@ -830,12 +830,6 @@ interface ItemVariables {
    * rules keep it (`declarationsOf`); the item's own verdict refuses the pair.
    */
   readonly declarations: ReadonlyMap<string, SourceElement>;
-  /**
-   * Whether the item's `time-dependent` reads false as `xs:boolean`, so that no expression may
-   * read its `duration`. One that is absent or outside `xs:boolean` is the item's own verdict's
-   * refusal and does not make the item untimed here.
-   */
-  readonly untimed: boolean;
 }
 
 /**
@@ -851,7 +845,8 @@ const declaresAs = (variables: ItemVariables, identifier: string, local: string)
 
 /**
  * Read what a reading of a dotted reference may name through an item ref from its item's document:
- * the variables it declares, and whether it is time dependent.
+ * the variables it declares. Its `time-dependent` is not read: an item's `duration` may be read
+ * whether or not the item is time dependent (reading 150).
  *
  * @param document The item's document.
  * @returns Its variables, none when the document is unread or its root is not an item.
@@ -870,10 +865,6 @@ const variablesOf = (document: Document | undefined): Option.Option<ItemVariable
   return Option.some({
     declarations: new Map(
       [...itemDeclarations].flatMap((kind) => [...declarationsOf(source, kind)]),
-    ),
-    untimed: Option.exists(
-      Option.flatMap(attributeOf(root, "time-dependent"), xsBooleanOf),
-      (timeDependent) => !timeDependent,
     ),
   });
 };
@@ -931,11 +922,6 @@ interface ReadVariable {
 interface Reading {
   readonly prefix: string;
   readonly rest: string;
-  /**
-   * Whether it reads the built-in `duration` of an item that is not time dependent, which "must
-   * not be used in any item or test-level expression" (`info-compact.txt:8472`).
-   */
-  readonly untimed: boolean;
   readonly variable: ReadVariable;
 }
 
@@ -970,7 +956,6 @@ const readingOf = (scope: ReferenceScope, prefix: string, rest: string): Option.
       ? Option.some({
           prefix,
           rest,
-          untimed: false,
           variable: { declaration: Option.none(), namable: false, type: scopeDuration },
         })
       : Option.none();
@@ -982,7 +967,6 @@ const readingOf = (scope: ReferenceScope, prefix: string, rest: string): Option.
     return Option.some({
       prefix,
       rest,
-      untimed: false,
       variable: { declaration: Option.none(), namable: true, type: declaredType(source) },
     });
   }
@@ -992,7 +976,6 @@ const readingOf = (scope: ReferenceScope, prefix: string, rest: string): Option.
     return Option.some({
       prefix,
       rest,
-      untimed: false,
       variable: {
         declaration: Option.some(declaration),
         namable: isQti(declaration, namableDeclarations),
@@ -1004,7 +987,6 @@ const readingOf = (scope: ReferenceScope, prefix: string, rest: string): Option.
   return Option.map(Option.fromUndefinedOr(itemBuiltIns.get(variable)), (type) => ({
     prefix,
     rest,
-    untimed: item.untimed && variable === "duration",
     variable: { declaration: Option.none(), namable: false, type },
   }));
 };
@@ -1195,10 +1177,11 @@ const referencesOf = (
  * and variable each, pantry's `prefixed-ref` with its readings. A rule's target
  * ({@link targetElements}) earns only these two, as pantry's `target` judges no more of it: what a
  * target whose one reading resolves sets is the typed reach's to judge (P20). An expression's
- * reference whose one reading reads the built-in `duration` of an item that is not time dependent
- * is `undeclared-variable` with `check: "untimed-duration"`, pantry's `item-duration`. Each is at
- * the attribute; an `undeclared-variable` names the `element`, the `identifier` as written and,
- * for an attribute other than `identifier`, the `attribute`.
+ * reference whose one reading reads the built-in `duration` of an item is never refused for the
+ * item's `time-dependent` (reading 150, "an item's built-in `duration` may be read whether or not
+ * the item is time dependent"). Each is at the attribute; an `undeclared-variable` names the
+ * `element`, the `identifier` as written and, for an attribute other than `identifier`, the
+ * `attribute`.
  *
  * An expression's reference whose one reading resolves is judged by what it reads, at the element,
  * as the rules judge a name the test declares (`#plate/validate/rules.ts`):
@@ -1277,9 +1260,6 @@ const judgeReference = (
   );
 
   return [
-    ...(first.untimed
-      ? [refuse(document, "undeclared-variable", path, { ...named, check: "untimed-duration" })]
-      : []),
     ...(byIdentifier && isQti(visit.element, responseExpressions) && !response
       ? [
           refuse(document, "undeclared-variable", path, {
