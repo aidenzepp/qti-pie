@@ -1584,11 +1584,57 @@ const operandOf = (element: SourceElement): Option.Option<SourceElement> => {
 };
 
 /**
+ * Report whether a reference is a prefixed read: no declaration of the kind it expects and no
+ * built-in it may name answers it, so only the context's typer can (`typeUnanswered`), as
+ * {@link variableType} resolves it. In an item that typer answers nothing.
+ *
+ * @param reference The reference.
+ * @param context The document's declarations, built-ins and typer.
+ * @returns True when neither a declaration nor a built-in answers the reference.
+ */
+const isPrefixedRead = (reference: Reference, context: Context): boolean => {
+  const namable: readonly string[] = builtInsNamed[reference.expected];
+
+  return (
+    !declarationsNamable(reference.expected, context).has(reference.identifier) &&
+    !(context.builtIns.has(reference.identifier) && namable.includes(reference.identifier))
+  );
+};
+
+/**
+ * Give the type a weighted read takes (G-R3 198). "When applying a weight to the value of a
+ * variable with base-type integer the value is subject to type promotion and the result of the
+ * expression has base-type float" (`info.txt:72139`), and weights apply only "when the item
+ * identifier prefixing technique … is being used to look up the value of an item variable". So a
+ * prefixed read of an integer item variable is a float of its declared cardinality, whether or not
+ * its item ref defines the weight, which is then 1.0. A float stays a float, and "if the item
+ * variable is of any other type the weight is ignored" (G-R3 186). A name the test declares,
+ * unprefixed or whole, or a built-in, keeps its declared type; in a test checked alone a prefixed
+ * read is unknown and stays so. The engine weights a read alike (`evaluateVariable` in
+ * `#plate/engine/expressions/references.ts`). The qti package promotes no weighted read
+ * (`packages/pantry/src/processing/types.ts`): an agreement difference G-R3 198 settles.
+ *
+ * @param reference The weighted reference.
+ * @param declared The type of the variable it names ({@link variableType}).
+ * @param context The document's declarations, built-ins and typer.
+ * @returns The read's type.
+ */
+const weightedType = (
+  reference: Reference,
+  declared: ExpressionType,
+  context: Context,
+): ExpressionType =>
+  declared.baseType === "integer" && isPrefixedRead(reference, context)
+    ? { ...declared, baseType: "float" }
+    : declared;
+
+/**
  * Give the attributes an expression's type depends on, as its kind's rule reads them
  * (`ResultAttributes` in `#plate/model/expression.ts`): the expression's own `base-type`
- * (`qti-base-value`'s) and operator `name` (`qti-math-operator`'s and `qti-stats-operator`'s), and,
- * for a kind whose rule declares a declaration facet, the type of the declaration it names
- * ({@link variableType}).
+ * (`qti-base-value`'s and `qti-test-variables`'), operator `name` (`qti-math-operator`'s and
+ * `qti-stats-operator`'s) and whether it carries a `weight-identifier`, and, for a kind whose rule
+ * declares a declaration facet, the type of the declaration it names ({@link variableType}), which
+ * a weighted read promotes ({@link weightedType}).
  *
  * A `base-type` outside the vocabulary is the structural validator's refusal and is not filled
  * in, nor is the type of a declaration that is not judged, so the rule reads either as unknown.
@@ -1604,6 +1650,7 @@ const resultAttributes = (
   rule: KindRule,
   context: Context,
 ): Option.Option<ResultAttributes> => {
+  const weighted = Option.isSome(attributeOf(expression, "weight-identifier"));
   const own: ResultAttributes = {
     ...Option.match(vocabularyValue(expression, "base-type", baseTypes), {
       onNone: () => ({}),
@@ -1613,18 +1660,25 @@ const resultAttributes = (
       onNone: () => ({}),
       onSome: (name) => ({ name: name.value }),
     }),
+    weighted,
   };
   if (rule.declaration === undefined) {
     return Option.some(own);
   }
 
-  return Option.map(
-    Option.flatMap(referenceOf(expression), (reference) => variableType(reference, context)),
-    (declared) =>
+  return Option.flatMap(referenceOf(expression), (reference) =>
+    Option.map(variableType(reference, context), (declared) =>
       Option.match(declared, {
         onNone: () => own,
-        onSome: ({ baseType, cardinality }) => ({ ...own, baseType, cardinality }),
+        onSome: (type) => {
+          const { baseType, cardinality } = weighted
+            ? weightedType(reference, type, context)
+            : type;
+
+          return { ...own, baseType, cardinality };
+        },
       }),
+    ),
   );
 };
 
@@ -2166,10 +2220,12 @@ const lookupOperandType = (
 /**
  * Apply `expression-type` with `check: "weight"` to a `qti-test-variables` of a test's outcome
  * processing that has a `weight-identifier` and a `base-type` other than `float`: the qti package
- * refuses it as P29 (`checkWeight` in `packages/pantry/src/processing/check.ts`), since a weighted
- * value is a float. One with no `base-type` is not refused. A `base-type` outside the vocabulary is
- * the structural validator's refusal, so it is not judged here. It reads the two attributes alone,
- * so it judges the kind whether its family has landed or not.
+ * refuses it as P29 (`checkWeight` in `packages/pantry/src/processing/check.ts`), since a weight's
+ * behaviour "is only defined if the base-type attribute is float or omitted", and the same line
+ * rules out `base-type` integer (`info.txt:71457`; G-R3 199). One with no `base-type` is not
+ * refused, and is a float (`testRules` in `#plate/model/expressions/test.ts`). A `base-type`
+ * outside the vocabulary is the structural validator's refusal, so it is not judged here. It reads
+ * the two attributes alone, so it judges the kind whether its family has landed or not.
  *
  * @param source The document.
  * @param visit The element's visit.

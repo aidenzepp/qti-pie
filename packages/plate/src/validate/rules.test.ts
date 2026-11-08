@@ -3436,6 +3436,77 @@ const matchingPattern = (pattern: string, typePrefixed: PrefixedTyper) =>
     typePrefixed,
   );
 
+/**
+ * The typer of {@link weightedReads}: `ITEM1.INT` an integer, `ITEM1.FLT` a float and
+ * `ITEM1.RESPONSE` an identifier, each single, and every other name `unknown`.
+ *
+ * @param read The prefixed read.
+ * @returns Its type.
+ */
+const itemTyping: PrefixedTyper = (read) =>
+  Option.match(
+    Option.fromUndefinedOr(
+      new Map<string, ExpressionType["baseType"]>([
+        ["ITEM1.FLT", "float"],
+        ["ITEM1.INT", "integer"],
+        ["ITEM1.RESPONSE", "identifier"],
+      ]).get(read),
+    ),
+    {
+      onNone: () => ({ baseType: "unknown", cardinality: "unknown" }),
+      onSome: singleOf,
+    },
+  );
+
+/**
+ * Construct a `qti-variable` weighted by the weight `W`.
+ *
+ * @param identifier The name it reads.
+ * @returns The expression.
+ */
+const weightedVariable = (identifier: string): SourceElement =>
+  el("qti-variable", [attr("identifier", identifier), attr("weight-identifier", "W")]);
+
+/**
+ * Check a {@link ruledTest} with the float `F`, the integer `N` and `K` and the boolean `B` whose
+ * outcome processing sets one of them to an expression, under a typer.
+ *
+ * @param target The outcome it sets.
+ * @param expression The expression.
+ * @param typePrefixed The typer of its prefixed reads, {@link itemTyping} unless given.
+ * @returns The refusals.
+ */
+const weightedReads = (
+  target: "B" | "F" | "N",
+  expression: SourceElement,
+  typePrefixed: PrefixedTyper = itemTyping,
+) =>
+  processed(
+    ruledTest(
+      [outcome("F"), outcome("N", "integer"), outcome("K", "integer"), outcome("B", "boolean")],
+      [setOutcome(target, expression)],
+    ),
+    typePrefixed,
+  );
+
+/**
+ * The refusal of a {@link weightedReads} test that sets the integer `N` to a single float.
+ */
+const floatIntoN = [
+  {
+    detail: {
+      element: "qti-set-outcome-value",
+      expressionBaseType: "float",
+      expressionCardinality: "single",
+      identifier: "N",
+      outcomeBaseType: "integer",
+      outcomeCardinality: "single",
+    },
+    path: outcomeRulePath("qti-set-outcome-value"),
+    rule: "expression-type",
+  },
+];
+
 describe("processingRefusals", () => {
   it("[T-9] judges a template default against the template variable it sets where the caller types it, and judges none it is not given (pantry P20, templateOf)", () => {
     assert.deepStrictEqual(
@@ -3489,6 +3560,36 @@ describe("processingRefusals", () => {
         ],
         [],
       ],
+    );
+  });
+
+  it("[T-9] weighted read is a float: a weighted ITEM1.INT, an integer item variable read through its prefix, sets the float F and is refused setting the integer N, which the unweighted read sets (G-R3 198, pantry P20)", () => {
+    assert.deepStrictEqual(
+      [
+        weightedReads("F", weightedVariable("ITEM1.INT")),
+        weightedReads("N", weightedVariable("ITEM1.INT")),
+        weightedReads("N", variable("ITEM1.INT")),
+      ],
+      [[], floatIntoN, []],
+    );
+  });
+
+  it("[T-9] weighted read is a float only of an integer read through its prefix: a weighted ITEM1.FLT stays a float, a weighted ITEM1.RESPONSE keeps identifier, a weighted K the test declares keeps integer, and under the unknown typer a weighted read stays unknown (G-R3 186 and 198)", () => {
+    const matched = el(
+      "qti-match",
+      [],
+      [weightedVariable("ITEM1.RESPONSE"), baseValue("identifier", "A")],
+    );
+
+    assert.deepStrictEqual(
+      [
+        weightedReads("F", weightedVariable("ITEM1.FLT")),
+        weightedReads("N", weightedVariable("ITEM1.FLT")),
+        weightedReads("B", matched),
+        weightedReads("N", weightedVariable("K")),
+        weightedReads("N", weightedVariable("ITEM1.INT"), unknownTyping),
+      ],
+      [[], floatIntoN, [], [], []],
     );
   });
 
