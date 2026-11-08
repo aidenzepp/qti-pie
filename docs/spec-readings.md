@@ -2946,3 +2946,32 @@ against it. A reading that is not an information-model-over-XSD case says which 
      `%.1f`, so no verdict moves. This binds pantry and plate alike in what a document may write; how a renderer prints
      a second conversion is plate's own reading. This is not a case of documents in conflict. (Decided 2026-11-07 by the
      coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-PRINTFMT.)
+162. **A path two document types name is the document its root bears out: of the types its resources name, the first in
+     the manifest's order whose `RootOfType` pair holds its root's kind, and the first of all where none does.** Reading
+     93 has a resource of a type `RootOfType` maps name the document at its `href`, "read as a document of that type",
+     and a path is one document, of one type (readings 93 and 146), so two resources that name one path under two
+     document types are refused under "Document entry" (`entry-kind`): the `href` of the type the document is not read
+     as names no document of its type. IMS Content Packaging 1.2 gives the resources no order: "The order of the child
+     Resource and IPointer objects is not significant" (Information Model, Version 1.2 Public Draft v2.0, section 6.6.1,
+     the Resources class; line 744 of `imscp_infov1p2pd2.txt`). So the type the document is read as cannot turn on which
+     resource is listed first, as it did when the importer and the law oracle read it as the first type listed:
+     `simple`'s item path listed as a stimulus and then as an item was read as a stimulus, a type its item root does not
+     bear out, and broke `RootOfType` beside "Document entry", while listed the other way round it broke "Document
+     entry" alone. The document is read as a type whose `RootOfType` pair holds its root's kind, the first in the
+     manifest's order where two do (an included fragment's type holds every kind an include stands for, reading 114),
+     and as the first type of all where none does, since no reading then bears its root out (`documentTypeOf`,
+     `src/import/program.ts`; `typingResource`, `src/test/oracle.ts`). A path two types name then breaks `RootOfType`
+     only where its root bears out neither, in either order, and "Document entry" alone otherwise. The records of each
+     item or test resource that names the path still describe the document, whatever type it is read as (reading 62;
+     `resourceNamer`, `src/import/overlays/metadata.ts`), and the law oracle's `lom-identifier` and `document-lang` read
+     each such resource's records, not the first listing's alone. The database judges `RootOfType` over `Document` as a
+     CHECK on the row the import writes, at its insert, and this "Document entry" as the deferred containment of the
+     other `href` in `Document`, so under the first-type reading it refused the stimulus-first package under
+     `root-type-reverse` where the catalog's precedence, entry-kind ahead of root-type-reverse (ee28115f), names
+     entry-kind; read this way, it names entry-kind, as the law oracle does. Where the root bears out neither type both
+     laws break, and the database names the CHECK it judges first, a stated limit of naming a refusal by the laws
+     PostgreSQL reports (`src/import/package.ts`). This sets aside the first-type reading the importer and the law
+     oracle held (NS4, `src/test/gen/genetic/known.ts`). This reading moves no corpus verdict: no manifest of the
+     corpus's 29 zips names one `href` under two types, by a scan of their resources. This binds pantry and plate alike.
+     This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing
+     ruling of 2026-11-05, from seat DBLANE-1.)

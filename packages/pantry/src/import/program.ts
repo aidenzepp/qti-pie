@@ -17,7 +17,7 @@
  * module is evaluated.
  */
 import type { Uuid } from "@bjornpagen/grizzle";
-import { Effect, Option } from "effect";
+import { Array as Arr, Effect, Option, Order } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
@@ -114,6 +114,30 @@ const shredFile = (file: PackageFile, version: (typeof versions)[number]) =>
   Effect.flatMap(readXml(file.bytes), (xml) => shred(xml, version, shredGrammarOf(grammar)));
 
 /**
+ * Choose the type a path's document is read as, of the types its resources name it under (spec
+ * readings 93 and 162): the first, in the manifest's order, whose `RootOfType` pair holds the
+ * root's kind, and the first of all where none does. Every other type's href then names no document
+ * of its type, which "Document entry" refuses; and `RootOfType` refuses a root only where no type
+ * its resources name bears it out, whatever order they are listed in. The sort is stable, so the
+ * types the root bears out come first, each group in the manifest's order.
+ *
+ * @param types - The types, in the manifest's order.
+ * @param rootKind - The kind of the document's root.
+ * @returns The type.
+ */
+const documentTypeOf = <T extends string>(
+  types: Arr.NonEmptyReadonlyArray<T>,
+  rootKind: string,
+): T =>
+  Arr.headNonEmpty(
+    Arr.sortWith(
+      types,
+      (type) => Option.isNone(grammar.package.rootOfType.lookup({ root: rootKind, type })),
+      Order.Boolean,
+    ),
+  );
+
+/**
  * Read the package at `dir` and list its documents, one per path: the manifest, then each other
  * document its resources name that an entry holds, in the manifest's order, each shredded once.
  *
@@ -135,17 +159,24 @@ const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(
     packageRowsOf(manifestTree, { idOf: provisionalIdOf, package: provisionalIdOf(0) }),
   );
   // A path is one document, of one type (reading 93): the manifest's, `none`, read before any
-  // resource names a path (reading 146), else the first type a resource names it under. A second
-  // type's href, the manifest's path's included, then names no document of its type, which
-  // "Document entry" refuses alone, and the document is read once and judged where its sites
-  // place it.
+  // resource names a path (reading 146), else the type its root bears out among those resources
+  // name it under (reading 162). Another type's href, the manifest's path's included, then names
+  // no document of its type, which "Document entry" refuses, and the document is read once and
+  // judged where its sites place it.
+  const pairs = [...named.values()];
   const documents = new Map<string, ListedDocument>([
     [manifest.path, { path: manifest.path, resourceType: "none", tree: manifestTree }],
   ]);
-  for (const { path, type } of named.values()) {
+  for (const [at, { path, type }] of pairs.entries()) {
     const file = byPath.get(path);
     if (file !== undefined && !documents.has(path)) {
-      documents.set(path, { path, resourceType: type, tree: yield* shredFile(file, version) });
+      const tree = yield* shredFile(file, version);
+      const others = pairs.slice(at + 1).flatMap((pair) => (pair.path === path ? [pair.type] : []));
+      documents.set(path, {
+        path,
+        resourceType: documentTypeOf([type, ...others], tree.root.kind),
+        tree,
+      });
     }
   }
 

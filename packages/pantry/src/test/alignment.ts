@@ -989,6 +989,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    162,
+    {
+      owner:
+        "the import's `documentTypeOf` (`src/import/program.ts`), the type a path's document is read as among those its resources name, by its root's kind, and the law oracle's `typingResource` (`src/test/oracle.ts`), the same choice; held by `src/import/overlays/resource-types.oracle.test.ts` (simple's item path listed again under each other type `RootOfType` maps, before and after the item) and, on PostgreSQL, `src/import/program.oracle.db.test.ts` (reading 93's box)",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

@@ -929,8 +929,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
  * @param rows - The manifest's overlay rows.
  * @returns The named documents' paths and types, a keyed set by (path, type), in the manifest's
  *   order. One path named under two types is two pairs; the import reads the path once, as the
- *   first pair's type, so the second's href names no document of its type, and "Document entry"
- *   refuses it.
+ *   type its root bears out (`#pantry/import/program.ts`, reading 162), so the other's href names
+ *   no document of its type, and "Document entry" refuses it.
  */
 export const namedDocuments = (
   rows: PackageRows,
