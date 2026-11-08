@@ -318,6 +318,13 @@ const valueOf = (
  * ({@link isNcName}). Any other value names nothing, and its value domain refuses it alone (spec
  * reading 152).
  *
+ * The test is the one `namedBinding` of `#pantry/qti/interactions.ts` states, and the schema holds
+ * that selection forward only: each binding it selects has its `BindingName` and, in an item, its
+ * `BoundVariable`, and no law refuses a row beyond them. A row for a value that is no NCName would
+ * stand, and "Binding declared" would judge it beside the value domain, which reading 152 rules
+ * out. So the test stays here for as long as both relations are written rows, not queries over
+ * the selection.
+ *
  * @param context - The document.
  * @param node - The element.
  * @param name - The attribute's name.
@@ -1042,6 +1049,14 @@ const ariaOf = (context: Context) => {
  * one (spec reading 159). A value that is no NCName names nothing and has neither, so its value
  * domain refuses it alone (spec reading 152).
  *
+ * The NCName test decides which value is a reference, as each relation's source does
+ * (`referenceSources` of `#pantry/qti/interactions.ts`), and the schema holds the source forward
+ * only, so no law refuses a row beyond it. No law refuses what the test leaves out, either: a
+ * printed variable's `base` and `index` hold an `xs:integer` literal or a variable's name, so
+ * `base="10"` is lawful and names nothing, and a row for it would break "Printed variable
+ * reference" on a package the database must accept. So the test stays here for as long as each
+ * relation is written rows, not a query over its source.
+ *
  * @param context - The document.
  * @param read - The document's read attributes.
  * @param reference - The relation's attributes and kinds.
@@ -1124,7 +1139,8 @@ const referencesOf = (
  * Build a section document's or an included fragment's references of one class: each read
  * attribute of the class's names and kinds that names a variable ({@link isNcName}), unresolved,
  * since neither declares anything; each resolves once per assembly that places the document (spec
- * readings 5 and 117).
+ * readings 5 and 117). The NCName test stays for the reasons {@link referencesOf} gives, each
+ * relation's source being `sectionSources` of `#pantry/qti/interactions.ts`.
  *
  * @param context - The document.
  * @param read - The document's read attributes.
