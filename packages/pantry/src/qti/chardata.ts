@@ -31,7 +31,6 @@ import {
   closed,
   closedId,
   Compute,
-  constant,
   contained,
   drawn,
   fin,
@@ -66,7 +65,7 @@ import {
   vocabularyNamespacePattern,
 } from "#pantry/grammar/install.ts";
 import { keyTextBytes, namespaceBytes, prefixBytes } from "#pantry/qti/limits.ts";
-import { Node, nodeContext, nodeRef, typeGovernorOf } from "#pantry/qti/node.ts";
+import { Node, nodeRef, typeGovernorOf } from "#pantry/qti/node.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
@@ -373,10 +372,12 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  *   and `Hottext` rows), `ids` (Q5.07's `DocumentId` rows), `idrefTargets` (Q5.07's `IdrefTarget`
  *   rows), `langs` (Q5.07's `XmlLang` rows) and `variables` (Q5.10's `VariableRef` rows).
  * - **its document node's copies:** `nodeChildren` and `version`, the document node's own, so the row
- *   states the node's context through {@link nodeContext}, the owner axis's own UNIQUE, and no
- *   other index on `Node` holds it. What every document node holds alike is no field: the
- *   containment's source reads `node` again as the node's `document` and states its governor, its
- *   kind and its parent's `document`, and its start 0 as constants.
+ *   states the node's context. What every document node holds alike is no field: the containment's
+ *   target is the document nodes, selected as their own `document`, governed by and of kind
+ *   `document` under a `document` parent, at start 0, fields grizzle fixes beyond the target's
+ *   terms (its fixed target, at `3cc8fbd`), held by `Node`'s key `id`. grizzle references a UNIQUE
+ *   over the terms and then the fixed fields in field order, which no other containment into `Node`
+ *   shares (docs/grizzle-findings.md, "A fixed target's UNIQUE").
  */
 export const Document = relation(
   "Document",
@@ -529,9 +530,9 @@ const rootElements = select(Node, (n) =>
  *   XML declaration, where it writes one, is a document's; and an `encoding` or a `standalone` is a
  *   declaration's, since neither is written outside one (XML 1.0 §2.8, `XMLDecl`).
  * - **its context** (spec reading 117): its document node's ancestry and nearest interaction are its
- *   `context`, `contextNearest` and `contextNearestKind`, through {@link nodeContext}; and
- *   (`E1_derived`) the nearest is the document node itself, unless sites name the document from
- *   inside one interaction.
+ *   `context`, `contextNearest` and `contextNearestKind`, through a containment into the document
+ *   node its target fixes; and (`E1_derived`) the nearest is the document node itself, unless sites
+ *   name the document from inside one interaction.
  * - **"Namespace family":** each element's declarations in order, and one per prefix on an element
  *   (Namespaces in XML 1.0, §3: a prefix is declared once on an element, since an element's
  *   attributes are distinct by name).
@@ -591,17 +592,29 @@ export const chardataLawsByName = {
         "node",
         "nodeChildren",
         "context",
-        "node",
         "documentType",
-        constant("document"),
-        constant("document"),
         "contextNearest",
         "contextNearestKind",
-        constant("document"),
-        constant(0n),
         "version",
       ),
-      nodeContext,
+      on(
+        select(Node, (n) =>
+          n.and(
+            n.eq(n.document, n.id),
+            n.eq(n.governor, "document"),
+            n.eq(n.kind, "document"),
+            n.eq(n.parentKind, "document"),
+            n.eq(n.start, 0n),
+          ),
+        ),
+        "id",
+        "children",
+        "ancestry",
+        "documentType",
+        "nearest",
+        "nearestKind",
+        "version",
+      ),
     ),
     check("E1_derived", Document, (d) =>
       d.or(

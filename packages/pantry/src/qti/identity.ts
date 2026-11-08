@@ -102,7 +102,6 @@ import {
   check,
   closedId,
   Compute,
-  constant,
   contained,
   counted,
   drawn,
@@ -728,6 +727,33 @@ export const namingIdAttributes = select(Attribute, (a) =>
 );
 
 /**
+ * The ID values of one element kind: the {@link namingIdAttributes} of that kind, which a `th`'s
+ * `TableHeader` copies back into (`#pantry/qti/html.ts`). Its conditions include every one of
+ * {@link namingIdAttributes}', whose key over `node` holds it, and its kind is a field it fixes to
+ * a value beyond its terms, so it needs no key of its own (grizzle's fixed target, at `3cc8fbd`).
+ *
+ * @param kind - The element kind.
+ * @returns The selection.
+ */
+export const namingIdAttributesOf = (kind: "th") =>
+  select(Attribute, (a) =>
+    a.and(idTyped(a), Compute.matches(a.lexical, namingPattern), a.eq(a.kind, kind)),
+  );
+
+/**
+ * The ID-typed attributes of one manifest element kind in a manifest, a `cp:manifest`'s or a
+ * `cp:resource`'s `identifier`, which its {@link ManifestId} or {@link ResourceId} copies back
+ * into. Its conditions include every one of {@link idAttributes}', whose key over `node` holds it,
+ * and its kind and document type are fields it fixes to values beyond its terms, so it needs no key
+ * of its own (grizzle's fixed target, at `3cc8fbd`).
+ *
+ * @param kind - The manifest element's kind.
+ * @returns The selection.
+ */
+const manifestIdAttributes = (kind: "cp:manifest" | "cp:resource") =>
+  select(Attribute, (a) => a.and(idTyped(a), a.eq(a.kind, kind), a.eq(a.documentType, "manifest")));
+
+/**
  * The elements whose text is of an identity type, the source of {@link IdentityText}.
  */
 const identityNodes = select(Node, (n) => textIdentityIn(n, identities));
@@ -1207,14 +1233,8 @@ export const identityLawsByName = {
     contained(on(itemLabels, "document"), on(toolVersions, "document")),
   ],
   "Manifest overlay": [
-    contained(
-      on(ManifestId, "node", constant("cp:manifest"), constant("manifest")),
-      on(idAttributes, "node", "kind", "documentType"),
-    ),
-    contained(
-      on(ResourceId, "node", constant("cp:resource"), constant("manifest")),
-      on(idAttributes, "node", "kind", "documentType"),
-    ),
+    contained(on(ManifestId, "node"), on(manifestIdAttributes("cp:manifest"), "node")),
+    contained(on(ResourceId, "node"), on(manifestIdAttributes("cp:resource"), "node")),
   ],
   "Node key": [key(on(identityNodes, "id")), key(on(lomLanguages, "id"))],
   "SSML lexicon reference": [ssmlLexiconReference],

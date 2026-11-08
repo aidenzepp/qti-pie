@@ -32,8 +32,9 @@
  * Every copy of an attribute into an overlay follows C18 the other way round, as `identity.ts`
  * states it: from `select(Attribute, φ)` into the overlay, beside a key over the same selection
  * whose UNIQUE serves the copy's reverse probe, but a `th`'s `id`: it lies inside the ID values
- * ({@link namingIdAttributes}), whose key holds it to one per element, and the copy back from its
- * {@link TableHeader} meets them at the `th` kind. Every copied text that takes part in a cross-row
+ * (`namingIdAttributes` of `#pantry/qti/identity.ts`), whose key holds it to one per element, and
+ * the copy back from its {@link TableHeader} meets them at the `th` kind
+ * ({@link namingIdAttributesOf}). Every copied text that takes part in a cross-row
  * equality is `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
  * (`#pantry/test/oracle.ts` `LawName`) with spaces written as underscores.
  *
@@ -49,7 +50,6 @@ import {
   check,
   closedId,
   Compute,
-  constant,
   contained,
   drawn,
   fin,
@@ -75,7 +75,7 @@ import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import {
   DocumentId,
   idValuePattern,
-  namingIdAttributes,
+  namingIdAttributesOf,
   namingPattern,
   spacePattern,
 } from "#pantry/qti/identity.ts";
@@ -367,7 +367,7 @@ export const htmlLawsByName = {
       t.and(Compute.matches(t.token, idValuePattern), t.or(t.eq(t.at, 0n), t.ne(t.before, ""))),
     ),
     contained(on(headerIds, "node", "document"), on(TableHeader, "node", "document")),
-    contained(on(TableHeader, "node", constant("th")), on(namingIdAttributes, "node", "kind")),
+    contained(on(TableHeader, "node"), on(namingIdAttributesOf("th"), "node")),
     contained(
       on(TableHeader, "node", "document", "id", "owner"),
       on(DocumentId, "node", "document", "id", "owner"),

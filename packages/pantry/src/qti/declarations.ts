@@ -68,7 +68,6 @@ import {
   check,
   closedId,
   Compute,
-  constant,
   contained,
   counted,
   drawn,
@@ -366,6 +365,11 @@ export const declarationRef = on(
  * row's own, copied from {@link DeclarationCardinality} only where `cardinalities` is 1, and one
  * over its base type reads {@link DeclarationBaseType} where `baseTypes` is 1. A declaration whose
  * identifier names nothing has no row here, and nothing resolves to it (spec readings 157 and 159).
+ *
+ * `cardinalities` is last, the order {@link DeclarationName}'s containment references the tuple in:
+ * its target fixes `cardinalities` to 1 beyond its terms, and grizzle references a fixed field
+ * after the terms (`#fixedTarget`, `laws/model/plan.ts:1394-1444` at `3cc8fbd`), so every reference
+ * here shares that one UNIQUE (docs/grizzle-findings.md, "A fixed target's UNIQUE").
  */
 export const declarationIdentifierRef = on(
   DeclarationIdentifier,
@@ -373,8 +377,8 @@ export const declarationIdentifierRef = on(
   "document",
   "identifier",
   "declarationKind",
-  "cardinalities",
   "baseTypes",
+  "cardinalities",
 );
 
 /**
@@ -1184,16 +1188,15 @@ export const declarationLawsByName = {
       on(DeclarationName, "node"),
     ),
     contained(
+      on(DeclarationName, "node", "document", "identifier", "declarationKind", "baseTypes"),
       on(
-        DeclarationName,
+        select(DeclarationIdentifier, (d) => d.eq(d.cardinalities, 1n)),
         "node",
         "document",
         "identifier",
         "declarationKind",
-        constant(1n),
         "baseTypes",
       ),
-      declarationIdentifierRef,
     ),
     contained(
       on(DeclarationName, "node", "cardinality"),

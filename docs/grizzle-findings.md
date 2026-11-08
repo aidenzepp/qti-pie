@@ -2446,3 +2446,26 @@ inside a wider key over the same field, so each is one key stated twice:
 - **Guard:** `src/grammar/attributes.work.test.ts`, with planted bugs shown failing.
 - **LP's last commit,** `d13a8389`, finds the sentinel-range characters a document writes with one regex in crust, not
   a walk over every code point.
+
+## A fixed target's UNIQUE: one set of columns, a second index in another order (cost, open)
+
+Found at grizzle trunk `3cc8fbd` (`3cc8fbda540167265f51b94f462d58f1cc2b6bc6`, 2026-11-08), rehearsing the repin past
+`0c2154c`, when the three `constant(...)` source terms became fixed targets (`3cc8fbda`).
+
+- **What happens.** A containment into a target that fixes fields beyond its terms references the target's terms, then
+  each fixed field in field order (`#fixedTarget`, `packages/engine/src/laws/model/plan.ts:1394-1444`), and
+  `#targetUnique` (`:1347-1365`) installs no UNIQUE only where the referenced columns are exactly a declared scalar
+  key's fields. Any other reference gets a UNIQUE over its columns in that order, so two references over one set of
+  columns in two orders install two indexes, though PostgreSQL holds a foreign key to any unique index over its
+  referenced columns as a set. The six such pairs `_init` already held at `0c2154c` (`aria_value`, `assembled_name`,
+  `binding_name`, `document`, `instance`, `interaction_attribute`) are the same behaviour.
+- **Where it costs pantry.** `Document`'s containment into its document node (`src/qti/chardata.ts`) references
+  `Node` at `(id, children, ancestry, documentType, nearest, nearestKind, version, document, governor, kind,
+  parentKind, start)`, the set of `nodeContext` and of the tree's owner axis, which grizzle now carries in declared
+  place order (`85ec7ecf`): a second twelve-column UNIQUE on `Node`, its largest table. `DeclarationName`'s
+  containment into the declarations of cardinality 1 did the same on `DeclarationIdentifier` until
+  `declarationIdentifierRef` put `cardinalities` last, its fixed field's place.
+- **Class.** No defect: every law holds and PostgreSQL accepts both indexes. A representation cost, open for
+  grizzle-c5: `#targetUnique` could reuse a planned UNIQUE whose columns are the same set, as PostgreSQL would.
+- **Measured.** `_init` regenerated from zero at `3cc8fbd` holds 568 UNIQUEs (567 at `0c2154c`), seven same-set
+  groups, the new one `node`'s.
