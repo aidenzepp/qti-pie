@@ -2456,31 +2456,59 @@ const boundItem = ({ choices, kind, max, min }: BoundCase) => {
 };
 
 /**
- * The interaction kinds the Binding unique box binds: one `BindingFit` names, the order
- * interaction, whose class description states no binding (reading 165), and the custom
- * interaction, which binds any type (reading 75).
+ * The binding sites the Binding unique box draws: a choice interaction, which `BindingFit` names,
+ * the order interaction, whose class description states no binding (reading 165), and the custom
+ * interaction, which binds any type (reading 75), each binding its response once by its
+ * `response-identifier`; a text entry interaction binding it once by its `string-identifier`, its
+ * `response-identifier` naming a response of its own; and an extended text interaction binding it
+ * twice, by both.
  */
-const uniqueKinds = [
-  "qti-choice-interaction",
-  "qti-order-interaction",
-  "qti-custom-interaction",
+const uniqueSites = [
+  "choice",
+  "order",
+  "custom",
+  "text entry string",
+  "extended text both",
 ] as const;
 
 /**
- * Write one interaction of the Binding unique box, bound to `R0` or `R1`.
+ * One site of the Binding unique box.
+ */
+type UniqueSite = (typeof uniqueSites)[number];
+
+/**
+ * The sites of the Binding unique box that bind their response by a `string-identifier`.
+ */
+const stringSites: ReadonlySet<UniqueSite> = new Set(["text entry string", "extended text both"]);
+
+/**
+ * The number of bindings a site of the Binding unique box gives its response: two for the extended
+ * text interaction whose string identifier names its own response, one for every other.
  *
- * @param kind - Its kind.
+ * @param site - The site.
+ * @returns Its bindings of its response.
+ */
+const bindingsOf = (site: UniqueSite): number => (site === "extended text both" ? 2 : 1);
+
+/**
+ * Write one site of the Binding unique box, binding `R0` or `R1`.
+ *
+ * @param site - The site.
  * @param at - The number of the response it binds.
+ * @param position - Its place in the item, which names a text entry's own response `T<position>`.
  * @returns The interaction, as written.
  */
-const uniqueInteraction = (kind: (typeof uniqueKinds)[number], at: number): string => {
-  const binds = `response-identifier="R${String(at)}"`;
+const uniqueInteraction = (site: UniqueSite, at: number, position: number): string => {
+  const response = `R${String(at)}`;
+  const binds = `response-identifier="${response}"`;
 
   return {
-    "qti-choice-interaction": `<qti-choice-interaction ${binds} max-choices="1"><qti-simple-choice identifier="A">A</qti-simple-choice></qti-choice-interaction>`,
-    "qti-custom-interaction": `<qti-custom-interaction ${binds}><w:widget xmlns:w="urn:example:widget">W</w:widget></qti-custom-interaction>`,
-    "qti-order-interaction": `<qti-order-interaction ${binds}><qti-simple-choice identifier="A">A</qti-simple-choice></qti-order-interaction>`,
-  }[kind];
+    choice: `<qti-choice-interaction ${binds} max-choices="1"><qti-simple-choice identifier="A">A</qti-simple-choice></qti-choice-interaction>`,
+    custom: `<qti-custom-interaction ${binds}><w:widget xmlns:w="urn:example:widget">W</w:widget></qti-custom-interaction>`,
+    "extended text both": `<qti-extended-text-interaction ${binds} string-identifier="${response}"/>`,
+    order: `<qti-order-interaction ${binds}><qti-simple-choice identifier="A">A</qti-simple-choice></qti-order-interaction>`,
+    "text entry string": `<p><qti-text-entry-interaction response-identifier="T${String(position)}" string-identifier="${response}"/></p>`,
+  }[site];
 };
 
 /**
@@ -2584,56 +2612,78 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
   );
 
   it.effect(
-    "Binding unique: an item breaks it exactly once for each interaction past the first that binds a response, of any kind",
+    "Binding unique: an item breaks it exactly once for each binding of a response past the first, by any interaction's response or string identifier",
     (ctx) =>
       searched(
         ctx,
         exhaust(
           {
-            box: "every list of 1 to 3 interactions, each a choice, an order or a custom interaction binding R0, declared, or R1, not",
+            box: "every list of 1 to 3 sites, each a choice, order or custom interaction's response identifier, a text entry's string identifier or an extended text interaction's both, binding R0, declared, or R1, not",
             caseHang: lawCaseHang,
             coverage: requiredInSpace<
-              "unique" | "shared" | "undeclared shared" | "shared across kinds"
-            >(["unique", "shared", "undeclared shared", "shared across kinds"]),
-            // Each of up to three interactions binds one of two responses, R0 declared and R1 not,
-            // and is of one of three kinds: one `BindingFit` names, the order interaction, whose
-            // class description states no binding (reading 165), and the custom interaction,
-            // which binds any type (reading 75). 6 + 36 + 216 = 258 cases.
+              | "unique"
+              | "shared"
+              | "undeclared shared"
+              | "shared across kinds"
+              | "string shared"
+              | "self shared"
+            >([
+              "unique",
+              "shared",
+              "undeclared shared",
+              "shared across kinds",
+              "string shared",
+              "self shared",
+            ]),
+            // Each of up to three sites binds one of two responses, R0 declared and R1 not, and is
+            // one of five sites (`uniqueSites`). 10 + 100 + 1,000 = 1,110 cases.
             generator: (source) =>
               Array.from({ length: source.draw(int(1, 3)) }, () => ({
                 at: source.draw(int(0, 1)),
-                kind: source.draw(element(uniqueKinds)),
+                site: source.draw(element(uniqueSites)),
               })),
-            limit: 258,
+            limit: 1110,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
-              name: "reading 92, §5.115: a response n interactions of any kind bind breaks it n − 1 times",
+              name: "reading 92, §5.115, §5.48.2 and §5.162.3: a response n bindings name, each interaction's response identifier and string identifier, breaks it n − 1 times",
             },
             suite: "oracle/binding-unique",
           },
           (bound, c) =>
             Effect.gen(function* unique() {
-              const counts = [0, 1].map(
-                (response) => bound.filter(({ at }) => at === response).length,
-              );
-              const expected = counts.reduce((sum, count) => sum + Math.max(0, count - 1), 0);
+              // Each response's sites, and its bindings: R0 declared, R1 not.
+              const responses = [0, 1].map((response) => {
+                const sites = bound.filter(({ at }) => at === response).map(({ site }) => site);
+
+                return {
+                  count: sites.reduce((sum, site) => sum + bindingsOf(site), 0),
+                  sites,
+                  undeclared: response === 1,
+                };
+              });
+              const shared = responses.filter(({ count }) => count > 1);
+              const expected = shared.reduce((sum, { count }) => sum + count - 1, 0);
               c.note(expected === 0 ? "unique" : "shared");
-              if ((counts[1] ?? 0) > 1) {
+              if (shared.some(({ undeclared }) => undeclared)) {
                 c.note("undeclared shared");
               }
 
-              if (
-                [0, 1].some(
-                  (response) =>
-                    new Set(bound.filter(({ at }) => at === response).map(({ kind }) => kind))
-                      .size > 1,
-                )
-              ) {
+              if (shared.some(({ sites }) => new Set(sites).size > 1)) {
                 c.note("shared across kinds");
               }
 
-              const body = bound.map(({ at, kind }) => uniqueInteraction(kind, at)).join("");
+              if (shared.some(({ sites }) => sites.some((site) => stringSites.has(site)))) {
+                c.note("string shared");
+              }
+
+              if (bound.some(({ site }) => site === "extended text both")) {
+                c.note("self shared");
+              }
+
+              const body = bound
+                .map(({ at, site }, position) => uniqueInteraction(site, at, position))
+                .join("");
               const breaches = ofLaw(
                 breachesOf(
                   yield* judged(
@@ -2647,8 +2697,10 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
               );
 
               // Oracle: reading 92, "Each response variable declared may be bound to one and only
-              // one interaction" (§5.115): a response named by n interactions breaks it n − 1
-              // times, declared or not, whatever the interactions' kinds.
+              // one interaction" (§5.115), and a string identifier binds "a second response
+              // variable" (§5.48.2, §5.162.3): a response named by n bindings breaks it n − 1
+              // times, declared or not, whatever the interactions' kinds, an extended text
+              // interaction whose string identifier names its own response counted twice.
               assert.strictEqual(breaches.length, expected, shown(breaches));
             }),
         ),

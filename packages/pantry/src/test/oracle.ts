@@ -53,9 +53,8 @@
  * its document laws after its own over each document it judges and its package laws after its
  * own, and `src/test/complete.oracle.test.ts` holds every law the oracle declares to a package
  * drawn to break it. The overlays' other laws have no statement yet beyond the rule each replaces:
- * `lang-set-copy`, `string-identifier-distinct`, coords by shape, the gap and hottext owners
- * beyond N8, `template-derivation`, the CSM laws, and the typed values a domain derives beyond its
- * regex (G5).
+ * `lang-set-copy`, coords by shape, the gap and hottext owners beyond N8, `template-derivation`,
+ * the CSM laws, and the typed values a domain derives beyond its regex (G5).
  */
 import { Array as Arr, Effect, Equal, Option, Order, pipe, Record as Rec, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
@@ -3887,14 +3886,20 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
             Option.isSome(valueOf(view, id, "label")),
         );
   // Reading 92: "Each response variable declared may be bound to one and only one interaction",
-  // so in an item no two of the interactions Binding declared reads, every interaction whatever
-  // the types it binds (readings 75 and 165), name one response.
+  // so in an item no two of the bindings Binding declared reads, each interaction's
+  // `response-identifier` and `string-identifier` whatever the types it binds (readings 75 and
+  // 165), name one response. A string identifier binds "a second response variable" (§5.48.2,
+  // §5.162.3), so one that names its interaction's response binds it twice, as the schema's key
+  // over `BoundVariable` counts it (the old `string-identifier-distinct`).
   const bindings = overlay.isItem
     ? Map.groupBy(
         view.members.flatMap((node) =>
           Option.isSome(laws.grammar.kinds.interaction.lookup({ kind: node.kind }))
-            ? Option.toArray(typedValueOf(view, node.id, "response-identifier")).map(
-                (identifier) => ({ identifier, node }),
+            ? bindingNames.flatMap((attribute) =>
+                Option.toArray(typedValueOf(view, node.id, attribute)).map((identifier) => ({
+                  identifier,
+                  node,
+                })),
               )
             : [],
         ),
