@@ -997,6 +997,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    163,
+    {
+      owner:
+        "the import's `Section.loose`, true exactly where the section's `visible` flag, a row of its own (`TestFlag`), reads false and `keepTogether` is false, with no `Section.visible` (\"Test overlay\" and `E1_derived`, `src/qti/tests.ts`; `sectionsOf`, `src/import/overlays/tests.ts`), so a section that writes no `visible` is refused by AL3 alone; the law oracle's section scope, loose only where `visible` is written and reads false (`testDocumentOf`, `src/test/oracle-laws/assembly.ts`); held by `src/import/overlays/section-visibility.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

@@ -2974,3 +2974,24 @@ against it. A reading that is not an information-model-over-XSD case says which 
      (`qtiv2p2-examples/items/items.zip`), names one `href` under two types, by a scan of their resources. This binds
      pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under
      the operator's standing ruling of 2026-11-05, from seat DBLANE-1.)
+163. **A section's visibility is its own `visible` alone: a section that writes none is neither visible nor invisible,
+     so AL3 alone refuses it, and no law reads a visibility it never wrote.** The ASI XSD requires the attribute, with
+     no default: `<xs:attribute name="visible" use="required" type="xs:boolean" />` in `AssessmentSectionDType`
+     (`imsqti_asiv3p0_v1p0.xsd` line 24711), and the information model gives it multiplicity `[1]`: "The visibility of
+     each section is determined solely by the value of its own visible attribute" (section 4.2.6, line 12755 of
+     `info301.txt`). The one rule that reads it is the ordering's: "an invisible sub-section is only treated as a single
+     block if its keep-together characteristic is 'true'. Otherwise, the child elements of the invisible sub-section are
+     mixed into the parent's selection prior to shuffling" (section 5.98, Ordering, line 51976). So a section is loose,
+     its children mixed into its parent's order, only where it writes `visible` and that value reads false (a malformed
+     one, which AL1 refuses, reads false as every `TestFlag` value that does not spell true does) and it is not kept
+     together. One that writes no `visible` is never loose, whatever its `keep-together`, and AL3 ("required-attribute")
+     refuses it under its own rule. In the importer a section's visibility is its `visible` flag, a row of its own
+     (`TestFlag`), and `Section.loose` holds exactly where that row reads false and `keepTogether` is false ("Test
+     overlay" and `E1_derived`, `src/qti/tests.ts`; `sectionsOf`, `src/import/overlays/tests.ts`); the law oracle reads
+     the same (`testDocumentOf`, `src/test/oracle-laws/assembly.ts`). This sets aside the importer's `Section.visible`,
+     false where the section writes none, under which such a section broke "Test overlay"'s copy of it beside AL3, and
+     both sides' reading of an unwritten `visible` as false, under which a section not kept together mixed its children
+     into a shuffling parent's order on a value it never wrote. The corpus moves no verdict: each of the 38 sections of
+     the 14 zips that hold one writes `visible` (4 of them false, none of them with `keep-together="false"`), by a scan
+     of their XML entries. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat SWEEP-VISIBLE.)

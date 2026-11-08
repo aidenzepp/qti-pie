@@ -11,8 +11,9 @@
  *   an identifier its type reads (reading 147: one that writes none names nothing), its identifier
  *   collapsed, and its scope in its document: its test part, whether a selection with replacement
  *   above it can repeat it, and, for a section, whether its children's order is drawn at delivery
- *   (a shuffle, or an invisible section not kept together under a parent whose order is drawn,
- *   information model §5.98) and whether that looseness reaches the document's root;
+ *   (a shuffle, or a section written invisible, reading 163, and not kept together under a parent
+ *   whose order is drawn, information model §5.98) and whether that looseness reaches the
+ *   document's root;
  * - **sites** (`Site`): each section ref, and each include under a parent whose content model holds
  *   an include particle (reading 114), with the document its href names;
  * - **the assembly** (`Instance`): one tree per document of a test or a section, its root the
@@ -77,7 +78,19 @@ export const itemResourceType = "imsqti_item_xmlv3p0";
 export const isLinkType = (type: string): boolean => /^ims(?:basic)?ltia?_xmlv/u.test(type);
 
 /**
- * Read an element's `xs:boolean` attribute.
+ * Read an element's `xs:boolean` attribute where it writes one: true where its lexical form reads
+ * true, and false otherwise.
+ *
+ * @param rows - The document.
+ * @param node - The element's id.
+ * @param name - The attribute's name.
+ * @returns The value, none where the element writes none.
+ */
+const writtenFlagOf = (rows: View, node: NodeId, name: string): Option.Option<boolean> =>
+  Option.map(valueOf(rows, node, name), (lexical) => Option.contains(booleanOf(lexical), true));
+
+/**
+ * Read an element's `xs:boolean` attribute ({@link writtenFlagOf}), or its default.
  *
  * @param rows - The document.
  * @param node - The element's id.
@@ -86,10 +99,7 @@ export const isLinkType = (type: string): boolean => /^ims(?:basic)?ltia?_xmlv/u
  * @returns The value.
  */
 const flagOf = (rows: View, node: NodeId, name: string, otherwise: boolean): boolean =>
-  Option.match(valueOf(rows, node, name), {
-    onNone: () => otherwise,
-    onSome: (lexical) => Option.contains(booleanOf(lexical), true),
-  });
+  Option.getOrElse(writtenFlagOf(rows, node, name), () => otherwise);
 
 /**
  * One name of a document (`Named`): its node, its collapsed identifier, and its scope in its own
@@ -212,8 +222,11 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
       children.find(({ kind }) => kind === testKinds.selection),
     );
     const ordering = children.find(({ kind }) => kind === testKinds.ordering);
+    // Invisible only where it writes `visible` false: one that writes none is neither visible nor
+    // invisible (information model §4.2.6, reading 163), so it is not loose.
     const loose =
-      !flagOf(rows, node.id, "visible", false) && !flagOf(rows, node.id, "keep-together", true);
+      Option.contains(writtenFlagOf(rows, node.id, "visible"), false) &&
+      !flagOf(rows, node.id, "keep-together", true);
     const withReplacement = Option.exists(selection, ({ id }) =>
       flagOf(rows, id, "with-replacement", false),
     );

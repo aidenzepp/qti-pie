@@ -54,62 +54,7 @@ export const knownEntries = (known: Known): PackageEntries =>
 /**
  * The known disagreements, keyed by signature.
  */
-export const known = {
-  "import-only-law: Test overlay, contained Section(node, visible) in TestFlag(node, value)": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
-  <metadata>
-    
-    <schemaversion>3.0.0</schemaversion>
-  </metadata>
-  
-  <resources>
-    
-    
-    
-    
-    
-    <resource type="imsqti_test_xmlv3p0" href="test.xml">
-      
-      
-      
-      
-      
-      
-    </resource>
-  </resources>
-</manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">
-  
-  <qti-test-part identifier="p23">
-    <qti-assessment-section identifier="s22">
-      <qti-assessment-section identifier="s16" visible="true">
-        
-        
-        <qti-assessment-section identifier="s15" title="s15">
-          
-          
-        </qti-assessment-section>
-      </qti-assessment-section>
-      
-    </qti-assessment-section>
-  </qti-test-part>
-</qti-assessment-test>`,
-      ],
-    ],
-    fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
-    owner: "NIL",
-  },
-} satisfies Entries;
+export const known = {} satisfies Entries;
 
 /**
  * The disagreements a fix closed, each kept as a seed: keyed by the closed class's signature, with
@@ -1247,6 +1192,60 @@ export const fixed = {
     ],
     fix: "spec reading 155: an item ref that writes no href names nothing, so the schema demands no ItemRefTarget, ReferencePath or NameLookup type of it and AL3 alone refuses it, and the law oracle judges an item ref's laws whether or not it, its sections or its part write an identifier",
     owner: "FIX-ITEMREF",
+  },
+  "import-only-law: Test overlay, contained Section(node) in TestFlag(node)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
+  <metadata>
+    
+    <schemaversion>3.0.0</schemaversion>
+  </metadata>
+  
+  <resources>
+    
+    
+    
+    
+    
+    <resource type="imsqti_test_xmlv3p0" href="test.xml">
+      
+      
+      
+      
+      
+      
+    </resource>
+  </resources>
+</manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">
+  
+  <qti-test-part identifier="p23">
+    <qti-assessment-section identifier="s22" keep-together="false">
+      <qti-assessment-section identifier="s16" visible="true">
+        
+        
+        <qti-assessment-section identifier="s15" title="s15">
+          
+          
+        </qti-assessment-section>
+      </qti-assessment-section>
+      
+    </qti-assessment-section>
+  </qti-test-part>
+</qti-assessment-test>`,
+      ],
+    ],
+    fix: "spec reading 163: a section is invisible only where its own visible flag, a row of its own, reads false, so one that writes no visible is never loose and AL3 alone refuses it, never an unwritten visible read as false (the Section.visible the old class named)",
+    owner: "SWEEP-VISIBLE",
   },
   "import-only-law: Test overlay, contained SitePath(node, package, path) in ReferencePath(node, package, path)":
     {

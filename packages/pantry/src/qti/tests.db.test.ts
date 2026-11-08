@@ -124,6 +124,7 @@ const sectionOf = (members: bigint): Stated => ({
   fact: {
     ...tupleOf("qti-assessment-section"),
     keepTogether: true,
+    loose: false,
     looseChain: false,
     members,
     mixes: false,
@@ -135,7 +136,6 @@ const sectionOf = (members: bigint): Stated => ({
     replacing: false,
     required: 0n,
     shuffle: false,
-    visible: true,
     withReplacement: false,
   },
   relation: Section,

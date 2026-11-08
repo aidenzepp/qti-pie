@@ -375,15 +375,17 @@ export const Named = relation(
  * A section, keyed by its node: the owner of its parts ({@link sectionFamily}), with the facts of
  * its own attributes and children that the scope of its descendants reads.
  *
- * - **the host's:** its {@link nodeRef} tuple; `parentKind`; `visible` and `keepTogether`, its
- *   attributes' values (`keep-together` true where it writes none); `shuffle`, its ordering's
- *   `shuffle`, and `withReplacement`, its selection's `with-replacement`, each false without the
- *   child or the attribute; and its scope: `part`; `replaced` and `replacing`, whether a section
- *   above it, or it or one above it, selects with replacement; `parentMixes` and `mixes`, whether
- *   its parent's and its own children's order is drawn at delivery (a shuffle, or an invisible
- *   section not kept together whose parent's order is drawn, information model §5.98); and
- *   `parentLooseChain` and `looseChain`, as {@link Named} reads them, true above a document's
- *   root;
+ * - **the host's:** its {@link nodeRef} tuple; `parentKind`; `keepTogether`, its `keep-together`
+ *   (true where it writes none); `loose`, whether it is invisible and not kept together, so its
+ *   children are mixed into its parent's order (information model §5.98), invisible where its
+ *   `visible` flag, a row of its own, reads false: one that writes no `visible` is neither visible
+ *   nor invisible and has no flag, so it is never loose, and AL3 alone refuses it (reading 163);
+ *   `shuffle`, its ordering's `shuffle`, and `withReplacement`, its selection's `with-replacement`,
+ *   each false without the child or the attribute; and its scope: `part`; `replaced` and
+ *   `replacing`, whether a section above it, or it or one above it, selects with replacement;
+ *   `parentMixes` and `mixes`, whether its parent's and its own children's order is drawn at
+ *   delivery (a shuffle, or a loose section whose parent's order is drawn); and `parentLooseChain`
+ *   and `looseChain`, as {@link Named} reads them, true above a document's root;
  * - **drawn:** `members`, its parts' count;
  * - **accumulated:** `required`, the count of its parts whose `required` is true, the end of
  *   {@link requiredFold}.
@@ -394,6 +396,7 @@ export const Section = relation(
     document: uuid,
     keepTogether: pg.boolean,
     kind: closedId(NodeKind),
+    loose: pg.boolean,
     looseChain: pg.boolean,
     members: drawn(natural),
     mixes: pg.boolean,
@@ -410,7 +413,6 @@ export const Section = relation(
     shuffle: pg.boolean,
     start: natural,
     version: closedId(SchemaVersion),
-    visible: pg.boolean,
     withReplacement: pg.boolean,
   },
   ["node"],
@@ -1248,6 +1250,15 @@ const flagCopy = ([name, kinds]: (typeof flagCarriers)[number]) => {
 };
 
 /**
+ * The sections written invisible: a `visible` that reads false. A section's visibility "is
+ * determined solely by the value of its own visible attribute" (information model §4.2.6), so one
+ * that writes none is in neither this nor its complement (reading 163).
+ */
+const invisibleFlags = select(TestFlag, (f) =>
+  f.and(f.eq(f.name, "visible"), f.eq(f.value, false)),
+);
+
+/**
  * The flags that make an element required: its `required` written true.
  */
 const requiredFlags = select(TestFlag, (f) => f.and(f.eq(f.name, "required"), f.eq(f.value, true)));
@@ -1295,20 +1306,6 @@ const instanceRoots = select(Instance, (i) => i.eq(i.start, 0n));
  * The instances of a test's assembly, whose names and branch rules resolve.
  */
 const testInstances = select(Instance, (i) => i.eq(i.assemblyKind, testKind));
-
-/**
- * A `Section` row as a row check reads it.
- */
-type SectionRow = RowScalars<typeof Section>;
-
-/**
- * State that a section is loose: invisible and not kept together, so its children are mixed into
- * its parent's order (information model §5.98).
- *
- * @param s - The row.
- * @returns The predicate.
- */
-const loose = (s: SectionRow) => s.and(s.eq(s.visible, false), s.eq(s.keepTogether, false));
 
 /**
  * An `Instance` row as a row check reads it.
@@ -1842,20 +1839,24 @@ export const testLawsByName = {
           ),
           s.and(s.eq(s.replacing, false), s.eq(s.replaced, false), s.eq(s.withReplacement, false)),
         ),
+        s.or(s.eq(s.loose, false), s.eq(s.keepTogether, false)),
         s.or(
           s.and(
             s.eq(s.mixes, true),
-            s.or(s.eq(s.shuffle, true), s.and(loose(s), s.eq(s.parentMixes, true))),
+            s.or(s.eq(s.shuffle, true), s.and(s.eq(s.loose, true), s.eq(s.parentMixes, true))),
           ),
           s.and(
             s.eq(s.mixes, false),
             s.eq(s.shuffle, false),
-            s.or(s.not(loose(s)), s.eq(s.parentMixes, false)),
+            s.or(s.eq(s.loose, false), s.eq(s.parentMixes, false)),
           ),
         ),
         s.or(
-          s.and(s.eq(s.looseChain, true), loose(s), s.eq(s.parentLooseChain, true)),
-          s.and(s.eq(s.looseChain, false), s.or(s.not(loose(s)), s.eq(s.parentLooseChain, false))),
+          s.and(s.eq(s.looseChain, true), s.eq(s.loose, true), s.eq(s.parentLooseChain, true)),
+          s.and(
+            s.eq(s.looseChain, false),
+            s.or(s.eq(s.loose, false), s.eq(s.parentLooseChain, false)),
+          ),
         ),
       ),
     ),
@@ -2193,7 +2194,20 @@ export const testLawsByName = {
     ),
     mirrors(on(Section, "node"), on(nodesOf(sectionKind), "id")),
     contained(on(Section, "parent", "parentKind"), on(Node, "id", "kind")),
-    contained(on(Section, "node", "visible"), on(flagsOf("visible"), "node", "value")),
+    contained(
+      on(
+        select(Section, (s) => s.eq(s.loose, true)),
+        "node",
+      ),
+      on(invisibleFlags, "node"),
+    ),
+    contained(
+      on(invisibleFlags, "node"),
+      on(
+        select(Section, (s) => s.or(s.eq(s.loose, true), s.eq(s.keepTogether, true))),
+        "node",
+      ),
+    ),
     contained(on(flagsOf("keep-together"), "node", "value"), on(Section, "node", "keepTogether")),
     contained(
       on(
