@@ -1390,10 +1390,10 @@ export const declarationType = (declaration: SourceElement): Option.Option<Expre
 };
 
 /**
- * Give the item's declarations a reference of a kind may name.
+ * Give the document's declarations a reference of a kind may name.
  *
  * @param expected The kind of variable the reference must name.
- * @param context The item's declarations.
+ * @param context The document's declarations.
  * @returns The outcome or the response declarations, or every declaration a `qti-variable` may
  *   read, by identifier.
  */
@@ -1438,13 +1438,13 @@ const variableType = (
 };
 
 /**
- * Apply `undeclared-variable` to an element of inline response processing or of template
- * processing that names a variable ({@link namingOf}).
+ * Apply `undeclared-variable` to an element that lies in a processing ({@link processings}) and
+ * names a variable ({@link namingOf}).
  *
  * An expression whose kind's rule declares a declaration facet names a variable of the kind the
- * facet expects: `qti-variable` a response, outcome, template or context declaration of the item,
- * or a built-in variable (`info-compact.txt:9286`), and `qti-default` likewise; `qti-correct`,
- * `qti-map-response` and `qti-map-response-point` a response declaration.
+ * facet expects: `qti-variable` a response, outcome, template or context declaration of the
+ * document, or a built-in variable (`info-compact.txt:9286`), and `qti-default` likewise;
+ * `qti-correct`, `qti-map-response` and `qti-map-response-point` a response declaration.
  * `qti-set-outcome-value` and `qti-lookup-outcome-value` name an outcome declaration or
  * `completionStatus`. The qti package refuses each as P8 (`reference` and `target` in
  * `packages/pantry/src/processing/check.ts`). A reference attribute that names no variable is
@@ -1469,7 +1469,7 @@ const variableType = (
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param context The item's declarations and the parents the walk has met.
+ * @param context The document's declarations and the parents the walk has met.
  * @returns The refusal at the element's path when it names no variable of the kind it must, or the
  *   `duration` an item that is not time dependent does not have; none for any other element, for
  *   one outside processing, and for a read template processing may not make.
@@ -1595,7 +1595,7 @@ const operandOf = (element: SourceElement): Option.Option<SourceElement> => {
  *
  * @param expression The expression.
  * @param rule Its kind's rule.
- * @param context The item's declarations.
+ * @param context The document's declarations.
  * @returns The attributes, none when the kind's declaration facet names no variable of the kind it
  *   expects, which leaves the expression untyped.
  */
@@ -1645,7 +1645,7 @@ const resultAttributes = (
  * judge their operands.
  *
  * @param expression The expression.
- * @param context The item's declarations and the types worked out so far.
+ * @param context The document's declarations and the types worked out so far.
  * @returns Its type, none when it is untyped.
  */
 const expressionType = (
@@ -1837,7 +1837,7 @@ const templateTarget = (
  * (`templateOf` in `packages/pantry/src/processing/check.ts`).
  *
  * @param element The rule.
- * @param context The item's declarations.
+ * @param context The document's declarations.
  * @returns The variable's identifier and type, and its kind for a template rule or a template
  *   default; none for an element that sets no variable, for one whose variable is undeclared or of
  *   a kind it may not set, for a declaration whose type is not judged, and for a template default
@@ -1906,7 +1906,7 @@ const setTarget = (
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param context The item's declarations and the parents the walk has met.
+ * @param context The document's declarations and the parents the walk has met.
  * @returns The refusal at the rule's path when its expression's type is not its variable's; none
  *   for any other element.
  */
@@ -1979,7 +1979,7 @@ const conditionBranches: ReadonlySet<string> = new Set([
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param context The item's declarations and the parents the walk has met.
+ * @param context The document's declarations and the parents the walk has met.
  * @returns The refusal at the rule's path, with `check: "condition"` and the condition's type,
  *   when its condition is not a single `boolean`; none for any other element.
  */
@@ -2040,10 +2040,10 @@ const lookupTableOf = (declaration: SourceElement): Option.Option<LookupTable> =
   );
 
 /**
- * Apply `template-requirements` to a `qti-lookup-outcome-value` of inline response processing: the
- * outcome it names is declared with a lookup table, as the lookup "sets the value of an outcome
- * variable to the value obtained by looking up the value of the associated expression in the
- * lookupTable associated with the outcome's declaration" (the information model,
+ * Apply `template-requirements` to a `qti-lookup-outcome-value` that lies in a processing
+ * ({@link processings}): the outcome it names is declared with a lookup table, as the lookup "sets
+ * the value of an outcome variable to the value obtained by looking up the value of the associated
+ * expression in the lookupTable associated with the outcome's declaration" (the information model,
  * `info-compact.txt:10774`).
  *
  * A lookup that names no outcome declaration is not judged here: an undeclared variable is its own
@@ -2053,7 +2053,7 @@ const lookupTableOf = (declaration: SourceElement): Option.Option<LookupTable> =
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param context The item's declarations and the parents the walk has met.
+ * @param context The document's declarations and the parents the walk has met.
  * @returns The refusal at the `qti-lookup-outcome-value`'s path when its outcome holds no lookup
  *   table; none for any other element.
  */
@@ -2110,7 +2110,7 @@ const anyLookupOperand: readonly BaseType[] = lookupOperands["qti-interpolation-
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param context The item's declarations and the parents the walk has met.
+ * @param context The document's declarations and the parents the walk has met.
  * @returns The refusal at the `qti-lookup-outcome-value`'s path when its operand's type is not one
  *   its table allows, or one no lookup reads; none for any other element.
  */
@@ -2250,7 +2250,7 @@ const weightPlacement = (source: SourceDocument, visit: Visit): readonly Refusal
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param context The item's declarations and the parents the walk has met.
+ * @param context The document's declarations and the parents the walk has met.
  * @returns One refusal per operand of a type the kind does not accept; none for any other element.
  */
 const operandTypes = (source: SourceDocument, visit: Visit, context: Context): readonly Refusal[] =>
@@ -2496,7 +2496,7 @@ export const referenceRefusals = (
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param context The item's declarations and the parents the walk has met.
+ * @param context The document's declarations and the parents the walk has met.
  * @returns The refusals of the variables its reference attributes name; none for any other
  * element.
  */

@@ -454,11 +454,13 @@ const datesRule: SessionRule = (session) => {
         ),
   );
 
-  return Option.isSome(invalid) || Date.parse(session.updated) >= Date.parse(session.started)
-    ? invalid
-    : Option.some(
-        `updated, ${JSON.stringify(session.updated)}, is before started, ${JSON.stringify(session.started)}`,
-      );
+  return Option.orElse(invalid, () =>
+    Date.parse(session.updated) < Date.parse(session.started)
+      ? Option.some(
+          `updated, ${JSON.stringify(session.updated)}, is before started, ${JSON.stringify(session.started)}`,
+        )
+      : Option.none(),
+  );
 };
 
 /**

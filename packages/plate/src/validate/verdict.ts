@@ -1900,7 +1900,7 @@ const wordings = {
   },
   /**
    * An attribute refused with no `context` is an item's weighted `qti-variable` (P12): weights are
-   * "defined only in the test context (and hence only in outcomes processing)" (info.txt:72139),
+   * "defined only in the test context (and hence only in outcomes processing)" (`info.txt:72139`),
    * so the one change an item can make is to remove the attribute. A test's refusal names its
    * `context`, and moving the expression into outcome processing is offered there.
    */

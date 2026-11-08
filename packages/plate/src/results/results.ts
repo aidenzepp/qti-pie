@@ -949,11 +949,11 @@ const sessionItemReport = (
   });
 
 /**
- * Write a test's own outcome variables, by the state of its outcome processing: each at its
- * starting value when it has none; each as the session holds it, which is as the last run left it,
- * or at its starting value before the first, when the engine runs it (`runs`); and none when the
- * engine cannot run it (`marked`), so no default reads as a score. Nothing here runs the
- * processing: the session's transitions do.
+ * Write a test's own outcome variables by the state of its outcome processing: each at its
+ * starting value when the test has none (`absent`); each as the session holds it when the engine
+ * runs it (`runs`), which is as the last run left it, or at its starting value before the first;
+ * and none when the engine cannot run it (`marked`), so no default reads as a score. Nothing here
+ * runs the processing: the session's transitions do.
  *
  * @param test The test.
  * @param session The session, whose outcomes `decodeSession` checked against the test's
