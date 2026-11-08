@@ -888,16 +888,30 @@ export const generatedRecorded: readonly Recorded[] = [
     },
     rule: "child-set",
   },
+  // The media URLs share one domain, whose handle names the reading that compiled it first.
   {
     class: "attribute-value",
     detail:
-      /^value domain at \S*\/source(?:\[\d+\])?: src: "(?:\\[tnr]| )*" is outside URLDType \(reading 124\)/u,
+      /^value domain at \S*\/(?:(?:audio|source|video)(?:\[\d+\])?: src|video(?:\[\d+\])?: poster|source(?:\[\d+\])?: srcset): "(?:\\[tnr]| )*" is outside URLDType \(reading 12[45]\)/u,
     direction: "oracle-only",
     reason: {
       _tag: "reading",
       reading: 124,
-      says: "A `source` in a `picture` carries `srcset`, and one in an `audio` or a `video` carries `src`.",
-      why: "the information model says a source's src is a valid non-empty URL potentially surrounded by spaces (5.135.1); the XSD types src as a URL that may be blank",
+      says: 'Each media URL the information model describes as "a valid non-empty URL potentially surrounded by spaces" holds a character other than a space',
+      why: "the information model says an audio's and a video's src, a video's poster and a source's src each hold a valid non-empty URL potentially surrounded by spaces (5.9.1, 5.166.1, 5.166.9, 5.135.1), and the HTML Standard that a srcset holds one or more image candidate strings, each a valid non-empty URL; the XSD types each URLDType, an xs:normalizedString that may be empty or blank",
+    },
+    rule: "attribute-lexical",
+  },
+  {
+    class: "attribute-value",
+    detail:
+      /^value domain at \S*\/track(?:\[\d+\])?: src: "(?:\\[tnr]| )*" is outside URLDType \(reading 12[45]\)/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 125,
+      says: "A `track`'s `src`, which the XSD already requires, holds a character other than a space",
+      why: "the information model says a track's src is a valid non-empty URL potentially surrounded by spaces (5.163.2); the XSD types it URLDType, an xs:normalizedString that may be empty or blank",
     },
     rule: "attribute-lexical",
   },
@@ -1097,6 +1111,28 @@ export const generatedRecorded: readonly Recorded[] = [
       why: "a printed variable names a declared outcome or template variable; the XSD types its identifier and resolves it nowhere",
     },
     rule: "printed-variable-ref",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateBlock.Attr_template-identifier (§5.145.1, and §5.155.1, §5.122.1, §5.124.1 and each choice's, as §5.132.3: 'The identifier of a template variable'), and https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateDeclaration (§5.151: 'Template declarations declare item variables that are to be used specifically for the purposes of cloning items')",
+      why: "a template element's or a choice's template-identifier names a template variable its item declares; the XSD types it an identifier and resolves it nowhere",
+    },
+    rule: "template-ref",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 92,
+      says: "A PCI's `qti-context-variable` names a context variable",
+      why: "a PCI's qti-context-variable names QTI_CONTEXT or a context variable its item declares; the XSD types its identifier and resolves it nowhere",
+    },
+    rule: "context-variable-ref",
   },
   {
     class: "beyond",

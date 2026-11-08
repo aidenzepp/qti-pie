@@ -415,6 +415,18 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * no type of the set, a descendant typed by a built-in simple type it breaks, which the law oracle
  * refuses (reading 60: the children are assessed laxly in turn) and libxml2 never assesses; each
  * shows a known disagreement until its libxml2 record lands.
+ *
+ * The last six are the shapes Aiden's runs of the free suite met (PR #46, comment 6701102861), each
+ * a document's only kind of fault. A blank media URL is refused under reading 124, or 125 for a
+ * track's `src`, where the XSD's `URLDType` admits it; its srcset value is TEST_SEED=505's drawn
+ * seed #12's. A template variable and a context variable that nothing declares, `é`, are refused
+ * beyond the XSD, which resolves neither name (the `template-ref` and `context-variable-ref`
+ * records). A 3.0.0 manifest's `xsi:type` naming `cp:ResourcesDType`, which only 3.0.1 declares,
+ * resolves to no type in 3.0.0, which the codec refuses as `type-unknown` and xmllint as a QName
+ * that resolves to no type definition, since 55a6e428; and a section holding only a branch rule is
+ * valid in both oracles since reading 26's rule was withdrawn (7858a46c). At Aiden's head
+ * (1ee51d8d) the law oracle refused the manifest under `xsi-type`, a class xmllint's refusal does
+ * not share, and the section under `child-set`, where xmllint accepts it.
  */
 const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
   {
@@ -448,6 +460,30 @@ const keptDocuments: readonly { readonly name: string; readonly text: string }[]
   {
     name: "an interaction in a template block's paragraph",
     text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-response-declaration identifier="R" cardinality="single" base-type="string"/><qti-template-declaration identifier="T" cardinality="single" base-type="identifier"/><qti-item-body><qti-template-block template-identifier="T" identifier="x"><p><qti-text-entry-interaction response-identifier="R"/></p></qti-template-block></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "an audio's empty src, a video's blank src and poster, and a picture source's blank srcset",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-item-body><div><audio src=""/><video src=" " poster="&#x9;"/><picture><source srcset=" &#xA; &#xD;"/><img src="a.png" alt="a"/></picture></div></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "a track's blank src",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-item-body><div><video src="v.mp4"><track src=" " srclang="en"/></video></div></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "a template inline naming a template variable nothing declares",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-item-body><p><qti-template-inline template-identifier="é" identifier="x">y</qti-template-inline></p></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "a PCI's context variable naming a context variable nothing declares",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-response-declaration identifier="R" cardinality="single" base-type="string"/><qti-item-body><qti-portable-custom-interaction response-identifier="R" module="m" custom-interaction-type-identifier="c"><qti-interaction-markup><div>x</div></qti-interaction-markup><qti-context-variable identifier="é"/></qti-portable-custom-interaction></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "a manifest's resources whose xsi:type names cp:ResourcesDType, which only 3.0.1 declares",
+    text: '<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata><organizations/><resources xsi:type="ResourcesDType"/></manifest>',
+  },
+  {
+    name: "a section holding only a branch rule",
+    text: '<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="S" title="s" visible="true"><qti-branch-rule target="EXIT_TEST"><qti-base-value base-type="boolean">true</qti-base-value></qti-branch-rule></qti-assessment-section>',
   },
 ];
 
