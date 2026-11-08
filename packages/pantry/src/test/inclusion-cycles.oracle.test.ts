@@ -31,7 +31,8 @@ import type { CycleCase } from "#pantry/test/inclusion-cycles.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { hostRowsOf, judge as judgeRows } from "#pantry/test/host-judge.ts";
 import { keyBreachesOf } from "#pantry/test/key-breaches.ts";
-import { datumText, judgedLaws } from "#pantry/test/key-copies.ts";
+import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { datumText } from "#pantry/test/key-copies.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 

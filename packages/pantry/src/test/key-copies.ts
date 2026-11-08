@@ -23,18 +23,8 @@
  * evaluated on the host in SQL's three-valued logic, over the fields the oracle knows of a row
  * ({@link attributeFields}, {@link nodeFields}).
  */
-import { lawsOf } from "@bjornpagen/grizzle";
 import type { Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
-import {
-  Array as Arr,
-  Formatter,
-  Function as Fn,
-  Option,
-  pipe,
-  Predicate,
-  Result,
-  Schema,
-} from "effect";
+import { Array as Arr, Formatter, Option, pipe, Predicate, Result, Schema } from "effect";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
@@ -1767,13 +1757,15 @@ const containedOf = (left: StoredSide, right: StoredSide): JudgedLaw => ({
 });
 
 /**
- * Read one statement as the laws the host judges it by.
+ * Read one statement as the laws the host judges it by, each law as this module reads it from the
+ * statement, its sides' selections left out: `#pantry/test/judged-laws.ts` names each as grizzle's
+ * `lawsOf` does, outside the law oracle's modules.
  *
  * @param statement - The statement as the schema states it.
  * @returns Its laws: two for a `mirrors`, one for a containment, a check or a key, none for any
  *   other statement.
  */
-const judgedOf = (statement: (typeof Qti.statements)[number]): readonly JudgedLaw[] => {
+export const judgedOf = (statement: (typeof Qti.statements)[number]): readonly JudgedLaw[] => {
   const keyed = Option.map(
     Schema.decodeUnknownOption(KeyStatementSchema)(statement),
     ({ side }): readonly JudgedLaw[] => [
@@ -1815,97 +1807,6 @@ const judgedOf = (statement: (typeof Qti.statements)[number]): readonly JudgedLa
 };
 
 /**
- * Whether two law sides read one side, whatever their selections: one relation, and the same terms
- * in pairing order, each a field, `pred` of one, or a constant of one value.
- *
- * @param stated - A side as grizzle's `lawsOf` names it.
- * @param read - The side as this module read it from its statement.
- * @returns Whether they are one side.
- */
-const readsSide = (stated: LawSourceSide, read: LawSourceSide): boolean =>
-  stated.relation === read.relation &&
-  stated.terms.length === read.terms.length &&
-  Arr.zip(stated.terms, read.terms).every(([held, term]) => {
-    if (held.kind === "constant" || term.kind === "constant") {
-      return held.kind === "constant" && term.kind === "constant" && held.value === term.value;
-    }
-
-    return held.kind === term.kind && held.field === term.field;
-  });
-
-/**
- * Whether a law grizzle's `lawsOf` names for a statement is the law this module read from it: a
- * check of one name over one relation, a key over one side, or a containment between one pair of
- * sides, whatever the sides' selections, since this module reads a selection as the predicate the
- * statement holds, not as grizzle's canonical conjuncts.
- *
- * @param stated - The law as `lawsOf` names it.
- * @param read - The law as this module read it.
- * @returns Whether they are one law.
- */
-const readsLaw = (stated: Law, read: Law): boolean => {
-  if (stated.kind === "check" && read.kind === "check") {
-    return stated.name === read.name && stated.relation === read.relation;
-  }
-
-  if (stated.kind === "key" && read.kind === "key") {
-    return readsSide(stated.side, read.side);
-  }
-
-  return (
-    stated.kind === "contained" &&
-    read.kind === "contained" &&
-    readsSide(stated.from, read.from) &&
-    readsSide(stated.to, read.to)
-  );
-};
-
-/**
- * Name a law the host judges as grizzle's `lawsOf` names it, its sides' selections included, so
- * `src/import/refusal.ts`'s `lawNameOf`, which matches by grizzle's `sameLaw`, names a broken one
- * as it names an outcome's: the one law of its statement's that it reads ({@link readsLaw}).
- *
- * @param judged - The law, as this module read it from its statement.
- * @param laws - The statement's laws, as `lawsOf` names them.
- * @returns The law, holding the statement's own law.
- * @throws {Error} When none or several of the statement's laws are the law read, which `lawsOf`
- *   rules out: a defect of this reader, never of a document.
- */
-const statedAs = (judged: JudgedLaw, laws: readonly Law[]): JudgedLaw => {
-  const held = laws.filter((stated) => readsLaw(stated, judged.law));
-  if (!Arr.isReadonlyArrayNonEmpty(held) || held.length > 1) {
-    throw new Error(
-      `The statement read as ${Formatter.format(judged.law)} has ${String(held.length)} laws of grizzle's lawsOf that read its sides, among ${Formatter.format(laws)}. Read each statement's sides as lawsOf pairs them.`,
-    );
-  }
-
-  return { ...judged, law: Arr.headNonEmpty(held) };
-};
-
-/**
- * Each statement of a schema beside its laws, as grizzle's `lawsOf` names them.
- *
- * `lawsOf` compiles the schema's law model, which takes seconds, so this is memoized by the
- * schema: {@link judgedLaws}, {@link containmentsOf}, `#pantry/test/host-judge.ts` and a test file
- * share one compile.
- */
-const statementLawsOf = Fn.memoize((schema: typeof Qti) => lawsOf(schema));
-
-/**
- * Every law a schema states that the host judges over rows ({@link JudgedLaw}), in statement
- * order, each named as grizzle's `lawsOf` names its statement's law ({@link statedAs}).
- *
- * @param schema - The schema, `Qti`.
- * @returns The laws.
- */
-export const judgedLaws: (schema: typeof Qti) => readonly JudgedLaw[] = Fn.memoize(
-  (schema: typeof Qti): readonly JudgedLaw[] =>
-    statementLawsOf(schema).flatMap(({ laws, statement }) =>
-      judgedOf(statement).map((judged) => statedAs(judged, laws)),
-    ),
-);
-
-/**
  * Read a closed relation's facts as rows, for a law over it.
  *
  * @param relation - The relation's name.
@@ -1939,9 +1840,9 @@ const sourceTermOf = (term: StoredSide["terms"][number]): SourceTerm => {
 };
 
 /**
- * A containment the schema states, read from the statement grizzle keeps for it: its law as
- * grizzle's `lawsOf` names it, its sides' selections included, each side's relation, its source's
- * terms and its target's fields, and each side's selection as SQL's `WHERE` reads it.
+ * A containment the schema states, read from the statement grizzle keeps for it: its law, each
+ * side's relation, its source's terms and its target's fields, and each side's selection as SQL's
+ * `WHERE` reads it.
  */
 export interface Containment {
   readonly from: string;
@@ -1954,39 +1855,40 @@ export interface Containment {
 }
 
 /**
- * Read every containment the schema states from one relation, so a test can judge rows by the
+ * Read the containment one statement states from one relation, so a test can judge rows by the
  * schema's own statements, their selections included: a source row its selection holds must meet
- * a target row its selection holds on the paired fields. Each law is its statement's own, read as
- * {@link judgedLaws} reads it ({@link statedAs}), so `src/import/refusal.ts`'s `lawNameOf` names
- * it.
+ * a target row its selection holds on the paired fields. Its law is read as {@link judgedOf} reads
+ * it, its sides' selections left out; `#pantry/test/judged-laws.ts` `containmentsOf` names it as
+ * grizzle's `lawsOf` does.
  *
- * @param schema - The schema, `Qti`.
+ * @param statement - The statement as the schema states it.
  * @param from - The source relation.
- * @returns The containments, in statement order.
+ * @returns The containment, none for a statement that is no containment from `from`.
  */
-export const containmentsOf = (schema: typeof Qti, from: string): readonly Containment[] =>
-  statementLawsOf(schema).flatMap(({ laws, statement }) =>
-    Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
-      onNone: () => [],
-      onSome: (read): readonly Containment[] => {
-        if (read.kind !== "contained" || sourceOf(read.left).name !== from) {
-          return [];
-        }
+export const containmentsIn = (
+  statement: (typeof Qti.statements)[number],
+  from: string,
+): readonly Containment[] =>
+  Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
+    onNone: () => [],
+    onSome: (read): readonly Containment[] => {
+      if (read.kind !== "contained" || sourceOf(read.left).name !== from) {
+        return [];
+      }
 
-        const left = sourceOf(read.left);
-        const right = sourceOf(read.right);
+      const left = sourceOf(read.left);
+      const right = sourceOf(read.right);
 
-        return [
-          {
-            from: left.name,
-            fromTerms: read.left.terms.map(sourceTermOf),
-            law: statedAs(containedOf(read.left, read.right), laws).law,
-            selected: selectedBy(left.predicate),
-            targeted: selectedBy(right.predicate),
-            to: right.name,
-            toFields: fieldsOf(read.right),
-          },
-        ];
-      },
-    }),
-  );
+      return [
+        {
+          from: left.name,
+          fromTerms: read.left.terms.map(sourceTermOf),
+          law: containedOf(read.left, read.right).law,
+          selected: selectedBy(left.predicate),
+          targeted: selectedBy(right.predicate),
+          to: right.name,
+          toFields: fieldsOf(read.right),
+        },
+      ];
+    },
+  });

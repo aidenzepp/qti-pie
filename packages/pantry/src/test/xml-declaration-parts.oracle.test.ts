@@ -31,7 +31,7 @@ import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge as judgeHost } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/key-copies.ts";
+import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { Judgment } from "#pantry/test/oracle.ts";
