@@ -958,12 +958,13 @@ export interface Stated {
 }
 
 /**
- * A relation's table, as grizzle converts a declared name.
+ * A relation's table, as grizzle converts a declared name: the table a direct writer writes a
+ * relation's rows to, and a case reads a constraint of it from.
  *
  * @param relation - The relation's name.
  * @returns The table.
  */
-const tableOf = (relation: string): string => columnOf(relation);
+export const tableOf = (relation: string): string => columnOf(relation);
 
 /**
  * The text of a fact's values at some fields, the key a family groups its members by.

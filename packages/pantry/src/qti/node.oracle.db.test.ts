@@ -517,23 +517,28 @@ const inStringValue = (
 const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
 
 /**
- * The resource type of a folded document: the one `RootOfType` names for its root element's kind,
- * `none` for a manifest, which no resource lists.
+ * The `DocumentType` of a folded document, as its document node's `documentType` holds it:
+ * `manifest` for the package's manifest, which no resource lists, and for every other document the
+ * type of the resource that lists it, the one `RootOfType` names for its root element's kind, which
+ * `ResourceDocumentType` spells as itself (spec reading 167).
  *
  * @param rows - The document's folded rows.
  * @returns The type.
  */
-const documentTypeOf = (rows: FoldedRows<Composed>) => {
+const documentTypeOf = (rows: FoldedRows<Composed>): string => {
   // The nodes are in pre-order, so the first element below the document node is its root.
   const root = rows.nodes.find(({ kind, start }) => start > 0n && !nonElements.has(kind))?.kind;
   if (root === "cp:manifest") {
-    return "none";
+    return "manifest";
   }
 
-  const types = RootOfType.rows.filter((row) => row.root === root).map(({ type }) => type);
-  assert.lengthOf(types, 1, `${root ?? "no root"}: the one resource type RootOfType names for it`);
+  const [type, ...others] = RootOfType.rows
+    .filter((row) => row.root === root)
+    .map(({ type: rooted }) => rooted);
+  assert.isDefined(type, `${root ?? "no root"}: a resource type RootOfType names for it`);
+  assert.isEmpty(others, `${root ?? "no root"}: the one resource type RootOfType names for it`);
 
-  return types[0] ?? "none";
+  return type;
 };
 
 /**
