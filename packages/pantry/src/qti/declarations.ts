@@ -219,7 +219,7 @@ export const contextVariable = {
  * - The node's {@link nodeRef} tuple: `node`, `document`, `kind`, `start`, `nearest`, `version` and
  *   `parent`;
  * - `parentKind`, its parent's kind, copied from `Node`: `Reserved type` reads it, since a test's
- *   SCORE and MAXSCORE, a `qti-assessment-test`'s children, may be of any base type (reading 161);
+ *   SCORE and MAXSCORE, a `qti-assessment-test`'s children, may be of any base type (reading 162);
  * - `declarationKind`, its kind as a `DeclarationKind`, `Declares` of `kind`;
  * - `cardinalities` and `baseTypes`, drawn: its counts of {@link DeclarationCardinality} and
  *   {@link DeclarationBaseType} rows, each 1 where its attribute spells a code and 0 where it does
@@ -299,7 +299,7 @@ export const DeclarationBaseType = relation(
  * `identifierTrail`, the whitespace written around it, which `E1_derived` proves concatenate to
  * `identifierLexical`, the lexical form as written (C18's copy), as {@link RecordFieldName} holds a
  * field's; and its {@link Declaration}'s {@link declarationRef} tuple and its `parentKind`, which
- * `Reserved type` reads (reading 161). The laws over a declared name read it: `Declaration key`,
+ * `Reserved type` reads (reading 162). The laws over a declared name read it: `Declaration key`,
  * `Declaration not reserved` and `Reserved type`.
  *
  * An `identifier` that is unwritten, or no NCName once collapsed, whitespace alone among them,
@@ -331,7 +331,7 @@ export const DeclarationIdentifier = relation(
  * declaration kind and count of base types, and its {@link DeclarationCardinality}'s
  * `cardinality`, which `Reserved type` reads beside the name (a typed outcome name is no record,
  * and QTI_CONTEXT is one); and `parentKind`, its {@link Declaration}'s, which `Reserved type`
- * reads where it reads the cardinality (reading 161).
+ * reads where it reads the cardinality (reading 162).
  *
  * A named declaration whose cardinality is unwritten or spells nothing has no row, so no law reads
  * a cardinality it does not have, and AL3 or its value domain refuses it alone (spec reading 158);
@@ -1125,7 +1125,7 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   context, and, where it has a cardinality, a typed outcome name is no record and QTI_CONTEXT is
  *   one (reading 153). A SCORE or MAXSCORE whose declaration is a child of a `qti-assessment-test`
  *   (`parentKind`) is held to neither, since "SCORE needs to be a float" is said of items (§4.5,
- *   reading 161).
+ *   reading 162).
  * - **`Declaration base type`**: a record has no base type, and every declaration of another
  *   cardinality writes one; one that spells nothing is its value domain's alone (spec reading
  *   158).

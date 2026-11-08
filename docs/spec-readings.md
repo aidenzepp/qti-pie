@@ -672,6 +672,11 @@ against it. A reading that is not an information-model-over-XSD case says which 
     grizzle's bounded lexical form of `double precision` was distinct from every other key by its text alone, is
     lifted by reading 154, which compares every float key by the double reading 144 maps it to.
 
+    In pantry, reading 144 sets this reading aside where the two differ: a double's value is the one XML Schema 1.1's
+    doubleLexicalMap gives (Part 2 §3.3.5.2), so `1e400` is `+INF`, not the largest finite double. This reading's
+    first sentence holds in plate alone, whose double reading follows it until the renderer team moves it to 144 (a
+    follow-up of PR #46).
+
 57. **In lax wildcard content, every prose rule judges the QTI elements the structural walk checks there, as it judges
     them anywhere else.** Under a `lax` element wildcard, such as the content of `qti-custom-interaction`, XML Schema
     assesses an element against its declaration when one is found, and only then (XML Schema Part 1, section 3.10.1,
@@ -2411,6 +2416,12 @@ against it. A reading that is not an information-model-over-XSD case says which 
      only be formatted in the e, E, f, g, G, r or R styles" (section 7.30) is advice and is not read. (Decided
      2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec
      wins; at most one conversion is the operator's decision of 2026-11-06 on item L4.)
+
+     Reading 161 sets aside this reading's rule that a format holds at most one conversion specifier, and with it the
+     operator's decision on item L4: a format of any number of specifiers is accepted and stored as written, so
+     `%i of %i` and `%%%e%%%G` are admitted. The rest of this reading stands: each specifier ends in one of the listed
+     codes, and `%q`, `2f%`, `%` and `%d` are still refused under `attribute-lexical`.
+
 133. **A key text holds at most 2,587 UTF-8 bytes: a stated limit of the representation, not a law of QTI.** No QTI
      specification bounds the length of an identifier, an ID, an IDREF, an `xml:lang`, a title, an href, a map key or a
      value's lexical form (readings 45 and 94 state that the productions state no length). pantry's representation still
@@ -3158,7 +3169,28 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      expected it until this reading. The corpus holds no repeated key (reading 98), so no verdict moves. This binds
      pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under
      the operator's standing ruling of 2026-11-05, from seat FIX-MAPKEYDUP.)
-161. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+161. **A printed variable's `format` may hold any number of conversion specifiers, two or more included, and pantry
+     stores it as written; each specifier is still one reading 132 admits.** The upstream reviewer of PR #46 ruled
+     "`qti-printed-variable@format` with two or more conversions, such as `%d %d`: our side has ruled it should be
+     accepted and stored as written. QTI defines `format` by reference to printf for one value, but it doesn't ban a
+     second conversion, and C's undefined behaviour isn't a QTI prohibition. Pantry never renders, so it can store the
+     value. How a renderer prints the extra conversion is the renderer's call" (comment 6701102861, 2026-11-07,
+     https://github.com/aidenzepp/qti-pie/pull/46#issuecomment-6701102861), and the operator's standing steer takes that
+     reviewer's advice. The information model defines `format` as "The format conversion specifier to use when
+     converting numerical values to strings" (section 7.30.7) and the syntax of a specifier (section 2.3.4), and states
+     no count; ISO/IEC 9899:2011's "If there are insufficient arguments for the format, the behavior is undefined"
+     (section 7.21.6.1) says what a C program that prints such a format does, not what a QTI document may write. So a
+     format is a printf format string over the listed codes: characters other than `%`, the escape `%%`, and conversion
+     specifiers, any number of them, none included (`printfFormat`, `src/grammar/attributes.ts`). `%i of %i`, `%%%e%%%G`
+     and `%i, %.2f and %#x` are admitted and kept as the attribute's lexical form; `%i of %d`, `%i of %` and `%d %d` are
+     still refused under `attribute-lexical`, since a specifier there ends in no listed code: reading 132 reads `d` as
+     none, though the ruling's own example writes it, and a `%` at the end ends in no code at all. The law oracle reads
+     the composed grammar's domain, so both sides judge by the one pattern. This sets aside reading 132's rule of at
+     most one specifier, and the operator's decision of 2026-11-06 on item L4 that it recorded. The corpus writes only
+     `%.1f`, so no verdict moves. This binds pantry and plate alike in what a document may write; how a renderer prints
+     a second conversion is plate's own reading. This is not a case of documents in conflict. (Decided 2026-11-07 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-PRINTFMT.)
+162. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 4.5, OutcomeDeclaration (https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration), says
      of SCORE "Items that declare a numeric outcome variable representing the candidate's overall performance on the item
      should use the outcome name 'SCORE' for the variable. SCORE needs to be a float." (`info.txt:11979`), and of
@@ -3173,7 +3205,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      reading 1 protects valid content. No corpus test declares a SCORE or MAXSCORE of another base type. This binds
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
      type`. Re-cited 2026-11-07 by the Mind on audit b61b8f14's D2: §4.5 for the non-normative §2.2.2.3.)
-162. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
+163. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
      HTML around it says.** MathML 3 section 2.2.1, Attributes
      (https://www.w3.org/TR/MathML3/chapter2.html#interf.toplevel.atts), says "Note that the dir attribute defaults to
      "ltr" on the math element (but inherits on all other elements which accept the dir attribute); this provides for
@@ -3190,7 +3222,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      direction (MathML 3 lists only those two; the value domain refuses another on a MathML element). This binds pantry
      and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on
      audit e8db90e1's F6, under the operator's standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
-163. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
+164. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
      first one listed.** A string mapping whose entries leave `case-sensitive` at its default writes `York` (mapped to 2)
      and `york` (mapped to 1); the document is accepted, and the response `york` matches both. The standard bans
      nothing here: no XSD carries a uniqueness constraint (no `xs:unique` or `xs:key` in `imsqti_asiv3p0_v1p0.xsd` or
@@ -3211,7 +3243,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 425,
      delegated by the operator in mail 69fd02ec; register row B11. Amended 2026-11-07 by the Mind, decision 433: a key
      written twice is a repeat whatever its matching, as reading 160 holds.)
-164. **A test's prefixed `qti-map-response` names a response variable whose declaration holds a `qti-mapping`, and a
+165. **A test's prefixed `qti-map-response` names a response variable whose declaration holds a `qti-mapping`, and a
      test's prefixed `qti-correct` names a response variable.** A test's outcome processing may name an item's variable
      through its item ref (reading 48), `I.RESPONSE`. The information model's section 7.22, MapResponse
      (https://www.imsglobal.org/spec/qti/v3p0/info#Derived_MapResponse), says "This expression looks up the value of a

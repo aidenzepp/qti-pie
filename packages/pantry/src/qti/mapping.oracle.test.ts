@@ -462,7 +462,7 @@ describe("qti/mapping.ts, the oracle's mapping laws", { timeout: searchTimeout }
           {
             breaks: [],
             keys: ["York", "york"],
-            name: "string keys differing only by case, both matched by the default (reading 163)",
+            name: "string keys differing only by case, both matched by the default (reading 164)",
             type: "string",
           },
           {

@@ -699,17 +699,19 @@ const nonEmptyUrl = (domain: Domain): Domain => withPattern(domain, ".*[^ ].*");
  * (#, 0, -, " " [space] and +), an optional digit string indicating the minimum field width, an
  * optional precision (consisting of a "." followed by zero or more digits) and finally one of the
  * conversion type codes: E, e, f, G, g, r, R, i, o, X, or x" (§2.3.4). So a format is a printf
- * format string over those codes: characters but `%`, the escape `%%`, and at most one conversion
- * specifier. C says "If there are insufficient arguments for the format, the behavior is undefined"
- * (C11 §7.21.6.1), and a printed variable formats its one value, so a second specifier would read
- * an argument that is not there; a format with none prints its text alone. `%%` converts no
- * argument. A `%` that begins no specifier, and a code the sentence does not list (`d`), are
- * refused.
+ * format string over those codes: characters but `%`, the escape `%%`, and conversion specifiers,
+ * any number of them. Spec reading 161 sets aside reading 132's rule of at most one specifier: QTI
+ * bans no second conversion, C's undefined behaviour for a missing argument (C11 §7.21.6.1) is no
+ * QTI prohibition, and pantry never renders, so `%i of %i` is stored as written and how it prints
+ * is the renderer's call. `%%` converts no argument, and a format with no specifier prints its
+ * text alone. A `%` that begins no specifier, and a code the sentence does not list (`d`), are
+ * refused, wherever they stand.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Variable | QTI 3.0 information model, 2.3.4 Variable Content}
  * @see {@link https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf | C11 (N1570), 7.21.6.1 The fprintf function}
+ * @see {@link https://github.com/aidenzepp/qti-pie/pull/46#issuecomment-6701102861 | The ruling of two or more conversions, PR #46}
  */
-const printfFormat = String.raw`([^%]|%%)*(%[#0 +\-]*[0-9]*(\.[0-9]*)?[EefGgrRioXx]([^%]|%%)*)?`;
+const printfFormat = String.raw`([^%]|%%|%[#0 +\-]*[0-9]*(\.[0-9]*)?[EefGgrRioXx])*`;
 
 /**
  * A token of RFC 2045's media type, "1*<any (US-ASCII) CHAR except SPACE, CTLs, or tspecials>"
@@ -964,8 +966,8 @@ const cnBaseReadings: readonly SpecReading[] = attributeDeclarations
  * - 129: an `xml:lang` is a BCP 47 language tag or empty, but on an item or a stimulus, where it is a
  *   tag ({@link xmlLanguage}, {@link rootLanguage}); a `lang` is a tag or empty
  *   ({@link languageOrEmpty}); a `track`'s `srclang` is a tag ({@link languageOnly}).
- * - 132: a `qti-printed-variable`'s `format` is a printf format string of at most one conversion,
- *   over the information model's conversion codes ({@link printfFormat}).
+ * - 132 and 161: a `qti-printed-variable`'s `format` is a printf format string over the information
+ *   model's conversion codes, of any number of conversions ({@link printfFormat}).
  * - 135: a MIME type, and each item of a list of them, is RFC 2045's type and subtype, two tokens
  *   joined by a slash ({@link mediaType}, {@link mediaTypeReadings}).
  *

@@ -499,8 +499,8 @@ export const recorded: readonly Recorded[] = [
     reason: {
       _tag: "reading",
       reading: 132,
-      says: "A printed variable's `format` is a printf format string of at most one conversion, over the information model's conversion codes.",
-      why: "the information model's printf grammar (§2.3.4), at most one conversion, where the XSD types format xs:normalizedString",
+      says: "A format is read as a C format string, whose conversion specifiers the information model restricts",
+      why: "the information model's printf grammar (§2.3.4), each conversion specifier over its listed codes, any number of them (reading 161), where the XSD types format xs:normalizedString",
     },
     xsd: "valid",
   },

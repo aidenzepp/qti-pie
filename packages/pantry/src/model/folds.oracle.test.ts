@@ -751,6 +751,8 @@ const unconstructed = {
   "Declaration not reserved": "a declaration's identifier, a value drawn without reading",
   "Document entry": "a package's law",
   "DocumentId key": "an ID's uniqueness, over values drawn without reading",
+  "Equal tolerance":
+    "a qti-equal's tolerance mode and values (reading 121), over lexical forms drawn without reading",
   "Feedback outcome type": "a reference, over identifiers drawn without reading",
   "Feedback reference": "a reference, over identifiers drawn without reading",
   "File listed": "a package's law",
@@ -891,29 +893,72 @@ const placedAlone: ReadonlyMap<string, readonly ElementKind<Composed>[]> = new M
 );
 
 /**
- * The tape of the tree that broke "Table headers" in a search that held it to every generated tree:
- * a td that no table holds, so takes part in none, whose headers name `v` (reading 126). It was the
- * free suite's red at 9b3a28a1 (TEST_SEED=2144430066, the rotating stream's case 199, shrunk), from
- * 4d7eed2f, which stated the law without naming it among the {@link unconstructed}.
+ * A tree that broke an unconstructed law in a search that held it to every generated tree, drawn
+ * again from its tape: a kept case of the search below, which must still meet every constructed
+ * law and still break the law it names, so the law stays stated and stays among the
+ * {@link unconstructed}.
+ *
+ * @param token - The tree's tape token, from the search's `TEST_REPLAY`.
+ * @param note - What the tree holds that breaks the law.
+ * @param law - The unconstructed law it breaks.
+ * @returns The kept case.
  */
-const headersOutsideTableTape = valuesFromToken(
-  "0.2.0.3.3.0.0.3.3.3.d.3.d.0.0.0.1.0.0.4.3.1.0.e.0.2.0.a3.0.0.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.gw.0.2.0.0.1.0.0.0.0.0.0.0.0.1.p.1.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.57b.0.2.0.0.1.0.0.0.0.0.0.0.0.0.0.0.2.0.0.0.0.0.0.2.0.0.2.0.3.0.0.0.0.0.0.0.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1dk.0.2.0.0.0.0.0.0.0.2.0.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.1.1j.1.0.0.0.0.0.0",
-);
+const unconstructedCase = (
+  token: string,
+  note: string,
+  law: keyof typeof unconstructed,
+): Kept<GeneratedXdm, Situation> => {
+  const tape = valuesFromToken(token);
+
+  return {
+    draws: "",
+    note,
+    reaches: [`${law} refuses`],
+    sketch: generate(documents, forcedChooser(tape, tape.length)).value,
+  };
+};
 
 /**
- * That tree, drawn again from its tape: a kept case of the search below, which must still meet
- * every constructed law and still break "Table headers", so the law stays stated and stays
- * unconstructed.
+ * The trees that broke an unconstructed law in a search that named it constructed, each shrunk by
+ * its run:
+ *
+ * - Four write a td whose headers name `v`, which no th of its table has as its id (reading 126). The
+ *   first, a td no table holds, so takes part in none, was the free suite's red at 9b3a28a1
+ *   (TEST_SEED=2144430066, the rotating stream's case 199), from 4d7eed2f, which stated "Table
+ *   headers" without naming it among the unconstructed. The other three are the reds Aiden found at
+ *   1ee51d8d (PR #46, comment 6701102861): a table's thead, a td under ssml:audio and a table-less
+ *   tfoot.
+ * - One writes a qti-equal whose tolerance is empty, which holds no value where a tolerance holds one
+ *   or two (reading 121): Aiden's red at TEST_SEED=3952699438, with "Equal tolerance" stated over a
+ *   lexical form drawn without reading but not named among the unconstructed.
  */
-const headersOutsideTable: Kept<GeneratedXdm, Situation> = {
-  draws: "",
-  note: "a td no table holds names a header: Table headers falls where it falls",
-  reaches: ["Table headers refuses"],
-  sketch: generate(
-    documents,
-    forcedChooser(headersOutsideTableTape, headersOutsideTableTape.length),
-  ).value,
-};
+const unconstructedCases: readonly Kept<GeneratedXdm, Situation>[] = [
+  unconstructedCase(
+    "0.2.0.3.3.0.0.3.3.3.d.3.d.0.0.0.1.0.0.4.3.1.0.e.0.2.0.a3.0.0.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.gw.0.2.0.0.1.0.0.0.0.0.0.0.0.1.p.1.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.57b.0.2.0.0.1.0.0.0.0.0.0.0.0.0.0.0.2.0.0.0.0.0.0.2.0.0.2.0.3.0.0.0.0.0.0.0.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1dk.0.2.0.0.0.0.0.0.0.2.0.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.1.1j.1.0.0.0.0.0.0",
+    "a td no table holds names a header (TEST_SEED=2144430066)",
+    "Table headers",
+  ),
+  unconstructedCase(
+    "6.2.0.3.3.0.3.0.0.d.3.d.d.d.3.0.0.4.3.0.0.8.0.1.0.7sc.1.0.3.0.0.0.0.0.0.2.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.0.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.1i.0.1.0.0.0.0.0.0.0",
+    "a td in a table's thead names a header no th of the table has (TEST_SEED=1119914124)",
+    "Table headers",
+  ),
+  unconstructedCase(
+    "0.1.0.0.9.9.0.0.9.f.0.0.0.0.0.0.0.2.1.2.3.4.2.4.0.5dq.0.2.0.1i.0.0.0.0.1.p.0.0.0.29.1.1.0.0.0.0.0.fy.0.0.6.p.0.0.0.4j.0.0.7.p.0.0.0.1tj.1.1.0.0.0.0.1.0.0.0.0.0.1.0.0.1.0.0.0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.3td.0.0.4.0.0.0.0.5.0.0.0.0.0.0.0.0.0.0.0.0.0.0.p.0.0.0.0.0.0.4.0.0.0.0.0.0.0.0.0.0.p.0.0.0.44w.0.1.1j.1.0.0.0",
+    "a td under ssml:audio, which no table holds, names a header (TEST_SEED=4046452640)",
+    "Table headers",
+  ),
+  unconstructedCase(
+    "8.1.0.0.0.9.0.9.9.c.2.c.0.9.0.0.0.0.3.1.1.3.0.2.1.0.1c1.1.1.3.0.0.0.0.0.0.0.3.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.4.0.0.1.0.3.0.0.0.0.0.0.1.0.0.1.0.0.0.0.0.0.0.0.0.4.0.18.1.1.0.0.1.0.0.0.0.0.0.0.1.0.0.0.0.0.0.5.0.0.0.0.1.0.0.0.0.0.1.0.0.0.0.1.1.0.0.1.0.0.0.0.0.0.2.0.0.0.0.0.0.0.0.0.0.1.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1.0.0.0.0.0.0.1.1.0.0.0.0.0.1.1.1.0.0.0.0.0.0.1.0.1.0.1.0.0.0.0.0.0.0.0.1.0.0.0.0.0.1.0.1.0.0.0.0.0.0.1.0.1.0.0.0.0.0.1.0.1.0.0.0.0.0.0.0.0.0.0.1.0.0.0.0.0.0.1.0.0.1.0.0.0.0.0.0.1.0.0.0.0.0.0.0.0.0.0.1.0.3.0.0.0.0.0.0.0.0.0.0.3.0.0.0.0.3.0.0.0.0.0.0.0.0.4.0.0.0.0.0.0.1.0.0.0.0.0.1.0.1.0.0.1.0.0.0.0.0.0.0.1.1.0.0.0.0.0.1.0.2.0.0.0.0.1.0.0.1.0.0.0.0.0.0.0.0.0.p.1.0.0.1ve.0.0.0.0.0.1.0.0.1.0.0.0.0.0.0.0.0.0.1.0.2.0.1i.0.1.0.0.0.0.0.0",
+    "a td under a tfoot no table holds names a header (TEST_SEED=1912931461)",
+    "Table headers",
+  ),
+  unconstructedCase(
+    "0.2.0.3.3.0.3.0.3.d.0.0.3.0.0.0.1.0.0.2.1.0.0.1.0.1.0.865.1.0.0.0.0.0.0.0.1en.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0",
+    "a qti-equal writes an empty tolerance (TEST_SEED=3952699438)",
+    "Equal tolerance",
+  ),
+];
 
 describe("the host's law model over folded rows", { timeout: searchTimeout }, () => {
   it.effect("holds every law a generated tree is built to meet", (ctx) =>
@@ -925,7 +970,7 @@ describe("the host's law model over folded rows", { timeout: searchTimeout }, ()
     searched(
       ctx,
       explore(
-        { ...over("model/folds-laws-valid", lawModelOracle), kept: [headersOutsideTable] },
+        { ...over("model/folds-laws-valid", lawModelOracle), kept: unconstructedCases },
         ({ document, model }, c) =>
           Effect.gen(function* valid() {
             c.noteAll(featuresOf(document));
