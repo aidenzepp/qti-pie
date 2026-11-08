@@ -1017,6 +1017,64 @@ describe.skipIf(!hasLease)(
         },
         {
           apply: () =>
+            Effect.flatMap(
+              editedSimple("data-name-upper", [inBody(`<p data-note="x">See.</p>`)]),
+              (dir) =>
+                applyEdited(
+                  dir,
+                  editNode(
+                    (node) => node.attributes.some(({ name }) => name === "data-*"),
+                    (node) => ({
+                      ...node,
+                      attributes: node.attributes.map((attribute) =>
+                        attribute.name === "data-*"
+                          ? {
+                              ...attribute,
+                              openName: attribute.openName.map((open) => ({
+                                ...open,
+                                local: "data-A",
+                              })),
+                            }
+                          : attribute,
+                      ),
+                    }),
+                  ),
+                ),
+            ),
+          laws: [checkNamed("OpenAttributeName", "AL4_data_name")],
+          name: "a data-* name with an upper-case local (AL4 data name)",
+        },
+        {
+          apply: () =>
+            Effect.flatMap(
+              editedSimple("data-name-declared", [inBody(`<p data-note="x">See.</p>`)]),
+              (dir) =>
+                applyEdited(
+                  dir,
+                  editNode(
+                    (node) => node.attributes.some(({ name }) => name === "data-*"),
+                    (node) => ({
+                      ...node,
+                      attributes: node.attributes.map((attribute) =>
+                        attribute.name === "data-*"
+                          ? {
+                              ...attribute,
+                              openName: attribute.openName.map((open) => ({
+                                ...open,
+                                local: "data-catalog-idref",
+                              })),
+                            }
+                          : attribute,
+                      ),
+                    }),
+                  ),
+                ),
+            ),
+          laws: [checkNamed("OpenAttributeName", "AL4_declared_data_name")],
+          name: "a data-* name the p element's governor declares (AL4 declared data name)",
+        },
+        {
+          apply: () =>
             Effect.flatMap(materialize("sharedMedia"), (dir) =>
               applyEdited(
                 dir,
