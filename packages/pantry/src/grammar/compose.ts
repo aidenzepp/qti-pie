@@ -454,7 +454,8 @@ const isXsNamespace = (name: NamespaceName): boolean =>
  * `ValueDomain` handle with no pattern (`emptyDomains` of the attribute grammar, C47): a foreign
  * element whose `xsi:type` names it holds no valid text. No pattern spells the empty language that
  * grizzle admits (it refuses a `Compute.matches` pattern no text matches,
- * `scalar/regex/admit.ts:121`), so the laws read the domain's emptiness, not a pattern.
+ * `scalar/regex/admit.ts:98-102`, `matchPattern`), so the laws read the domain's emptiness, not a
+ * pattern.
  *
  * @param namespaces - The namespaces of the composition's vocabularies.
  * @returns The rows.

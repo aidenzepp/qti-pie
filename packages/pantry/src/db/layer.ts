@@ -44,10 +44,12 @@ const authorAppRole = "qti__author_app";
  * The author application's session pool: at most 10 sessions, 1 kept open once opened, and the
  * others closed 5,000 ms after their last use.
  *
- * Grizzle states no number of its own. These are the bounds grizzle 48256f8 fixed for every pool,
- * which every lease run of this package has passed under.
+ * Grizzle chooses no size and no timeout: the caller sizes the pool (`PoolBounds`,
+ * `adapter/types/layer.ts:80-95` at the pin). These are the bounds grizzle fixed for every pool
+ * before it left them to the caller (`poolBounds`, `core/policy.ts:198-199` at `48256f8`), which
+ * every lease run of this package has passed under.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/48256f8d61484d18aea2023f2d6fb54d07d46abf/packages/engine/src/core/policy.ts
+ * @see https://github.com/bjornpagen/grizzle/blob/0c2154c75d173f20b8f2198bffc2a626f5ea431f/packages/grizzle/src/adapter/types/layer.ts#L80-L95
  */
 const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
 

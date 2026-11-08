@@ -28,7 +28,7 @@
  *   `xs:NOTATION`'s, whose value space is the notations a schema declares, and no pinned XSD
  *   declares one, XML Schema 1.0 Part 2 §3.2.19) holds no value, so a value in one is refused by
  *   the domain's identity: grizzle refuses a pattern whose language is empty
- *   (`scalar/regex/admit.ts:121`), so the domain has no pattern to match (C47).
+ *   (`scalar/regex/admit.ts:98-102`, `matchPattern`), so the domain has no pattern to match (C47).
  * - **AL2** (C9): `slot` is the singleton of the name's slot, `Compute.singleton(slot)`. It is
  *   written by the host and proved by `E1_derived`, because a generated field reads the caller's
  *   fields alone and `version`, `kind` and `governs` are copies. The `or` fold over the family,
