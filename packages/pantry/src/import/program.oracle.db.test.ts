@@ -8,11 +8,11 @@
  * The cases over a whole package that the slices left to the importer (their reports, and the
  * orchestrator's lists of 2026-11-06) run through one helper: a valid package, one edit, the
  * apply. An edit is either of the package's text ({@link editedSimple}, a fixture spec over
- * `simple`), which the reader and the codec read like any package, or of one row of its inputs
- * before the ChangeSet is built ({@link applyEdited}), which writes a state no valid document
- * shreds to but every written type admits. A corruption no written type admits (a gap in a
- * family's slots, a wrong count, a junk accumulator) cannot be written through the API at all;
- * those are the slices' direct-SQL cases.
+ * `simple`), which the reader and the codec read like any package, or of one row of its inputs,
+ * with the copy of it the import writes beside it, before the ChangeSet is built
+ * ({@link applyEdited}), which writes a state no valid document shreds to but every written type
+ * admits. A corruption no written type admits (a gap in a family's slots, a wrong count, a junk
+ * accumulator) cannot be written through the API at all; those are the slices' direct-SQL cases.
  *
  * Each case also logs how long `db.compile` takes over its ChangeSet (the W5 amendment's C19), the
  * compile time per package the network seat reports.
@@ -342,6 +342,29 @@ const editNode =
   };
 
 /**
+ * `simple`'s correct response, the text of its first value: a value of its identifier response, so
+ * its text with a letter appended is still a lexical form of its base type.
+ */
+const correctChoice = "ChoiceA";
+
+/**
+ * Find the node of a package's value of a text, by its inputs' `Value` rows.
+ *
+ * @param inputs - The package's inputs.
+ * @param text - The value's text.
+ * @returns The value's node; a test failure when no value has the text.
+ */
+const valueNodeOf = (inputs: PackageInputs, text: string): string => {
+  for (const row of inputs.Value.values()) {
+    if (row.text === text) {
+      return row.node;
+    }
+  }
+
+  return assert.fail(`no value of the package has the text ${text}`);
+};
+
+/**
  * The password a connection authenticates with, read once.
  *
  * @param password - The connection's password.
@@ -658,7 +681,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [containedIn("Mapping", "MappableBaseType")],
+          laws: [containedIn("MappingBaseType", "MappableBaseType")],
           name: "a mapping on a file response (mapping-base-type, Q5.11)",
         },
         {
@@ -671,7 +694,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [containedIn("Mapping", "MappableBaseType")],
+          laws: [checkNamed("MappingCardinality", "MappableBaseType")],
           name: "a mapping on a record response (mapping-base-type, Q5.11)",
         },
         {
@@ -723,7 +746,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [checkNamed("AreaMapping", "AreaMapping_base_type")],
+          laws: [containedIn("AreaMapping", "DeclarationBaseType")],
           name: "an area mapping on a pair response (mapping-base-type, Q5.11)",
         },
         {
@@ -736,7 +759,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [checkNamed("LookupTable", "Lookup_table_cardinality")],
+          laws: [checkNamed("LookupTableCardinality", "Lookup_table_cardinality")],
           name: "a match table on a multiple-cardinality outcome (lookup-cardinality, Q5.11)",
         },
         {
@@ -798,6 +821,7 @@ describe.skipIf(!hasLease)(
             containedIn("ResourceHref", "Document"),
             containedIn("FileHref", "Entry"),
             containedIn("File", "Entry"),
+            containedIn("TypedHref", "LomResource"),
           ],
           name: "a document href no entry holds (entry-kind, Q5.06)",
         },
@@ -944,7 +968,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [checkNamed("MapKey", "Typed_attribute_value")],
+          laws: [checkNamed("MapKeyType", "Typed_attribute_value")],
           name: "an integer mapping keyed abc (Typed attribute value, Q5.11)",
         },
         {
@@ -957,7 +981,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [checkNamed("LookupValue", "Typed_attribute_value")],
+          laws: [checkNamed("LookupValueType", "Typed_attribute_value")],
           name: "an integer outcome's match table entry targeting x (Typed attribute value, Q5.11)",
         },
         {
@@ -1009,25 +1033,41 @@ describe.skipIf(!hasLease)(
         },
         {
           apply: () =>
-            applyEdited(fixtures.simple, (inputs) => ({
-              ...inputs,
-              Value: new Map([...inputs.Value].slice(1)),
-            })),
+            applyEdited(fixtures.simple, (inputs) => {
+              const node = valueNodeOf(inputs, correctChoice);
+
+              return {
+                ...inputs,
+                TypedValue: new Map([...inputs.TypedValue].filter(([, row]) => row.node !== node)),
+                Value: new Map([...inputs.Value].filter(([, row]) => row.node !== node)),
+              };
+            }),
           laws: [containedIn("Node", "Value")],
           name: "a value with no Value row (Q5.08)",
         },
         {
           apply: () =>
-            applyEdited(fixtures.simple, (inputs) => ({
-              ...inputs,
-              Value: new Map(
-                [...inputs.Value].map(([key, row], at) => [
-                  key,
-                  at === 0 ? { ...row, text: `${row.text}x` } : row,
-                ]),
-              ),
-            })),
-          laws: [containedIn("Value", "Node"), containedIn("Node", "Value")],
+            applyEdited(fixtures.simple, (inputs) => {
+              const node = valueNodeOf(inputs, correctChoice);
+              const text = `${correctChoice}x`;
+
+              return {
+                ...inputs,
+                TypedValue: new Map(
+                  [...inputs.TypedValue].map(([key, row]) => [
+                    key,
+                    row.node === node ? { ...row, text } : row,
+                  ]),
+                ),
+                Value: new Map(
+                  [...inputs.Value].map(([key, row]) => [
+                    key,
+                    row.node === node ? { ...row, text } : row,
+                  ]),
+                ),
+              };
+            }),
+          laws: [containedIn("Value", "Node")],
           name: "a value whose text is not its node's string value (Q5.08)",
         },
       ];

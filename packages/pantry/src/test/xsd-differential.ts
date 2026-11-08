@@ -156,17 +156,17 @@ export const emptyIdrefsRecord: Recorded = {
 
 /**
  * A blank list in element content: libxml2 2.9.13 accepts an element an `xsi:type` types
- * `xs:NMTOKENS` or `xs:IDREFS` whose content is empty or blank, a list of no item, which the type's
- * `minLength` of 1 refuses (XML Schema Part 2, 3.3.5 and 3.3.10), as {@link emptyIdrefsRecord}
- * says of an attribute.
+ * `xs:NMTOKENS`, `xs:IDREFS` or `xs:ENTITIES` whose content is empty or blank, a list of no item,
+ * which the type's `minLength` of 1 refuses (XML Schema Part 2, 3.3.5, 3.3.10 and 3.3.12), as
+ * {@link emptyIdrefsRecord} says of an attribute.
  */
 export const blankListRecord: Recorded = {
   class: "text-value",
-  detail: /^TextDomain at \S+: "(?:\\[tnr]| )*" is outside xs:(?:IDREFS|NMTOKENS), /u,
+  detail: /^TextDomain at \S+: "(?:\\[tnr]| )*" is outside xs:(?:ENTITIES|IDREFS|NMTOKENS), /u,
   direction: "oracle-only",
   reason: {
     _tag: "libxml2",
-    why: "libxml2 accepts an element of a list type, xs:NMTOKENS or xs:IDREFS, that holds no item, which the type's minLength of 1 refuses",
+    why: "libxml2 accepts an element of a list type, xs:NMTOKENS, xs:IDREFS or xs:ENTITIES, that holds no item, which the type's minLength of 1 refuses",
   },
   rule: "text-copy",
 };
@@ -849,6 +849,13 @@ const mathmlSegment = (() => {
 const coveredMessages = new RegExp(String.raw`^${mathmlSegment}(?: \| ${mathmlSegment})*$`, "u");
 
 /**
+ * One message of libxml2's refusing a match table entry's `target-value` as no base-type name: the
+ * value as written between its quotes, line ends included, which runs to the message's own end and
+ * no further, so a run of messages never reads as one value.
+ */
+const targetValueMessage = String.raw`line \d+ \{http://www\.imsglobal\.org/xsd/imsqtiasi_v3p0\}qti-match-table-entry: \[facet 'enumeration'\] The value '(?:(?!' is not an element of the set )[\s\S])*' is not an element of the set \{'boolean', 'directedPair', [^}]*\}\.`;
+
+/**
  * The differences generated documents show that no corpus document does, classified as
  * {@link recorded} classifies the corpus's. A generated run draws its own documents, so a record
  * here may match nothing in a run, and none goes stale.
@@ -960,8 +967,7 @@ export const generatedRecorded: readonly Recorded[] = [
   },
   {
     class: "attribute-value",
-    detail:
-      /^line \d+ \{http:\/\/www\.imsglobal\.org\/xsd\/imsqtiasi_v3p0\}qti-match-table-entry: \[facet 'enumeration'\] The value '.*?' is not an element of the set \{'boolean', 'directedPair', [^}]*\}\.(?: \| line \d+ \{http:\/\/www\.imsglobal\.org\/xsd\/imsqtiasi_v3p0\}qti-match-table-entry: \[facet 'enumeration'\] The value '.*?' is not an element of the set \{'boolean', 'directedPair', [^}]*\}\.)*$/u,
+    detail: new RegExp(`^${targetValueMessage}(?: \\| ${targetValueMessage})*$`, "u"),
     direction: "xsd-only",
     reason: {
       _tag: "reading",
@@ -1402,6 +1408,17 @@ export const generatedRecorded: readonly Recorded[] = [
       why: "a lookup's expression is a single integer, float or duration, and an integer for a match table; the XSD types no expression",
     },
     rule: "P22",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 121,
+      says: "Under `tolerance-mode` absolute or relative, a `qti-equal` carries a `tolerance`; every `tolerance` is one or two values, each number among them above 0.",
+      why: 'an absolute or relative qti-equal names its tolerance, and every tolerance, in exact mode too, is one or two values, each number among them above 0, so tolerance="" holds none and is refused; the XSD types tolerance as an unbounded list of a union of xs:string and xs:double, which admits any value, and requires none',
+    },
+    rule: "P36",
   },
   {
     class: "beyond",
