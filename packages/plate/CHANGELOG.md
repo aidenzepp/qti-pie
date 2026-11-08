@@ -14,7 +14,9 @@ and both of its entry points are unstable until M3.
 - A test's outcome processing runs. A test session runs it from the declared defaults after
   `advance` submits an item of an individual part, once after it submits a simultaneous part, and
   once more when the test closes. `TestSession` gains `outcomes`, the test's outcomes as the last
-  run left them, and `outcomeRuns`, the number of runs. The README's
+  run left them, and `outcomeRuns`, the number of runs. In a test that holds a
+  `qti-assessment-section-ref`, outcome processing that holds one of the eight outcome-only
+  expressions is marked and does not run. The README's
   [Outcome processing](README.md#outcome-processing) section says what a host can rely on.
 - `results` writes the test's own outcomes as the session holds them. A test with no outcome
   processing still writes its outcomes' defaults, and a test whose outcome processing the verdict
@@ -39,6 +41,12 @@ and both of its entry points are unstable until M3.
   whose records or template defaults do not fit its test. `openPackage` refuses such a default.
 - `AcceptedTest`'s `test` gains `outcomeProcessing`, which is `absent`, `marked` or `runs` with its
   rules, and each item ref gains `weights`, `mappings` and `templateDefaults`.
+- `Accepted`'s `item` gains `unheld`: its response, outcome and template declarations of base type
+  `file` or cardinality `record`, keyed by identifier, which a test's processing reads through an
+  item ref as NULL. It is absent when the item makes none. Each `UnheldDeclaration` holds the
+  identifier, the base type and cardinality as written, and `kind`, which is `response`, `outcome`
+  or `template`. A response's also holds `declaresCorrect`: whether it holds a
+  `qti-correct-response`, which `qti-number-correct` and `qti-number-incorrect` read.
 - A duration is a value: `Value` gains `{ baseType: "duration", value }`, its seconds as a double. A
   `qti-value`, a `qti-base-value` and a stored value of base type `duration` write its seconds as a
   float is written, such as `90.5` or `INF`, and `open` refuses an ISO 8601 duration such as
@@ -170,6 +178,24 @@ and both of its entry points are unstable until M3.
   - `qti-outcome-minimum` leaves out an item with no `normal-minimum` and applies no default for it
     _(pending)_. An item-session built-in has no `normal-minimum` or `normal-maximum`, so the
     minimum leaves the item out and the maximum is NULL _(pending)_.
+
+### How plate reads booleans and mappings (2026-11-07)
+
+- An `xs:boolean` attribute plate reads, such as `time-dependent`, `adaptive`, `shuffle`,
+  `required`, `fixed`, `visible` and `keep-together`, takes `true`, `false`, `1` and `0`, as XML
+  Schema Part 2 defines the type. plate already read all four, so no verdict changes.
+- A boolean `qti-value` or `qti-base-value` is still `true` or `false` only, and `open` refuses `1`
+  or `0` there with `value-type` (reading 34). The QTI XSD types both elements as strings, so it
+  does not decide, and the information model permits `true` and `false`. No verdict changes.
+- A value that two or more entries of a `qti-mapping` match maps by the first entry listed, as a
+  point that two areas of a `qti-area-mapping` hold maps by the first area listed. pantry reads it
+  the same way, as its reading 150, which `docs/spec-readings.md` does not number yet _(pending)_.
+  plate already mapped so, and no verdict changes.
+- The refusal of a `qti-map-response`, `qti-map-response-point` or `qti-correct` that names a
+  built-in, such as `numAttempts`, or a dotted name that reads anything but a response, says why
+  and what to write instead: a built-in has no declaration, so no mapping or correct response, and
+  the fix is a declared response, written `ITEMREF.RESPONSE` for a dotted name. Before, it said to
+  declare the name, which no declaration can give. The rule and the verdict do not change.
 
 ### Template processing (M3)
 
