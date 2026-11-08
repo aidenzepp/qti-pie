@@ -98,6 +98,13 @@ const strayNode = (at: number): `${string}-${string}-${string}-${string}-${strin
   `00000000-0000-4000-8000-0000000019${String(at).padStart(2, "0")}`;
 
 /**
+ * PostgreSQL's name of the CHECK `E1_derived`, as grizzle names a check: its declared name split at
+ * each case change and at each edge of a digit run, lowercased and joined by underscores
+ * (`conversionOf`, `packages/engine/src/core/identity.ts`, which grizzle does not export).
+ */
+const derivedCheck = "e_1_derived";
+
+/**
  * Whether an outcome is `invariant-rejected` with a law among its `laws` that the predicate picks.
  *
  * @param outcome - The apply's outcome.
@@ -777,17 +784,17 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               [
                 "a least whose integer is not its form's",
                 { fact: leastOf({ least: "02", leastValue: 3n }), relation: LeastCount },
-                "e1_derived",
+                derivedCheck,
               ],
               [
                 "a least no integer reads",
                 { fact: leastOf({ least: "two", leastValue: 2n }), relation: LeastCount },
-                "e1_derived",
+                derivedCheck,
               ],
               [
                 "a most written as no count",
                 { fact: mostOf({ most: "1abc", mostValue: 1n }), relation: MostCount },
-                "e1_derived",
+                derivedCheck,
               ],
               [
                 "an unwritten least whose kind has no default",
@@ -795,7 +802,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   fact: leastOf({ least: "0", leastValue: 0n, minWritten: false }),
                   relation: LeastCount,
                 },
-                "e1_derived",
+                derivedCheck,
               ],
             ];
             for (const [label, stated, constraint] of cases) {
@@ -1389,7 +1396,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   declarations: 0n,
                   hottexts: 0n,
                 }),
-                "e_1_derived",
+                derivedCheck,
               ],
             ] as const) {
               const refused = Option.getOrUndefined(

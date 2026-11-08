@@ -14,12 +14,13 @@
  *
  * A `Reading`'s owner, its `AssembledReference`, is lawful only placed in an assembly
  * (`E1_derived`: at least one `PlacedReference`), so its cases are judged by a direct SQL writer
- * (`#pantry/test/direct-sql.ts`, README "Direct SQL access"): the reading with the three owners
- * its non-deferrable foreign keys read (its `AssembledReference`, that one's `TestReference`, and
- * that one's `ReferenceDocument`), each lawful on its own CHECKs, the rest deferred and rolled
- * back unchecked. A refused case's verdict is the SQLSTATE and the constraint that states the
- * law; a control's is no error. Each breach breaks the one law under test, so the constraint
- * PostgreSQL names is that law's whatever order it checks them in.
+ * (`#pantry/test/direct-sql.ts`, README "Direct SQL access"): the reading with the rows its
+ * non-deferrable foreign keys read (its `AssembledReference`, that one's `TestReference`, that
+ * one's `ReferenceDocument`, and, for a reading through an item ref, its `MappingLookup`), each
+ * lawful on its own CHECKs, the rest deferred and rolled back unchecked. A refused case's verdict
+ * is the SQLSTATE and the constraint that states the law; a control's is no error. Each breach
+ * breaks the one law under test, so the constraint PostgreSQL names is that law's whatever order it
+ * checks them in.
  *
  * The whole-package cases, each fixture of `src/test/fixtures/processing/` imported and refused
  * under its rule or accepted, need the importer and arrive with it (Q5.15): every `broken`
@@ -31,7 +32,7 @@ import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { Addition, ApplyOutcome, Fact, Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Layer, Option } from "effect";
+import { Effect, Formatter, Layer, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
@@ -47,6 +48,7 @@ import {
   ExpressionAttribute,
   HeldType,
   LiteralTyped,
+  MappingLookup,
   MappingSourceDeclaration,
   Operand,
   ProcessingTemplate,
@@ -215,7 +217,7 @@ const referenceChange = (
               baseType: reference.baseType,
               cardinality: reference.cardinality,
               declBaseTypes: 1n,
-              declCardinality: "single",
+              declCardinalities: 1n,
               declaration: strayNode,
               declarationKind: "qti-outcome-declaration",
               document: reference.document,
@@ -382,9 +384,14 @@ const allDigits = /^[0-9]+$/u;
  *   name is its segments joined and is read once unsplit and once at each dot, a numbered segment
  *   once less where it is the last; a section's has no segments and is read once), stated since the
  *   case states fewer readings than the name has;
- * - The readings.
+ * - The readings;
+ * - The `MappingLookup` row of each reading through an item ref (a split or numbered reading of a
+ *   found item ref), at the item ref and the reading's variable, its verdict the reading's
+ *   `mapped`: grizzle installs the reading's foreign key into it immediate, since its deferral rule
+ *   defers only a foreign key on a cycle or into a replaceable target, so PostgreSQL judges it at
+ *   the reading's statement.
  *
- * Every other row they name (the segments, the placements, the lookups, the test's nodes) is
+ * Every other row they name (the segments, the placements, the other lookups, the test's nodes) is
  * absent, its foreign keys deferred and never checked before the rollback.
  *
  * @param readings - The reference's readings, one at least, all of one reference.
@@ -427,6 +434,17 @@ const readingFacts = (
       relation: AssembledReference,
     },
     ...readings.map((reading) => ({ fact: reading, relation: Reading })),
+    ...readings
+      .filter(
+        ({ form, found, namedKind }) =>
+          (form === "split" || form === "numbered") &&
+          found &&
+          namedKind === "qti-assessment-item-ref",
+      )
+      .map((reading) => ({
+        fact: { itemRef: reading.named, mapped: reading.mapped, name: reading.variable },
+        relation: MappingLookup,
+      })),
   ];
 };
 
@@ -1020,6 +1038,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                     {
                       ...second,
                       declBaseTypes: 0n,
+                      declCardinalities: 0n,
                       declaration: nodeOf(70),
                       declared: false,
                       source: "none",
@@ -1269,7 +1288,11 @@ describe.skipIf(!hasLease)(
               const outcome = yield* db.apply(changeSetOf(Author, program.inputs), {});
 
               if (rule === undefined) {
-                assert.strictEqual(outcome.kind, "accepted", `${name}: ${JSON.stringify(outcome)}`);
+                assert.strictEqual(
+                  outcome.kind,
+                  "accepted",
+                  `${name}: ${Formatter.format(outcome)}`,
+                );
               } else {
                 assert.deepStrictEqual(
                   outcome.kind === "invariant-rejected"
@@ -1282,7 +1305,7 @@ describe.skipIf(!hasLease)(
                       ]
                     : [outcome.kind],
                   [rule],
-                  `${name}: every law the refusal names keeps ${rule}: ${JSON.stringify(outcome)}`,
+                  `${name}: every law the refusal names keeps ${rule}: ${Formatter.format(outcome)}`,
                 );
               }
             }
@@ -1318,13 +1341,13 @@ describe.skipIf(!hasLease)(
                 assert.strictEqual(
                   outcome.kind,
                   "accepted",
-                  `${target}: ${JSON.stringify(outcome)}`,
+                  `${target}: ${Formatter.format(outcome)}`,
                 );
               } else {
                 assert.strictEqual(outcome.kind, "invariant-rejected", target);
                 assert.isTrue(
                   refused.every((rule) => rule !== undefined && rules.includes(rule)),
-                  `${target}: every law the refusal names keeps one of ${rules.join(", ")}: ${JSON.stringify(outcome)}`,
+                  `${target}: every law the refusal names keeps one of ${rules.join(", ")}: ${Formatter.format(outcome)}`,
                 );
               }
             }

@@ -10,8 +10,9 @@
  *   `DeclarationIdentifier`, beside the `ChoiceVariableName` row its name's family hangs from (spec
  *   reading 159), its immutable owner (README, "Families": "An immutable owner's family is fixed
  *   when the owner is inserted").
- * - A containment a declaration's cardinality states, a foreign key grizzle defers, is judged by the
- *   same direct SQL writer with that one key set immediate: SQLSTATE 23503 and its name.
+ * - A containment a declaration's cardinality or a typed name's base type states, a foreign key
+ *   grizzle defers, is judged by the same direct SQL writer with that one key set immediate:
+ *   SQLSTATE 23503 and its name.
  * - A row's own CHECKs are judged by a direct SQL writer, as the rules file's rule 8 and grizzle's
  *   README ("Direct SQL access") state it: the author login, `SET ROLE` to the author role,
  *   SERIALIZABLE, every deferrable foreign key deferred, the row inserted into its table with every
@@ -414,23 +415,35 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         () =>
           // Oracle: the specification as a checker, §2.2.2.3 ("SCORE MUST be a float", "MAXSCORE
           // MUST be a float", "PASSED MUST be a boolean") of an outcome, and §2.2.2.1's record
-          // context variable QTI_CONTEXT, with reading 74.
+          // context variable QTI_CONTEXT, with reading 74. A typed name's base type is a
+          // containment from its `DeclarationIdentifier` into the `DeclarationBaseType` rows of
+          // the type the specification gives it, whatever its cardinality (spec reading 158), a
+          // deferred foreign key set immediate: 23503 and its name, found by grizzle's comment on
+          // it. QTI_CONTEXT's kind and cardinality are CHECKs on `DeclarationIdentifier` and
+          // `DeclarationName`: 23514 and `reserved_type`.
           // Bound: each typed outcome name under every declaration kind against every base type
           // (3 × 4 × 11), so the same name of another kind is the control, then QTI_CONTEXT
           // against every declaration kind and cardinality (4 × 4), 148 cases.
           Effect.gen(function* reservedType() {
             const client = yield* loginSession;
             for (const { baseType: kept, identifier, kind: typedKind } of reservedBaseTypes) {
+              const typed = yield* constraintDescribed(
+                client,
+                "declaration_identifier",
+                `%"value":"${identifier}"}}, tag DeclarationBaseType.baseType = ${kept}) to DeclarationBaseType(node, baseType)`,
+              );
               for (const kind of declarationKinds) {
                 for (const baseType of BaseType.handles) {
+                  const { refused } = yield* judgedCase(client, {
+                    immediate: [typed],
+                    inserts: declared(declarationRow({ identifier, kind }), Option.some(baseType)),
+                  });
                   assertVerdict(
-                    yield* judged(
-                      client,
-                      declared(declarationRow({ identifier, kind }), Option.some(baseType)),
-                    ),
-                    "reserved_type",
+                    refused,
+                    typed,
                     kind === typedKind && baseType !== kept,
                     `${kind} ${identifier} ${baseType}`,
+                    "23503",
                   );
                 }
               }

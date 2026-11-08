@@ -188,48 +188,56 @@ const foreignCases: readonly {
  * The items each breaking one law over its node rows, its retired rule's fixture restated (§2.2:
  * `ordering`, `union-count` and `body-empty` become Follow and Last; the counted and barred laws;
  * an ancestry ban and a need), each checked against the host oracle before PostgreSQL judges it.
+ * `beside` names a node law the item also breaks over rows the case does not write: a gap outside
+ * a gap match interaction breaks N8's choice clause, every choice in an interaction, its nearest
+ * (information model §5.55, reading 38), over its `Choice` row, beside N6's need over its nodes.
  */
-const lawCases: readonly { readonly law: LawName; readonly name: string; readonly xml: string }[] =
-  [
-    {
-      law: "N5 Follow",
-      name: "an outcome declaration after the item body (ordering)",
-      xml: itemOf(
-        `<p>x</p>`,
-        `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`,
-      ),
-    },
-    {
-      law: "N7 Last",
-      name: "a choice interaction without a choice (union-count)",
-      xml: itemOf(`<qti-choice-interaction response-identifier="RESPONSE"/>`),
-    },
-    { law: "N7 Last", name: "an item body of whitespace alone (body-empty)", xml: itemOf(" ") },
-    {
-      law: "N7 Counted",
-      name: "a match interaction with one simple match set",
-      xml: itemOf(
-        `<qti-match-interaction response-identifier="RESPONSE" max-associations="1"><qti-simple-match-set><qti-simple-associable-choice identifier="M" match-max="1">M</qti-simple-associable-choice></qti-simple-match-set></qti-match-interaction>`,
-      ),
-    },
-    {
-      law: "N7 barred by",
-      name: "a colgroup with a span and a col",
-      xml: itemOf(`<table><colgroup span="2"><col/></colgroup><tr><td>x</td></tr></table>`),
-    },
-    {
-      law: "N6 ancestry",
-      name: "a text entry inside a hottext interaction (a ban)",
-      xml: itemOf(
-        `<qti-hottext-interaction response-identifier="RESPONSE"><p>Type <qti-text-entry-interaction response-identifier="RESPONSE"/></p></qti-hottext-interaction>`,
-      ),
-    },
-    {
-      law: "N6 ancestry",
-      name: "a gap outside a gap match interaction (a need)",
-      xml: itemOf(`<p>A <qti-gap identifier="G"/></p>`),
-    },
-  ];
+const lawCases: readonly {
+  readonly beside?: readonly LawName[];
+  readonly law: LawName;
+  readonly name: string;
+  readonly xml: string;
+}[] = [
+  {
+    law: "N5 Follow",
+    name: "an outcome declaration after the item body (ordering)",
+    xml: itemOf(
+      `<p>x</p>`,
+      `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`,
+    ),
+  },
+  {
+    law: "N7 Last",
+    name: "a choice interaction without a choice (union-count)",
+    xml: itemOf(`<qti-choice-interaction response-identifier="RESPONSE"/>`),
+  },
+  { law: "N7 Last", name: "an item body of whitespace alone (body-empty)", xml: itemOf(" ") },
+  {
+    law: "N7 Counted",
+    name: "a match interaction with one simple match set",
+    xml: itemOf(
+      `<qti-match-interaction response-identifier="RESPONSE" max-associations="1"><qti-simple-match-set><qti-simple-associable-choice identifier="M" match-max="1">M</qti-simple-associable-choice></qti-simple-match-set></qti-match-interaction>`,
+    ),
+  },
+  {
+    law: "N7 barred by",
+    name: "a colgroup with a span and a col",
+    xml: itemOf(`<table><colgroup span="2"><col/></colgroup><tr><td>x</td></tr></table>`),
+  },
+  {
+    law: "N6 ancestry",
+    name: "a text entry inside a hottext interaction (a ban)",
+    xml: itemOf(
+      `<qti-hottext-interaction response-identifier="RESPONSE"><p>Type <qti-text-entry-interaction response-identifier="RESPONSE"/></p></qti-hottext-interaction>`,
+    ),
+  },
+  {
+    beside: ["N8 nearest"],
+    law: "N6 ancestry",
+    name: "a gap outside a gap match interaction (a need)",
+    xml: itemOf(`<p>A <qti-gap identifier="G"/></p>`),
+  },
+];
 
 /**
  * A constraint of `Node`'s table as the catalog holds it.
@@ -1053,8 +1061,9 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
         "refuses each retired content rule's item by its law, and accepts each law's lawful twin",
         () =>
           // Oracle: the host law model (`#pantry/test/oracle.ts`'s `documentBreaches`), which finds
-          // exactly the case's law among the node laws and none in the lawful items, against
-          // PostgreSQL's verdict.
+          // exactly the case's law among the node laws, with any law it breaks beside over rows the
+          // case does not write, and none in the lawful items, against PostgreSQL's verdict on the
+          // case's node rows, which names the case's law.
           // Bound: the seven items of `lawCases` and the two lawful items.
           Effect.gen(function* content() {
             const client = yield* loginSession;
@@ -1074,10 +1083,10 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
               );
             }
 
-            for (const { law, name, xml } of lawCases) {
+            for (const { beside = [], law, name, xml } of lawCases) {
               const rows = yield* foldedOf(xml);
 
-              assert.deepStrictEqual(nodeBreaches(rows), [law], name);
+              assert.deepStrictEqual(nodeBreaches(rows), [law, ...beside], name);
               assertRefused(
                 constraints,
                 yield* judged(client, statedInserts(nodeFactsOf(rows))),
