@@ -993,7 +993,7 @@ describe("checkTestRules", () => {
     });
   });
 
-  describe("dotted references (readings 4, 5, 37 and 48)", () => {
+  describe('dotted references (readings 4, 5 and 37, and reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))', () => {
     it("accepts prefixed references in pre-conditions, branch rules and outcome processing", () => {
       assert.deepStrictEqual(
         judged(

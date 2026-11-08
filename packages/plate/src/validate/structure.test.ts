@@ -2083,7 +2083,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("readings 22, 23 and 38: placements", () => {
+  describe('readings 22 and 23, and reading 38 ("a `qti-gap` appears only within a gap-match interaction, and a `qti-hottext` may appear in any flow or inline content"): placements', () => {
     it("[I-2] refuses a qti-template-constraint inside qti-template-if as misplaced-element, and still walks it (reading 22)", () => {
       const constraint =
         "qti-assessment-item/qti-template-processing/qti-template-condition/qti-template-if/qti-template-constraint";
@@ -2189,7 +2189,7 @@ describe("checkStructure", () => {
       assert.deepStrictEqual(found(doc(location, section), generatedTables), []);
     });
 
-    it("[I-8] refuses a qti-gap outside a qti-gap-match-interaction as misplaced-element (reading 38)", () => {
+    it('[I-8] refuses a qti-gap outside a qti-gap-match-interaction as misplaced-element, by reading 38 ("a `qti-gap` appears only within a gap-match interaction, and a `qti-hottext` may appear in any flow or inline content")', () => {
       const gap = el("qti-gap", [attr("identifier", "G1")]);
       const loose = body(el("p", [], [gap]));
       const graphic = body(
@@ -3423,7 +3423,7 @@ describe("checkStructure", () => {
       assert.deepStrictEqual(found(customized(widget("z:WeightDType")), generatedTables), [fault]);
     });
 
-    it("relies on the committed tables: the simple and complex types the reading 60 cases name", () => {
+    it('relies on the committed tables: the simple and complex types the cases of reading 60 ("a simple type it names governs its text and is checked") name', () => {
       assert.deepStrictEqual(
         [
           generatedTables.types["MimeTypeListDType"],
@@ -3440,7 +3440,7 @@ describe("checkStructure", () => {
       );
     });
 
-    it("[I-8] refuses an attribute and a child element on foreign content typed by a simple type, and leaves its text unchecked (reading 60)", () => {
+    it('[I-8] refuses an attribute and a child element on foreign content typed by a simple type, and leaves its text unchecked, plate\'s open limit that reading 60 ("a simple type it names governs its text and is checked") records', () => {
       const widgetPath = `${custom}/{${otherNamespace}}widget`;
       const widget = (
         written: string,
@@ -3495,7 +3495,7 @@ describe("checkStructure", () => {
       }
     });
 
-    it("[I-8] cites reading 60 on the refusals of foreign content typed by a simple type", () => {
+    it('[I-8] cites reading 60 ("a simple type it names governs its text and is checked") on the refusals of foreign content typed by a simple type', () => {
       const source = customized(
         el(
           "widget",
@@ -3594,7 +3594,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("reading 56: one reader of xs:double", () => {
+  describe('reading 56 ("an `xs:double` literal beyond the largest finite double names the largest finite double of its sign"): one reader of xs:double', () => {
     it("[I-2] admits normal-maximum 1e400 and INF, and refuses -1e400, 0e0, -0 and NaN (reading 16)", () => {
       const path = "qti-assessment-item/qti-outcome-declaration/@normal-maximum";
 

@@ -164,10 +164,10 @@ const typeSourcesOf = (expression: Expression): readonly Expression[] => {
 };
 
 /**
- * Report whether the item model types an expression's values with no base type (`unknown`), as
- * its kind's rule gives over its operands' types (`kindRules` in
- * `#plate/model/expressions/read.ts`; the qti package types them alike, `resultType` in
- * `packages/pantry/src/processing/types.ts`). On a checked item whose processing runs, that is a
+ * Report whether the item model types an expression's values with no base type (`unknown`), as its
+ * kind's rule gives over its operands' types (`kindRules` in `#plate/model/expressions/read.ts`;
+ * the qti package types them alike, by the typings of `expressionTypings` in
+ * `packages/pantry/src/grammar/expression.ts`). On a checked item whose processing runs, that is a
  * `qti-custom-operator`, whose value plate never knows (9.21), a `qti-field-value`, whose value is
  * of its field's base type, and the kinds whose rule passes an unknown operand's base type up:
  * `qti-multiple`, `qti-ordered` and `qti-repeat` (`sharedBase`), `qti-index` and `qti-random`

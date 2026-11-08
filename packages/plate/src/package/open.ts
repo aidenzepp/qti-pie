@@ -326,7 +326,8 @@ const itemBuiltIns: ReadonlyMap<string, ExpressionType> = new Map([
 
 /**
  * The type of a part's or a section's `duration`, a single duration, where an item's is a float
- * (`partDuration` in `packages/pantry/src/processing/env.ts`).
+ * (`durationScopes` in `packages/pantry/src/qti/expressions.ts`, typed by `builtIns` in
+ * `packages/pantry/src/grammar/references.ts`).
  */
 const scopeDuration: ExpressionType = singleOf("duration");
 
@@ -443,8 +444,11 @@ const sectionRefElements: ReadonlySet<string> = new Set(["qti-assessment-section
 const durationScopes: ReadonlySet<string> = new Set(["qti-assessment-section", "qti-test-part"]);
 
 /**
- * The variables a test's processing holds besides those it declares, as pantry gives a test its
- * built-ins (`builtInsOf("test")` in `packages/pantry/src/processing/env.ts`).
+ * The variables a test's processing holds besides those it declares: `QTI_CONTEXT`,
+ * `completionStatus`, `duration` and `numAttempts`. The qti package now gives a test only
+ * `duration` and `QTI_CONTEXT` (`builtIns` in `packages/pantry/src/grammar/references.ts`); plate
+ * keeps a test's own `numAttempts` and `completionStatus`, accepted and marked, an agreement
+ * difference (G-R3 184, pending).
  */
 const testBuiltIns: ReadonlySet<string> = new Set([
   "QTI_CONTEXT",
@@ -868,8 +872,9 @@ const variablesOf = (document: Document | undefined): Option.Option<ItemVariable
 
 /**
  * What a reading of a dotted reference may name through one resolved item ref: its item's
- * variables, and the targets of the item ref's variable mappings whose source the item declares,
- * as pantry's reach holds them (`testProcessingRows` in `packages/pantry/src/import/reference.ts`).
+ * variables, and the targets of the item ref's variable mappings whose source the item declares, as
+ * pantry's reach holds them (the relations `VariableLookup` and `MappingLookup` in
+ * `packages/pantry/src/qti/expressions.ts`).
  */
 interface ItemRefVariables extends ItemVariables {
   /**
@@ -889,8 +894,8 @@ interface ReferenceScope {
 }
 
 /**
- * The variable one resolving reading of a dotted reference reads, as pantry's `resolveReading`
- * gives it (`packages/pantry/src/processing/env.ts`).
+ * The variable one resolving reading of a dotted reference reads, as pantry's relation `Reading`
+ * gives it (`packages/pantry/src/qti/expressions.ts`).
  */
 interface ReadVariable {
   /**
@@ -1107,13 +1112,13 @@ interface NamedReference {
 }
 
 /**
- * Give each variable an element of a test names, in the element's attribute order: the
- * `identifier` of a `qti-variable`, `qti-correct`, `qti-default`, `qti-map-response` or
- * `qti-map-response-point` ({@link referenceElements}), the `identifier` a
- * `qti-set-outcome-value` or `qti-lookup-outcome-value` sets ({@link targetElements}), and each
- * value of a reference attribute its expression kind's reference facet checks, as pantry's
- * `referenceAttributes` lists them (`figures`, `max`, `min`, `n`, `number-repeats`, `pattern` and
- * `step`; `packages/pantry/src/processing/check.ts`), with the base type its entry names.
+ * Give each variable an element of a test names, in the element's attribute order: the `identifier`
+ * of a `qti-variable`, `qti-correct`, `qti-default`, `qti-map-response` or `qti-map-response-point`
+ * ({@link referenceElements}), the `identifier` a `qti-set-outcome-value` or
+ * `qti-lookup-outcome-value` sets ({@link targetElements}), and each value of a reference attribute
+ * its expression kind's reference facet checks, as pantry derives them from the XSD's unions with
+ * an NCName member (`referenceMembers` in `packages/pantry/src/grammar/references.ts`: `figures`,
+ * `max`, `min`, `n`, `number-repeats`, `pattern` and `step`), with the base type its entry names.
  *
  * A literal names no variable, and a `pattern` names one only as a braced name of a variable the
  * test holds (ruling R1). A name that is no NCName is the structure check's refusal, so it is
@@ -1303,8 +1308,9 @@ const judgeReference = (
 
 /**
  * Judge the variable mappings of the item refs of a test or of a section document a test reaches,
- * as pantry's import judges a `VariableMapping` (`packages/pantry/src/schema/test/rules.ts`), each
- * in document order.
+ * as pantry judges a `VariableMapping` (the `Variable mapping target` and `Variable mapping source`
+ * laws in `packages/pantry/src/qti/tests.ts` and `packages/pantry/src/qti/expressions.ts`), each in
+ * document order.
  *
  * A mapping's `source-identifier` that names no outcome variable the item ref's item declares, a
  * name it does not declare or one it declares as another kind of variable, is
@@ -1404,9 +1410,10 @@ interface TemplateDefaults {
 
 /**
  * Judge the template defaults of the item refs of a test or of a section document a test reaches,
- * as pantry's import judges a `TemplateDefault` (`packages/pantry/src/schema/test/rules.ts`), each
- * in document order, and type the template variable each sets, as pantry's `templateOf` does
- * (`packages/pantry/src/processing/check.ts`).
+ * as pantry judges a `TemplateDefault` (the `Template default target` law in
+ * `packages/pantry/src/qti/expressions.ts`), each in document order, and type the template variable
+ * each sets, as pantry's `TemplateDefaultTarget` does (the `Template default type` law in
+ * `packages/pantry/src/qti/expressions.ts`).
  *
  * A default's `template-identifier` that names no template variable the item ref's item declares, a
  * name it does not declare or one it declares as another kind of variable, is
@@ -1746,11 +1753,12 @@ const variablesThrough = (
  * test's own document, then each section document it reaches, in the order it reaches them, each in
  * its document order.
  *
- * The identifier of a section or item reference "must be unique within the test and must not be
- * the identifier of any testPart" (`info.txt:10759`), and a section ref reads as if its section
- * document were inline, so pantry keys each structure identifier by the test that reaches it
- * (`TestReach` in `packages/pantry/src/schema/test/structure.ts`, refused `structure-identifier`).
- * The first occurrence wins: a later one that a document reached before already gave is
+ * The identifier of a section or item reference "must be unique within the test and must not be the
+ * identifier of any testPart" (`info.txt:10759`), and a section ref reads as if its section
+ * document were inline. Pantry keys each structure identifier within its document (the `Structure
+ * identifier` law, refused `structure-identifier`) and across the assembled test (the `Test name
+ * key` law, refused `test-name-key`), both in `packages/pantry/src/qti/tests.ts`. The first
+ * occurrence wins: a later one that a document reached before already gave is
  * `duplicate-identifier` at its `identifier` attribute, its detail the `identifier`, as the test
  * rules give one within a document. One a document gives twice is its own verdict's
  * (`duplicateIdentifier` in `#plate/validate/test-rules.ts`), so only a document's first occurrence
@@ -2108,8 +2116,9 @@ const judgeTest = (
  * reach it: their variable mappings by {@link judgeMappings} and their template defaults by
  * {@link judgeTemplateDefaults}, against the item each resolves to from the section document's path,
  * each refusal at the section document, as pantry contains a mapping's source and a default's
- * target in its item ref's item's declarations (`packages/pantry/src/schema/test/rules.ts`). A
- * section document no test reaches is judged by its own verdict alone.
+ * target in its item ref's item's declarations (the `Template default target` and `Variable mapping
+ * source` laws in `packages/pantry/src/qti/expressions.ts`). A section document no test reaches is
+ * judged by its own verdict alone.
  *
  * @param section The reached section document.
  * @param documents The package's documents.

@@ -405,8 +405,10 @@ const controlOf = (
   });
 
 /**
- * Read a `qti-weight`: its `identifier`, and its `value` as an `xs:double`, outer whitespace gone
- * (readings 7 and 56), as `doubleAttribute` in `#plate/model/attributes.ts` reads one.
+ * Read a `qti-weight`: its `identifier`, and its `value` as an `xs:double`, outer whitespace gone,
+ * by reading 7 and reading 56 ("an `xs:double` literal beyond the largest finite double names the
+ * largest finite double of its sign"), as `doubleAttribute` in `#plate/model/attributes.ts` reads
+ * one.
  *
  * @param build The build.
  * @param element The weight.
@@ -736,10 +738,14 @@ const marksOf = (
 };
 
 /**
- * The built-in variables a test's processing may name, as the qti package gives them for a test
- * (`builtInsOf("test")` in `packages/pantry/src/processing/env.ts`), whatever the engine holds of
- * them. Of these the engine holds only the test's own `duration` (G-R3, pending: a test's
- * processing reads only the test's declared outcomes and its own `duration`).
+ * The built-in variables a test's processing may name, as plate reads them: `completionStatus`,
+ * `duration`, `numAttempts` and `QTI_CONTEXT`, whatever the engine holds of them. The qti package
+ * now gives a test only `duration` and `QTI_CONTEXT` (`builtIns` in
+ * `packages/pantry/src/grammar/references.ts`, typed by `builtInTypes` in
+ * `packages/pantry/src/grammar/expression.ts`); plate keeps a test's own `numAttempts` and
+ * `completionStatus`, accepted and marked, an agreement difference (G-R3 184, pending). Of these
+ * the engine holds only the test's own `duration` (G-R3, pending: a test's processing reads only
+ * the test's declared outcomes and its own `duration`).
  */
 const processingBuiltIns: readonly string[] = [
   "completionStatus",

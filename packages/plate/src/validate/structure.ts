@@ -11,21 +11,23 @@
  * manifest's, it walks their elements too, each by its own namespace's tables and by the same
  * rules, reading `##other` against that namespace; the readings stay QTI's. An element in a
  * namespace it holds no tables for that its parent's table names, such as MathML, is kept and not
- * walked, and so is what a `strict` or `skip` element wildcard admits. What a `lax` element
- * wildcard admits is walked as XML Schema assesses it (rule `5b8ee08b`): a global QTI element is
- * checked by its table, a nested QTI root, or a global element of another namespace's tables, is
- * kept as foreign content (reading 6), foreign content whose `xsi:type` names a complex type the
- * tables define is kept unchecked (reading 50), foreign content whose `xsi:type` names a simple
- * type, built in or in the tables, has its attributes and element children refused and its text
- * accepted unchecked (reading 60), and any other element is passed over while its children are
- * admitted laxly in turn. A QTI element in `qti-ordering`'s `##other` slot, which the XSD refuses,
- * is kept as extension content and passed over with everything below it (reading 61). On every
- * element it walks it judges `xsi:type` and `xsi:nil` as XML Schema judges them (reading 47), and
- * no attribute wildcard admits either: a type is valid when it names the element's declared type or
- * a type derived from it, and `xsi:nil` never is, because no table records a nillable element.
- * After a valid `xsi:type` naming a type of the tables, that type's own table governs the element's
- * attributes, text and children in place of its name's (AD-9); {@link governingTables} gives the
- * table that governs each element the walk checks.
+ * walked, and so is what a `strict` or `skip` element wildcard admits: for a `strict` one, plate's
+ * open limit that reading 60 ("a simple type it names governs its text and is checked") records.
+ * What a `lax` element wildcard admits is walked as XML Schema assesses it (rule `5b8ee08b`): a
+ * global QTI element is checked by its table, a nested QTI root, or a global element of another
+ * namespace's tables, is kept as foreign content (reading 6), foreign content whose `xsi:type`
+ * names a complex type the tables define is kept unchecked (reading 50), foreign content whose
+ * `xsi:type` names a simple type, built in or in the tables, has its attributes and element
+ * children refused and its text accepted unchecked, plate's open limit that reading 60 ("a simple
+ * type it names governs its text and is checked") records, and any other element is passed over
+ * while its children are admitted laxly in turn. A QTI element in `qti-ordering`'s `##other` slot,
+ * which the XSD refuses, is kept as extension content and passed over with everything below it
+ * (reading 61). On every element it walks it judges `xsi:type` and `xsi:nil` as XML Schema judges
+ * them (reading 47), and no attribute wildcard admits either: a type is valid when it names the
+ * element's declared type or a type derived from it, and `xsi:nil` never is, because no table
+ * records a nillable element. After a valid `xsi:type` naming a type of the tables, that type's own
+ * table governs the element's attributes, text and children in place of its name's (AD-9);
+ * {@link governingTables} gives the table that governs each element the walk checks.
  *
  * Over the XSD's rules it applies the shared readings that set the XSD aside where the walk can see
  * them, each a row of {@link readingRows}: attributes narrowed or retyped, `data-*` names,
@@ -93,8 +95,8 @@ interface Misspelling {
  * A name with no row is refused with no suggestion, and its wording says to remove the attribute.
  */
 const misspellings: readonly Misspelling[] = [
-  // Reading 11 (spec-readings.md:86): a PCI's fallback module configuration is the schema's
-  // `secondary-configuration`; the name `fallback-configuration` appears in QTI 3.0's prose only.
+  // Reading 11 ("a PCI's secondary module configuration is `secondary-configuration`"): the
+  // schema's name for what QTI 3.0's implementation guide alone calls `fallback-configuration`.
   {
     element: "qti-interaction-modules",
     reading: "11",
@@ -111,7 +113,8 @@ type BaseTypeSource = "float" | "qti-outcome-declaration" | "qti-response-declar
 
 /**
  * The typed-value attributes reading 7 lists that an item can carry, each on its own element,
- * with where each takes its base type (spec-readings.md:36-55).
+ * with where each takes its base type (reading 7, "a typed value in element text is trimmed; in an
+ * attribute it is exact").
  *
  * Outer XML whitespace in one of these is `padded-attribute`, except in a value of base type
  * `string`, whose whitespace is part of the value. Every other attribute is read as its XSD type
@@ -612,8 +615,8 @@ const isSingleDeclaration = (parent: Option.Option<SourceElement>): boolean =>
 
 /**
  * The identifiers of the built-in session variables, which "are reserved" (info.txt:12006), so no
- * declaration may take one: the qti package refuses a declaration of any kind that does as
- * `DeclarationNotReserved` (`packages/pantry/src/schema/declaration.ts:278`). An identifier is an
+ * declaration may take one: the qti package refuses a declaration of any kind that does by its
+ * `Declaration not reserved` law (`packages/pantry/src/qti/declarations.ts`). An identifier is an
  * NCName, compared exactly after collapse, so `Duration` is another name.
  */
 const reservedIdentifiers: ReadonlySet<string> = new Set([
@@ -637,14 +640,15 @@ const reservingDeclarations = [
 ] as const;
 
 /**
- * The outcomes whose base type the information model fixes, each with that base type, its line and
- * whether the type holds in a test too. "SCORE MUST be a float" and "MAXSCORE MUST be a float" are
- * said of items ("Items that declare a numeric outcome variable", "Items that declare a maximum
- * score", info.txt:8478, :8480), so they are typed in an item and any base type in a test; "PASSED
- * MUST be a boolean" is said of "Items or tests" (info.txt:8482), so it is typed in both. The qti
- * package's `ReservedOutcomeTypes` (`packages/pantry/src/schema/declaration.ts:295`) refuses a
- * test's SCORE and MAXSCORE of another base type too, so plate accepts such a test where pantry
- * refuses it, until pantry follows.
+ * The outcomes whose base type the information model fixes, each with that base type, the line its
+ * refusal cites and whether the type holds in a test too. The outcome declaration's description
+ * (§4.5, info.txt:11979) says "SCORE needs to be a float" and "MAXSCORE needs to be a float" of
+ * items ("Items that declare a numeric outcome variable", "Items that declare a maximum score"),
+ * so they are typed in an item and any base type in a test; it says "PASSED needs to be a boolean"
+ * of "Items or tests", so it is typed in both. Each row's line is §2.2.2.3's restatement of the
+ * same sentence (info.txt:8478, :8480, :8482). The qti package's `Reserved type` law
+ * (`packages/pantry/src/qti/declarations.ts`) refuses a test's SCORE and MAXSCORE of another base
+ * type too, so plate accepts such a test where pantry refuses it, until pantry follows.
  */
 const typedOutcomes = [
   ["SCORE", "float", "info.txt:8478", false],
@@ -748,8 +752,8 @@ const printfFormat = /^%[#0 +-]*(?:[1-9][0-9]*)?(?:\.[0-9]*)?[EefGgrRioXx]$/u;
  * carries neither: its line and the qti package's rule are in the row's comment.
  */
 const readingRows: readonly ReadingRow[] = [
-  // Reading 8 (spec-readings.md:65): a match table entry's `target-value` is a value of the
-  // enclosing outcome's base type, not one of the base-type names the XSD enumerates. The prose
+  // Reading 8 ("a match table entry's `target-value` is a value of the outcome's base type"): of
+  // the enclosing outcome's, not one of the base-type names the XSD enumerates. The prose
   // rules' `value-type` reads it; its padding stays reading 7's.
   {
     attribute: "target-value",
@@ -757,11 +761,11 @@ const readingRows: readonly ReadingRow[] = [
     kind: "retyped-attribute",
     reading: "8",
   },
-  // Reading 13 (spec-readings.md:96): a `data-*` name is `data-[a-z0-9_.-]+`, in no namespace,
-  // even where an attribute wildcard would admit any name.
+  // Reading 13 ("a `data-*` attribute name is `data-[a-z0-9_.-]+`, with no namespace"), even
+  // where an attribute wildcard would admit any name.
   { kind: "attribute-name", pattern: /^data-[a-z0-9_.-]+$/u, prefix: "data-", reading: "13" },
-  // Reading 16 (spec-readings.md:116): `normal-maximum` is greater than 0, where the XSD's
-  // `NonNegativeDoubleDType` admits 0. It compares the number, so `0`, `0.0`, `-0` and `0e0` all fail.
+  // Reading 16 ("`normal-maximum` is greater than zero"), where the XSD's `NonNegativeDoubleDType`
+  // admits 0. It compares the number, so `0`, `0.0`, `-0` and `0e0` all fail.
   {
     attribute: "normal-maximum",
     elements: ["qti-outcome-declaration"],
@@ -771,8 +775,7 @@ const readingRows: readonly ReadingRow[] = [
     settled: { reading: "16" },
     whiteSpace: "collapse",
   },
-  // Reading 17 (spec-readings.md:120): a `view` list holds at least one view, where the XSD's list
-  // admits none.
+  // Reading 17 ("a `view` list has at least one view"), where the XSD's list admits none.
   {
     attribute: "view",
     elements: "declaring",
@@ -782,8 +785,10 @@ const readingRows: readonly ReadingRow[] = [
     settled: { reading: "17" },
     whiteSpace: "collapse",
   },
-  // Reading 18 (spec-readings.md:123): an order or graphic-order interaction's `min-choices` is at
-  // least 1, where the XSD admits 0. `max-choices="0"` means unlimited, and no count is compared.
+  // Reading 18 ("an order or graphic-order interaction's `min-choices`, where written, is from 1
+  // to its number of choices, and a `max-choices` written beside it is from `min-choices` to its
+  // number of choices"): `min-choices` is at least 1, where the XSD admits 0. `max-choices="0"`
+  // means unlimited, and no count is compared.
   {
     attribute: "min-choices",
     elements: ["qti-graphic-order-interaction", "qti-order-interaction"],
@@ -793,8 +798,7 @@ const readingRows: readonly ReadingRow[] = [
     settled: { reading: "18" },
     whiteSpace: "collapse",
   },
-  // Reading 20 (spec-readings.md:132): a PCI holds exactly one `qti-interaction-markup`, which may
-  // be empty.
+  // Reading 20 ("a PCI has exactly one `qti-interaction-markup`, which may be empty").
   {
     applies: anywhere,
     child: "qti-interaction-markup",
@@ -805,7 +809,7 @@ const readingRows: readonly ReadingRow[] = [
     required: "exactly one",
     source: "reading 20",
   },
-  // Reading 21 (spec-readings.md:137): a `qti-repeat` holds at least one operand, any child
+  // Reading 21 ("`qti-repeat` has one or more operands"): at least one operand, any child
   // element.
   {
     applies: anywhere,
@@ -817,8 +821,8 @@ const readingRows: readonly ReadingRow[] = [
     required: "at least one",
     source: "reading 21",
   },
-  // Reading 22 (spec-readings.md:141): a `qti-template-constraint` is a direct child of
-  // `qti-template-processing`, where the XSD also admits it in the template conditions' branches.
+  // Reading 22 ("a `qti-template-constraint` is a direct child of `qti-template-processing`"),
+  // where the XSD also admits it in the template conditions' branches.
   {
     admits: anywhere,
     container: "qti-template-processing",
@@ -829,9 +833,10 @@ const readingRows: readonly ReadingRow[] = [
     roots: anywhere,
     within: "parent",
   },
-  // Reading 23 (spec-readings.md:145): the eight outcome-only expressions sit inside outcome
-  // processing, so in an item, which holds none, every one is misplaced. In a test or a section the
-  // test prose rules refuse a misplaced one as `expression-placement`, once.
+  // Reading 23 ("the eight outcome-only expressions are forbidden outside outcome processing"):
+  // they sit inside outcome processing, so in an item, which holds none, every one is misplaced.
+  // In a test or a section the test prose rules refuse a misplaced one as `expression-placement`,
+  // once.
   {
     admits: anywhere,
     container: "qti-outcome-processing",
@@ -851,8 +856,9 @@ const readingRows: readonly ReadingRow[] = [
     roots: outsideTests,
     within: "ancestor",
   },
-  // Reading 31 (spec-readings.md:187; `CardDType`, XSD:26089-26104): a card holds at least one of
-  // an HTML content node, file hrefs or card entries.
+  // Reading 31 ("a card holds at least one of an HTML content node or file hrefs, and may hold
+  // both"; `CardDType`, XSD:26089-26104): a card holds at least one of an HTML content node, file
+  // hrefs or card entries.
   {
     applies: anywhere,
     child: "qti-html-content or qti-file-href or qti-card-entry",
@@ -874,9 +880,10 @@ const readingRows: readonly ReadingRow[] = [
     required: "at least one",
     source: "reading 31",
   },
-  // Reading 38 (spec-readings.md:222): a `qti-gap` sits inside a gap-match interaction, which also
-  // refuses one in a graphic gap-match interaction's gap text. Where the reading is silent
-  // (hottext, a gap text holding gaps), nothing is refused.
+  // Reading 38 ("a `qti-gap` appears only within a gap-match interaction, and a `qti-hottext` may
+  // appear in any flow or inline content"): the row also refuses a gap in a graphic gap-match
+  // interaction's gap text. Nothing refuses a hottext outside a hottext interaction, nor a gap text
+  // holding gaps, which the reading leaves alone.
   {
     admits: anywhere,
     container: "qti-gap-match-interaction",
@@ -890,8 +897,9 @@ const readingRows: readonly ReadingRow[] = [
   // The information model maps "a source set of any base-type (except file and duration)"
   // (info.txt:34086), and `qti-map-response` "cannot be applied to variables of record
   // cardinality" (info.txt:9306), so a response declaration of base type file or duration, or of
-  // cardinality record, holds no `qti-mapping`. No shared reading carries it; the qti package
-  // refuses it as `mapping-base-type`.
+  // cardinality record, holds no `qti-mapping`: reading 78 ("a mapping maps a base type other
+  // than `file` and `duration`, of a variable that is not a record"). The qti package refuses it
+  // as `mapping-base-type` (the `MappableBaseType` law in `packages/pantry/src/qti/mapping.ts`).
   {
     admits: holdsMapping,
     container: "qti-response-declaration",
@@ -904,8 +912,8 @@ const readingRows: readonly ReadingRow[] = [
     within: "parent",
   },
   // An area mapping "may only be present in declarations of variables with base-type point"
-  // (info.txt:39388). No shared reading carries it; the qti package refuses it as
-  // `area-mapping-point`.
+  // (info.txt:39388): reading 99 ("an area mapping maps points"). The qti package refuses it as
+  // `mapping-base-type` (the `AreaMapping base type` law in `packages/pantry/src/qti/mapping.ts`).
   {
     admits: holdsAreaMapping,
     container: "qti-response-declaration",
@@ -916,9 +924,9 @@ const readingRows: readonly ReadingRow[] = [
     roots: anywhere,
     within: "parent",
   },
-  // Reading 46 (spec-readings.md:267): a count attribute holds a signed 64-bit integer, read
-  // exactly: the eight interaction counts, `xs:nonNegativeInteger` in the XSD, and `figures` on
-  // `qti-round-to` and `qti-equal-rounded`, an `xs:integer` or a template variable's name.
+  // Reading 46 ("a count attribute holds a signed 64-bit integer"), read exactly: the eight
+  // interaction counts, `xs:nonNegativeInteger` in the XSD, and `figures` on `qti-round-to` and
+  // `qti-equal-rounded`, an `xs:integer` or a template variable's name.
   {
     attributes: [
       "figures",
@@ -1019,8 +1027,8 @@ const readingRows: readonly ReadingRow[] = [
     whiteSpace: "collapse",
   })),
   // The information model fixes the base types of three outcomes: an item's SCORE and MAXSCORE are
-  // floats, and an item's or a test's PASSED a boolean (info.txt:8478, :8480, :8482); a test's
-  // SCORE and MAXSCORE may be of any base type. Pantry's `ReservedOutcomeTypes` refuses an outcome
+  // floats, and an item's or a test's PASSED a boolean (§4.5, info.txt:11979); a test's SCORE and
+  // MAXSCORE may be of any base type. Pantry's `Reserved type` law refuses an outcome
   // declaration of another base type in an item or a test, so it refuses a test's too, which plate
   // accepts until pantry follows. A response or template declaration of those names is not an
   // outcome, and a `record` one has no base type to fix.
@@ -2238,13 +2246,15 @@ const checkElement = (
 };
 
 /**
- * Check the attributes of an element a simple type governs in lax wildcard content (reading 60).
+ * Check the attributes of an element a simple type governs in lax wildcard content, by reading 60
+ * ("a simple type it names governs its text and is checked").
  *
  * Such an element may hold no attribute but `xsi:type`, `xsi:nil`, `xsi:schemaLocation` and
  * `xsi:noNamespaceSchemaLocation` (XML Schema Part 1, section 3.3.4, Element Locally Valid (Type),
  * clause 3.1.1), so each other attribute is `unknown-attribute`, `xml:lang` included. A namespace
  * declaration, which the shared reader returns as an attribute, is not one. Its element children
- * are refused by the walk, and its text is accepted unchecked.
+ * are refused by the walk, and its text is accepted unchecked, plate's open limit that reading 60
+ * records.
  *
  * @param source The document.
  * @param element The element.
@@ -2269,8 +2279,8 @@ const checkSimplyTyped = (
 /**
  * How the walk treats one element: check it against its name's table, refuse it as
  * `unknown-element` (citing the reading that refuses it, if any), pass over it and admit its
- * children laxly, check it as an element a simple type governs (reading 60), or pass over it and
- * its subtree.
+ * children laxly, check it as an element a simple type governs, by reading 60 ("a simple type it
+ * names governs its text and is checked"), or pass over it and its subtree.
  */
 type Admission =
   | { readonly kind: "check"; readonly table: ElementTable }
@@ -2318,11 +2328,12 @@ const isSimpleType = (type: ChildName, schemas: Schemas): boolean => {
  * An `xsi:type` that resolves governs the element. Under a simple type, built in or in the `types`
  * of the tables the walk holds, the element may hold no attribute but the four `xsi:` ones and no
  * element child (section 3.3.4, Element Locally Valid (Type), clause 3.1), which the walk checks,
- * while its text is accepted unchecked (reading 60). Under a complex type in those `types` it is
- * kept unchecked with everything below it, and so is an element whose `xsi:type` holds an
- * unexpanded entity reference, whose type is unknown (reading 50). An absent `xsi:type`,
- * `xs:anyType`, and a name that resolves to no type leave the element laxly assessed, against the
- * ur-type definition, which is the lax walk itself.
+ * while its text is accepted unchecked: plate's open limit that reading 60 ("a simple type it names
+ * governs its text and is checked") records. Under a complex type in those `types` it is kept
+ * unchecked with everything below it, and so is an element whose `xsi:type` holds an unexpanded
+ * entity reference, whose type is unknown (reading 50). An absent `xsi:type`, `xs:anyType`, and a
+ * name that resolves to no type leave the element laxly assessed, against the ur-type definition,
+ * which is the lax walk itself.
  *
  * @param element The element.
  * @param parents Each walked element's parent, for the namespace declarations in scope.
@@ -2369,9 +2380,10 @@ const admitByInstanceType = (
  * `5b8ee08b`). Any other element, one declared only locally or an element of a namespace the walk
  * holds no tables for, is governed by its `xsi:type` where that resolves, as
  * {@link admitByInstanceType} decides: under a simple type its attributes and element children are
- * refused and its text accepted unchecked (reading 60), and under a complex type it is passed over
- * with everything below it (reading 50). Without such a type it is passed over, and each of its
- * children admitted laxly in turn.
+ * refused and its text accepted unchecked, plate's open limit that reading 60 ("a simple type it
+ * names governs its text and is checked") records, and under a complex type it is passed over with
+ * everything below it (reading 50). Without such a type it is passed over, and each of its children
+ * admitted laxly in turn.
  *
  * @param element The element.
  * @param parents Each walked element's parent, for the namespace declarations in scope.
@@ -2406,15 +2418,16 @@ const admitLaxly = (
  * checked when it is tabled and its tables declare its name, and refused when they do not; a root
  * in a namespace the walk holds no tables for is the verdict's `not-qti-root`, so it is passed
  * over. A child of an element a simple type governs in lax wildcard content is refused, citing
- * reading 60. A child of any other element the walk did not check is passed over, unless the walk
- * passed over the parent laxly: then it is admitted laxly, by {@link admitLaxly}. A child its
- * parent's table names is checked when it is tabled and has a table, refused when it is tabled and
- * has none, and passed over in any other namespace. A child only the parent's element wildcard
- * matches, `##other` read against the namespace of the parent's tables, is admitted laxly when the
- * wildcard is `lax`, and passed over with everything below it when it is `strict` or `skip`. A QTI
- * child of one of {@link ownNamespaceSlots} that its table does not name sits in the wildcard's
- * slot, so it is passed over with everything below it as extension content (reading 61). Any other
- * child is refused.
+ * reading 60 ("a simple type it names governs its text and is checked"). A child of any other
+ * element the walk did not check is passed over, unless the walk passed over the parent laxly: then
+ * it is admitted laxly, by {@link admitLaxly}. A child its parent's table names is checked when it
+ * is tabled and has a table, refused when it is tabled and has none, and passed over in any other
+ * namespace. A child only the parent's element wildcard matches, `##other` read against the
+ * namespace of the parent's tables, is admitted laxly when the wildcard is `lax`, and passed over
+ * with everything below it when it is `strict` or `skip`. A QTI child of one of
+ * {@link ownNamespaceSlots} that its table does not name sits in the wildcard's slot, so it is
+ * passed over with everything below it as extension content (reading 61). Any other child is
+ * refused.
  *
  * @param element The element.
  * @param parent Its parent, none for the root.
@@ -2492,8 +2505,9 @@ const admit = (
 
 /**
  * One element the walk checks or refuses, in document order: checked by the table that governs it,
- * checked as an element a simple type governs in lax wildcard content (reading 60), or refused as
- * `unknown-element`, citing the reading that refuses it, if any.
+ * checked as an element a simple type governs in lax wildcard content, by reading 60 ("a simple
+ * type it names governs its text and is checked"), or refused as `unknown-element`, citing the
+ * reading that refuses it, if any.
  */
 type Step =
   | {
@@ -2519,8 +2533,8 @@ interface Walked {
  * Walk a document once from its root, deciding how each element is treated and, for each element
  * it checks, which table governs it: its name's, or the table of the type a valid `xsi:type` names.
  * An element's children are admitted by the table that governs it, laxly when the walk passed over
- * it in lax wildcard content, and as `unknown-element` when a simple type governs it there
- * (reading 60).
+ * it in lax wildcard content, and as `unknown-element` when a simple type governs it there, by
+ * reading 60 ("a simple type it names governs its text and is checked").
  *
  * @param source The document.
  * @param schemas The tables by namespace.
@@ -2602,10 +2616,10 @@ export const governingTables = (
  * and `count-range`, each at the path of the element or attribute at fault. The readings are QTI's
  * and apply to QTI's elements only. Each element is checked by the table {@link governingTables}
  * gives it, except one a simple type governs in lax wildcard content, whose attributes and element
- * children are refused and whose text is not checked (reading 60). It does not enter an element it
- * refuses as unknown, and does enter a misplaced one. A document whose root is outside QTI's
- * namespace and every namespace of `others` yields nothing here: that is the verdict's
- * `not-qti-root`.
+ * children are refused and whose text is not checked, plate's open limit that reading 60 ("a simple
+ * type it names governs its text and is checked") records. It does not enter an element it refuses
+ * as unknown, and does enter a misplaced one. A document whose root is outside QTI's namespace and
+ * every namespace of `others` yields nothing here: that is the verdict's `not-qti-root`.
  *
  * @param source The document, as the reader adapter built it.
  * @param tables The tables generated from the QTI XSD.

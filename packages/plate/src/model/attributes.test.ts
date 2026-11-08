@@ -71,7 +71,7 @@ describe("attributes", () => {
   );
 
   it.effect(
-    "reads an xs:double beyond the largest finite double as that double of its sign (reading 56)",
+    'reads an xs:double beyond the largest finite double as that double of its sign, by reading 56 ("an `xs:double` literal beyond the largest finite double names the largest finite double of its sign")',
     () =>
       Effect.gen(function* readsDouble() {
         const declaration = el("qti-outcome-declaration", [

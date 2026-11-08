@@ -46,8 +46,9 @@ import { areaShapes } from "#plate/vocabulary.ts";
 /**
  * The rule of `qti-string-match` and `qti-substring`: a single boolean, of two operands that must
  * each be a single string, so each operand of another type is a mismatch that accepts `string`,
- * `single`. The qti package refuses the same (P23, `operandRules` in
- * `packages/pantry/src/processing/check.ts`).
+ * `single`. The qti package refuses the same (P23, the `Operand fit` law in
+ * `packages/pantry/src/qti/expressions.ts`, over the kinds' typings in `expressionTypings`,
+ * `packages/pantry/src/grammar/expression.ts`).
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpStringMatch
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpSubstring
@@ -90,7 +91,8 @@ const insideRule: KindRule = {
 /**
  * The rule of `qti-custom-operator`: its result "is defined by the extension", so it is typed
  * unknown, which satisfies every rule above it, and none of its operands is judged, as the qti
- * package types it (`UNKNOWN` in `packages/pantry/src/processing/types.ts`).
+ * package types it (its fixed `unknown` typing in `expressionTypings`,
+ * `packages/pantry/src/grammar/expression.ts`).
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpCustomOp
  */
@@ -171,10 +173,11 @@ const substringReader: ReaderSpec<"substring"> = {
  *
  * The pattern is split into literal text or a reference by `stringOrRefOf` against the item's
  * declared names, as written and untrimmed (reading 7): only `{name}` whose name names a variable
- * the item holds is a reference. A braced name that names no variable is literal text, braces
- * kept, and never refused as P8 (ruling R1, as the information model reads a string attribute
- * that "appears to be a reference" to no variable). The qti package refuses such a name as P8
- * (`patternOrRef` in `packages/pantry/src/processing/parse.ts`): a ruled agreement difference.
+ * the item holds is a reference. A braced name that names no variable is literal text, braces kept,
+ * and never refused as P8 (ruling R1, as the information model reads a string attribute that
+ * "appears to be a reference" to no variable). The qti package refuses such a name as P8 (the
+ * `Variable declared` law in `packages/pantry/src/qti/expressions.ts`, over `referenceMembers` in
+ * `packages/pantry/src/grammar/references.ts`): a ruled agreement difference.
  *
  * A literal is compiled here only to decide its mark: one `compile` in `#plate/model/regex.ts`
  * refuses (outside XML Schema's regular expressions, readings 55 and 58, or past the automaton's
