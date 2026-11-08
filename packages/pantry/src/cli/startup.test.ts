@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
+import { moduleImports } from "#pantry/test/module-imports.ts";
+import type { ModuleImport } from "#pantry/test/module-imports.ts";
 
 /**
  * The `src` folder, where `#pantry/<x>` resolves to `src/<x>`.
@@ -49,38 +51,14 @@ const productionEntries = [
 const readSource = (file: string): string => readFileSync(file, "utf-8");
 
 /**
- * One import or re-export of a source module, as it is written.
- */
-interface StaticImport {
-  readonly specifier: string;
-  readonly text: string;
-}
-
-/**
- * Every static, non-type import of `source`: `import … from "x"`, a bare `import "x"`, and
- * `export … from "x"`, each over any number of lines.
- *
- * A dynamic `import(…)` is not counted, nor is a statement that is wholly `import type` or
- * `export type`. A mixed `import { type A, b }` is counted, because `b` is a value.
+ * Read the imports of a module that bring a value in when it loads: its static imports and
+ * re-exports, not a statement that is wholly `import type` or `export type`, nor an `import(…)`.
  *
  * @param source - The text of a TypeScript module.
- * @returns The statements, in source order.
+ * @returns The imports, in source order.
  */
-export const staticImports = (source: string): readonly StaticImport[] => {
-  const withoutComments = source
-    .replaceAll(/\/\*[\s\S]*?\*\//gu, "")
-    .replaceAll(/^\s*\/\/.*$/gmu, "");
-  const statements = withoutComments.matchAll(
-    /^[ \t]*(?:import\s*["'](?<bare>[^"']+)["']|(?:import|export)\b(?!\s*\()[^;]*?\bfrom\s*["'](?<named>[^"']+)["'])/gmu,
-  );
-
-  return [...statements]
-    .filter(([text]) => !/^\s*(?:import|export)\s+type\b/u.test(text))
-    .map(({ 0: text, groups }) => ({
-      specifier: groups?.["bare"] ?? groups?.["named"] ?? "",
-      text: text.trim(),
-    }));
-};
+const staticImports = (source: string): readonly ModuleImport[] =>
+  moduleImports(source).filter(({ form }) => form === "value");
 
 /**
  * The modules a module reaches through static `#pantry/` imports, and the first import that names a
@@ -111,7 +89,7 @@ export const forbiddenImports = (
 
     for (const { specifier, text } of staticImports(read(file))) {
       if (forbidden.some((prefix) => specifier.startsWith(prefix))) {
-        offences.push(`${path.relative(sourceRoot, file)}: ${text.replaceAll(/\s+/gu, " ")}`);
+        offences.push(`${path.relative(sourceRoot, file)}: ${text}`);
       } else if (specifier.startsWith("#pantry/")) {
         pending.push(path.join(sourceRoot, specifier.slice("#pantry/".length)));
       }
@@ -124,7 +102,7 @@ export const forbiddenImports = (
 /**
  * Every module a set of entries reaches: through each static, non-type import, and through each
  * dynamic `import("#pantry/…")`, which is how the command handlers load the engine and the
- * database layer loads the author login. A dynamic import written in a comment is followed too, so
+ * database layer loads the author login. A type written `import("#pantry/…")` is followed too, so
  * the set errs toward more modules, never fewer.
  *
  * @param entries - The absolute paths of the modules to start from.
@@ -147,16 +125,8 @@ const reachedModules = (
 
     seen.add(file);
 
-    const source = read(file);
-    const dynamic = [
-      ...source.matchAll(/\bimport\(\s*["'](?<specifier>#pantry\/[^"']+)["']\s*\)/gu),
-    ].map(({ groups }) => groups?.["specifier"] ?? "");
-
-    for (const specifier of [
-      ...staticImports(source).map((found) => found.specifier),
-      ...dynamic,
-    ]) {
-      if (specifier.startsWith("#pantry/")) {
+    for (const { form, specifier } of moduleImports(read(file))) {
+      if (form !== "type" && specifier.startsWith("#pantry/")) {
         pending.push(path.join(sourceRoot, specifier.slice("#pantry/".length)));
       }
     }
@@ -181,66 +151,8 @@ const importsOf = (
   [...modules].flatMap((file) =>
     staticImports(read(file))
       .filter((found) => found.specifier === specifier)
-      .map(({ text }) => `${path.relative(sourceRoot, file)}: ${text.replaceAll(/\s+/gu, " ")}`),
+      .map(({ text }) => `${path.relative(sourceRoot, file)}: ${text}`),
   );
-
-describe("staticImports", () => {
-  it("counts a multi-line named import", () => {
-    const found = staticImports(
-      'import {\n  a,\n  b,\n} from "#pantry/db/layer.ts";\nconst c = 1;\n',
-    );
-
-    assert.deepStrictEqual(
-      found.map(({ specifier }) => specifier),
-      ["#pantry/db/layer.ts"],
-    );
-  });
-
-  it("counts a bare side-effect import", () => {
-    const found = staticImports('import "#pantry/export/package.ts";\n');
-
-    assert.deepStrictEqual(
-      found.map(({ specifier }) => specifier),
-      ["#pantry/export/package.ts"],
-    );
-  });
-
-  it("counts a re-export from a module", () => {
-    const found = staticImports('export { a } from "#pantry/import/package.ts";\n');
-
-    assert.strictEqual(found.length, 1);
-  });
-
-  it("does not count a multi-line import type", () => {
-    const found = staticImports(
-      'import type {\n  A,\n  B,\n} from "#pantry/db/layer.ts";\nexport type { C } from "#pantry/db/layer.ts";\n',
-    );
-
-    assert.deepStrictEqual(found, []);
-  });
-
-  it("counts a mixed import with an inline type", () => {
-    const found = staticImports('import { type A, b } from "#pantry/db/layer.ts";\n');
-
-    assert.strictEqual(found.length, 1);
-  });
-
-  it("does not count a dynamic import", () => {
-    const found = staticImports(
-      'const load = () => import("#pantry/db/layer.ts");\nawait Effect.promise(() => import("#pantry/export/package.ts"));\n',
-    );
-
-    assert.deepStrictEqual(found, []);
-  });
-
-  it("does not count an import written inside a comment", () => {
-    const found = staticImports(
-      '/* import { a } from "#pantry/db/layer.ts"; */\n// import "#pantry/db/layer.ts";\n',
-    );
-
-    assert.deepStrictEqual(found, []);
-  });
-});
 
 describe("forbiddenImports", () => {
   it("follows static imports and names the module and the import", () => {
