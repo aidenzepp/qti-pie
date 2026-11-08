@@ -587,6 +587,9 @@ describe.skipIf(!cached)(
               "list-blank": markedItem(
                 `<widget xmlns="urn:w" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:NMTOKENS"> </widget>`,
               ),
+              "list-blank-entities": markedItem(
+                `<widget xmlns="urn:w" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:ENTITIES"/>`,
+              ),
               "list-whole": markedItem(
                 `<widget xmlns="urn:w" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:NMTOKENS">a b</widget>`,
               ),
@@ -614,6 +617,7 @@ describe.skipIf(!cached)(
                 "laws only",
                 "accepted by both",
                 "laws only",
+                "laws only",
                 "accepted by both",
                 "refused by both",
                 "laws only",
@@ -624,7 +628,7 @@ describe.skipIf(!cached)(
                 "xmllint only",
                 "accepted by both",
               ],
-              "xmllint refuses a base64 value of two letters and xml:base's value, as the law oracle does, and accepts a stray character in base64, an empty IDREFS, a blank NMTOKENS element, the two xsi: locations' values and a lax xsi:nil's, which the law oracle refuses; it refuses a padded xsi:type, whose QName collapses to one it accepts unpadded, and an xsi:type naming no type on a lax element, which the law oracle accepts (reading 60)",
+              "xmllint refuses a base64 value of two letters and xml:base's value, as the law oracle does, and accepts a stray character in base64, an empty IDREFS, a blank NMTOKENS element, an empty ENTITIES element, the two xsi: locations' values and a lax xsi:nil's, which the law oracle refuses; it refuses a padded xsi:type, whose QName collapses to one it accepts unpadded, and an xsi:type naming no type on a lax element, which the law oracle accepts (reading 60)",
             );
             assert.deepStrictEqual(
               held.map(({ records }) => records),
@@ -633,6 +637,7 @@ describe.skipIf(!cached)(
                 [base64Record],
                 [emptyIdrefsRecord],
                 [],
+                [blankListRecord],
                 [blankListRecord],
                 [],
                 [],

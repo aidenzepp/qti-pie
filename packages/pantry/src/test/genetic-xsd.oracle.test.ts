@@ -416,25 +416,37 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * refuses (reading 60: the children are assessed laxly in turn) and libxml2 never assesses; each
  * shows a known disagreement until its libxml2 record lands.
  *
- * The last six are the shapes Aiden's runs of the free suite met (PR #46, comment 6701102861), each
- * a document's only kind of fault. A blank media URL is refused under reading 124, or 125 for a
- * track's `src`, where the XSD's `URLDType` admits it; its srcset value is TEST_SEED=505's drawn
- * seed #12's. A template variable and a context variable that nothing declares, `é`, are refused
- * beyond the XSD, which resolves neither name (the `template-ref` and `context-variable-ref`
- * records). A 3.0.0 manifest's `xsi:type` naming `cp:ResourcesDType`, which only 3.0.1 declares,
- * resolves to no type in 3.0.0, which the codec refuses as `type-unknown` and xmllint as a QName
- * that resolves to no type definition, since 55a6e428; and a section holding only a branch rule is
- * valid in both oracles since reading 26's rule was withdrawn (7858a46c). At Aiden's head
- * (1ee51d8d) the law oracle refused the manifest under `xsi-type`, a class xmllint's refusal does
- * not share, and the section under `child-set`, where xmllint accepts it.
+ * The six after the template block's are the shapes Aiden's runs of the free suite met (PR #46,
+ * comment 6701102861), each a document's only kind of fault. A blank media URL is refused under
+ * reading 124, or 125 for a track's `src`, where the XSD's `URLDType` admits it; its srcset value
+ * is TEST_SEED=505's drawn seed #12's. A template variable and a context variable that nothing
+ * declares, `é`, are refused beyond the XSD, which resolves neither name (the `template-ref` and
+ * `context-variable-ref` records). A 3.0.0 manifest's `xsi:type` naming `cp:ResourcesDType`, which
+ * only 3.0.1 declares, resolves to no type in 3.0.0, which the codec refuses as `type-unknown` and
+ * xmllint as a QName that resolves to no type definition, since 55a6e428; and a section holding
+ * only a branch rule is valid in both oracles since reading 26's rule was withdrawn (7858a46c). At
+ * Aiden's head (1ee51d8d) the law oracle refused the manifest under `xsi-type`, a class xmllint's
+ * refusal does not share, and the section under `child-set`, where xmllint accepts it.
  *
- * The last is TEST_SEED=101's drawn seed #60, unedited, reduced to its one context declaration:
+ * The next is TEST_SEED=101's drawn seed #60, unedited, reduced to its one context declaration:
  * one that writes no identifier and no cardinality, whose default value's second value writes a
  * `base-type` spelling nothing and no `field-identifier`. Both oracles refuse the missing
  * attributes and the base type's form, and the law oracle refuses Value cardinality beyond the XSD,
  * since a value writes both or neither whatever its declaration's cardinality spells (reading 158);
  * the search had no record of the rule (`value-cardinality` in `generatedRecorded`), and the law's
  * explanation named the absent cardinality `""`.
+ *
+ * The last three are drawn seeds of rotating streams, each reduced to its one difference. The empty
+ * tolerance is TEST_SEED=555's drawn seed #59's, a `qti-equal` with `tolerance=""`: xmllint accepts
+ * it, since the XSD's list of a union of xs:string and xs:double admits an empty list, and the law
+ * oracle refuses it under `P36`, as reading 121 reads every tolerance as one or two values; the
+ * search had no record of the rule. The target-value's line end is TEST_SEED=3003's drawn seed
+ * #38's: xmllint refuses a match table entry's `target-value` of `a`, a line end and `b` as no
+ * base-type name, which reading 8 sets aside, and reading 8's record read the value with a `.` that
+ * stops at a line end. The empty `xs:ENTITIES` element is TEST_SEED=65535's drawn seed #33's: the
+ * law oracle refuses it, a list of no item where the type's minLength is 1, and libxml2 accepts it,
+ * as it does a blank `xs:NMTOKENS` or `xs:IDREFS` element (`blankListRecord`), whose pattern named
+ * those two types alone.
  */
 const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
   {
@@ -496,6 +508,18 @@ const keptDocuments: readonly { readonly name: string; readonly text: string }[]
   {
     name: "a context declaration with no cardinality, a value of whose default writes a base-type alone",
     text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-context-declaration><qti-default-value><qti-value>a</qti-value><qti-value base-type="a b&lt;év">b</qti-value></qti-default-value></qti-context-declaration></qti-assessment-item>',
+  },
+  {
+    name: "a qti-equal whose tolerance is empty",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-outcome-declaration identifier="O" cardinality="single" base-type="boolean"/><qti-response-processing><qti-set-outcome-value identifier="O"><qti-equal tolerance=""><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">1</qti-base-value></qti-equal></qti-set-outcome-value></qti-response-processing></qti-assessment-item>',
+  },
+  {
+    name: "a match table entry whose target-value holds a line end",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-outcome-declaration identifier="O" cardinality="single" base-type="string"><qti-match-table><qti-match-table-entry source-value="1" target-value="a&#xA;b"/></qti-match-table></qti-outcome-declaration></qti-assessment-item>',
+  },
+  {
+    name: "an xs:ENTITIES element holding no item, in a LOM root's lax content",
+    text: '<lom xmlns="http://ltsc.ieee.org/xsd/LOM"><widget xmlns="urn:w" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:ENTITIES"/></lom>',
   },
 ];
 
