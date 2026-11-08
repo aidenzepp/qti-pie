@@ -94,14 +94,12 @@ const unjudged = {
   "MostCount: a when term": unreadTerm("when"),
   "Node.elements":
     "a tree root's running value of the element fold, the start value grizzle keeps in the field's builder",
-  "Node.lastState": "a copy along a last axis, `pred(children)`, which the host does not restore",
   "Node.parentAncestry": rootCopy,
   "Node.parentGoverns": rootCopy,
   "Node.parentKind": rootCopy,
   "Node.parentNearest": rootCopy,
   "Node.parentNearestKind": rootCopy,
   "Node.parentParentKind": rootCopy,
-  "Node.was": "a copy along a predecessor axis, `pred(at)`, which the host does not restore",
   "Node: a between term": unreadTerm("between"),
   "OpenAttributeName: a literal term":
     "its predicate holds a literal of no datum's type, a Bits set over AttributeName",
