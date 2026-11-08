@@ -15,20 +15,20 @@
  * and was refused under "Document lang" beside its value domain unless the record wrote that
  * value.
  *
- * The genetic judge (`judgeOne`) cannot see this: its host leaves "Document lang" unknown, since
- * the law reads counts the database draws through a selection by pattern. So the import's rows are
- * judged here by the schema's statement of R26 on the host, its counts drawn from the rows.
+ * The genetic judge (`judgeOne`) cannot hold this: its host never holds "Document lang", since the
+ * law reads counts the database draws through a selection by pattern. So the import's rows are
+ * judged here by the schema's statements of R26 on the host, its counts drawn from the rows.
  *
  * An assessment object's `ObjectLang` row is the root's `xml:lang`, copied both ways: a row planted
  * for a root that writes none is refused under "E1 derived".
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * schema's R26 over the import's rows (`documentLang` and `assembledLang` of
- * `#pantry/qti/identity.ts`, its witnesses' `E1_derived`), and both against §2.7.1.3 under
- * readings 134 and 164 as stated above, each form's tagness read off RFC 5646 by hand: the three
- * refuse one set of forms under "Document lang", and the oracle refuses a form under its value
- * domain exactly where it lies outside it. And the host verdict over the import's rows with an
- * `ObjectLang` row planted.
+ * `#pantry/qti/identity.ts`, its witnesses' containments into their categories' languages and
+ * their `E1_derived`), and both against §2.7.1.3 under readings 134 and 164 as stated above, each
+ * form's tagness read off RFC 5646 by hand: the three refuse one set of forms under "Document
+ * lang", and the oracle refuses a form under its value domain exactly where it lies outside it. And
+ * the host verdict over the import's rows with an `ObjectLang` row planted.
  *
  * Bound: an item whose root, or a body element, writes each of nine `xml:lang` forms (unwritten,
  * three tags, the empty one, one of whitespace alone and three that are no tag), its record's one
@@ -240,7 +240,9 @@ interface HostDocumentLang {
  * Judge the schema's R26 on the host over a package's rows: each form that states a language
  * ({@link stated}) counts as many witnesses, a document's (`GeneralLang`) and an assembly's
  * (`PlacedGeneralLang`), as general categories describe its document (`GeneralObject`), the counts
- * the database draws; and every witness is a stated form's (its `E1_derived`).
+ * the database draws; each witness's value is a language its category lists
+ * (`ResourceLomLanguageSet`), its containment; and every witness is a stated form's (its
+ * `E1_derived`).
  *
  * @param view - The rows by relation.
  * @returns The forms the law refuses, and the witnesses of a form that states none.
@@ -248,6 +250,16 @@ interface HostDocumentLang {
 const documentLangOf = (view: ReadonlyMap<string, readonly Row[]>): HostDocumentLang => {
   const rowsOf = (relation: string): readonly Row[] => view.get(relation) ?? [];
   const objects = rowsOf("GeneralObject");
+  const witnesses = [...rowsOf("GeneralLang"), ...rowsOf("PlacedGeneralLang")];
+  const listed = new Set(
+    rowsOf("ResourceLomLanguageSet").map((row) =>
+      JSON.stringify([textOf(row, "general"), textOf(row, "lang")]),
+    ),
+  );
+  const unlisted = witnesses.filter(
+    (witness) =>
+      !listed.has(JSON.stringify([textOf(witness, "general"), textOf(witness, "value")])),
+  );
   const documentForms = rowsOf("DocumentLang").filter(
     (form) =>
       stated.test(textOf(form, "lang")) &&
@@ -267,9 +279,11 @@ const documentLangOf = (view: ReadonlyMap<string, readonly Row[]>): HostDocument
 
   return {
     refused: [
-      ...new Set([...documentForms, ...assembledForms].map((form) => textOf(form, "lang"))),
+      ...new Set(
+        [...documentForms, ...assembledForms, ...unlisted].map((form) => textOf(form, "lang")),
+      ),
     ],
-    unstated: [...rowsOf("GeneralLang"), ...rowsOf("PlacedGeneralLang")]
+    unstated: witnesses
       .map((witness) => textOf(witness, "lang"))
       .filter((lang) => !stated.test(lang)),
   };

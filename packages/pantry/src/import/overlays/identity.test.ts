@@ -3,7 +3,8 @@
  * The identity builder's free tests: over every document of four small shapes, `rowsOf` gives each
  * overlay one row per element it describes, as the document's own construction says, and each
  * projection each value once; and over a manifest and an item, `languageRowsOf` gives R26's
- * witnesses, whose counts hold the law exactly when the specification does.
+ * witnesses, over which the schema's two statements of the law hold exactly when the specification
+ * does.
  *
  * The documents are built by construction, never filtered: each case's model records what it wrote
  * (every `xml:lang`, ID and `label`, every identity-typed text, every LOM language and its
@@ -973,7 +974,7 @@ type LangSituation =
 
 describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, () => {
   it.effect(
-    "gives each resource's general category its named type, each naming one its document, and a witness for each stated xml:lang form it lists, so the witnesses of every stated form count its document's categories exactly when R26 holds",
+    "gives each resource's general category its named type, each naming one its document, and a witness for each stated xml:lang form under each naming category, listed or not, so the witnesses count every stated form's categories and are all listed exactly when R26 holds",
     (ctx) =>
       // Oracle: the specification as a checker, QTI 3.0 Metadata §2.7.1.3 ("There must be one
       // value for each of the languages referred to by the language attributes on the associated
@@ -1138,28 +1139,36 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
                   ),
                 ),
                 naming
-                  .flatMap(({ langs, node }) =>
-                    stated
-                      .filter((form) => lists(langs, form))
-                      .map((form) =>
-                        JSON.stringify([node, itemDocument, form, folded(collapsed(form))]),
-                      ),
+                  .flatMap(({ node }) =>
+                    stated.map((form) =>
+                      JSON.stringify([node, itemDocument, form, folded(collapsed(form))]),
+                    ),
                   )
                   .toSorted(),
               );
 
-              // The law as the database counts it: each stated form's witnesses against the
-              // categories that describe the item.
+              // The law as the database states it: each stated form's witnesses count the
+              // categories that describe the item (`documentLang`), and each witness's value is a
+              // language its category lists (the witness's containment into
+              // `ResourceLomLanguageSet`).
               const categories = [...manifestRows.GeneralObject.values()].filter(
                 ({ document }) => document === itemDocument,
               ).length;
+              const listed = new Set(
+                [...manifestRows.ResourceLomLanguageSet.values()].map(({ general, lang }) =>
+                  JSON.stringify([general, lang]),
+                ),
+              );
               assert.strictEqual(
                 stated.every(
                   (form) =>
                     [...witnesses.values()].filter(
                       ({ document, lang }) => document === itemDocument && lang === form,
                     ).length === categories,
-                ),
+                ) &&
+                  [...witnesses.values()].every(({ general, value }) =>
+                    listed.has(JSON.stringify([general, value])),
+                  ),
                 holds,
                 JSON.stringify(drawn),
               );

@@ -856,23 +856,16 @@ export const placedIdRowsOf = (input: {
  * Build a package's R26 witnesses from every document's identity rows: for each general category
  * that describes a document ({@link IdentityRows.GeneralObject}, the manifest's) and each of the
  * document's `xml:lang` forms that states a language, a language tag once collapsed
- * ({@link statesLanguage}, spec reading 164), a {@link GeneralLang} row where the category
- * lists the form's value, collapsed and case-folded, among its case-folded languages
- * ({@link IdentityRows.ResourceLomLanguageSet}). A
- * form no category lists has no witness, so its count falls short of its document's categories and
- * the database refuses it under "Document lang".
+ * ({@link statesLanguage}, spec reading 164), a {@link GeneralLang} row of the form's value,
+ * collapsed and case-folded. Whether the category lists that value is the database's to judge: a
+ * witness whose value is none of its category's case-folded languages
+ * ({@link IdentityRows.ResourceLomLanguageSet}) breaks its containment into them, and the database
+ * refuses it under "Document lang".
  *
  * @param documents - Each document's identity rows, the manifest's among them.
  * @returns The witnesses, by their heading.
  */
 export const languageRowsOf = (documents: readonly IdentityRows[]): LanguageRows => {
-  const listed = new Set(
-    documents.flatMap((rows) =>
-      [...rows.ResourceLomLanguageSet.values()].map(({ general, lang }) =>
-        headingKey([general, lang]),
-      ),
-    ),
-  );
   const witnesses = new Map<string, Addition<typeof GeneralLang>>();
 
   for (const [{ document, general }, { lang }] of joined(
@@ -882,7 +875,7 @@ export const languageRowsOf = (documents: readonly IdentityRows[]): LanguageRows
     (form) => form.document,
   )) {
     const value = lowerAscii(collapse(lang));
-    if (statesLanguage(value) && listed.has(headingKey([general, value]))) {
+    if (statesLanguage(value)) {
       witnesses.set(headingKey([general, lang]), { document, general, lang, value });
     }
   }
@@ -894,10 +887,9 @@ export const languageRowsOf = (documents: readonly IdentityRows[]): LanguageRows
  * Build a package's languages in place (spec reading 117): under each instance of an item's
  * assembly, every `xml:lang` carrier of the instance's document; each form the assembly carries,
  * once; and R26's witnesses in place, for each general category that describes the item and each
- * form of its assembly that states a language, a {@link PlacedGeneralLang} row where the category
- * lists the form's value, collapsed and case-folded. A form no category lists has no witness, so
- * its count falls short of the item's categories and the database refuses it under "Document
- * lang".
+ * form of its assembly that states a language, a {@link PlacedGeneralLang} row of the form's value,
+ * collapsed and case-folded. A witness whose value its category does not list breaks its
+ * containment into the category's languages, and the database refuses it under "Document lang".
  *
  * @param documents - Each document's identity rows, the manifest's among them.
  * @param instances - Every assembly's root instance, its tree nested (Q5.13's `assembledRowsOf`).
@@ -907,13 +899,6 @@ export const placedLanguageRowsOf = (
   documents: readonly IdentityRows[],
   instances: Iterable<InstanceRoot>,
 ): PlacedLanguageRows => {
-  const listed = new Set(
-    documents.flatMap((rows) =>
-      [...rows.ResourceLomLanguageSet.values()].map(({ general, lang }) =>
-        headingKey([general, lang]),
-      ),
-    ),
-  );
   const placed = new Map<string, Addition<typeof PlacedXmlLang>>();
   const assembled = new Map<string, Addition<typeof AssembledLang>>();
   const witnesses = new Map<string, Addition<typeof PlacedGeneralLang>>();
@@ -944,7 +929,7 @@ export const placedLanguageRowsOf = (
     (object) => object.document,
   )) {
     const value = lowerAscii(collapse(lang));
-    if (statesLanguage(value) && listed.has(headingKey([general, value]))) {
+    if (statesLanguage(value)) {
       witnesses.set(headingKey([general, lang]), { assembly, general, lang, value });
     }
   }
