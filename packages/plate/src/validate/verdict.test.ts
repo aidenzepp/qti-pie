@@ -2272,11 +2272,760 @@ const m2Wordings: readonly {
   },
 ];
 
+/**
+ * A hand-built refusal for each `check`, rule and rewording align-54 adds (its refusal contract),
+ * with the item that adds it and the fragments its sentence must hold: the facts its detail
+ * carries, what settles it and the repair. Each fragment names a fact the rule's default sentence
+ * never names, so each case fails until its branch words it.
+ */
+const align54Wordings: readonly {
+  readonly detail: Readonly<Record<string, string>>;
+  readonly item: string;
+  readonly name: string;
+  readonly rule: RefusalRule;
+  readonly says: readonly string[];
+}[] = [
+  {
+    detail: {
+      baseType: "integer",
+      cardinality: "multiple",
+      check: "string-binding",
+      interaction: "qti-text-entry-interaction",
+      reading: "14",
+      response: "NOTES",
+    },
+    item: "D3a",
+    name: "a string-identifier binds a single string response",
+    rule: "binding",
+    says: [
+      "`qti-text-entry-interaction`'s attribute `string-identifier` names `NOTES`, a multiple response of base type `integer`, and a `string-identifier` binds a single `string` response (reading 14).",
+      "To make it valid: name a single `string` response in `string-identifier`, or change the declaration of `NOTES`.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "response-identifier",
+      check: "bound-once",
+      interaction: "qti-choice-interaction",
+      reading: "92",
+      response: "RESPONSE",
+    },
+    item: "E11a",
+    name: "one response, one binding",
+    rule: "binding",
+    says: [
+      "`qti-choice-interaction`'s attribute `response-identifier` binds `RESPONSE`, which an earlier binding already binds, and a response is bound at most once, to one interaction (reading 92).",
+      "To make it valid: declare a response of its own and name it in `response-identifier`, so that `RESPONSE` is bound once.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "max-choices",
+      check: "count-cardinality",
+      count: "0",
+      interaction: "qti-choice-interaction",
+      reading: "92",
+      response: "RESPONSE",
+    },
+    item: "E11a",
+    name: "a count of 0, no limit, needs a multiple response",
+    rule: "binding",
+    says: [
+      "`qti-choice-interaction`'s `max-choices` is `0`, which sets no limit, so the interaction must be bound to a `multiple` response, and `RESPONSE` is not one (reading 92).",
+      'To make it valid: declare `RESPONSE` with `cardinality="multiple"`, or set `max-choices` to `1`.',
+    ],
+  },
+  {
+    detail: {
+      attribute: "max-associations",
+      check: "count-cardinality",
+      count: "2",
+      interaction: "qti-match-interaction",
+      reading: "92",
+      response: "RESPONSE",
+    },
+    item: "E11a",
+    name: "a count above 1 needs a multiple response",
+    rule: "binding",
+    says: [
+      "`qti-match-interaction`'s `max-associations` is `2`, so the interaction must be bound to a `multiple` response, and `RESPONSE` is not one (reading 92).",
+    ],
+  },
+  {
+    detail: {
+      check: "gap-match-single",
+      gaps: "3",
+      interaction: "qti-gap-match-interaction",
+      response: "RESPONSE",
+    },
+    item: "P7",
+    name: "several gaps need a multiple response",
+    rule: "binding",
+    says: [
+      "`qti-gap-match-interaction` holds 3 gaps and is bound to `RESPONSE`, a single response, and an interaction of several gaps needs a `multiple` response.",
+      'To make it valid: declare `RESPONSE` with `cardinality="multiple"`.',
+    ],
+  },
+  {
+    detail: {
+      check: "context-variable",
+      element: "qti-context-variable",
+      identifier: "LOCALE",
+      reading: "92",
+    },
+    item: "E11a",
+    name: "a PCI's context variable names a context variable",
+    rule: "undeclared-variable",
+    says: [
+      "`qti-context-variable` names `LOCALE`, which is neither a context variable the item declares nor the built-in `QTI_CONTEXT` (reading 92).",
+      "To make it valid: name a context variable the item declares, or the built-in `QTI_CONTEXT`.",
+    ],
+  },
+  {
+    detail: {
+      check: "count-pair",
+      element: "qti-choice-interaction",
+      least: "min-choices",
+      leastValue: "3",
+      most: "max-choices",
+      mostValue: "2",
+      reading: "76",
+    },
+    item: "E2",
+    name: "a least count is at most its most",
+    rule: "count-range",
+    says: [
+      "`qti-choice-interaction`'s `min-choices` is `3`, above its `max-choices`, `2`, and a least count is at most its most (reading 76).",
+      "To make it valid: lower `min-choices` to at most `2`, or raise `max-choices` to at least `3`.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "max-choices",
+      check: "choice-count",
+      choices: "4",
+      reading: "18",
+      value: "5",
+    },
+    item: "D4a",
+    name: "a count is at most the number of choices",
+    rule: "count-range",
+    says: [
+      "`max-choices` is `5`, more than the interaction's 4 choices, and it may be at most the number of choices (reading 18).",
+      "To make it valid: write a `max-choices` of at most 4, or give the interaction more choices.",
+    ],
+  },
+  {
+    detail: { check: "selection", parts: "3", reading: "79", select: "5" },
+    item: "E4",
+    name: "a selection without replacement selects at most its section's parts",
+    rule: "count-range",
+    says: [
+      "`qti-selection` selects `5` without replacement from its section's 3 parts, and a selection without replacement selects at most its section's parts (reading 79).",
+      'To make it valid: set `select` to at most 3, or set `with-replacement="true"`.',
+    ],
+  },
+  {
+    detail: {
+      attribute: "identifier",
+      check: "numbered",
+      element: "qti-variable",
+      itemRef: "Q1",
+      reading: "88",
+      reference: "Q1.2.SCORE",
+    },
+    item: "D6",
+    name: "a numbered reading only under a selection with replacement",
+    rule: "undeclared-variable",
+    says: [
+      "`qti-variable`'s attribute `identifier` names `Q1.2.SCORE`, a numbered instance of the item ref `Q1`, and an instance number counts only where a selection with replacement can repeat `Q1`, which none does (reading 88).",
+      'To make it valid: name the variable without its instance number, or give a section that holds `Q1` a selection with `with-replacement="true"`.',
+    ],
+  },
+  {
+    detail: {
+      attribute: "identifier",
+      check: "setter",
+      element: "qti-set-outcome-value",
+      reading: "112",
+      reference: "a.SCORE",
+    },
+    item: "D6",
+    name: "a setter names the test's own declaration",
+    rule: "undeclared-variable",
+    says: [
+      "`qti-set-outcome-value`'s attribute `identifier` names `a.SCORE`, which the test does not declare, and a setter sets a variable its own document declares, never an item's (reading 112).",
+      "To make it valid: declare `a.SCORE` in the test, or set a variable the test declares.",
+    ],
+  },
+  {
+    detail: {
+      baseType: "float",
+      cardinality: "single",
+      check: "feedback-outcome",
+      element: "qti-feedback-block",
+      identifier: "SCORE",
+      reading: "77",
+    },
+    item: "E3a",
+    name: "a feedback element names an identifier outcome, single or multiple",
+    rule: "expression-type",
+    says: [
+      "`qti-feedback-block`'s attribute `outcome-identifier` names `SCORE`, a single outcome of base type `float`, and a feedback element names an outcome of base type `identifier`, single or multiple (reading 77).",
+      "To make it valid: name an outcome of base type `identifier`, single or multiple, in `outcome-identifier`, or change the declaration of `SCORE`.",
+    ],
+  },
+  {
+    detail: {
+      check: "default-hotspot",
+      context: "qti-hotspot-interaction",
+      element: "qti-hotspot-choice",
+      reading: "80",
+    },
+    item: "E5",
+    name: "a default hotspot comes last",
+    rule: "misplaced-element",
+    says: [
+      '`qti-hotspot-choice` is a default hotspot, with `shape="default"`, and is not the last hotspot of `qti-hotspot-interaction`, where a default hotspot comes last (reading 80).',
+      "To make it valid: move `qti-hotspot-choice` after the other hotspots of `qti-hotspot-interaction`.",
+    ],
+  },
+  {
+    detail: {
+      check: "default-hotspot",
+      context: "qti-graphic-gap-match-interaction",
+      element: "qti-associable-hotspot",
+      reading: "80",
+    },
+    item: "E5",
+    name: "a graphic gap match interaction has no default hotspot",
+    rule: "misplaced-element",
+    says: [
+      '`qti-associable-hotspot` is a default hotspot, with `shape="default"`, and `qti-graphic-gap-match-interaction` may hold none (reading 80).',
+      "To make it valid: give `qti-associable-hotspot` another shape, or remove it.",
+    ],
+  },
+  {
+    detail: {
+      check: "order",
+      context: "qti-companion-materials-info",
+      element: "qti-physical-material",
+      reading: "96",
+    },
+    item: "E13",
+    name: "order after a repeated wildcard",
+    rule: "misplaced-element",
+    says: [
+      "`qti-physical-material` comes after a child of `qti-companion-materials-info` that its repeated wildcard holds, and no element of an earlier part of the sequence may follow such a child (reading 96).",
+      "To make it valid: move `qti-physical-material` before the children the wildcard holds.",
+    ],
+  },
+  {
+    detail: {
+      check: "lookup-cardinality",
+      element: "qti-match-table",
+      identifier: "GRADE",
+      reading: "100",
+    },
+    item: "E15",
+    name: "a lookup sets a single outcome",
+    rule: "misplaced-element",
+    says: [
+      "`qti-match-table` belongs to the outcome `GRADE`, which is not single, and a lookup table sets a single outcome (reading 100).",
+      'To make it valid: declare `GRADE` with `cardinality="single"`, or remove `qti-match-table`.',
+    ],
+  },
+  {
+    detail: { check: "quotation", mark: '"', reading: "127", side: "before" },
+    item: "E30",
+    name: "no quotation mark before a q",
+    rule: "text-not-allowed",
+    says: [
+      'The quotation mark `"` stands immediately before this `q`, and a browser adds the quotation marks of a `q` itself (reading 127).',
+      'To make it valid: remove the quotation mark `"`.',
+    ],
+  },
+  {
+    detail: { check: "quotation", mark: "”", reading: "127", side: "end" },
+    item: "E30",
+    name: "no quotation mark at the end of a q",
+    rule: "text-not-allowed",
+    says: ["The quotation mark `”` stands at the end of this `q`"],
+  },
+  {
+    detail: {
+      chain: "tests/test.xml sections/a.xml sections/b.xml sections/a.xml",
+      href: "../sections/a.xml",
+      identifier: "toA",
+      reading: "85",
+    },
+    item: "E7",
+    name: "the new rule inclusion-cycle",
+    rule: "inclusion-cycle",
+    says: [
+      "The section ref `toA` points at `../sections/a.xml`, which leads back to a document already on its chain, `tests/test.xml sections/a.xml sections/b.xml sections/a.xml`, and an inclusion never reaches itself (reading 85).",
+      "Rule `inclusion-cycle`.",
+      "To make it valid: point the section ref at a document that does not lead back to one on its chain, or remove it.",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "backward", target: "Q1" },
+    item: "E8a",
+    name: "the new rule branch-target, a backward jump",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `Q1` comes before the end of the element that holds the rule, and a branch rule jumps only forward (reading 87).",
+      "Rule `branch-target`.",
+      "To make it valid: name a later item ref, section or test part the rule may reach, or one of `EXIT_SECTION`, `EXIT_TESTPART` and `EXIT_TEST`.",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "self", target: "Q2" },
+    item: "E8a",
+    name: "the new rule branch-target, a jump to itself",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `Q2` names the element that holds the rule, and a branch rule jumps only forward, never to its own element (reading 87).",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "outside-part", target: "S9" },
+    item: "E8a",
+    name: "the new rule branch-target, a jump outside its test part",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `S9` lies outside what the rule may name: a test part's rule names a later test part, and any other rule an item ref, section or section ref of its own test part (reading 87).",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "unknown", target: "NOWHERE" },
+    item: "E8b",
+    name: "the new rule branch-target, an unknown target",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `NOWHERE` names no test part, section, section ref or item ref the rule can reach, and no exit (reading 87).",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "repeatable", target: "Q3" },
+    item: "E8b",
+    name: "the new rule branch-target, a repeatable item ref",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `Q3` names an item ref that a selection with replacement can repeat, which no branch rule may target (reading 87).",
+      "To make it valid: name an item ref no selection with replacement repeats, or one of `EXIT_SECTION`, `EXIT_TESTPART` and `EXIT_TEST`.",
+    ],
+  },
+  {
+    detail: { reading: "87", reason: "ambiguous", target: "Q4" },
+    item: "E8b",
+    name: "the new rule branch-target, a target two placements supply",
+    rule: "branch-target",
+    says: [
+      "`qti-branch-rule`'s target `Q4` names an element that two placements of one section document both supply, so it names two (reading 87).",
+      "To make it valid: name an element placed once, or place that section document once.",
+    ],
+  },
+  {
+    detail: { document: "items/q1.xml", language: "fr", listed: "en de", reading: "134" },
+    item: "E34",
+    name: "the new rule document-lang",
+    rule: "document-lang",
+    says: [
+      "The document `items/q1.xml` uses the language `fr`, and its resource's LOM general category lists only `en` and `de`; each language an item or test uses is listed there (reading 134).",
+      "Rule `document-lang`.",
+      "To make it valid: add a `language` of `fr` to the resource's LOM general category, or correct the document's language.",
+    ],
+  },
+  {
+    detail: { document: "items/q1.xml", language: "fr", listed: "", reading: "134" },
+    item: "E34",
+    name: "the new rule document-lang, with no language listed",
+    rule: "document-lang",
+    says: ["its resource's LOM general category lists no language;"],
+  },
+  {
+    detail: { reading: "122", value: "self assessment" },
+    item: "E25",
+    name: "the new rule lom-learning-resource-type",
+    rule: "lom-learning-resource-type",
+    says: [
+      "The LOM `learningResourceType` is `self assessment`, a LOM value that QTI forbids, since a QTI object may be reused in any kind of assessment (reading 122).",
+      "Rule `lom-learning-resource-type`.",
+      "To make it valid: use `exercise` or `questionnaire`, or a term of another vocabulary.",
+    ],
+  },
+  {
+    detail: {
+      check: "choice-variable",
+      class: "qti-simple-choice",
+      identifier: "SCORE",
+      reading: "104",
+    },
+    item: "E19",
+    name: "a choice's identifier names no item variable",
+    rule: "duplicate-identifier",
+    says: [
+      "`qti-simple-choice`'s identifier `SCORE` is also the name of an item variable or a built-in, and a choice's identifier names no item variable (reading 104).",
+      "To make it valid: give the `qti-simple-choice` an identifier that no variable, built-in or other choice of the item uses.",
+    ],
+  },
+  {
+    detail: { baseType: "integer", check: "map-key", key: "01", reading: "98" },
+    item: "B5b",
+    name: "a mapping's keys are distinct",
+    rule: "duplicate-identifier",
+    says: [
+      "The mapping's key `01` repeats an earlier key, compared as a value of base type `integer`, and a mapping's keys are distinct (reading 98).",
+      "To make it valid: remove the repeated `qti-map-entry`, or give it a key no other entry has.",
+    ],
+  },
+  {
+    detail: { check: "field", field: "x", reading: "158" },
+    item: "B7",
+    name: "a record writes each field once",
+    rule: "duplicate-identifier",
+    says: [
+      "The record value writes the field `x` more than once, and a record holds each field once (reading 158).",
+      "To make it valid: write the field `x` once.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "for",
+      check: "idref-target",
+      element: "label",
+      reading: "156",
+      value: "name",
+    },
+    item: "E16",
+    name: "an IDREF names an ID of the document",
+    rule: "attribute-type",
+    says: [
+      "`label`'s attribute `for` is `name`, the `id` of no element of the document (reading 156).",
+      "To make it valid: name in `for` the `id` of an element of the document.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "headers",
+      check: "headers",
+      element: "td",
+      reading: "126",
+      token: "h3",
+      value: "h1 h3",
+    },
+    item: "E29",
+    name: "headers names header cells of the same table, each once",
+    rule: "attribute-type",
+    says: [
+      "`td`'s attribute `headers` is `h1 h3`, and its token `h3` is not the `id` of a `th` of the cell's own table, or repeats an earlier token (reading 126).",
+      "To make it valid: make each token of `headers` the `id` of a `th` of the same table, each written once.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "mastery-value",
+      check: "mastery-range",
+      element: "qti-outcome-declaration",
+      least: "0.0",
+      reading: "149",
+      value: "-1",
+    },
+    item: "E42b",
+    name: "a mastery value at least the outcome's minimum",
+    rule: "attribute-type",
+    says: [
+      "`qti-outcome-declaration`'s attribute `mastery-value` is `-1`, below the outcome's minimum, `0.0`, and a mastery value lies from the outcome's minimum to its maximum (reading 149).",
+      "To make it valid: write a `mastery-value` of at least `0.0`, or lower the outcome's `normal-minimum`.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "mastery-value",
+      check: "mastery-range",
+      element: "qti-outcome-declaration",
+      greatest: "10",
+      reading: "149",
+      value: "12",
+    },
+    item: "E42a",
+    name: "a mastery value at most the outcome's maximum",
+    rule: "attribute-type",
+    says: [
+      "`qti-outcome-declaration`'s attribute `mastery-value` is `12`, above the outcome's maximum, `10`, and a mastery value lies from the outcome's minimum to its maximum (reading 149).",
+      "To make it valid: write a `mastery-value` of at most `10`, or raise the outcome's `normal-maximum`.",
+    ],
+  },
+  {
+    detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem: "json" },
+    item: "P3",
+    name: "a data-ssml value that is not JSON",
+    rule: "attribute-type",
+    says: [
+      "`span`'s attribute `data-ssml` is not JSON, and a `data-ssml` value is Data-SSML JSON.",
+      "To make it valid: write `data-ssml` as Data-SSML JSON, or remove it.",
+    ],
+  },
+  {
+    detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem: "name" },
+    item: "P3",
+    name: "a data-ssml value naming an unknown property",
+    rule: "attribute-type",
+    says: ["`span`'s attribute `data-ssml` names a property Data-SSML does not define,"],
+  },
+  {
+    detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem: "type" },
+    item: "P3",
+    name: "a data-ssml value of an unknown type",
+    rule: "attribute-type",
+    says: [
+      "`span`'s attribute `data-ssml` gives a property a value of a type Data-SSML does not allow it,",
+    ],
+  },
+  {
+    detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem: "value" },
+    item: "P3",
+    name: "a data-ssml value outside its property's values",
+    rule: "attribute-type",
+    says: ["`span`'s attribute `data-ssml` gives a property a value Data-SSML does not allow,"],
+  },
+  {
+    detail: {
+      attribute: "cardinality",
+      baseType: "float",
+      check: "reserved-outcome-type",
+      element: "qti-outcome-declaration",
+      identifier: "SCORE",
+      reading: "153",
+      value: "record",
+    },
+    item: "B1b",
+    name: "a reserved outcome declared record",
+    rule: "attribute-type",
+    says: [
+      "`qti-outcome-declaration`'s attribute `cardinality` is `record`, but an outcome named `SCORE` is a single value of the base type `float`, and a record has no base type (reading 153).",
+      'To make it valid: declare `SCORE` with `cardinality="single"` and the base type `float`, or give `qti-outcome-declaration` another identifier.',
+    ],
+  },
+  {
+    detail: {
+      attribute: "tool-name tool-version",
+      check: "label-tool",
+      element: "qti-assessment-item",
+      labelled: "qti-assessment-item/qti-item-body/qti-text-entry-interaction",
+      reading: "128",
+    },
+    item: "E31a",
+    name: "a label names its tool",
+    rule: "missing-attribute",
+    says: [
+      "`qti-assessment-item` must carry `tool-name` and `tool-version`, because `qti-assessment-item/qti-item-body/qti-text-entry-interaction` carries a `label`, and an item that uses labels names the tool that set them (reading 128).",
+      "To make it valid: add `tool-name` and `tool-version` to `qti-assessment-item`, or remove the `label`.",
+    ],
+  },
+  {
+    detail: { check: "entry-key", path: "C:/items/q1.xml", reading: "138" },
+    item: "E36",
+    name: "an entry key with a backslash or a drive letter",
+    rule: "package-path-outside",
+    says: [
+      "The package's entry `C:/items/q1.xml` holds a backslash or begins with a drive letter, so it names no path inside the package (reading 138).",
+      "To make it valid: rename the entry with forward slashes and no drive letter.",
+    ],
+  },
+  {
+    detail: { check: "document-entry", path: "https://example.org/q1.xml", reading: "102" },
+    item: "E17",
+    name: "a document resource's href outside the package",
+    rule: "package-path-outside",
+    says: [
+      "The resource's `href` is `https://example.org/q1.xml`, which leads outside the package, and a document resource's `href` names a document the package holds (reading 102).",
+      "To make it valid: point the `href` at the document's path inside the package, relative to its root.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "src",
+      check: "reference",
+      document: "items/q1.xml",
+      path: "images/a.png",
+      reading: "103",
+    },
+    item: "E18",
+    name: "a file reference names a held file",
+    rule: "package-file-missing",
+    says: [
+      "The document `items/q1.xml` names the file `images/a.png` in its `src`, and the package's manifest lists no such file (reading 103).",
+      "To make it valid: add `images/a.png` to the package and list it in a `file` entry, or correct the `src`.",
+    ],
+  },
+  {
+    detail: {
+      check: "path-type",
+      path: "items/q1.xml",
+      reading: "162",
+      type: "imsqti_test_xmlv3p0",
+    },
+    item: "E38",
+    name: "one path, one document type",
+    rule: "resource-type-mismatch",
+    says: [
+      "The manifest names `items/q1.xml` a document of type `imsqti_test_xmlv3p0`, and another resource names it a document of another type; a path is one document, of one type (reading 162).",
+      "To make it valid: name `items/q1.xml` under one document type only.",
+    ],
+  },
+  {
+    detail: {
+      check: "manifest-document",
+      path: "imsmanifest.xml",
+      reading: "146",
+      type: "imsqti_item_xmlv3p0",
+    },
+    item: "E38",
+    name: "no resource names the manifest",
+    rule: "resource-type-mismatch",
+    says: [
+      "A resource of type `imsqti_item_xmlv3p0` names `imsmanifest.xml`, the package's manifest, which is no resource's document (reading 146).",
+      "To make it valid: point the resource's `href` at its own document, not at the manifest.",
+    ],
+  },
+  {
+    detail: { attribute: "identifier", check: "unwritten", path: "q1.xml", reading: "148" },
+    item: "E41a",
+    name: "a root with no identifier beside a LOM identifier",
+    rule: "lom-identifier",
+    says: [
+      "The document `q1.xml` writes no `identifier` on its root, so nothing matches the `identifier` its resource's LOM metadata gives (reading 148).",
+      "To make it valid: write on the document's root the `identifier` its resource's LOM metadata gives.",
+    ],
+  },
+  {
+    detail: { attribute: "title", check: "unwritten", path: "q1.xml", reading: "148" },
+    item: "E41a",
+    name: "a root with no title beside a LOM title",
+    rule: "lom-title",
+    says: [
+      "The document `q1.xml` writes no `title` on its root, so nothing matches the `title` its resource's LOM metadata gives (reading 148).",
+      "To make it valid: write on the document's root the `title` its resource's LOM metadata gives.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "identifier",
+      check: "unwritten",
+      href: "q9.xml",
+      path: "items/q9.xml",
+      reading: "155",
+    },
+    item: "E41b",
+    name: "an item ref with no identifier, judged like any other",
+    rule: "item-ref-unresolved",
+    says: [
+      "The item ref that writes no `identifier` points at `q9.xml`, which resolves to `items/q9.xml`, and the manifest lists no item resource there (reading 155).",
+      "To make it valid: point the item ref's `href` at an item resource the manifest lists, or list the item as a resource of the package.",
+    ],
+  },
+  {
+    detail: {
+      check: "custom-interaction",
+      element: "qti-custom-interaction",
+      parent: "qti-item-body",
+      version: "3.0.0",
+    },
+    item: "P2",
+    name: "qti-custom-interaction in a 3.0.0 package",
+    rule: "unknown-element",
+    says: [
+      "`qti-custom-interaction` is deprecated in QTI 3.0.0, which requires a Portable Custom Interaction, `qti-portable-custom-interaction`, in its place.",
+      "To make it valid: replace `qti-custom-interaction` with a `qti-portable-custom-interaction`.",
+    ],
+  },
+];
+
 describe("describeRefusal", () => {
   it("words every rule in refusalRules", () => {
     for (const rule of refusalRules) {
       assert.isAbove(describeRefusal(refusalOf(rule, {})).length, 0, rule);
     }
+  });
+
+  it.each(align54Wordings)("align-54 wording $item: $name", ({ detail, rule, says }) => {
+    const sentence = describeRefusal(refusalOf(rule, detail));
+
+    assert.notMatch(sentence, /[\n\r]/u);
+
+    for (const fragment of says) {
+      assert.include(sentence, fragment);
+    }
+  });
+
+  it("align-54 wording D2: compares a LOM title in the document's language, as xs:normalizedString, naming the language when the document has one", () => {
+    const facts = {
+      metadata: "Metadata Example Item #1",
+      path: "choice.xml",
+      reading: "62",
+      resource: "choice",
+      title: "Unattended Luggage",
+    };
+    const unstated = describeRefusal(refusalOf("lom-title", facts));
+    const stated = describeRefusal(refusalOf("lom-title", { ...facts, language: "en" }));
+
+    assert.include(
+      unstated,
+      "The document `choice.xml` has the title `Unattended Luggage`, and the LOM metadata of its resource `choice` gives `Metadata Example Item #1` instead; an item's or test's title must be one its LOM metadata gives in the document's language, compared as an `xs:normalizedString`, in which a tab or line break reads as a space (reading 62).",
+    );
+    assert.include(
+      unstated,
+      "To make it valid: make the resource's LOM title string in the document's language `Unattended Luggage`, or change the document's `title` to `Metadata Example Item #1`.",
+    );
+    assert.include(
+      stated,
+      "must be one its LOM metadata gives in the document's language, `en`, compared as an `xs:normalizedString`",
+    );
+  });
+
+  it("align-54 wording D6: names the test's own variable as one reading of an ambiguous reference when its prefix is empty", () => {
+    const sentence = describeRefusal(
+      refusalOf("ambiguous-reference", {
+        firstPrefix: "",
+        firstVariable: "a.b",
+        reading: "48",
+        reference: "a.b",
+        secondPrefix: "a",
+        secondVariable: "b",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "The reference `a.b` reads two ways, the test's own variable `a.b` and `a` with the variable `b`, and both name a variable that exists (reading 48).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: rename the test's own variable `a.b`, or the item ref, test part or section `a`, so that only one reading names a variable.",
+    );
+  });
+
+  it("align-54 wording P1, B2b: words a printed variable's format as any text, %% and conversions over the codes and d", () => {
+    const sentence = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "format",
+        check: "printf-format",
+        element: "qti-printed-variable",
+        reading: "132",
+        value: "%q",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-printed-variable`'s attribute `format` is `%q`, which is not a printf format: any text, `%%` for a percent sign, and conversions, each a `%`, then any of the flags `#`, `0`, a space, `+` and `-`, an optional width, an optional precision and one of the codes `E`, `e`, `f`, `G`, `g`, `r`, `R`, `i`, `o`, `X`, `x` or `d` (reading 132).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: end each conversion in one of those codes, and write a percent sign as `%%`.",
+    );
   });
 
   it("keeps a value holding backticks inside one code span, whole", () => {
@@ -2369,6 +3118,8 @@ describe("describeRefusal", () => {
   });
 
   it("cites the reading that refuses a child, and names QTI 3.0's schema only when none does", () => {
+    // Reading 60 ("a simple type it names governs its text and is checked"): an element whose
+    // `xsi:type` names a simple type holds no element child.
     const cited = describeRefusal(
       refusalOf("unknown-element", { element: "b", parent: "data", reading: "60" }),
     );
@@ -2469,26 +3220,24 @@ describe("describeRefusal", () => {
     );
   });
 
-  it("[I-9a] words a qti-equal tolerance whose token is neither a number nor a variable's name, citing the information model's line (pantry P6)", () => {
+  it("align-54 wording E24: words a qti-equal tolerance of 0, which is not one or two values, each a number above 0 or a variable's name (reading 121)", () => {
     const sentence = describeRefusal(
       refusalOf("attribute-type", {
         attribute: "tolerance",
         check: "tolerance-token",
         element: "qti-equal",
-        expected: "a list of numbers (xs:double) and variable names (NCName), one space apart",
-        pantry: "P6",
-        source: "info.txt:24946",
-        value: "1,5",
+        reading: "121",
+        value: "0",
       }),
     );
 
     assert.include(
       sentence,
-      "`qti-equal`'s attribute `tolerance` is `1,5`, which holds a token that is neither a number (`xs:double`) nor a variable's name (an NCName) (info.txt:24946).",
+      "`qti-equal`'s attribute `tolerance` is `0`, which is not one or two values, each a number above 0 or a variable's name (reading 121).",
     );
     assert.include(
       sentence,
-      "To make it valid: write each token of `tolerance` as a number or a variable's name, one space apart.",
+      "To make it valid: write one or two values, one space apart, each a number above 0 or a variable's name.",
     );
   });
 
@@ -3150,7 +3899,7 @@ describe("describeRefusal", () => {
     assert.notInclude(sentence, "sets");
   });
 
-  it("names a dotted name that resolves to no item ref, test part or section variable (reading 48)", () => {
+  it('names a dotted name that resolves to no item ref, test part or section variable, by reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable")', () => {
     const sentence = describeRefusal(
       refusalOf("undeclared-variable", {
         check: "reading",

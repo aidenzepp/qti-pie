@@ -22,16 +22,26 @@ import { Schema } from "effect";
  * adapter's `not-well-formed`, located by line and column, and `reader-refused`, located at the
  * whole document with the shared reader's own rule in {@link Refusal.readerRule}.
  *
- * The last thirteen are M2's. A test's prose rules give `expression-placement`, an outcome-only
+ * The next thirteen are M2's. A test's prose rules give `expression-placement`, an outcome-only
  * expression outside outcome processing (reading 23). The manifest gives `not-qti3-package`, a root
  * outside QTI 3.0's content packaging namespace, `package-profile`, a `schemaversion` other than
  * the two accepted, and `dependency-unresolved`. The file rules give `package-manifest-missing`,
  * `package-path-outside`, `package-file-unlisted` and `package-file-missing`. Opening a package
- * gives `item-ref-unresolved`, `ambiguous-reference`, a dotted reference that two readings resolve
- * (reading 48), `resource-type-mismatch`, a resource whose document's root is not the one its
- * declared type names, and `lom-identifier` and `lom-title`, an item's or test's identifier or
- * title that its resource's own LOM metadata gives otherwise (reading 62). Adding a rule here is
- * the only way a stage gains a new refusal.
+ * gives `item-ref-unresolved`, `ambiguous-reference`, a dotted reference that two readings
+ * resolve, which reading 48 ("a dotted reference is accepted when exactly one reading names a real
+ * item ref, test part or section and its variable") refuses, `resource-type-mismatch`, a resource
+ * whose document's root is not the one its declared type names, and `lom-identifier` and
+ * `lom-title`, an item's or test's identifier or title that its resource's own LOM metadata gives
+ * otherwise, which reading 62 ("an item's or test's identifier and title are those its package's
+ * LOM metadata gives it") refuses.
+ *
+ * The last four are align-54's, under the qti package's names: `inclusion-cycle`, a chain of
+ * section refs that leads back to a document already on it (reading 85), `branch-target`, a branch
+ * rule's target that no branch rule may name (reading 87), `document-lang`, a language an item or
+ * test uses that its resource's LOM record does not list (reading 134), and
+ * `lom-learning-resource-type`, a LOM `learningResourceType` of `exam` or `self assessment`
+ * (reading 122). Every other refusal align-54 adds is an existing rule with a new `check` in its
+ * detail. Adding a rule here is the only way a stage gains a new refusal.
  */
 export const refusalRules = [
   "unknown-element",
@@ -66,6 +76,10 @@ export const refusalRules = [
   "resource-type-mismatch",
   "lom-identifier",
   "lom-title",
+  "inclusion-cycle",
+  "branch-target",
+  "document-lang",
+  "lom-learning-resource-type",
 ] as const;
 
 /**
