@@ -92,10 +92,10 @@ import type {
   Element,
   InvalidConfiguration,
   Options,
+  ResponseValue,
   StatusInput,
   StoredRecord,
   ValidationMessage,
-  Value,
 } from "#plate/index.ts";
 import { htmlHost } from "#plate/hosts/html.ts";
 import type { HtmlHost } from "#plate/hosts/html.ts";
@@ -241,7 +241,7 @@ class SheetUnreadable extends Schema.TaggedError<SheetUnreadable>()("SheetUnread
  */
 interface Shown {
   readonly status: StatusInput & { readonly heading: "responseRecorded" | "scored" };
-  readonly values: Readonly<Record<string, Value>>;
+  readonly values: Readonly<Record<string, ResponseValue>>;
 }
 
 /**
