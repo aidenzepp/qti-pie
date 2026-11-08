@@ -121,8 +121,8 @@ const categoriesOf = (element: SourceElement, name: string): Option.Option<reado
   );
 
 /**
- * Read the filters every kind of the family takes, each none when absent: the
- * `section-identifier`, read as an identifier, and the two category lists.
+ * Read the filters every kind of the family takes, each none when absent: the `section-identifier`,
+ * read as an identifier, and the two category lists.
  *
  * @param element The kind's element.
  * @returns The filters.

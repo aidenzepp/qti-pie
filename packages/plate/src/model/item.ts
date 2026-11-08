@@ -701,6 +701,15 @@ export type BodyNode =
   | Unsupported;
 
 /**
+ * The identifier, and the base type and cardinality as written, of an {@link UnheldDeclaration}.
+ */
+interface UnheldType {
+  readonly baseType: Option.Option<BaseType>;
+  readonly cardinality: Cardinality;
+  readonly identifier: string;
+}
+
+/**
  * A response, outcome or template declaration of a type the value model holds no value of: base
  * type `file`, or cardinality `record`. A record's `base-type` is optional, so it is none when the
  * declaration writes none. `kind` names the declaration; a response's `declaresCorrect` is whether
@@ -715,25 +724,16 @@ export type UnheldDeclaration = UnheldType &
   );
 
 /**
- * The identifier, and the base type and cardinality as written, of an {@link UnheldDeclaration}.
- */
-interface UnheldType {
-  readonly baseType: Option.Option<BaseType>;
-  readonly cardinality: Cardinality;
-  readonly identifier: string;
-}
-
-/**
  * A valid `qti-assessment-item` as plate models it.
  *
  * `responses`, `outcomes` and `templates` hold the declarations of modelled base types and
  * cardinalities, in document order; every other declaration is a mark, and `unheld` holds those of
- * base type `file` or cardinality `record` by identifier. `processing` is none when
- * the item has no response processing, or when plate cannot run it, which `unsupported` then marks.
- * Plate cannot run it beside a `qti-template-processing` that does not run (`templateProcessing`
- * none, an element in it marked), which may set a value response processing reads, such as a
- * correct response. `unsupported` lists every feature not rendered, in document order, each once
- * per feature and path.
+ * base type `file` or cardinality `record` by identifier. `processing` is none when the item has no
+ * response processing, or when plate cannot run it, which `unsupported` then marks. Plate cannot
+ * run it beside a `qti-template-processing` that does not run (`templateProcessing` none, an
+ * element in it marked), which may set a value response processing reads, such as a correct
+ * response. `unsupported` lists every feature not rendered, in document order, each once per
+ * feature and path.
  */
 export interface Item {
   readonly body: readonly BodyNode[];
@@ -2758,9 +2758,9 @@ type SettingKind = Extract<Rule | TemplateRule, { readonly identifier: string }>
  * and `qti-set-default-value` a response or an outcome (`targetOf` in
  * `#plate/engine/template.ts`). The names it finds are valid content, never refused (reading 1,
  * rule `5b8ee08b`): a response, an outcome or a template variable the model does not hold (base
- * type `file`, cardinality `record`, or no base type), a template variable beside
- * template processing that does not run, the built-in variable `duration`, read or set, which the
- * engine holds no value for, and the built-in `completionStatus` where a declaration names it.
+ * type `file`, cardinality `record`, or no base type), a template variable beside template
+ * processing that does not run, the built-in variable `duration`, read or set, which the engine
+ * holds no value for, and the built-in `completionStatus` where a declaration names it.
  * Reading 29 makes an item's `duration` a single float, so it is a valid name in an item's rules.
  * In template processing it also finds `QTI_CONTEXT` and each variable a `qti-context-declaration`
  * declares: template processing may read them (`info.txt:22601`, and a reference to `QTI_CONTEXT`
@@ -2967,8 +2967,8 @@ type ValueType = Pick<Value, "baseType" | "cardinality">;
 
 /**
  * Give the value type of a type the kind rules give, none when the value model holds no value of
- * it: a base type of `any`, `unknown` or `file`, or a cardinality of `record` or
- * `unknown`. Such a type is not judged.
+ * it: a base type of `any`, `unknown` or `file`, or a cardinality of `record` or `unknown`. Such a
+ * type is not judged.
  *
  * @param type The type.
  * @returns Its value type, or none.
@@ -3417,8 +3417,8 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       kind: UnheldDeclaration["kind"],
     ): Effect.Effect<void, Refusal> =>
       Effect.map(unheldDeclaration(build, declaration, kind), (read) => {
-        for (const each of Option.toArray(read)) {
-          unheld.set(each.identifier, each);
+        if (Option.isSome(read)) {
+          unheld.set(read.value.identifier, read.value);
         }
       });
     const body: BodyNode[] = [];
