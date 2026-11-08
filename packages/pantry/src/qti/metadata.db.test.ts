@@ -6,18 +6,23 @@
  * access") state it, through the one direct writer (`#pantry/test/direct-sql.ts`): the author
  * login, `SET ROLE` to the author role, at SERIALIZABLE, every deferrable foreign key deferred, the
  * builder's facts written into `Qti`'s tables with every column a writer fills (generated columns
- * PostgreSQL computes), then the one constraint under test set immediate, and a rollback. A role
+ * PostgreSQL computes), then the constraints under test set immediate, and a rollback. A role
  * writes a table, never its own view of it: it holds INSERT on each table it writes and only SELECT
  * on its views (README, "Security model"), so a read back goes through the view. The rows are the
  * builder's (`#pantry/import/overlays/metadata.ts`) over the fixture's own documents, so a case
  * restates its setup as a fixture and an edit of it:
  *
  * - **`lom-identifier`** on `metaData`: its record's entry names `qti_v2_item_01` and its item is
- *   `choice`, so `LomObjectIdentifier`'s witness containment into the general entries refuses it
- *   (23503); with the entry edited to `choice`, or to `choice` padded, it holds.
+ *   `choice`, so the builder writes no `LomObjectIdentifier` for the record, whose witness would be
+ *   an entry naming `choice`, and the law's existence, the containment of the record's general
+ *   entries into `LomObjectIdentifier`, refuses it (23503); with the entry edited to `choice`, or
+ *   to `choice` padded, the record has its row, and both that containment and the witness's into
+ *   the general entries hold.
  * - **`lom-title`** on `metaData`: its record's title string is `Metadata Example Item #1` and its
- *   item's title `Unattended Luggage`, so `LomObjectTitle`'s witness containment refuses it; with
- *   the string edited to the item's title, it holds.
+ *   item's title `Unattended Luggage`, so the builder writes no `LomObjectTitle`, and the law's
+ *   existence, the containment of the record's title into `LomObjectTitle`, refuses it; with the
+ *   string edited to the item's title, the record has its row, and both the existence and the
+ *   witness's containments into the title strings hold.
  * - **the date** (`attribute-lexical`): each `lastUpdated` of the usage-data fixtures `usage3`,
  *   `usage3-typed`, `usage3-padded` and `usage3-float-padded` is accepted by its row's laws, its
  *   generated `date` the day it names; `usage3-feb-30`'s and `usage3-bad-month`'s are refused by
@@ -51,6 +56,7 @@ import {
   LomEntry,
   LomObjectIdentifier,
   LomObjectTitle,
+  LomTitle,
   LomTitleString,
   StatisticDate,
   UsageValue,
@@ -229,14 +235,20 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
   it.effect(
     "refuses metaData's record by lom-identifier, and accepts it with its entry naming choice, padded or not",
     () =>
-      // Oracle: PostgreSQL, `LomObjectIdentifier`'s witness containment into the general entries,
-      // a foreign key into `lom_entry`: 23503 on that key where no general entry of the record
-      // has the item's identifier as its token.
+      // Oracle: PostgreSQL, the law `LomObjectIdentifier` (§2.7.1.1, reading 62): its existence,
+      // the containment of a naming record's general entries into `LomObjectIdentifier`, a
+      // foreign key from `lom_entry`, and its witness, the containment of that row into the general
+      // entries, a foreign key into `lom_entry`, each set immediate. The builder writes the
+      // record's row exactly where one of its general entries has the item's identifier as its
+      // token, so a record none of whose entries names its item has no row, and the existence
+      // refuses it: 23503 on that key.
       // Bound: the fixture, and its entry edited to `choice` and to `choice` padded.
       Effect.gen(function* lomIdentifier() {
         const client = yield* loginSession;
-        const keys = yield* foreignKeysBetween(client, "lom_object_identifier", "lom_entry");
-        assert.isNotEmpty(keys, "lom_object_identifier references lom_entry");
+        const existence = yield* foreignKeysBetween(client, "lom_entry", "lom_object_identifier");
+        const witness = yield* foreignKeysBetween(client, "lom_object_identifier", "lom_entry");
+        assert.isNotEmpty(existence, "lom_entry references lom_object_identifier");
+        assert.isNotEmpty(witness, "lom_object_identifier references lom_entry");
 
         const files = yield* readPackage(fixtures.metaData);
 
@@ -255,23 +267,24 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
         ] as const) {
           const built = yield* builtOf(edited);
           const named = statedOf(LomObjectIdentifier, built.objects.LomObjectIdentifier.values());
-          assert.isNotEmpty(named, `${label}: its record names its item`);
+          assert.lengthOf(
+            named,
+            refused ? 0 : 1,
+            `${label}: its record names its item exactly where an entry is the item's identifier`,
+          );
 
           const refusal = Option.getOrUndefined(
             yield* judged(
               client,
-              statedInserts([
-                ...statedOf(LomEntry, built.manifest.LomEntry.values()),
-                ...named.slice(0, 1),
-              ]),
-              keys,
+              statedInserts([...statedOf(LomEntry, built.manifest.LomEntry.values()), ...named]),
+              [...existence, ...witness],
             ),
           );
 
           assert.strictEqual(refusal !== undefined, refused, label);
           if (refused) {
             assert.strictEqual(refusal?.code, "23503", label);
-            assert.include(keys, refusal?.constraint, label);
+            assert.include(existence, refusal?.constraint, label);
           }
         }
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
@@ -281,14 +294,20 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
   it.effect(
     "refuses metaData's record by lom-title, and accepts it with its title string the item's title",
     () =>
-      // Oracle: PostgreSQL, `LomObjectTitle`'s witness containment into the title strings, a
-      // foreign key into `lom_title_string`: 23503 where no title string of the record has the
-      // item's title as its text, in the item's language.
+      // Oracle: PostgreSQL, the law `LomObjectTitle` (§2.7.1.1, reading 62): its existence, the
+      // containment of a naming record's title into `LomObjectTitle`, a foreign key from
+      // `lom_title`, and its witness, the containment of that row into the title strings, foreign
+      // keys into `lom_title_string`, each set immediate. The builder writes the record's row
+      // exactly where one of its title strings has the item's title as its text, in the item's
+      // language, so a record none of whose strings titles its item has no row, and the existence
+      // refuses it: 23503 on that key.
       // Bound: the fixture, and its title string edited to `Unattended Luggage`.
       Effect.gen(function* lomTitle() {
         const client = yield* loginSession;
-        const keys = yield* foreignKeysBetween(client, "lom_object_title", "lom_title_string");
-        assert.isNotEmpty(keys, "lom_object_title references lom_title_string");
+        const existence = yield* foreignKeysBetween(client, "lom_title", "lom_object_title");
+        const witness = yield* foreignKeysBetween(client, "lom_object_title", "lom_title_string");
+        assert.isNotEmpty(existence, "lom_title references lom_object_title");
+        assert.isNotEmpty(witness, "lom_object_title references lom_title_string");
 
         const files = yield* readPackage(fixtures.metaData);
 
@@ -306,23 +325,28 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
         ] as const) {
           const built = yield* builtOf(edited);
           const named = statedOf(LomObjectTitle, built.objects.LomObjectTitle.values());
-          assert.isNotEmpty(named, `${label}: its record titles its item`);
+          assert.lengthOf(
+            named,
+            refused ? 0 : 1,
+            `${label}: its record titles its item exactly where a string is the item's title`,
+          );
 
           const refusal = Option.getOrUndefined(
             yield* judged(
               client,
               statedInserts([
+                ...statedOf(LomTitle, built.manifest.LomTitle.values()),
                 ...statedOf(LomTitleString, built.manifest.LomTitleString.values()),
-                ...named.slice(0, 1),
+                ...named,
               ]),
-              keys,
+              [...existence, ...witness],
             ),
           );
 
           assert.strictEqual(refusal !== undefined, refused, label);
           if (refused) {
             assert.strictEqual(refusal?.code, "23503", label);
-            assert.include(keys, refusal?.constraint, label);
+            assert.include(existence, refusal?.constraint, label);
           }
         }
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
