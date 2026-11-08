@@ -23,13 +23,19 @@
  *     reach it, and is left out of the reach, so the first wins;
  *   - Each item ref resolves against its own document's path to an item resource the manifest lists; a
  *     test's own item ref that does not is `item-ref-unresolved`;
- *   - Each dotted reference in the test that it does not declare whole, a name an expression reads or
- *     an outcome rule sets, is judged by reading 48 against the items the item refs resolve to, their
- *     variable mappings and the reach's parts and sections: one no reading resolves is
- *     `undeclared-variable`, and one two readings resolve is `ambiguous-reference`. An item's
- *     `duration` resolves whether or not the item is time dependent (reading 150). A reference
- *     attribute reads through an item ref only a template or outcome variable (`expression-type`), a
- *     `qti-correct` only a response (`undeclared-variable`), and a mapping expression only a response
+ *   - Each dotted reference in the test, a name an expression reads, is judged by reading 48 ("a dotted
+ *     reference is accepted when exactly one reading names a real item ref, test part or section and
+ *     its variable") against the test's own variables, the items the item refs resolve to, their
+ *     variable mappings and built-ins, `QTI_CONTEXT` among them (reading 106), and the reach's parts
+ *     and sections: the unsplit reading, the test's own variable of the whole name, counts among the
+ *     readings, and a numbered one only through an item ref a selection with replacement can repeat
+ *     (reading 88). One no reading counts for is `undeclared-variable`, and one two readings count
+ *     for is `ambiguous-reference`. A name an outcome rule sets is the test's own variable (reading
+ *     112), so one the test does not declare is `undeclared-variable`. An item's `duration` resolves
+ *     whether or not the item is time dependent (reading 150). A variable read through a prefix is
+ *     judged by its kind, a built-in by the kind it stands as (reading 111): a reference attribute
+ *     reads only a template or outcome variable (`expression-type`), a `qti-correct` only a response
+ *     (`undeclared-variable`), and a mapping expression only a response its item declares
  *     (`undeclared-variable`) with the mapping it needs (`template-requirements`);
  *   - Each item ref's variable mappings, the test's own and a reached section document's, name an
  *     outcome its item declares as their source (`undeclared-variable`) and each its own target
@@ -43,9 +49,9 @@
  *     (`undeclared-variable`, `expression-type`; reading 5), each refusal at the section document and
  *     given once however many tests give it;
  *   - Each read in the test document's outcome processing or in one of its item refs' template defaults
- *     of a variable the item declares in a `qti-context-declaration`, through its item ref, is found:
- *     the item marks that declaration, so the engine holds no value of it, and the delivered test
- *     marks the processing that reads it (see below);
+ *     of an item's context variable through its item ref, one the item declares in a
+ *     `qti-context-declaration` or the built-in `QTI_CONTEXT`, is found: the engine holds no value of
+ *     it, and the delivered test marks the processing that reads it (see below);
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
  *   62).
@@ -53,14 +59,16 @@
  * A resource with no `href`, or with an absolute one (reading 35), names no document the package
  * holds, so nothing of it is read. The package's verdict follows from its parts: `refused` when
  * anything is refused, `unchecked` when nothing is and some document is, then
- * `accepted-with-unsupported` when some document is, and `accepted` otherwise. Only an accepting
- * package's documents are delivered. A test is delivered with the model its document's own verdict
- * holds, except that one whose processing reads an item's context variable through its item ref is
- * delivered with that processing marked, `variable:<name>` at it: its outcome processing `marked`,
- * and each template default that reads one left out, so its template variable starts at its
- * declared default. The test document's own verdict cannot carry those marks, since the document is
- * judged without its items, and it keeps its own. Like `open`, it runs over the shared reader and
- * the Schema-decoded tables, so it stays server-side.
+ * `accepted-with-unsupported` when some document is or some test is delivered with processing the
+ * package marks (see below), and `accepted` otherwise. Only an accepting package's documents are
+ * delivered. A test is delivered with the model its document's own verdict holds, except that one
+ * whose processing reads an item's context variable through its item ref is delivered with that
+ * processing marked, `variable:<name>` at it: its outcome processing `marked`, and each template
+ * default that reads one left out, so its template variable starts at its declared default. The
+ * test document's own verdict cannot carry those marks, since the document is judged without its
+ * items, and it keeps its own; the package's verdict carries them, so a read of the built-in
+ * `QTI_CONTEXT`, which marks no item, still makes the package `accepted-with-unsupported`. Like
+ * `open`, it runs over the shared reader and the Schema-decoded tables, so it stays server-side.
  *
  * @module
  * @see https://www.imsglobal.org/content/packaging/cpv1p2pd2/imscp_infov1p2pd2.html
@@ -76,7 +84,7 @@ import type {
   SourceElement,
   Visit,
 } from "#plate/document/source.ts";
-import { xmlWhitespaceRun } from "#plate/model/attributes.ts";
+import { xmlWhitespaceRun, xsBooleanOf } from "#plate/model/attributes.ts";
 import {
   expressionKinds,
   floatOrRefOf,
@@ -313,23 +321,43 @@ const rootOfType: ReadonlyMap<string, string> = new Map<string, string>(resource
 const lomBoundTypes: ReadonlySet<string> = new Set(["imsqti_item_xmlv3p0", "imsqti_test_xmlv3p0"]);
 
 /**
- * The variables every item has besides those it declares that a test reads through an item ref,
- * with the types the qti package gives them (`itemSessionBuiltIns` in
- * `packages/pantry/src/processing/env.ts`): QTI's built-in item variables but `QTI_CONTEXT`, an
- * item's `duration` a single float, seconds (reading 29).
+ * The kind of variable a variable stands as, the declaration kind of its declaration or, for a
+ * built-in, the one QTI gives it: what a reference judged by kind (reading 111, "a processing
+ * element's `identifier` names a variable of the kind the element reads or sets") reads.
  */
-const itemBuiltIns: ReadonlyMap<string, ExpressionType> = new Map([
-  ["completionStatus", singleOf("identifier")],
-  ["duration", singleOf("float")],
-  ["numAttempts", singleOf("integer")],
+type VariableKind = "context" | "outcome" | "response" | "template";
+
+/**
+ * A built-in variable: the kind it stands as and its type.
+ */
+interface BuiltIn {
+  readonly kind: VariableKind;
+  readonly type: ExpressionType;
+}
+
+/**
+ * The variables every item has besides those it declares, which a test reads through an item ref
+ * (reading 106, "a prefixed reference reaches every built-in variable its item ref's item holds,
+ * `QTI_CONTEXT` among them"), each with the kind it stands as (reading 111) and its type, as the
+ * qti package's `BuiltInVariable` holds them under an item's root
+ * (`packages/pantry/src/grammar/install.ts`, its rows `builtIns` in
+ * `packages/pantry/src/grammar/references.ts`): the responses `numAttempts`, a single integer, and
+ * `duration`, a single float, seconds (reading 29), the outcome `completionStatus`, a single
+ * identifier, and the context variable `QTI_CONTEXT`, a record.
+ */
+const itemBuiltIns: ReadonlyMap<string, BuiltIn> = new Map<string, BuiltIn>([
+  ["completionStatus", { kind: "outcome", type: singleOf("identifier") }],
+  ["duration", { kind: "response", type: singleOf("float") }],
+  ["numAttempts", { kind: "response", type: singleOf("integer") }],
+  ["QTI_CONTEXT", { kind: "context", type: { baseType: "unknown", cardinality: "record" } }],
 ]);
 
 /**
- * The type of a part's or a section's `duration`, a single duration, where an item's is a float
- * (`durationScopes` in `packages/pantry/src/qti/expressions.ts`, typed by `builtIns` in
- * `packages/pantry/src/grammar/references.ts`).
+ * A part's or a section's `duration`: a response, a single duration, where an item's is a float
+ * (`builtIns` in `packages/pantry/src/grammar/references.ts`, which gives a test's, a part's and a
+ * section's `duration` the kind of a response declaration).
  */
-const scopeDuration: ExpressionType = singleOf("duration");
+const scopeDuration: BuiltIn = { kind: "response", type: singleOf("duration") };
 
 /**
  * The type of a name no reading resolves, or two readings resolve: unknown, which satisfies every
@@ -338,30 +366,27 @@ const scopeDuration: ExpressionType = singleOf("duration");
 const unknownType: ExpressionType = { baseType: "unknown", cardinality: "unknown" };
 
 /**
- * The declarations of the variables a reference attribute may name through an item ref, by local
- * name in QTI's namespace: a template variable and an outcome variable (P24, pantry's
- * `checkAttributeReference`).
+ * The kinds of variable a reference attribute may name through an item ref: a template variable
+ * and an outcome variable (P24), a built-in by the kind it stands as.
  */
-const namableDeclarations: ReadonlySet<string> = new Set([
-  "qti-outcome-declaration",
-  "qti-template-declaration",
-]);
+const namableKinds: ReadonlySet<VariableKind> = new Set(["outcome", "template"]);
 
 /**
- * The declarations of an item's variables, by local name in QTI's namespace.
+ * The declarations of an item's variables, by local name in QTI's namespace, each with the kind
+ * of variable it declares.
  */
-const itemDeclarations: ReadonlySet<string> = new Set([
-  "qti-context-declaration",
-  "qti-outcome-declaration",
-  "qti-response-declaration",
-  "qti-template-declaration",
+const itemDeclarations: ReadonlyMap<string, VariableKind> = new Map<string, VariableKind>([
+  ["qti-context-declaration", "context"],
+  ["qti-outcome-declaration", "outcome"],
+  ["qti-response-declaration", "response"],
+  ["qti-template-declaration", "template"],
 ]);
 
 /**
  * The expressions whose `identifier` a test may prefix with an item ref, a part or a section, by
  * local name in QTI's namespace: a variable's value, its default, a response's correct response,
- * and a response mapped through its mapping or its area mapping (pantry's `checkMapping` reads both
- * through `reference`). The outcome rules a test may prefix are {@link targetElements}.
+ * and a response mapped through its mapping or its area mapping. The outcome rules whose
+ * `identifier` a test writes dotted are {@link targetElements}, which no prefix resolves.
  */
 const referenceElements: ReadonlySet<string> = new Set([
   "qti-correct",
@@ -372,20 +397,17 @@ const referenceElements: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The outcome rules whose `identifier`, the variable they set, a test may prefix with an item ref,
- * a part or a section, by local name in QTI's namespace, as pantry's `target` types a prefixed
- * name through its reach (`packages/pantry/src/processing/check.ts`): a set and a lookup of an
- * outcome's value.
+ * The outcome rules of a test, a set and a lookup of an outcome's value, by local name in QTI's
+ * namespace, whose `identifier` names the variable they set: a variable of the test's own document,
+ * so of a dotted `identifier` only the unsplit reading resolves (reading 112, "a test's setter sets
+ * a variable of its own document, so a prefixed reading never resolves it"), as the qti package's
+ * `resolves` gives a setter's reading (the relation `Reading` in
+ * `packages/pantry/src/qti/expressions.ts`). A test's processing holds no other setter.
  */
 const targetElements: ReadonlySet<string> = new Set([
   "qti-lookup-outcome-value",
   "qti-set-outcome-value",
 ]);
-
-/**
- * The declaration of a response variable, by local name in QTI's namespace.
- */
-const responseDeclarations: ReadonlySet<string> = new Set(["qti-response-declaration"]);
 
 /**
  * The expressions that map a response, by local name in QTI's namespace.
@@ -421,12 +443,6 @@ const processingElements: ReadonlySet<string> = new Set(["qti-outcome-processing
 const contextReadElements: ReadonlySet<string> = new Set(["qti-default", "qti-variable"]);
 
 /**
- * The declaration of an item's context variable, by local name in QTI's namespace, which the item
- * marks: the engine holds no value of it.
- */
-const contextDeclarations: ReadonlySet<string> = new Set(["qti-context-declaration"]);
-
-/**
  * The item ref, the one element of a test that references an item document, by local name in
  * QTI's namespace.
  */
@@ -444,17 +460,29 @@ const sectionRefElements: ReadonlySet<string> = new Set(["qti-assessment-section
 const durationScopes: ReadonlySet<string> = new Set(["qti-assessment-section", "qti-test-part"]);
 
 /**
- * The variables a test's processing holds besides those it declares: `QTI_CONTEXT`,
- * `completionStatus`, `duration` and `numAttempts`. The qti package now gives a test only
- * `duration` and `QTI_CONTEXT` (`builtIns` in `packages/pantry/src/grammar/references.ts`); plate
- * keeps a test's own `numAttempts` and `completionStatus`, accepted and marked, an agreement
- * difference (G-R3 184, pending).
+ * A section, by local name in QTI's namespace, the one element of a test whose `qti-selection`
+ * may let its item refs be instantiated more than once.
  */
-const testBuiltIns: ReadonlySet<string> = new Set([
-  "QTI_CONTEXT",
-  "completionStatus",
-  "duration",
-  "numAttempts",
+const sectionElements: ReadonlySet<string> = new Set(["qti-assessment-section"]);
+
+/**
+ * A section's selection, by local name in QTI's namespace.
+ */
+const selectionElements: ReadonlySet<string> = new Set(["qti-selection"]);
+
+/**
+ * The variables a test's processing holds besides those it declares, each with the kind it stands
+ * as and its type: `QTI_CONTEXT`, a context variable and a record, `completionStatus`, an outcome
+ * and a single identifier, and `duration` and `numAttempts`, responses, a single duration and a
+ * single integer. The qti package now gives a test only `duration` and `QTI_CONTEXT` (`builtIns`
+ * in `packages/pantry/src/grammar/references.ts`); plate keeps a test's own `numAttempts` and
+ * `completionStatus`, accepted and marked, an agreement difference (G-R3 184, pending).
+ */
+const testBuiltIns: ReadonlyMap<string, BuiltIn> = new Map<string, BuiltIn>([
+  ["QTI_CONTEXT", { kind: "context", type: { baseType: "unknown", cardinality: "record" } }],
+  ["completionStatus", { kind: "outcome", type: singleOf("identifier") }],
+  ["duration", scopeDuration],
+  ["numAttempts", { kind: "response", type: singleOf("integer") }],
 ]);
 
 /**
@@ -864,7 +892,7 @@ const variablesOf = (document: Document | undefined): Option.Option<ItemVariable
 
   return Option.some({
     declarations: new Map(
-      [...itemDeclarations].flatMap((kind) => [...declarationsOf(source, kind)]),
+      [...itemDeclarations.keys()].flatMap((local) => [...declarationsOf(source, local)]),
     ),
   });
 };
@@ -884,12 +912,25 @@ interface ItemRefVariables extends ItemVariables {
 
 /**
  * What a test's dotted references resolve against, its reach: the variables of each resolved item
- * ref and the identifiers of the parts and sections of the test and of each section document it
- * reaches through its section refs, as if each section document were inline.
+ * ref, the identifiers of the parts and sections of the test and of each section document it
+ * reaches through its section refs, as if each section document were inline, the test's own
+ * variables, and the item refs a selection with replacement can repeat.
  */
 interface ReferenceScope {
   readonly durations: ReadonlySet<string>;
   readonly items: ReadonlyMap<string, ItemRefVariables>;
+  /**
+   * The identifier of each item ref of the reach that lies under a section whose `qti-selection`
+   * has `with-replacement` true, anywhere above it in the assembled test, through which a numbered
+   * reading counts (reading 88).
+   */
+  readonly repeatable: ReadonlySet<string>;
+  /**
+   * The test's own variables by their whole identifier, each a declaration of the test or one of
+   * its built-ins: what the unsplit reading of a reference reads (reading 48, "the unsplit reading
+   * counts among them").
+   */
+  readonly whole: ReadonlyMap<string, ReadVariable>;
 }
 
 /**
@@ -898,16 +939,15 @@ interface ReferenceScope {
  */
 interface ReadVariable {
   /**
-   * The declaration the reading names directly, a variable its item declares; none for a mapping
-   * target and a built-in.
+   * The declaration the reading names directly: a variable its item declares, or, for the unsplit
+   * reading, one the test declares; none for a mapping target and a built-in.
    */
   readonly declaration: Option.Option<SourceElement>;
   /**
-   * Whether a reference attribute may name it (P24): a template or outcome variable the item
-   * declares, or a mapping target, which pantry reads as an outcome; never a response, a context
-   * variable or a built-in.
+   * The kind of variable it stands as (reading 111): a declared variable's its declaration's, a
+   * mapping target's an outcome, as pantry reads one, and a built-in's the kind QTI gives it.
    */
-  readonly namable: boolean;
+  readonly kind: VariableKind;
   /**
    * Its type: a mapping target's is its source's, a declared variable's its declaration's, a
    * built-in's its built-in type; unknown where the declaration's type is not judged.
@@ -916,14 +956,42 @@ interface ReadVariable {
 }
 
 /**
- * One reading of a dotted reference that resolves (reading 48): the item ref, part or section its
- * prefix names, the rest, as written, and the variable it reads.
+ * One reading of a dotted reference that resolves (reading 48, "a dotted reference is accepted when
+ * exactly one reading names a real item ref, test part or section and its variable"): its form,
+ * the item ref, part or section its prefix names, the rest, as written, and the variable it reads.
+ * The `unsplit` reading reads the test's own variable of the whole reference, its prefix empty and
+ * its rest the reference; a `split` reading splits at one dot; a `numbered` one reads an instance
+ * of its item ref's item, its rest `N.VAR` (reading 88).
  */
 interface Reading {
+  readonly form: "numbered" | "split" | "unsplit";
   readonly prefix: string;
   readonly rest: string;
   readonly variable: ReadVariable;
 }
+
+/**
+ * Give the kind of variable a declaration declares, by its local name ({@link itemDeclarations}).
+ * Every declaration this module reads, an item's four and a test's two, has one; anything else
+ * would read as an outcome.
+ *
+ * @param declaration The declaration.
+ * @returns Its kind.
+ */
+const kindOf = (declaration: SourceElement): VariableKind =>
+  itemDeclarations.get(declaration.local) ?? "outcome";
+
+/**
+ * Give the variable a built-in reads as.
+ *
+ * @param builtIn The built-in.
+ * @returns The variable, which no declaration names.
+ */
+const builtInVariable = ({ kind, type }: BuiltIn): ReadVariable => ({
+  declaration: Option.none(),
+  kind,
+  type,
+});
 
 /**
  * Give the type a declaration declares, unknown when it is not judged (the item's own verdict's
@@ -936,13 +1004,18 @@ const declaredType = (declaration: SourceElement): ExpressionType =>
   Option.getOrElse(declarationType(declaration), () => unknownType);
 
 /**
- * Resolve one reading of a dotted reference (reading 48), in pantry's order (`resolveReading` in
- * `packages/pantry/src/processing/env.ts`).
+ * Resolve one split or numbered reading of a dotted reference (reading 48, "a dotted reference is
+ * accepted when exactly one reading names a real item ref, test part or section and its
+ * variable"), in pantry's order (the relation `Reading` in
+ * `packages/pantry/src/qti/expressions.ts`, its source mapped, declared or built in).
  *
- * After an item ref, the rest names, directly or in the occurrence form `N.VAR` (reading 4,
- * {@link occurrenceOf}), a target of the item ref's variable mappings, else a variable its item
- * declares, else one of the built-ins every item has. After a part or a section, the rest is its
- * `duration`, a built-in.
+ * After an item ref, the rest names, directly or in the numbered form `N.VAR`
+ * ({@link occurrenceOf}), a target of the item ref's variable mappings, else a variable its item
+ * declares, else one of the built-ins every item has, `QTI_CONTEXT` among them (reading 106, "a
+ * prefixed reference reaches every built-in variable its item ref's item holds, `QTI_CONTEXT`
+ * among them"). After a part or a section, the rest is its `duration`, a built-in. A numbered
+ * reading resolves here whether or not a selection with replacement can repeat its item ref;
+ * {@link isCounted} decides whether it counts.
  *
  * @param scope What the test's references resolve against.
  * @param prefix The part before the dot the reading splits at.
@@ -953,54 +1026,62 @@ const readingOf = (scope: ReferenceScope, prefix: string, rest: string): Option.
   const item = scope.items.get(prefix);
   if (item === undefined) {
     return scope.durations.has(prefix) && rest === "duration"
-      ? Option.some({
-          prefix,
-          rest,
-          variable: { declaration: Option.none(), namable: false, type: scopeDuration },
-        })
+      ? Option.some({ form: "split", prefix, rest, variable: builtInVariable(scopeDuration) })
       : Option.none();
   }
 
   const { variable } = occurrenceOf(rest);
+  const form = variable === rest ? "split" : "numbered";
   const source = item.mapped.get(variable);
   if (source !== undefined) {
     return Option.some({
+      form,
       prefix,
       rest,
-      variable: { declaration: Option.none(), namable: true, type: declaredType(source) },
+      variable: { declaration: Option.none(), kind: "outcome", type: declaredType(source) },
     });
   }
 
   const declaration = item.declarations.get(variable);
   if (declaration !== undefined) {
     return Option.some({
+      form,
       prefix,
       rest,
       variable: {
         declaration: Option.some(declaration),
-        namable: isQti(declaration, namableDeclarations),
+        kind: kindOf(declaration),
         type: declaredType(declaration),
       },
     });
   }
 
-  return Option.map(Option.fromUndefinedOr(itemBuiltIns.get(variable)), (type) => ({
+  return Option.map(Option.fromUndefinedOr(itemBuiltIns.get(variable)), (builtIn) => ({
+    form,
     prefix,
     rest,
-    variable: { declaration: Option.none(), namable: false, type },
+    variable: builtInVariable(builtIn),
   }));
 };
 
 /**
- * Give every reading of a dotted reference that resolves, one for each dot it may split at, from
- * the first dot.
+ * Give every reading of a reference that resolves, whether or not it counts: the unsplit reading,
+ * when the test declares or holds the whole reference, then one for each dot the reference may
+ * split at, from the first dot.
  *
  * @param scope What the test's references resolve against.
  * @param reference The reference.
  * @returns Each resolving reading.
  */
-const readingsOf = (scope: ReferenceScope, reference: string): readonly Reading[] => {
-  const readings: Reading[] = [];
+const resolvingReadings = (scope: ReferenceScope, reference: string): readonly Reading[] => {
+  const readings: Reading[] = Option.toArray(
+    Option.map(Option.fromUndefinedOr(scope.whole.get(reference)), (variable): Reading => ({
+      form: "unsplit",
+      prefix: "",
+      rest: reference,
+      variable,
+    })),
+  );
   for (let dot = reference.indexOf("."); dot !== -1; dot = reference.indexOf(".", dot + 1)) {
     readings.push(
       ...Option.toArray(readingOf(scope, reference.slice(0, dot), reference.slice(dot + 1))),
@@ -1011,11 +1092,36 @@ const readingsOf = (scope: ReferenceScope, reference: string): readonly Reading[
 };
 
 /**
+ * Report whether a resolving reading counts under reading 48 ("a dotted reference is accepted when
+ * exactly one reading names a real item ref, test part or section and its variable"): every one
+ * but a numbered reading whose item ref no selection with replacement can repeat (reading 88, "a
+ * numbered reference such as `Q01.2.SCORE` names an instance of an item ref that a selection with
+ * replacement can repeat, and nothing else").
+ *
+ * @param scope What the test's references resolve against.
+ * @param reading The reading.
+ * @returns Whether it counts.
+ */
+const isCounted = (scope: ReferenceScope, reading: Reading): boolean =>
+  reading.form !== "numbered" || scope.repeatable.has(reading.prefix);
+
+/**
+ * Give every reading of a reference that resolves and counts ({@link isCounted}): the unsplit
+ * reading, then one for each dot it may split at, from the first dot.
+ *
+ * @param scope What the test's references resolve against.
+ * @param reference The reference.
+ * @returns Each resolving reading that counts.
+ */
+const readingsOf = (scope: ReferenceScope, reference: string): readonly Reading[] =>
+  resolvingReadings(scope, reference).filter((reading) => isCounted(scope, reading));
+
+/**
  * Give the type of the variable a `qti-test-variables` reads by a name through one item ref, as
  * the engine resolves it (`itemName` in `#plate/engine/scope.ts`): a target of the item ref's
  * variable mappings names its source's declaration, else the item's own declaration of the name,
- * else one of the built-ins every item has. An item's context variable is passed over, since the
- * engine holds none and so never collects one.
+ * else one of the built-ins every item has. An item's context variable, declared or the built-in
+ * `QTI_CONTEXT`, is passed over, since the engine holds none and so never collects one.
  *
  * @param item What the name may name through the item ref.
  * @param name The `variable-identifier`.
@@ -1034,7 +1140,10 @@ const collectedDeclaration = (
   const declaration = item.declarations.get(name);
 
   return declaration === undefined || declaresAs(item, name, "qti-context-declaration")
-    ? Option.fromUndefinedOr(itemBuiltIns.get(name))
+    ? Option.fromUndefinedOr(itemBuiltIns.get(name)).pipe(
+        Option.filter(({ kind }) => kind !== "context"),
+        Option.map(({ type }) => type),
+      )
     : Option.some(declaredType(declaration));
 };
 
@@ -1167,39 +1276,62 @@ const referencesOf = (
 };
 
 /**
- * Judge one dotted reference of a test, which the test does not hold whole, by reading 48, as
- * pantry's `reference` judges a prefixed name an expression reads, and its `target` one an outcome
- * rule sets (`packages/pantry/src/processing/check.ts`).
+ * Judge one dotted reference of a test by reading 48 ("a dotted reference is accepted when exactly
+ * one reading names a real item ref, test part or section and its variable"), as the qti package
+ * judges a test-level reference over its readings (the relation `Reading` in
+ * `packages/pantry/src/qti/expressions.ts`, judged by its `Prefixed_reference` and
+ * `Variable_declared` laws, refused `prefixed-ref`).
  *
- * A reference no reading resolves is `undeclared-variable` with `check: "reading"` and the
- * `reading`, pantry's `prefixed-ref` with no reading. One two readings resolve is
- * `ambiguous-reference`, its detail the `reference` and its first two resolving readings, prefix
- * and variable each, pantry's `prefixed-ref` with its readings. A rule's target
- * ({@link targetElements}) earns only these two, as pantry's `target` judges no more of it: what a
- * target whose one reading resolves sets is the typed reach's to judge (P20). An expression's
- * reference whose one reading reads the built-in `duration` of an item is never refused for the
- * item's `time-dependent` (reading 150, "an item's built-in `duration` may be read whether or not
- * the item is time dependent"). Each is at the attribute; an `undeclared-variable` names the
- * `element`, the `identifier` as written and, for an attribute other than `identifier`, the
- * `attribute`.
+ * The readings that count are the unsplit reading, the test's own variable of the whole reference,
+ * declared or built in (reading 48, "the unsplit reading counts among them"), each split reading,
+ * and each numbered reading whose item ref a selection with replacement can repeat (reading 88,
+ * {@link isCounted}). A rule's target ({@link targetElements}) is judged by its unsplit reading
+ * alone (reading 112, "a test's setter sets a variable of its own document, so a prefixed reading
+ * never resolves it"): one the test does not hold whole is `undeclared-variable` with
+ * `check: "setter"`, the `reference` and the `reading`, whatever its split readings resolve, and
+ * what one the test holds sets is the rules' to judge. Of any other reference:
  *
- * An expression's reference whose one reading resolves is judged by what it reads, at the element,
- * as the rules judge a name the test declares (`#plate/validate/rules.ts`):
+ * - One no reading counts for is `undeclared-variable` with `check: "numbered"`, the `reference`, the
+ *   `itemRef` of its first numbered reading and the `reading`, when a numbered reading would
+ *   resolve it were its item ref repeatable, and otherwise with `check: "reading"` and the
+ *   `reading`, pantry's `prefixed-ref` with no reading.
+ * - One two readings count for is `ambiguous-reference`, its detail the `reference` and its first two
+ *   counting readings, prefix and variable each, the unsplit reading's prefix empty, pantry's
+ *   `prefixed-ref` with its readings.
+ * - One whose one counting reading is the unsplit one names the test's own variable, which the rules
+ *   judge (`#plate/validate/rules.ts`), so it earns nothing here.
+ *
+ * An expression's reference whose one reading reads the built-in `duration` of an item is never
+ * refused for the item's `time-dependent` (reading 150, "an item's built-in `duration` may be read
+ * whether or not the item is time dependent"). Each refusal is at the attribute; an
+ * `undeclared-variable` names the `element`, the `identifier` as written and, for an attribute
+ * other than `identifier`, the `attribute`.
+ *
+ * An expression's reference whose one counting reading is split or numbered is judged by the kind
+ * of variable it reads (reading 111, "a processing element's `identifier` names a variable of the
+ * kind the element reads or sets"), a built-in by the kind it stands as, at the element, as the
+ * rules judge a name the test declares:
  *
  * - In a reference attribute, a variable that is not a template or outcome variable (a response, a
- *   context variable or a built-in) is `expression-type` with `check: "reference"`, its detail the
- *   rules' P24 detail, as pantry's `checkAttributeReference` judges a resolved prefixed name. One
- *   of another type is the rules' own P24, which they judge through the typed reach.
- * - In a `qti-correct`, `qti-map-response` or `qti-map-response-point`, a variable that is not a
- *   response (an outcome, a template or context variable, a mapping target, which reads an outcome,
- *   or a built-in) is `undeclared-variable` at the attribute with `expected: "response"`, the
+ *   context variable, or a built-in response or context variable) is `expression-type` with `check:
+ *   "reference"`, its detail the rules' P24 detail, as pantry's `Reference_type` law judges a
+ *   resolved reading. One of another type is the rules' own P24, which they judge through the typed
+ *   reach.
+ * - In a `qti-correct`, a variable that is not a response (an outcome, a template or context
+ *   variable, a mapping target, which reads an outcome, or the built-in `completionStatus` or
+ *   `QTI_CONTEXT`) is `undeclared-variable` at the attribute with `expected: "response"`, the
  *   detail the rules give an item's expression of a name that is no response, with the `prefix` the
  *   reading reads through: a `qti-correct` "looks up the declaration of a response variable"
- *   (`info.txt:9302`), and each mapping "looks up the value of a response variable" (`:9306`,
- *   `:9314`). The `prefix` is what tells the wording a read through an item ref, part or section
- *   from a dotted name a document declares whole, which the rules refuse with no `prefix` (a name
- *   the test declares whole never reaches this judgement). Pantry does not judge what a prefixed
- *   name reads there, so this is an agreement difference (G-R3, pending).
+ *   (`info.txt:9302`). An item's `numAttempts` and `duration`, and a part's or a section's
+ *   `duration`, are responses, so a `qti-correct` of one is accepted.
+ * - In a `qti-map-response` or `qti-map-response-point`, a variable that is not a response its item
+ *   declares, a built-in response included, since no declaration gives it a mapping, is
+ *   `undeclared-variable` likewise: each mapping "looks up the value of a response variable"
+ *   (`:9306`, `:9314`) and "transforms it using the associated mapping, which must have been
+ *   declared" (`:9306`). The `prefix` is what tells the wording a read through an item ref, part or
+ *   section from a dotted name a document declares whole, which the rules refuse with no `prefix`.
+ *   Pantry does not judge what a prefixed name reads there, so this is an agreement difference
+ *   (G-R3, pending).
  * - In a `qti-map-response` or `qti-map-response-point`, a response its item declares without the
  *   mapping or the area mapping the expression needs is `template-requirements`, as an item's
  *   inline expression is, the `identifier` as written, with the `prefix` the reading reads through:
@@ -1213,7 +1345,7 @@ const referencesOf = (
  * @param visit The element's visit.
  * @param reference The attribute and the name it holds.
  * @param scope What the test's references resolve against.
- * @returns The refusals, none when exactly one reading resolves it and what that one reads may be
+ * @returns The refusals, none when exactly one reading counts for it and what that one reads may be
  *   read there.
  */
 const judgeReference = (
@@ -1229,10 +1361,38 @@ const judgeReference = (
   const named = byIdentifier
     ? { element, identifier }
     : { attribute: attribute.local, element, identifier };
-  const [first, second] = readingsOf(scope, identifier);
+  if (byIdentifier && isQti(visit.element, targetElements)) {
+    return scope.whole.has(identifier)
+      ? []
+      : [
+          refuse(document, "undeclared-variable", path, {
+            ...named,
+            check: "setter",
+            reading: "112",
+            reference: identifier,
+          }),
+        ];
+  }
+
+  const resolving = resolvingReadings(scope, identifier);
+  const [first, second] = resolving.filter((reading) => isCounted(scope, reading));
   if (first === undefined) {
+    const numbered = resolving.find((reading) => reading.form === "numbered");
+
     return [
-      refuse(document, "undeclared-variable", path, { ...named, check: "reading", reading: "48" }),
+      numbered === undefined
+        ? refuse(document, "undeclared-variable", path, {
+            ...named,
+            check: "reading",
+            reading: "48",
+          })
+        : refuse(document, "undeclared-variable", path, {
+            ...named,
+            check: "numbered",
+            itemRef: numbered.prefix,
+            reading: "88",
+            reference: identifier,
+          }),
     ];
   }
 
@@ -1249,18 +1409,17 @@ const judgeReference = (
     ];
   }
 
-  if (byIdentifier && isQti(visit.element, targetElements)) {
+  if (first.form === "unsplit") {
     return [];
   }
 
   const { variable } = first;
   const isMapping = byIdentifier && isQti(visit.element, mappingExpressions);
-  const response = Option.exists(variable.declaration, (declaration) =>
-    isQti(declaration, responseDeclarations),
-  );
+  const response = variable.kind === "response";
+  const readsResponse = isMapping ? response && Option.isSome(variable.declaration) : response;
 
   return [
-    ...(byIdentifier && isQti(visit.element, responseExpressions) && !response
+    ...(byIdentifier && isQti(visit.element, responseExpressions) && !readsResponse
       ? [
           refuse(document, "undeclared-variable", path, {
             ...named,
@@ -1269,7 +1428,7 @@ const judgeReference = (
           }),
         ]
       : []),
-    ...(variable.namable
+    ...(namableKinds.has(variable.kind)
       ? []
       : reference.baseType.pipe(
           Option.map((expectedBaseType) =>
@@ -1509,12 +1668,31 @@ const notHeld = (refusals: readonly Refusal[], held: readonly Refusal[]): readon
 
 /**
  * One item ref of a test or a section document that resolves to an item resource the manifest
- * lists: the item ref, its identifier and its item's path.
+ * lists: the item ref, its identifier, its item's path, and whether a selection with replacement
+ * in its own document can repeat it.
  */
 interface ResolvedItemRef {
   readonly element: SourceElement;
   readonly identifier: string;
   readonly path: string;
+  /**
+   * Whether it lies under a section of its own document whose `qti-selection` has
+   * `with-replacement` true ({@link replacingSections}).
+   */
+  readonly replaced: boolean;
+}
+
+/**
+ * One section ref of a test or a section document whose `href` names a path inside the package:
+ * that path, and whether a selection with replacement can repeat what the section document holds.
+ */
+interface SectionPlacement {
+  readonly path: string;
+  /**
+   * Whether the section ref lies under a section whose `qti-selection` has `with-replacement` true,
+   * anywhere above it in the assembled test.
+   */
+  readonly replaced: boolean;
 }
 
 /**
@@ -1553,10 +1731,11 @@ interface DocumentStructure {
    */
   readonly itemRefs: readonly ResolvedItemRef[];
   /**
-   * The path each of its section refs' `href` resolves to against the document's path, in document
-   * order; a section ref whose `href` names no path inside the package gives none.
+   * The path each of its section refs' `href` resolves to against the document's path, with whether
+   * a selection with replacement in the document lies above it, in document order; a section ref
+   * whose `href` names no path inside the package gives none.
    */
-  readonly sectionRefs: readonly string[];
+  readonly sectionRefs: readonly SectionPlacement[];
   /**
    * Each item ref that resolves to no item resource, `item-ref-unresolved` at the item ref.
    */
@@ -1569,10 +1748,47 @@ interface DocumentStructure {
 }
 
 /**
+ * Report whether an element is a section whose `qti-selection` has `with-replacement` true, as
+ * `xs:boolean` reads it, which lets each item ref beneath it be instantiated more than once
+ * (reading 88).
+ *
+ * @param element The element.
+ * @returns Whether it is.
+ */
+const replacesItems = (element: SourceElement): boolean =>
+  isQti(element, sectionElements) &&
+  element.children.some(
+    (child) =>
+      child.kind === "element" &&
+      isQti(child, selectionElements) &&
+      Option.exists(Option.flatMap(attributeOf(child, "with-replacement"), xsBooleanOf), Boolean),
+  );
+
+/**
+ * Give the elements of a document that lie under a section whose `qti-selection` has
+ * `with-replacement` true ({@link replacesItems}), each such section included.
+ *
+ * @param visits The visits of the document's elements, in document order, each parent before its
+ *   children.
+ * @returns The elements.
+ */
+const replacingSections = (visits: readonly Visit[]): ReadonlySet<SourceElement> => {
+  const replacing = new Set<SourceElement>();
+  for (const { element, parent } of visits) {
+    if (Option.exists(parent, (above) => replacing.has(above)) || replacesItems(element)) {
+      replacing.add(element);
+    }
+  }
+
+  return replacing;
+};
+
+/**
  * Read what a test's reach is built from in one test or section document: its parts', sections' and
  * item refs' identifiers, each with the path of its `identifier` attribute, its item refs, each
  * resolved against the document's path to an item resource the manifest lists, and the paths its
- * section refs name.
+ * section refs name, each item ref and section ref with whether a selection with replacement in the
+ * document lies above it ({@link replacingSections}).
  *
  * An item ref that resolves to no listed item resource is `item-ref-unresolved` at the item ref,
  * its detail the `identifier`, the `href` and, when the `href` names a path inside the package,
@@ -1589,9 +1805,10 @@ const structureIn = (
   itemPaths: ReadonlySet<string>,
 ): DocumentStructure => {
   const visits = [...walk(source)];
+  const replacing = replacingSections(visits);
   const identifiers: StructureIdentifier[] = [];
   const itemRefs: ResolvedItemRef[] = [];
-  const sectionRefs: string[] = [];
+  const sectionRefs: SectionPlacement[] = [];
   const unresolved: Refusal[] = [];
   for (const { element, path } of visits) {
     const identifier = Option.getOrUndefined(identifierOf(element));
@@ -1608,12 +1825,24 @@ const structureIn = (
     }
 
     if (href !== undefined && isQti(element, sectionRefElements)) {
-      sectionRefs.push(...Option.toArray(resolveReference(base, collapse(href))));
+      sectionRefs.push(
+        ...Option.toArray(
+          Option.map(resolveReference(base, collapse(href)), (resolved) => ({
+            path: resolved,
+            replaced: replacing.has(element),
+          })),
+        ),
+      );
     } else if (identifier !== undefined && href !== undefined && isQti(element, itemRefElements)) {
       const written = collapse(href);
       const resolved = resolveReference(base, written);
       if (Option.isSome(resolved) && itemPaths.has(resolved.value)) {
-        itemRefs.push({ element, identifier, path: resolved.value });
+        itemRefs.push({
+          element,
+          identifier,
+          path: resolved.value,
+          replaced: replacing.has(element),
+        });
       } else {
         const facts = { href: written, identifier };
         unresolved.push(
@@ -1639,6 +1868,12 @@ const structureIn = (
  */
 interface ReachedSection {
   readonly path: string;
+  /**
+   * Whether the section ref that first reaches it lies under a section whose `qti-selection` has
+   * `with-replacement` true, anywhere above it in the assembled test, so that a selection with
+   * replacement can repeat each item ref it holds.
+   */
+  readonly replaced: boolean;
   readonly source: SourceDocument;
   readonly structure: DocumentStructure;
 }
@@ -1679,6 +1914,11 @@ const sectionDocumentAt = (
  * `href` names no section document the reader read adds nothing. Pantry refuses both, as
  * `section-ref-cycle` and `section-ref-target`, which plate has no rule for (2b.9 Q2).
  *
+ * Each reached document carries whether the ref that first reaches it lies under a section whose
+ * selection has replacement, in its own document or above the ref that placed that document, so a
+ * numbered reading through one of its item refs counts (reading 88: "anywhere above it in the
+ * assembled test"). A later ref to the same document adds nothing here either.
+ *
  * The walk keeps the refs still to follow in a list of its own rather than on the call stack, so
  * no length of a chain of refs, each document naming the next, overflows the stack, and no limit is
  * set on it.
@@ -1697,18 +1937,20 @@ const sectionsReached = (
 ): readonly ReachedSection[] => {
   const reached: ReachedSection[] = [];
   const seen = new Set<string>();
-  // The paths the refs still to follow name, the next one last: a document's are added in reverse,
-  // so the walk takes them in document order, each before the refs that follow its document.
+  // The placements of the refs still to follow, the next one last: a document's are added in
+  // reverse, so the walk takes them in document order, each before the refs that follow its
+  // document.
   const pending = test.sectionRefs.toReversed();
-  for (let path = pending.pop(); path !== undefined; path = pending.pop()) {
+  for (let placement = pending.pop(); placement !== undefined; placement = pending.pop()) {
+    const { path, replaced } = placement;
     const source = sectionDocumentAt(path, sectionPaths, documents);
     if (Option.isSome(source) && !seen.has(path)) {
       seen.add(path);
 
       const structure = structureIn(source.value, path, itemPaths);
-      reached.push({ path, source: source.value, structure });
+      reached.push({ path, replaced, source: source.value, structure });
       for (const next of structure.sectionRefs.toReversed()) {
-        pending.push(next);
+        pending.push({ path: next.path, replaced: replaced || next.replaced });
       }
     }
   }
@@ -1786,8 +2028,8 @@ const repeatsIn = (
  * processing: a `qti-variable` or a `qti-default` ({@link contextReadElements}) that lies in the
  * test's `qti-outcome-processing` or in a `qti-template-default` of one of its item refs, and whose
  * `identifier` is a name the predicate takes. The test model, built from the document alone, holds
- * such a read and would run it; the engine holds no value of it, since the item marks the
- * declaration.
+ * such a read and would run it; the engine holds no value of it: the item marks a declared context
+ * variable, and the engine holds no item's `QTI_CONTEXT`.
  *
  * @param source The test's source.
  * @param visits The visits of its elements, in document order.
@@ -1859,8 +2101,9 @@ interface TestJudgement {
 /**
  * Judge one test document of the package: each item ref resolved against the test's path to an item
  * resource the manifest lists ({@link structureIn}), its variable mappings by {@link judgeMappings}
- * and its template defaults by {@link judgeTemplateDefaults}, each dotted reference by reading 48,
- * then the test's processing through its typed reach.
+ * and its template defaults by {@link judgeTemplateDefaults}, each dotted reference by reading 48
+ * ("a dotted reference is accepted when exactly one reading names a real item ref, test part or
+ * section and its variable"), then the test's processing through its typed reach.
  *
  * The test's reach is its own parts, sections and item refs and those of each section document it
  * reaches through its section refs ({@link sectionsReached}), each item ref of a section document
@@ -1868,10 +2111,14 @@ interface TestJudgement {
  * across the reach: one a section document gives again after the test or a document reached before
  * gave it is `duplicate-identifier` at that document and left out of the reach, so the first wins
  * ({@link repeatsIn}; pantry's `structure-identifier`), so a later item ref never shadows a part's
- * or a section's `duration`. The test's dotted references resolve through the rest. A reference the
- * test declares whole, as an outcome or context variable (reading 37 lets an identifier hold `.`),
- * or holds as a built-in is never split, and a name with no `.` is the test's own check's; every
- * other is judged by {@link judgeReference}. An item ref resolves a reading only through an item
+ * or a section's `duration`. The test's dotted references resolve through the rest and through the
+ * test's own variables: a name the test declares whole, as an outcome or context variable (reading
+ * 37 lets an identifier hold `.`), or holds as a built-in, is its unsplit reading, which counts
+ * beside every other (reading 48, "the unsplit reading counts among them"). An item ref a selection
+ * with replacement can repeat, in its own document or above the section ref that places it, is
+ * `repeatable`, and only through one does a numbered reading count (reading 88). A name with no
+ * `.` is the test's own check's; every other is judged by {@link judgeReference}. An item ref
+ * resolves a reading only through an item
  * whose document the package holds and the reader read, so a reference through any other names
  * nothing, as pantry's reach holds no such item ref. Only the test's own item refs are its items
  * (`refs`): a session delivers no section document's item, and the test model marks a processing
@@ -1879,8 +2126,8 @@ interface TestJudgement {
  *
  * The test's expressions are then judged by the item's processing rules (`processingRefusals` in
  * `#plate/validate/rules.ts`: P20 to P24), with each prefixed read typed by the variable its one
- * resolving reading reads, as pantry's `typePrefixed` types it, and a name no reading or two
- * readings resolve typed unknown, so it keeps its reading's refusal alone; with each unweighted
+ * counting reading reads, as pantry's `typePrefixed` types it, and a name no reading or two
+ * readings count for typed unknown, so it keeps its reading's refusal alone; with each unweighted
  * `qti-test-variables` with no `base-type` typed from the declarations of the reach's items
  * ({@link collectedBaseType}; G-R3 199); and with each template default judged against the
  * template variable it sets. Only what that typed run adds is reported (Admission A5): the same
@@ -1892,8 +2139,8 @@ interface TestJudgement {
  * under each test that reaches it (`testProcessingRows` in
  * `packages/pantry/src/import/reference.ts`), since its references "resolve once for each test
  * that includes the section, not once for the section on its own" (reading 5): its dotted
- * references by {@link judgeReference} against the test's reach, a name the test declares whole or
- * holds as a built-in never split, and its expressions by the item's processing rules under the
+ * references by {@link judgeReference} against the test's reach, the test's own variables among
+ * their readings, and its expressions by the item's processing rules under the
  * test's processing scope, its declarations and built-ins, with the test's typed reach, its
  * collections typed from the reach's items, and each of the section document's template defaults
  * judged against the template variable it sets. Each
@@ -1901,12 +2148,13 @@ interface TestJudgement {
  * same rules over the section alone, every name unknown, are the section document's own verdict's.
  *
  * Last, it finds each read in the test document's processing, its outcome processing and its item
- * refs' template defaults, of a variable an item declares in a `qti-context-declaration`, through
- * its item ref ({@link contextReadsIn}): a name the test does not declare whole whose one resolving
- * reading names such a declaration, directly or in the occurrence form. The item marks that
- * declaration and the engine holds no value of it, so the delivered test marks the processing that
- * reads it. A read in a reached section document is left alone: a session delivers none of its
- * items, and the test model marks a read through one.
+ * refs' template defaults, of an item's context variable through its item ref
+ * ({@link contextReadsIn}): a name the test does not hold whole whose one counting reading reads a
+ * variable the item declares in a `qti-context-declaration`, directly or in the numbered form, or
+ * the built-in `QTI_CONTEXT` (reading 106, "a prefixed reference reaches every built-in variable
+ * its item ref's item holds, `QTI_CONTEXT` among them"). The engine holds no value of either, so
+ * the delivered test marks the processing that reads it. A read in a reached section document is
+ * left alone: a session delivers none of its items, and the test model marks a read through one.
  *
  * @param source The test's source.
  * @param testPath The test's path.
@@ -1928,9 +2176,17 @@ const judgeTest = (
   const repeats = repeatsIn(own, reached);
   const refs = new Map(own.itemRefs.map((itemRef) => [itemRef.identifier, itemRef] as const));
   const reach = new Map(refs);
-  for (const itemRef of reached.flatMap((section) => section.structure.itemRefs)) {
-    if (!repeats.has(itemRef.element) && !reach.has(itemRef.identifier)) {
-      reach.set(itemRef.identifier, itemRef);
+  const repeatable = new Set(
+    own.itemRefs.flatMap(({ identifier, replaced }) => (replaced ? [identifier] : [])),
+  );
+  for (const { replaced, structure } of reached) {
+    for (const itemRef of structure.itemRefs) {
+      if (!repeats.has(itemRef.element) && !reach.has(itemRef.identifier)) {
+        reach.set(itemRef.identifier, itemRef);
+        if (replaced || itemRef.replaced) {
+          repeatable.add(itemRef.identifier);
+        }
+      }
     }
   }
 
@@ -1956,6 +2212,27 @@ const judgeTest = (
   const variablesFor = variablesThrough(own.itemRefs, documents);
   const mappingRefusals = judgeMappings(source.location, own.visits, variablesFor);
   const defaults = judgeTemplateDefaults(source.location, own.visits, variablesFor);
+  const whole = new Map<string, ReadVariable>([
+    ...[...testBuiltIns].map(([name, builtIn]) => [name, builtInVariable(builtIn)] as const),
+    ...source.root.children.flatMap((child) =>
+      child.kind === "element" && isQti(child, testDeclarations)
+        ? Option.toArray(
+            Option.map(
+              identifierOf(child),
+              (identifier) =>
+                [
+                  identifier,
+                  {
+                    declaration: Option.some(child),
+                    kind: kindOf(child),
+                    type: declaredType(child),
+                  },
+                ] as const,
+            ),
+          )
+        : [],
+    ),
+  ]);
   const scope: ReferenceScope = {
     durations: new Set(
       [own, ...reached.map((section) => section.structure)].flatMap(({ identifiers }) =>
@@ -1965,15 +2242,9 @@ const judgeTest = (
       ),
     ),
     items,
+    repeatable,
+    whole,
   };
-  const whole: ReadonlySet<string> = new Set([
-    ...testBuiltIns,
-    ...source.root.children.flatMap((child) =>
-      child.kind === "element" && isQti(child, testDeclarations)
-        ? Option.toArray(identifierOf(child))
-        : [],
-    ),
-  ]);
   /**
    * Report whether the test holds a variable by a name, as it must for a `pattern`'s braced name to
    * reference it (ruling R1).
@@ -1985,8 +2256,9 @@ const judgeTest = (
   const held = (name: string): boolean => whole.has(name) || readingsOf(scope, name).length > 0;
 
   /**
-   * Judge each dotted reference of a test or section document's elements that the test does not
-   * hold whole by reading 48 against the test's reach.
+   * Judge each dotted reference of a test or section document's elements by reading 48 ("a dotted
+   * reference is accepted when exactly one reading names a real item ref, test part or section and
+   * its variable") against the test's reach, the test's own variables included.
    *
    * @param document The document's location.
    * @param visits The visits of its elements, in document order.
@@ -1995,9 +2267,7 @@ const judgeTest = (
   const judgeReferences = (document: string, visits: readonly Visit[]): readonly Refusal[] =>
     visits.flatMap((visit) =>
       referencesOf(visit.element, held).flatMap((reference) =>
-        whole.has(reference.identifier) || !reference.identifier.includes(".")
-          ? []
-          : judgeReference(document, visit, reference, scope),
+        reference.identifier.includes(".") ? judgeReference(document, visit, reference, scope) : [],
       ),
     );
   const references = judgeReferences(source.location, own.visits);
@@ -2062,8 +2332,9 @@ const judgeTest = (
 
   /**
    * Report whether a name the test's processing reads names an item's context variable through its
-   * item ref: the test does not declare it whole, and its one resolving reading names a
-   * `qti-context-declaration`.
+   * item ref: the test does not hold it whole, and its one counting reading reads a context
+   * variable, one its item declares in a `qti-context-declaration` or the built-in `QTI_CONTEXT`
+   * (reading 106).
    *
    * @param name The name.
    * @returns Whether it does.
@@ -2075,13 +2346,7 @@ const judgeTest = (
 
     const [only, ...others] = readingsOf(scope, name);
 
-    return (
-      only !== undefined &&
-      others.length === 0 &&
-      Option.exists(only.variable.declaration, (declaration) =>
-        isQti(declaration, contextDeclarations),
-      )
-    );
+    return only !== undefined && others.length === 0 && only.variable.kind === "context";
   };
 
   return {
@@ -2373,9 +2638,11 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
     accepted: acceptPackage(contentsOf(manifest, documents, tests, location)),
     location,
     resources,
-    verdict: verdicts.some((verdict) => verdict.verdict === "accepted-with-unsupported")
-      ? "accepted-with-unsupported"
-      : "accepted",
+    verdict:
+      verdicts.some((verdict) => verdict.verdict === "accepted-with-unsupported") ||
+      [...tests.values()].some((judged) => judged.reads.length > 0)
+        ? "accepted-with-unsupported"
+        : "accepted",
   };
 });
 

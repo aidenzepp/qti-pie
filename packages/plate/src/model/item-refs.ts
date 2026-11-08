@@ -31,10 +31,12 @@ export const refIdentifiersIn = (children: readonly SectionChild[]): readonly st
   itemRefsIn(children).map((ref) => ref.identifier);
 
 /**
- * The occurrence form of a prefixed name's rest, `N.VAR` (reading 4): `N` a decimal from 1, its
- * leading zeros allowed, as pantry's `prefixedReadings` reads it (`processing/prefixed.ts`), so
- * `0.VAR` is no occurrence: it names the variable `0.VAR`, which no item has, since an identifier
- * never starts with a digit.
+ * The numbered form of a prefixed name's rest, `N.VAR`: `N` all digits and at least 1, its leading
+ * zeros allowed, the first instance being 1 (reading 88, "a numbered reference such as
+ * `Q01.2.SCORE` names an instance of an item ref that a selection with replacement can repeat, and
+ * nothing else"), as the qti package matches a numbered reading's number (`positiveNumberPattern`
+ * in `packages/pantry/src/qti/expressions.ts`). So `0.VAR` is no occurrence: it names the variable
+ * `0.VAR`, which no item has, since an identifier never starts with a digit.
  */
 const occurrenceForm = /^(?<occurrence>0*[1-9]\d*)\.(?<variable>.+)$/su;
 
@@ -49,8 +51,15 @@ export interface Occurrence {
 
 /**
  * Split the rest of a prefixed name, what follows its item ref, into the occurrence it names and
- * the variable: `N.VAR` in the occurrence form (reading 4) names occurrence `N`, and any other rest
- * names occurrence 1 and is the variable whole.
+ * the variable: `N.VAR` in the numbered form names occurrence `N`, and any other rest names
+ * occurrence 1 and is the variable whole.
+ *
+ * The split reads the form alone. Whether a numbered reading counts is the package's to judge: by
+ * reading 88 it counts only where a selection with replacement can repeat its item ref, and a name
+ * whose only resolving reading is numbered elsewhere is refused (`openPackage` in
+ * `#plate/package/open.ts`, `undeclared-variable` with `check: "numbered"`), as the qti package
+ * resolves a numbered reading only when its item ref is `replaced` (the relation `Reading` in
+ * `packages/pantry/src/qti/expressions.ts`). The test model and the engine split every rest so.
  *
  * @param rest The part of the name after the item ref and its dot.
  * @returns The occurrence and the variable's name.
