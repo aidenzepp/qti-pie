@@ -65,7 +65,7 @@ const perElement = ({ depth, runs }: { readonly depth: number; readonly runs: nu
     let best = Number.POSITIVE_INFINITY;
     for (let run = 0; run < runs; run += 1) {
       const start = performance.now();
-      const document = yield* readXml(bytes, { elementDepth: Number.POSITIVE_INFINITY });
+      const document = yield* readXml(bytes);
       const took = performance.now() - start;
 
       assert.strictEqual(document.root.children.length, 1);

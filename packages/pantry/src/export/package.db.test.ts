@@ -20,6 +20,9 @@
  * - **The export charset.** A document is written in its `Document` row's export charset: `latin1`'s
  *   `choice.xml` in ISO-8859-1, a character that charset lacks as a character reference, and
  *   `windows-1252`'s, which no encoder writes, in UTF-8, its declaration naming it.
+ * - **Any depth.** An item whose body nests 10,000 divs, far past any reader's bound, is imported and
+ *   exported canonically equal to its record: XML 1.0 bounds no depth, and spec reading 1 refuses
+ *   nothing valid. `import/depth.test.ts` holds the steps around the database at depth.
  */
 import path from "node:path";
 import { Db } from "@bjornpagen/grizzle";
@@ -36,8 +39,11 @@ import { documentScan, documentsOf } from "#pantry/export/scan.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
+import { manifestPath } from "#pantry/qti/package.ts";
 import { loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
+import { deepItem, deepItemPath, deepManifest } from "#pantry/test/deep-item.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
+import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -66,6 +72,12 @@ const accepted = [
  * row's.
  */
 const scanStatements = 13;
+
+/**
+ * The divs the deep item's body nests: far past the 256 open elements crust once refused past and
+ * libxml2's 257, and past where a recursive walk of a tree nears Node's default stack.
+ */
+const deepDivs = 10_000;
 
 /**
  * The plan node types that make a statement recursive: a recursive CTE's union and its working
@@ -328,6 +340,25 @@ describe.skipIf(!hasLease)(
               assert.include(Buffer.from(latin1).toString("latin1"), "&#x20AC;");
               assert.include(text.slice(0, text.indexOf("?>")), 'encoding="UTF-8"');
             }),
+        );
+
+        it.effect(
+          `imports an item nested ${String(deepDivs)} divs deep and exports it canonically equal to its record`,
+          () =>
+            // Oracle: a universal one, export ∘ import is the identity up to Canonical XML, here
+            // at a depth no reader bounds. Bound: one item of deepDivs nested divs.
+            Effect.gen(function* deepRoundTrip() {
+              const dir = yield* scopedPackage(
+                new Map([
+                  [manifestPath, deepManifest],
+                  [deepItemPath, deepItem(deepDivs)],
+                ]),
+              );
+              const report = yield* compareWithRecord(yield* importPackage(dir));
+
+              assert.strictEqual(tally(report).differing, 0, renderReport(report));
+              assert.lengthOf(report, 2, renderReport(report));
+            }).pipe(Effect.scoped),
         );
       },
     );

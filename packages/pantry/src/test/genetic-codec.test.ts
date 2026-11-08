@@ -141,10 +141,11 @@ const recorded: readonly Recorded[] = [
     why: 'O1 runs `xmllint --noout --nonet`, and there libxml2 2.9.13 (libxml version 20913) reports no namespace error for `<r xmlns:p="&#38;f;http://x"/>` and exits 0, though `--c14n` on the same file reports "xmlns:p: \'&f;http://x\' is not a valid URI" and fails, and `--noout --nonet` reports it for `%zz`, `a b`, `&quot;` and every other value probed; the value\'s first segment holds a colon and no scheme begins with `&`, so it is no URI reference and crust refuses it under reading 142',
   },
   {
-    signature: /^O1 crust refused-element-depth, libxml2 accepts$/u,
+    signature:
+      /^O1 crust accepts, libxml2 refuses: Excessive depth in document: N use XML_PARSE_HUGE option$/u,
     source:
-      "crust's reader bound, read.ts defaultElementDepth (256), which XML 1.0 leaves to the processor (section 5.1 sets no limit); libxml2 2.9.13's xmlParserMaxDepth of 256 is checked after the 257th element is pushed, so it reads 257 levels and refuses 258",
-    why: "an implementation limit, documented as xmllint's default and one level below libxml2's effective bound; crust's comment calls 256 xmllint's limit, which the probe shows admits 257 (a note for crust's owner, no specification rule)",
+      "XML 1.0 (Fifth Edition) productions [39] element and [43] content, where an element's content holds elements and nothing bounds how deep, and section 5.1, which sets no limit; spec reading 1, nothing valid is refused",
+    why: 'libxml2 2.9.13 refuses a document past its own implementation limit unless XML_PARSE_HUGE is set: xmlParserMaxDepth, 256, is checked after the 257th element is pushed, so it reads 257 open elements and refuses 258 with "Excessive depth in document: 256 use XML_PARSE_HUGE option"; crust reads any depth (read.ts, the operator\'s ruling of 2026-11-05)',
   },
 ];
 

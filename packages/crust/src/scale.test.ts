@@ -4,7 +4,6 @@ import { Effect, Option } from "effect";
 import { canonicalize } from "#crust/canonical.ts";
 import { encode } from "#crust/encode.ts";
 import { readXml } from "#crust/read.ts";
-import type { ReadOptions } from "#crust/read.ts";
 import type { Child, Element, XmlDocument } from "#crust/tree.ts";
 import { writeXml } from "#crust/write.ts";
 
@@ -16,12 +15,6 @@ import { writeXml } from "#crust/write.ts";
 const DEPTH = 100_000;
 
 const WIDTH = 100_000;
-
-/**
- * The read these tests make: no element depth refused, so the trees above the reader's default of
- * 256 are read whole.
- */
-const unbounded: ReadOptions = { elementDepth: Number.POSITIVE_INFINITY };
 
 /**
  * The timeout, in milliseconds, for each scale test. The slowest, the namespaced deep round trip,
@@ -140,7 +133,7 @@ describe(`every walk is iterative: depth ${DEPTH} and width ${WIDTH}`, () => {
           -1,
         );
 
-        const read = yield* readXml(bytes, unbounded);
+        const read = yield* readXml(bytes);
 
         assert.strictEqual(firstChildPath(read.root).length, DEPTH);
         assert.strictEqual(firstDifference(text(yield* encode(read, "UTF-8")), written), -1);
@@ -168,7 +161,7 @@ describe(`every walk is iterative: depth ${DEPTH} and width ${WIDTH}`, () => {
           -1,
         );
 
-        const read = yield* readXml(bytes, unbounded);
+        const read = yield* readXml(bytes);
 
         assert.strictEqual(read.root.children.length, WIDTH);
         assert.strictEqual(firstDifference(text(yield* encode(read, "UTF-8")), written), -1);
@@ -181,7 +174,7 @@ describe(`every walk is iterative: depth ${DEPTH} and width ${WIDTH}`, () => {
     () =>
       Effect.gen(function* deepNamespaced() {
         const source = `<!DOCTYPE a SYSTEM "a.dtd" [<!ATTLIST p:a d CDATA "v">]><a xmlns="urn:x" xmlns:p="urn:p">${'<p:a xml:lang="en" r="&u;">'.repeat(DEPTH - 1)}&u;${"</p:a>".repeat(DEPTH - 1)}</a>`;
-        const read = yield* readXml(new TextEncoder().encode(source), unbounded);
+        const read = yield* readXml(new TextEncoder().encode(source));
         const [top, ...inner] = firstChildPath(read.root);
         const wrong = inner.filter(
           (level) =>
@@ -199,7 +192,7 @@ describe(`every walk is iterative: depth ${DEPTH} and width ${WIDTH}`, () => {
         assert.deepStrictEqual(inner.at(-1)?.children, [{ kind: "entityRef", name: "u" }]);
 
         const once = yield* encode(read, "UTF-8");
-        const twice = yield* encode(yield* readXml(once, unbounded), "UTF-8");
+        const twice = yield* encode(yield* readXml(once), "UTF-8");
 
         assert.strictEqual(firstDifference(text(twice), text(once)), -1);
       }),

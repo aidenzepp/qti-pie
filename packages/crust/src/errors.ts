@@ -30,8 +30,7 @@ export class ReaderRefusal extends Data.TaggedError("ReaderRefusal")<{
     | "nul"
     | "undeclared-entity"
     | "entity-cycle"
-    | "entity-expansion"
-    | "element-depth";
+    | "entity-expansion";
 }> {}
 
 /**
