@@ -527,11 +527,12 @@ const indexReference = (identifier: string): Stated => ({
 
 /**
  * A used identifier's projection fact, its counts as the case states them, none of whose members
- * it writes: no assembly places it, so its placed counts are 0.
+ * it writes: unless the case states them, no assembly places it, so its placed counts are 0.
  *
  * @param identifier - The identifier.
  * @param rootKind - Its document's root kind.
- * @param counts - Its counts of choices, declarations and hottexts.
+ * @param counts - Its counts of choices, declarations and hottexts, and of the choices and hottexts
+ *   its assembly places.
  * @returns The fact.
  */
 const choiceName = (
@@ -541,14 +542,16 @@ const choiceName = (
     readonly choices: bigint;
     readonly declarations: bigint;
     readonly hottexts: bigint;
+    readonly placedChoices?: bigint;
+    readonly placedHottexts?: bigint;
   },
 ): Stated => ({
   fact: {
+    placedChoices: 0n,
+    placedHottexts: 0n,
     ...counts,
     document: stray,
     identifier,
-    placedChoices: 0n,
-    placedHottexts: 0n,
     rootKind,
   },
   relation: ChoiceVariableName,
@@ -853,6 +856,65 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               );
 
               assert.isUndefined(refused, refused?.message);
+            }
+          }).pipe(Effect.scoped),
+      );
+
+      it.effect(
+        "refuses a gap match bound to a single response over two or more gaps, and accepts one gap, or several bound multiple, by Binding cardinality",
+        () =>
+          // Oracle: PostgreSQL, the `Binding_cardinality` check on `BindingCardinality` with every
+          // foreign key and family proof deferred and none set immediate (reading 169: a gap
+          // match's response is single only where it has at most one gap, §5.57), 23514 on the
+          // check refused.
+          // Bound: a gap match bound single with 2 gaps and most 1, refused; with 1 gap, and with
+          // 2 gaps bound multiple, accepted; a choice interaction bound single with 2 gaps (a
+          // count its kind does not read), accepted.
+          Effect.gen(function* gapCardinality() {
+            const client = yield* loginSession;
+
+            for (const [label, fields, refusedBy] of [
+              [
+                "two gaps bound single",
+                { cardinality: "single", gaps: 2n, kind: "qti-gap-match-interaction", mosts: 1n },
+                "binding_cardinality",
+              ],
+              [
+                "one gap bound single",
+                { cardinality: "single", gaps: 1n, kind: "qti-gap-match-interaction", mosts: 1n },
+                undefined,
+              ],
+              [
+                "two gaps bound multiple",
+                { cardinality: "multiple", gaps: 2n, kind: "qti-gap-match-interaction", mosts: 1n },
+                undefined,
+              ],
+              [
+                "two gaps of another kind bound single",
+                { cardinality: "single", gaps: 2n, kind: "qti-choice-interaction", mosts: 1n },
+                undefined,
+              ],
+            ] as const) {
+              const refused = Option.getOrUndefined(
+                yield* judged(
+                  client,
+                  statedInserts([
+                    { fact: cardinalityRow(0, fields), relation: BindingCardinality },
+                  ]),
+                  [],
+                ),
+              );
+
+              if (refusedBy === undefined) {
+                assert.isUndefined(refused, `${label}: ${refused?.message ?? ""}`);
+              } else {
+                assert.strictEqual(
+                  refused?.code,
+                  "23514",
+                  `${label}: ${refused?.message ?? "accepted"}`,
+                );
+                assert.strictEqual(refused?.constraint, refusedBy, label);
+              }
             }
           }).pipe(Effect.scoped),
       );
@@ -1214,10 +1276,12 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // "identifier")): the choice classes' "This identifier must not be used by any other
           // choice or item variable" (§5.132.1, §5.65.1), each class of its own kind, the document
           // its scope (reading 104).
+          // Across classes the nine share one space (reading 104 as amended); that half is the
+          // `Choice_identifier_key` check on `ChoiceVariableName`, held by the name-rows test below.
           // Bound: two simple choices named A of one interaction, and of two; two hottexts named H,
           // one in a hottext interaction and one outside any; a gap and a gap text named A of one
-          // interaction, which the key lets be (the rows are stray, so the deferred foreign keys
-          // refuse them at commit, and the key is not among the laws).
+          // interaction, which these per-class keys let be (the rows are stray, so the deferred
+          // foreign keys refuse them at commit, and the keys are not among the laws).
           Effect.gen(function* choiceKeys() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const second of [
@@ -1342,26 +1406,97 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "accepts a name of choices alone, of a declaration alone and a stimulus choice named as a built-in, and refuses a name counted by both and one counted by none, by the row's own checks",
+        "accepts a name of one choice, of a declaration alone and a stimulus choice named as a built-in, and refuses a name of two choices, a choice and a hottext, two hottexts, in the document or placed, a name counted by both and one counted by none, by the row's own checks",
         () =>
           // Oracle: PostgreSQL, `ChoiceVariableName`'s CHECKs with every foreign key and family
           // proof deferred and none set immediate: `Choice_not_variable` (reading 104) and
-          // `E1_derived` (some count above 0), 23514 on the check refused.
-          // Bound: two choices of one name; one declaration; a stimulus's choice named
-          // numAttempts, accepted; a hottext and a declaration of one name, and a name of no
-          // choice, hottext or declaration, refused.
+          // `Choice_identifier_key` (reading 104 as amended: the nine classes share one space, so
+          // at most one choice or hottext bears a name in the document and one over its assembly)
+          // and `E1_derived` (some count above 0), 23514 on the check refused.
+          // Bound: one choice; one declaration; a stimulus's choice named numAttempts, accepted;
+          // two choices, a choice and a hottext, two hottexts, each in the document and placed, a
+          // hottext and a declaration of one name, and a name of no choice, hottext or declaration,
+          // refused; one placed choice, accepted.
           Effect.gen(function* nameRows() {
             const client = yield* loginSession;
 
             for (const [label, row, refusedBy] of [
               [
-                "choices alone",
+                "one choice",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 1n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                }),
+                undefined,
+              ],
+              [
+                "one placed choice",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                  placedChoices: 1n,
+                }),
+                undefined,
+              ],
+              [
+                "two choices",
                 choiceName("A", "qti-assessment-item", {
                   choices: 2n,
                   declarations: 0n,
                   hottexts: 0n,
                 }),
-                undefined,
+                "choice_identifier_key",
+              ],
+              [
+                "a choice and a hottext",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 1n,
+                  declarations: 0n,
+                  hottexts: 1n,
+                }),
+                "choice_identifier_key",
+              ],
+              [
+                "two hottexts",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 0n,
+                  hottexts: 2n,
+                }),
+                "choice_identifier_key",
+              ],
+              [
+                "two placed choices",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                  placedChoices: 2n,
+                }),
+                "choice_identifier_key",
+              ],
+              [
+                "a placed choice and a placed hottext",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                  placedChoices: 1n,
+                  placedHottexts: 1n,
+                }),
+                "choice_identifier_key",
+              ],
+              [
+                "two placed hottexts",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                  placedHottexts: 2n,
+                }),
+                "choice_identifier_key",
               ],
               [
                 "a declaration alone",
