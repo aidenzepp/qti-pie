@@ -304,8 +304,8 @@ const equal = (...operands: readonly SourceElement[]): SourceElement =>
   el("qti-equal", [], operands);
 
 /**
- * Construct a `qti-field-value` of a record operand: the last expression kind to land (M3.b-4), so
- * it stays untyped through M3.b-1 and pins what an untyped expression does.
+ * Construct a `qti-field-value` of a record operand: a single whose base type is the field's, which
+ * the rules leave unknown, so it satisfies every rule that takes a single.
  *
  * @param operand The record it reads a field of.
  * @returns The expression.
@@ -518,6 +518,27 @@ const judged = (source: ReturnType<typeof item>) =>
  */
 const settingScore = (expression: SourceElement) =>
   judged(item([outcome("SCORE")], [], [processing(undefined, [setScore(expression)])]));
+
+/**
+ * Judge an item that declares the record responses `REC` and `OTHER`, the float `SCORE` and the
+ * boolean `SAME`, whose response processing is the rules given.
+ *
+ * @param rules The rules of its `qti-response-processing`, in order.
+ * @returns The refusals, reduced.
+ */
+const overRecords = (rules: readonly SourceElement[]) =>
+  judged(
+    item(
+      [
+        response("REC", "record"),
+        response("OTHER", "record"),
+        outcome("SCORE"),
+        outcome("SAME", "boolean"),
+      ],
+      [],
+      [processing(undefined, rules)],
+    ),
+  );
 
 /**
  * Construct a field of a record value: a `qti-value` with the attributes given.
@@ -1827,8 +1848,73 @@ describe("checkRules", () => {
       );
     });
 
-    it("neither types nor refuses an expression that holds a qti-field-value, not yet landed", () => {
+    it("accepts setting the float SCORE from a qti-field-value of QTI_CONTEXT, a single of unknown base type", () => {
       assert.deepStrictEqual(settingScore(fieldValue(variable("QTI_CONTEXT"))), []);
+    });
+
+    it("refuses a qti-field-value of a single string at the qti-field-value, its operand not a record (P23)", () => {
+      assert.deepStrictEqual(settingScore(fieldValue(baseValue("string", "a"))), [
+        {
+          detail: {
+            acceptsBaseTypes: "any",
+            acceptsCardinalities: "record",
+            check: "operand",
+            element: "qti-field-value",
+            expressionBaseType: "string",
+            expressionCardinality: "single",
+            operand: "1",
+          },
+          path: `${rulePath}/qti-field-value`,
+          rule: "expression-type",
+        },
+      ]);
+    });
+
+    describe("a record operand (P23)", () => {
+      it("refuses a qti-sum of a record response at the qti-sum", () => {
+        assert.deepStrictEqual(overRecords([setScore(el("qti-sum", [], [variable("REC")]))]), [
+          {
+            detail: {
+              acceptsBaseTypes: "integer float",
+              acceptsCardinalities: "multiple ordered single",
+              check: "operand",
+              element: "qti-sum",
+              expressionBaseType: "",
+              expressionCardinality: "record",
+              operand: "1",
+            },
+            path: `${rulePath}/qti-sum`,
+            rule: "expression-type",
+          },
+        ]);
+      });
+
+      it("refuses setting the float SCORE from a record response", () => {
+        assert.deepStrictEqual(overRecords([setScore(variable("REC"))]), [
+          {
+            detail: {
+              element: "qti-set-outcome-value",
+              expressionBaseType: "",
+              expressionCardinality: "record",
+              identifier: "SCORE",
+              outcomeBaseType: "float",
+              outcomeCardinality: "single",
+            },
+            path: rulePath,
+            rule: "expression-type",
+          },
+        ]);
+      });
+
+      it("accepts a qti-is-null of a record response and a qti-match of two", () => {
+        assert.deepStrictEqual(
+          overRecords([
+            setOutcome("SAME", isNull("REC")),
+            setOutcome("SAME", el("qti-match", [], [variable("REC"), variable("OTHER")])),
+          ]),
+          [],
+        );
+      });
     });
 
     describe("a qti-map-response-point, a single float", () => {
@@ -1939,14 +2025,14 @@ describe("checkRules", () => {
         assert.deepStrictEqual(comparing(baseValue("integer", "1"), baseValue("float", "1")), []);
       });
 
-      it("accepts an operand that holds a qti-field-value, untyped", () => {
+      it("accepts a qti-field-value operand, a single of unknown base type", () => {
         assert.deepStrictEqual(
           comparing(fieldValue(variable("QTI_CONTEXT")), baseValue("integer", "1")),
           [],
         );
       });
 
-      it("refuses only the string operand beside an untyped one (ruling R3)", () => {
+      it("refuses only the string operand beside a qti-field-value, whose base type is unknown", () => {
         assert.deepStrictEqual(
           judged(
             item(
@@ -1993,12 +2079,12 @@ describe("checkRules", () => {
       });
     });
 
-    it("does not type a qti-match that holds an untyped operand (ruling R3)", () => {
+    it("types a qti-match of a qti-field-value a single boolean, so it refuses setting the float SCORE from one", () => {
       assert.deepStrictEqual(
         settingScore(
           el("qti-match", [], [fieldValue(variable("QTI_CONTEXT")), baseValue("string", "a")]),
         ),
-        [],
+        [scoreRefused("boolean")],
       );
     });
 
@@ -2121,7 +2207,7 @@ describe("checkRules", () => {
         );
       });
 
-      it("accepts an operand that holds a qti-field-value, untyped", () => {
+      it("accepts a qti-field-value operand under a match table, whose base type is unknown", () => {
         assert.deepStrictEqual(
           judged(lookupItem("qti-match-table", fieldValue(variable("QTI_CONTEXT")))),
           [],
@@ -2182,7 +2268,7 @@ describe("checkRules", () => {
         );
       });
 
-      it("[I-9a] accepts a condition that holds a kind not yet landed, untyped (P21, ruling R3)", () => {
+      it("[I-9a] accepts a qti-field-value condition, a single of unknown base type (P21)", () => {
         assert.deepStrictEqual(
           branching(responseBranch("qti-response-if", fieldValue(variable("QTI_CONTEXT")))),
           [],

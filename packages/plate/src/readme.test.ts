@@ -764,10 +764,10 @@ describe("README.md", () => {
     }
   });
 
-  it("[T-9] gives in Scoring the number of expressions plate runs and names qti-field-value as the one left", () => {
+  it("[T-9] gives in Scoring the number of expressions plate runs, all of them, none left unlanded, and names qti-field-value", () => {
     const unlanded = expressionKinds.filter((kind) => !landedKinds.includes(kind));
 
-    assert.deepStrictEqual(unlanded, ["field-value"]);
+    assert.deepStrictEqual(unlanded, []);
     assert.isTrue(
       paragraphsOf("## Scoring").some(
         (paragraph) =>
@@ -776,6 +776,11 @@ describe("README.md", () => {
           ) && paragraph.includes("`qti-field-value`"),
       ),
       "a paragraph of Scoring gives the count of expressions plate runs and names qti-field-value",
+    );
+    assert.notInclude(
+      sectionOf("## Scoring"),
+      "- `qti-field-value`",
+      "Scoring no longer lists qti-field-value among the marks",
     );
   });
 

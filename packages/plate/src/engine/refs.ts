@@ -3,25 +3,28 @@
  * and {@link variableRead} with the item a test's run read it through), from the responses,
  * outcomes and template values the attempt holds ({@link own}), from a built-in variable
  * ({@link builtInValue}) or, in a test's run, from an item through its item ref
- * ({@link prefixedRead}); the type of each built-in the run holds ({@link builtInType}); and the
- * run-time resolver of an attribute that holds a literal or names a template or outcome variable
- * ({@link referenceValue}, and {@link referenceInteger} for an integer one).
+ * ({@link prefixedRead}); the record an operand of `qti-field-value`, `qti-is-null` or `qti-match`
+ * reads ({@link recordOrValue}); the type of each built-in the run holds ({@link builtInType}); and
+ * the run-time resolver of an attribute that holds a literal or names a template or outcome
+ * variable ({@link referenceValue}, and {@link referenceInteger} for an integer one).
  *
  * It value-imports only `effect`'s `Option` and `Result`, `#plate/engine/failures.ts`,
  * `#plate/engine/numbers.ts`, `#plate/engine/scope.ts`, `#plate/model/record.ts` and
- * `#plate/model/values.ts`, and reads `Variables` from `#plate/engine/evaluate.ts` and the
- * reference types from `#plate/model/expression.ts` as types, so every expression family may
- * import it.
+ * `#plate/model/values.ts`, and reads `Variables`, `Scope` and `Evaluate` from
+ * `#plate/engine/evaluate.ts` and the expression and reference types from
+ * `#plate/model/expression.ts` as types, so every expression family may import it.
  *
  * @module
  */
 import { Option, Result } from "effect";
-import type { Variables } from "#plate/engine/evaluate.ts";
-import { UnknownIdentifierError } from "#plate/engine/failures.ts";
+import type { Evaluate, Scope, Variables } from "#plate/engine/evaluate.ts";
+import { RecordOperandError, UnknownIdentifierError } from "#plate/engine/failures.ts";
+import type { EngineFailure } from "#plate/engine/failures.ts";
 import { integerOf, integerValue, singleValue } from "#plate/engine/numbers.ts";
 import { durationOf, prefixedVariable } from "#plate/engine/scope.ts";
 import type { ItemName, Reading, ScopeItem, TestScope } from "#plate/engine/scope.ts";
 import type {
+  Expression,
   FloatOrRef,
   IntOrIdentifier,
   IntegerOrRef,
@@ -29,7 +32,7 @@ import type {
 } from "#plate/model/expression.ts";
 import { completionStatus, completionStatusType } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 
 /**
  * Look up a value by identifier among a map's own keys.
@@ -197,6 +200,26 @@ export interface VariableRead {
 }
 
 /**
+ * Look up a record by identifier among a records map's own keys, as {@link own} looks up a value.
+ *
+ * @param records The record responses the run holds, if any.
+ * @param identifier The identifier.
+ * @returns The record, or none when the map holds no record by that name.
+ */
+const ownRecord = (
+  records: Readonly<Record<string, RecordValue>> | undefined,
+  identifier: string,
+): Option.Option<RecordValue> =>
+  records !== undefined && Object.hasOwn(records, identifier)
+    ? Option.fromUndefinedOr(records[identifier])
+    : Option.none();
+
+/**
+ * The NULL record: a record with no field.
+ */
+const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+/**
  * Give what a `qti-variable` reads: the response, the outcome or the template variable of that
  * identifier, the built-in `completionStatus` among the outcomes, else the built-in variable of
  * that name ({@link builtInValue}), else, in a test's run, the item variable the name reads through
@@ -209,9 +232,14 @@ export interface VariableRead {
  * through the test scope only when the run's own variables hold no value by that name, so a test
  * outcome named `ITEM1.SCORE` is read as the test's own.
  *
+ * A record response is not a value, so a name the variables hold a record of
+ * (`Variables.records`) fails: the three kinds that read a record whole take it through
+ * {@link recordOrValue} before any value read.
+ *
  * @param variables The variables of the run.
  * @param identifier The variable's identifier.
- * @returns The value, with the item when it was read through an item ref; or an
+ * @returns The value, with the item when it was read through an item ref; or a
+ *   {@link RecordOperandError} when the variables hold a record of it; or an
  *   {@link UnknownIdentifierError}, with holder `record`, when neither the responses, the
  *   outcomes, the template values, the built-in variables nor, in a test's run, an item ref hold
  *   it.
@@ -219,7 +247,11 @@ export interface VariableRead {
 export const variableRead = (
   variables: Variables,
   identifier: string,
-): Result.Result<VariableRead, UnknownIdentifierError> => {
+): Result.Result<VariableRead, RecordOperandError | UnknownIdentifierError> => {
+  if (Option.isSome(ownRecord(variables.records, identifier))) {
+    return Result.fail(new RecordOperandError({ identifier }));
+  }
+
   const direct = Option.firstSomeOf([
     own(variables.responses, identifier),
     own(variables.outcomes, identifier),
@@ -243,13 +275,70 @@ export const variableRead = (
  *
  * @param variables The variables of the run.
  * @param identifier The variable's identifier.
- * @returns Its current value, or the {@link UnknownIdentifierError} {@link variableRead} gives.
+ * @returns Its current value, or the {@link RecordOperandError} or {@link UnknownIdentifierError}
+ *   {@link variableRead} gives.
  */
 export const variableValue = (
   variables: Variables,
   identifier: string,
-): Result.Result<Value, UnknownIdentifierError> =>
+): Result.Result<Value, RecordOperandError | UnknownIdentifierError> =>
   Result.map(variableRead(variables, identifier), (read) => read.value);
+
+/**
+ * Give the record an operand names, when it names a record response: a `qti-variable` the record
+ * the run holds of it (`Variables.records`), a `qti-default` its declared default and a
+ * `qti-correct` its declared correct response (`Declarations.records`), each the NULL record when
+ * the declaration declares none. A record response's default and correct response are never set:
+ * template processing that sets either is marked `record-set` and does not run.
+ *
+ * @param operand The operand.
+ * @param scope The holder and the variables of the run.
+ * @returns The record; none for any other operand, and for a `qti-variable` of a name the run holds
+ *   no record of, which its value read then judges.
+ */
+const recordOf = (operand: Expression, scope: Scope): Option.Option<RecordValue> => {
+  if (operand.kind === "variable") {
+    return ownRecord(scope.variables.records, operand.identifier);
+  }
+
+  if (operand.kind !== "correct" && operand.kind !== "default") {
+    return Option.none();
+  }
+
+  const { identifier, kind } = operand;
+
+  return Option.map(Option.fromUndefinedOr(scope.item.records?.get(identifier)), (declared) =>
+    Option.getOrElse(
+      kind === "correct" ? declared.correct : declared.defaultValue,
+      () => nullRecord,
+    ),
+  );
+};
+
+/**
+ * Give what an operand of `qti-field-value`, `qti-is-null` or `qti-match` stands for: the record it
+ * names ({@link recordOf}), else its value, evaluated as any operand is.
+ *
+ * These three kinds alone read a record whole, so they read their operands here before any value
+ * read, which fails a record ({@link variableRead}). A record is read, never computed, so naming it
+ * draws nothing and fails nothing; any other operand is evaluated in its place among its siblings,
+ * so the draws and the first failure keep evaluation order.
+ *
+ * @param operand The operand.
+ * @param scope The holder, the variables of the run and the stream it draws from.
+ * @param evaluate The evaluator, which gives the operand's value when it names no record.
+ * @returns The record or the value, or the operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpFieldValue
+ */
+export const recordOrValue = (
+  operand: Expression,
+  scope: Scope,
+  evaluate: Evaluate,
+): Result.Result<ResponseValue, EngineFailure> =>
+  Option.match(recordOf(operand, scope), {
+    onNone: (): Result.Result<ResponseValue, EngineFailure> => evaluate(operand, scope),
+    onSome: (record) => Result.succeed(record),
+  });
 
 /**
  * An attribute that holds a literal or names a variable, with what its kind rule's reference facet
@@ -297,14 +386,15 @@ export type ReferenceSite =
  *
  * @param variables The variables of the attempt.
  * @param site The attribute's value and its reference facet.
- * @returns The value; or an {@link UnknownIdentifierError} when a checked site names a variable the
- *   variables hold no value of.
+ * @returns The value; or, at a checked site, the {@link RecordOperandError} or
+ *   {@link UnknownIdentifierError} {@link variableValue} gives, for a record response or a
+ *   variable the variables hold no value of.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#IT_Use
  */
 export const referenceValue = (
   variables: Variables,
   site: ReferenceSite,
-): Result.Result<Value, UnknownIdentifierError> => {
+): Result.Result<Value, RecordOperandError | UnknownIdentifierError> => {
   if (site.reference._tag === "ref") {
     const { identifier } = site.reference;
 
@@ -345,13 +435,15 @@ export const referenceValue = (
  * @param variables The variables of the attempt.
  * @param reference The attribute's value.
  * @returns The integer; none when the named variable holds NULL or a value that is not a single
- *   integer, which the validator refuses (P24) on a checked item; or an
- *   {@link UnknownIdentifierError} when it names a variable the variables hold no value of.
+ *   integer, which the validator refuses (P24) on a checked item; or the failure
+ *   {@link referenceValue} gives: a {@link RecordOperandError} for a record response, which P24
+ *   refuses on a checked item, or an {@link UnknownIdentifierError} when it names a variable the
+ *   variables hold no value of.
  */
 export const referenceInteger = (
   variables: Variables,
   reference: IntOrIdentifier | IntegerOrRef,
-): Result.Result<Option.Option<bigint>, UnknownIdentifierError> =>
+): Result.Result<Option.Option<bigint>, RecordOperandError | UnknownIdentifierError> =>
   Result.map(
     referenceValue(variables, { baseType: "integer", checked: true, reference }),
     integerOf,

@@ -1,8 +1,7 @@
 /**
  * The containers family of the item model: the kind rules and reader specs of `qti-is-null`,
  * `qti-multiple`, `qti-ordered`, `qti-repeat`, `qti-container-size`, `qti-index`, `qti-random`,
- * `qti-member`, `qti-delete` and `qti-contains`, and the unlanded rule and stub reader spec of
- * `qti-field-value`, which a later slice replaces.
+ * `qti-member`, `qti-delete`, `qti-contains` and `qti-field-value`.
  *
  * The constructors (`qti-multiple`, `qti-ordered`, `qti-repeat`) give a container of the base type
  * their operands share; the readers (`qti-container-size`, `qti-index`, `qti-random`) take a
@@ -11,7 +10,9 @@
  * that says one sets, as the qti package's operand rules do (P23, `operandRules` in
  * `packages/pantry/src/processing/check.ts`). `qti-index`'s `n` and `qti-repeat`'s `number-repeats`
  * may name an integer variable, so their rules declare them in their reference facet, and the
- * validator, the walks and the engine check and resolve them from there.
+ * validator, the walks and the engine check and resolve them from there. `qti-field-value` reads a
+ * field of a record, whose `field-identifier` names a field inside the record, never a variable,
+ * so its rule declares no reference.
  *
  * It value-imports only `effect`, `#plate/model/expression.ts`, the leaf
  * `#plate/model/attributes.ts` and `#plate/vocabulary.ts`, and names the registry's reader types
@@ -21,14 +22,13 @@
  * @module
  */
 import { Effect } from "effect";
-import { requiredValue } from "#plate/model/attributes.ts";
+import { identifierAttribute, requiredValue } from "#plate/model/attributes.ts";
 import {
   accepts,
   acceptsAnyOperands,
   everyOperand,
   intOrIdentifierOf,
   singleOf,
-  unlandedRule,
 } from "#plate/model/expression.ts";
 import type {
   ExpressionType,
@@ -36,7 +36,7 @@ import type {
   KindRule,
   OperandMismatch,
 } from "#plate/model/expression.ts";
-import type { FamilyReaders, ReaderSpec, UnlandedReader } from "#plate/model/expressions/read.ts";
+import type { FamilyReaders, ReaderSpec } from "#plate/model/expressions/read.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
 import type { BaseType, Cardinality } from "#plate/vocabulary.ts";
 
@@ -286,7 +286,24 @@ const containsRule: KindRule = {
 };
 
 /**
- * The containers family's kind rules by kind, and the unlanded rule for `field-value`.
+ * The rule of `qti-field-value`: a single of base type `unknown`, of a record operand. The field's
+ * base type is the record's to say, so the rule leaves it unknown, as the qti package types the
+ * kind (`resultType` in `packages/pantry/src/processing/types.ts`), and every rule that takes a
+ * single accepts it. Its operand is a record, or of a cardinality not known yet, as `qti-null`'s
+ * and `qti-custom-operator`'s are; one of any other cardinality is refused (P23), as the qti
+ * package's operand rule of the kind refuses it (`operandRules` in
+ * `packages/pantry/src/processing/check.ts`).
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpFieldValue
+ */
+const fieldValueRule: KindRule = {
+  operandsAccept: everyOperand("any", ["record"]),
+  references: [],
+  resultType: () => singleOf("unknown"),
+};
+
+/**
+ * The containers family's kind rules by kind.
  */
 export const containersRules: FamilyRules<
   | "container-size"
@@ -304,7 +321,7 @@ export const containersRules: FamilyRules<
   "container-size": containerSizeRule,
   contains: containsRule,
   delete: deleteRule,
-  "field-value": unlandedRule,
+  "field-value": fieldValueRule,
   index: indexRule,
   "is-null": isNullRule,
   member: memberRule,
@@ -430,13 +447,25 @@ const containsReader: ReaderSpec<"contains"> = {
 };
 
 /**
- * The reader spec of each kind the family has not landed: the stub, which marks the kind's element
- * at its path and reads nothing in it.
+ * The reader spec of `qti-field-value`: its one operand, and its required `field-identifier`, the
+ * NCName of the field it reads, read as `identifierOf` reads an identifier, its outer whitespace
+ * gone.
+ *
+ * Its read fails with `missing-attribute` for an absent `field-identifier`, as a document the
+ * validator refuses first would.
  */
-const unlanded: UnlandedReader = { _tag: "unlanded" };
+const fieldValueReader: ReaderSpec<"field-value"> = {
+  _tag: "generic",
+  arity: "one",
+  attributes: (context, element) =>
+    Effect.map(
+      identifierAttribute(context.walk, element, "field-identifier"),
+      (fieldIdentifier) => (operands) => ({ fieldIdentifier, kind: "field-value", operands }),
+    ),
+};
 
 /**
- * The containers family's reader specs by kind, and the stub for `field-value`.
+ * The containers family's reader specs by kind.
  */
 export const containersReaders: FamilyReaders<
   | "container-size"
@@ -454,7 +483,7 @@ export const containersReaders: FamilyReaders<
   "container-size": containerSizeReader,
   contains: containsReader,
   delete: deleteReader,
-  "field-value": unlanded,
+  "field-value": fieldValueReader,
   index: indexReader,
   "is-null": isNullReader,
   member: memberReader,

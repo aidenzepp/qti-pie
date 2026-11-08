@@ -53,6 +53,7 @@ import type { RecordValue, Single, Value } from "#plate/model/values.ts";
 
 export {
   OutcomeMismatchError,
+  RecordOperandError,
   UnknownIdentifierError,
   UnmappedResponseError,
 } from "#plate/engine/failures.ts";
@@ -116,12 +117,15 @@ export interface Variables {
 }
 
 /**
- * The declarations a run of rules reads: the outcomes it sets, and the responses and template
+ * The declarations a run of rules reads: the outcomes it sets, the responses and template
  * variables whose declarations give the correct responses, the defaults, the mappings and the area
- * mappings. An {@link Item} is one, and every item's processing passes its item. A test's holder is
- * its outcome declarations with no response and no template variable, since a test is not an item.
+ * mappings, and the record responses, whose declarations give the correct response and the default
+ * a `qti-correct` and a `qti-default` of one read (`recordOrValue` in `#plate/engine/refs.ts`),
+ * absent where the holder declares none. An {@link Item} is one, and every item's processing passes
+ * its item. A test's holder is its outcome declarations with no response and no template variable,
+ * since a test is not an item.
  */
-export type Declarations = Pick<Item, "outcomes" | "responses" | "templates">;
+export type Declarations = Pick<Item, "outcomes" | "records" | "responses" | "templates">;
 
 /**
  * The evaluator's context: the declarations holder whose declarations give the outcomes' types,

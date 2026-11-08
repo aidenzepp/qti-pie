@@ -193,31 +193,6 @@ const referenceFacets: Partial<Record<ExpressionKind, readonly ReferenceEntry[]>
 const byAttribute = (entries: readonly ReferenceEntry[]): readonly ReferenceEntry[] =>
   entries.toSorted((left, right) => left.attribute.localeCompare(right.attribute));
 
-/**
- * The kinds a later stage of this plan owns, by the unit that lands each (M3.b-2's P7T-01 has
- * landed its three random kinds with template processing, M3.b-3's P7O-02 the two duration
- * comparisons with duration values, and M3.b-3's P7O-04 the eight outcome-only kinds for a test's
- * outcome processing): `field-value`, which M3.b-4's P7R-03 lands with record values. It stays
- * unlanded in all three tables, so an item that holds one is marked and its processing runs none.
- * The ledger's claim on I-9a names this roster, and a unit that lands a kind removes it here.
- */
-const laterKinds = {
-  "P7R-03": ["field-value"],
-} as const satisfies Readonly<Record<string, readonly ExpressionKind[]>>;
-
-/**
- * Every kind of {@link laterKinds}, whatever its owner.
- */
-const laterKindSet: ReadonlySet<ExpressionKind> = new Set(Object.values(laterKinds).flat());
-
-/**
- * The kinds that run: each of the 64 the roster does not list, M3.b-1's 50 and any kind a later
- * stage has landed and removed from {@link laterKinds}.
- */
-const runningKinds: readonly ExpressionKind[] = expressionKinds.filter(
-  (kind) => !laterKindSet.has(kind),
-);
-
 describe("expressionKinds", () => {
   it("holds 64 kinds, none repeated", () => {
     assert.strictEqual(expressionKinds.length, 64);
@@ -336,15 +311,14 @@ describe("the expression families", () => {
 });
 
 describe("kindRules", () => {
-  it("holds the unlanded rule for exactly the kinds whose reader spec is the stub and whose evaluator is the stub marker", () => {
-    const unlanded = expressionKinds.filter((kind) => isUnlanded(kindRules[kind]));
-
+  it("holds the unlanded rule for no kind, the stub reader spec for none and the stub marker for none, since qti-field-value, the last, has landed", () => {
     assert.deepStrictEqual(
       {
         evaluators: expressionKinds.filter((kind) => evaluators[kind] === "unlanded"),
         readers: expressionKinds.filter((kind) => kindReaders[kind]._tag === "unlanded"),
+        rules: expressionKinds.filter((kind) => isUnlanded(kindRules[kind])),
       },
-      { evaluators: unlanded, readers: unlanded },
+      { evaluators: [], readers: [], rules: [] },
     );
   });
 
@@ -435,32 +409,15 @@ describe("kindRules", () => {
 });
 
 describe("kindReaders", () => {
-  it("lists as landed exactly the kinds whose rule is landed, in the order of the kinds", () => {
-    assert.deepStrictEqual(
-      landedKinds,
-      expressionKinds.filter((kind) => !isUnlanded(kindRules[kind])),
-    );
+  it("lists as landed each of the 64 kinds, in the order of the kinds", () => {
+    assert.deepStrictEqual(landedKinds, expressionKinds);
   });
 });
 
-describe("the roster", () => {
-  it("[I-9a] runs each kind the roster does not list, M3.b-1's 50 among them: its reader spec, its kind rule and its evaluator are landed, none a stub", () => {
-    assert.isAtLeast(runningKinds.length, 50);
+describe("the landing", () => {
+  it("[I-9a] runs each of the 64 kinds, qti-field-value among them: its reader spec, its kind rule and its evaluator are landed, none a stub", () => {
     assert.deepStrictEqual(
-      runningKinds.filter((kind) => !landedEverywhere(kind)),
-      [],
-    );
-  });
-
-  it("holds unlanded exactly the kinds a later stage owns, listed by owner, each a stub in all three tables", () => {
-    assert.deepStrictEqual(
-      expressionKinds.filter((kind) => isUnlanded(kindRules[kind])),
-      expressionKinds.filter((kind) => laterKindSet.has(kind)),
-    );
-    assert.deepStrictEqual(
-      [...laterKindSet].filter(
-        (kind) => kindReaders[kind]._tag !== "unlanded" || evaluators[kind] !== "unlanded",
-      ),
+      expressionKinds.filter((kind) => !landedEverywhere(kind)),
       [],
     );
   });

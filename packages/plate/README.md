@@ -413,18 +413,16 @@ value for such a response: validate it, or draw its interaction yourself.
 Inline processing runs every response rule. `qti-lookup-outcome-value` maps a value through a
 match or interpolation table, `qti-exit-response` ends processing, and a
 `qti-response-processing-fragment`'s rules run where the fragment stands. Of the 64 expressions
-QTI 3.0 defines, plate runs 63. M3.b-4 brings the last, `qti-field-value`, with record values.
-Until it lands, the [ledger](#conformance-ledger) reports row I-9a (Response Processing: Full) as
-`limited`. Eight of the 63 belong to a test's outcome processing, as
-[Outcome processing](#outcome-processing) says, so `open` refuses one in an item with
-`expression-placement`.
+QTI 3.0 defines, plate runs 64. `qti-field-value` reads one field of a record response, and
+`qti-is-null` and `qti-match` read a record whole. Eight of the 64 belong to a test's outcome
+processing, as [Outcome processing](#outcome-processing) says, so `open` refuses one in an item
+with `expression-placement`.
 
 A value that two or more entries of a `qti-mapping` match maps by the first entry listed, as a
 point that two areas of a `qti-area-mapping` hold maps by the first area listed.
 
 The verdict marks each of these, and `score` runs no processing that holds one:
 
-- `qti-field-value`, which M3.b-4 brings
 - An `xi:include`, which plate never fetches
 - A `%` coordinate in a `qti-inside`, or in an area mapping that `qti-map-response-point` reads
 - A `qti-pattern-match` pattern that plate cannot translate

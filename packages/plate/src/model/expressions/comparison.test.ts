@@ -424,9 +424,9 @@ describe("the comparison family's reader specs and kind rules", () => {
   );
 
   it.effect(
-    "[I-9a] mark only the unlanded kind among an absolute qti-equal's operands, and no tolerance mode",
+    "[I-9a] keep an absolute qti-equal over the floatValue of a record response, marking no tolerance mode",
     () =>
-      Effect.gen(function* marksOperandOnly() {
+      Effect.gen(function* keepsFieldOperand() {
         const built = yield* buildItem(
           sameItem(
             expressionElement(
@@ -435,23 +435,23 @@ describe("the comparison family's reader specs and kind rules", () => {
               [
                 expressionElement(
                   "field-value",
-                  [attr("field-identifier", "f")],
-                  [variableElement("RESPONSE")],
+                  [attr("field-identifier", "floatValue")],
+                  [variableElement("ANSWER")],
                 ),
                 baseValueElement("float", "1.0"),
               ],
             ),
+            [
+              el("qti-response-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "ANSWER"),
+              ]),
+            ],
           ),
         );
 
-        assert.deepStrictEqual(built.processing, Option.none());
-        assert.deepStrictEqual(built.unsupported, [
-          {
-            feature: "qti-field-value",
-            path: `${setSame}/qti-equal/qti-field-value`,
-            shown: "mark",
-          },
-        ]);
+        assert.isTrue(Option.isSome(built.processing), "the processing runs");
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
