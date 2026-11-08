@@ -54,7 +54,8 @@ const isOpen = (name: string): boolean => openClasses.some((open) => open === na
 
 /**
  * The installed `GoverningOf`, keyed `version kind governs` by its rows: the second implementation
- * the host's governor lookup is checked against.
+ * the host's governor lookup is checked against. A node no named type governs, or one under a
+ * type `GoverningOf` holds no row of, is governed by its kind (`KindGovernor`).
  */
 const governing: ReadonlyMap<string, string> = new Map(
   GoverningOf.rows.map(({ governor, governs, kind, version }) => [
@@ -214,18 +215,25 @@ describe("qti/attributes.ts, the host's view", { timeout: searchTimeout }, () =>
               const byNode = Map.groupBy(rows.attributes, ({ node }) => node);
 
               for (const node of rows.nodes) {
-                const governor = governing.get(`${node.version} ${node.kind} ${node.governs}`);
+                const governor = Option.match(
+                  node.governs.pipe(
+                    Option.flatMap((type) =>
+                      Option.fromNullishOr(governing.get(`${node.version} ${node.kind} ${type}`)),
+                    ),
+                  ),
+                  { onNone: () => node.kind, onSome: (held) => held },
+                );
                 const expected = new Set(
                   (byNode.get(node.id) ?? [])
                     .filter(({ name }) => !isOpen(name))
-                    .map(({ name }) => slots.get(`${node.version} ${governor ?? ""} ${name}`)),
+                    .map(({ name }) => slots.get(`${node.version} ${governor} ${name}`)),
                 );
 
                 assert.isFalse(expected.has(undefined), `${node.kind}: a closed name no row holds`);
                 assert.deepStrictEqual(
                   [...node.attrs].toSorted((a, b) => a - b),
                   [...expected].toSorted((a, b) => (a ?? 0) - (b ?? 0)),
-                  `${node.version} ${node.kind} under ${node.governs}`,
+                  `${node.version} ${node.kind} under ${Formatter.format(node.governs)}`,
                 );
               }
             }),

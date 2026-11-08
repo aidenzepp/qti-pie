@@ -26,7 +26,6 @@ import type { Law } from "@bjornpagen/grizzle";
 import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { ImportRefused, refusalOfLaws } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
@@ -353,7 +352,8 @@ const importSideOf = (
  * @returns The feature, `o:value domain arm <domain> <facets or pattern>`.
  */
 const domainArmOf = (breach: Breach, grammar: ComposedGrammar): Feature => {
-  const { governs = noType, kind = "", lexical = "", name = "", version = "3.0.0" } = breach.keys;
+  const { kind = "", lexical = "", name = "", version = "3.0.0" } = breach.keys;
+  const governs = Option.fromNullishOr(breach.keys["governs"]);
   const admitted = schemaVersions.find((held) => held === version) ?? "3.0.0";
   const handle = Option.getOrUndefined(
     Option.map(

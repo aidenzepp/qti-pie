@@ -72,7 +72,8 @@ const bySlot = (left: { readonly at: bigint }, right: { readonly at: bigint }): 
 /**
  * The scan of one document as the database delivers it, built from the document's rows without
  * the code under test: each node row in `start` order with its characters (a text or whitespace
- * run's, an entity reference's `&name;`) and the rows keyed by it attached, the document row with
+ * run's, an entity reference's `&name;`) and the rows keyed by it attached (its governing type an
+ * `ElementType`, or a foreign element's `OpenElementType`), the document row with
  * its XML declaration and the declaration with its encoding and standalone, its attributes and
  * namespace declarations in `at` order, and an attribute's entity references in offset order with
  * its open name.
@@ -148,12 +149,18 @@ const scanOf = (rows: FlatRows<Composed>): readonly ScanRow<Composed>[] => {
               node: node.id,
             })
           : Option.none(),
+      elementType: openElementNames.has(node.id)
+        ? Option.none()
+        : node.governs.pipe(Option.map((type) => ({ type }))),
       namespaces: (namespaces.get(node.id) ?? [])
         .toSorted(bySlot)
         .map(({ at, prefix, uri }) => ({ at, prefix, uri })),
       openElementName: Option.fromNullishOr(openElementNames.get(node.id)).pipe(
         Option.map(({ local, namespace }) => ({ local, namespace })),
       ),
+      openElementType: openElementNames.has(node.id)
+        ? node.governs.pipe(Option.map((type) => ({ type })))
+        : Option.none(),
       pi: Option.fromNullishOr(pis.get(node.id)).pipe(
         Option.map(({ data, target }) => ({ data, target })),
       ),

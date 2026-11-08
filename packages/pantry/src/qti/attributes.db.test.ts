@@ -90,13 +90,10 @@ const kind = "qti-hotspot-choice";
 const version = "3.0.1";
 
 /**
- * The governing type a hotspot choice under its own governor holds: the `GoverningOf` row whose
- * governor is the kind.
+ * The hotspot choice as its attributes' element, under its own governor: its kind's, as under its
+ * declared type.
  */
-const governs =
-  GoverningOf.rows.find(
-    (row) => row.kind === kind && row.governor === kind && row.version === version,
-  )?.governs ?? assert.fail(`GoverningOf holds ${kind} under its own governor`);
+const hotspotHost = { governor: kind, kind } as const;
 
 /**
  * The slot of a name a governor admits in a version.
@@ -147,8 +144,8 @@ const ownerCount = (family: string, count: number) => ({
  * @param fields.lexical - The lexical form.
  * @param place - Its slot, its element, and the slots before it.
  * @param place.at - Its slot.
- * @param place.host - Its element's kind and governing type, which governs it: the hotspot choice
- *   under its declared type by default.
+ * @param place.host - Its element's kind and governor: the hotspot choice under its own governor by
+ *   default.
  * @param place.was - The slots of the closed names before it.
  * @param place.rest - Any other field the case sets.
  * @returns The fact.
@@ -157,12 +154,12 @@ const attributeOf = (
   { lexical, name }: { readonly lexical: string; readonly name: string },
   {
     at = 0,
-    host = { governs, kind },
+    host = hotspotHost,
     rest = {},
     was = [],
   }: {
     readonly at?: number;
-    readonly host?: { readonly governs: string; readonly kind: string };
+    readonly host?: { readonly governor: string; readonly kind: string };
     readonly rest?: Stated["fact"];
     readonly was?: readonly number[];
   } = {},
@@ -177,7 +174,7 @@ const attributeOf = (
       attrsWas: slotBits(...was),
       document: strayNode,
       documentType,
-      governs: host.governs,
+      governor: host.governor,
       id: `00000000-0000-4000-8000-0000000001${String(at).padStart(2, "0")}`,
       idrefText: "",
       kind: host.kind,
@@ -212,19 +209,13 @@ const secondOfTwo = (
 });
 
 /**
- * Read the governing type a kind's elements hold under the kind's own governor in the cases'
- * version: the host of a case on another kind than the hotspot choice.
+ * A kind's elements under the kind's own governor (`KindGovernor`), as under its declared type or
+ * no named type: the host of a case on another kind than the hotspot choice.
  *
  * @param of - The kind.
- * @returns The kind and its governing type.
+ * @returns The kind and its governor.
  */
-const hostOf = (of: string) => ({
-  governs:
-    GoverningOf.rows.find(
-      (row) => row.kind === of && row.governor === of && row.version === version,
-    )?.governs ?? assert.fail(`GoverningOf holds ${of} under its own governor`),
-  kind: of,
-});
+const hostOf = (of: string) => ({ governor: of, kind: of });
 
 /**
  * A fact with some of its fields replaced: a case's corruption of a control.
@@ -452,7 +443,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
                     attrsWas: slotBits(),
                     document: strayNode,
                     documentType,
-                    governs: governing.governs,
+                    governor: governing.governor,
                     id: "00000000-0000-4000-8000-000000000200",
                     idrefText: "",
                     kind: governor,
@@ -541,21 +532,21 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           string,
           string,
           string,
-          { readonly governs: string; readonly kind: string },
+          { readonly governor: string; readonly kind: string },
           boolean,
         ])[] = [
-          ["identifier", "H1", "", "", { governs, kind }, true],
-          ["identifier", "H1", "x", "Attribute_prefix", { governs, kind }, false],
-          ["data-*", "v", "", "", { governs, kind }, true],
-          ["data-*", "v", "x", "Attribute_prefix", { governs, kind }, false],
-          ["xml:lang", "en", "xml", "", { governs, kind }, true],
-          ["xml:lang", "en", "", "Attribute_prefix", { governs, kind }, false],
-          ["xml:lang", "en", "x", "Attribute_prefix", { governs, kind }, false],
-          ["xsi:schemaLocation", "urn:a b", "xsi", "", { governs, kind }, true],
-          ["xsi:schemaLocation", "urn:a b", "zs", "", { governs, kind }, true],
-          ["xsi:schemaLocation", "urn:a b", "", "Attribute_prefix", { governs, kind }, false],
-          ["xsi:schemaLocation", "urn:a b", "xml", "Attribute_prefix", { governs, kind }, false],
-          ["xsi:schemaLocation", "urn:a b", "xmlns", "Attribute_prefix", { governs, kind }, false],
+          ["identifier", "H1", "", "", hotspotHost, true],
+          ["identifier", "H1", "x", "Attribute_prefix", hotspotHost, false],
+          ["data-*", "v", "", "", hotspotHost, true],
+          ["data-*", "v", "x", "Attribute_prefix", hotspotHost, false],
+          ["xml:lang", "en", "xml", "", hotspotHost, true],
+          ["xml:lang", "en", "", "Attribute_prefix", hotspotHost, false],
+          ["xml:lang", "en", "x", "Attribute_prefix", hotspotHost, false],
+          ["xsi:schemaLocation", "urn:a b", "xsi", "", hotspotHost, true],
+          ["xsi:schemaLocation", "urn:a b", "zs", "", hotspotHost, true],
+          ["xsi:schemaLocation", "urn:a b", "", "Attribute_prefix", hotspotHost, false],
+          ["xsi:schemaLocation", "urn:a b", "xml", "Attribute_prefix", hotspotHost, false],
+          ["xsi:schemaLocation", "urn:a b", "xmlns", "Attribute_prefix", hotspotHost, false],
           ["xlink:href", "a.xml", "xl", "", lom, true],
           ["xlink:href", "a.xml", "", "Attribute_prefix", lom, false],
           ["foreign", "1", "f", "", foreign, true],

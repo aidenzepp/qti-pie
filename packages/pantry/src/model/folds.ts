@@ -62,7 +62,7 @@ import { Option, Result, Schema } from "effect";
 import { step as enter } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry, AncestrySets } from "#pantry/grammar/ancestry.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
-import { documentFamily, flatten, none } from "#pantry/model/xdm.ts";
+import { documentFamily, flatten } from "#pantry/model/xdm.ts";
 import type {
   AttributeRow,
   FlatRows,
@@ -104,7 +104,7 @@ export interface ChildKey<V extends XdmVocabulary> {
  * is a governor of its kind, else `AttributeAdmission`'s (spec reading 84).
  */
 export interface AttributeKey<V extends XdmVocabulary> {
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly kind: XdmKind<V>;
   readonly name: NameHandle<V>;
   readonly version: V["version"];
@@ -336,9 +336,9 @@ export interface FoldedAttribute<V extends XdmVocabulary> extends AttributeRow<V
   readonly document: NodeId;
   /**
    * The owner's governing type, which with its kind decides the attribute's position and domain
-   * (spec reading 84).
+   * (spec reading 84), none where no named type governs it.
    */
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly kind: XdmKind<V>;
   readonly version: V["version"];
 }
@@ -770,7 +770,7 @@ export const fold = <V extends XdmVocabulary>(
       sentinelOf(grammar, {
         at: 0n,
         end: BigInt(rows.nodes.length),
-        governs: none,
+        governs: Option.none(),
         id: self,
         kind: document._tag,
         parent: self,

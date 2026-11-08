@@ -1,9 +1,12 @@
 /**
  * The relations of the `xsi:type` law, "XsiType derived" (rule `xsi-type`, spec reading 47): the
- * `TypeName` roster of the pinned XSDs' named types, and `XsiType(version, kind, type)`, the types
- * an element of a kind may name in its `xsi:type`. An element's governing type, `Node.governs`, is
- * a `TypeName` code: the type its `xsi:type` names, its declared type without one, and the null
- * object {@link noType} where no named type governs it.
+ * `TypeName` roster of the pinned XSDs' named types, `XsiType(version, kind, type)`, the types an
+ * element of a kind may name in its `xsi:type`, and `AnonymousType(version, kind)`, the kinds whose
+ * declared type is anonymous. An element's governing type, where a named type governs it, is a
+ * `TypeName` code, a row of its own keyed by its node (`ElementType` of `#pantry/qti/node.ts`, and
+ * `OpenElementType` of `#pantry/qti/chardata.ts` for a foreign element): the type its `xsi:type`
+ * names, else its declared type. An element no named type governs has no such row, and no handle
+ * stands for the absence.
  *
  * An element a declaration assesses strictly may carry `xsi:type` only where its value is a QName
  * that resolves to a type definition validly derived from the declared one (XML Schema 1.0 Part 1,
@@ -15,17 +18,19 @@
  * no ASI type, which no manifest's set imports. A kind standing in several sets takes the union,
  * reading 81's limit. The codec resolves the QName against the element's in-scope namespaces, and
  * the law reads this set. An element of an anonymous declared type admits no named type, since none
- * derives from an anonymous one: its only row is {@link noType}, its own type with no `xsi:type`.
+ * derives from an anonymous one: its kind has no `XsiType` row, and its `AnonymousType` row says
+ * that it stands with no type at all, its own with no `xsi:type`.
  *
  * A foreign element has no declaration, so no derivation constrains its `xsi:type`, and this law
  * selects it out. Its `xsi:type` still governs it where the QName resolves to a type its document's
  * schema set holds or a built-in (§3.3.4, Schema-Validity Assessment (Element), clause 1.2; spec
- * reading 60): the codec writes that type to `Node.governs`, and `none` for a name no such type
- * has, which leaves the element to lax assessment. The foreign governor laws judge it where the
- * type is simple, through the attribute grammar's `Governor` (`#pantry/grammar/attributes.ts`): it
- * admits the four `xsi:` names alone (Element Locally Valid (Type), clause 3.1.1), holds no element
- * child (clause 3.1.2, law "Foreign simple content") and holds text in the type's `TypeText`
- * domain (clause 3.1.3, `TextDomain`). A complex type is spec reading 50's unchecked limit.
+ * reading 60): the codec writes that type as the element's `OpenElementType`, and none for a name
+ * no such type has, which leaves the element to lax assessment. The foreign governor laws judge it
+ * where the type is simple, through the attribute grammar's `Governor`
+ * (`#pantry/grammar/attributes.ts`): it admits the four `xsi:` names alone (Element Locally Valid
+ * (Type), clause 3.1.1), holds no element child (clause 3.1.2, law "Foreign simple content") and
+ * holds text in the type's `TypeText` domain (clause 3.1.3, `TextDomain`). A complex type is spec
+ * reading 50's unchecked limit.
  */
 import { Option, Result, Schema } from "effect";
 import { idField, roster, sourced, sourceIn } from "#pantry/grammar/closed.ts";
@@ -46,14 +51,6 @@ import {
 } from "#pantry/vocab/namespaces.ts";
 import type { NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
 import { typeAvailable } from "#pantry/vocab/open.ts";
-
-/**
- * The null object of a node's governing type: the `TypeName` handle of no named type, which an
- * anonymous declared type, a foreign element whose `xsi:type` gives it no type, and a node that is
- * no element take. No pinned XSD names a type `none` in QTI's namespace, whose type handles carry
- * no prefix, so no type's handle is spelled so (`xsi.test.ts`).
- */
-export const noType = "none";
 
 /**
  * The prefix each pinned namespace's type handles open with: the one its vocabulary's kind handles
@@ -98,15 +95,10 @@ export const typeHandle = ({ local, namespace }: ExpandedName): string => {
 /**
  * Read a `TypeName` handle back as the expanded name it spells, {@link typeHandle}'s inverse.
  *
- * @param handle - A handle {@link typeHandle} spelled, or {@link noType}.
- * @returns The name, or none for {@link noType} and for a handle whose prefix no pinned namespace
- *   has.
+ * @param handle - A handle {@link typeHandle} spelled.
+ * @returns The name, or none for a handle whose prefix no pinned namespace has.
  */
 export const expandedNameOf = (handle: string): Option.Option<ExpandedName> => {
-  if (handle === noType) {
-    return Option.none();
-  }
-
   if (handle.startsWith("{")) {
     const close = handle.indexOf("}");
 
@@ -142,19 +134,37 @@ type XsiTypeRow = SourcedRow<
 >;
 
 /**
+ * `AnonymousType`: (version, kind) where the kind's model declares an anonymous type, so an element
+ * of the kind stands with no named governing type, each row sourced to the kind's model in its
+ * version.
+ */
+export type AnonymousType = Sourced<
+  readonly [IdField<"version", SchemaVersion>, IdField<"kind", string>],
+  readonly []
+>;
+
+/**
+ * One `AnonymousType` row, with the source of the model it reads.
+ */
+type AnonymousTypeRow = SourcedRow<
+  readonly [IdField<"version", SchemaVersion>, IdField<"kind", string>],
+  readonly []
+>;
+
+/**
  * The `xsi:type` law's relations of a composition.
  */
 export interface XsiTypes {
+  readonly anonymousType: AnonymousType;
   /**
    * Find the type a kind declares in a version: the governing type of its element without
    * `xsi:type`.
    *
    * @param version - The version.
    * @param kind - The kind.
-   * @returns The declared type's handle, {@link noType} for an anonymous one or a kind no model
-   *   declares.
+   * @returns The declared type's handle, or none for an anonymous one or a kind no model declares.
    */
-  readonly declaredType: (version: SchemaVersion, kind: string) => string;
+  readonly declaredType: (version: SchemaVersion, kind: string) => Option.Option<string>;
   /**
    * Whether a version's pinned schemas define a type: the names its derivations list, built-ins
    * included. An `xsi:type` resolves only against its document's version (XML Schema 1.0 Part 1,
@@ -169,10 +179,10 @@ export interface XsiTypes {
    */
   readonly definedIn: (version: SchemaVersion, handle: string) => boolean;
   /**
-   * The `TypeName` roster, the code space of every governing-type field: {@link noType}, then every
-   * named type of the pinned XSDs of every version, built-ins included, each as {@link typeHandle}
-   * spells it, in the order the derivations first name it. It is no lookup: a name is a type of a
-   * version only where {@link XsiTypes.definedIn} says so.
+   * The `TypeName` roster, the code space of every governing-type field: every named type of the
+   * pinned XSDs of every version, built-ins included, each as {@link typeHandle} spells it, in the
+   * order the derivations first name it. It is no lookup: a name is a type of a version only where
+   * {@link XsiTypes.definedIn} says so.
    */
   readonly typeName: Roster<string>;
   readonly xsiType: XsiType;
@@ -202,7 +212,7 @@ export type XsiTypeError = ClosedRelationError | UnderivedType;
 
 /**
  * The derivations read for lookup: each (version, type)'s derived names, the `TypeName` roster's
- * handles, {@link noType} first, and the handles each version's schemas name.
+ * handles, and the handles each version's schemas name.
  */
 interface DerivationIndex {
   readonly derivedFrom: ReadonlyMap<string, readonly ExpandedName[]>;
@@ -236,7 +246,6 @@ const derivationIndexOf = (derivations: readonly TypeDerivation[]): DerivationIn
       ),
     ),
     names: [
-      noType,
       ...new Set(derivations.flatMap(({ derived, type }) => [type, ...derived].map(typeHandle))),
     ],
     namesIn: new Map(
@@ -277,16 +286,17 @@ export const xsiTypesOf = (input: {
   Result.gen(function* generateXsiTypes() {
     const { derivedFrom, names, namesIn } = derivationIndexOf(input.derivations);
     const rows: XsiTypeRow[] = [];
+    const anonymous: AnonymousTypeRow[] = [];
     const declared = new Map<string, string>();
     for (const { kind, namespace, sources, type, versions } of input.models) {
       for (const [at, version] of versions.entries()) {
         const source = sourceIn(sources, at, `The content model of ${kind}`);
-        declared.set(
-          `${version} ${kind}`,
-          Option.match(type, { onNone: () => noType, onSome: typeHandle }),
-        );
+        for (const named of Option.toArray(type)) {
+          declared.set(`${version} ${kind}`, typeHandle(named));
+        }
+
         if (Option.isNone(type)) {
-          rows.push({ row: { kind, type: noType, version }, source });
+          anonymous.push({ row: { kind, version }, source });
         }
 
         for (const named of Option.toArray(type)) {
@@ -313,12 +323,14 @@ export const xsiTypesOf = (input: {
     const typeName = yield* roster("TypeName", names);
 
     return {
-      // A kind no model declares in the version is governed by no named type.
-      declaredType: (version, kind) =>
-        Option.match(Option.fromNullishOr(declared.get(`${version} ${kind}`)), {
-          onNone: () => noType,
-          onSome: (type) => type,
-        }),
+      anonymousType: yield* sourced({
+        key: [idField("version", input.versions), idField("kind", input.kinds)],
+        name: "AnonymousType",
+        payload: [],
+        rows: anonymous,
+      }),
+      // A kind no model declares in the version, or declares of an anonymous type, has none.
+      declaredType: (version, kind) => Option.fromNullishOr(declared.get(`${version} ${kind}`)),
       definedIn: (version, handle) =>
         Option.exists(Option.fromNullishOr(namesIn.get(version)), (held) => held.has(handle)),
       typeName,

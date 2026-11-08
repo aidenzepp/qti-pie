@@ -35,7 +35,6 @@ import {
   ContentModelOf,
   Flag,
   Follow,
-  GoverningOf,
   grammar,
   nonElementKinds,
   Position,
@@ -44,7 +43,7 @@ import {
   Symbol as ContentSymbol,
   TextDomain,
 } from "#pantry/grammar/install.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { governorOf, ownContext } from "#pantry/import/fold.ts";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -57,7 +56,13 @@ import { readPackage } from "#pantry/package/read.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { LabelUse } from "#pantry/qti/identity.ts";
-import { copiedTextKinds, Node, universalDomains, vocabularyTermKinds } from "#pantry/qti/node.ts";
+import {
+  copiedTextKinds,
+  ElementType,
+  Node,
+  universalDomains,
+  vocabularyTermKinds,
+} from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
@@ -376,7 +381,10 @@ const roleOf = (constraint: Constraint): string => {
       "last state pin",
       comment.startsWith("check of Node for law Node(id, pred(children), lastState)"),
     ],
-    ["xsi type", comment.startsWith("check of Node for law Node(version, kind, governs)")],
+    [
+      "xsi type",
+      comment.startsWith("check of ElementType for law ElementType(version, kind, type)"),
+    ],
   ];
 
   return rules.find(([, holds]) => holds)?.[0] ?? "other";
@@ -399,12 +407,13 @@ const treeRoles: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Read `Node`'s constraints from the catalog.
+ * Read a table's constraints from the catalog, `Node`'s by default.
  *
  * @param client - The session.
+ * @param table - The table, `node` or another of `Qti`'s.
  * @returns Its constraints.
  */
-const constraintsOf = (client: Client) =>
+const constraintsOf = (client: Client, table = "node") =>
   rowsOf<{
     readonly columns: readonly string[];
     readonly comment: string | null;
@@ -420,7 +429,8 @@ const constraintsOf = (client: Client) =>
             ARRAY(SELECT a.attname::text FROM unnest(c.conkey) AS k(n)
                     JOIN pg_catalog.pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.n) AS columns
        FROM pg_catalog.pg_constraint c
-      WHERE c.conrelid = 'qti.node'::regclass`,
+      WHERE c.conrelid = pg_catalog.to_regclass($1)`,
+    [`qti.${table}`],
   ).pipe(
     Effect.map((constraints) =>
       constraints.map((constraint): Constraint => ({
@@ -440,13 +450,6 @@ const constraintsOf = (client: Client) =>
  */
 const namesOf = (constraints: readonly Constraint[], role: string): readonly string[] =>
   constraints.filter((constraint) => roleOf(constraint) === role).map(({ name }) => name);
-
-/**
- * `GoverningOf`'s rows by `<version> <kind> <governs>`.
- */
-const governorAt = new Map(
-  GoverningOf.rows.map((row) => [`${row.version} ${row.kind} ${row.governs}`, row.governor]),
-);
 
 /**
  * `TextDomain`'s rows by `<version> <governor>`.
@@ -494,10 +497,12 @@ const inStringValue = (
   member: FoldedNode<Composed>,
   parent: FoldedNode<Composed> | undefined,
 ): boolean => {
-  const governor = governorAt.get(
-    `${member.version} ${member.parentKind} ${parent?.governs ?? ""}`,
+  const governor = governorOf(
+    member.version,
+    member.parentKind,
+    parent === undefined ? Option.none() : parent.governs,
   );
-  const domain = textDomainAt.get(`${member.version} ${governor ?? ""}`);
+  const domain = textDomainAt.get(`${member.version} ${governor}`);
 
   return (
     (domain !== undefined && !universal.has(domain)) ||
@@ -597,7 +602,7 @@ const nodeFactsOf = (rows: FoldedRows<Composed>): Stated[] => {
         elementsWas: node.elementsWas,
         end: node.end,
         first: node.first,
-        governs: node.governs,
+        governor: governorOf(node.version, node.kind, node.governs),
         id: node.id,
         kind: node.kind,
         last: node.last,
@@ -607,7 +612,7 @@ const nodeFactsOf = (rows: FoldedRows<Composed>): Stated[] => {
         nearestKind: node.nearestKind,
         parent: node.parent,
         parentAncestry: bitsText(Flag, node.parentAncestry),
-        parentGoverns: parent.governs,
+        parentGovernor: governorOf(parent.version, parent.kind, parent.governs),
         parentKind: node.parentKind,
         parentNearest: node.parentNearest,
         parentNearestKind: node.parentNearestKind,
@@ -749,7 +754,7 @@ const attributeFactsOf = (rows: FoldedRows<Composed>): Stated[] =>
         entities: BigInt(
           rows.attributeEntities.filter((row) => row.attribute === attribute.id).length,
         ),
-        governs: attribute.governs,
+        governor: governorOf(attribute.version, attribute.kind, attribute.governs),
         id: attribute.id,
         idrefText: "",
         kind: attribute.kind,
@@ -811,6 +816,33 @@ const nodeBreaches = (rows: FoldedRows<Composed>): readonly string[] => {
  * @param roles - The roles of the law's constraints.
  * @param label - The case.
  */
+/**
+ * Write the `ElementType` fact of one fact's element under a type: its node's tuple, and the
+ * governor the type gives it (`governorOf`), so its own `E1_derived` holds.
+ *
+ * @param rows - The facts.
+ * @param at - The element's fact's index in document order.
+ * @param type - The type's handle.
+ * @returns The fact.
+ */
+const typeFactOf = (rows: readonly Stated[], at: number, type: string): Stated => {
+  const node = rows[at]?.fact ?? assert.fail(`no fact at ${String(at)}`);
+  const version = String(node["version"]);
+  const kind = String(node["kind"]);
+
+  return {
+    fact: {
+      document: node["document"] ?? "",
+      governor: governorOf(version, kind, Option.some(type)),
+      kind,
+      node: node["id"] ?? "",
+      type,
+      version,
+    },
+    relation: ElementType,
+  };
+};
+
 const assertRefused = (
   constraints: readonly Constraint[],
   verdict: Option.Option<DatabaseError>,
@@ -1115,7 +1147,10 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
           // Bound: the two lawful items under each named edit.
           Effect.gen(function* rowLaws() {
             const client = yield* loginSession;
-            const constraints = yield* constraintsOf(client);
+            const constraints = [
+              ...(yield* constraintsOf(client)),
+              ...(yield* constraintsOf(client, "element_type")),
+            ];
             const lawfulRows = yield* foldedOf(lawfulItem);
             // Each edit is of a lawful item's facts, every value the writer derives for them pinned,
             // so it breaks the one law it names.
@@ -1273,7 +1308,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 codes: ["23514"],
                 name: "an xsi:type outside XsiType",
                 roles: ["xsi type", "other"],
-                rows: edited(lawful, lastElement, { governs: "xs:anyType" }),
+                rows: [...lawful, typeFactOf(lawful, lastElement, "xs:anyType")],
               },
             ];
             for (const { codes, name, roles, rows } of cases) {
@@ -1541,7 +1576,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
             for (const copied of [
               "version",
               "parent_kind",
-              "parent_governs",
+              "parent_governor",
               "parent_ancestry",
               "parent_nearest",
               "parent_nearest_kind",

@@ -524,7 +524,7 @@ const elementOf = (
     references: [],
   })),
   children,
-  governs: "none",
+  governs: Option.none(),
   kind,
   namespaces: [],
   prefix: "",

@@ -212,8 +212,9 @@ export const AttributeName = closed(
 );
 
 /**
- * The `TypeName` roster: `none`, then the pinned XSDs' named types, each its namespace's prefix and
- * its local name (`typeHandle` of `xsi.ts`).
+ * The `TypeName` roster: the pinned XSDs' named types, each its namespace's prefix and its local
+ * name (`typeHandle` of `xsi.ts`). No handle stands for no type: an element no named type governs
+ * has no row of the relation that holds its type (`ElementType`, `OpenElementType`).
  */
 export const TypeName = closed("TypeName", nonEmpty("TypeName", grammar.xsi.typeName.handles));
 
@@ -775,7 +776,7 @@ export const Needs = closed.relation(
 
 /**
  * `XsiType`: the set of (version, kind, type) where an element of the kind may name the type in
- * `xsi:type`, validly derived from its declared type, `none` its declared type's absence.
+ * `xsi:type`, validly derived from its declared type, the declared type among them.
  */
 export const XsiType = closed.relation(
   "XsiType",
@@ -784,6 +785,21 @@ export const XsiType = closed.relation(
   grammar.xsi.xsiType.rows.map(({ kind, type, version }) => ({
     kind: memberOf(grammar.kinds.nodeKind, kind),
     type,
+    version,
+  })),
+);
+
+/**
+ * `AnonymousType`: the set of (version, kind) whose content model declares an anonymous type, so
+ * an element of the kind stands with no named governing type and has no `XsiType` row: no named
+ * type derives from an anonymous one.
+ */
+export const AnonymousType = closed.relation(
+  "AnonymousType",
+  { kind: closedId(NodeKind), version: closedId(SchemaVersion) },
+  ["version", "kind"],
+  grammar.xsi.anonymousType.rows.map(({ kind, version }) => ({
+    kind: memberOf(grammar.kinds.nodeKind, kind),
     version,
   })),
 );
@@ -801,16 +817,17 @@ const governorAt: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * State `GoverningOf`'s rows, total on every (version, kind, governs) a node may hold:
+ * State `GoverningOf`'s rows, on every (version, kind, governs) a law admits an element's named
+ * governing type at:
  *
  * - Each `XsiType` row, governed by the grammar's governor of the triple, else by the kind itself;
  * - Each foreign kind under every type, by its simple governor where the grammar holds one, else by
- *   the kind;
- * - Each kind that is no element, under `none`, by the kind.
+ *   the kind.
+ *
+ * A node no named type governs reads no row: its governor is its kind's own ({@link KindGovernor}).
  *
  * @returns The rows, each (version, kind, governs) once.
- * @throws {Error} When two of the three sources give one triple two governors, which none does
- *   today.
+ * @throws {Error} When the two sources give one triple two governors, which none does today.
  */
 const governingRows = () => {
   const rows = new Map<
@@ -853,18 +870,17 @@ const governingRows = () => {
         add(version, kind, type);
       }
     }
-
-    for (const kind of nonElementKinds) {
-      add(version, kind, none);
-    }
   }
 
   return [...rows.values()];
 };
 
 /**
- * `GoverningOf`: (version, kind, governs) → governor, what an element of the kind under the type
- * reads its attributes and text by, total on every triple a node may hold.
+ * `GoverningOf`: (version, kind, governs) → governor, what an element of the kind under the named
+ * type reads its attributes and text by, at every triple a law admits the type at. A law reads it
+ * where an element's type is a row of its own (`ElementType`, `OpenElementType`), and states the
+ * kind's own governor where the triple is absent ({@link KindGovernor}): an `xsi:type` naming a
+ * type its kind's declared type does not derive, which `XsiType derived` refuses.
  */
 export const GoverningOf = closed.relation(
   "GoverningOf",
@@ -876,6 +892,18 @@ export const GoverningOf = closed.relation(
   },
   ["version", "kind", "governs"],
   governingRows(),
+);
+
+/**
+ * `KindGovernor`: kind → governor, each kind's own `Governor` handle, what a node no named type
+ * governs reads its attributes and text by: a node that is no element, an element of an anonymous
+ * declared type, and a foreign element its `xsi:type` gives no type.
+ */
+export const KindGovernor = closed.relation(
+  "KindGovernor",
+  { governor: closedId(Governor), kind: closedId(NodeKind) },
+  ["kind"],
+  grammar.kinds.nodeKind.handles.map((kind) => ({ governor: asGovernor(kind), kind })),
 );
 
 /**
@@ -1206,8 +1234,9 @@ export const KindByNameUnder = closed.relation(
  * `namespace}local`, of spec reading 6's roots its strict wildcards assess against the global
  * declarations of its documents' schema set (C13, `cp:manifest` under `drd:accessForAllResource`),
  * `^$` where there is none. Such a root is stored as a foreign element and governed by no type, and
- * Strictly held lets it stand: `¬StrictlyHeld(version, parentKind, kind) ∨ governs ≠ none ∨
- * Compute.matches(Compute.concat(Compute.concat(namespace, "}"), local),
+ * Strictly held lets it stand: the foreign elements that need a type, which hold an
+ * `OpenElementType`, are those with `StrictlyHeld(version, parentKind, kind) ∧
+ * ¬Compute.matches(Compute.concat(Compute.concat(namespace, "}"), local),
  * HeldRootsUnder.at("names", version, parentKind))`.
  */
 export const HeldRootsUnder = closed.relation(
@@ -1224,10 +1253,10 @@ export const HeldRootsUnder = closed.relation(
 /**
  * `TypeAvailable`: type → namespaces, total over `TypeName`: the pattern of the vocabulary
  * namespaces under whose elements an element's `xsi:type` may name the type, every namespace for
- * `none` and XML Schema's own types (spec readings 60 and 81; C15, C36). An element whose parent's
- * namespace is no vocabulary's stands in documents of every schema set, so it may name any type:
- * the law over a foreign element's `governs` is `Compute.matches(parentNamespace,
- * TypeAvailable.at("namespaces", governs)) ∨ ¬Compute.matches(parentNamespace,
+ * XML Schema's own types (spec readings 60 and 81; C15, C36). An element whose parent's namespace
+ * is no vocabulary's stands in documents of every schema set, so it may name any type: the law
+ * over a foreign element's `OpenElementType` is `Compute.matches(parentNamespace,
+ * TypeAvailable.at("namespaces", type)) ∨ ¬Compute.matches(parentNamespace,
  * vocabularyNamespacePattern)`.
  */
 export const TypeAvailable = closed.relation(

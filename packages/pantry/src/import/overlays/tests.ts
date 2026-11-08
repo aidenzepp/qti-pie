@@ -28,7 +28,7 @@ import type { Kind } from "#pantry/grammar/compose.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import { Flag, grammar } from "#pantry/grammar/install.ts";
 import { isSiteKind } from "#pantry/import/context.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
+import { foldAt, foldOf, governorOf } from "#pantry/import/fold.ts";
 import type { Folds } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import { comparedPathOf, entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
@@ -878,7 +878,7 @@ const sitesOf = (
             ancestry: Bits.of(Flag, [...foldAt(view.folds, node.id).ancestry]),
             children: BigInt(childrenOf(view, node.id).length),
             documentType: view.ids.documentType,
-            governs: node.governs,
+            governor: governorOf(node.version, node.kind, node.governs),
             nearestKind: foldAt(view.folds, node.id).nearestKind,
             parentKind,
             parentLooseChain: parentKind === sectionKind && above.parentLooseChain,

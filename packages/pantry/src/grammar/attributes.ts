@@ -65,7 +65,6 @@ import type {
   Reading,
 } from "#pantry/grammar/domains.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
 import { attributeDeclarations, openAttribute } from "#pantry/vocab/inventory/attributes.ts";
 import type { Domain, Facet, ValueType } from "#pantry/vocab/inventory/types.ts";
 
@@ -1967,10 +1966,11 @@ export const generate = (
  */
 export interface GoverningKey {
   /**
-   * The element's governing type, `Node.governs`: a `TypeName` handle, `none` where no named type
-   * governs it.
+   * The element's governing type, a `TypeName` handle, where a named type governs it: none for an
+   * element of an anonymous declared type, a foreign element its `xsi:type` gives no type, and a
+   * node that is no element.
    */
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly kind: string;
   readonly version: SchemaVersion;
 }
@@ -1987,7 +1987,14 @@ export interface GoverningKey {
  *   against (spec reading 50).
  */
 export const governorOf = (grammar: AttributeGrammar, key: GoverningKey): Option.Option<string> =>
-  Option.map(grammar.governor.lookup(key), ({ governor }) => governor);
+  key.governs.pipe(
+    Option.flatMap((governs) =>
+      Option.map(
+        grammar.governor.lookup({ governs, kind: key.kind, version: key.version }),
+        ({ governor }) => governor,
+      ),
+    ),
+  );
 
 /**
  * Find the row of an attribute name an element admits: its governor's, where one governs it, else
@@ -2027,7 +2034,8 @@ export const admissionOf = (
  * @param names - The `AttributeName` roster.
  * @param version - The version.
  * @param kind - The kind.
- * @param governs - The element's governing type, its kind's own rows for one that is no governor.
+ * @param governs - The element's governing type, its kind's own rows for none or one that is no
+ *   governor.
  * @returns The element's admitted attributes, in position order.
  */
 export const admittedOf = (
@@ -2035,7 +2043,7 @@ export const admittedOf = (
   names: Roster<string>,
   version: SchemaVersion,
   kind: string,
-  governs: string = noType,
+  governs: Option.Option<string>,
 ): readonly {
   readonly domain: string;
   readonly name: string;
@@ -2060,7 +2068,8 @@ export const admittedOf = (
  * @param names - The `AttributeName` roster.
  * @param version - The version.
  * @param kind - The kind.
- * @param governs - The element's governing type, its kind's own rows for one that is no governor.
+ * @param governs - The element's governing type, its kind's own rows for none or one that is no
+ *   governor.
  * @returns The required positions.
  */
 export const requiredOf = (
@@ -2068,7 +2077,7 @@ export const requiredOf = (
   names: Roster<string>,
   version: SchemaVersion,
   kind: string,
-  governs: string = noType,
+  governs: Option.Option<string>,
 ): ReadonlySet<number> =>
   new Set(
     admittedOf(grammar, names, version, kind, governs)
@@ -2088,7 +2097,15 @@ export const requiredOf = (
 export const textDomainOf = (grammar: AttributeGrammar, key: GoverningKey): Option.Option<string> =>
   Option.match(governorOf(grammar, key), {
     onNone: () => Option.map(grammar.text.lookup(key), ({ domain }) => domain),
-    onSome: () => Option.map(grammar.typeText.lookup(key), ({ domain }) => domain),
+    onSome: () =>
+      key.governs.pipe(
+        Option.flatMap((governs) =>
+          Option.map(
+            grammar.typeText.lookup({ governs, version: key.version }),
+            ({ domain }) => domain,
+          ),
+        ),
+      ),
   });
 
 /**

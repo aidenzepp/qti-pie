@@ -4,21 +4,22 @@
  * references as ordered families under it, and the laws over them (plan §1.5; fin.md §16; the W5
  * amendment's C1, C3, C6, C7, C9, C14, C18 and C21, with the orchestrator's rulings of 2026-11-06).
  *
- * An attribute is read under its element's governor, `GoverningOf(version, kind, governs)`: the
- * kind itself where its declared type governs it, or the (kind, type) pair where an `xsi:type`
+ * An attribute is read under its element's governor, `Node.governor`: the kind itself where its
+ * declared type governs it or no named type does, or the (kind, type) pair where an `xsi:type`
  * names a type derived from the declared one, or a simple type governs a foreign element (spec
- * readings 60, 83 and 84). The governor's attribute model, `AttributeModelOf(version, governor)`,
+ * readings 60, 83 and 84; `GoverningOf` of the element's type, `typeGovernorOf` of
+ * `#pantry/qti/node.ts`). The governor's attribute model, `AttributeModelOf(version, governor)`,
  * then gives the name's slot, `AttributeSlotOf(model, name)`, and the slot its value domain and
  * use, `AttributeGrammar(model, slot)`. `Attribute` copies `kind`, `version`, `document` and
- * `governs` from its element along the family's owner axis, so every law below reads its governor
- * inline.
+ * `governor` from its element along the family's owner axis, so every law below reads its
+ * governor inline.
  *
  * - **AL1, admission** (`AL1_admission`, rule `attribute-admission`): the name is one its element's
  *   governor admits, `{name} ⊆ AttributeSlotOf.row(model)`, with `{name}` the name's
  *   `Compute.singleton`. It is a named check, not a generated column's NOT NULL: the governor it
- *   reads is `version`, `kind` and `governs`, accumulated copies, and a generated field's term
- *   reads only the fields its caller writes (grizzle's README, "How a field is written"). An
- *   unadmitted name is refused `invariant-rejected` on the check's own law.
+ *   reads is `version` and `governor`, accumulated copies, and a generated field's term reads only
+ *   the fields its caller writes (grizzle's README, "How a field is written"). An unadmitted name
+ *   is refused `invariant-rejected` on the check's own law.
  * - **AL1, the lexical half** (`value_domain`, rule `attribute-lexical`): the lexical form as written
  *   matches its domain's compiled pattern, `ValueDomainOf.at("pattern", domain)`, through grizzle's
  *   `Compute.matches`. A universal domain, whose pattern admits every value (`universalDomains` of
@@ -31,11 +32,11 @@
  *   (`scalar/regex/admit.ts:98-102`, `matchPattern`), so the domain has no pattern to match (C47).
  * - **AL2** (C9): `slot` is the singleton of the name's slot, `Compute.singleton(slot)`. It is
  *   written by the host and proved by `E1_derived`, because a generated field reads the caller's
- *   fields alone and `version`, `kind` and `governs` are copies. The `or` fold over the family,
- *   whose step selection leaves the open classes out, ends in `Node.attrs`, and `AL2_distinct` is
- *   `attrsWas ∩ slot = ∅`. An open class is one slot for many names, and the selection keeps that
- *   slot out of every `attrsWas`, so two attributes of one class are no repeat with no mask (fin.md
- *   §16's `~open`), and C9's `in(name, openClasses)` disjunct would be redundant. grizzle emits the
+ *   fields alone and `version` and `governor` are copies. The `or` fold over the family, whose step
+ *   selection leaves the open classes out, ends in `Node.attrs`, and `AL2_distinct` is `attrsWas ∩
+ *   slot = ∅`. An open class is one slot for many names, and the selection keeps that slot out of
+ *   every `attrsWas`, so two attributes of one class are no repeat with no mask (fin.md §16's
+ *   `~open`), and C9's `in(name, openClasses)` disjunct would be redundant. grizzle emits the
  *   fold's slot-0 pin and its empty family's end.
  * - **AL3** (`AL3_required`, a check on `Node`): every slot the element's governor requires is in its
  *   `attrs`.
@@ -102,7 +103,7 @@ import {
   boundedDomains,
   DoubleBound,
   emptyDomains,
-  GoverningOf,
+  Governor,
   KindNamespace,
   NodeKind,
   openElementClasses,
@@ -110,7 +111,6 @@ import {
   ResourceType,
   SchemaVersion,
   TextDomain,
-  TypeName,
   ValueDomainOf,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
@@ -202,7 +202,7 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  * - **the family's group:** `node`, its element's id, which the nesting supplies;
  * - **drawn:** `at`, and the counts of its four families, `openName`, `idrefs`, `entities` and
  *   `doubleValue`;
- * - **accumulated** by grizzle: `kind`, `version`, `document`, `governs` and `documentType`, its
+ * - **accumulated** by grizzle: `kind`, `version`, `document`, `governor` and `documentType`, its
  *   element's, along the owner axis; `attrsWas` and `attrsAfter`, AL2's fold before and after this
  *   attribute; and `idrefText`, the end of its `Idref` pieces' concatenation.
  */
@@ -216,7 +216,7 @@ export const Attribute = relation(
     documentType: accumulated(closedId(ResourceType), "none"),
     doubleValue: drawn(natural),
     entities: drawn(natural),
-    governs: accumulated(closedId(TypeName), "none"),
+    governor: accumulated(closedId(Governor), "document"),
     id: uuid,
     idrefText: accumulated(keyText, ""),
     idrefs: drawn(natural),
@@ -270,7 +270,7 @@ export const OpenAttributeName = relation(
  *   form is in the domain's lexical space;
  * - **the family's group:** `node` and `attribute`, its attribute's key;
  * - **drawn:** `at`, always 0;
- * - **accumulated** along the owner axis: `governs`, `kind`, `name` and `version`, its attribute's,
+ * - **accumulated** along the owner axis: `governor`, `kind`, `name` and `version`, its attribute's,
  *   which read its domain.
  *
  * It holds a double's value for its bound alone. grizzle's `float8` has one zero: it writes -0 as 0
@@ -283,7 +283,7 @@ export const DoubleValue = relation(
   {
     at: drawn(natural),
     attribute: uuid,
-    governs: accumulated(closedId(TypeName), "none"),
+    governor: accumulated(closedId(Governor), "document"),
     kind: accumulated(closedId(NodeKind), "document"),
     name: accumulated(closedId(AttributeName), "data-*"),
     node: uuid,
@@ -303,7 +303,7 @@ export const DoubleValue = relation(
  *   where the string value is in the domain's lexical space;
  * - **the family's group:** `node`, its element's id;
  * - **drawn:** `at`, always 0;
- * - **accumulated** along the owner axis: `governs`, `kind` and `version`, its element's, which read
+ * - **accumulated** along the owner axis: `governor`, `kind` and `version`, its element's, which read
  *   its text's domain.
  *
  * Its value is a double's for its bound alone, -0 stored as 0 under grizzle's one-zero `float8`, as
@@ -313,7 +313,7 @@ export const TextDoubleValue = relation(
   "TextDoubleValue",
   {
     at: drawn(natural),
-    governs: accumulated(closedId(TypeName), "none"),
+    governor: accumulated(closedId(Governor), "document"),
     kind: accumulated(closedId(NodeKind), "document"),
     node: uuid,
     value: pg.float8,
@@ -427,13 +427,13 @@ export const textDoubleValueFamily = ordered(
 
 /**
  * Read the domain a typed text's element reads its text in, from the element's copies
- * (`TextDomain` under `GoverningOf`'s governor).
+ * (`TextDomain` under its governor).
  *
  * @param t - The row.
  * @returns The closed read.
  */
 const typedTextDomainOf = (t: RowScalars<typeof TextDoubleValue>) =>
-  TextDomain.at("domain", t.version, GoverningOf.at("governor", t.version, t.kind, t.governs));
+  TextDomain.at("domain", t.version, t.governor);
 
 /**
  * An `Attribute` row as a row check or a selection reads it.
@@ -441,29 +441,21 @@ const typedTextDomainOf = (t: RowScalars<typeof TextDoubleValue>) =>
 type AttributeRow = RowScalars<typeof Attribute>;
 
 /**
- * What an attribute's domain is read by: its name, and its element's version, kind and governing
- * type, which an `Attribute` row holds and a `DoubleValue` row copies.
+ * What an attribute's domain is read by: its name, and its element's version and governor, which
+ * an `Attribute` row holds and a `DoubleValue` row copies.
  */
 type NamedRow =
-  | Pick<AttributeRow, "governs" | "kind" | "name" | "version">
-  | Pick<RowScalars<typeof DoubleValue>, "governs" | "kind" | "name" | "version">;
+  | Pick<AttributeRow, "governor" | "name" | "version">
+  | Pick<RowScalars<typeof DoubleValue>, "governor" | "name" | "version">;
 
 /**
- * Read an attribute's governor: what its element reads its attributes by, under the element's
- * kind and governing type (`GoverningOf`, total on every lawful triple).
+ * Read an attribute's attribute model: its element's governor's in the version
+ * (`AttributeModelOf`, total).
  *
  * @param a - The row.
  * @returns The closed read.
  */
-const governorOf = (a: NamedRow) => GoverningOf.at("governor", a.version, a.kind, a.governs);
-
-/**
- * Read an attribute's attribute model: its governor's in the version (`AttributeModelOf`, total).
- *
- * @param a - The row.
- * @returns The closed read.
- */
-const attributeModelOf = (a: NamedRow) => AttributeModelOf.at("model", a.version, governorOf(a));
+const attributeModelOf = (a: NamedRow) => AttributeModelOf.at("model", a.version, a.governor);
 
 /**
  * Read an admitted attribute's slot under its element's governor (`AttributeSlotOf`).
@@ -554,14 +546,6 @@ const unboundPrefixes = ["", "xml", "xmlns"];
 type NodeRow = RowScalars<typeof Node>;
 
 /**
- * Read an element's governor, as {@link governorOf} reads its attributes'.
- *
- * @param n - The row.
- * @returns The closed read.
- */
-const nodeGovernorOf = (n: NodeRow) => GoverningOf.at("governor", n.version, n.kind, n.governs);
-
-/**
  * Read the domain an element's governor reads its text in (`TextDomain`), absent for a governor
  * with no simple content, whose text no law reads in a domain ({@link holdsCheckedText} is false of
  * it).
@@ -569,7 +553,7 @@ const nodeGovernorOf = (n: NodeRow) => GoverningOf.at("governor", n.version, n.k
  * @param n - The row.
  * @returns The closed read.
  */
-const textDomainOf = (n: NodeRow) => TextDomain.at("domain", n.version, nodeGovernorOf(n));
+const textDomainOf = (n: NodeRow) => TextDomain.at("domain", n.version, n.governor);
 
 /**
  * Every statement over the attribute layer, each `check` named by its oracle law:
@@ -586,8 +570,8 @@ export const attributeLawsByName = {
   "AL1 admission": [check("AL1_admission", Attribute, admitted)],
   "AL1 owner": [
     contained(
-      on(Attribute, "node", "kind", "version", "document", "governs", "documentType"),
-      on(Node, "id", "kind", "version", "document", "governs", "documentType"),
+      on(Attribute, "node", "kind", "version", "document", "governor", "documentType"),
+      on(Node, "id", "kind", "version", "document", "governor", "documentType"),
     ),
     contained(
       on(OpenAttributeName, "node", "attribute", "class", "kind"),
@@ -595,12 +579,12 @@ export const attributeLawsByName = {
     ),
     contained(on(Idref, "node", "attribute", "document"), on(Attribute, "node", "id", "document")),
     contained(
-      on(DoubleValue, "node", "attribute", "governs", "kind", "name", "version"),
-      on(Attribute, "node", "id", "governs", "kind", "name", "version"),
+      on(DoubleValue, "node", "attribute", "governor", "kind", "name", "version"),
+      on(Attribute, "node", "id", "governor", "kind", "name", "version"),
     ),
     contained(
-      on(TextDoubleValue, "node", "governs", "kind", "version"),
-      on(Node, "id", "governs", "kind", "version"),
+      on(TextDoubleValue, "node", "governor", "kind", "version"),
+      on(Node, "id", "governor", "kind", "version"),
     ),
   ],
   "AL2 count": [attributeFamily],
@@ -624,10 +608,7 @@ export const attributeLawsByName = {
   "AL3 required": [
     check("AL3_required", Node, (n) =>
       n.eq(
-        Compute.subset(
-          Required.row(AttributeModelOf.at("model", n.version, nodeGovernorOf(n))),
-          n.attrs,
-        ),
+        Compute.subset(Required.row(AttributeModelOf.at("model", n.version, n.governor)), n.attrs),
         true,
       ),
     ),

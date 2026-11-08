@@ -35,7 +35,7 @@ import { collapse, qNamePartsOf, unboundPrefixesOf } from "#pantry/grammar/domai
 import type { Qualified } from "#pantry/grammar/domains.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
 import type { ForeignKind } from "#pantry/grammar/kinds.ts";
-import { handlePrefixes, none } from "#pantry/model/xdm.ts";
+import { handlePrefixes } from "#pantry/model/xdm.ts";
 import type {
   ClosedName,
   ExpandedName,
@@ -96,14 +96,15 @@ export interface ShredGrammar<V extends XdmVocabulary> {
    *
    * @param version - The version of the attribute's document.
    * @param kind - The kind of the attribute's element, a foreign kind for a foreign element.
-   * @param governs - The element's governing type, its `TypeName` handle.
+   * @param governs - The element's governing type, its `TypeName` handle, none where no named type
+   *   governs it.
    * @param name - A closed handle, or an open class.
    * @returns Whether the element admits an attribute of that name in that version.
    */
   readonly admitted: (
     version: V["version"],
     kind: ElementKind<V> | ForeignKind,
-    governs: string,
+    governs: Option.Option<string>,
     name: ClosedName<V> | OpenClass,
   ) => boolean;
   /**
@@ -114,14 +115,15 @@ export interface ShredGrammar<V extends XdmVocabulary> {
    *
    * @param version - The version of the element's document.
    * @param kind - The element's kind, a foreign kind for a foreign element.
-   * @param governs - The element's governing type, its `TypeName` handle.
+   * @param governs - The element's governing type, its `TypeName` handle, none where no named type
+   *   governs it.
    * @param site - The value: an attribute, by its closed handle, or the element's text.
    * @returns How, or none for a value that is no QName or that the element holds no domain for.
    */
   readonly qualified: (
     version: V["version"],
     kind: ElementKind<V> | ForeignKind,
-    governs: string,
+    governs: Option.Option<string>,
     site: ValueSite<V>,
   ) => Option.Option<Qualified>;
   /**
@@ -155,9 +157,9 @@ export interface ShredGrammar<V extends XdmVocabulary> {
    *
    * @param version - The version of the element's document.
    * @param kind - The element's kind.
-   * @returns The declared type's `TypeName` handle, `none` for an anonymous one.
+   * @returns The declared type's `TypeName` handle, or none for an anonymous one.
    */
-  readonly declaredType: (version: V["version"], kind: ElementKind<V>) => string;
+  readonly declaredType: (version: V["version"], kind: ElementKind<V>) => Option.Option<string>;
   /**
    * Find the kind an element is: `resolve` of `src/grammar/kinds.ts`.
    *
@@ -605,7 +607,7 @@ const resolvesIn = (
  * (`typeAvailable`, spec reading 81), governs the element, which is then assessed against
  * that type (§3.3.4, Schema-Validity Assessment (Element), clause 1.2): a simple type's text is
  * checked by the law that reads the governing type, a complex one is reading 50's unchecked limit.
- * With no `xsi:type`, or one that names no such type, no type governs it (`none`): under `lax` it
+ * With no `xsi:type`, or one that names no such type, no type governs it (none): under `lax` it
  * is laxly assessed against the ur-type, its children in turn, and under `strict`, whose
  * declaration is `mustFind`, it is refused as `strict-undeclared` (§3.10.4 clause 2, §3.3.5
  * [validity] clause 1.1.3; spec reading 60). No pinned XSD writes a `skip` element wildcard, so
@@ -615,16 +617,17 @@ const resolvesIn = (
  * @param scope - The bindings in scope at it.
  * @param version - The version of its document.
  * @param grammar - The grammar.
- * @returns The governing type's handle, `none` for a foreign element no type governs; or the
- *   refusal of an `xsi:type` that is no QName in scope, of one on an element of a kind that names
- *   no type, or of a strictly held element no type assesses.
+ * @returns The governing type's handle, none for an element of an anonymous declared type and for
+ *   a foreign element no type governs; or the refusal of an `xsi:type` that is no QName in scope,
+ *   of one on an element of a kind that names no type, or of a strictly held element no type
+ *   assesses.
  */
 const governsOf = <V extends XdmVocabulary>(
   reading: Reading<V>,
   scope: Scope,
   version: V["version"],
   grammar: ShredGrammar<V>,
-): Result.Result<string, UnmodeledVocabulary> => {
+): Result.Result<Option.Option<string>, UnmodeledVocabulary> => {
   const typed = reading.element.attributes.find(
     (attribute) => attribute.namespace === xsiNamespace && attribute.local === "type",
   );
@@ -632,14 +635,17 @@ const governsOf = <V extends XdmVocabulary>(
     return typed === undefined
       ? Result.succeed(grammar.declaredType(version, reading.kind))
       : Result.flatMap(qNameOf(typed, reading.element, scope), (name) =>
-          Result.fromOption(grammar.typeName(version, name), () =>
-            unmodeledAttribute(typed, reading.element, "type-unknown"),
+          Result.map(
+            Result.fromOption(grammar.typeName(version, name), () =>
+              unmodeledAttribute(typed, reading.element, "type-unknown"),
+            ),
+            Option.some,
           ),
         );
   }
 
   const { element, parent, strict } = reading;
-  const unassessed = (): Result.Result<string, UnmodeledVocabulary> =>
+  const unassessed = (): Result.Result<Option.Option<string>, UnmodeledVocabulary> =>
     strict
       ? Result.fail(
           new UnmodeledVocabulary({
@@ -649,7 +655,7 @@ const governsOf = <V extends XdmVocabulary>(
             reason: "strict-undeclared",
           }),
         )
-      : Result.succeed(none);
+      : Result.succeed(Option.none());
 
   return typed === undefined
     ? unassessed()
@@ -658,7 +664,7 @@ const governsOf = <V extends XdmVocabulary>(
           Option.filter(grammar.typeName(version, name), () =>
             typeAvailable(namespaceNameOf(parent.namespace), namespaceNameOf(name.namespace)),
           ),
-          { onNone: unassessed, onSome: (handle) => Result.succeed(handle) },
+          { onNone: unassessed, onSome: (handle) => Result.succeed(Option.some(handle)) },
         ),
       );
 };
@@ -794,7 +800,7 @@ const spellingOf = ({ local, namespace }: Attribute): Option.Option<string> =>
  *
  * @param attribute - The attribute, never a namespace declaration.
  * @param reading - How the element that carries it is read.
- * @param governs - The element's governing type.
+ * @param governs - The element's governing type, none where no named type governs it.
  * @param scope - The namespace bindings in scope at the element.
  * @param version - The version of its document.
  * @param grammar - The grammar.
@@ -803,7 +809,7 @@ const spellingOf = ({ local, namespace }: Attribute): Option.Option<string> =>
 const attributeOf = <V extends XdmVocabulary>(
   attribute: Attribute,
   reading: Reading<V>,
-  governs: string,
+  governs: Option.Option<string>,
   scope: Scope,
   version: V["version"],
   grammar: ShredGrammar<V>,
@@ -859,7 +865,7 @@ const refusalOrder = Order.mapInput(
  * element's attributes as a set, the same in whatever order the element writes them.
  *
  * @param reading - How the element is read.
- * @param governs - The element's governing type.
+ * @param governs - The element's governing type, none where no named type governs it.
  * @param scope - The namespace bindings in scope at the element.
  * @param version - The version of its document.
  * @param grammar - The grammar.
@@ -868,7 +874,7 @@ const refusalOrder = Order.mapInput(
  */
 const attributesOf = <V extends XdmVocabulary>(
   reading: Reading<V>,
-  governs: string,
+  governs: Option.Option<string>,
   scope: Scope,
   version: V["version"],
   grammar: ShredGrammar<V>,

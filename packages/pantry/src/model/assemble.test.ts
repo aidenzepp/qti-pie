@@ -6,7 +6,7 @@ import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Effect, Formatter, Option, Result } from "effect";
+import { Array as Arr, Effect, Equal, Formatter, Option, Result } from "effect";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { assemble } from "#pantry/model/assemble.ts";
@@ -15,7 +15,7 @@ import { foldGrammarOf, namesOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { toXmlDocument } from "#pantry/model/unshred.ts";
-import { flatten, none } from "#pantry/model/xdm.ts";
+import { flatten } from "#pantry/model/xdm.ts";
 import type {
   DocumentRow,
   FlatRows,
@@ -177,9 +177,13 @@ const smallVersions = ["3.0.0", "3.0.1"] as const satisfies readonly Composed["v
 const smallPrefixes = ["", "q"] as const;
 
 /**
- * The governing types an element of the small box has, {@link none} among them.
+ * The governing types an element of the small box has, none among them.
  */
-const smallGoverns = ["g", "h", none] as const;
+const smallGoverns: readonly Option.Option<string>[] = [
+  Option.some("g"),
+  Option.some("h"),
+  Option.none(),
+];
 
 /**
  * Every element of the small box over its children: of kind `p`, under each prefix and governing
@@ -341,7 +345,8 @@ type NodeEdit =
   | { readonly field: "at" | "end" | "start"; readonly value: bigint }
   | { readonly field: "id" | "parent"; readonly value: NodeId }
   | { readonly field: "kind"; readonly value: NodeRow<Composed>["kind"] }
-  | { readonly field: "governs" | "prefix"; readonly value: string }
+  | { readonly field: "governs"; readonly value: Option.Option<string> }
+  | { readonly field: "prefix"; readonly value: string }
   | { readonly field: "version"; readonly value: Composed["version"] };
 
 /**
@@ -358,9 +363,11 @@ const editedRow = (row: NodeRow<Composed>, edit: NodeEdit): NodeRow<Composed> =>
     case "start":
     case "id":
     case "parent":
-    case "governs":
     case "prefix": {
       return { ...row, [edit.field]: edit.value };
+    }
+    case "governs": {
+      return { ...row, governs: edit.value };
     }
     case "kind": {
       return { ...row, kind: edit.value };
@@ -403,7 +410,7 @@ const editsOf = (
     ...smallVersions.map((value): NodeEdit => ({ field: "version", value })),
   ];
 
-  return edits.filter((edit) => row[edit.field] !== edit.value);
+  return edits.filter((edit) => !Equal.equals(row[edit.field], edit.value));
 };
 
 /**
@@ -421,7 +428,7 @@ interface SmallCase {
 const editedDocuments = smallDocuments.filter((document) =>
   flatten(document, idOf).nodes.every(
     ({ governs, kind, prefix, version }) =>
-      version === "3.0.1" && prefix === "" && (kind !== "p" || governs === "g"),
+      version === "3.0.1" && prefix === "" && (kind !== "p" || Option.contains(governs, "g")),
   ),
 );
 

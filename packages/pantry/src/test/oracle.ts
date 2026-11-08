@@ -57,7 +57,7 @@
  * beyond N8, `template-derivation`, the CSM laws, and the typed values a domain derives beyond its
  * regex (G5).
  */
-import { Array as Arr, Effect, Option, Order, pipe, Record as Rec, Result } from "effect";
+import { Array as Arr, Effect, Equal, Option, Order, pipe, Record as Rec, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { rowOf } from "#pantry/grammar/ancestry.ts";
@@ -81,7 +81,7 @@ import { foreignKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { Spelling } from "#pantry/grammar/references.ts";
 import { expandedText } from "#pantry/grammar/names.ts";
-import { expandedNameOf, noType } from "#pantry/grammar/xsi.ts";
+import { expandedNameOf } from "#pantry/grammar/xsi.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
@@ -525,9 +525,9 @@ const kindKey = (version: string, kind: string): string => `${version} ${kind}`;
 
 /**
  * A table of the laws keyed by (version, kind, governing type), each cell computed from the grammar
- * the first time a law reads it.
+ * the first time a law reads it; an element no named type governs is keyed by its kind alone.
  */
-type ByKind<A> = (version: SchemaVersion, kind: string, governs: string) => A;
+type ByKind<A> = (version: SchemaVersion, kind: string, governs: Option.Option<string>) => A;
 
 /**
  * Compute a table keyed by (version, kind, governing type) on demand, each cell once.
@@ -539,7 +539,7 @@ const byKind = <A>(compute: ByKind<A>): ByKind<A> => {
   const cells = new Map<string, A>();
 
   return (version, kind, governs) => {
-    const key = `${kindKey(version, kind)} ${governs}`;
+    const key = [kindKey(version, kind), ...Option.toArray(governs)].join(" ");
     const held = cells.get(key);
     if (held !== undefined) {
       return held;
@@ -697,6 +697,16 @@ const unless = (holds: boolean, keys: () => Keys): Option.Option<Keys> =>
   holds ? Option.none() : Option.some(keys());
 
 /**
+ * Name an element's governing type among a breach's keys: `governs`, where a named type governs it,
+ * and no key where none does.
+ *
+ * @param governs - The element's governing type.
+ * @returns The keys.
+ */
+const governsKeys = (governs: Option.Option<string>): Keys =>
+  Option.match(governs, { onNone: () => ({}), onSome: (type) => ({ governs: type }) });
+
+/**
  * Write a set's members as one key field: their texts, space separated, in their order.
  *
  * @param set - The set.
@@ -720,7 +730,7 @@ const membersOf = (text: string | undefined): readonly string[] =>
  * @param laws - The grammar's tables.
  * @param version - The version.
  * @param kind - The kind.
- * @param governs - The element's governing type.
+ * @param governs - The element's governing type, none where no named type governs it.
  * @param name - The `AttributeName` handle.
  * @returns Its position, or none when the element does not admit the name.
  */
@@ -728,7 +738,7 @@ const positionOf = (
   laws: Laws,
   version: SchemaVersion,
   kind: string,
-  governs: string,
+  governs: Option.Option<string>,
   name: string,
 ): Option.Option<number> =>
   Option.map(
@@ -1525,7 +1535,7 @@ const nodeLaws: readonly NodeLaw[] = [
         !isForeignKind(node.kind) ||
           Option.isNone(governorOf(laws.grammar.attributes, node)) ||
           !(view.childrenOf.get(node.id) ?? []).some(({ kind }) => laws.elements.has(kind)),
-        () => ({ governs: node.governs }),
+        () => governsKeys(node.governs),
       ),
     law: "Foreign simple content",
     over: "nodes",
@@ -1661,16 +1671,22 @@ const nodeLaws: readonly NodeLaw[] = [
       unless(
         !elements.has(node.kind) ||
           isForeignKind(node.kind) ||
-          Option.isSome(
-            grammar.xsi.xsiType.lookup({
-              kind: node.kind,
-              type: node.governs,
-              version: node.version,
-            }),
-          ),
+          Option.match(node.governs, {
+            onNone: () =>
+              Option.isSome(
+                grammar.xsi.anonymousType.lookup({ kind: node.kind, version: node.version }),
+              ),
+            onSome: (type) =>
+              Option.isSome(
+                grammar.xsi.xsiType.lookup({ kind: node.kind, type, version: node.version }),
+              ),
+          }),
         () => ({
-          declared: grammar.xsi.declaredType(node.version, node.kind),
-          governs: node.governs,
+          ...Option.match(grammar.xsi.declaredType(node.version, node.kind), {
+            onNone: () => ({}),
+            onSome: (declared) => ({ declared }),
+          }),
+          ...governsKeys(node.governs),
           value: Option.getOrElse(valueOf(view, node.id, "xsi:type"), () => ""),
         }),
       ),
@@ -1681,7 +1697,7 @@ const nodeLaws: readonly NodeLaw[] = [
     breaks: (node, view, { grammar }) =>
       unless(
         !isForeignKind(node.kind) ||
-          node.governs !== noType ||
+          Option.isSome(node.governs) ||
           Option.isNone(
             grammar.content.strictlyHeld.lookup({
               child: node.kind,
@@ -1690,40 +1706,39 @@ const nodeLaws: readonly NodeLaw[] = [
             }),
           ) ||
           heldRoot(grammar, view, node),
-        () => ({ governs: node.governs }),
+        () => governsKeys(node.governs),
       ),
     law: "Strictly held",
     over: "members",
   },
   {
-    breaks: (node, view, { grammar }) => {
-      if (!isForeignKind(node.kind) || node.governs === noType) {
-        return Option.none();
-      }
+    breaks: (node, view, { grammar }) =>
+      (isForeignKind(node.kind) ? node.governs : Option.none<string>()).pipe(
+        Option.flatMap((governs) => {
+          const parent = view.byId.get(node.parent);
+          const against = parent === undefined ? Option.none() : namespaceOf(view, grammar, parent);
+          const type = Option.match(expandedNameOf(governs), {
+            onNone: () => "",
+            onSome: ({ namespace }) => namespace,
+          });
+          const vocabulary = (namespace: string) =>
+            grammar.kinds.elementName.rows.some((row) => row.namespace === namespace);
 
-      const parent = view.byId.get(node.parent);
-      const against = parent === undefined ? Option.none() : namespaceOf(view, grammar, parent);
-      const type = Option.match(expandedNameOf(node.governs), {
-        onNone: () => "",
-        onSome: ({ namespace }) => namespace,
-      });
-      const vocabulary = (namespace: string) =>
-        grammar.kinds.elementName.rows.some((row) => row.namespace === namespace);
-
-      return unless(
-        type === xsNamespace ||
-          Option.exists(
-            against,
-            (namespace) =>
-              !vocabulary(namespace) ||
-              typeAvailable(namespaceNameOf(namespace), namespaceNameOf(type)),
-          ),
-        () => ({
-          governs: node.governs,
-          parentNamespace: Option.getOrElse(against, () => ""),
+          return unless(
+            type === xsNamespace ||
+              Option.exists(
+                against,
+                (namespace) =>
+                  !vocabulary(namespace) ||
+                  typeAvailable(namespaceNameOf(namespace), namespaceNameOf(type)),
+              ),
+            () => ({
+              governs,
+              parentNamespace: Option.getOrElse(against, () => ""),
+            }),
+          );
         }),
-      );
-    },
+      ),
     law: "XsiType available",
     over: "members",
   },
@@ -2083,7 +2098,7 @@ const ownerCopied = (
 ): boolean =>
   owner !== undefined &&
   owner.kind === attribute.kind &&
-  owner.governs === attribute.governs &&
+  Equal.equals(owner.governs, attribute.governs) &&
   owner.version === attribute.version &&
   owner.document === attribute.document;
 
@@ -2177,7 +2192,7 @@ const attributeBreaches = (
         document: view.path,
         keys: {
           at: String(attribute.at),
-          governs: attribute.governs,
+          ...governsKeys(attribute.governs),
           kind: attribute.kind,
           name: attribute.name,
           node: at,
@@ -2310,28 +2325,50 @@ const documentTypeOf = (view: View, laws: Laws): string => {
 };
 
 /**
+ * Read a node's governor, `Node.governor`: what its attributes and text are read under, the
+ * grammar's governor of its (version, kind, governing type) (`governorOf`), and its kind's own
+ * where the grammar gives none (`KindGovernor`): no named type governs it, or its declared type,
+ * a complex type a foreign element is not checked against, or a type its declared type does not
+ * derive.
+ *
+ * @param laws - The grammar's tables.
+ * @param node - The node's version, kind and governing type.
+ * @returns The governor's `Governor` handle.
+ */
+const nodeGovernorOf = (
+  laws: Laws,
+  node: Pick<FoldedNode<Composed>, "governs" | "kind" | "version">,
+): string =>
+  Option.match(governorOf(laws.grammar.attributes, node), {
+    onNone: () => node.kind,
+    onSome: (governor) => governor,
+  });
+
+/**
  * Read the fields of a node row a key copy's selection or check reads
  * (`#pantry/test/key-copies.ts` `nodeFields`), its parent's from the parent's row: a root's parent
- * is the document node, which governs no type and is its own parent's kind.
+ * is the document node, which is governed by its own kind and is its own parent's kind.
  *
  * @param view - The node's document.
  * @param node - The node.
  * @param documentType - The document's type ({@link documentTypeOf}).
+ * @param laws - The grammar's tables.
  * @returns Its fields.
  */
 const nodeFieldsOf = (
   view: View,
   node: FoldedNode<Composed>,
   documentType: string,
+  laws: Laws,
 ): DocumentRows["Node"] => {
   const parent = view.byId.get(node.parent);
 
   return {
     chars: charsOf(view, node),
     documentType,
-    governs: node.governs,
+    governor: nodeGovernorOf(laws, node),
     kind: node.kind,
-    parentGoverns: parent?.governs ?? noType,
+    parentGovernor: parent === undefined ? "document" : nodeGovernorOf(laws, parent),
     parentKind: node.parentKind,
     parentParentKind: parent?.parentKind ?? "document",
     start: node.start,
@@ -2406,7 +2443,7 @@ const keyTexts = (
   const nodeOfAttribute = new Map(view.rows.attributes.map(({ id, node }) => [id, node]));
   const documentType = documentTypeOf(view, laws);
   const nodes = view.rows.nodes.map((node) => ({
-    fields: nodeFieldsOf(view, node, documentType),
+    fields: nodeFieldsOf(view, node, documentType, laws),
     node: node.id,
   }));
   const fieldsOf = new Map(nodes.map(({ fields, node }) => [node, fields]));
@@ -2414,7 +2451,7 @@ const keyTexts = (
     attributes: view.rows.attributes.map((attribute) => ({
       fields: {
         documentType,
-        governs: attribute.governs,
+        governor: nodeGovernorOf(laws, attribute),
         kind: attribute.kind,
         lexical: attribute.lexical,
         name: attribute.name,
@@ -2630,7 +2667,7 @@ const wholeBreaches = (
         )
         ? [
             breach("TextDomain", {
-              governs: node.governs,
+              ...governsKeys(node.governs),
               kind: node.kind,
               node: pathOf(view, node.id),
               value: node.stringValue,
@@ -2662,7 +2699,7 @@ const wholeBreaches = (
             .filter((token) => !ids.has(token))
             .map((token) =>
               breach("Idref target", {
-                governs: node.governs,
+                ...governsKeys(node.governs),
                 kind: node.kind,
                 name: `the text of ${node.kind}`,
                 node: pathOf(view, node.id),
@@ -5977,7 +6014,7 @@ const admittedNames = (keys: Keys, grammar: ComposedGrammar) =>
         grammar.kinds.attributeName,
         version,
         field(keys, "kind"),
-        field(keys, "governs"),
+        Option.fromNullishOr(keys["governs"]),
       ),
   });
 
@@ -6741,7 +6778,7 @@ const ownLaws = {
         grammar,
         Option.flatMap(keyedVersion(keys, grammar), (version) =>
           textDomainOf(grammar.attributes, {
-            governs: field(keys, "governs"),
+            governs: Option.fromNullishOr(keys["governs"]),
             kind: field(keys, "kind"),
             version,
           }),
@@ -6801,7 +6838,7 @@ const ownLaws = {
   },
   "XsiType derived": {
     explain: (keys, grammar) =>
-      `${field(keys, "kind")} is governed by ${field(keys, "governs")}${field(keys, "value") === "" ? "" : `, which its xsi:type ${JSON.stringify(field(keys, "value"))} names`}, and no type validly derived from its declared ${field(keys, "declared")} is; XsiType admits ${inBraces(
+      `${field(keys, "kind")} is governed by ${keys["governs"] ?? "no named type"}${field(keys, "value") === "" ? "" : `, which its xsi:type ${JSON.stringify(field(keys, "value"))} names`}, and no type validly derived from its declared ${keys["declared"] ?? "anonymous type"} is; XsiType admits ${inBraces(
         grammar.xsi.xsiType.rows
           .filter(
             ({ kind, version }) =>
@@ -6842,7 +6879,7 @@ const ownLaws = {
         Option.map(
           Option.flatMap(keyedVersion(keys, grammar), (version) =>
             governedAdmission(grammar.attributes, {
-              governs: field(keys, "governs"),
+              governs: Option.fromNullishOr(keys["governs"]),
               kind: field(keys, "kind"),
               name: field(keys, "name"),
               version,

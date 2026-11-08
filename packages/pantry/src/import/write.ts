@@ -328,8 +328,9 @@ export type NodeRoot = NodeMember & { readonly document: Addition<typeof Node>["
 
 /**
  * The document layer's flat rows of one or more documents, each a keyed set by its node's id: the
- * `Document` row of each document node, each comment's, instruction's and doctype's row, and each
- * foreign element's expanded name, one keyed set per relation of `documentLayer`
+ * `Document` row of each document node, each comment's, instruction's and doctype's row, each
+ * foreign element's expanded name, and each element's named governing type, one keyed set per
+ * relation of `documentLayer`
  * (`#pantry/import/roster.ts`). A text, whitespace or entity reference node keeps its characters on
  * its `Node` row (`chars`).
  */
@@ -721,8 +722,8 @@ const gatheredOf = (rows: FlatRows<Composed>): Iterable<Gathered> => {
 const attributeOf = (attribute: GatheredAttribute, element: Gathered): AttributeInsert => {
   const { row } = attribute;
   const { governs, kind, version } = element.node;
-  const admitted = Option.flatMap(governorOf(version, kind, governs), (governor) =>
-    Option.fromUndefinedOr(attributeGrammarAt.get(keyOf(version, governor, row.name))),
+  const admitted = Option.fromUndefinedOr(
+    attributeGrammarAt.get(keyOf(version, governorOf(version, kind, governs), row.name)),
   );
   const lexicalSpace = admitted.pipe(Option.flatMap((admits) => admits.lexicalSpace));
 
@@ -775,7 +776,8 @@ const memberOf = (
   const { kind, version } = node;
   const ends = endsOf(gathered.chars);
   const children: NodeMember[] = [];
-  const textSpace = Option.flatMap(textDomainOf(version, kind, node.governs), (domain) =>
+  const governor = governorOf(version, kind, node.governs);
+  const textSpace = Option.flatMap(textDomainOf(version, governor), (domain) =>
     Option.fromUndefinedOr(boundedPatterns.get(domain)),
   );
 
@@ -791,7 +793,7 @@ const memberOf = (
         ? [{ value: doubleOf(gathered.text) }]
         : [],
       first: ends.first,
-      governs: node.governs,
+      governor,
       id: node.id,
       kind,
       last: ends.last,
@@ -818,7 +820,8 @@ const memberOf = (
  *   document node's are its context's, its state 0;
  * - `chars`, a text or whitespace node's characters and an entity reference's `&name;`, empty
  *   elsewhere, `first` and `last`, the first and last code points of `chars` (`endsOf`);
- * - `governs` and `prefix`, an element's own, `none` and empty for any other node;
+ * - `governor`, what its attributes and text are read under (`governorOf`, its kind's own for a node
+ *   no named type governs), and `prefix`, an element's own, empty for any other node;
  * - `documentType`, the document's type (`NodeIds.documentType`), every node's alike, which its
  *   `Document` row and the tree's owner axis prove.
  *
@@ -849,7 +852,7 @@ export const rootInsertOf = (
     documentType,
     doubleValue: [],
     first: "",
-    governs: "none",
+    governor: "document",
     id: self,
     kind: "document",
     last: "",
@@ -882,8 +885,11 @@ export const rootInsertOf = (
 /**
  * Write a document's flat rows of the document layer: its `Document` row, its XML declaration's
  * `XmlDecl`, `EncodingDecl` and `SdDecl` rows where it writes each, each comment's, instruction's
- * and doctype's row, and each foreign element's `OpenElementName` row with its node's tuple (C18)
- * and its parent's kind and namespace name, the document node's none.
+ * and doctype's row, each foreign element's `OpenElementName` row with its node's tuple (C18) and
+ * its parent's kind and namespace name, the document node's none, and the named governing type of
+ * each element a named type governs: a vocabulary element's `ElementType`, and a foreign element's
+ * `OpenElementType` with its parent's namespace name, each with its node's governor
+ * (`governorOf`).
  *
  * @param document - The document as the importer lists it.
  * @param ids - The ids its rows are written under, whether it is in an assembly, and the context
@@ -908,6 +914,23 @@ export const documentRowsOf = (
     parent.id === self
       ? noNamespace
       : elementNamespaceOf(parent.kind, Option.fromUndefinedOr(foreignNamespace.get(parent.id)));
+  const typed = rows.nodes.flatMap((row) =>
+    Option.toArray(
+      row.governs.pipe(
+        Option.map((type) => ({
+          fields: {
+            document: self,
+            governor: governorOf(row.version, row.kind, row.governs),
+            kind: row.kind,
+            node: row.id,
+            type,
+            version: row.version,
+          },
+          row,
+        })),
+      ),
+    ),
+  );
 
   return {
     Comment: new Map(rows.comments.map(({ node, value }) => [node, { node, value }] as const)),
@@ -931,6 +954,11 @@ export const documentRowsOf = (
         },
       ],
     ]),
+    ElementType: new Map(
+      typed.flatMap(({ fields, row }) =>
+        foreignKinds.has(row.kind) ? [] : [[row.id, fields] as const],
+      ),
+    ),
     EncodingDecl: new Map(rows.encodingDecls.map((row) => [row.node, row] as const)),
     OpenElementName: new Map(
       rows.openElementNames.map(({ local, namespace, node }) => {
@@ -941,7 +969,6 @@ export const documentRowsOf = (
           node,
           {
             document: self,
-            governs: row.governs,
             kind: row.kind,
             local,
             namespace,
@@ -955,6 +982,23 @@ export const documentRowsOf = (
           },
         ] as const;
       }),
+    ),
+    OpenElementType: new Map(
+      typed.flatMap(({ fields, row }) =>
+        foreignKinds.has(row.kind)
+          ? [
+              [
+                row.id,
+                {
+                  ...fields,
+                  parentNamespace: namespaceOf(
+                    ownerIn(byId, row.parent, `node ${row.id}, its child`),
+                  ),
+                },
+              ] as const,
+            ]
+          : [],
+      ),
     ),
     Pi: new Map(rows.pis.map(({ data, node, target }) => [node, { data, node, target }] as const)),
     SdDecl: new Map(rows.sdDecls.map((row) => [row.node, row] as const)),

@@ -32,9 +32,11 @@ import {
   Document,
   EncodingDecl,
   OpenElementName,
+  OpenElementType,
   Pi,
   SdDecl,
 } from "#pantry/qti/chardata.ts";
+import { governorOf } from "#pantry/import/fold.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
@@ -261,10 +263,9 @@ const foreignName = (
     Fact<typeof OpenElementName>,
     "kind" | "namespace" | "parentKind" | "parentNamespace"
   > &
-    Partial<Pick<Fact<typeof OpenElementName>, "governs" | "local">>,
+    Partial<Pick<Fact<typeof OpenElementName>, "local">>,
 ): Fact<typeof OpenElementName> => ({
   document: strayNode,
-  governs: "none",
   local: "e",
   nearest: strayNode,
   node: strayNode,
@@ -275,42 +276,79 @@ const foreignName = (
 });
 
 /**
- * A foreign element's name row as a direct writer sends it, its node and its node's tuple stray,
- * each closed id by its code.
+ * A foreign element's type row, its node and its node's tuple stray, its governor the one its type
+ * gives its class (`governorOf`), so its `E1_derived` holds.
  *
  * @param fields - The fields the case sets.
- * @param fields.governs - The governing type's handle.
+ * @param fields.kind - The element's class.
+ * @param fields.parentNamespace - Its parent's namespace.
+ * @param fields.type - Its governing type's handle.
+ * @returns The row.
+ */
+const foreignType = (fields: {
+  readonly kind: Fact<typeof OpenElementType>["kind"];
+  readonly parentNamespace: string;
+  readonly type: Fact<typeof OpenElementType>["type"];
+}): Fact<typeof OpenElementType> => ({
+  document: strayNode,
+  governor: governorOf("3.0.1", fields.kind, Option.some(fields.type)),
+  kind: fields.kind,
+  node: strayNode,
+  parentNamespace: fields.parentNamespace,
+  type: fields.type,
+  version: "3.0.1",
+});
+
+/**
+ * A foreign element's name row as a direct writer sends it, its node and its node's tuple stray,
+ * each closed id by its code, with its type row where a type governs it.
+ *
+ * @param fields - The fields the case sets.
+ * @param fields.governs - The governing type's handle, none for an element no type governs.
  * @param fields.kind - The element's class.
  * @param fields.local - Its local name.
  * @param fields.namespace - Its namespace name.
  * @param fields.parentKind - Its parent's kind.
  * @param fields.parentNamespace - Its parent's namespace, QTI's where none is given.
- * @returns The row.
+ * @returns The rows.
  */
-const lawfulNameRow = (fields: {
-  readonly governs: Fact<typeof OpenElementName>["governs"];
+const lawfulNameRows = (fields: {
+  readonly governs: Option.Option<Fact<typeof OpenElementType>["type"]>;
   readonly kind: Fact<typeof OpenElementName>["kind"];
   readonly local: string;
   readonly namespace: string;
   readonly parentKind: Fact<typeof OpenElementName>["parentKind"];
   readonly parentNamespace?: string;
-}): Stated => ({
-  fact: {
-    document: strayNode,
-    governs: fields.governs,
-    kind: fields.kind,
-    local: fields.local,
-    namespace: fields.namespace,
-    nearest: strayNode,
-    node: strayNode,
-    parent: strayNode,
-    parentKind: fields.parentKind,
-    parentNamespace: fields.parentNamespace ?? asi,
-    start: 1n,
-    version: "3.0.1",
-  },
-  relation: OpenElementName,
-});
+}): readonly Stated[] => {
+  const parentNamespace = fields.parentNamespace ?? asi;
+
+  return [
+    {
+      fact: {
+        document: strayNode,
+        kind: fields.kind,
+        local: fields.local,
+        namespace: fields.namespace,
+        nearest: strayNode,
+        node: strayNode,
+        parent: strayNode,
+        parentKind: fields.parentKind,
+        parentNamespace,
+        start: 1n,
+        version: "3.0.1",
+      },
+      relation: OpenElementName,
+    },
+    ...Option.toArray(
+      fields.governs.pipe(
+        Option.map((type): Stated => ({
+          fact: foreignType({ kind: fields.kind, parentNamespace, type }),
+          relation: OpenElementType,
+        })),
+      ),
+    ),
+  ];
+};
 
 describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
   layer(AuthorAppLayer, { timeout: authorLayerHookTimeoutMs })(
@@ -524,13 +562,11 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
           Effect.gen(function* available() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const outcome = yield* db.apply(
-              ChangeSet.empty(Author).insert(OpenElementName, [
-                foreignName({
-                  governs: otherSetType,
+              ChangeSet.empty(Author).insert(OpenElementType, [
+                foreignType({
                   kind: "foreign-element",
-                  namespace: "urn:example:f",
-                  parentKind: "qti-selection",
                   parentNamespace: asi,
+                  type: otherSetType,
                 }),
               ]),
               {},
@@ -542,7 +578,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
                 outcome.refused.laws.some(
                   (law) =>
                     law.kind === "check" &&
-                    law.relation === "OpenElementName" &&
+                    law.relation === "OpenElementType" &&
                     law.name === "XsiType_available",
                 ),
             );
@@ -560,7 +596,13 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
           // element named as `cp:manifest` under the same slot, whose set (an item's) declares no
           // manifest; every other law of each row kept.
           Effect.gen(function* strictlyHeld() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const client = yield* loginSession;
+            const keys = yield* foreignKeysBetween(
+              client,
+              "open_element_name",
+              "open_element_type",
+            );
+            assert.isNotEmpty(keys, "open_element_name references open_element_type");
             for (const row of [
               foreignName({
                 kind: "foreign-element",
@@ -576,35 +618,29 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
                 parentNamespace: asi,
               }),
             ]) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(OpenElementName, [row]),
-                {},
+              const refused = Option.getOrUndefined(
+                yield* judged(
+                  client,
+                  statedInserts([{ fact: row, relation: OpenElementName }]),
+                  keys,
+                ),
               );
 
-              assert.strictEqual(outcome.kind, "invariant-rejected", row.local);
-              assert.isTrue(
-                outcome.kind === "invariant-rejected" &&
-                  outcome.refused.laws.some(
-                    (law) =>
-                      law.kind === "check" &&
-                      law.relation === "OpenElementName" &&
-                      law.name === "Strictly_held",
-                  ),
-                row.local,
-              );
+              assert.strictEqual(refused?.code, "23503", row.local);
+              assert.include(keys, refused?.constraint, row.local);
             }
-          }),
+          }).pipe(Effect.scoped),
       );
 
       it.effect(
-        "accepts qti-ordering's QTI-named and no-namespace elements, an xs: or none type, a typed element under a strict slot and a root its set declares there, by every law of the row itself",
+        "accepts qti-ordering's QTI-named and no-namespace elements, an xs: type or none, a typed element under a strict slot and a root its set declares there, by every law of the rows themselves",
         () =>
           // Oracle: PostgreSQL, the row's domains and CHECKs (`Foreign_element_class`,
           // `OpenElementName_canonical`, `XsiType_available` and `MathML_foreign_element`), with
           // every foreign key deferred and none set immediate: upstream's spec reading 61 admits
           // each in `qti-ordering`'s slot.
           // Bound: `qti-variable` in QTI's namespace and `foo` in none under `qti-ordering`, each
-          // governed by `none`; a foreign element under `qti-selection` governed by `xs:string`;
+          // governed by no type; a foreign element under `qti-selection` governed by `xs:string`;
           // one under a foreign parent governed by a content-packaging type, which stands since its
           // parent's namespace is no vocabulary's (reading 81's recorded limit); and `cp:manifest`
           // under `drd:accessForAllResource`'s strict slot with no type, a root its set declares
@@ -613,44 +649,44 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
           Effect.gen(function* lawful() {
             const client = yield* loginSession;
             for (const row of [
-              lawfulNameRow({
-                governs: "none",
+              lawfulNameRows({
+                governs: Option.none(),
                 kind: "own-namespace-element",
                 local: "qti-variable",
                 namespace: asi,
                 parentKind: "qti-ordering",
               }),
-              lawfulNameRow({
-                governs: "none",
+              lawfulNameRows({
+                governs: Option.none(),
                 kind: "no-namespace-element",
                 local: "foo",
                 namespace: "",
                 parentKind: "qti-ordering",
               }),
-              lawfulNameRow({
-                governs: "xs:string",
+              lawfulNameRows({
+                governs: Option.some("xs:string"),
                 kind: "foreign-element",
                 local: "x",
                 namespace: "urn:example:f",
                 parentKind: "qti-selection",
               }),
-              lawfulNameRow({
-                governs: otherSetType,
+              lawfulNameRows({
+                governs: Option.some(otherSetType),
                 kind: "foreign-element",
                 local: "x",
                 namespace: "urn:example:f",
                 parentKind: "foreign-element",
                 parentNamespace: "urn:example:p",
               }),
-              lawfulNameRow({
-                governs: "xs:string",
+              lawfulNameRows({
+                governs: Option.some("xs:string"),
                 kind: "foreign-element",
                 local: "x",
                 namespace: "urn:example:f",
                 parentKind: "qti-companion-materials-info",
               }),
-              lawfulNameRow({
-                governs: "none",
+              lawfulNameRows({
+                governs: Option.none(),
                 kind: "foreign-element",
                 local: "manifest",
                 namespace: namespaceOf("cp:manifest"),
@@ -658,7 +694,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
                 parentNamespace: namespaceOf("drd:accessForAllResource"),
               }),
             ]) {
-              const refused = Option.getOrUndefined(yield* judged(client, statedInserts([row])));
+              const refused = Option.getOrUndefined(yield* judged(client, statedInserts(row)));
 
               assert.isUndefined(refused, refused?.message);
             }

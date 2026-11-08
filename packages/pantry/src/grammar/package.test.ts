@@ -20,7 +20,6 @@ import {
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { packageGrammar } from "#pantry/grammar/package.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
 import { checkCache, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { loadXsd, XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
@@ -75,7 +74,7 @@ const resourceTypeDomain = (version: SchemaVersion): ValueDomain =>
   Option.getOrThrowWith(
     Option.flatMap(
       admissionOf(grammar.attributes, {
-        governs: noType,
+        governs: Option.none(),
         kind: "cp:resource",
         name: "type",
         version,

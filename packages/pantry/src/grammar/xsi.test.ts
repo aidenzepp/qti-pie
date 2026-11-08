@@ -10,13 +10,7 @@ import { roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import {
-  expandedNameOf,
-  noType,
-  typeHandle,
-  typePrefixes,
-  xsiTypesOf,
-} from "#pantry/grammar/xsi.ts";
+import { expandedNameOf, typeHandle, typePrefixes, xsiTypesOf } from "#pantry/grammar/xsi.ts";
 import type { ContentModel, ExpandedName, TypeDerivation } from "#pantry/vocab/inventory/types.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import { typeDerivations } from "#pantry/vocab/inventory/models.ts";
@@ -135,7 +129,7 @@ describe("XsiType", () => {
               });
               assert.isTrue(Result.isSuccess(result));
               if (Result.isSuccess(result)) {
-                const { xsiType } = result.success;
+                const { anonymousType, xsiType } = result.success;
                 for (const [index, at] of declared.entries()) {
                   for (const version of schemaVersions) {
                     for (const [named, type] of types.entries()) {
@@ -145,15 +139,13 @@ describe("XsiType", () => {
                       assert.strictEqual(Option.isSome(xsiType.sourceOf(key)), expected);
                     }
 
-                    // An anonymous type is its own governor with no xsi:type, and nothing else.
-                    const own = { kind: `k${String(index)}`, type: noType, version };
-                    assert.strictEqual(Option.isSome(xsiType.lookup(own)), at === -1);
-                    assert.strictEqual(
+                    // An anonymous type stands with no xsi:type and names no type at all.
+                    const own = { kind: `k${String(index)}`, version };
+                    assert.strictEqual(Option.isSome(anonymousType.lookup(own)), at === -1);
+                    assert.strictEqual(Option.isSome(anonymousType.sourceOf(own)), at === -1);
+                    assert.deepStrictEqual(
                       result.success.declaredType(version, `k${String(index)}`),
-                      Option.match(Option.fromNullishOr(types[at]), {
-                        onNone: () => noType,
-                        onSome: typeHandle,
-                      }),
+                      Option.map(Option.fromNullishOr(types[at]), typeHandle),
                     );
                   }
                 }
@@ -261,7 +253,7 @@ const typedSchemas: readonly (readonly [SourcePath, SchemaVersion, string])[] = 
 /**
  * Read a named type's `TypeName` handle back as the name it spells.
  *
- * @param handle - A named type's handle, never {@link noType}.
+ * @param handle - A named type's handle.
  * @returns The name.
  */
 const nameOfHandle = (handle: string): ExpandedName =>
@@ -312,25 +304,29 @@ const typeProbesOf = (input: {
   const global =
     input.set.elements.has(`{${name.namespace}}${name.local}`) &&
     Option.contains(resolve(name.namespace, name.local, "document"), kind);
-  const typed =
-    declared !== noType &&
-    reading.type === nameKey(nameOfHandle(declared)) &&
-    nameOfHandle(declared).namespace === target;
-  if (!global && !typed) {
+  const typed = declared.pipe(
+    Option.filter(
+      (type) =>
+        reading.type === nameKey(nameOfHandle(type)) && nameOfHandle(type).namespace === target,
+    ),
+  );
+  if (!global && Option.isNone(typed)) {
     return [];
   }
 
-  const parent: Probe = global
-    ? { _tag: "global", name }
-    : { _tag: "type", type: nameOfHandle(declared) };
+  const parent: Probe = Option.match(typed, {
+    onNone: () => ({ _tag: "global", name }),
+    onSome: (type) =>
+      global ? { _tag: "global", name } : { _tag: "type", type: nameOfHandle(type) },
+  });
   const anyType = typeHandle({ local: "anyType", namespace: xsNamespace });
   const allowed = (
     typeDerivations.find(
-      (row) => row.versions.includes(version) && typeHandle(row.type) === declared,
+      (row) => row.versions.includes(version) && Option.contains(declared, typeHandle(row.type)),
     )?.derived ?? []
   ).map(typeHandle);
   const unrelated = grammar.xsi.typeName.handles.find(
-    (handle) => handle !== noType && handle !== anyType && !allowed.includes(handle),
+    (handle) => handle !== anyType && !allowed.includes(handle),
   );
 
   return [
@@ -365,10 +361,14 @@ describe.skipIf(!cached)("XsiType against xmllint", () => {
           const verdicts = yield* Effect.scoped(validateContents(root, target, probes));
           for (const [index, probe] of probes.entries()) {
             probed += 1;
-            const handle = Option.match(probe.type, { onNone: () => noType, onSome: typeHandle });
-            const admitted = Option.isSome(
-              xsi.xsiType.lookup({ kind: probe.kind, type: handle, version }),
-            );
+            const handle = Option.match(probe.type, { onNone: () => "(none)", onSome: typeHandle });
+            const admitted = Option.match(probe.type, {
+              onNone: () => Option.isSome(xsi.anonymousType.lookup({ kind: probe.kind, version })),
+              onSome: (type) =>
+                Option.isSome(
+                  xsi.xsiType.lookup({ kind: probe.kind, type: typeHandle(type), version }),
+                ),
+            });
             const verdict = verdicts[index];
             if (verdict === undefined || verdict.typeRefused === admitted) {
               failures.push(
@@ -418,12 +418,16 @@ describe("Governor", () => {
         );
         for (const { governs, kind, version } of governed) {
           const names = new Set(
-            admittedOf(attributes, grammar.kinds.attributeName, version, kind, governs).map(
-              ({ name }) => name,
-            ),
+            admittedOf(
+              attributes,
+              grammar.kinds.attributeName,
+              version,
+              kind,
+              Option.some(governs),
+            ).map(({ name }) => name),
           );
           const required = new Set(
-            admittedOf(attributes, grammar.kinds.attributeName, version, kind, governs)
+            admittedOf(attributes, grammar.kinds.attributeName, version, kind, Option.some(governs))
               .filter(({ use }) => use === "required")
               .map(({ name }) => name),
           );
@@ -461,7 +465,7 @@ describe("Governor", () => {
           const text = leaf.typeTexts.find(
             ({ owner, versions }) => owner === governs && versions.includes(version),
           );
-          const read = textDomainOf(attributes, { governs, kind, version });
+          const read = textDomainOf(attributes, { governs: Option.some(governs), kind, version });
           // An empty domain, xs:NOTATION's, has no compiled pattern and is a domain all the same.
           const domain = read.pipe(
             Option.flatMap((handle) =>
@@ -479,7 +483,7 @@ describe("Governor", () => {
             disagreements.push(`${where}: text ${Formatter.format(read)}`);
           }
 
-          if (governs === grammar.xsi.declaredType(version, kind)) {
+          if (Option.contains(grammar.xsi.declaredType(version, kind), governs)) {
             disagreements.push(`${where}: governs by its declared type`);
           }
         }
@@ -487,7 +491,11 @@ describe("Governor", () => {
         for (const version of schemaVersions) {
           for (const kind of Object.values(foreignKinds)) {
             const anyType = typeHandle({ local: "anyType", namespace: xsNamespace });
-            if (Option.isSome(governorOf(attributes, { governs: anyType, kind, version }))) {
+            if (
+              Option.isSome(
+                governorOf(attributes, { governs: Option.some(anyType), kind, version }),
+              )
+            ) {
               disagreements.push(`${version} ${kind}: governed by xs:anyType`);
             }
           }
@@ -560,7 +568,6 @@ describe("the TypeName spelling", () => {
                   c.note(handle.includes(":") ? "prefixed" : "unprefixed");
                 }
 
-                assert.notStrictEqual(handle, noType);
                 assert.deepStrictEqual(expandedNameOf(handle), Option.some(name));
                 assert.isAtMost(new TextEncoder().encode(handle).length, 63, handle);
               }),
@@ -568,9 +575,9 @@ describe("the TypeName spelling", () => {
         );
 
         for (const handle of grammar.xsi.typeName.handles) {
-          assert.strictEqual(
-            Option.match(expandedNameOf(handle), { onNone: () => noType, onSome: typeHandle }),
-            handle,
+          assert.deepStrictEqual(
+            Option.map(expandedNameOf(handle), typeHandle),
+            Option.some(handle),
           );
         }
       }),

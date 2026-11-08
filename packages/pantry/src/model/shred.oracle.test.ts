@@ -9,7 +9,7 @@ import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Effect, FileSystem, Formatter, Layer, Option, Result } from "effect";
+import { Array as Arr, Effect, Equal, FileSystem, Formatter, Layer, Option, Result } from "effect";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { encode } from "@qti-pie/crust/encode.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
@@ -27,7 +27,7 @@ import { NotQti3, shred, UnmodeledVocabulary, versionOf } from "#pantry/model/sh
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 import { collapsed } from "#pantry/test/oracle-view.ts";
 import { toXmlDocument, unshred } from "#pantry/model/unshred.ts";
-import { flatten, none } from "#pantry/model/xdm.ts";
+import { flatten } from "#pantry/model/xdm.ts";
 import type { XdmAttribute, XdmChild, XdmClosedElement, XdmDocument } from "#pantry/model/xdm.ts";
 import {
   caseHang,
@@ -588,7 +588,7 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
                         _tag: "foreign-element",
                         attributes: [],
                         children: [],
-                        governs: none,
+                        governs: Option.none(),
                         name: { local: "nope", namespace: "urn:none" },
                         namespaces: [{ prefix: "zn", uri: "urn:none" }],
                         prefix: "zn",
@@ -617,7 +617,7 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
                         _tag: "foreign-element",
                         attributes: [],
                         children: [],
-                        governs: none,
+                        governs: Option.none(),
                         name: { local: "mi", namespace: mathmlNamespace },
                         namespaces: [{ prefix: "zm", uri: mathmlNamespace }],
                         prefix: "zm",
@@ -657,7 +657,7 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
                           },
                         ],
                         children: [],
-                        governs: none,
+                        governs: Option.none(),
                         name: { local: "nope", namespace: "urn:none" },
                         namespaces: [
                           { prefix: "zn", uri: "urn:none" },
@@ -959,7 +959,7 @@ const typeScope: ReadonlyMap<string, string> = new Map([
  * @param value - The root's `xsi:type`, if it has one.
  * @returns The governing type's handle, or `type-unresolved` or `type-unknown`.
  */
-const governingOf = (value: Option.Option<string>): Result.Result<string, string> =>
+const governingOf = (value: Option.Option<string>): Result.Result<Option.Option<string>, string> =>
   Option.match(value, {
     onNone: () => Result.succeed(grammar.xsi.declaredType("3.0.1", "qti-assessment-item")),
     onSome: (held) => {
@@ -972,7 +972,7 @@ const governingOf = (value: Option.Option<string>): Result.Result<string, string
       const handle = typeHandle({ local: parts["local"] ?? "", namespace });
 
       return grammar.xsi.definedIn("3.0.1", handle)
-        ? Result.succeed(handle)
+        ? Result.succeed(Option.some(handle))
         : Result.fail("type-unknown");
     },
   });
@@ -994,7 +994,7 @@ const shreddedGoverningOf = (value: Option.Option<string>) => {
 
   return Effect.map(
     Effect.result(reread(bytes, "3.0.1")),
-    (result): Result.Result<string, string> =>
+    (result): Result.Result<Option.Option<string>, string> =>
       Result.isSuccess(result)
         ? Result.succeed(result.success.root.governs)
         : Result.fail(
@@ -1085,82 +1085,87 @@ const laxArms: readonly {
   readonly arm: string;
   readonly child: string;
   readonly departs?: true;
-  readonly governs: string;
+  readonly governs: Option.Option<string>;
   readonly verdict: string;
 }[] = [
-  { arm: "no xsi:type", child: '<f:x f:a="1"><f:y/>t</f:x>', governs: none, verdict: "accepted" },
+  {
+    arm: "no xsi:type",
+    child: '<f:x f:a="1"><f:y/>t</f:x>',
+    governs: Option.none(),
+    verdict: "accepted",
+  },
   {
     arm: "built-in simple, text in its domain",
     child: '<f:x xsi:type="xs:integer"> -12 </f:x>',
-    governs: builtin("integer"),
+    governs: Option.some(builtin("integer")),
     verdict: "accepted",
   },
   {
     arm: "built-in simple, text outside its domain",
     child: '<f:x xsi:type="xs:integer">1.5</f:x>',
-    governs: builtin("integer"),
+    governs: Option.some(builtin("integer")),
     verdict: "text",
   },
   {
     arm: "built-in simple, an element child",
     child: '<f:x xsi:type="xs:string">a<f:y/></f:x>',
-    governs: builtin("string"),
+    governs: Option.some(builtin("string")),
     verdict: "element child",
   },
   {
     arm: "built-in simple, another attribute",
     child: '<f:x xsi:type="xs:string" f:a="1">a</f:x>',
-    governs: builtin("string"),
+    governs: Option.some(builtin("string")),
     verdict: "unadmitted",
   },
   {
     arm: "built-in simple, xsi:nil beside it",
     child: '<f:x xsi:type="xs:boolean" xsi:nil="false">true</f:x>',
-    governs: builtin("boolean"),
+    governs: Option.some(builtin("boolean")),
     verdict: "accepted",
   },
   {
     arm: "xs:anyType",
     child: '<f:x xsi:type="xs:anyType" f:a="1"><f:y/>t</f:x>',
-    governs: builtin("anyType"),
+    governs: Option.some(builtin("anyType")),
     verdict: "accepted",
   },
   {
     arm: "simple type of the set, text in its domain",
     child: '<f:x xsi:type="q:IdentifierDType">a1</f:x>',
-    governs: typeHandle({ local: "IdentifierDType", namespace: asi }),
+    governs: Option.some(typeHandle({ local: "IdentifierDType", namespace: asi })),
     verdict: "accepted",
   },
   {
     arm: "simple type of the set, text outside its domain",
     child: '<f:x xsi:type="q:IdentifierDType">1a</f:x>',
-    governs: typeHandle({ local: "IdentifierDType", namespace: asi }),
+    governs: Option.some(typeHandle({ local: "IdentifierDType", namespace: asi })),
     verdict: "text",
   },
   {
     arm: "type of another set",
     child: '<f:x xsi:type="d:ExtensionString.Type">a<f:y/></f:x>',
     departs: true,
-    governs: none,
+    governs: Option.none(),
     verdict: "accepted",
   },
   {
     arm: "unknown type",
     child: '<f:x xsi:type="f:NoSuchType">a<f:y/></f:x>',
     departs: true,
-    governs: none,
+    governs: Option.none(),
     verdict: "accepted",
   },
   {
     arm: "unbound prefix",
     child: '<f:x xsi:type="zz:T">a</f:x>',
-    governs: none,
+    governs: Option.none(),
     verdict: "type-unresolved",
   },
   {
     arm: "no QName",
     child: '<f:x xsi:type="a:b:c">a</f:x>',
-    governs: none,
+    governs: Option.none(),
     verdict: "type-unresolved",
   },
   ...(
@@ -1179,20 +1184,20 @@ const laxArms: readonly {
     {
       arm: `xs:${local}, text in its domain`,
       child: `<f:x xsi:type="xs:${local}">${valid}</f:x>`,
-      governs: builtin(local),
+      governs: Option.some(builtin(local)),
       verdict: "accepted",
     },
     {
       arm: `xs:${local}, text outside its domain`,
       child: `<f:x xsi:type="xs:${local}">${invalid}</f:x>`,
-      governs: builtin(local),
+      governs: Option.some(builtin(local)),
       verdict: "text",
     },
   ]),
   ...["", "a", "q:IdentifierDType"].map((text) => ({
     arm: `xs:NOTATION, the text ${JSON.stringify(text)}`,
     child: `<f:x xsi:type="xs:NOTATION">${text}</f:x>`,
-    governs: builtin("NOTATION"),
+    governs: Option.some(builtin("NOTATION")),
     verdict: "text",
   })),
 ];
@@ -1306,8 +1311,8 @@ describe("a foreign element's governing type (spec readings 60 and 83)", () => {
                 Option.match(laxChildOf(tree), {
                   onNone: () => "no foreign element",
                   onSome: (child) =>
-                    "governs" in child && child.governs !== governs
-                      ? `governed by ${child.governs}`
+                    "governs" in child && !Equal.equals(child.governs, governs)
+                      ? `governed by ${Option.getOrElse(child.governs, () => "no type")}`
                       : simpleVerdictOf(child, version),
                 }),
             });
@@ -1679,7 +1684,13 @@ describe("an element under its governing type (spec reading 84)", () => {
             const where = `${version} ${kind} ${type} ${name}`;
             if (expect === "required") {
               const requires = new Set(
-                admittedOf(grammar.attributes, grammar.kinds.attributeName, version, kind, type)
+                admittedOf(
+                  grammar.attributes,
+                  grammar.kinds.attributeName,
+                  version,
+                  kind,
+                  Option.some(type),
+                )
                   .filter(({ use }) => use === "required")
                   .map(({ name: held }) => held),
               );
@@ -2050,7 +2061,7 @@ describe("a reading 6 root under a strict wildcard (C13)", () => {
                 if (
                   expected !== "accepted" ||
                   held.length !== 1 ||
-                  held.some(({ governs }) => governs !== none) ||
+                  held.some(({ governs }) => Option.isSome(governs)) ||
                   breaches.length > 0
                 ) {
                   disagreements.push(

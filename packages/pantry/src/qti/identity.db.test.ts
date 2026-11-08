@@ -24,10 +24,11 @@
  * overlay, both ways; and R26 over a manifest and an item.
  */
 import { assert, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type { Client } from "pg";
 import { describe } from "vitest";
 import { Flag } from "#pantry/grammar/install.ts";
+import { governorOf } from "#pantry/import/fold.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   DocumentGenerals,
@@ -335,8 +336,9 @@ const listing = (xmlLang: string, lomLang: string): readonly Stated[] => [
 ];
 
 /**
- * An `IdentityText` fact of a `qti-description` under a governing type, with its IDREF token count
- * and their concatenation's end as a case states them; the case writes none of its tokens.
+ * An `IdentityText` fact of a `qti-description` under a governing type, its governor the one the
+ * type gives it (`governorOf`), with its IDREF token count and their concatenation's end as a case
+ * states them; the case writes none of its tokens.
  *
  * @param governs - The governing type's `TypeName` handle.
  * @param lexical - The element's text.
@@ -352,7 +354,7 @@ const identityText = (
 ): Stated => ({
   fact: {
     document: first,
-    governs,
+    governor: governorOf("3.0.1", "qti-description", Option.some(governs)),
     idrefText,
     idrefs,
     kind: "qti-description",

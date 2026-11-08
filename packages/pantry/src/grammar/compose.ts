@@ -90,7 +90,7 @@ import { heldRootsUnder, namesUnder, typesAvailable } from "#pantry/grammar/name
 import type { HeldRootsUnder, NamesUnder, TypesAvailable } from "#pantry/grammar/names.ts";
 import { packageGrammar } from "#pantry/grammar/package.ts";
 import { references } from "#pantry/grammar/references.ts";
-import { expandedNameOf, noType, xsiTypesOf } from "#pantry/grammar/xsi.ts";
+import { expandedNameOf, xsiTypesOf } from "#pantry/grammar/xsi.ts";
 import type { XsiTypeError, XsiTypes } from "#pantry/grammar/xsi.ts";
 import type { References } from "#pantry/grammar/references.ts";
 import type { PackageGrammar } from "#pantry/grammar/package.ts";
@@ -530,7 +530,7 @@ const governedOf = (
   const isComplex = (key: string) => declaredBy.has(key) || wildcardOf.has(key);
   const governors: readonly Governor[] = [
     ...xsi.xsiType.rows.flatMap(({ kind, type, version }) =>
-      type === noType || type === xsi.declaredType(version, kind)
+      Option.contains(xsi.declaredType(version, kind), type)
         ? []
         : [{ governs: type, kind, version }],
     ),
@@ -671,11 +671,19 @@ export type ComposeError =
  * Read a `TypeName` handle's namespace.
  *
  * @param type - The handle.
- * @returns Its namespace, or none for the null type, which names no type: the one handle of a
- *   `TypeName` roster that spells no expanded name (`expandedNameOf`).
+ * @returns Its namespace.
+ * @throws {Error} When the handle spells no expanded name (`expandedNameOf`): `typeHandle` spells
+ *   every handle of the roster from one, so this is its defect.
  */
-const typeNamespaceOf = (type: string): Option.Option<NamespaceName> =>
-  Option.map(expandedNameOf(type), ({ namespace }) => namespaceNameOf(namespace));
+const typeNamespaceOf = (type: string): NamespaceName =>
+  Option.match(expandedNameOf(type), {
+    onNone: () => {
+      throw new Error(
+        `The TypeName handle ${type} spells no expanded name, and typeHandle spells each handle from one. Correct typeHandle or expandedNameOf.`,
+      );
+    },
+    onSome: ({ namespace }) => namespaceNameOf(namespace),
+  });
 
 /**
  * Run every generator over a vocabulary list.

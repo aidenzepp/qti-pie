@@ -15,7 +15,7 @@ import {
   textsPattern,
   vocabularyNamespacesPattern,
 } from "#pantry/grammar/names.ts";
-import { expandedNameOf, noType } from "#pantry/grammar/xsi.ts";
+import { expandedNameOf } from "#pantry/grammar/xsi.ts";
 import { globalKinds } from "#pantry/vocab/inventory/vocabularies.ts";
 import {
   namespaceClassOf,
@@ -252,7 +252,7 @@ describe("TypeAvailable", () => {
           {
             box: `every TypeName handle, ${grammar.typeAvailable.rows.length}, under ${parentNamespaces.length} namespaces`,
             caseHang,
-            coverage: requiredInSpace<"none" | "vocabulary" | "xs">(["none", "vocabulary", "xs"]),
+            coverage: requiredInSpace<"vocabulary" | "xs">(["vocabulary", "xs"]),
             generator: int(0, grammar.typeAvailable.rows.length - 1),
             limit: grammar.typeAvailable.rows.length,
             literal: Formatter.format,
@@ -268,7 +268,7 @@ describe("TypeAvailable", () => {
               });
               const vocabularyType = typeNamespace === xsNamespace ? "xs" : "vocabulary";
 
-              c.note(type === noType ? "none" : vocabularyType);
+              c.note(vocabularyType);
 
               const vocabularies = vocabularyNamespacesPattern(
                 Object.values(vocabularyNamespaces).map(({ namespace }) => namespace),
@@ -276,7 +276,7 @@ describe("TypeAvailable", () => {
               const wrong = parentNamespaces.filter(
                 (parent) =>
                   (matches(namespaces, parent) || !matches(vocabularies, parent)) !==
-                  (type === noType || availableBySets(parent, typeNamespace)),
+                  availableBySets(parent, typeNamespace),
               );
 
               assert.deepStrictEqual(wrong, [], type);

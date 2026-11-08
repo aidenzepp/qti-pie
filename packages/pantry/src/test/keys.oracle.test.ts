@@ -700,7 +700,7 @@ const concatEnds: ReadonlyMap<
 
 /**
  * The parent copies a tree's member reads, as grizzle fills them along the owner axis from the row
- * it nests in: its parent's kind and governing type, and its grandparent's kind, the parent's own
+ * it nests in: its parent's kind and governor, and its grandparent's kind, the parent's own
  * `parentKind`; and its `start`, past the root's 0.
  *
  * @param owner - The member's parent, as the import writes it.
@@ -718,7 +718,7 @@ const treeCopies = (owner: Written, copies: Readonly<Record<string, Datum>>) => 
   }
 
   return {
-    parentGoverns: writtenText(owner, "governs"),
+    parentGovernor: writtenText(owner, "governor"),
     parentKind: writtenText(owner, "kind"),
     parentParentKind: grandparent,
     start: 1n,

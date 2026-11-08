@@ -193,9 +193,8 @@ export type TypesAvailable = Closed<
 
 /**
  * Generate `TypeAvailable`, total over the `TypeName` roster: for each type, the pattern of the
- * vocabulary namespaces under whose elements an `xsi:type` may name it; {@link everyText} for the
- * null type, which names no namespace, and for a type of XML Schema's own namespace, which every
- * schema set holds.
+ * vocabulary namespaces under whose elements an `xsi:type` may name it; {@link everyText} for a
+ * type of XML Schema's own namespace, which every schema set holds.
  *
  * An element of a namespace no vocabulary has stands in documents of every set, so it may name a
  * type of every vocabulary: a law reads that half through {@link vocabularyNamespacesPattern},
@@ -206,7 +205,7 @@ export type TypesAvailable = Closed<
  *   second (`open.ts`, `typeAvailable`).
  * @param input.everywhere - Whether a type of a namespace is available under every namespace: a
  *   type of XML Schema's namespace.
- * @param input.namespaceOf - A type's namespace, or none for the null type.
+ * @param input.namespaceOf - A type's namespace.
  * @param input.types - The `TypeName` roster.
  * @param input.vocabularies - The vocabularies' namespaces, as crust's tree spells them, the texts
  *   a pattern holds.
@@ -215,7 +214,7 @@ export type TypesAvailable = Closed<
 export const typesAvailable = (input: {
   readonly available: (parent: NamespaceOfKind, type: NamespaceName) => boolean;
   readonly everywhere: (namespace: NamespaceName) => boolean;
-  readonly namespaceOf: (type: string) => Option.Option<NamespaceName>;
+  readonly namespaceOf: (type: string) => NamespaceName;
   readonly types: Roster<string>;
   readonly vocabularies: readonly string[];
 }): Result.Result<TypesAvailable, ClosedRelationError> => {
@@ -225,21 +224,20 @@ export const typesAvailable = (input: {
     );
   // A type's pattern is its namespace's, so each named namespace's is spelled once.
   const byNamespace = new Map<string, string>();
-  const rows = input.types.handles.map((type) => ({
-    namespaces: Option.match(input.namespaceOf(type), {
-      onNone: () => everyText,
-      onSome: (namespace) => {
-        if (input.everywhere(namespace)) {
-          return everyText;
-        }
+  const rows = input.types.handles.map((type) => {
+    const namespace = input.namespaceOf(type);
+    if (input.everywhere(namespace)) {
+      return { namespaces: everyText, type };
+    }
 
-        return namespace._tag === "in"
+    return {
+      namespaces:
+        namespace._tag === "in"
           ? byNamespace.getOrInsertComputed(namespace.uri, () => patternOf(namespace))
-          : patternOf(namespace);
-      },
-    }),
-    type,
-  }));
+          : patternOf(namespace),
+      type,
+    };
+  });
 
   return closed({
     key: [idField("type", input.types)],

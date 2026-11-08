@@ -80,14 +80,15 @@ export interface ScannedDocument extends DocumentRow {
 /**
  * One row of a document's scan: a `Node` row of the document, with what the node owns attached.
  *
- * The node's own fields are those `assemble` reads, and `chars`: a text or whitespace node's
- * characters and an entity reference's `&name;`, empty for every other kind (`Node.chars`, whose
- * row checks in `#pantry/qti/chardata.ts` hold each arm's characters to that form). A comment, an
- * instruction, the doctype, the `Document` row and a foreign element's expanded name are rows keyed
- * by the node, so each is there at most once, and exactly for the nodes of its kind by the mirror
- * laws; the attributes and the namespace declarations are the node's families.
+ * The node's own fields are those `assemble` reads but its governing type, and `chars`: a text or
+ * whitespace node's characters and an entity reference's `&name;`, empty for every other kind
+ * (`Node.chars`, whose row checks in `#pantry/qti/chardata.ts` hold each arm's characters to that
+ * form). A comment, an instruction, the doctype, the `Document` row, a foreign element's expanded
+ * name and an element's governing type are rows keyed by the node, so each is there at most once,
+ * and exactly for the nodes of its kind by the mirror laws; the attributes and the namespace
+ * declarations are the node's families.
  */
-export interface ScanRow<V extends XdmVocabulary> extends NodeRow<V> {
+export interface ScanRow<V extends XdmVocabulary> extends Omit<NodeRow<V>, "governs"> {
   readonly attributes: readonly ScannedAttribute<V>[];
   readonly chars: string;
   readonly comment: Option.Option<Pick<CharacterRow, "value">>;
@@ -97,8 +98,18 @@ export interface ScanRow<V extends XdmVocabulary> extends NodeRow<V> {
    * text the `XmlDecl` row holds, which {@link assembleScan} reads.
    */
   readonly documentRow: Option.Option<ScannedDocument>;
+  /**
+   * A vocabulary element's named governing type (`ElementType`); none on every other node, and on
+   * an element no named type governs.
+   */
+  readonly elementType: Option.Option<{ readonly type: string }>;
   readonly namespaces: readonly Omit<NamespaceRow, "node">[];
   readonly openElementName: Option.Option<Omit<OpenElementNameRow, "node">>;
+  /**
+   * A foreign element's governing type (`OpenElementType`); none on every other node, and on a
+   * foreign element no type governs.
+   */
+  readonly openElementType: Option.Option<{ readonly type: string }>;
   readonly pi: Option.Option<Omit<PiRow, "node">>;
 }
 
@@ -183,7 +194,11 @@ const keyedBy = <Fields extends object>(
  * @returns The same accumulator, now holding the row's rows.
  */
 export const addRow = <V extends XdmVocabulary>(scan: Scan<V>, row: ScanRow<V>): Scan<V> => {
-  const { at, end, governs, id: node, kind, parent, prefix, start, version } = row;
+  const { at, end, id: node, kind, parent, prefix, start, version } = row;
+  const governs = Option.map(
+    Option.orElse(row.elementType, () => row.openElementType),
+    ({ type }) => type,
+  );
   scan.nodes.push({ at, end, governs, id: node, kind, parent, prefix, start, version });
   switch (kind) {
     case "text": {

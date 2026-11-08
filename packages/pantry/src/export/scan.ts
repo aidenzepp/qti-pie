@@ -8,8 +8,9 @@
  * `document` and ordered by `start`, it is one index range in document order, with no sort and no
  * recursion, and `db.page` pages it by that key. Each row carries its own characters (`Node.chars`:
  * a text or whitespace run's, an entity reference's `&name;`) and what its node owns, each as its
- * own attachment: its comment, instruction, doctype, `Document` row and foreign element's name at
- * most once (each keyed by its node), the `Document` row with its XML declaration at most once
+ * own attachment: its comment, instruction, doctype, `Document` row, foreign element's name and
+ * governing type (an `ElementType` or an `OpenElementType`) at most once (each keyed by its
+ * node), the `Document` row with its XML declaration at most once
  * and the declaration with its encoding and standalone at most once each, and its attribute and
  * namespace families as lists in `at` order. The arms stay apart, never a union, because an
  * attachment over a union is never paged.
@@ -23,11 +24,12 @@ import {
   EncodingDecl,
   Namespace,
   OpenElementName,
+  OpenElementType,
   Pi,
   SdDecl,
   XmlDecl,
 } from "#pantry/qti/chardata.ts";
-import { Node } from "#pantry/qti/node.ts";
+import { ElementType, Node } from "#pantry/qti/node.ts";
 import { Entry } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 
@@ -50,15 +52,12 @@ import { Author } from "#pantry/qti/roles.ts";
  */
 export const documentScan = query(Author)
   .rule((r) => {
-    const { at, chars, document, end, governs, id, kind, parent, prefix, start, version } = v(
-      Node,
-      "node",
-    );
+    const { at, chars, document, end, id, kind, parent, prefix, start, version } = v(Node, "node");
 
     return r
-      .match(Node, { at, chars, document, end, governs, id, kind, parent, prefix, start, version })
+      .match(Node, { at, chars, document, end, id, kind, parent, prefix, start, version })
       .where(r.eq(document, r.param("document", uuid)))
-      .find({ at, chars, document, end, governs, id, kind, parent, prefix, start, version });
+      .find({ at, chars, document, end, id, kind, parent, prefix, start, version });
   })
   .attach(
     "comment",
@@ -87,6 +86,26 @@ export const documentScan = query(Author)
         const { value } = v(Doctype, "doctype");
 
         return r.match(Doctype, { node: node.id, value }).find({ value });
+      }),
+    "option",
+  )
+  .attach(
+    "elementType",
+    (node) =>
+      query(Author).rule((r) => {
+        const { type } = v(ElementType, "elementType");
+
+        return r.match(ElementType, { node: node.id, type }).find({ type });
+      }),
+    "option",
+  )
+  .attach(
+    "openElementType",
+    (node) =>
+      query(Author).rule((r) => {
+        const { type } = v(OpenElementType, "openElementType");
+
+        return r.match(OpenElementType, { node: node.id, type }).find({ type });
       }),
     "option",
   )

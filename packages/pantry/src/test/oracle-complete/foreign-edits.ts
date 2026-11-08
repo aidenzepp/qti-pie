@@ -144,7 +144,7 @@ const strictParents = (grammar: ComposedGrammar, node: Node): readonly Node["par
  * @param node - The node.
  * @returns The type handles; none for a parent of no vocabulary's namespace.
  */
-const unavailableTypes = (grammar: ComposedGrammar, node: Node): readonly Node["governs"][] => {
+const unavailableTypes = (grammar: ComposedGrammar, node: Node): readonly string[] => {
   const parent = grammar.kinds.elementName.rows.find(({ kind }) => kind === node.parentKind);
 
   return parent === undefined
@@ -259,7 +259,9 @@ export const foreignEdits = {
 
     return withNodes(
       rows,
-      rows.nodes.map((node) => (node.id === foreign.id ? { ...node, governs } : node)),
+      rows.nodes.map((node) =>
+        node.id === foreign.id ? { ...node, governs: Option.some(governs) } : node,
+      ),
     );
   }),
   // XsiType derived (XML Schema Part 1 §3.3.4 clause 4.3): the item's typed description given an

@@ -15,6 +15,7 @@
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BaseSequence.Attr_label | QTI 3.0 information model, 5.16.5 label}
  */
+import { Option } from "effect";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { typeHandle } from "#pantry/grammar/xsi.ts";
@@ -65,7 +66,7 @@ export interface ToolLabelKinds<K extends string> {
  * @returns The kinds, per version and at once.
  */
 export const toolLabelKindsOf = <K extends string>(input: {
-  readonly declaredType: (version: SchemaVersion, kind: K) => string;
+  readonly declaredType: (version: SchemaVersion, kind: K) => Option.Option<string>;
   readonly derivations: readonly TypeDerivation[];
   readonly kinds: readonly K[];
 }): ToolLabelKinds<K> => {
@@ -84,7 +85,9 @@ export const toolLabelKindsOf = <K extends string>(input: {
 
       return [
         version,
-        input.kinds.filter((kind) => types.has(input.declaredType(version, kind))),
+        input.kinds.filter((kind) =>
+          Option.exists(input.declaredType(version, kind), (type) => types.has(type)),
+        ),
       ] as const;
     }),
   );

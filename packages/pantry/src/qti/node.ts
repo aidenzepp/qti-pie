@@ -9,8 +9,8 @@
  * sends, and its natives (T0 to T6, the root pin) make each document's rows one tree. Every other
  * law here rides one of the tree's three foreign keys or is a row CHECK:
  *
- * - The owner axis carries the parent copies (N3): `version`, `kind`, `governs`, `ancestry`,
- *   `nearest`, `nearestKind` and `parentKind` into `version`, `parentKind`, `parentGoverns`,
+ * - The owner axis carries the parent copies (N3): `version`, `kind`, `governor`, `ancestry`,
+ *   `nearest`, `nearestKind` and `parentKind` into `version`, `parentKind`, `parentGovernor`,
  *   `parentAncestry`, `parentNearest`, `parentNearestKind` and `parentParentKind`;
  * - The predecessor axis carries the content automaton's state into `was` (N5), and each fold's
  *   running value;
@@ -53,6 +53,7 @@ import {
 import type { RowScalars } from "@bjornpagen/grizzle";
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import {
+  AnonymousType,
   AttributeSlot,
   Banned,
   BarredOf,
@@ -64,7 +65,9 @@ import {
   Flag,
   Follow,
   GoverningOf,
+  Governor,
   interactionKinds,
+  KindGovernor,
   Last,
   Needs,
   NodeKind,
@@ -147,7 +150,9 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  *
  * - **the host's:** `id`, `document` (the root field, on the root alone, its own id), `kind`,
  *   `version`, `documentType` (the type of the resource that lists its document, `none` for the
- *   manifest: its document's `Document.resourceType` at the root, its parent's below), `governs`,
+ *   manifest: its document's `Document.resourceType` at the root, its parent's below), `governor`
+ *   (what its attributes and text are read under: its kind's own `Governor` handle where no named
+ *   type governs it, else `GoverningOf`'s of its {@link ElementType} or `OpenElementType`),
  *   `prefix`, `nearest`, `nearestKind`, `state` (its content-automaton state, from `placedStep`),
  *   `ancestry` (`parentAncestry ∪ Enters(kind)`), `chars` (a text or whitespace node's characters,
  *   an entity reference's `&name;`, empty elsewhere: the string value fold's step), and `first` and
@@ -185,7 +190,7 @@ export const Node = relation(
     elementsWas: accumulated(natural, 0n),
     end: drawn(natural),
     first: EndCharacter,
-    governs: closedId(TypeName),
+    governor: closedId(Governor),
     id: uuid,
     kind: closedId(NodeKind),
     last: EndCharacter,
@@ -195,7 +200,7 @@ export const Node = relation(
     nearestKind: closedId(NodeKind),
     parent: uuid,
     parentAncestry: accumulated(bits(Flag), Bits.of(Flag, [])),
-    parentGoverns: accumulated(closedId(TypeName), "none"),
+    parentGovernor: accumulated(closedId(Governor), "document"),
     parentKind: accumulated(closedId(NodeKind), "document"),
     parentNearest: accumulated(uuid, nilUuid),
     parentNearestKind: accumulated(closedId(NodeKind), "document"),
@@ -214,6 +219,54 @@ export const Node = relation(
  * A `Node` row as a row check or a selection reads it.
  */
 type NodeRow = RowScalars<typeof Node>;
+
+/**
+ * A vocabulary element's governing type, keyed by its node, where a named type governs it (XML
+ * Schema 1.0 Part 1, §3.3.4, Element Locally Valid (Element), clause 4; spec reading 47): the type
+ * its `xsi:type` names, else its declared type. An element of an anonymous declared type has none,
+ * and so has a node that is no element; a foreign element's type is its `OpenElementType`
+ * (`#pantry/qti/chardata.ts`).
+ *
+ * - **the host's:** `type`, the shred's reading of the element's `xsi:type` or its kind's declared
+ *   type; and its node's `document`, `governor`, `kind` and `version`, copied through the `(id,
+ *   kind, version, document, governor)` tuple the attribute and identity overlays copy too.
+ */
+export const ElementType = relation(
+  "ElementType",
+  {
+    document: uuid,
+    governor: closedId(Governor),
+    kind: closedId(NodeKind),
+    node: uuid,
+    type: closedId(TypeName),
+    version: closedId(SchemaVersion),
+  },
+  ["node"],
+);
+
+/**
+ * Read the governor a named type gives an element: `GoverningOf`'s of its (version, kind, type),
+ * and its kind's own where `GoverningOf` holds no such triple, an `xsi:type` naming a type its
+ * kind's declared type does not derive, which `XsiType derived` refuses. So it is the governor the
+ * attribute grammar reads the element's attributes under (`#pantry/grammar/attributes.ts`
+ * `governorOf`, its kind's own rows where it gives none). The row of the element's type, an
+ * {@link ElementType} or a foreign element's `OpenElementType`, holds its governor to it.
+ *
+ * @param version - The element's version.
+ * @param kind - Its kind.
+ * @param type - Its governing type.
+ * @returns The governor's term.
+ */
+export const typeGovernorOf = (
+  version: Parameters<typeof GoverningOf.has>[0],
+  kind: Parameters<typeof GoverningOf.has>[1],
+  type: Parameters<typeof GoverningOf.has>[2],
+) =>
+  Compute.cond(
+    GoverningOf.has(version, kind, type),
+    GoverningOf.at("governor", version, kind, type),
+    KindGovernor.at("governor", kind),
+  );
 
 /**
  * State φ₀, a member of its parent's family: every row but the root, whose start is 0 (T2).
@@ -243,6 +296,28 @@ const element = (n: NodeRow) => n.not(n.in(n.kind, nonElementKinds));
  * @returns The predicate.
  */
 const modeled = (n: NodeRow) => n.or(element(n), n.eq(n.kind, "document"));
+
+/**
+ * State that a row is a vocabulary element: an element of no foreign kind, which a declaration
+ * assesses strictly.
+ *
+ * @param n - The row.
+ * @returns The predicate.
+ */
+const vocabularyElement = (n: NodeRow) =>
+  n.and(element(n), n.not(n.in(n.kind, openElementClasses)));
+
+/**
+ * State that a vocabulary element has a named governing type, its {@link ElementType}: its kind's
+ * model declares a named type, so the element is governed by it or by one its `xsi:type` names. A
+ * kind whose declared type is anonymous (`AnonymousType`) admits no named type, since none derives
+ * from an anonymous one (spec reading 47).
+ *
+ * @param n - The row.
+ * @returns The predicate.
+ */
+const namedlyTyped = (n: NodeRow) =>
+  n.and(vocabularyElement(n), n.not(AnonymousType.has(n.version, n.kind)));
 
 /**
  * Read a member's position in its parent's content model, `ChildGrammar`'s cell: a position above
@@ -281,50 +356,45 @@ export const universalDomains: readonly (typeof ValueDomain.handles)[number][] =
 })();
 
 /**
- * State that an element under its governor holds checked text: `GoverningOf`'s governor of
- * (version, kind, governs) has a `TextDomain`, and it is none of {@link universalDomains}. Simple
- * content holds only character data, and a governor with no simple content has no `TextDomain`
- * row, so this is the element whose string value TextDomain judges.
+ * State that an element under its governor holds checked text: its governor has a `TextDomain`,
+ * and it is none of {@link universalDomains}. Simple content holds only character data, and a
+ * governor with no simple content has no `TextDomain` row, so this is the element whose string
+ * value TextDomain judges.
  *
- * Q5.05's TextDomain check reads it over an element's own kind and type ({@link holdsCheckedText}),
- * and the string value's fold over a member's parent's (`parentKind`, `parentGoverns`), so the two
- * select one set of elements.
+ * Q5.05's TextDomain check reads it over an element's own governor ({@link holdsCheckedText}), and
+ * the string value's fold over a member's parent's (`parentGovernor`), so the two select one set of
+ * elements.
  *
  * @param n - The row.
- * @param kind - The element's kind: the row's own, or its parent's copy.
- * @param governs - The element's governing type: the row's own, or its parent's copy.
+ * @param governor - The element's governor: the row's own, or its parent's copy.
  * @returns The predicate.
  */
 export const checkedText = (
   n: NodeRow,
-  kind: NodeRow["kind"] | NodeRow["parentKind"],
-  governs: NodeRow["governs"] | NodeRow["parentGoverns"],
-) => {
-  const governor = GoverningOf.at("governor", n.version, kind, governs);
-
-  return n.and(
+  governor: NodeRow["governor"] | NodeRow["parentGovernor"],
+) =>
+  n.and(
     TextDomain.has(n.version, governor),
     n.not(n.in(TextDomain.at("domain", n.version, governor), universalDomains)),
   );
-};
 
 /**
- * State that a row is an element whose text TextDomain checks: {@link checkedText} of its own kind
- * and governing type.
+ * State that a row is an element whose text TextDomain checks: {@link checkedText} of its own
+ * governor.
  *
  * @param n - The row.
  * @returns The predicate.
  */
-export const holdsCheckedText = (n: NodeRow) => checkedText(n, n.kind, n.governs);
+export const holdsCheckedText = (n: NodeRow) => checkedText(n, n.governor);
 
 /**
  * State that a member is a child of an element whose text TextDomain checks: {@link checkedText} of
- * its parent's copied kind and governing type, the fields the member carries.
+ * its parent's copied governor, the field the member carries.
  *
  * @param n - The row.
  * @returns The predicate.
  */
-const inCheckedText = (n: NodeRow) => checkedText(n, n.parentKind, n.parentGoverns);
+const inCheckedText = (n: NodeRow) => checkedText(n, n.parentGovernor);
 
 /**
  * The simple-content kinds whose text an overlay copies though no TextDomain check reads it (their
@@ -409,18 +479,17 @@ const inStringValue = (n: NodeRow) =>
   );
 
 /**
- * State that a foreign element is governed by a simple type: its governor under `GoverningOf` is
- * the (kind, type) pair, not its kind. `GoverningOf` gives a foreign kind under a type its pair
- * exactly where the grammar's `Governor` holds one, every named simple type of the leaf and no
- * complex one (`compose.ts`, `governedOf`), and the kind itself under every other type, `none`
- * included, so a foreign kind's own handle as its governor is the type's absence or its complex
- * content (spec readings 50 and 60).
+ * State that a foreign element is governed by a simple type: its governor is the (kind, type)
+ * pair, not its kind. `GoverningOf` gives a foreign kind under a type its pair exactly where the
+ * grammar's `Governor` holds one, every named simple type of the leaf and no complex one
+ * (`compose.ts`, `governedOf`), and the kind itself under every other type, and an element no type
+ * governs is governed by its kind ({@link KindGovernor}), so a foreign kind's own handle as its
+ * governor is the type's absence or its complex content (spec readings 50 and 60).
  *
  * @param n - The row, of a foreign kind.
  * @returns The predicate.
  */
-const simplyGoverned = (n: NodeRow) =>
-  n.not(n.in(GoverningOf.at("governor", n.version, n.kind, n.governs), openElementClasses));
+const simplyGoverned = (n: NodeRow) => n.not(n.in(n.governor, openElementClasses));
 
 /**
  * The tree of every document's nodes, its root the document node (N2, N9 to N11; trees.md §5).
@@ -461,7 +530,7 @@ export const nodeContext = on(
   "ancestry",
   "document",
   "documentType",
-  "governs",
+  "governor",
   "kind",
   "nearest",
   "nearestKind",
@@ -581,13 +650,13 @@ const stringValueFold = fold(
  * automaton, ancestry, the nearest interaction and the governing type.
  *
  * - **N1:** the document node is the one row at start 0, its own document, at the automaton's start
- *   state and with no governing type, each of its parent copies its own field. grizzle pins no base
- *   of an owner-axis copy on a tree (`laws/model/plan.ts` `#pin`): the owner axis's foreign key,
- *   planned from the plain `parent`, holds the root to itself, which leaves `parentAncestry` free,
- *   since `Enters(document)` is empty (C10). So the root's copies and `state` are pinned here. Its
- *   ancestry and nearest interaction are its document's context (spec reading 117), which its
- *   `Document` row states through {@link nodeContext}: none and itself for every document but an
- *   included fragment, whose content is judged in the context its includes stand in.
+ *   state and governed by its own kind, each of its parent copies its own field. grizzle pins no
+ *   base of an owner-axis copy on a tree (`laws/model/plan.ts` `#pin`): the owner axis's foreign
+ *   key, planned from the plain `parent`, holds the root to itself, which leaves `parentAncestry`
+ *   free, since `Enters(document)` is empty (C10). So the root's copies and `state` are pinned
+ *   here. Its ancestry and nearest interaction are its document's context (spec reading 117), which
+ *   its `Document` row states through {@link nodeContext}: none and itself for every document but
+ *   an included fragment, whose content is judged in the context its includes stand in.
  * - **N3:** the parent copies, riding the owner axis.
  * - **N5:** the predecessor copy, riding the predecessor axis; `N5_Follow`, one `Follow` bit of its
  *   parent's model (`ContentModelOf`) for every member that steps its parent's automaton, a row
@@ -597,15 +666,21 @@ const stringValueFold = fold(
  *   unadmitted kind reads no position and is refused.
  * - **E1:** `ancestry` is `parentAncestry ∪ Enters(kind)`, only character data has characters,
  *   `first` and `last` are the first and last code points of `chars` (each one code point by its
- *   type, so `startsWith` and `endsWith` pin it), and both empty exactly where `chars` is; and the
- *   string value's fold over the `chars` of the members whose parent's text is checked or copied.
+ *   type, so `startsWith` and `endsWith` pin it), and both empty exactly where `chars` is; the
+ *   string value's fold over the `chars` of the members whose parent's text is checked or copied;
+ *   and `governor`: its kind's own (`KindGovernor`) on a node no named type governs, a node that is
+ *   no element or a vocabulary element of an anonymous declared type, and on an {@link ElementType}
+ *   the governor its type gives ({@link typeGovernorOf}), the row's copy of its node's. A foreign
+ *   element's governor is `chardata.ts`'s, over its `OpenElementType`.
  * - **N6:** no banned flag above a node, and every flag it needs.
  * - **N7:** the last-slot copy, riding the last axis; `N7_Last`, its own model's `Last` holds every
  *   modeled node's last state; and the counted and barred positions' bounds, each on the owner,
  *   each vacuous where its position is 0.
  * - **N8:** a member's nearest interaction is its parent where the parent is one, else its parent's.
- * - **N12:** each vocabulary element's governing type is one its kind may name in `xsi:type`; a
- *   foreign element is assessed laxly and is selected out.
+ * - **N12:** each vocabulary element whose kind declares a named type has an {@link ElementType}, and
+ *   each type is one its kind may name in `xsi:type`; an element of an anonymous declared type has
+ *   none, since its kind has no `XsiType` row; a foreign element is assessed laxly and is selected
+ *   out.
  * - **Foreign simple content** (C41, spec reading 60): a foreign element a simple type governs holds
  *   no element child (XML Schema 1.0 Part 1, §3.3.4, Element Locally Valid (Type), clause 3.1.2),
  *   its `elementChildren` the elements fold's end. Its attributes are AL1's under the governor and
@@ -619,6 +694,11 @@ export const nodeLawsByName = {
     check("E1_derived", Node, (n) =>
       n.and(
         n.eq(n.ancestry, Compute.union(n.parentAncestry, Enters.row(n.kind))),
+        n.or(
+          n.eq(n.governor, KindGovernor.at("governor", n.kind)),
+          n.in(n.kind, openElementClasses),
+          namedlyTyped(n),
+        ),
         n.or(n.in(n.kind, ["text", "ws", "entityRef"]), n.eq(n.chars, "")),
         n.or(
           n.and(n.eq(n.chars, ""), n.eq(n.first, ""), n.eq(n.last, "")),
@@ -632,6 +712,13 @@ export const nodeLawsByName = {
       ),
     ),
     stringValueFold,
+    contained(
+      on(ElementType, "node", "kind", "version", "document", "governor"),
+      on(Node, "id", "kind", "version", "document", "governor"),
+    ),
+    check("E1_derived", ElementType, (t) =>
+      t.eq(t.governor, typeGovernorOf(t.version, t.kind, t.type)),
+    ),
   ],
   "Foreign simple content": [
     check("Foreign_simple_content", Node, (n) =>
@@ -651,12 +738,12 @@ export const nodeLawsByName = {
           n.eq(n.kind, "document"),
           n.eq(n.document, n.id),
           n.eq(n.parentKind, n.kind),
-          n.eq(n.parentGoverns, n.governs),
+          n.eq(n.parentGovernor, n.governor),
           n.eq(n.parentNearest, n.nearest),
           n.eq(n.parentNearestKind, n.nearestKind),
           n.eq(n.parentParentKind, n.parentKind),
           n.eq(n.state, "0"),
-          n.eq(n.governs, "none"),
+          n.eq(n.governor, "document"),
         ),
       ),
     ),
@@ -781,7 +868,7 @@ export const nodeLawsByName = {
         "version",
         "documentType",
         "parentKind",
-        "parentGoverns",
+        "parentGovernor",
         "parentAncestry",
         "parentNearest",
         "parentNearestKind",
@@ -793,7 +880,7 @@ export const nodeLawsByName = {
         "version",
         "documentType",
         "kind",
-        "governs",
+        "governor",
         "ancestry",
         "nearest",
         "nearestKind",
@@ -802,15 +889,8 @@ export const nodeLawsByName = {
     ),
   ],
   "XsiType derived": [
-    contained(
-      on(
-        select(Node, (n) => n.and(element(n), n.not(n.in(n.kind, openElementClasses)))),
-        "version",
-        "kind",
-        "governs",
-      ),
-      on(XsiType, "version", "kind", "type"),
-    ),
+    contained(on(select(Node, namedlyTyped), "id"), on(ElementType, "node")),
+    contained(on(ElementType, "version", "kind", "type"), on(XsiType, "version", "kind", "type")),
   ],
 } as const;
 

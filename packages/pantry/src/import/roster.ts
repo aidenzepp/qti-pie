@@ -21,24 +21,28 @@ import {
   Document,
   EncodingDecl,
   OpenElementName,
+  OpenElementType,
   Pi,
   SdDecl,
   XmlDecl,
 } from "#pantry/qti/chardata.ts";
+import { ElementType } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * The document layer's relations, which `documentRowsOf` of `#pantry/import/write.ts` writes for
  * each document: its `Document` row, its XML declaration's rows where it writes one, its comments',
- * instructions' and doctypes' rows, and its foreign elements' expanded names. `DocumentLayerRows`
- * is read from this record.
+ * instructions' and doctypes' rows, its foreign elements' expanded names, and its elements' named
+ * governing types. `DocumentLayerRows` is read from this record.
  */
 export const documentLayer = {
   Comment,
   Doctype,
   Document,
+  ElementType,
   EncodingDecl,
   OpenElementName,
+  OpenElementType,
   Pi,
   SdDecl,
   XmlDecl,

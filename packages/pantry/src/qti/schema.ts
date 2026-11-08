@@ -9,6 +9,7 @@
  */
 import { schema } from "@bjornpagen/grizzle";
 import {
+  AnonymousType,
   AttributeGrammar,
   AttributeModel,
   AttributeModelOf,
@@ -50,6 +51,7 @@ import {
   IncludeParentKind,
   IncludeRoot,
   KindByNameUnder,
+  KindGovernor,
   KindNamespace,
   Last,
   MappableBaseType,
@@ -100,6 +102,7 @@ import {
   EncodingDecl,
   Namespace,
   OpenElementName,
+  OpenElementType,
   Pi,
   SdDecl,
   XmlDecl,
@@ -186,7 +189,7 @@ import {
   referenceRelations,
   VariableRef,
 } from "#pantry/qti/expressions.ts";
-import { Node, nodeLaws } from "#pantry/qti/node.ts";
+import { ElementType, Node, nodeLaws } from "#pantry/qti/node.ts";
 import { operatorLaws, operatorRelations } from "#pantry/qti/operators.ts";
 import {
   Dependency,
@@ -248,6 +251,7 @@ const grammarRosters = {
  * a law or a generated field reads them.
  */
 const grammarRelations = {
+  AnonymousType,
   AttributeGrammar,
   AttributeModelOf,
   AttributeSlotOf,
@@ -274,6 +278,7 @@ const grammarRelations = {
   IncludeParentKind,
   IncludeRoot,
   KindByNameUnder,
+  KindGovernor,
   KindNamespace,
   Last,
   MappableBaseType,
@@ -299,9 +304,10 @@ const grammarRelations = {
 };
 
 /**
- * `node.ts`'s relation: every node of every document.
+ * `node.ts`'s relations: every node of every document, and each vocabulary element's named
+ * governing type.
  */
-const nodeRelations = { Node };
+const nodeRelations = { ElementType, Node };
 
 /**
  * `chardata.ts`'s relations and roster: character data, documents, namespaces and foreign names.
@@ -313,6 +319,7 @@ const chardataRelations = {
   EncodingDecl,
   Namespace,
   OpenElementName,
+  OpenElementType,
   Pi,
   SdDecl,
   XmlDecl,

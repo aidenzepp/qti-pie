@@ -49,9 +49,11 @@ import {
 import { uriReference } from "@qti-pie/crust/uri.ts";
 import {
   Flag,
+  Governor,
   HeldRootsUnder,
   interactionKinds,
   KindByNameUnder,
+  KindGovernor,
   KindNamespace,
   NodeKind,
   nonElementKinds,
@@ -64,7 +66,7 @@ import {
   vocabularyNamespacePattern,
 } from "#pantry/grammar/install.ts";
 import { keyTextBytes, namespaceBytes, prefixBytes } from "#pantry/qti/limits.ts";
-import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
+import { Node, nodeContext, nodeRef, typeGovernorOf } from "#pantry/qti/node.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
@@ -456,8 +458,6 @@ export const namespaceFamily = ordered(on(Namespace, "node", "at"), fin(Node, "n
  *
  * - `document`, `kind`, `start`, `nearest`, `version` and `parent` are its node's {@link nodeRef}
  *   tuple (C18);
- * - `governs` is its node's governing type, through the `(id, kind, version, document, governs)`
- *   tuple the attribute and identity overlays copy too, so one UNIQUE on `Node` serves them all;
  * - `parentKind` is its parent's kind, through `UNIQUE (id, kind)` on `Node`;
  * - `parentNamespace` is its parent's namespace name: `KindNamespace`'s for a parent of a kind, the
  *   parent's own row's for a foreign parent.
@@ -466,7 +466,6 @@ export const OpenElementName = relation(
   "OpenElementName",
   {
     document: uuid,
-    governs: closedId(TypeName),
     kind: closedId(NodeKind),
     local: NcName,
     namespace: ForeignNamespace,
@@ -476,6 +475,32 @@ export const OpenElementName = relation(
     parentKind: closedId(NodeKind),
     parentNamespace: ForeignNamespace,
     start: natural,
+    version: closedId(SchemaVersion),
+  },
+  ["node"],
+);
+
+/**
+ * A foreign element's governing type, keyed by its node, where its `xsi:type` gives it one: the
+ * type its `xsi:type` names, where that resolves to a type its document's schema set holds or a
+ * built-in (XML Schema 1.0 Part 1, §3.3.4, Schema-Validity Assessment (Element), clause 1.2; spec
+ * readings 60 and 81). A foreign element with no `xsi:type`, or one naming no such type, is
+ * assessed laxly and has none.
+ *
+ * - **the host's:** `type`, the shred's reading of the `xsi:type`; its node's `document`, `governor`,
+ *   `kind` and `version`, through the `(id, kind, version, document, governor)` tuple the attribute
+ *   and identity overlays copy too; and its {@link OpenElementName}'s `parentNamespace`, which
+ *   `TypeAvailable` reads the type against.
+ */
+export const OpenElementType = relation(
+  "OpenElementType",
+  {
+    document: uuid,
+    governor: closedId(Governor),
+    kind: closedId(NodeKind),
+    node: uuid,
+    parentNamespace: ForeignNamespace,
+    type: closedId(TypeName),
     version: closedId(SchemaVersion),
   },
   ["node"],
@@ -509,8 +534,12 @@ const rootElements = select(Node, (n) =>
  *   (Namespaces in XML 1.0, §3: a prefix is declared once on an element, since an element's
  *   attributes are distinct by name).
  * - **"OpenElementName":** one row per foreign element, both ways: every node of a foreign kind has
- *   its row, and each row carries its node's tuple, its governing type and its parent's kind, its
- *   own kind one of the three classes, which `Foreign_element_class`'s first conjunct holds.
+ *   its row, and each row carries its node's tuple and its parent's kind, its own kind one of the
+ *   three classes, which `Foreign_element_class`'s first conjunct holds.
+ * - **its type** (`E1_derived`): an {@link OpenElementType} copies its node's tuple and its
+ *   `OpenElementName`'s parent namespace, and holds its node's governor to the one its type gives
+ *   (`typeGovernorOf`); a foreign element no type governs is governed by its kind, so one whose
+ *   governor is another has its type.
  * - **"Foreign element class"** (rule `unmodeled-vocabulary`): its stored namespace agrees with its
  *   class against its parent's, as XML Schema 1.0 Part 1 §3.10.4 classes a wildcard's names:
  *   `no-namespace-element` in none, `own-namespace-element` in its parent's, `foreign-element` in
@@ -524,17 +553,19 @@ const rootElements = select(Node, (n) =>
  *   §3.3.4 clauses 1.1.1.2 and 1.1.1.3.2, with §3.10.4 clause 2; shred reads it so).
  *   `KindByNameUnder` holds each (version, parent)'s names as one pattern over `namespace}local`,
  *   the subject built by `Compute.concat`, since a closed relation's key is closed ids only.
- * - **"XsiType available"** (C15, C36; spec readings 60 and 81): a foreign element's governing type
- *   is one its document's schema set holds, or XML Schema's own, or `none`, read from its parent's
- *   namespace through `TypeAvailable`; under a parent of no vocabulary's namespace, which stands in
- *   documents of every set, any type stands. Which set a document is assessed against is not on
- *   `Node`, so the parent's namespace stands for it: reading 81's recorded limit.
+ * - **"XsiType available"** (C15, C36; spec readings 60 and 81): a foreign element's governing type,
+ *   its {@link OpenElementType} where it has one, is one its document's schema set holds or XML
+ *   Schema's own, read from its parent's namespace through `TypeAvailable`; under a parent of no
+ *   vocabulary's namespace, which stands in documents of every set, any type stands. Which set a
+ *   document is assessed against is not on `Node`, so the parent's namespace stands for it: reading
+ *   81's recorded limit.
  * - **"Strictly held"** (C44, C13; spec readings 6 and 81): a foreign element its parent's model
- *   holds only by `strict` wildcards (`StrictlyHeld`) has a governing type, since without one XML
- *   Schema cannot assess it (§3.10.4 clause 2, §3.3.5 [validity] clause 1.1.3), unless its expanded
- *   name is one of reading 6's roots its documents' schema set declares there (`HeldRootsUnder`),
- *   which the wildcard assesses against that declaration (`cp:manifest` under
- *   `drd:accessForAllResource`). shred refuses the rest as `strict-undeclared`.
+ *   holds only by `strict` wildcards (`StrictlyHeld`) has a governing type, its
+ *   {@link OpenElementType}, since without one XML Schema cannot assess it (§3.10.4 clause 2,
+ *   §3.3.5 [validity] clause 1.1.3), unless its expanded name is one of reading 6's roots its
+ *   documents' schema set declares there (`HeldRootsUnder`), which the wildcard assesses against
+ *   that declaration (`cp:manifest` under `drd:accessForAllResource`). shred refuses the rest as
+ *   `strict-undeclared`.
  * - **"MathML foreign element"** (reading 2): no foreign element is in MathML's namespace.
  */
 export const chardataLawsByName = {
@@ -560,7 +591,7 @@ export const chardataLawsByName = {
         "context",
         "node",
         "resourceType",
-        constant("none"),
+        constant("document"),
         constant("document"),
         "contextNearest",
         "contextNearestKind",
@@ -577,8 +608,27 @@ export const chardataLawsByName = {
       ),
     ),
     contained(
-      on(OpenElementName, "node", "kind", "version", "document", "governs"),
-      on(Node, "id", "kind", "version", "document", "governs"),
+      on(OpenElementType, "node", "kind", "version", "document", "governor"),
+      on(Node, "id", "kind", "version", "document", "governor"),
+    ),
+    contained(
+      on(OpenElementType, "node", "parentNamespace"),
+      on(OpenElementName, "node", "parentNamespace"),
+    ),
+    check("E1_derived", OpenElementType, (t) =>
+      t.eq(t.governor, typeGovernorOf(t.version, t.kind, t.type)),
+    ),
+    contained(
+      on(
+        select(Node, (n) =>
+          n.and(
+            n.in(n.kind, openElementClasses),
+            n.ne(n.governor, KindGovernor.at("governor", n.kind)),
+          ),
+        ),
+        "id",
+      ),
+      on(OpenElementType, "node"),
     ),
   ],
   "Foreign element class": [
@@ -644,34 +694,42 @@ export const chardataLawsByName = {
     ),
   ],
   "Strictly held": [
-    check("Strictly_held", OpenElementName, (o) =>
-      o.or(
-        o.not(o.in(o.kind, openElementClasses)),
-        ...openElementClasses.map((kind) =>
+    contained(
+      on(
+        select(OpenElementName, (o) =>
           o.and(
-            o.eq(o.kind, kind),
-            o.eq(
-              Compute.disjoint(
-                StrictlyHeld.row(o.version, o.parentKind),
-                Bits.of(NodeKind, [kind]),
+            o.or(
+              ...openElementClasses.map((kind) =>
+                o.and(
+                  o.eq(o.kind, kind),
+                  o.eq(
+                    Compute.disjoint(
+                      StrictlyHeld.row(o.version, o.parentKind),
+                      Bits.of(NodeKind, [kind]),
+                    ),
+                    false,
+                  ),
+                ),
               ),
-              true,
+            ),
+            o.not(
+              Compute.matches(
+                Compute.concat(Compute.concat(o.namespace, "}"), o.local),
+                HeldRootsUnder.at("names", o.version, o.parentKind),
+              ),
             ),
           ),
         ),
-        o.ne(o.governs, "none"),
-        Compute.matches(
-          Compute.concat(Compute.concat(o.namespace, "}"), o.local),
-          HeldRootsUnder.at("names", o.version, o.parentKind),
-        ),
+        "node",
       ),
+      on(OpenElementType, "node"),
     ),
   ],
   "XsiType available": [
-    check("XsiType_available", OpenElementName, (o) =>
-      o.or(
-        Compute.matches(o.parentNamespace, TypeAvailable.at("namespaces", o.governs)),
-        o.not(Compute.matches(o.parentNamespace, vocabularyNamespacePattern)),
+    check("XsiType_available", OpenElementType, (t) =>
+      t.or(
+        Compute.matches(t.parentNamespace, TypeAvailable.at("namespaces", t.type)),
+        t.not(Compute.matches(t.parentNamespace, vocabularyNamespacePattern)),
       ),
     ),
   ],

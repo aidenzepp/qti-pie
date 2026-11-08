@@ -391,7 +391,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   [
     84,
     {
-      owner: "Q5.05's AttributeGrammar keyed by the governing type; Q5.03's `Node.governs`",
+      owner: "Q5.05's AttributeGrammar keyed by the governing type; Q5.03's `Node.governor`",
       status: "P",
     },
   ],

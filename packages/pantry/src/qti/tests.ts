@@ -77,6 +77,7 @@ import { booleanTruePattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeName,
   Flag,
+  Governor,
   grammar,
   IncludeParent,
   IncludeParentKind,
@@ -85,7 +86,6 @@ import {
   NodeKind,
   ResourceType,
   SchemaVersion,
-  TypeName,
 } from "#pantry/grammar/install.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
@@ -496,7 +496,7 @@ export const SectionOrdering = relation(
  * its own (information model §7.5 and §2.12).
  *
  * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`,
- *   `ancestry`, `document`, `documentType`, `governs`, `kind`, `nearest`, `nearestKind`,
+ *   `ancestry`, `document`, `documentType`, `governor`, `kind`, `nearest`, `nearestKind`,
  *   `parentKind`, `start`, `version`), which also holds its {@link nodeRef} fields but `parent`;
  *   `parent`; and the scope it is placed in, its parent's: `part`, `replaced` (its parent section's
  *   `replacing`), `parentMixes` and `parentLooseChain`.
@@ -518,7 +518,7 @@ export const Site = relation(
     children: natural,
     document: uuid,
     documentType: closedId(ResourceType),
-    governs: closedId(TypeName),
+    governor: closedId(Governor),
     kind: closedId(NodeKind),
     nearest: uuid,
     nearestKind: closedId(NodeKind),
@@ -2303,7 +2303,7 @@ export const testLawsByName = {
         "ancestry",
         "document",
         "documentType",
-        "governs",
+        "governor",
         "kind",
         "nearest",
         "nearestKind",

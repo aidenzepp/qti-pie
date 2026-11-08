@@ -42,7 +42,7 @@ import { endsOf, fold } from "#pantry/model/folds.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import type { XdmDocument } from "#pantry/model/xdm.ts";
-import { EndCharacter, Node, nodeLaws } from "#pantry/qti/node.ts";
+import { ElementType, EndCharacter, Node, nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
@@ -99,6 +99,7 @@ const scratchSchema = () =>
   schema(
     "NodeScratch",
     {
+      AnonymousType: install.AnonymousType,
       AttributeSlot: install.AttributeSlot,
       Banned: install.Banned,
       BarredOf: install.BarredOf,
@@ -107,11 +108,13 @@ const scratchSchema = () =>
       ContentModel: install.ContentModel,
       ContentModelOf: install.ContentModelOf,
       CountedOf: install.CountedOf,
+      ElementType,
       Enters: install.Enters,
       Flag: install.Flag,
       Follow: install.Follow,
       GoverningOf: install.GoverningOf,
       Governor: install.Governor,
+      KindGovernor: install.KindGovernor,
       Last: install.Last,
       ModelPositions: install.ModelPositions,
       Needs: install.Needs,
@@ -160,7 +163,8 @@ const lawOf = (name: string): string => name.replaceAll("_", " ");
 
 /**
  * The oracle laws `nodeLaws` states as named checks. Every other statement is a family, a fold or a
- * containment, which a refusal names by its kind and sides (Q5.17).
+ * containment, which a refusal names by its kind and sides (Q5.17). "E1 derived" is a check on
+ * `Node` and one on `ElementType`, each relation's own.
  */
 const checkedLaws: readonly LawName[] = [
   "E1 derived",
@@ -189,7 +193,7 @@ const written = {
   chars: "",
   documentType: "imsqti_item_xmlv3p0",
   first: "",
-  governs: "none",
+  governor: "qti-assessment-item",
   id: someId,
   kind: "qti-assessment-item",
   last: "",
@@ -224,15 +228,18 @@ describe("Node's declarations", () => {
     testTimeoutMs,
   );
 
-  it("names every check by an oracle law, each mapped to a rule, and states each law once", () => {
+  it("names every check by an oracle law, each mapped to a rule, and states each law once on each relation", () => {
     // Oracle: the specification as a checker, the oracle's law list and its rule map
     // (`#pantry/test/oracle.ts`), which Q5.17's refusals read.
-    const names = nodeLaws.flatMap((statement) =>
-      statement.kind === "check" ? [lawOf(statement.name)] : [],
+    const checks = nodeLaws.flatMap((statement) =>
+      statement.kind === "check"
+        ? [{ checked: statement.relation.name, law: lawOf(statement.name) }]
+        : [],
     );
+    const placed = checks.map(({ checked, law }) => `${checked} ${law}`);
 
-    assert.sameMembers(names, [...checkedLaws]);
-    assert.strictEqual(new Set(names).size, names.length);
+    assert.sameMembers([...new Set(checks.map(({ law }) => law))], [...checkedLaws]);
+    assert.strictEqual(new Set(placed).size, placed.length);
     for (const law of checkedLaws) {
       assert.include(lawNames, law);
       assert.include(oracleRules, ruleOf(law));
@@ -254,7 +261,7 @@ describe("Node's declarations", () => {
       document: true,
       documentType: true,
       first: true,
-      governs: true,
+      governor: true,
       id: true,
       kind: true,
       last: true,
@@ -901,7 +908,7 @@ const foreignCases: readonly {
   {
     corrupt: {
       _tag: "edit",
-      edit: (rows) => editedForeign(rows, "foreign-element", { governs: "none" }),
+      edit: (rows) => editedForeign(rows, "foreign-element", { governs: Option.none() }),
     },
     law: "Strictly held",
     lawful: `<qti-assessment-item xmlns="${asi}" xmlns:f="urn:f" xmlns:xsi="${xsiNamespace}" xmlns:xs="${xsNamespace}" identifier="item" title="Item" time-dependent="false" adaptive="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-companion-materials-info><f:x xsi:type="xs:string"/></qti-companion-materials-info><qti-item-body><p>x</p></qti-item-body></qti-assessment-item>`,
@@ -929,7 +936,8 @@ const foreignCases: readonly {
   {
     corrupt: {
       _tag: "edit",
-      edit: (rows) => editedForeign(rows, "foreign-element", { governs: otherSetType }),
+      edit: (rows) =>
+        editedForeign(rows, "foreign-element", { governs: Option.some(otherSetType) }),
     },
     law: "XsiType available",
     lawful: sectionTest(

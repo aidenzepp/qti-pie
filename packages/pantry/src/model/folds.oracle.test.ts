@@ -21,7 +21,7 @@ import { foldGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
-import { closedName, none } from "#pantry/model/xdm.ts";
+import { closedName } from "#pantry/model/xdm.ts";
 import type {
   ClosedName,
   ElementKind,
@@ -637,7 +637,7 @@ describe("fold's refusals", { timeout: searchTimeout }, () => {
               const owner = model[target] ?? assert.fail("no owner");
               const { kind } = owner;
               const { version } = document;
-              let governs = none;
+              let governs = Option.none<string>();
 
               editElement(document, target, (held) => {
                 ({ governs } = held);

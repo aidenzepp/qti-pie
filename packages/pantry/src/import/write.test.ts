@@ -113,7 +113,7 @@ const packageId = idOf(0xff_ff_ff);
  * slot its place in its element's family.
  *
  * @param root - The document's `Node` insert.
- * @param flat - Its document layer's flat rows.
+ * @param flat - Its document layer's flat rows, each element's named governing type among them.
  * @returns The rows `flatten` writes, which `assemble` reads.
  */
 const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed> => {
@@ -144,7 +144,12 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
     const row = {
       at: BigInt(at),
       end: 0n,
-      governs: node.governs,
+      governs: Option.map(
+        Option.orElse(Option.fromNullishOr(flat.ElementType.get(node.id)), () =>
+          Option.fromNullishOr(flat.OpenElementType.get(node.id)),
+        ),
+        ({ type }) => type,
+      ),
       id: node.id,
       kind: node.kind,
       parent,
@@ -859,7 +864,7 @@ describe("the written types", () => {
       chars: true,
       documentType: true,
       first: true,
-      governs: true,
+      governor: true,
       id: true,
       kind: true,
       last: true,

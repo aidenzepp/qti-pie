@@ -30,11 +30,11 @@ import { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * The fields of an `Attribute` row the oracle knows before the database writes it: its owner's
- * kind, version, governing type and document's type, its name and its lexical form.
+ * kind, version, governor and document's type, its name and its lexical form.
  */
 export const attributeFields = [
   "documentType",
-  "governs",
+  "governor",
   "kind",
   "lexical",
   "name",
@@ -43,15 +43,15 @@ export const attributeFields = [
 
 /**
  * The fields of a `Node` row the oracle knows before the database writes it: its own kind, version,
- * governing type, start and characters, its document's type, its parent's kind and governing type,
- * its grandparent's kind, and its string value.
+ * governor, start and characters, its document's type, its parent's kind and governor, its
+ * grandparent's kind, and its string value.
  */
 export const nodeFields = [
   "chars",
   "documentType",
-  "governs",
+  "governor",
   "kind",
-  "parentGoverns",
+  "parentGovernor",
   "parentKind",
   "parentParentKind",
   "start",

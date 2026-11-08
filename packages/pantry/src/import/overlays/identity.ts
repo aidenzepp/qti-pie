@@ -19,7 +19,6 @@ import { Option } from "effect";
 import { collapse, isNcName } from "#pantry/grammar/domains.ts";
 import {
   attributeRows,
-  GoverningOf,
   ResourceType,
   TextDomain,
   toolLabelKinds,
@@ -33,7 +32,7 @@ import {
   stringValuesOf,
 } from "#pantry/import/overlays/metadata.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
-import { foldAt, foldOf } from "#pantry/import/fold.ts";
+import { foldAt, foldOf, governorOf } from "#pantry/import/fold.ts";
 import type { Folds } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -167,17 +166,6 @@ export interface PlacedLanguageRows {
 }
 
 /**
- * The installed `GoverningOf`, keyed `version kind governs`: the governor an element reads its
- * attributes and its text under.
- */
-const governorAt: ReadonlyMap<string, string> = new Map(
-  GoverningOf.rows.map(({ governor, governs, kind, version }) => [
-    `${version} ${kind} ${governs}`,
-    governor,
-  ]),
-);
-
-/**
  * The installed `ValueIdentity`, keyed by domain: the identity type of each value domain that has
  * one. A domain of no identity has no row.
  */
@@ -256,32 +244,28 @@ const toolLabelled: ReadonlySet<string> = new Set(toolLabelKinds);
 const headingKey = (values: readonly string[]): string => JSON.stringify(values);
 
 /**
- * Read an element's governor, as `GoverningOf` gives it.
+ * Read an element's governor, `Node.governor` (`#pantry/import/fold.ts` `governorOf`).
  *
  * @param element - The element's node row.
- * @returns The governor, none for a (version, kind, type) `GoverningOf` holds no row of.
+ * @returns The governor.
  */
-const governorOf = (element: NodeRow<Composed>): string | undefined =>
-  governorAt.get(`${element.version} ${element.kind} ${element.governs}`);
+const governorOfElement = (element: NodeRow<Composed>): string =>
+  governorOf(element.version, element.kind, element.governs);
 
 /**
  * Read the identity type of an attribute's value domain under its element's governor.
  *
  * @param attribute - The attribute row.
  * @param element - Its element's node row.
- * @returns `ID`, `IDREF` or `IDREFS`; none where `GoverningOf` gives the element no governor, the
- *   governor reads the attribute under no domain, or its domain has no identity.
+ * @returns `ID`, `IDREF` or `IDREFS`; none where the governor reads the attribute under no domain,
+ *   or its domain has no identity.
  */
 const attributeIdentityOf = (
   attribute: AttributeRow<Composed>,
   element: NodeRow<Composed>,
 ): Option.Option<string> =>
-  Option.fromUndefinedOr(governorOf(element)).pipe(
-    Option.flatMap((governor) =>
-      Option.fromUndefinedOr(
-        attributeIdentityAt.get(`${element.version} ${governor} ${attribute.name}`),
-      ),
-    ),
+  Option.fromUndefinedOr(
+    attributeIdentityAt.get(`${element.version} ${governorOfElement(element)} ${attribute.name}`),
   );
 
 /**
@@ -317,15 +301,11 @@ const holdsIdref = (attribute: AttributeRow<Composed>, element: NodeRow<Composed
  * governor's text domain's.
  *
  * @param element - The element's node row.
- * @returns `ID`, `IDREF` or `IDREFS`; none where its text is of no identity type, or `GoverningOf`
- *   gives it no governor, or its governor reads its text in no domain.
+ * @returns `ID`, `IDREF` or `IDREFS`; none where its text is of no identity type, or its governor
+ *   reads its text in no domain.
  */
 const textIdentityOf = (element: NodeRow<Composed>): Option.Option<string> =>
-  Option.fromUndefinedOr(governorOf(element)).pipe(
-    Option.flatMap((governor) =>
-      Option.fromUndefinedOr(textIdentityAt.get(`${element.version} ${governor}`)),
-    ),
-  );
+  Option.fromUndefinedOr(textIdentityAt.get(`${element.version} ${governorOfElement(element)}`));
 
 /**
  * Split an IDREF or IDREFS text into its tokens, each with the whitespace written before it, and
@@ -474,7 +454,7 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
     const identity = found.value;
     identityTexts.set(node.id, {
       document: tree.document,
-      governs: node.governs,
+      governor: governorOfElement(node),
       idrefs: identity === "ID" ? [] : idrefPiecesOf(text),
       kind: node.kind,
       lexical: text,

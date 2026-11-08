@@ -6,7 +6,6 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Predicate, Schema } from "effect";
 import * as install from "#pantry/grammar/install.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
 
 /**
  * The composed grammar, the generators' rows every declaration is compared with.
@@ -221,6 +220,7 @@ const comparisons: readonly Comparison[] = [
   { expected: () => grammar.ancestry.banned.rows, name: "Banned" },
   { expected: () => grammar.ancestry.needs.rows, name: "Needs" },
   { expected: () => grammar.xsi.xsiType.rows, name: "XsiType" },
+  { expected: () => grammar.xsi.anonymousType.rows, name: "AnonymousType" },
   { expected: () => grammar.attributes.valueDomain.rows, name: "ValueDomainOf" },
   {
     expected: () =>
@@ -257,8 +257,8 @@ const comparisons: readonly Comparison[] = [
         kind,
         version,
       })),
-      ...grammar.kinds.versions.handles.flatMap((version) => [
-        ...Object.values(foreignKinds).flatMap((kind) =>
+      ...grammar.kinds.versions.handles.flatMap((version) =>
+        Object.values(foreignKinds).flatMap((kind) =>
           grammar.xsi.typeName.handles.map((governs) => ({
             governor: Option.match(grammar.attributes.governor.lookup({ governs, kind, version }), {
               onNone: () => kind,
@@ -269,15 +269,13 @@ const comparisons: readonly Comparison[] = [
             version,
           })),
         ),
-        ...["document", "text", "ws", "comment", "pi", "entityRef", "doctype"].map((kind) => ({
-          governor: kind,
-          governs: noType,
-          kind,
-          version,
-        })),
-      ]),
+      ),
     ],
     name: "GoverningOf",
+  },
+  {
+    expected: () => grammar.kinds.nodeKind.handles.map((kind) => ({ governor: kind, kind })),
+    name: "KindGovernor",
   },
   {
     expected: () =>
@@ -645,6 +643,7 @@ describe("the rosters", () => {
     assert.deepStrictEqual(handlesOf("NodeKind"), grammar.kinds.nodeKind.handles);
     assert.deepStrictEqual(handlesOf("AttributeName"), grammar.kinds.attributeName.handles);
     assert.deepStrictEqual(handlesOf("TypeName"), grammar.xsi.typeName.handles);
+    assert.notInclude(handlesOf("TypeName"), "none");
     assert.deepStrictEqual(handlesOf("SchemaVersion"), grammar.kinds.versions.handles);
     assert.deepStrictEqual(handlesOf("BaseType"), grammar.baseTypes.handles);
     assert.deepStrictEqual(handlesOf("Cardinality"), [

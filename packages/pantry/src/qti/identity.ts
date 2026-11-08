@@ -128,14 +128,13 @@ import {
   AttributeModelOf,
   AttributeName,
   AttributeSlotOf,
-  GoverningOf,
+  Governor,
   Identity,
   NodeKind,
   ResourceType,
   SchemaVersion,
   TextDomain,
   toolLabelKinds,
-  TypeName,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { Attribute, Idref, Space } from "#pantry/qti/attributes.ts";
@@ -241,7 +240,7 @@ export const IdBinding = relation(
  * domain is an `xs:ID`, an `xs:IDREF` or an `xs:IDREFS` one (`ValueIdentity`), which only an
  * `xsi:type` gives an element in the pinned grammar.
  *
- * - **copied from the node:** `node`, `document`, `kind`, `version`, `governs`, `owner` (its parent)
+ * - **copied from the node:** `node`, `document`, `kind`, `version`, `governor`, `owner` (its parent)
  *   and `lexical`, its string value, `Node.stringValue`, which the string value's fold steps
  *   because TextDomain checks the text (`#pantry/qti/node.ts` `inCheckedText`);
  * - **drawn:** `idrefs`, its {@link TextIdref} count;
@@ -251,7 +250,7 @@ export const IdentityText = relation(
   "IdentityText",
   {
     document: uuid,
-    governs: closedId(TypeName),
+    governor: closedId(Governor),
     idrefText: accumulated(keyText, ""),
     idrefs: drawn(natural),
     kind: closedId(NodeKind),
@@ -660,11 +659,7 @@ type IdentityHandle = (typeof Identity.handles)[number];
  * @returns The predicate.
  */
 const identityIn = (a: AttributeRow, identities: readonly IdentityHandle[]) => {
-  const model = AttributeModelOf.at(
-    "model",
-    a.version,
-    GoverningOf.at("governor", a.version, a.kind, a.governs),
-  );
+  const model = AttributeModelOf.at("model", a.version, a.governor);
   const domain = AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, a.name));
 
   return a.and(ValueIdentity.has(domain), a.in(ValueIdentity.at("identity", domain), identities));
@@ -687,11 +682,10 @@ type GovernedRow = RowScalars<typeof Node> | RowScalars<typeof IdentityText>;
  * @returns The predicate.
  */
 const textIdentityIn = (n: GovernedRow, identities: readonly IdentityHandle[]) => {
-  const governor = GoverningOf.at("governor", n.version, n.kind, n.governs);
-  const domain = TextDomain.at("domain", n.version, governor);
+  const domain = TextDomain.at("domain", n.version, n.governor);
 
   return n.and(
-    TextDomain.has(n.version, governor),
+    TextDomain.has(n.version, n.governor),
     ValueIdentity.has(domain),
     n.in(ValueIdentity.at("identity", domain), identities),
   );
@@ -1064,8 +1058,8 @@ export const identityLawsByName = {
       on(IdentityText, "node", "document", "owner", "lexical"),
     ),
     contained(
-      on(IdentityText, "node", "kind", "version", "document", "governs"),
-      on(Node, "id", "kind", "version", "document", "governs"),
+      on(IdentityText, "node", "kind", "version", "document", "governor"),
+      on(Node, "id", "kind", "version", "document", "governor"),
     ),
     textIdrefFamily,
     contained(on(TextIdref, "node", "document"), on(IdentityText, "node", "document")),

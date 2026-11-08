@@ -43,7 +43,6 @@ import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { keyTextBytes } from "#pantry/qti/limits.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
 import type { Corpus } from "#pantry/test/gen/genetic/corpus.ts";
 import { versionOfGenome } from "#pantry/test/gen/genetic/corpus.ts";
 import { below, oneOf } from "#pantry/test/gen/genetic/engine.ts";
@@ -226,8 +225,8 @@ const boundOffsets = [-1, 0, 1, 1, 2] as const;
 
 /**
  * Whether the schema copies an attribute's text into a key text: some `Attribute` copy of
- * `#pantry/test/key-copies.ts` holds it, read over the fields that copy knows, the element's
- * governing type taken as none.
+ * `#pantry/test/key-copies.ts` holds it, read over the fields that copy knows, the element taken
+ * as governed by its kind, as an element no named type governs is.
  *
  * @param kind - The element's kind.
  * @param name - The attribute's name as written.
@@ -238,7 +237,7 @@ const boundOffsets = [-1, 0, 1, 1, 2] as const;
 const copiedAttribute = (kind: string, name: string, lexical: string, version: string): boolean =>
   keyCopies.some(
     (copy) =>
-      copy.source === "Attribute" && copy.holds({ governs: noType, kind, lexical, name, version }),
+      copy.source === "Attribute" && copy.holds({ governor: kind, kind, lexical, name, version }),
   );
 
 /**
@@ -585,6 +584,7 @@ const operations: Readonly<
         breeding.grammar.kinds.attributeName,
         version,
         breeding.corpus.kindOf(at.element),
+        Option.none(),
       ).some(({ name, use }) => use === "required" && name === qname),
     );
     const read = required.filter(({ qname }) => lawRead.has(qname));
@@ -628,6 +628,7 @@ const operations: Readonly<
       breeding.grammar.kinds.attributeName,
       versionIn(genome),
       kind,
+      Option.none(),
     )
       .map(({ name }) => name)
       .filter(
@@ -1197,6 +1198,7 @@ const operations: Readonly<
         breeding.grammar.kinds.attributeName,
         version,
         breeding.corpus.kindOf(site.at.element),
+        Option.none(),
       ).find(({ name }) => name === site.qname);
       const domain = breeding.grammar.attributes.domains.find(
         ({ handle }) => handle === admitted?.domain,

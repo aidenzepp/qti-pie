@@ -87,16 +87,25 @@ const governorAt: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * Read the governor `GoverningOf` gives an element: the type whose attribute grammar and text
- * domain it is judged under.
+ * Read a node's governor, `Node.governor`: what its attributes and text are judged under, as the
+ * law states it (`typeGovernorOf` of `#pantry/qti/node.ts`, and `E1_derived` on `Node`). Under a
+ * named type it is `GoverningOf`'s of (version, kind, type); with no type, and under a type
+ * `GoverningOf` holds no row of (an `xsi:type` its kind's declared type does not derive, which
+ * `XsiType derived` refuses), its kind's own, `KindGovernor`'s, which spells the kind's handle
+ * (`#pantry/grammar/install.ts` `Governor`: each `NodeKind` handle first).
  *
- * @param version - The element's version.
+ * @param version - The node's version.
  * @param kind - Its kind.
- * @param governs - Its governing type.
- * @returns The governor, none where `GoverningOf` holds no row.
+ * @param governs - Its governing type, none where no named type governs it.
+ * @returns The governor's `Governor` handle.
  */
-export const governorOf = (version: string, kind: string, governs: string): Option.Option<string> =>
-  Option.fromNullishOr(governorAt.get(keyOf(version, kind, governs)));
+export const governorOf = (version: string, kind: string, governs: Option.Option<string>): string =>
+  Option.match(
+    governs.pipe(
+      Option.flatMap((type) => Option.fromNullishOr(governorAt.get(keyOf(version, kind, type)))),
+    ),
+    { onNone: () => kind, onSome: (governor) => governor },
+  );
 
 /**
  * The installed `TextDomain`, by `version governor`.
@@ -163,22 +172,14 @@ const interactions: ReadonlySet<string> = new Set(interactionKinds);
 const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
 
 /**
- * Read the domain an element reads its text in: `TextDomain` under the governor `GoverningOf`
- * gives it.
+ * Read the domain an element reads its text in: `TextDomain` under its governor.
  *
  * @param version - The element's version.
- * @param kind - Its kind.
- * @param governs - Its governing type.
- * @returns The domain, none where `GoverningOf` or `TextDomain` holds no row.
+ * @param governor - Its governor ({@link governorOf}).
+ * @returns The domain, none where `TextDomain` holds no row.
  */
-export const textDomainOf = (
-  version: string,
-  kind: string,
-  governs: string,
-): Option.Option<string> =>
-  Option.flatMap(governorOf(version, kind, governs), (governor) =>
-    Option.fromNullishOr(textDomainAt.get(keyOf(version, governor))),
-  );
+export const textDomainOf = (version: string, governor: string): Option.Option<string> =>
+  Option.fromNullishOr(textDomainAt.get(keyOf(version, governor)));
 
 /**
  * The state a family's automaton starts in, before its first member: position 0, the family's

@@ -19,7 +19,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { GoverningOf } from "#pantry/grammar/install.ts";
 import { languageRowsOf, rowsOf } from "#pantry/import/overlays/identity.ts";
-import { ownContext } from "#pantry/import/fold.ts";
+import { governorOf, ownContext } from "#pantry/import/fold.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
@@ -93,10 +93,12 @@ type CaseKind =
  * @param kind - The kind.
  * @returns Its declared type's `TypeName` handle.
  */
-const declaredType = (kind: CaseKind): string =>
-  GoverningOf.rows.find(
-    (row) => row.kind === kind && row.governor === kind && row.version === version,
-  )?.governs ?? assert.fail(`GoverningOf holds ${kind} under its own governor`);
+const declaredType = (kind: CaseKind): Option.Option<string> =>
+  Option.some(
+    GoverningOf.rows.find(
+      (row) => row.kind === kind && row.governor === kind && row.version === version,
+    )?.governs ?? assert.fail(`GoverningOf holds ${kind} under its own governor`),
+  );
 
 /**
  * Write a closed attribute.
@@ -137,7 +139,7 @@ const elementOf = (
   kind: CaseKind,
   attributes: readonly XdmAttribute<Composed>[],
   children: readonly XdmChild<Composed>[],
-  governs: string = declaredType(kind),
+  governs: Option.Option<string> = declaredType(kind),
 ): XdmClosedElement<Composed> => ({
   _tag: "element",
   attributes,
@@ -768,7 +770,7 @@ describe(
                           "qti-description",
                           [],
                           [{ _tag: "text", value: text.text }],
-                          type,
+                          Option.some(type),
                         ),
                       ),
                     ),
@@ -833,7 +835,7 @@ describe(
                         row.document,
                         row.owner,
                         row.kind,
-                        row.governs,
+                        row.governor,
                         row.lexical,
                         row.idrefs.map(({ after, before, token }) => [before, token, after]),
                       ]),
@@ -846,7 +848,7 @@ describe(
                         documentNode,
                         owner,
                         "qti-description",
-                        choice.type,
+                        governorOf(version, "qti-description", Option.some(choice.type)),
                         choice.text.text,
                         choice.type === "xs:IDREF"
                           ? choice.text.idrefs.map(({ after, before, token }) => [

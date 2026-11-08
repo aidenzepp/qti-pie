@@ -602,6 +602,8 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
   ).map(([relation, name]) => [primaryKeyOf(relation, "node"), name] as const),
   [primaryKeyOf("Namespace", "node", "at"), "Namespace family"],
   [primaryKeyOf("OpenElementName", "node"), "OpenElementName"],
+  [primaryKeyOf("ElementType", "node"), "E1 derived"],
+  [primaryKeyOf("OpenElementType", "node"), "E1 derived"],
   [primaryKeyOf("Attribute", "node", "id"), "AL2 count"],
   [primaryKeyOf("OpenAttributeName", "node", "attribute", "at"), "AL4 open names"],
   [primaryKeyOf("Idref", "node", "attribute", "at"), "E1 derived"],

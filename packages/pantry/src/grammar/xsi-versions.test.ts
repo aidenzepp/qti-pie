@@ -25,7 +25,7 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { expandedNameOf, noType, typeHandle } from "#pantry/grammar/xsi.ts";
+import { expandedNameOf, typeHandle } from "#pantry/grammar/xsi.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { loadXsd } from "#pantry/test/gen/grammar.ts";
@@ -133,7 +133,7 @@ describe.skipIf(!cached)("xsi:type names by version", () => {
             declared.set(version, yield* declaredIn(version));
           }
 
-          const handles = grammar.xsi.typeName.handles.filter((handle) => handle !== noType);
+          const { handles } = grammar.xsi.typeName;
           const lookup: string[] = [];
           for (const version of schemaVersions) {
             for (const handle of handles) {

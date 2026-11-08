@@ -45,7 +45,6 @@ import { composed } from "#pantry/grammar/compose.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
 import { loadXsd, XsdOracleLayer, xsdContents } from "#pantry/test/gen/grammar.ts";
 import { checkCache, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
@@ -88,13 +87,12 @@ const rosters = {
 } as const;
 
 /**
- * The inputs of a grammar no `xsi:type` governs: no governor, and a `TypeName` roster of the null
- * type alone.
+ * The inputs of a grammar no `xsi:type` governs: no governor, and an empty `TypeName` roster.
  */
 const ungoverned = {
   governed: [],
   governors: [],
-  typeName: Result.getOrThrow(roster("TypeName", [noType])),
+  typeName: Result.getOrThrow(roster("TypeName", [])),
   typeTexts: [],
 } as const;
 
