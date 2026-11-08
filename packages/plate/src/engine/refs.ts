@@ -143,10 +143,12 @@ export const builtInType = (
  * Give the value a test-level read of an item variable stands for.
  *
  * A value of a type the value model holds is itself. NULL of a declared type it does not hold, base
- * type `file` or a record outcome, template or context variable (G-R3, pending; G-R4, pending: such
- * a variable reads NULL), is the NULL `qti-null` gives, a single string's, "treated as if it is of
+ * type `file` or a record outcome or template variable (G-R3, pending; G-R4, pending: such a
+ * variable reads NULL), is the NULL `qti-null` gives, a single string's, "treated as if it is of
  * any desired base-type": the value model holds no value of that type, and an outcome set to it
- * stores its own typed NULL (`setOutcome` in `#plate/engine/evaluate.ts`). A record response's
+ * stores its own typed NULL (`setOutcome` in `#plate/engine/evaluate.ts`). A context variable read
+ * through an item ref is not read: `openPackage` marks the processing that reads it (repair9-9),
+ * and in documents opened apart the read fails {@link UnknownIdentifierError}. A record response's
  * record is not a value: only the three kinds that read a record whole read it
  * ({@link recordOrValue}).
  *
