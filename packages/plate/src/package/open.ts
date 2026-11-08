@@ -13,18 +13,23 @@
  *   `resource-type-mismatch` at the resource (T-h, refuse), which also reads, without judging, the
  *   documents of the three types M3 checks: outcome declarations, response processing and its
  *   templates;
- * - Each test's item refs resolve against the test's own path to an item resource the manifest lists
- *   (`item-ref-unresolved`), and each dotted reference in it that the test does not declare whole,
- *   a name an expression reads or an outcome rule sets, is judged by reading 48 against the items
- *   they resolve to, their variable mappings and its parts and sections: one no reading resolves,
- *   or one that an expression reads as the `duration` of an item that is not time dependent, is
- *   `undeclared-variable`, and one two readings resolve is `ambiguous-reference`; each item ref's
- *   variable mappings name an outcome its item declares as their source (`undeclared-variable`) and
- *   each its own target (`duplicate-identifier`), and its template defaults a template variable its
- *   item declares (`undeclared-variable`); a reference attribute reads through an item ref only a
- *   template or outcome variable, a `qti-correct` only a response, and a mapping expression only a
- *   response with the mapping it needs; and the test's expressions are typed through its item refs,
- *   so the item's processing rules judge what it reads there and what each template default sets
+ * - Each test reaches, through its section refs and then each reached section document's, every
+ *   section document a section resource names, each once, as if it were inline; that reach is its
+ *   own parts, sections and item refs and each reached document's. Each item ref in the reach
+ *   resolves against its own document's path to an item resource the manifest lists (a test's own
+ *   that does not is `item-ref-unresolved`), and each dotted reference in the test that it does not
+ *   declare whole, a name an expression reads or an outcome rule sets, is judged by reading 48
+ *   against the items they resolve to, their variable mappings and the reach's parts and sections:
+ *   one no reading resolves, or one that an expression reads as the `duration` of an item that is
+ *   not time dependent, is `undeclared-variable`, and one two readings resolve is
+ *   `ambiguous-reference`; each item ref's variable mappings, the test's own and a reached section
+ *   document's, name an outcome its item declares as their source (`undeclared-variable`) and each
+ *   its own target (`duplicate-identifier`), and its template defaults a template variable its item
+ *   declares (`undeclared-variable`), each refusal at its own document and given once however many
+ *   tests reach it; a reference attribute reads through an item ref only a template or outcome
+ *   variable, a `qti-correct` only a response, and a mapping expression only a response with the
+ *   mapping it needs; and the test's expressions are typed through its reach, so the item's
+ *   processing rules judge what it reads there and what each template default sets
  *   (`expression-type`);
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
@@ -378,6 +383,12 @@ const templateDefaultElements: ReadonlySet<string> = new Set(["qti-template-defa
  * QTI's namespace.
  */
 const itemRefElements: ReadonlySet<string> = new Set(["qti-assessment-item-ref"]);
+
+/**
+ * The section ref, the one element of a test or a section document that references a section
+ * document, by local name in QTI's namespace.
+ */
+const sectionRefElements: ReadonlySet<string> = new Set(["qti-assessment-section-ref"]);
 
 /**
  * The elements of a test whose identifier names a scope with a `duration`: a part and a section.
@@ -834,8 +845,9 @@ interface ItemRefVariables extends ItemVariables {
 }
 
 /**
- * What a test's dotted references resolve against: each resolved item ref's variables, and the
- * identifiers of its parts and sections.
+ * What a test's dotted references resolve against, its reach: the variables of each resolved item
+ * ref and the identifiers of the parts and sections of the test and of each section document it
+ * reaches through its section refs, as if each section document were inline.
  */
 interface ReferenceScope {
   readonly durations: ReadonlySet<string>;
@@ -1185,8 +1197,9 @@ const judgeReference = (
 };
 
 /**
- * Judge the variable mappings of a test's item refs, as pantry's import judges a `VariableMapping`
- * (`packages/pantry/src/schema/test/rules.ts`), each in document order.
+ * Judge the variable mappings of the item refs of a test or of a section document a test reaches,
+ * as pantry's import judges a `VariableMapping` (`packages/pantry/src/schema/test/rules.ts`), each
+ * in document order.
  *
  * A mapping's `source-identifier` that names no outcome variable the item ref's item declares, a
  * name it does not declare or one it declares as another kind of variable, is
@@ -1199,8 +1212,8 @@ const judgeReference = (
  * and its target. A value that is no NCName is the structure check's refusal, so it is passed
  * over.
  *
- * @param document The test's location.
- * @param visits The visits of the test's elements, in document order.
+ * @param document The document's location.
+ * @param visits The visits of the document's elements, in document order.
  * @param variablesFor The variables of the item an item ref resolves to, none when it resolves to
  *   no item the reader read.
  * @returns The refusals, in document order.
@@ -1259,8 +1272,8 @@ const judgeMappings = (
 };
 
 /**
- * What judging the template defaults of a test's item refs gives: their refusals, and the type of
- * the template variable each other one sets.
+ * What judging the template defaults of a document's item refs gives: their refusals, and the type
+ * of the template variable each other one sets.
  */
 interface TemplateDefaults {
   readonly refusals: readonly Refusal[];
@@ -1272,9 +1285,10 @@ interface TemplateDefaults {
 }
 
 /**
- * Judge the template defaults of a test's item refs, as pantry's import judges a `TemplateDefault`
- * (`packages/pantry/src/schema/test/rules.ts`), each in document order, and type the template
- * variable each sets, as pantry's `templateOf` does (`packages/pantry/src/processing/check.ts`).
+ * Judge the template defaults of the item refs of a test or of a section document a test reaches,
+ * as pantry's import judges a `TemplateDefault` (`packages/pantry/src/schema/test/rules.ts`), each
+ * in document order, and type the template variable each sets, as pantry's `templateOf` does
+ * (`packages/pantry/src/processing/check.ts`).
  *
  * A default's `template-identifier` that names no template variable the item ref's item declares, a
  * name it does not declare or one it declares as another kind of variable, is
@@ -1283,8 +1297,8 @@ interface TemplateDefaults {
  * through an item ref whose item the package holds and the reader read. A value that is no NCName,
  * or a default without the attribute, is the structure check's refusal, so it is passed over.
  *
- * @param document The test's location.
- * @param visits The visits of the test's elements, in document order.
+ * @param document The document's location.
+ * @param visits The visits of the document's elements, in document order.
  * @param variablesFor The variables of the item an item ref resolves to, none when it resolves to
  *   no item the reader read.
  * @returns The refusals, in document order, and each typed target.
@@ -1379,68 +1393,76 @@ const notHeld = (refusals: readonly Refusal[], held: readonly Refusal[]): readon
 };
 
 /**
- * What judging one test gives: each item ref's item path, keyed by the item ref's identifier, in
- * document order, and the test's refusals: the item refs', their variable mappings', their template
- * defaults', the references', then those of the test's processing that only its typed reach gives,
- * each in document order.
+ * One item ref of a test or a section document that resolves to an item resource the manifest
+ * lists: the item ref, its identifier and its item's path.
  */
-interface TestJudgement {
-  readonly refs: ReadonlyMap<string, string>;
-  readonly refusals: readonly Refusal[];
+interface ResolvedItemRef {
+  readonly element: SourceElement;
+  readonly identifier: string;
+  readonly path: string;
 }
 
 /**
- * Judge one test document of the package: each item ref resolved against the test's path to an item
- * resource the manifest lists, its variable mappings by {@link judgeMappings} and its template
- * defaults by {@link judgeTemplateDefaults}, each dotted reference by reading 48, then the test's
- * processing through its typed reach.
+ * What a test's reach is built from in one test or section document, read from its elements in
+ * document order.
+ */
+interface DocumentStructure {
+  /**
+   * The identifiers of its parts and sections, each a scope with a `duration`.
+   */
+  readonly durations: readonly string[];
+  /**
+   * Each item ref that resolves, against the document's path, to an item resource.
+   */
+  readonly itemRefs: readonly ResolvedItemRef[];
+  /**
+   * The path each of its section refs' `href` resolves to against the document's path, in document
+   * order; a section ref whose `href` names no path inside the package gives none.
+   */
+  readonly sectionRefs: readonly string[];
+  /**
+   * Each item ref that resolves to no item resource, `item-ref-unresolved` at the item ref.
+   */
+  readonly unresolved: readonly Refusal[];
+  readonly visits: readonly Visit[];
+}
+
+/**
+ * Read what a test's reach is built from in one test or section document: its parts' and sections'
+ * identifiers, its item refs, each resolved against the document's path to an item resource the
+ * manifest lists, and the paths its section refs name.
  *
  * An item ref that resolves to no listed item resource is `item-ref-unresolved` at the item ref,
  * its detail the `identifier`, the `href` and, when the `href` names a path inside the package,
- * that `path`. A reference the test declares whole, as an outcome or context variable (reading 37
- * lets an identifier hold `.`), or holds as a built-in is never split, and a name with no `.` is
- * the test's own check's; every other is judged by {@link judgeReference}. An item ref resolves a
- * reading only through an item whose document the package holds and the reader read, so a
- * reference through any other names nothing, as pantry's reach holds no such item ref.
+ * that `path`. Each `href` is collapsed and resolved by {@link resolveReference}.
  *
- * The test's expressions are then judged by the item's processing rules (`processingRefusals` in
- * `#plate/validate/rules.ts`: P20 to P24), with each prefixed read typed by the variable its one
- * resolving reading reads, as pantry's `typePrefixed` types it, and a name no reading or two
- * readings resolve typed unknown, so it keeps its reading's refusal alone; and with each template
- * default judged against the template variable it sets. Only what that typed run adds is reported
- * (Admission A5): the same rules over the test alone, every prefixed read unknown, are the test
- * document's own verdict's, and a refusal the references already gave is not given again.
- *
- * @param source The test's source.
- * @param testPath The test's path.
+ * @param source The document's source.
+ * @param base The document's path, which its `href`s resolve against.
  * @param itemPaths The path of every item resource's document.
- * @param documents The package's documents.
- * @returns The item refs' item paths and the refusals.
+ * @returns What it holds.
  */
-const judgeTest = (
+const structureIn = (
   source: SourceDocument,
-  testPath: string,
+  base: string,
   itemPaths: ReadonlySet<string>,
-  documents: ReadonlyMap<string, Document>,
-): TestJudgement => {
+): DocumentStructure => {
   const visits = [...walk(source)];
-  const refs = new Map<string, string>();
-  const resolvedRefs = new Map<SourceElement, string>();
-  const mappings = new Map<string, readonly (readonly [source: string, target: string])[]>();
+  const durations: string[] = [];
+  const itemRefs: ResolvedItemRef[] = [];
+  const sectionRefs: string[] = [];
   const unresolved: Refusal[] = [];
-  const durations = new Set<string>();
   for (const { element, path } of visits) {
     const identifier = Option.getOrUndefined(identifierOf(element));
     const href = Option.getOrUndefined(attributeOf(element, "href"));
     if (identifier !== undefined && isQti(element, durationScopes)) {
-      durations.add(identifier);
+      durations.push(identifier);
+    } else if (href !== undefined && isQti(element, sectionRefElements)) {
+      sectionRefs.push(...Option.toArray(resolveReference(base, collapse(href))));
     } else if (identifier !== undefined && href !== undefined && isQti(element, itemRefElements)) {
       const written = collapse(href);
-      const resolved = resolveReference(testPath, written);
+      const resolved = resolveReference(base, written);
       if (Option.isSome(resolved) && itemPaths.has(resolved.value)) {
-        refs.set(identifier, resolved.value);
-        resolvedRefs.set(element, resolved.value);
-        mappings.set(identifier, mappingsOf(element));
+        itemRefs.push({ element, identifier, path: resolved.value });
       } else {
         const facts = { href: written, identifier };
         unresolved.push(
@@ -1458,13 +1480,175 @@ const judgeTest = (
     }
   }
 
+  return { durations, itemRefs, sectionRefs, unresolved, visits };
+};
+
+/**
+ * One section document a test reaches through a section ref, with what it holds.
+ */
+interface ReachedSection {
+  readonly path: string;
+  readonly source: SourceDocument;
+  readonly structure: DocumentStructure;
+}
+
+/**
+ * Give the section document at a path, when a section resource names it and the reader read it
+ * with the root `qti-assessment-section`.
+ *
+ * @param path The document's path.
+ * @param sectionPaths The path of every section resource's document.
+ * @param documents The package's documents.
+ * @returns Its source, none otherwise.
+ */
+const sectionDocumentAt = (
+  path: string,
+  sectionPaths: ReadonlySet<string>,
+  documents: ReadonlyMap<string, Document>,
+): Option.Option<SourceDocument> => {
+  const source = sectionPaths.has(path) ? documents.get(path)?.source : undefined;
+
+  return source !== undefined &&
+    Result.isSuccess(source) &&
+    source.success.root.namespace === qtiNamespace &&
+    source.success.root.local === "qti-assessment-section"
+    ? Option.some(source.success)
+    : Option.none();
+};
+
+/**
+ * Give the section documents a test reaches, as pantry's `reachOf` walks them
+ * (`packages/pantry/src/import/reach.ts`): a section ref "behaves as if its section document were
+ * inline", so a test reaches, through each section ref in its own document and then in each
+ * section document it reaches, depth first in document order, the section document the ref names
+ * ({@link sectionDocumentAt}).
+ *
+ * Each document is reached once: a ref to one already reached adds nothing, so two refs to one
+ * document walk it once and a cycle of refs ends where it meets a reached document. A ref whose
+ * `href` names no section document the reader read adds nothing. Pantry refuses both, as
+ * `section-ref-cycle` and `section-ref-target`, which plate has no rule for (2b.9 Q2).
+ *
+ * @param test What the test's own document holds.
+ * @param sectionPaths The path of every section resource's document.
+ * @param itemPaths The path of every item resource's document.
+ * @param documents The package's documents.
+ * @returns The reached section documents, in the order the walk first meets each.
+ */
+const sectionsReached = (
+  test: DocumentStructure,
+  sectionPaths: ReadonlySet<string>,
+  itemPaths: ReadonlySet<string>,
+  documents: ReadonlyMap<string, Document>,
+): readonly ReachedSection[] => {
+  const reached: ReachedSection[] = [];
+  const seen = new Set<string>();
+  const follow = (sectionRefs: readonly string[]): void => {
+    for (const path of sectionRefs) {
+      const source = sectionDocumentAt(path, sectionPaths, documents);
+      if (Option.isSome(source) && !seen.has(path)) {
+        seen.add(path);
+
+        const structure = structureIn(source.value, path, itemPaths);
+        reached.push({ path, source: source.value, structure });
+        follow(structure.sectionRefs);
+      }
+    }
+  };
+  follow(test.sectionRefs);
+
+  return reached;
+};
+
+/**
+ * Give the variables of the item each of some resolved item refs names.
+ *
+ * @param itemRefs The resolved item refs.
+ * @param documents The package's documents.
+ * @returns What gives an item ref's item's variables, none for an item ref not among them or one
+ *   whose item the reader did not read.
+ */
+const variablesThrough = (
+  itemRefs: readonly ResolvedItemRef[],
+  documents: ReadonlyMap<string, Document>,
+): ((itemRef: SourceElement) => Option.Option<ItemVariables>) => {
+  const paths = new Map(itemRefs.map((itemRef) => [itemRef.element, itemRef.path] as const));
+
+  return (itemRef) =>
+    Option.flatMap(Option.fromUndefinedOr(paths.get(itemRef)), (path) =>
+      variablesOf(documents.get(path)),
+    );
+};
+
+/**
+ * What judging one test gives: each of its own item refs' item path, keyed by the item ref's
+ * identifier, in document order; the section documents it reaches; and the test's refusals: the
+ * item refs', their variable mappings', their template defaults', the references', then those of
+ * the test's processing that only its typed reach gives, each in document order.
+ */
+interface TestJudgement {
+  readonly reached: readonly ReachedSection[];
+  readonly refs: ReadonlyMap<string, string>;
+  readonly refusals: readonly Refusal[];
+}
+
+/**
+ * Judge one test document of the package: each item ref resolved against the test's path to an item
+ * resource the manifest lists ({@link structureIn}), its variable mappings by {@link judgeMappings}
+ * and its template defaults by {@link judgeTemplateDefaults}, each dotted reference by reading 48,
+ * then the test's processing through its typed reach.
+ *
+ * The test's reach is its own parts, sections and item refs and those of each section document it
+ * reaches through its section refs ({@link sectionsReached}), each item ref of a section document
+ * resolved against that document's path. The test's dotted references resolve through all of them,
+ * an item ref a reached document holds passed over when one the test or a document reached before
+ * holds has its identifier. A reference the test declares whole, as an outcome or context variable
+ * (reading 37 lets an identifier hold `.`), or holds as a built-in is never split, and a name with
+ * no `.` is the test's own check's; every other is judged by {@link judgeReference}. An item ref
+ * resolves a reading only through an item whose document the package holds and the reader read, so
+ * a reference through any other names nothing, as pantry's reach holds no such item ref. Only the
+ * test's own item refs are its items (`refs`): a session delivers no section document's item, and
+ * the test model marks a processing that reads through one.
+ *
+ * The test's expressions are then judged by the item's processing rules (`processingRefusals` in
+ * `#plate/validate/rules.ts`: P20 to P24), with each prefixed read typed by the variable its one
+ * resolving reading reads, as pantry's `typePrefixed` types it, and a name no reading or two
+ * readings resolve typed unknown, so it keeps its reading's refusal alone; and with each template
+ * default judged against the template variable it sets. Only what that typed run adds is reported
+ * (Admission A5): the same rules over the test alone, every prefixed read unknown, are the test
+ * document's own verdict's, and a refusal the references already gave is not given again. A
+ * reached section document's item refs are judged once for the package ({@link judgeReached}).
+ *
+ * @param source The test's source.
+ * @param testPath The test's path.
+ * @param itemPaths The path of every item resource's document.
+ * @param sectionPaths The path of every section resource's document.
+ * @param documents The package's documents.
+ * @returns Its own item refs' item paths, the section documents it reaches and the refusals.
+ */
+const judgeTest = (
+  source: SourceDocument,
+  testPath: string,
+  itemPaths: ReadonlySet<string>,
+  sectionPaths: ReadonlySet<string>,
+  documents: ReadonlyMap<string, Document>,
+): TestJudgement => {
+  const own = structureIn(source, testPath, itemPaths);
+  const reached = sectionsReached(own, sectionPaths, itemPaths, documents);
+  const refs = new Map(own.itemRefs.map((itemRef) => [itemRef.identifier, itemRef] as const));
+  const reach = new Map(refs);
+  for (const itemRef of reached.flatMap((section) => section.structure.itemRefs)) {
+    if (!reach.has(itemRef.identifier)) {
+      reach.set(itemRef.identifier, itemRef);
+    }
+  }
+
   const items = new Map<string, ItemRefVariables>();
-  for (const [identifier, itemPath] of refs) {
-    for (const variables of Option.toArray(variablesOf(documents.get(itemPath)))) {
+  for (const [identifier, itemRef] of reach) {
+    for (const variables of Option.toArray(variablesOf(documents.get(itemRef.path)))) {
       items.set(identifier, {
         ...variables,
         mapped: new Map(
-          (mappings.get(identifier) ?? []).flatMap(([from, to]) =>
+          mappingsOf(itemRef.element).flatMap(([from, to]) =>
             Option.toArray(
               Option.map(
                 Option.fromUndefinedOr(variables.declarations.get(from)),
@@ -1477,19 +1661,16 @@ const judgeTest = (
     }
   }
 
-  /**
-   * Give the variables of the item an item ref resolves to.
-   *
-   * @param itemRef The item ref.
-   * @returns Its item's variables, none when it resolves to no item the reader read.
-   */
-  const variablesFor = (itemRef: SourceElement): Option.Option<ItemVariables> =>
-    Option.flatMap(Option.fromUndefinedOr(resolvedRefs.get(itemRef)), (itemPath) =>
-      variablesOf(documents.get(itemPath)),
-    );
-  const mapped = judgeMappings(source.location, visits, variablesFor);
-  const defaults = judgeTemplateDefaults(source.location, visits, variablesFor);
-  const scope: ReferenceScope = { durations, items };
+  const variablesFor = variablesThrough(own.itemRefs, documents);
+  const mapped = judgeMappings(source.location, own.visits, variablesFor);
+  const defaults = judgeTemplateDefaults(source.location, own.visits, variablesFor);
+  const scope: ReferenceScope = {
+    durations: new Set([
+      ...own.durations,
+      ...reached.flatMap((section) => section.structure.durations),
+    ]),
+    items,
+  };
   const whole: ReadonlySet<string> = new Set([
     ...testBuiltIns,
     ...source.root.children.flatMap((child) =>
@@ -1499,7 +1680,7 @@ const judgeTest = (
     ),
   ]);
   const held = (name: string): boolean => whole.has(name) || readingsOf(scope, name).length > 0;
-  const references = visits.flatMap((visit) =>
+  const references = own.visits.flatMap((visit) =>
     referencesOf(visit.element, held).flatMap((reference) =>
       whole.has(reference.identifier) || !reference.identifier.includes(".")
         ? []
@@ -1526,9 +1707,36 @@ const judgeTest = (
   );
 
   return {
-    refs,
-    refusals: [...unresolved, ...mapped, ...defaults.refusals, ...references, ...processing],
+    reached,
+    refs: new Map([...refs].map(([identifier, itemRef]) => [identifier, itemRef.path] as const)),
+    refusals: [...own.unresolved, ...mapped, ...defaults.refusals, ...references, ...processing],
   };
+};
+
+/**
+ * Judge the item refs of a section document a test reaches, once for the package however many tests
+ * reach it: their variable mappings by {@link judgeMappings} and their template defaults by
+ * {@link judgeTemplateDefaults}, against the item each resolves to from the section document's path,
+ * each refusal at the section document, as pantry contains a mapping's source and a default's
+ * target in its item ref's item's declarations (`packages/pantry/src/schema/test/rules.ts`). A
+ * section document no test reaches is judged by its own verdict alone.
+ *
+ * @param section The reached section document.
+ * @param documents The package's documents.
+ * @returns The refusals, the mappings' then the template defaults', each in document order.
+ */
+const judgeReached = (
+  section: ReachedSection,
+  documents: ReadonlyMap<string, Document>,
+): readonly Refusal[] => {
+  const { location } = section.source;
+  const { itemRefs, visits } = section.structure;
+  const variablesFor = variablesThrough(itemRefs, documents);
+
+  return [
+    ...judgeMappings(location, visits, variablesFor),
+    ...judgeTemplateDefaults(location, visits, variablesFor).refusals,
+  ];
 };
 
 /**
@@ -1683,7 +1891,7 @@ const contentsOf = (
 
 /**
  * Judge a package whose manifest is read: the file rules, the documents, the roots, the LOM
- * metadata and the tests, then the verdict over them.
+ * metadata, the tests and the section documents they reach, then the verdict over them.
  *
  * @param manifest The manifest.
  * @param lom Each resource's LOM generals, keyed by its location.
@@ -1702,8 +1910,10 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
   const fileRules = checkFiles(manifest, files, location);
   const documents = yield* readDocuments(manifest, held, location);
   const itemPaths = new Set(pathsOfType(manifest, "imsqti_item_xmlv3p0"));
+  const sectionPaths = new Set(pathsOfType(manifest, "imsqti_section_xmlv3p0"));
   const tests = new Map<string, ReadonlyMap<string, string>>();
   const testRefusals: Refusal[] = [];
+  const reached = new Map<string, ReachedSection>();
   for (const path of pathsOfType(manifest, "imsqti_test_xmlv3p0")) {
     const source = documents.get(path)?.source;
     if (
@@ -1712,11 +1922,20 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
       source.success.root.namespace === qtiNamespace &&
       source.success.root.local === "qti-assessment-test"
     ) {
-      const judged = judgeTest(source.success, path, itemPaths, documents);
+      const judged = judgeTest(source.success, path, itemPaths, sectionPaths, documents);
       tests.set(path, judged.refs);
       testRefusals.push(...judged.refusals);
+      for (const section of judged.reached) {
+        if (!reached.has(section.path)) {
+          reached.set(section.path, section);
+        }
+      }
     }
   }
+
+  const sectionRefusals = [...reached.values()].flatMap((section) =>
+    judgeReached(section, documents),
+  );
 
   const verdicts = [...documents.values()].flatMap((document) => Option.toArray(document.verdict));
   const resources = manifest.resources.map((resource): PackageResource => {
@@ -1736,6 +1955,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
     ...checkRoots(manifest, documents, fileLocation(location, manifestFile)),
     ...checkLom(manifest, lom, documents, fileLocation(location, manifestFile)),
     ...testRefusals,
+    ...sectionRefusals,
     ...verdicts.flatMap((verdict) => (verdict.verdict === "refused" ? verdict.refusals : [])),
   ];
   if (first !== undefined) {
