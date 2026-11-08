@@ -18,8 +18,9 @@ import { tables } from "#plate/validate/tables.ts";
 import { acceptedItem, check } from "#plate/validate/verdict.ts";
 
 /**
- * The test the sessions below belong to, as `decodeSession` checks them against it: one part,
- * `part-1`, whose section holds the one item ref `item-1`, and no outcome declaration.
+ * The test the sessions below belong to, as `decodeSession` checks them against it: one linear
+ * part, `part-1`, whose section holds the one item ref `item-1`, which gives no template default,
+ * and no outcome declaration.
  */
 const owner: SessionTest = {
   test: {
@@ -28,8 +29,14 @@ const owner: SessionTest = {
     outcomes: new Map(),
     parts: [
       {
-        children: [{ children: [{ identifier: "item-1", kind: "item-ref" }], kind: "section" }],
+        children: [
+          {
+            children: [{ identifier: "item-1", kind: "item-ref", templateDefaults: [] }],
+            kind: "section",
+          },
+        ],
         identifier: "part-1",
+        navigation: "linear",
       },
     ],
   },

@@ -14,7 +14,9 @@ import { Array as Arr, Data, Option, Result, Schema, SchemaTransformation } from
 import { ItemRecordSchema, storedVersion, versionIssue, versionOf } from "#plate/codec/record.ts";
 import { ValueSchema } from "#plate/codec/values.ts";
 import type { OutcomeDeclaration } from "#plate/model/item.ts";
-import type { SessionPart, TestSession } from "#plate/session/session.ts";
+import type { TemplateDefault } from "#plate/model/test.ts";
+import type { SessionItem, SessionPart, TestSession } from "#plate/session/session.ts";
+import type { NavigationMode } from "#plate/vocabulary.ts";
 
 /**
  * Values by identifier: an item's saved responses, first outcomes or template defaults, or the
@@ -103,6 +105,11 @@ interface SessionItemRef {
    */
   readonly identifier: string;
   readonly kind: "item-ref";
+  /**
+   * The template defaults the item ref applies, as far as the session reads them: the template
+   * variable each sets. A session item of a started nonlinear part holds a value of exactly these.
+   */
+  readonly templateDefaults: readonly Pick<TemplateDefault, "templateIdentifier">[];
 }
 
 /**
@@ -116,8 +123,8 @@ interface SessionSection {
 
 /**
  * The test a stored session must belong to: its identifier, its document's location, its parts
- * with the item refs each holds, and its outcome declarations, as the accepted test's model gives
- * them, so an `AcceptedTest` is one.
+ * with each one's navigation mode and the item refs it holds, each with its template defaults, and
+ * its outcome declarations, as the accepted test's model gives them, so an `AcceptedTest` is one.
  */
 export interface SessionTest {
   readonly test: {
@@ -136,11 +143,13 @@ export interface SessionTest {
     readonly outcomes: ReadonlyMap<string, Pick<OutcomeDeclaration, "baseType" | "cardinality">>;
     /**
      * The test's parts in order, each with its sections, whose item refs are the session's items
-     * in document order.
+     * in document order, and its navigation mode: a nonlinear part's items hold their template
+     * defaults from the part's start.
      */
     readonly parts: readonly {
       readonly children: readonly SessionSection[];
       readonly identifier: string;
+      readonly navigation: NavigationMode;
     }[];
   };
 }
@@ -270,16 +279,16 @@ const belonging = (
 };
 
 /**
- * List the identifiers of the item refs among some section children, nested sections' included,
- * in document order, as `itemRefsIn` of `#plate/model/item-refs.ts` walks the test's model.
+ * List the item refs among some section children, nested sections' included, in document order,
+ * as `itemRefsIn` of `#plate/model/item-refs.ts` walks the test's model.
  *
  * @param children The children.
- * @returns Their item refs' identifiers.
+ * @returns Their item refs.
  */
-const refsIn = (children: readonly (SessionItemRef | SessionSection)[]): readonly string[] =>
-  children.flatMap((child) =>
-    child.kind === "item-ref" ? [child.identifier] : refsIn(child.children),
-  );
+const refsIn = (
+  children: readonly (SessionItemRef | SessionSection)[],
+): readonly SessionItemRef[] =>
+  children.flatMap((child) => (child.kind === "item-ref" ? [child] : refsIn(child.children)));
 
 /**
  * Write a count of things, the noun in the plural unless the count is 1.
@@ -305,7 +314,9 @@ type SessionRule = (session: TestSession, test: SessionTest) => Option.Option<st
  * neither selects nor reorders them, it marks a selection or an ordering.
  */
 const itemsRule: SessionRule = (session, test) => {
-  const refs = test.test.parts.flatMap((part) => refsIn(part.children));
+  const refs = test.test.parts.flatMap((part) =>
+    refsIn(part.children).map((ref) => ref.identifier),
+  );
   if (session.items.length !== refs.length) {
     return Option.some(
       `items holds ${counted(session.items.length, "item")}, where the test has ${counted(refs.length, "item ref")}, one item each`,
@@ -476,6 +487,87 @@ const positionRule: SessionRule = (session) =>
       );
 
 /**
+ * Write some identifiers for a message, each in quotes, separated by commas.
+ *
+ * @param identifiers The identifiers.
+ * @returns The list, such as `"T", "U"`.
+ */
+const quoted = (identifiers: readonly string[]): string =>
+  identifiers.map((identifier) => JSON.stringify(identifier)).join(", ");
+
+/**
+ * Judge one session item's stored template defaults against its item ref's, when its part is
+ * nonlinear and has started: the item holds a value of exactly the template variables the ref's
+ * defaults set, and holds none when they set none.
+ *
+ * @param item The session item.
+ * @param index Its index among the session's items.
+ * @param ref Its item ref.
+ * @returns What does not fit, or none when the item's keys are the ref's.
+ */
+const defaultsIssue = (
+  item: SessionItem,
+  index: number,
+  ref: SessionItemRef,
+): Option.Option<string> => {
+  const path = `items[${String(index)}].templateDefaults`;
+  const wanted = [...new Set(ref.templateDefaults.map((each) => each.templateIdentifier))];
+  const gives =
+    wanted.length === 0
+      ? `its item ref ${JSON.stringify(ref.identifier)}, in a nonlinear part that has started, gives no template default`
+      : `its item ref ${JSON.stringify(ref.identifier)}, in a nonlinear part that has started, gives defaults of exactly ${quoted(wanted)}`;
+
+  return Option.match(item.templateDefaults, {
+    onNone: () =>
+      wanted.length === 0 ? Option.none() : Option.some(`${path} is absent, where ${gives}`),
+    onSome: (stored) => {
+      const missing = Arr.findFirst(wanted, (identifier) =>
+        Object.hasOwn(stored, identifier)
+          ? Option.none()
+          : Option.some(`${path} holds no value of ${JSON.stringify(identifier)}, where ${gives}`),
+      );
+      const extra = Arr.findFirst(Object.keys(stored), (identifier) =>
+        wanted.includes(identifier)
+          ? Option.none()
+          : Option.some(`${path} holds ${JSON.stringify(identifier)}, where ${gives}`),
+      );
+
+      return Option.orElse(
+        Option.orElse(missing, () => extra),
+        () =>
+          wanted.length === 0
+            ? Option.some(`${path} is present and empty, where ${gives}, so the item holds none`)
+            : Option.none(),
+      );
+    },
+  });
+};
+
+/**
+ * Each item of a nonlinear part that has started, current or ended, holds the template defaults
+ * its item ref gives by exactly their template identifiers, and none when the ref gives none: the
+ * part evaluated them at its start, so a key missing or extra is not one the renderer wrote. An
+ * item of a pending part, which has evaluated none, or of a linear part, which evaluates them when
+ * the candidate meets the item, is not judged. The values are `present`'s to check when it shows
+ * the item. {@link itemsRule} has already matched the items to the test's item refs.
+ */
+const templateDefaultsRule: SessionRule = (session, test) => {
+  const places = test.test.parts.flatMap((part, partIndex) => {
+    const judged =
+      part.navigation === "nonlinear" &&
+      Option.exists(Arr.get(session.parts, partIndex), ({ status }) => status !== "pending");
+
+    return refsIn(part.children).map((ref) => ({ judged, ref }));
+  });
+
+  return Arr.findFirst(session.items, (item, index) =>
+    Option.flatMap(Arr.get(places, index), ({ judged, ref }) =>
+      judged ? defaultsIssue(item, index, ref) : Option.none(),
+    ),
+  );
+};
+
+/**
  * The session holds a value of exactly the test's declared outcomes, each of its declared base type
  * and cardinality.
  */
@@ -523,6 +615,7 @@ const sessionRules: readonly SessionRule[] = [
   instanceRule,
   datesRule,
   positionRule,
+  templateDefaultsRule,
   outcomesRule,
 ];
 
@@ -557,9 +650,13 @@ const fitting = (
  * parts are the test's parts in order, ended, then at most one current, then pending, and none
  * current once the session is closed; `started`, `updated` and each item's `datestamp` are ISO
  * 8601 UTC instants, `updated` not before `started`; `position` is the index of one of its items,
- * or 0 when it has none; `outcomes` holds a value of exactly the test's declared outcomes, each of
- * its declared base type and cardinality; and `outcomeRuns` is a whole number of at least 0. An
- * item's template defaults are not checked here: `SessionTest` holds no item's declarations.
+ * or 0 when it has none; each item of a nonlinear part that has started, current or ended, holds
+ * template defaults keyed by exactly the template variables its item ref's defaults set, and none
+ * when they set none, where an item of a pending or a linear part is not judged; `outcomes` holds a
+ * value of exactly the test's declared outcomes, each of its declared base type and cardinality;
+ * and `outcomeRuns` is a whole number of at least 0. The template defaults' values are checked by
+ * `present` when it shows the item, against the item's declarations, which `SessionTest` does not
+ * hold.
  *
  * @param input The stored session, as the host returned it: the {@link StoredTestSession}
  *   {@link encodeSession} wrote, after any JSON round trip. A session that names no version, or
