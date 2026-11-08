@@ -8,7 +8,10 @@
  * the item ref's `weight-identifier`; a `qti-correct`, `qti-default`, `qti-map-response` or
  * `qti-map-response-point` of a prefixed name reads the item's declaration and record through the
  * same item ref (`prefixedRead` in `#plate/engine/refs.ts`), and a `qti-correct` or `qti-default`
- * of a variable of base type `file` or cardinality `record` reads its NULL.
+ * of a variable of base type `file`, or of a record outcome or template variable, reads its NULL.
+ * An item's record response is no value: a prefixed name of one, read as a value by any of these,
+ * fails, and `qti-field-value`, `qti-is-null` and `qti-match` read its record, its declared correct
+ * response or its declared default instead (`recordOrValue` in `#plate/engine/refs.ts`).
  *
  * It value-imports only engine leaves, `#plate/engine/scope.ts` among them,
  * `#plate/model/values.ts` and `effect`'s `Option`, `Array` and `Result`, and reads the
@@ -98,10 +101,11 @@ interface HeldResponse {
 /**
  * What a `qti-correct`, a `qti-map-response` or a `qti-map-response-point` names: a
  * {@link HeldResponse}; or, in a test's run, `unheld`, a variable a prefixed name reads through its
- * item ref whose declared type the value model does not hold, base type `file` or cardinality
- * `record`, with the NULL a read of it gives (`prefixedRead` in `#plate/engine/refs.ts`). The
- * engine holds no declaration of such a variable, so no correct response, mapping or area mapping
- * of it.
+ * item ref whose declared type the value model does not hold, base type `file`, a record response
+ * with a field of it, or a record outcome or template variable, with the NULL a read of it gives
+ * (`prefixedRead` in `#plate/engine/refs.ts`). The engine holds no declaration of such a variable,
+ * so no correct response, mapping or area mapping of it. A prefixed name of an item's record
+ * response is neither: its read fails before ({@link namedResponse}).
  */
 type NamedResponse = HeldResponse | { readonly kind: "unheld"; readonly value: Value };
 
@@ -115,8 +119,10 @@ type NamedResponse = HeldResponse | { readonly kind: "unheld"; readonly value: V
  * correct response its record's template processing set, and its value in the record. The prefixed
  * read takes the response's value from the record first, so a record that lacks it is the
  * record's gap before the declaration is judged. A prefixed name whose one reading names a
- * variable of base type `file` or cardinality `record`, a mapping target whose source is one
- * included, is `unheld`, with the NULL its read gives (G-R3, pending: such a variable reads NULL).
+ * variable of base type `file`, or a record outcome or template variable, a mapping target whose
+ * source is one included, is `unheld`, with the NULL its read gives (G-R3, pending; G-R4, pending:
+ * such a variable reads NULL). One that names an item's record response reads a record, no value,
+ * and fails as `prefixedRead` fails it.
  *
  * @param item The declarations holder: an item, or a test's outcome declarations, which declare no
  *   response.
@@ -125,13 +131,15 @@ type NamedResponse = HeldResponse | { readonly kind: "unheld"; readonly value: V
  * @returns The response, held or unheld; or an {@link UnknownIdentifierError}: with holder `item`
  *   when the holder, or the item a prefixed name reads through, declares no response by that name
  *   and no variable of a type the value model does not hold, or the one `prefixedRead` gives, with
- *   holder `record`, when no item ref resolves the name or the item's record holds no value of it.
+ *   holder `record`, when no item ref resolves the name or the item's record holds no value of it;
+ *   or the {@link RecordOperandError} `prefixedRead` gives when the name reads an item's record
+ *   response.
  */
 const namedResponse = (
   item: Declarations,
   variables: Variables,
   identifier: string,
-): Result.Result<NamedResponse, UnknownIdentifierError> => {
+): Result.Result<NamedResponse, RecordOperandError | UnknownIdentifierError> => {
   if (item.responses.has(identifier) || variables.test === undefined) {
     return Result.map(responseOf(item, identifier), (declaration) => ({
       correct: own(variables.correct, identifier),
@@ -144,7 +152,7 @@ const namedResponse = (
 
   return Result.flatMap(
     prefixedRead(variables.test, identifier),
-    (read): Result.Result<NamedResponse, UnknownIdentifierError> => {
+    (read): Result.Result<NamedResponse, RecordOperandError | UnknownIdentifierError> => {
       if (read.named.kind === "unheld") {
         return Result.succeed({ kind: "unheld", value: read.value });
       }
@@ -170,20 +178,21 @@ const namedResponse = (
 /**
  * Find the response a `qti-map-response` or a `qti-map-response-point` maps ({@link
  * namedResponse}), which must be held: the engine holds no mapping or area mapping of a variable of
- * base type `file` or cardinality `record`, so a prefixed name that reads one fails as a name of no
- * response does.
+ * base type `file` or cardinality `record`, so a prefixed name that reads an unheld one fails as a
+ * name of no response does, and one that reads an item's record response fails as a value read of
+ * it does.
  *
  * @param item The declarations holder.
  * @param variables The variables of the run.
  * @param identifier The response's identifier, prefixed in a test's run.
- * @returns The held response; or an {@link UnknownIdentifierError}: with holder `item` when the
- *   name reads an unheld variable, or the one {@link namedResponse} gives.
+ * @returns The held response; or an {@link UnknownIdentifierError} with holder `item` when the name
+ *   reads an unheld variable; or the failure {@link namedResponse} gives.
  */
 const heldResponse = (
   item: Declarations,
   variables: Variables,
   identifier: string,
-): Result.Result<HeldResponse, UnknownIdentifierError> =>
+): Result.Result<HeldResponse, RecordOperandError | UnknownIdentifierError> =>
   Result.flatMap(namedResponse(item, variables, identifier), (named) =>
     named.kind === "held"
       ? Result.succeed(named)
@@ -332,14 +341,15 @@ const clamped = (
  *   modelled response by that name, an {@link UnmappedResponseError} when its declaration has no
  *   mapping, or an {@link UnknownIdentifierError} when the variables hold no value of it, checked
  *   in that order ({@link namedResponse} reads a prefixed response's value first). A prefixed name
- *   of a `file` or `record` variable is a name of no modelled response.
+ *   of a `file` variable or a record outcome or template variable is a name of no modelled
+ *   response; one of an item's record response fails {@link RecordOperandError}.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
  */
 const mapResponse = (
   item: Declarations,
   variables: Variables,
   identifier: string,
-): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> =>
+): Result.Result<Value, RecordOperandError | UnknownIdentifierError | UnmappedResponseError> =>
   Result.gen(function* mapOneResponse() {
     const named = yield* heldResponse(item, variables, identifier);
     const mapping = yield* Result.fromOption(
@@ -430,14 +440,15 @@ const areaSum = (mapping: AreaMapping, points: readonly Single[]): number => {
  *   modelled response by that name, an {@link UnmappedResponseError} when its declaration has no
  *   area mapping, or an {@link UnknownIdentifierError} when the variables hold no value of it,
  *   checked in that order ({@link namedResponse} reads a prefixed response's value first). A
- *   prefixed name of a `file` or `record` variable is a name of no modelled response.
+ *   prefixed name of a `file` variable or a record outcome or template variable is a name of no
+ *   modelled response; one of an item's record response fails {@link RecordOperandError}.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
  */
 const mapResponsePoint = (
   item: Declarations,
   variables: Variables,
   identifier: string,
-): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> =>
+): Result.Result<Value, RecordOperandError | UnknownIdentifierError | UnmappedResponseError> =>
   Result.gen(function* mapOnePointResponse() {
     const named = yield* heldResponse(item, variables, identifier);
     const mapping = yield* Result.fromOption(
@@ -509,8 +520,9 @@ const weighted = (value: Value, weight: number): Value =>
  *
  * @param expression The `qti-variable`.
  * @param scope The holder and the variables of the run.
- * @returns The variable's value, or an {@link UnknownIdentifierError} when the variables hold no
- *   value of it.
+ * @returns The variable's value; or the {@link RecordOperandError} {@link variableRead} gives for a
+ *   record response, the run's own or an item's through its item ref; or an
+ *   {@link UnknownIdentifierError} when the variables hold no value of it.
  */
 const evaluateVariable: Evaluator<"variable"> = (expression, scope) =>
   Result.map(variableRead(scope.variables, expression.identifier), (read) =>
@@ -532,15 +544,18 @@ const evaluateVariable: Evaluator<"variable"> = (expression, scope) =>
  * ({@link namedResponse}; 0.14 decision 7): the one its record's template processing set, else
  * its declaration's, else NULL of its declared type; `ITEMREF.N.VAR` with `N` other than 1 names
  * an occurrence that does not exist and reads NULL of the response's type (G-R3, pending). A
- * prefixed name of a response of base type `file` or cardinality `record`, which the value model
- * holds no value of, reads the NULL `qti-variable` reads of it (G-R3, pending: such a variable
- * reads NULL).
+ * prefixed name of a response of base type `file`, or of a record response with a field of it,
+ * which the value model holds no value of, reads the NULL `qti-variable` reads of it (G-R3,
+ * pending: such a variable reads NULL). A prefixed name of an item's record response reads a
+ * record, no value, so its `qti-correct` read as a value fails; as the operand of
+ * `qti-field-value`, `qti-is-null` or `qti-match` it reads the item's declared correct response
+ * (`recordOrValue` in `#plate/engine/refs.ts`), never through here.
  *
  * @param expression The `qti-correct`.
  * @param scope The holder, whose declaration gives the correct response, and the variables, whose
  *   override comes first.
- * @returns The correct response or the NULL, or the {@link UnknownIdentifierError}
- *   {@link namedResponse} gives.
+ * @returns The correct response or the NULL, or the {@link RecordOperandError} or
+ *   {@link UnknownIdentifierError} {@link namedResponse} gives.
  */
 const evaluateCorrect: Evaluator<"correct"> = (expression, scope) =>
   Result.map(namedResponse(scope.item, scope.variables, expression.identifier), (named) => {
@@ -592,8 +607,8 @@ const evaluateMapResponsePoint: Evaluator<"map-response-point"> = (expression, s
  * Find the declaration an item makes of the variable a prefixed name names in it.
  *
  * @param read The prefixed name, read through its item ref.
- * @returns The response, outcome or template declaration; none for an item-session built-in and
- *   for a declaration of a type the value model does not hold.
+ * @returns The response, outcome or template declaration; none for an item-session built-in, for
+ *   a record response and for a declaration of a type the value model does not hold.
  */
 const prefixedDeclaration = (
   read: PrefixedName,
@@ -611,6 +626,7 @@ const prefixedDeclaration = (
       return declarations.templates.get(identifier);
     }
     case "built-in":
+    case "record":
     case "unheld": {
       return undefined;
     }
@@ -628,8 +644,11 @@ const prefixedDeclaration = (
  * An item-session built-in (`numAttempts`, `completionStatus`) has no declaration and so no
  * declared default: it gives NULL of its own type. `ITEMREF.N.VAR` with `N` other than 1 names an
  * occurrence that does not exist and gives NULL of the variable's type (G-R3, pending). A variable
- * of base type `file` or cardinality `record`, whose default the item model does not hold, gives
- * the NULL `qti-variable` reads of it (G-R3, pending: such a variable reads NULL).
+ * of base type `file`, or a record outcome or template variable, whose default the item model does
+ * not hold, gives the NULL `qti-variable` reads of it (G-R3, pending: such a variable reads NULL).
+ * An item's record response never reaches here: `prefixedRead` fails its value read first, and
+ * `qti-field-value`, `qti-is-null` and `qti-match` read its declared default
+ * (`recordOrValue` in `#plate/engine/refs.ts`).
  *
  * @param read The prefixed name, read through its item ref.
  * @returns The default or the NULL; none only when the item's declarations hold no declaration of
@@ -682,8 +701,10 @@ const prefixedDefault = (read: PrefixedName): Option.Option<Value> => {
  * NULL of the built-in's own type ({@link builtInType}), a single integer, a single identifier or
  * a single duration, whatever the attempt holds of it and whether or not the test's scope holds a
  * time. In a test's run a prefixed name reads the default of the item variable it names through its
- * item ref ({@link prefixedDefault}), a variable of base type `file` or cardinality `record` its
- * NULL.
+ * item ref ({@link prefixedDefault}), a variable of base type `file` or a record outcome or
+ * template variable its NULL; a prefixed name of an item's record response reads a record, no
+ * value, and fails, while `qti-field-value`, `qti-is-null` and `qti-match` read its declared
+ * default (`recordOrValue` in `#plate/engine/refs.ts`).
  *
  * @param expression The `qti-default`.
  * @param scope The holder, whose declarations give the defaults, and the variables, whose set
@@ -693,7 +714,8 @@ const prefixedDefault = (read: PrefixedName): Option.Option<Value> => {
  *   outcome or template variable by that name and it names no built-in the run holds, which the
  *   item model marks in an item (an item's `duration` among them); or the one `prefixedRead` gives,
  *   with holder `record`, when no item ref resolves a prefixed name or the item's record holds no
- *   value of it.
+ *   value of it; or the {@link RecordOperandError} `prefixedRead` gives when a prefixed name names
+ *   an item's record response.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpDefault
  */
 const evaluateDefault: Evaluator<"default"> = (expression, scope) => {

@@ -23,7 +23,7 @@ import type {
   ResponseDeclaration,
   TemplateDeclaration,
 } from "#plate/model/item.ts";
-import type { ModelledBaseType, Value } from "#plate/model/values.ts";
+import type { ModelledBaseType, RecordValue, Value } from "#plate/model/values.ts";
 
 /**
  * Construct a single float value.
@@ -140,6 +140,7 @@ const item1: ScopeItem = {
       SCORE: floatValue(1.5),
       completionStatus: identifierValue("completed"),
     },
+    records: {},
     responses: { RESPONSE: identifierValue("A") },
     templates: { T: { baseType: "integer", cardinality: "multiple", values: [] } },
   },
@@ -169,6 +170,7 @@ const item2: ScopeItem = {
       SCORE: floatValue(0),
       completionStatus: identifierValue("not_attempted"),
     },
+    records: {},
     responses: { RESPONSE: { baseType: "identifier", cardinality: "single", values: [] } },
     templates: {},
   },
@@ -545,5 +547,92 @@ describe("durationOf", () => {
       cardinality: "single",
       values: [],
     });
+  });
+});
+
+/**
+ * The record `ITEM4`'s record holds of its record response `RREC`: `stringValue` "12" and
+ * `floatValue` 12.
+ */
+const answeredRecord: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "stringValue", value: { baseType: "string", value: "12" } },
+    { identifier: "floatValue", value: { baseType: "float", value: 12 } },
+  ],
+};
+
+/**
+ * `ITEM4`, which declares the record response `RREC`, with no correct response and no default,
+ * beside `ITEM1`'s declarations, and whose record holds {@link answeredRecord} of it.
+ */
+const recordItem: ScopeItem = {
+  ...item1,
+  record: { ...item1.record, records: { RREC: answeredRecord } },
+  records: new Map([
+    ["RREC", { correct: Option.none(), defaultValue: Option.none(), identifier: "RREC" }],
+  ]),
+  ref: "ITEM4",
+};
+
+/**
+ * `ITEM5`, which declares `RREC` as `ITEM4` does, and whose record holds no record of it.
+ */
+const unansweredItem: ScopeItem = {
+  ...recordItem,
+  record: item1.record,
+  ref: "ITEM5",
+};
+
+/**
+ * A test of one part `P1` holding `ITEM4` and `ITEM5`, which declares `TOTAL`.
+ */
+const recordScope: TestScope = {
+  declared: new Set(["TOTAL"]),
+  duration: Option.none(),
+  items: [recordItem, unansweredItem],
+  parts: new Map([["P1", ["ITEM4", "ITEM5"]]]),
+  sections: new Map(),
+};
+
+describe("a record response through its item ref", () => {
+  it("[T-9] test scope lookup: a record response through its item ref reads the record its item's record holds, the NULL record when it holds none or the name reads a second occurrence", () => {
+    const readingOf = (name: string): Reading =>
+      Result.getOrThrow(prefixedVariable(recordScope, name)).reading;
+    const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+    assert.deepStrictEqual(
+      [
+        readingOf("ITEM4.RREC"),
+        readingOf("ITEM4.1.RREC"),
+        readingOf("ITEM5.RREC"),
+        readingOf("ITEM4.2.RREC"),
+      ],
+      [
+        { kind: "record", value: answeredRecord },
+        { kind: "record", value: answeredRecord },
+        { kind: "record", value: nullRecord },
+        { kind: "record", value: nullRecord },
+      ],
+    );
+    assert.deepStrictEqual(Result.getOrThrow(prefixedVariable(recordScope, "ITEM4.RREC")).named, {
+      identifier: "RREC",
+      kind: "record",
+      type: { baseType: "file", cardinality: "record" },
+    });
+    assert.deepStrictEqual(Result.getOrThrow(itemVariable(recordItem, "RREC")), {
+      kind: "record",
+      value: answeredRecord,
+    });
+  });
+
+  it("[T-9] test scope lookup: beside a record response through its item ref, the item's record outcome still reads NULL of its declared type, and no kind that reads a single keeps the record response", () => {
+    assert.deepStrictEqual(Result.getOrThrow(prefixedVariable(recordScope, "ITEM4.REC")).reading, {
+      kind: "unheld",
+      type: { baseType: "file", cardinality: "record" },
+    });
+    assert.isTrue(
+      Option.exists(itemName(recordItem, "RREC"), ({ type }) => type.cardinality !== "single"),
+    );
   });
 });

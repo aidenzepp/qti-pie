@@ -4,7 +4,8 @@
  * outcomes and template values the attempt holds ({@link own}), from a built-in variable
  * ({@link builtInValue}) or, in a test's run, from an item through its item ref
  * ({@link prefixedRead}); the record an operand of `qti-field-value`, `qti-is-null` or `qti-match`
- * reads ({@link recordOrValue}); the type of each built-in the run holds ({@link builtInType}); and
+ * reads ({@link recordOrValue}), in a test's run an item's record response through its item ref
+ * among them; the type of each built-in the run holds ({@link builtInType}); and
  * the run-time resolver of an attribute that holds a literal or names a template or outcome
  * variable ({@link referenceValue}, and {@link referenceInteger} for an integer one).
  *
@@ -22,7 +23,7 @@ import { RecordOperandError, UnknownIdentifierError } from "#plate/engine/failur
 import type { EngineFailure } from "#plate/engine/failures.ts";
 import { integerOf, integerValue, singleValue } from "#plate/engine/numbers.ts";
 import { durationOf, prefixedVariable } from "#plate/engine/scope.ts";
-import type { ItemName, Reading, ScopeItem, TestScope } from "#plate/engine/scope.ts";
+import type { ItemName, PrefixedRead, ScopeItem, TestScope } from "#plate/engine/scope.ts";
 import type {
   Expression,
   FloatOrRef,
@@ -30,6 +31,7 @@ import type {
   IntegerOrRef,
   StringOrRef,
 } from "#plate/model/expression.ts";
+import type { RecordDeclaration } from "#plate/model/item.ts";
 import { completionStatus, completionStatusType } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
@@ -139,16 +141,35 @@ export const builtInType = (
  * Give the value a test-level read of an item variable stands for.
  *
  * A value of a type the value model holds is itself. NULL of a declared type it does not hold, base
- * type `file` or cardinality `record` (G-R3, pending: such a variable reads NULL), is the NULL
- * `qti-null` gives, a single string's, "treated as if it is of any desired base-type": the value
- * model holds no value of that type, and an outcome set to it stores its own typed NULL
- * (`setOutcome` in `#plate/engine/evaluate.ts`).
+ * type `file` or a record outcome, template or context variable (G-R3, pending; G-R4, pending: such
+ * a variable reads NULL), is the NULL `qti-null` gives, a single string's, "treated as if it is of
+ * any desired base-type": the value model holds no value of that type, and an outcome set to it
+ * stores its own typed NULL (`setOutcome` in `#plate/engine/evaluate.ts`). A record response's
+ * record is not a value: only the three kinds that read a record whole read it
+ * ({@link recordOrValue}).
  *
- * @param reading The reading.
- * @returns The value.
+ * @param read The prefixed name's reading.
+ * @param name The name, as the test's processing writes it.
+ * @returns The value, or a {@link RecordOperandError} naming `name` when it reads a record
+ *   response's record.
  */
-const readValue = (reading: Reading): Value =>
-  reading.kind === "held" ? reading.value : nullOf("string", "single");
+const readValue = (read: PrefixedRead, name: string): Result.Result<Value, RecordOperandError> => {
+  const { reading } = read;
+  switch (reading.kind) {
+    case "held": {
+      return Result.succeed(reading.value);
+    }
+    case "unheld": {
+      return Result.succeed(nullOf("string", "single"));
+    }
+    case "record": {
+      return Result.fail(new RecordOperandError({ identifier: name }));
+    }
+    default: {
+      return reading satisfies never;
+    }
+  }
+};
 
 /**
  * A prefixed name a test's run reads through an item ref: the item, what the name names in it,
@@ -168,27 +189,34 @@ export interface PrefixedName {
 }
 
 /**
- * Read a prefixed name of a test's processing through its item ref: the one reading of the name
- * that resolves, by reading 48, as `prefixedVariable` in `#plate/engine/scope.ts` resolves it (a
- * name the test declares whole never split, a mapping target before the item's own declaration),
- * with what it names in the item and whether it reads the item's one occurrence.
+ * Read a prefixed name of a test's processing through its item ref, as a value: the one reading of
+ * the name that resolves, by reading 48, as `prefixedVariable` in `#plate/engine/scope.ts`
+ * resolves it (a name the test declares whole never split, a mapping target before the item's own
+ * declaration), with what it names in the item and whether it reads the item's one occurrence.
+ *
+ * A name that resolves to an item's record response reads a record, which is no value: it fails,
+ * as a value read of the run's own record response does ({@link variableRead}); `qti-field-value`,
+ * `qti-is-null` and `qti-match` read its record through {@link recordOrValue} instead.
  *
  * @param test The test scope.
  * @param name The name, as the test's processing writes it.
- * @returns The prefixed name; or the {@link UnknownIdentifierError} `prefixedVariable` gives, with
+ * @returns The prefixed name; or a {@link RecordOperandError} naming `name` when it resolves to an
+ *   item's record response; or the {@link UnknownIdentifierError} `prefixedVariable` gives, with
  *   holder `record`, when no reading or more than one resolves the name, when the test declares it
  *   whole, or when the item's record holds no value of the response or outcome it names.
  */
 export const prefixedRead = (
   test: TestScope,
   name: string,
-): Result.Result<PrefixedName, UnknownIdentifierError> =>
-  Result.map(prefixedVariable(test, name), ({ item, named, occurrence, reading }) => ({
-    first: occurrence === 1n,
-    item,
-    named,
-    value: readValue(reading),
-  }));
+): Result.Result<PrefixedName, RecordOperandError | UnknownIdentifierError> =>
+  Result.flatMap(prefixedVariable(test, name), (read) =>
+    Result.map(readValue(read, name), (value) => ({
+      first: read.occurrence === 1n,
+      item: read.item,
+      named: read.named,
+      value,
+    })),
+  );
 
 /**
  * What a `qti-variable` reads: the value, and the item a test's run read it through when the name
@@ -220,6 +248,23 @@ const ownRecord = (
 const nullRecord: RecordValue = { cardinality: "record", fields: [] };
 
 /**
+ * Give the value the run's own variables hold by an identifier: the response, the outcome or the
+ * template variable of that identifier, the built-in `completionStatus` among the outcomes, else
+ * the built-in variable of that name ({@link builtInValue}).
+ *
+ * @param variables The variables of the run.
+ * @param identifier The variable's identifier.
+ * @returns The value, none when the run's own variables hold none by that name.
+ */
+const directValue = (variables: Variables, identifier: string): Option.Option<Value> =>
+  Option.firstSomeOf([
+    own(variables.responses, identifier),
+    own(variables.outcomes, identifier),
+    own(variables.templates, identifier),
+    builtInValue(variables, identifier),
+  ]);
+
+/**
  * Give what a `qti-variable` reads: the response, the outcome or the template variable of that
  * identifier, the built-in `completionStatus` among the outcomes, else the built-in variable of
  * that name ({@link builtInValue}), else, in a test's run, the item variable the name reads through
@@ -233,13 +278,15 @@ const nullRecord: RecordValue = { cardinality: "record", fields: [] };
  * outcome named `ITEM1.SCORE` is read as the test's own.
  *
  * A record response is not a value, so a name the variables hold a record of
- * (`Variables.records`) fails: the three kinds that read a record whole take it through
+ * (`Variables.records`) fails, and so does, in a test's run, a prefixed name that resolves to an
+ * item's record response: the three kinds that read a record whole take it through
  * {@link recordOrValue} before any value read.
  *
  * @param variables The variables of the run.
  * @param identifier The variable's identifier.
  * @returns The value, with the item when it was read through an item ref; or a
- *   {@link RecordOperandError} when the variables hold a record of it; or an
+ *   {@link RecordOperandError} when the variables hold a record of it or it reads an item's record
+ *   response through its item ref; or an
  *   {@link UnknownIdentifierError}, with holder `record`, when neither the responses, the
  *   outcomes, the template values, the built-in variables nor, in a test's run, an item ref hold
  *   it.
@@ -252,12 +299,7 @@ export const variableRead = (
     return Result.fail(new RecordOperandError({ identifier }));
   }
 
-  const direct = Option.firstSomeOf([
-    own(variables.responses, identifier),
-    own(variables.outcomes, identifier),
-    own(variables.templates, identifier),
-    builtInValue(variables, identifier),
-  ]);
+  const direct = directValue(variables, identifier);
   if (Option.isSome(direct)) {
     return Result.succeed({ item: Option.none(), value: direct.value });
   }
@@ -285,20 +327,73 @@ export const variableValue = (
   Result.map(variableRead(variables, identifier), (read) => read.value);
 
 /**
+ * Give the one resolving reading of a prefixed name in a test's run (`prefixedVariable` in
+ * `#plate/engine/scope.ts`).
+ *
+ * @param variables The variables of the run.
+ * @param name The name, as the test's processing writes it.
+ * @returns The reading; none outside a test's run, and when no reading or more than one resolves
+ *   the name, whose value read then fails.
+ */
+const prefixedOf = (variables: Variables, name: string): Option.Option<PrefixedRead> =>
+  Option.flatMap(Option.fromUndefinedOr(variables.test), (test) =>
+    Result.getSuccess(prefixedVariable(test, name)),
+  );
+
+/**
+ * Report whether a `qti-correct` or a `qti-default` names a variable of the run's own holder, so
+ * that, as {@link prefixedRead}'s callers read it, the name is never read through an item ref: for
+ * `qti-correct` a response the holder declares; for `qti-default` a response, an outcome or a
+ * template variable it declares, or a built-in the run holds ({@link builtInType}).
+ *
+ * @param kind The kind.
+ * @param identifier The name it writes.
+ * @param scope The holder and the variables of the run.
+ * @returns Whether the holder holds the name.
+ */
+const holderNames = (kind: "correct" | "default", identifier: string, scope: Scope): boolean => {
+  const { outcomes, responses, templates } = scope.item;
+
+  return kind === "correct"
+    ? responses.has(identifier)
+    : responses.has(identifier) ||
+        outcomes.has(identifier) ||
+        templates.has(identifier) ||
+        Option.isSome(builtInType(scope.variables, identifier));
+};
+
+/**
  * Give the record an operand names, when it names a record response: a `qti-variable` the record
  * the run holds of it (`Variables.records`), a `qti-default` its declared default and a
  * `qti-correct` its declared correct response (`Declarations.records`), each the NULL record when
  * the declaration declares none. A record response's default and correct response are never set:
  * template processing that sets either is marked `record-set` and does not run.
  *
+ * In a test's run, whose holder declares no response, a name the run's own variables and holder
+ * do not hold may name an item's record response through its item ref (`prefixedVariable` in
+ * `#plate/engine/scope.ts`), and reads it there: a `qti-variable` the record the item's record
+ * holds, the NULL record when it holds none; a `qti-correct` or a `qti-default` the item's
+ * declared correct response or default, the NULL record when it declares none. `ITEMREF.N.VAR`
+ * with `N` other than 1 names an occurrence that does not exist and reads the NULL record (G-R3,
+ * pending).
+ *
  * @param operand The operand.
  * @param scope The holder and the variables of the run.
- * @returns The record; none for any other operand, and for a `qti-variable` of a name the run holds
- *   no record of, which its value read then judges.
+ * @returns The record; none for any other operand, and for a name that names no record response,
+ *   which its value read then judges.
  */
 const recordOf = (operand: Expression, scope: Scope): Option.Option<RecordValue> => {
+  const { variables } = scope;
   if (operand.kind === "variable") {
-    return ownRecord(scope.variables.records, operand.identifier);
+    const { identifier } = operand;
+
+    return Option.orElse(ownRecord(variables.records, identifier), () =>
+      Option.isSome(directValue(variables, identifier))
+        ? Option.none()
+        : Option.flatMap(prefixedOf(variables, identifier), ({ reading }) =>
+            reading.kind === "record" ? Option.some(reading.value) : Option.none(),
+          ),
+    );
   }
 
   if (operand.kind !== "correct" && operand.kind !== "default") {
@@ -306,12 +401,25 @@ const recordOf = (operand: Expression, scope: Scope): Option.Option<RecordValue>
   }
 
   const { identifier, kind } = operand;
-
-  return Option.map(Option.fromUndefinedOr(scope.item.records?.get(identifier)), (declared) =>
+  const declaredRecord = (declared: RecordDeclaration): RecordValue =>
     Option.getOrElse(
       kind === "correct" ? declared.correct : declared.defaultValue,
       () => nullRecord,
-    ),
+    );
+
+  return Option.orElse(
+    Option.map(Option.fromUndefinedOr(scope.item.records?.get(identifier)), declaredRecord),
+    () =>
+      holderNames(kind, identifier, scope)
+        ? Option.none()
+        : Option.flatMap(prefixedOf(variables, identifier), ({ item, named, occurrence }) =>
+            named.kind === "record"
+              ? Option.map(
+                  Option.fromUndefinedOr(item.records?.get(named.identifier)),
+                  (declared) => (occurrence === 1n ? declaredRecord(declared) : nullRecord),
+                )
+              : Option.none(),
+          ),
   );
 };
 

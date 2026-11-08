@@ -7,9 +7,13 @@ import type { Declarations, EngineFailure } from "#plate/engine/evaluate.ts";
 import { containerSizeBound } from "#plate/engine/numbers.ts";
 import type { ScopeItem, TestScope } from "#plate/engine/scope.ts";
 import type { Expression } from "#plate/model/expression.ts";
-import type { OutcomeDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
+import type {
+  OutcomeDeclaration,
+  RecordDeclaration,
+  ResponseDeclaration,
+} from "#plate/model/item.ts";
 import { buildTest } from "#plate/model/test.ts";
-import type { Single, Value } from "#plate/model/values.ts";
+import type { RecordValue, Single, Value } from "#plate/model/values.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { assertKindType } from "#plate/test/processing.ts";
 
@@ -98,7 +102,7 @@ const itemOf = (ref: string, fields: Partial<ScopeItem> = {}): ScopeItem => ({
   mappings: new Map(),
   numAttempts: 1,
   presented: true,
-  record: { correct: {}, defaults: {}, outcomes: {}, responses: {}, templates: {} },
+  record: { correct: {}, defaults: {}, outcomes: {}, records: {}, responses: {}, templates: {} },
   ref,
   unheld: new Map(),
   weights: new Map(),
@@ -125,6 +129,7 @@ const answered = (ref: string, held: Value, fields: Partial<ScopeItem> = {}): Sc
       correct: {},
       defaults: {},
       outcomes: {},
+      records: {},
       responses: { RESPONSE: held },
       templates: {},
     },
@@ -179,6 +184,7 @@ const counting = scopeOf(
         correct: {},
         defaults: {},
         outcomes: {},
+        records: {},
         responses: { RESPONSE: identifier("A") },
         templates: {},
       },
@@ -427,6 +433,7 @@ const aggregates = scopeOf([
       correct: {},
       defaults: {},
       outcomes: { SCORE: float(1.5) },
+      records: {},
       responses: {},
       templates: {},
     },
@@ -442,6 +449,7 @@ const aggregates = scopeOf([
       correct: {},
       defaults: {},
       outcomes: { SCORE: integer(4n) },
+      records: {},
       responses: {},
       templates: {},
     },
@@ -467,6 +475,7 @@ const aggregates = scopeOf([
         },
         SCORE: { baseType: "float", cardinality: "single", values: [] },
       },
+      records: {},
       responses: {},
       templates: {},
     },
@@ -494,6 +503,7 @@ const mappingScope = (mapped: boolean): TestScope =>
         correct: {},
         defaults: {},
         outcomes: { SCORE: float(7) },
+        records: {},
         responses: {},
         templates: {},
       },
@@ -512,6 +522,7 @@ const mappingScope = (mapped: boolean): TestScope =>
         correct: {},
         defaults: {},
         outcomes: { NOTA: float(15), SCORE: float(2) },
+        records: {},
         responses: {},
         templates: {},
       },
@@ -539,7 +550,14 @@ const pointsItem = (
       responses: new Map(),
       templates: new Map(),
     },
-    record: { correct: {}, defaults: {}, outcomes: { PTS: held }, responses: {}, templates: {} },
+    record: {
+      correct: {},
+      defaults: {},
+      outcomes: { PTS: held },
+      records: {},
+      responses: {},
+      templates: {},
+    },
     ...fields,
   });
 
@@ -618,6 +636,72 @@ const judging = (item: ScopeItem): readonly Value[] => {
   return [all["number-correct"], all["number-incorrect"]];
 };
 
+/**
+ * Construct a record of string fields.
+ *
+ * @param fields Each field's identifier keyed to its text.
+ * @returns The record.
+ */
+const stringRecord = (fields: Readonly<Record<string, string>>): RecordValue => ({
+  cardinality: "record",
+  fields: Object.entries(fields).map(([field, value]) => ({
+    identifier: field,
+    value: { baseType: "string", value },
+  })),
+});
+
+/**
+ * Construct an item whose only response is the record response `RREC`.
+ *
+ * @param ref Its item ref's identifier.
+ * @param declared The correct response and default `RREC` declares, each none unless given.
+ * @param declared.correct The correct response.
+ * @param declared.defaultValue The default.
+ * @param held The record its record holds of `RREC`, none unless given.
+ * @returns The item, presented with one attempt started.
+ */
+const recordItem = (
+  ref: string,
+  declared: { readonly correct?: RecordValue; readonly defaultValue?: RecordValue },
+  held?: RecordValue,
+): ScopeItem => {
+  const declaration: RecordDeclaration = {
+    correct: Option.fromUndefinedOr(declared.correct),
+    defaultValue: Option.fromUndefinedOr(declared.defaultValue),
+    identifier: "RREC",
+  };
+
+  return itemOf(ref, {
+    record: {
+      correct: {},
+      defaults: {},
+      outcomes: {},
+      records: held === undefined ? {} : { RREC: held },
+      responses: {},
+      templates: {},
+    },
+    records: new Map([["RREC", declaration]]),
+  });
+};
+
+/**
+ * The record `RREC`'s correct response: `stringValue` "12".
+ */
+const keyRecord = stringRecord({ stringValue: "12" });
+
+/**
+ * The record `RREC`'s declared default: `stringValue` "0".
+ */
+const startRecord = stringRecord({ stringValue: "0" });
+
+/**
+ * Give the `qti-number-responded` of one item.
+ *
+ * @param item The item.
+ * @returns The count.
+ */
+const responded = (item: ScopeItem): Value => counts(scopeOf([item]))["number-responded"];
+
 describe("the test family's evaluators", () => {
   it("[T-9] count over the test scope: selected, presented, responded, correct and incorrect items, an item presented and unanswered incorrect and one never presented not", () => {
     assert.deepStrictEqual(counts(counting), expected(1n, 2n, 5n, 3n, 6n));
@@ -669,6 +753,7 @@ describe("the test family's evaluators", () => {
           correct: { RESPONSE: identifier("B") },
           defaults: {},
           outcomes: {},
+          records: {},
           responses: { RESPONSE: identifier(held) },
           templates: {},
         },
@@ -685,6 +770,7 @@ describe("the test family's evaluators", () => {
                 correct: { RESPONSE: identifier("B") },
                 defaults: {},
                 outcomes: {},
+                records: {},
                 responses: { RESPONSE: identifier("B") },
                 templates: {},
               },
@@ -708,6 +794,7 @@ describe("the test family's evaluators", () => {
           correct: {},
           defaults,
           outcomes: {},
+          records: {},
           responses: { RESPONSE: identifier("C") },
           templates: {},
         },
@@ -742,6 +829,87 @@ describe("the test family's evaluators", () => {
     assert.deepStrictEqual(judging(uploading(true)), [integer(0n), integer(1n)]);
   });
 
+  it("[T-9] qti-number-responded counts an item whose only response is a record response through its item ref that differs from its default, the declared one or else the NULL record", () => {
+    assert.deepStrictEqual(
+      [
+        responded(recordItem("CHANGED", { defaultValue: startRecord }, keyRecord)),
+        responded(recordItem("ANSWERED", {}, keyRecord)),
+        responded(recordItem("AT_DEFAULT", { defaultValue: startRecord }, startRecord)),
+        responded(
+          recordItem(
+            "REORDERED",
+            { defaultValue: stringRecord({ floatValue: "0", stringValue: "0" }) },
+            {
+              cardinality: "record",
+              fields: [
+                { identifier: "stringValue", value: { baseType: "string", value: "0" } },
+                { identifier: "floatValue", value: { baseType: "string", value: "0" } },
+              ],
+            },
+          ),
+        ),
+        responded(recordItem("UNANSWERED", {})),
+      ],
+      [integer(1n), integer(1n), integer(0n), integer(0n), integer(0n)],
+    );
+  });
+
+  it("[T-9] qti-number-correct counts an item whose record response through its item ref equals its correct response, and qti-number-incorrect one that does not", () => {
+    const fieldMore = stringRecord({ floatValue: "12", stringValue: "12" });
+
+    assert.deepStrictEqual(
+      [
+        judging(recordItem("EQUAL", { correct: keyRecord }, stringRecord({ stringValue: "12" }))),
+        judging(recordItem("FIELD_MORE", { correct: keyRecord }, fieldMore)),
+        judging(recordItem("UNANSWERED", { correct: keyRecord })),
+      ],
+      [
+        [integer(1n), integer(0n)],
+        [integer(0n), integer(1n)],
+        [integer(0n), integer(1n)],
+      ],
+    );
+  });
+
+  it("[T-9] an item whose record response through its item ref declares no correct response is not judged: neither correct nor incorrect, whatever it holds", () => {
+    assert.deepStrictEqual(
+      [
+        judging(recordItem("KEYLESS", {}, keyRecord)),
+        judging(recordItem("KEYLESS", {}, stringRecord({ stringValue: "7" }))),
+      ],
+      [
+        [integer(0n), integer(0n)],
+        [integer(0n), integer(0n)],
+      ],
+    );
+
+    // The control: beside a choice response with a correct response, a keyless record still keeps
+    // the item unjudged, and with the record keyed and matched the item is correct.
+    const beside = (correct?: RecordValue): ScopeItem =>
+      answered("BESIDE", identifier("A"), {
+        record: {
+          correct: {},
+          defaults: {},
+          outcomes: {},
+          records: { RREC: keyRecord },
+          responses: { RESPONSE: identifier("A") },
+          templates: {},
+        },
+        records: new Map([
+          [
+            "RREC",
+            {
+              correct: Option.fromUndefinedOr(correct),
+              defaultValue: Option.none(),
+              identifier: "RREC",
+            },
+          ],
+        ]),
+      });
+    assert.deepStrictEqual(judging(beside()), [integer(0n), integer(0n)]);
+    assert.deepStrictEqual(judging(beside(keyRecord)), [integer(1n), integer(0n)]);
+  });
+
   it("[T-9] give qti-outcome-minimum over the test scope, weighted, an item with no declared minimum ignored", () => {
     assert.deepStrictEqual(
       [
@@ -765,6 +933,7 @@ describe("the test family's evaluators", () => {
           correct: {},
           defaults: {},
           outcomes: { SCORE: float(1) },
+          records: {},
           responses: {},
           templates: {},
         },
@@ -892,6 +1061,7 @@ describe("the test family's evaluators", () => {
           NOTA: { baseType: "float", cardinality: "single", values: [] },
           PTS: integer(1n),
         },
+        records: {},
         responses: {},
         templates: {},
       },

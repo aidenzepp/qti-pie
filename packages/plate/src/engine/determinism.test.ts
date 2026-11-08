@@ -310,6 +310,7 @@ describe("criterion 7 in Node: the determinism fixture's test", () => {
       correct: after.correct,
       defaults: after.defaults,
       outcomes: after.outcomes,
+      records: after.records,
       responses: after.responses,
       templates: after.templates,
     });
@@ -397,6 +398,7 @@ describe("criterion 7 in Node: the determinism fixture's template defaults", () 
       correct: record.correct,
       defaults: record.defaults,
       outcomes: record.outcomes,
+      records: record.records,
       responses: record.responses,
       templates: record.templates,
     });
