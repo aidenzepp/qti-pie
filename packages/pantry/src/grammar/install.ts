@@ -39,6 +39,8 @@ import { closed, closedId, fin, natural, pg, slot, str } from "@bjornpagen/grizz
 import { Array as Arr, Option, Result } from "effect";
 import { committedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
 import type { Flag as FlagHandle } from "#pantry/grammar/ancestry.ts";
+import { attributeCounts } from "#pantry/grammar/attributes.ts";
+import type { AttributeCount } from "#pantry/grammar/attributes.ts";
 import type { Roster as GeneratedRoster } from "#pantry/grammar/closed.ts";
 import { int8Max, rowsAt } from "#pantry/grammar/closed.ts";
 import { composed, recordCardinality } from "#pantry/grammar/compose.ts";
@@ -1079,6 +1081,88 @@ export const Required = closed.relation(
   AttributeGrammar.rows
     .filter(({ use }) => use === "required")
     .map(({ model, slot: at }) => ({ model, slot: at })),
+);
+
+/**
+ * The attribute models a count of `attributeCounts` judges (spec readings 41 and 43), each with
+ * its count: the model each element of a counted kind reads under its governor, its counted slots
+ * the slots of the count's names the model admits, and its bounds, an unbounded `max` written as
+ * the number of those slots, which no count exceeds. A name a model does not admit has no slot, so
+ * it counts nothing, as the oracle reads it.
+ *
+ * A model is shared by every (version, governor) of one attribute grammar, so a counted model
+ * another kind reads, or two counts read, would judge that kind by a count that is not its own:
+ * the grammar has neither, and a change that makes one throws here rather than install it.
+ */
+const countedModels = (() => {
+  const modelAt = new Map(
+    AttributeModelOf.rows.map(({ governor, model, version }) => [`${version} ${governor}`, model]),
+  );
+  const modelOfRow = ({ governor, version }: (typeof GoverningOf.rows)[number]) => {
+    const model = modelAt.get(`${version} ${governor}`);
+    if (model === undefined) {
+      throw new Error(
+        `The governor ${governor} has no attribute model in version ${version}, though AttributeModelOf is total; correct its rows.`,
+      );
+    }
+
+    return model;
+  };
+  const counts = new Map<string, AttributeCount>();
+  for (const row of GoverningOf.rows) {
+    const count = attributeCounts.find(({ kind }) => kind === row.kind);
+    if (count !== undefined) {
+      const model = modelOfRow(row);
+      const earlier = counts.get(model);
+      if (earlier !== undefined && earlier !== count) {
+        throw new Error(
+          `The attribute model ${model} is read by the counted kinds ${earlier.kind} and ${count.kind}, whose counts differ; give each its own model.`,
+        );
+      }
+
+      counts.set(model, count);
+    }
+  }
+
+  for (const row of GoverningOf.rows) {
+    const model = modelOfRow(row);
+    if (counts.has(model) && !attributeCounts.some(({ kind }) => kind === row.kind)) {
+      throw new Error(
+        `The attribute model ${model} is read by ${row.kind}, which no attribute count names, and by ${counts.get(model)?.kind ?? model}, which one does; give the counted kind its own model.`,
+      );
+    }
+  }
+
+  return [...counts].map(([model, { max, min, names }]) => {
+    const slots = AttributeSlotOf.rows
+      .filter((row) => row.model === model && names.includes(row.name))
+      .map(({ slot: at }) => at);
+
+    return { max: BigInt(Math.min(max, slots.length)), min: BigInt(min), model, slots };
+  });
+})();
+
+/**
+ * `CountedSlot`: the set of (model, slot) where the attribute at the slot counts toward its model's
+ * `AttributeCountOf`, read as `CountedSlot.row(model)` by AL5.
+ */
+export const CountedSlot = closed.relation(
+  "CountedSlot",
+  { model: closedId(AttributeModel), slot: modelSlot },
+  ["model", "slot"],
+  countedModels.flatMap(({ model, slots }) => slots.map((at) => ({ model, slot: at }))),
+);
+
+/**
+ * `AttributeCountOf`: model → (min, max), how many of its `CountedSlot` attributes an element under
+ * a governor of the model carries (spec readings 41 and 43), a model of no count having no row,
+ * which AL5 reads through `AttributeCountOf.has`.
+ */
+export const AttributeCountOf = closed.relation(
+  "AttributeCountOf",
+  { max: pg.bigint, min: pg.bigint, model: closedId(AttributeModel) },
+  ["model"],
+  countedModels.map(({ max, min, model }) => ({ max, min, model })),
 );
 
 /**

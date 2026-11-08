@@ -117,6 +117,7 @@ describe("qti/attributes.ts, declared", () => {
       "AL4 data name",
       "AL4 declared data name",
       "AL4 open names",
+      "AL5 attribute count",
       "Attribute prefix",
       "Double bound",
       "Double value",
