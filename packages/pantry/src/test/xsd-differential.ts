@@ -721,8 +721,8 @@ export const recorded: readonly Recorded[] = [
     reason: {
       _tag: "reading",
       reading: 104,
-      says: "A choice's identifier names it among its document's choices of its class",
-      why: "no two choices of one class in a document share an identifier, whichever interactions hold them; the XSD states no key over choice identifiers",
+      says: "A choice's identifier is used by no other choice of any class in its document",
+      why: "no two choices of the nine classes in a document share an identifier, whichever interactions hold them and whatever their classes; the XSD states no key over choice identifiers",
     },
     rule: "choice-identifier-distinct",
   },
