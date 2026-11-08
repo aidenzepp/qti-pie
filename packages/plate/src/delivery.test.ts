@@ -1280,7 +1280,7 @@ describe("the M2 witness: a full session per mode combination, walked by keys th
           firstexample: { response: ["A"], score: ["1"] },
         });
       }),
-    { tags: ["corpus", "qti-xsd"], timeout: sessionTimeoutMs },
+    { tags: ["corpus", "results-xsd"], timeout: sessionTimeoutMs },
   );
   it.effect(
     "[T-4] [T-7] [T-14] [S-0] [S-7] [keyboard] CASE, linear and individual with max-attempts 2: a wrong first attempt scores 0 and leaves the item open, the second scores 1, Next submits each later item, the last Next closes the test, and the scores are 1, 1 and 1",
@@ -1326,7 +1326,7 @@ describe("the M2 witness: a full session per mode combination, walked by keys th
           "res_-TX_G06SAMP_005": { response: ["A_3"], score: ["1"] },
         });
       }),
-    { tags: ["corpus", "qti-xsd"], timeout: sessionTimeoutMs },
+    { tags: ["corpus", "results-xsd"], timeout: sessionTimeoutMs },
   );
 
   it.effect(
@@ -1385,7 +1385,7 @@ describe("the M2 witness: a full session per mode combination, walked by keys th
           "the result names the order the candidate saw",
         );
       }),
-    { tags: ["qti-xsd"], timeout: sessionTimeoutMs },
+    { tags: ["results-xsd"], timeout: sessionTimeoutMs },
   );
 });
 
