@@ -308,6 +308,58 @@ const declaration = (
   ]);
 
 /**
+ * Construct a test whose record outcome `R` holds a `qti-default-value` of the fields given, before
+ * a part holding one item ref.
+ *
+ * @param fields The default's `qti-value` children, each a field of the record.
+ * @returns The test.
+ */
+const recordOutcome = (fields: readonly SourceElement[]): SourceDocument =>
+  assessmentTest([
+    el(
+      "qti-outcome-declaration",
+      [attr("cardinality", "record"), attr("identifier", "R")],
+      [el("qti-default-value", [], fields)],
+    ),
+    part("P", [section("S", [itemRef("I1")])]),
+  ]);
+
+/**
+ * Construct a field of a record value: a `qti-value` with the attributes given.
+ *
+ * @param attributes Its attributes, as `[local, value]` pairs, such as `field-identifier`.
+ * @param written Its text, as written.
+ * @returns The `qti-value`.
+ */
+const field = (
+  attributes: readonly (readonly [string, string])[],
+  written: string,
+): SourceElement =>
+  el(
+    "qti-value",
+    attributes.map(([local, value]) => attr(local, value)),
+    [text(written)],
+  );
+
+/**
+ * The path of {@link recordOutcome}'s first field.
+ */
+const fieldPath = "qti-assessment-test/qti-outcome-declaration/qti-default-value/qti-value";
+
+/**
+ * Construct the reduced refusal of a record field that lacks an attribute its record requires
+ * (`info.txt:73046`), at the path an item's field gets it.
+ *
+ * @param attribute The attribute it lacks, `field-identifier` or `base-type`.
+ * @returns The refusal at {@link fieldPath}'s attribute, as {@link judged} reduces it.
+ */
+const missingField = (attribute: string) => ({
+  detail: { attribute, element: "qti-value", source: "info.txt:73046" },
+  path: `${fieldPath}/@${attribute}`,
+  rule: "missing-attribute" as const,
+});
+
+/**
  * Construct a `qti-base-value` of a base type.
  *
  * @param baseType Its `base-type`.
@@ -1345,6 +1397,47 @@ describe("checkTestRules", () => {
           ],
         ],
       );
+    });
+  });
+
+  describe("a record declaration's field, judged as an item's (info.txt:73046; pantry's test import runs semanticRows)", () => {
+    const named = ["field-identifier", "n"] as const;
+    const integerBase = ["base-type", "integer"] as const;
+
+    it("[I-1] refuses a record field in a test declaration with no field-identifier, as missing-attribute at its @field-identifier (pantry's RecordFieldIdentifier)", () => {
+      assert.deepStrictEqual(judged(recordOutcome([field([integerBase], "1")])), [
+        missingField("field-identifier"),
+      ]);
+    });
+
+    it("[I-1] refuses a record field in a test declaration with no base-type, as missing-attribute at its @base-type (pantry's semanticRows has no arm for it)", () => {
+      assert.deepStrictEqual(judged(recordOutcome([field([named], "1")])), [
+        missingField("base-type"),
+      ]);
+    });
+
+    it("[I-1] refuses a record field in a test declaration whose integer text is abc, as value-type under its own base-type", () => {
+      assert.deepStrictEqual(judged(recordOutcome([field([named, integerBase], "abc")])), [
+        {
+          detail: { baseType: "integer", lexical: "abc" },
+          path: fieldPath,
+          rule: "value-type",
+        },
+      ]);
+    });
+
+    it("[I-1] gives a record field in a test declaration missing-attribute before value-type when it breaks both", () => {
+      assert.deepStrictEqual(
+        judged(recordOutcome([field([integerBase], "abc")])).map(({ path, rule }) => [rule, path]),
+        [
+          ["missing-attribute", `${fieldPath}/@field-identifier`],
+          ["value-type", fieldPath],
+        ],
+      );
+    });
+
+    it("[I-1] accepts a record field in a test declaration with both attributes and an integer, trimmed (reading 7)", () => {
+      assert.deepStrictEqual(judged(recordOutcome([field([named, integerBase], " 1 ")])), []);
     });
   });
 

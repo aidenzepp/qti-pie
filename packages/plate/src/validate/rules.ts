@@ -684,19 +684,19 @@ const templateRequirements = (
 /**
  * Climb from an element through its ancestors, each passing its step's test in turn.
  *
- * @param context The parents the walk has met.
+ * @param parents Each element's parent, as the walk has met them.
  * @param element The element to climb from.
  * @param steps One test per ancestor, the parent's first.
  * @returns The last ancestor climbed to, or none when an ancestor is missing or fails its test.
  */
 const enclosing = (
-  context: Context,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
   element: SourceElement,
   steps: readonly ((ancestor: SourceElement) => boolean)[],
 ): Option.Option<SourceElement> => {
   let reached = element;
   for (const step of steps) {
-    const ancestor = context.parents.get(reached);
+    const ancestor = parents.get(reached);
     if (ancestor === undefined || !step(ancestor)) {
       return Option.none();
     }
@@ -1022,7 +1022,7 @@ const attributeValueType = (
 
     const attribute = attributeOf(visit.element, typed.attribute);
     const baseType = Option.flatMap(
-      enclosing(context, visit.element, typed.steps),
+      enclosing(context.parents, visit.element, typed.steps),
       declaredBaseType,
     );
     if (Option.isNone(attribute) || Option.isNone(baseType)) {
@@ -1041,17 +1041,20 @@ const attributeValueType = (
 
 /**
  * Find the record declaration a `qti-value` is a field of: one in a `qti-correct-response` or a
- * `qti-default-value` of a declaration whose `cardinality` is `record`, of any of the item's four
- * kinds.
+ * `qti-default-value` of a declaration whose `cardinality` is `record`: any of an item's four
+ * kinds, or a test's outcome or context declaration.
  *
  * @param visit The element's visit.
- * @param context The parents the walk has met.
+ * @param parents Each element's parent, as the walk has met them.
  * @returns The record declaration, none for any other element.
  */
-const recordOfField = (visit: Visit, context: Context): Option.Option<SourceElement> =>
+const recordOfField = (
+  visit: Visit,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+): Option.Option<SourceElement> =>
   isQti(visit.element, (local) => local === "qti-value")
     ? Option.filter(
-        enclosing(context, visit.element, [
+        enclosing(parents, visit.element, [
           named("qti-correct-response", "qti-default-value"),
           isDeclaration,
         ]),
@@ -1078,18 +1081,39 @@ const textBaseType = (visit: Visit, context: Context): Option.Option<ModelledBas
     return Option.none();
   }
 
-  if (Option.isSome(recordOfField(visit, context))) {
+  if (Option.isSome(recordOfField(visit, context.parents))) {
     return modelledBaseType(visit.element);
   }
 
   return Option.flatMap(
-    enclosing(context, visit.element, [
+    enclosing(context.parents, visit.element, [
       named("qti-correct-response", "qti-default-value"),
       isDeclaration,
     ]),
     declaredBaseType,
   );
 };
+
+/**
+ * Apply `value-type` to an element's text under a base type, read as the value model's
+ * `parseElementText` reads element text (reading 7's trim).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param baseType The base type its text is read in, none when it is not judged.
+ * @returns The refusal at the element's path when its text is outside the base type; none when it
+ *   parses or no base type is given.
+ */
+const textUnder = (
+  source: SourceDocument,
+  visit: Visit,
+  baseType: Option.Option<ModelledBaseType>,
+): readonly Refusal[] =>
+  Option.match(baseType, {
+    onNone: () => [],
+    onSome: (type) =>
+      valueRefusals(source, visit.path, parseElementText(type, textOf(visit.element))),
+  });
 
 /**
  * Apply `value-type` to an element whose text is a typed value.
@@ -1116,17 +1140,34 @@ const textValueType = (
   source: SourceDocument,
   visit: Visit,
   context: Context,
-): readonly Refusal[] =>
-  Option.match(textBaseType(visit, context), {
-    onNone: () => [],
-    onSome: (baseType) =>
-      valueRefusals(source, visit.path, parseElementText(baseType, textOf(visit.element))),
-  });
+): readonly Refusal[] => textUnder(source, visit, textBaseType(visit, context));
 
 /**
  * The attributes each field of a record declaration's value carries.
  */
 const fieldAttributes = ["field-identifier", "base-type"] as const;
+
+/**
+ * Construct the `missing-attribute` refusals of a field of a record declaration's value, one at
+ * each of {@link fieldAttributes} it does not carry.
+ *
+ * @param source The document.
+ * @param visit The field's visit.
+ * @returns One refusal at each missing attribute's path, `field-identifier`'s first.
+ */
+const missingFieldAttributes = (source: SourceDocument, visit: Visit): readonly Refusal[] =>
+  fieldAttributes.flatMap((attribute) =>
+    Option.isSome(attributeOf(visit.element, attribute))
+      ? []
+      : [
+          refusal(
+            source,
+            "missing-attribute",
+            attributePath(visit.path, { local: attribute, namespace: "" }),
+            { attribute, element: "qti-value", source: "info.txt:73046" },
+          ),
+        ],
+  );
 
 /**
  * Apply `missing-attribute` to a field of a record declaration's value: a `qti-value` in the
@@ -1152,19 +1193,39 @@ const recordFieldAttributes = (
   visit: Visit,
   context: Context,
 ): readonly Refusal[] =>
-  Option.isSome(recordOfField(visit, context))
-    ? fieldAttributes.flatMap((attribute) =>
-        Option.isSome(attributeOf(visit.element, attribute))
-          ? []
-          : [
-              refusal(
-                source,
-                "missing-attribute",
-                attributePath(visit.path, { local: attribute, namespace: "" }),
-                { attribute, element: "qti-value", source: "info.txt:73046" },
-              ),
-            ],
-      )
+  Option.isSome(recordOfField(visit, context.parents)) ? missingFieldAttributes(source, visit) : [];
+
+/**
+ * Apply an item's rules for a field of a record declaration's value to one visit of a test or a
+ * section document: `missing-attribute` for each of `field-identifier` and `base-type` the field
+ * lacks ({@link recordFieldAttributes}), then `value-type` when its text is outside its own
+ * `base-type` ({@link textValueType}'s record branch), with the paths and details an item's field
+ * gets. `checkTestRules` calls it once per judged visit.
+ *
+ * A test's record declarations take their fields as an item's do. The information model requires
+ * both attributes of every record's field (`info.txt:73046`), and the qti package's test import
+ * runs the item builder's declaration pass (`packages/pantry/src/import/test.ts` calling
+ * `semanticRows` of `packages/pantry/src/import/item.ts`), which refuses a field with no
+ * `base-type` (it has no arm) and one with no `field-identifier` (the NCName contract
+ * `RecordFieldIdentifier`). The rest of a test's record declaration is the test model's, which
+ * marks it `cardinality="record"`.
+ *
+ * @param source The test or section document.
+ * @param visit The element's visit.
+ * @param parents Each element of the document with its parent.
+ * @returns The refusals, `missing-attribute`'s first; none for an element that is not a field of a
+ *   record declaration's value.
+ */
+export const recordFieldRefusals = (
+  source: SourceDocument,
+  visit: Visit,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+): readonly Refusal[] =>
+  Option.isSome(recordOfField(visit, parents))
+    ? [
+        ...missingFieldAttributes(source, visit),
+        ...textUnder(source, visit, modelledBaseType(visit.element)),
+      ]
     : [];
 
 /**
