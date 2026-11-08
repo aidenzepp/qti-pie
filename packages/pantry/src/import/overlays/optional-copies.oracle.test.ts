@@ -311,11 +311,11 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   const own = hostVerdictOf(inputs, minted).broken;
                   assert.isFalse(
                     own.has("Manifest overlay"),
-                    `${said}: ${String(own.get("Manifest overlay"))}`,
+                    `${said}: ${String(own.get("Manifest overlay")?.witness)}`,
                   );
                   assert.isFalse(
                     own.has("E1 derived"),
-                    `${said}: ${String(own.get("E1 derived"))}`,
+                    `${said}: ${String(own.get("E1 derived")?.witness)}`,
                   );
 
                   const hrefNodes = new Set(hrefs.map(({ node }) => node));
