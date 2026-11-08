@@ -381,35 +381,42 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a declaration of a built-in session variable of any kind, and admits completion_status and QTI_CONTEXT's record context, by Declaration not reserved",
+        "refuses a declaration of an item's built-in session variable of any kind, and a test's duration alone, and admits completion_status and QTI_CONTEXT's record context, by Declaration not reserved",
         () =>
           // Oracle: the specification as a checker, §2.2.2 and tables 4.5.1, 5.115.1, 5.151.1 with
-          // reading 72: the session variables are reserved in every declaration of every document,
-          // spelled exactly; every other name is no built-in's.
+          // readings 72 and 168: an item's three session variables are reserved in every
+          // declaration of an item, a test's `duration` alone in a declaration of a test, spelled
+          // exactly; every other name, a test's own `numAttempts` and `completionStatus` included,
+          // is no built-in's.
           // Bound: every declaration kind (4) against the session variables (3) and three controls,
-          // `completion_status`, `completion-status` and `SCORE`, 24 cases.
+          // `completion_status`, `completion-status` and `SCORE`, under an item (24 cases) and under
+          // a test (24 cases), 48 cases.
           Effect.gen(function* notReserved() {
             const client = yield* loginSession;
-            for (const kind of declarationKinds) {
-              for (const identifier of [
-                ...sessionVariables,
-                "completion_status",
-                "completion-status",
-                "SCORE",
-              ]) {
-                const refused = sessionVariables.includes(identifier);
-                assertVerdict(
-                  yield* judged(
-                    client,
-                    declared(
-                      declarationRow({ identifier, kind }),
-                      Option.some(identifier === "SCORE" ? "float" : "identifier"),
+            for (const parentKind of ["qti-assessment-item", "qti-assessment-test"]) {
+              for (const kind of declarationKinds) {
+                for (const identifier of [
+                  ...sessionVariables,
+                  "completion_status",
+                  "completion-status",
+                  "SCORE",
+                ]) {
+                  const refused =
+                    sessionVariables.includes(identifier) &&
+                    (parentKind === "qti-assessment-item" || identifier === "duration");
+                  assertVerdict(
+                    yield* judged(
+                      client,
+                      declared(
+                        declarationRow({ identifier, kind, parentKind }),
+                        Option.some(identifier === "SCORE" ? "float" : "identifier"),
+                      ),
                     ),
-                  ),
-                  "declaration_not_reserved",
-                  refused,
-                  `${kind} ${identifier}`,
-                );
+                    "declaration_not_reserved",
+                    refused,
+                    `${parentKind} ${kind} ${identifier}`,
+                  );
+                }
               }
             }
           }).pipe(Effect.scoped),
