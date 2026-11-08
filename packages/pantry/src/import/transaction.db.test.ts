@@ -308,19 +308,40 @@ const waitedOn = (client: Client, table: string) =>
   );
 
 /**
- * Wait until a session holds no lock, polling the lock manager every 10 ms for at most
- * {@link pollBound}: so an interrupted import's session, which grizzle destroys, has ended and its
- * transaction rolled back before the table it waited on is released.
+ * The mode `pg_locks` gives every predicate lock: SIRead locks are the only predicate locks
+ * PostgreSQL takes, and the view lists them after the regular locks under this one mode, each under
+ * the process id its serializable transaction ran in.
+ *
+ * @see {@link https://github.com/postgres/postgres/blob/REL_19_RC1/src/backend/utils/adt/lockfuncs.c#L421-L433 | PostgreSQL 19rc1, lockfuncs.c pg_lock_status: the holder's pid from its SERIALIZABLEXACT, and "Currently all predicate locks are SIReadLocks"}
+ */
+const predicateLockMode = "SIReadLock";
+
+/**
+ * Wait until a session holds no lock of its own, polling the lock manager every 10 ms for at most
+ * {@link pollBound}: so an interrupted import's transaction, which grizzle's cancel aborts before
+ * it destroys the session, has ended before the table it waited on is released. A transaction holds
+ * an exclusive lock on its virtual transaction id from its start to its end (PostgreSQL 19, §53.12
+ * `pg_locks`), so a session that holds no lock runs no transaction.
+ *
+ * The SIRead locks `pg_locks` lists under the session's process id are not the session's: the view
+ * lists each predicate lock under the process id of the serializable transaction that took it,
+ * and PostgreSQL keeps a committed one's "past transaction commit, until overlapping read write
+ * transactions complete" (§13.2.3), past its session's end too. Every transaction here is
+ * SERIALIZABLE, the holder's included, and so is every transaction of any other installation on
+ * the cluster, so they are left out: the earlier transactions the import's session committed stay
+ * listed for as long as the holder's runs, which outlives this wait.
  *
  * @param client - The session that holds the held table's lock.
  * @param pid - The session's backend.
- * @returns Nothing; dies when the session still holds a lock after the bound.
+ * @returns Nothing; dies when the session still holds a lock of its own after the bound.
+ * @see {@link https://www.postgresql.org/docs/19/view-pg-locks.html | PostgreSQL 19, §53.12 pg_locks}
+ * @see {@link https://www.postgresql.org/docs/19/transaction-iso.html#XACT-SERIALIZABLE | PostgreSQL 19, §13.2.3 Serializable Isolation Level}
  */
 const ended = (client: Client, pid: string) =>
   rowsOf<{ readonly held: string }>(
     client,
-    "SELECT count(*)::text AS held FROM pg_catalog.pg_locks WHERE pid = $1::integer",
-    [pid],
+    "SELECT count(*)::text AS held FROM pg_catalog.pg_locks WHERE pid = $1::integer AND mode <> $2",
+    [pid, predicateLockMode],
   ).pipe(
     Effect.flatMap((rows) =>
       Number(rows[0]?.held ?? 0) === 0 ? Effect.void : Effect.fail("still running" as const),
@@ -517,7 +538,6 @@ describe.skipIf(!hasLease)(
                   Effect.gen(function* noRow() {
                     const table = heldAt(at);
                     const holder = yield* authorSession;
-                    const before = yield* countsOf(holder, tables);
                     const waiter = yield* Ref.make(Option.none<Waiter>());
                     const held = <A, E, R>(
                       apply: Effect.Effect<A, E, R>,
@@ -533,6 +553,13 @@ describe.skipIf(!hasLease)(
 
                     yield* rowsOf(holder, "BEGIN");
                     yield* rowsOf(holder, `LOCK TABLE ${table} IN SHARE MODE`);
+
+                    // The holder's SERIALIZABLE transaction takes its snapshot at this first read,
+                    // after the lock (LOCK takes none) and before the import begins, so every
+                    // transaction the import commits from here on keeps its SIRead locks until the
+                    // holder's ends, listed under the import's session: `ended` meets them in every
+                    // case, as it met another installation's overlap on a shared cluster.
+                    const before = yield* countsOf(holder, tables);
 
                     const failed = yield* Effect.flip(
                       importDrawn(members).pipe(Effect.provideService(WrapApply, held)),
