@@ -52,13 +52,14 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * configuration's. `names`, `values` and `posted` are keyed by response identifier: the name a
  * response's controls post under (`entryName(instance, response)` when absent), the value they show
  * (NULL when absent), and the strings a refused post sent, which the controls show instead of
- * `values` when `messages` is not empty. A record value restores its `stringValue` once its
- * interaction can take one; until then it shows nothing. `messages` are a refused post's validation
- * messages: each marks its response's controls invalid, and the first invalid Control takes
- * `autofocus`. `disabled` disables every control. `mode` is the state the item is shown in,
- * `answering` when absent, which the Root's `data-mode` names: `review` and `solution` mark every
- * interaction not editable, and `solution` shows the correct responses only when the author passes
- * them as `values`.
+ * `values` when `messages` is not empty. A record value restores its `stringValue`, the text it was
+ * typed as, into the string control bound to it, and a record without one leaves that control
+ * empty; restored text counts toward the output budget as any other. `messages` are a refused
+ * post's validation messages: each marks its response's controls invalid, and the first invalid
+ * Control takes `autofocus`. `disabled` disables every control. `mode` is the state the item is
+ * shown in, `answering` when absent, which the Root's `data-mode` names: `review` and `solution`
+ * mark every interaction not editable, and `solution` shows the correct responses only when the
+ * author passes them as `values`.
  */
 export interface Options {
   readonly assetBase?: string;

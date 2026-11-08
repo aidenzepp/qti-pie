@@ -21,7 +21,7 @@ import { interactionsIn } from "#plate/model/interactions.ts";
 import type { Interaction, Item } from "#plate/model/item.ts";
 import type { ResponsesRecord } from "#plate/model/record.ts";
 import { isRecordValue, nullOf } from "#plate/model/values.ts";
-import type { ResponseValue, Value } from "#plate/model/values.ts";
+import type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 import { redactStructure } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
@@ -64,6 +64,28 @@ const absent = (item: Item, interaction: Interaction): Value =>
     onNone: () => ownNull(interaction),
     onSome: (declaration) => nullOf(declaration.baseType, declaration.cardinality),
   });
+
+/**
+ * Give the input a record gives the interaction it is posted to.
+ *
+ * A Text Entry or an Extended Text judges a record as the string it was typed as, as it judges a
+ * string binding: its `stringValue` field, matched as typed against a `pattern-mask`, or NULL when
+ * it has none, as the NULL record. A Choice or an Inline Choice binds no record, so it judges none.
+ *
+ * @param interaction The interaction.
+ * @param record The record posted to it.
+ * @returns The single string to judge, or none.
+ */
+const typedInput = (interaction: Interaction, record: RecordValue): Option.Option<Value> =>
+  interaction.kind === "extended-text" || interaction.kind === "text-entry"
+    ? Option.some({
+        baseType: "string",
+        cardinality: "single",
+        values: record.fields.flatMap(({ identifier, value }) =>
+          identifier === "stringValue" ? [value] : [],
+        ),
+      })
+    : Option.none();
 
 /**
  * Validate one interaction's input through its own module.
@@ -125,10 +147,12 @@ const shownInteractions = (item: Item, record?: ResponsesRecord): readonly Inter
  * record's template values ({@link shownInteractions}). Each interaction shown, in document order,
  * validates its response: a host that posts a native form passes what `decode` gave for each
  * response, a {@link Malformed} included, and a form-library host passes values. A response left out
- * is NULL. A record gives no message: no interaction yet judges one. Tier (a) limits apply always
- * and tier (b) ones only under `configuration.validateResponses`. An Extended Text that renders the
- * cap's notice in place of its Controls (Q23) is not judged against its `min-strings`, so a post
- * with no entry for it never holds its item back.
+ * is NULL. A Text Entry or an Extended Text judges a record as the string it was typed as, its
+ * `stringValue`, as a string binding ({@link typedInput}): its `pattern-mask` matches that text as
+ * typed. `expected-length` sets a Control's size only and is never judged, for any binding. Tier
+ * (a) limits apply always and tier (b) ones only under `configuration.validateResponses`. An
+ * Extended Text that renders the cap's notice in place of its Controls (Q23) is not judged against
+ * its `min-strings`, so a post with no entry for it never holds its item back.
  *
  * A choice its template hides, or withholds because the record holds no value of its template
  * variable, is not among the choices presented, so posting it to its interaction gives
@@ -168,7 +192,10 @@ export const checkResponses = (
       : undefined;
 
     if (given !== undefined && !(given instanceof Malformed) && isRecordValue(given)) {
-      return [];
+      return Option.match(typedInput(interaction, given), {
+        onNone: () => [],
+        onSome: (typed) => validate(interaction, typed, configuration),
+      });
     }
 
     return validate(interaction, given ?? absent(document.item, interaction), configuration);

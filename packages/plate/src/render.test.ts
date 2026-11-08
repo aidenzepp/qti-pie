@@ -20,12 +20,13 @@ import type {
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
 import { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
 import type { Options, Rendered } from "#plate/render.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
+import { solution } from "#plate/solution.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptForTest, acceptedItem, check } from "#plate/validate/verdict.ts";
@@ -1858,6 +1859,184 @@ describe("render, a record-bound control", () => {
         assert.strictEqual(
           rendered.html,
           (yield* Effect.fromResult(render(redact(stringBound), configuration, { instance }))).html,
+        );
+      }),
+  );
+});
+
+/**
+ * Construct the record the text a candidate typed gives, holding only its `stringValue`, as a host
+ * may build it; the NULL record for empty text.
+ *
+ * @param typed The text.
+ * @returns The record.
+ */
+const typedRecord = (typed: string): RecordValue => ({
+  cardinality: "record",
+  fields:
+    typed === ""
+      ? []
+      : [{ identifier: "stringValue", value: { baseType: "string", value: typed } }],
+});
+
+/**
+ * An item whose paragraph holds a Text Entry bound to the record response `NUMBER`, whose
+ * declaration holds a correct response of some fields, or none.
+ *
+ * @param fields The correct response's fields, each its `field-identifier`, its `base-type` and its
+ *   text; none for no correct response.
+ * @returns The document.
+ */
+const solvedBy = (fields: readonly (readonly [string, string, string])[]): SourceDocument =>
+  doc(
+    "items/solved.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "solved"), attr("time-dependent", "false"), attr("title", "Solved")],
+      [
+        el(
+          "qti-response-declaration",
+          [attr("cardinality", "record"), attr("identifier", "NUMBER")],
+          fields.length === 0
+            ? []
+            : [
+                el(
+                  "qti-correct-response",
+                  [],
+                  fields.map(([identifier, baseType, lexical]) =>
+                    el(
+                      "qti-value",
+                      [attr("base-type", baseType), attr("field-identifier", identifier)],
+                      [sourceText(lexical)],
+                    ),
+                  ),
+                ),
+              ],
+        ),
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "p",
+              [],
+              [
+                sourceText("Your number: "),
+                el("qti-text-entry-interaction", [attr("response-identifier", "NUMBER")]),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+/**
+ * Give the text a Control holds as written, its line breaks kept: a `textarea`'s text children.
+ *
+ * @param control The Control.
+ * @returns Its text nodes' text, joined.
+ */
+const typedText = (control: Element): string =>
+  control.children.map((child) => (child.kind === "text" ? child.text : "")).join("");
+
+describe("render, a record value", () => {
+  it.effect(
+    "[Q-20] [Q-5] restores the record: each text control bound to a record shows its stringValue as typed, and the NULL record an empty control",
+    () =>
+      Effect.gen(function* restoresStringValue() {
+        const configuration = yield* defaults;
+        const recorded = redact(
+          yield* Effect.fromOption(acceptedItem(check(boundTo("record"), tables))),
+        );
+        const shownFor = (values: NonNullable<Options["values"]>) =>
+          Effect.map(
+            Effect.fromResult(render(recorded, configuration, { instance, values })),
+            elementsIn,
+          );
+        const typed = yield* shownFor({
+          NUMBER: typedRecord("12.0"),
+          WORKING: typedRecord("First line\nSecond line"),
+        });
+        const empty = yield* shownFor({ NUMBER: typedRecord(""), WORKING: typedRecord("") });
+
+        assert.deepStrictEqual(
+          controlsOf(typed, instance, "NUMBER").map((control) => control.attrs["value"]),
+          ["12.0"],
+        );
+        assert.deepStrictEqual(controlsOf(typed, instance, "WORKING").map(typedText), [
+          "First line\nSecond line",
+        ]);
+        assert.deepStrictEqual(
+          controlsOf(empty, instance, "NUMBER").map((control) => control.attrs["value"]),
+          [""],
+        );
+        assert.deepStrictEqual(controlsOf(empty, instance, "WORKING").map(typedText), [""]);
+      }),
+  );
+
+  it.effect(
+    "[Q-20] restores the record in a solution: the declared correct response's stringValue, and an empty control when it declares none",
+    () =>
+      Effect.gen(function* solvedRecord() {
+        const configuration = yield* defaults;
+        const shownIn = (fields: readonly (readonly [string, string, string])[]) =>
+          Effect.gen(function* solvedControl() {
+            const accepted = yield* Effect.fromOption(
+              acceptedItem(check(solvedBy(fields), tables)),
+            );
+            const rendered = yield* Effect.fromResult(
+              render(redact(accepted), configuration, {
+                instance,
+                mode: "solution",
+                values: solution(accepted),
+              }),
+            );
+
+            return controlsOf(elementsIn(rendered), instance, "NUMBER").map(
+              (control) => control.attrs["value"],
+            );
+          });
+
+        assert.deepStrictEqual(
+          yield* shownIn([
+            ["stringValue", "string", "12"],
+            ["floatValue", "float", "12"],
+          ]),
+          ["12"],
+        );
+        assert.deepStrictEqual(yield* shownIn([["floatValue", "float", "12"]]), [""]);
+        assert.deepStrictEqual(yield* shownIn([]), [""]);
+      }),
+  );
+
+  it.effect(
+    "[Q-20] restores the record within the output budget: its stringValue counts as any restored text",
+    () =>
+      Effect.gen(function* recordWithinBudget() {
+        const accepted = yield* Effect.fromOption(acceptedItem(check(solvedBy([]), tables)));
+        const values = { NUMBER: typedRecord("y".repeat(500)) };
+        const bare = yield* Effect.fromResult(
+          render(redact(accepted), yield* defaults, { instance }),
+        );
+        const restored = yield* Effect.fromResult(
+          render(redact(accepted), yield* defaults, { instance, values }),
+        );
+        const exact = yield* configure({ outputBudget: restored.html.length });
+        const short = yield* configure({ outputBudget: restored.html.length - 1 });
+
+        assert.isAbove(restored.html.length, bare.html.length + 499);
+        assert.strictEqual(
+          Result.getOrUndefined(render(redact(accepted), exact, { instance, values }))?.html,
+          restored.html,
+        );
+        assert.deepStrictEqual(
+          budgetFailure(render(redact(accepted), short, { instance, values })),
+          Option.some({
+            budget: restored.html.length - 1,
+            item: "solved",
+            printed: Option.none(),
+          }),
         );
       }),
   );

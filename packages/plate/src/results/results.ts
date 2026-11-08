@@ -562,8 +562,8 @@ const completionOf = (report: ItemReport): Value => {
  * record reported, in the record's order, each with its `fieldIdentifier` and `baseType`: none for
  * a NULL record, which a record response the values reported lack holds. An answered status judges
  * only the interactions the page showed under the record's template values, as `checkResponses`
- * does, and reads a response's default as the record's template processing set it, else as
- * declared ({@link answeredStatusOf}).
+ * does, a record response's typed text among them, and reads a response's default as the record's
+ * template processing set it, else as declared ({@link answeredStatusOf}).
  *
  * @param report What the result says about the item.
  * @returns The `itemResult`.
@@ -571,9 +571,9 @@ const completionOf = (report: ItemReport): Value => {
 const itemResult = (report: ItemReport): Element => {
   const { item } = report.item;
   const invalid = new Set(
-    checkResponses(report.item, report.answers, judging, { templates: report.templates }).map(
-      (message) => message.response,
-    ),
+    checkResponses(report.item, { ...report.answers, ...report.records }, judging, {
+      templates: report.templates,
+    }).map((message) => message.response),
   );
   const responses = Array.from(item.responses.values(), (declaration) => {
     const value = Option.getOrElse(own(report.answers, declaration.identifier), () =>

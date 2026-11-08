@@ -15,7 +15,9 @@
  * {@link validateTextEntry} checks a value the caller decoded. Tier (a) always applies: a posted
  * text that is not a number of the bound base type, or a file or a second entry, which a native
  * text input never posts. Tier (b), under `validateResponses`, adds the `pattern-mask` check
- * ({@link patternMessage}).
+ * ({@link patternMessage}). A record is judged as the string it was typed as, its `stringValue`,
+ * which `checkResponses` passes. `expected-length` is never judged, for any binding: it sets the
+ * Control's `size` only, as it is not a validity constraint.
  *
  * @module
  */
@@ -177,7 +179,8 @@ export const renderTextEntry = (
  * The caller decodes the posted entry with `decode`, under the entry name its form gave the
  * Control, the Text Entry's binding (a single value of its base type) and its `base`, and passes
  * the value, or the {@link Malformed} `decode` gave. So the entry name stays the caller's, while
- * the message and the author's override stay here.
+ * the message and the author's override stay here. For a record binding, `checkResponses` passes
+ * the record's `stringValue` as a single string, NULL when it has none.
  *
  * - A {@link Malformed} input of any binding, by its reason ({@link malformedMessage}):
  *   `malformedFile` for a file and `malformedSingleMany` for a second entry; for a text that is not
@@ -186,7 +189,7 @@ export const renderTextEntry = (
  * - A decoded value, under `validateResponses`: one message when it mismatches the Text Entry's
  *   `pattern-mask` ({@link patternMessage}), the author's `data-patternmask-message` or else
  *   `patternMismatch`. NULL, a Text Entry without a `pattern-mask`, and every value without
- *   `validateResponses` give none.
+ *   `validateResponses` give none, and so does a text longer than `expected-length`.
  *
  * @param interaction The Text Entry.
  * @param input The decoded value, or why the entry did not decode.
