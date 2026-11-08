@@ -13,6 +13,7 @@ import type { ExpressionType, ReferenceEntry } from "#plate/model/expression.ts"
 import { checkRules, processingRefusals, referenceRefusals } from "#plate/validate/rules.ts";
 import type { PrefixedTyper } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
+import { check } from "#plate/validate/verdict.ts";
 
 /**
  * The location every hand-built item in these tests carries.
@@ -3812,6 +3813,148 @@ describe("processingRefusals", () => {
       ],
     );
   });
+});
+
+/**
+ * What one refusal reduces to in these tests: its rule, its path and its detail.
+ */
+type Judged = ReturnType<typeof judged>[number];
+
+/**
+ * Check a document whole, as `open` does, and reduce a refusing verdict's refusals as
+ * {@link judged} does. A test's declarations are judged by the test model's builder, which no rule
+ * of `processingRefusals` runs, so only the whole check reaches a test outcome's default value.
+ *
+ * @param source The document.
+ * @returns The refusals, reduced; empty for an accepting verdict.
+ */
+const verdictRefusals = (source: SourceDocument): readonly Judged[] => {
+  const verdict = check(source, tables);
+  assert.notStrictEqual(verdict.verdict, "unchecked");
+
+  return verdict.verdict === "refused"
+    ? verdict.refusals.map((refusal) => ({
+        detail: refusal.detail,
+        path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
+        rule: refusal.rule,
+      }))
+    : [];
+};
+
+/**
+ * Construct a rule that sets the boolean outcome `PASSED` to a `qti-base-value` of base type
+ * boolean.
+ *
+ * @param written The value's text, as written.
+ * @returns The `qti-set-outcome-value`.
+ */
+const setPassed = (written: string): SourceElement =>
+  el("qti-set-outcome-value", [attr("identifier", "PASSED")], [baseValue("boolean", written)]);
+
+/**
+ * One place plate reads a boolean value's text, with the path a refusal of it is at.
+ */
+interface BooleanPlace {
+  /**
+   * Judge a document that holds the value at this place.
+   */
+  readonly judge: (written: string) => readonly Judged[];
+  /**
+   * The place, as a case's title names it.
+   */
+  readonly name: string;
+  /**
+   * The path of the value's element.
+   */
+  readonly path: string;
+  /**
+   * The feature tag a case at this place carries, with its space: `[I-1]` where it judges a
+   * response declaration, else none.
+   */
+  readonly tag: string;
+}
+
+/**
+ * The five places a boolean `qti-value` or `qti-base-value` is read from its text: an item's
+ * response and template declarations and its response processing, and a test's outcome
+ * declaration and outcome processing.
+ */
+const booleanPlaces: readonly BooleanPlace[] = [
+  {
+    judge: (written) =>
+      judged(
+        item(
+          [response("RESPONSE", "single", "boolean", [values("qti-correct-response", written)])],
+          [],
+        ),
+      ),
+    name: "a response's qti-correct-response",
+    path: "qti-assessment-item/qti-response-declaration/qti-correct-response/qti-value",
+    tag: "[I-1] ",
+  },
+  {
+    judge: (written) =>
+      judged(
+        item(
+          [
+            el(
+              "qti-template-declaration",
+              [
+                attr("identifier", "T"),
+                attr("cardinality", "single"),
+                attr("base-type", "boolean"),
+              ],
+              [values("qti-default-value", written)],
+            ),
+          ],
+          [],
+        ),
+      ),
+    name: "a template's qti-default-value",
+    path: "qti-assessment-item/qti-template-declaration/qti-default-value/qti-value",
+    tag: "",
+  },
+  {
+    judge: (written) =>
+      judged(
+        item([outcome("PASSED", "boolean")], [], [processing(undefined, [setPassed(written)])]),
+      ),
+    name: "response processing's qti-base-value",
+    path: "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-base-value",
+    tag: "",
+  },
+  {
+    judge: (written) =>
+      verdictRefusals(
+        ruledTest([outcome("PASSED", "boolean", [values("qti-default-value", written)])], []),
+      ),
+    name: "a test outcome's qti-default-value",
+    path: "qti-assessment-test/qti-outcome-declaration/qti-default-value/qti-value",
+    tag: "",
+  },
+  {
+    judge: (written) =>
+      processed(ruledTest([outcome("PASSED", "boolean")], [setPassed(written)]), unknownTyping),
+    name: "a test's outcome processing's qti-base-value",
+    path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-base-value",
+    tag: "",
+  },
+];
+
+describe("a boolean qti-value or qti-base-value is true or false (reading 34)", () => {
+  for (const place of booleanPlaces) {
+    for (const lexical of ["1", "0", "TRUE"]) {
+      it(`${place.tag}refuses the boolean value text '${lexical}' in ${place.name} as value-type`, () => {
+        assert.deepStrictEqual(place.judge(lexical), [
+          { detail: { baseType: "boolean", lexical }, path: place.path, rule: "value-type" },
+        ]);
+      });
+    }
+
+    it(`${place.tag}accepts the boolean value text ' true ' in ${place.name}, its outer whitespace trimmed (reading 7)`, () => {
+      assert.deepStrictEqual(place.judge(" true "), []);
+    });
+  }
 });
 
 /**

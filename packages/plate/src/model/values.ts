@@ -399,7 +399,14 @@ const readers = {
  * Read text as a value of a base type, exactly as written.
  *
  * No whitespace is removed, so a padded attribute value is refused, as spec reading 7 rules for
- * typed values in attributes. A boolean is `true` or `false` only; `1` and `0` are refused.
+ * typed values in attributes.
+ *
+ * A boolean is `true` or `false` only; `1` and `0` are refused (reading 34). The QTI XSD does not
+ * decide: it types `qti-value` as `xs:normalizedString` and `qti-base-value` as `xs:string`. The
+ * information model does: its boolean base type is "the same as the set of values defined by the
+ * boolean primitiveType" (`info.txt:72950`), the primitive "with permitted values of "true" and
+ * "false"" (`info.txt:74910`). XML Schema's `1` and `0` belong only to the attributes the XSD types
+ * `xs:boolean`, which `xsBooleanOf` in `#plate/model/attributes.ts` reads.
  *
  * @param baseType The base type to read.
  * @param lexical The text, as written.
