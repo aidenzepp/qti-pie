@@ -123,9 +123,10 @@ const startingOutcomes = (item: Item, record: ItemRecord): ItemRecord["outcomes"
  * raises it at the start of each attempt, and may read and set `completionStatus`, which the
  * record then keeps into the next attempt. They read the record's template values, and a
  * `qti-correct` or a `qti-default` reads the correct response or default the record's template
- * processing set before the declaration's. The record's seed, template values, correct responses
- * and defaults are copied unchanged, since a stored value always wins over recomputation. The
- * record passed in is not changed, on success or on failure.
+ * processing set before the declaration's. They are given each record response's value from the
+ * record's `records`, beside the responses. The record's seed, template values, correct responses,
+ * defaults and record responses' values are copied unchanged, since a stored value always wins
+ * over recomputation. The record passed in is not changed, on success or on failure.
  *
  * The rules draw from one stream, keyed by the record's seed under the attempt's response label
  * (`responseLabel`): `<instance>\u001Fresponse\u001F<numAttempts>`, with the record's instance and
@@ -156,6 +157,7 @@ export const runAttempt = (
     defaults: record.defaults,
     numAttempts: BigInt(numAttempts),
     outcomes: startingOutcomes(item, record),
+    records: record.records,
     responses: { ...record.responses, ...responses },
     templates: record.templates,
   };

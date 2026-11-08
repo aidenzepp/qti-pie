@@ -49,7 +49,7 @@ import {
   holdsCompletionStatus,
 } from "#plate/model/record.ts";
 import { isNull, nullOf } from "#plate/model/values.ts";
-import type { Single, Value } from "#plate/model/values.ts";
+import type { RecordValue, Single, Value } from "#plate/model/values.ts";
 
 export {
   OutcomeMismatchError,
@@ -93,6 +93,12 @@ export interface Variables {
    */
   readonly numAttempts?: bigint;
   readonly outcomes: Readonly<Record<string, Value>>;
+  /**
+   * The value of each record response, by identifier, beside `responses`, which hold the values of
+   * the other cardinalities: the session record's `records`. Absent where the run holds no record
+   * response.
+   */
+  readonly records?: Readonly<Record<string, RecordValue>>;
   readonly responses: Readonly<Record<string, Value>>;
   /**
    * The value of each template variable, by identifier, as template processing left it. Without

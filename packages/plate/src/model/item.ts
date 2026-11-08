@@ -61,7 +61,7 @@ import type { ExpressionReading } from "#plate/model/expressions/read.ts";
 import { translate } from "#plate/model/regex.ts";
 import { templateRules } from "#plate/model/template.ts";
 import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
-import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import type { ModelledBaseType, RecordValue, Single, Value } from "#plate/model/values.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import {
   // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
@@ -701,6 +701,17 @@ export type BodyNode =
   | Unsupported;
 
 /**
+ * A `qti-response-declaration` of cardinality `record` the item model holds: its identifier, and
+ * the record its `qti-correct-response` and its `qti-default-value` write, each none when the
+ * declaration has none.
+ */
+export interface RecordDeclaration {
+  readonly correct: Option.Option<RecordValue>;
+  readonly defaultValue: Option.Option<RecordValue>;
+  readonly identifier: string;
+}
+
+/**
  * The identifier, and the base type and cardinality as written, of an {@link UnheldDeclaration}.
  */
 interface UnheldType {
@@ -748,6 +759,12 @@ export interface Item {
   readonly lang: Option.Option<string>;
   readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
   readonly processing: Option.Option<readonly Rule[]>;
+  /**
+   * The response declarations of cardinality `record` the item holds a value of, keyed by
+   * identifier. Absent when it holds none, as `unheld` is, so an item built by hand may leave it
+   * out.
+   */
+  readonly records?: ReadonlyMap<string, RecordDeclaration>;
   readonly responses: ReadonlyMap<string, ResponseDeclaration>;
   /**
    * The template processing's rules in document order: none when the item has no

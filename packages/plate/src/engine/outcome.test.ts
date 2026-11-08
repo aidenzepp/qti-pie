@@ -547,6 +547,7 @@ const record = (name: string, score: number, numAttempts: number): ItemRecord =>
   notices: [],
   numAttempts,
   outcomes: { SCORE: float(score), completionStatus: identifier("completed") },
+  records: {},
   responses: { RESPONSE: identifier("B") },
   seed: "a seed the scope never holds",
   templates: { T: integer(4n) },
