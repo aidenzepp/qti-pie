@@ -97,7 +97,7 @@ reset() {
 
 # Prints each leftover as "role: <name>" or "database: <name>"; exits 1 if any were found.
 check_clear() {
-	local schema where="rolname LIKE 'qti\_\_%' OR rolname LIKE 'qti_smoke\_\_%'"
+	local schema where="rolname LIKE 'qti\_\_%'"
 	for schema in $(schemas); do
 		where="$where OR rolname LIKE '${schema}\_\_%'"
 	done

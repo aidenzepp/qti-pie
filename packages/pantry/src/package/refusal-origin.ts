@@ -38,10 +38,10 @@ export const WitnessKind = Schema.Literals(Object.values(witnessKinds));
  * it, absent for a law the table does not hold. A program reads which law broke by its `name`.
  *
  * The text is no JSON: `Formatter.format` writes a literal's absent type as `undefined` and a
- * bigint as `1n`. The law stays text because grizzle publishes no Schema of its `Law`: a side's
- * selection is grizzle's expression description and a constant term any literal grizzle holds, a
- * bigint, a decimal or a span among them, so a structure here would define grizzle's type a second
- * time.
+ * bigint as `1n`. The law stays display text because grizzle has no encoder or decoder of its
+ * `Law` or its IR, and will never have one, as its owner ruled on 2026-11-08: the database is the
+ * whole constraint engine, so a refusal prints what the database states, each law's display text
+ * and its installed name.
  */
 export const RefusedLaw = Schema.Struct({
   name: Schema.optionalKey(Schema.String),

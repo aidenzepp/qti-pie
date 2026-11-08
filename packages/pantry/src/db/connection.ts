@@ -109,12 +109,17 @@ const localCluster = Config.all({
 
 /**
  * The bound, in milliseconds, of one connection attempt to the cluster and of the one
- * CancelRequest an interrupted statement sends.
+ * CancelRequest an interrupted statement sends, for the migration identity and every login alike.
  *
- * Grizzle states no number of its own. This is the budget grizzle 48256f8 fixed for every session
- * it opened, the bound every lease run of this package has passed under.
+ * Grizzle states no number of its own: every `DbConnection` carries the caller's
+ * `connectTimeoutMs`, and an attempt that has not read its password, connected, finished TLS and
+ * authenticated within it fails with `ConnectTimedOut`. 5,000 ms is this package's choice. An
+ * attempt is one password read and a few round trips (TCP, the SSLRequest, the TLS handshake,
+ * startup and authentication), so the bound stands well above a reachable server's answer, and a
+ * server that never answers fails the command within seconds rather than holding it.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/48256f8d61484d18aea2023f2d6fb54d07d46abf/packages/grizzle/src/adapter/pool/budgets.ts
+ * @see https://github.com/bjornpagen/grizzle/blob/0c2154c75d173f20b8f2198bffc2a626f5ea431f/packages/grizzle/src/adapter/types/layer.ts#L61-L78
+ * @see https://github.com/bjornpagen/grizzle/blob/0c2154c75d173f20b8f2198bffc2a626f5ea431f/README.md#connecting
  */
 const connectTimeoutMs = 5000;
 

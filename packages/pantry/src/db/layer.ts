@@ -42,12 +42,17 @@ const authorAppRole = "qti__author_app";
  * The author application's session pool: at most 10 sessions, 1 kept open once opened, and the
  * others closed 5,000 ms after their last use.
  *
- * Grizzle chooses no size and no timeout: the caller sizes the pool (`PoolBounds`,
- * `adapter/types/layer.ts:80-95` at the pin). These are the bounds grizzle fixed for every pool
- * before it left them to the caller (`poolBounds`, `core/policy.ts:198-199` at `48256f8`), which
- * every lease run of this package has passed under.
+ * Grizzle chooses no size and no timeout: `DbLayer.make` takes the caller's `PoolBounds`, and
+ * these are this package's choice. Pantry's calls on a `Db` run one after another: the import
+ * opens one `Db` and applies one ChangeSet, the export reads its documents' pages in order, and the
+ * database tests run one file at a time (`maxWorkers: 1`, vite.config.ts) and import one package at
+ * a time, so 10 is headroom above what pantry uses, not a measured need. The session kept open
+ * serves a process's next call, such as a test file's next import through the same layer, without
+ * a new connection attempt; any other closes 5,000 ms after its last use, so a process between
+ * calls holds one session of the server.
  *
  * @see https://github.com/bjornpagen/grizzle/blob/0c2154c75d173f20b8f2198bffc2a626f5ea431f/packages/grizzle/src/adapter/types/layer.ts#L80-L95
+ * @see https://github.com/bjornpagen/grizzle/blob/0c2154c75d173f20b8f2198bffc2a626f5ea431f/README.md#connecting
  */
 const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
 
