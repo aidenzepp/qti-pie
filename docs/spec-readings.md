@@ -3,9 +3,7 @@
 How this repository reads QTI 3.0 and the languages it embeds where a specification is silent, ambiguous or split
 between its schema and its prose. Every package follows these readings: the qti package when it accepts or refuses a
 document, and the renderer when it renders one, so the two never disagree about the same file. Each reading is an
-operator ruling, or a decision read from the normative text under the operator's standing ruling of 2026-11-05 that
-the spec wins, recorded in the pull request that lands it. A new reading lands here by pull request, and a package
-that needs one asks the operator first.
+operator ruling. A new reading lands here by pull request, and a package that needs one asks the operator first.
 
 ## Validity
 
