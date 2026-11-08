@@ -467,6 +467,7 @@ const tiers: readonly (readonly Rule[])[] = [
     "attribute-admission",
   ],
   ["ancestry-ban", "owner-copy", "ordering", "child-set", "union-count", "admission"],
+  ["cdn-data", "cdn-origin", "cdn-style", "cdn-foreign"],
   [
     "key-text-bound",
     "href-form",
@@ -1081,7 +1082,31 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
     "admission",
     "the content model: the family's end before admission, the most general (N5 admitted)",
   ],
-  ["admission", "key-text-bound", "the tiers: the content model before the document layer"],
+  [
+    "admission",
+    "cdn-data",
+    "the tiers: the content model before a single-CDN install's policy, so content that is not valid QTI is named by the rule that says so",
+  ],
+  [
+    "cdn-data",
+    "cdn-origin",
+    "the install's policy: a data: address is the cause its address off the origin follows from (cdn.ts)",
+  ],
+  [
+    "cdn-origin",
+    "cdn-style",
+    "the install's policy: an address the player fetches before a style that fetches, which no fetched field is (cdn.ts)",
+  ],
+  [
+    "cdn-style",
+    "cdn-foreign",
+    "the install's policy: markup it reads before markup pantry cannot read (cdn.ts)",
+  ],
+  [
+    "cdn-foreign",
+    "key-text-bound",
+    "the tiers: a single-CDN install's policy before the document layer",
+  ],
   [
     "key-text-bound",
     "href-form",

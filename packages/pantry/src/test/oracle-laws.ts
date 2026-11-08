@@ -153,6 +153,23 @@ export const statedInParts = {
 } as const satisfies Readonly<Record<string, readonly string[]>>;
 
 /**
+ * The laws a single-CDN install's policy states (`#pantry/qti/cdn.ts`), each with why the oracle
+ * declares none: the oracle judges a package as this package's own install does, which states none
+ * of them, so a package the oracle accepts may break one. Each law's checks are held to their
+ * readings in `src/qti/cdn.test.ts`, and the database of such an install is their judge.
+ */
+export const policyLaws = {
+  "CDN data":
+    "the policy refuses a data: address, which this package's own install admits as any URI; cdn.test.ts holds its patterns to the URL Standard's reading of a scheme",
+  "CDN foreign":
+    "the policy refuses foreign markup and every open attribute class but data-*, which this package's own install keeps; cdn.test.ts holds the check to the classes it names",
+  "CDN origin":
+    "the policy holds every fetched address to its origin, which this package's own install leaves free; cdn.test.ts holds its patterns to the URL Standard and to HTML's srcset parser",
+  "CDN style":
+    "the policy refuses a style that fetches, which this package's own install admits; cdn.test.ts holds its pattern to the text it names",
+} as const satisfies Readonly<Record<string, string>>;
+
+/**
  * The laws the schema states that no host predicate over a package's rows can judge, each with
  * why. None is a rule of the specification a package can break: each is a law over rows the
  * importer writes beside the tree, copied from it, which the host writes none of. Only an importer

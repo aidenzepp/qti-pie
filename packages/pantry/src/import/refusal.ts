@@ -197,6 +197,7 @@ import {
 } from "#pantry/qti/metadata.ts";
 import { Chars, EndCharacter, nodeLawsByName, Prefix } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
+import { installedCdnLawsByName } from "#pantry/qti/cdn.ts";
 import { HeaderToken, htmlLawsByName } from "#pantry/qti/html.ts";
 import { identityLawsByName, TextIdref } from "#pantry/qti/identity.ts";
 import { operatorLawsByName, ToleranceToken } from "#pantry/qti/operators.ts";
@@ -917,6 +918,7 @@ type LawsByName = { readonly [Name in LawName]?: readonly Statement[] };
  * The modules that name their laws where they state them, each a {@link LawsByName}.
  */
 export const namedLaws: readonly LawsByName[] = [
+  installedCdnLawsByName,
   nodeLawsByName,
   chardataLawsByName,
   attributeLawsByName,

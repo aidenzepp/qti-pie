@@ -54,6 +54,11 @@ needs `--yes` to replace a directory that already has content. `--output json` p
 - `GR8DES_PG_PASSWORD_COMMAND` names an executable that prints a role's password. Every connection attempt runs it,
   without a shell, with the role's name as its one argument, in place of `GR8DES_PG_MIGRATION_PASSWORD` and the logins'
   password files.
+- `GR8DES_QTI_INSTALL` names a single-CDN install's folder: its `policy.json`, exactly `{ "cdn": "https://<host>/" }`,
+  and the `migrations/qti/snapshot.json` its own grizzle config generated. `import` and `export` then build `Qti`
+  with the policy, whose laws the database alone judges: every address a player fetches is on the origin, no address
+  is a `data:` one, no `style` fetches, and no foreign markup is kept. `grizzle.config.ts` installs this package's own
+  `Qti` whatever the setting says.
 
 ## Development
 

@@ -10,6 +10,7 @@ import { Predicate } from "effect";
 import * as install from "#pantry/grammar/install.ts";
 import * as attributes from "#pantry/qti/attributes.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
+import { installedCdnLawsByName } from "#pantry/qti/cdn.ts";
 import * as chardata from "#pantry/qti/chardata.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import * as declarations from "#pantry/qti/declarations.ts";
@@ -59,6 +60,7 @@ const composedLaws: readonly (readonly [string, readonly Statement[]])[] = [
   ["src/qti/html.ts htmlLaws", htmlLaws],
   ["src/qti/quotation.ts quotationLaws", quotationLaws],
   ["src/qti/operators.ts operatorLaws", operatorLaws],
+  ["src/qti/cdn.ts installedCdnLawsByName", Object.values(installedCdnLawsByName).flat()],
 ];
 
 /**

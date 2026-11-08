@@ -1,9 +1,9 @@
 import { DbLayer } from "@bjornpagen/grizzle";
 import type { PoolBounds } from "@bjornpagen/grizzle";
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import { Effect, FileSystem, Layer, Schema } from "effect";
+import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { fileURLToPath } from "node:url";
-import { loginConnection } from "#pantry/db/connection.ts";
+import { connectionServices, loginConnection } from "#pantry/db/connection.ts";
+import { installed, snapshotPathOf } from "#pantry/db/install.ts";
 
 /**
  * The migrations snapshot could not be read from disk or is not a JSON object with a `fingerprint`.
@@ -18,7 +18,7 @@ export class SnapshotLoadError extends Schema.TaggedError<SnapshotLoadError>()(
    * The file, why that is likely, and the command that fixes it.
    */
   override get message(): string {
-    return `Cannot read the migrations snapshot at ${this.path}. Without git-lfs it checks out as a pointer file. Run \`git lfs pull\` in this checkout, then try again.`;
+    return `Cannot read the migrations snapshot at ${this.path}. Without git-lfs it checks out as a pointer file. Run \`git lfs pull\` in the checkout that holds it, then try again; where GR8DES_QTI_INSTALL names an install, the install's own grizzle config generates it into the install's migrations folder.`;
   }
 }
 
@@ -57,8 +57,18 @@ const authorAppRole = "qti__author_app";
 const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
 
 /**
+ * The snapshot the author login opens: the committed one, or, where `GR8DES_QTI_INSTALL` names an
+ * install, the install's (`#pantry/db/install.ts`), whose `Qti` this process builds with the same
+ * policy, so the two are one schema's.
+ */
+const snapshotPath = Option.match(installed, {
+  onNone: () => fileURLToPath(import.meta.resolve("#migrations/qti/snapshot.json")),
+  onSome: snapshotPathOf,
+});
+
+/**
  * The author application's pool on the local cluster: the login's connection
- * (`#pantry/db/connection.ts`), its pool, and the committed migrations snapshot, read from disk.
+ * (`#pantry/db/connection.ts`), its pool, and its install's migrations snapshot, read from disk.
  *
  * The login (`#pantry/qti/logins.ts`) is a resource of this layer, loaded once the settings, the
  * CA and the snapshot are read: grizzle builds its workload when that module is evaluated, so a
@@ -78,7 +88,6 @@ export const AuthorAppLayer = Layer.unwrap(
   Effect.gen(function* AuthorAppLayer() {
     const fs = yield* FileSystem.FileSystem;
     const connection = yield* loginConnection(authorAppRole);
-    const snapshotPath = fileURLToPath(import.meta.resolve("#migrations/qti/snapshot.json"));
     const snapshot = yield* fs.readFileString(snapshotPath).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(SnapshotText)),
       Effect.mapError((reason) => new SnapshotLoadError({ path: snapshotPath, reason })),
@@ -87,4 +96,4 @@ export const AuthorAppLayer = Layer.unwrap(
 
     return DbLayer.make({ ...connection, login: AuthorApp, pool: authorAppPool, snapshot });
   }),
-).pipe(Layer.provide(NodeFileSystem.layer));
+).pipe(Layer.provide(connectionServices));

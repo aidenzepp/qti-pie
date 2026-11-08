@@ -1,13 +1,17 @@
 /**
  * The `Qti` schema, composed by name: every roster and closed relation `install.ts` declares, every
  * stored relation of the `src/qti/` modules, and every module's laws, each array once (plan §1.1,
- * the W5 amendment's §C).
+ * the W5 amendment's §C), and an install's single-CDN laws where its policy states them
+ * (`#pantry/qti/cdn.ts`).
  *
  * No relation is `mutable`: qti-pie writes each package once, every owner inserted with its whole
  * family in one ChangeSet step (the W5 amendment's A). A module joins the composition when it
  * lands; `schema.test.ts` lists the modules composed and checks each law array is here once.
  */
 import { schema } from "@bjornpagen/grizzle";
+import { Option } from "effect";
+import type { CdnPolicy } from "#pantry/db/install.ts";
+import { installedPolicy } from "#pantry/db/install.ts";
 import {
   AnonymousType,
   AttributeGrammar,
@@ -131,6 +135,7 @@ import {
   ValueSet,
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
+import { cdnLawsByName } from "#pantry/qti/cdn.ts";
 import { htmlLaws, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLaws, identityRelations } from "#pantry/qti/identity.ts";
 import { interactionLaws, interactionRelations } from "#pantry/qti/interactions.ts";
@@ -486,7 +491,13 @@ type QtiStatement =
   | (typeof metadataLaws)[number]
   | (typeof htmlLaws)[number]
   | (typeof quotationLaws)[number]
-  | (typeof operatorLaws)[number];
+  | (typeof operatorLaws)[number]
+  | NonNullable<CdnStatements[keyof CdnStatements]>[number];
+
+/**
+ * The single-CDN laws a policy states, by name (`#pantry/qti/cdn.ts`).
+ */
+type CdnStatements = ReturnType<typeof cdnLawsByName>;
 
 /**
  * Every module's statements, in module order, each module's list one element: a list of lists
@@ -510,33 +521,78 @@ const moduleLaws: readonly (readonly QtiStatement[])[] = [
 ];
 
 /**
- * Every module's statements, in module order.
+ * The relations of the QTI 3.0 schema: the grammar's rosters and closed relations, then each
+ * module's relations, each under its own name.
  */
-const qtiLaws = moduleLaws.flat();
+const qtiRelations = {
+  ...grammarRosters,
+  ...grammarRelations,
+  ...nodeRelations,
+  ...chardataRelations,
+  ...attributeRelations,
+  ...packageRelations,
+  ...identityRelations,
+  ...declarationRelations,
+  ...testRelations,
+  ...mappingRelations,
+  ...interactionRelations,
+  ...expressionRelations,
+  ...metadataRelations,
+  ...htmlRelations,
+  ...quotationRelations,
+  ...operatorRelations,
+};
 
 /**
- * The QTI 3.0 schema: the grammar's rosters and closed relations, then each module's relations,
- * each under its own name, and every module's laws.
+ * Build the QTI 3.0 schema for a single-CDN install's laws: the relations and every module's laws,
+ * then the policy's.
+ *
+ * @param cdnLaws - The policy's laws, none for no policy.
+ * @returns The schema.
  */
-export const Qti = schema(
-  "Qti",
-  {
-    ...grammarRosters,
-    ...grammarRelations,
-    ...nodeRelations,
-    ...chardataRelations,
-    ...attributeRelations,
-    ...packageRelations,
-    ...identityRelations,
-    ...declarationRelations,
-    ...testRelations,
-    ...mappingRelations,
-    ...interactionRelations,
-    ...expressionRelations,
-    ...metadataRelations,
-    ...htmlRelations,
-    ...quotationRelations,
-    ...operatorRelations,
-  },
-  qtiLaws,
-);
+const qtiSchemaOf = (cdnLaws: readonly QtiStatement[]) =>
+  schema("Qti", qtiRelations, [...moduleLaws, cdnLaws].flat());
+
+/**
+ * The QTI 3.0 schema of this package's own install: no policy, so its statements are exactly the
+ * modules' and the committed migrations install it.
+ */
+const ownQti = qtiSchemaOf([]);
+
+/**
+ * The QTI 3.0 schema built for each origin so far, by origin.
+ */
+const builtSchemas = new Map<string, typeof ownQti>();
+
+/**
+ * Build the QTI 3.0 schema for an install's policy, or none for this package's own install: every
+ * module's relations and laws, and the policy's single-CDN laws (`#pantry/qti/cdn.ts`).
+ *
+ * One schema value stands for each policy, built at its first call, so an install outside this
+ * package that composes `Qti` for a policy holds the very value this package's runtime opens with
+ * that policy, and its statements are the ones the importer names refusals by.
+ *
+ * @param policy - The install's policy, none for this package's own install.
+ * @returns The schema.
+ */
+export const qtiSchema = (policy: Option.Option<CdnPolicy>): typeof ownQti =>
+  Option.match(policy, {
+    onNone: () => ownQti,
+    onSome: ({ cdn }) => {
+      const known = builtSchemas.get(cdn);
+      if (known !== undefined) {
+        return known;
+      }
+
+      const built = qtiSchemaOf(Object.values(cdnLawsByName(policy)).flat());
+      builtSchemas.set(cdn, built);
+
+      return built;
+    },
+  });
+
+/**
+ * The QTI 3.0 schema this process opens: built for the policy of the install `GR8DES_QTI_INSTALL`
+ * names (`#pantry/db/install.ts`), and this package's own where it names none.
+ */
+export const Qti = qtiSchema(installedPolicy);
