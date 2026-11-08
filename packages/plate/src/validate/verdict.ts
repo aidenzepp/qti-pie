@@ -1629,6 +1629,69 @@ const attributeType = (refusal: Refusal): string => {
 };
 
 /**
+ * The built-in variables' identifiers, which "are reserved" (`info.txt:12006`), so no declaration
+ * may take one: the names of `reservedIdentifiers` in `#plate/validate/structure.ts`, which refuses
+ * such a declaration `attribute-type` (pantry's `DeclarationNotReserved`).
+ */
+const builtInIdentifiers: ReadonlySet<string> = new Set([
+  "completionStatus",
+  "duration",
+  "numAttempts",
+]);
+
+/**
+ * Word an `undeclared-variable` refusal with no `check` whose `expected` is exactly `response` and
+ * which has no `declarer`, when no declaration can give its name, so the sentence does not ask for
+ * a declaration that would itself be wrong. `qti-map-response`, `qti-map-response-point` and
+ * `qti-correct` read a declared response's mapping, area mapping or correct response, so a name
+ * that is not one is refused there: by the item's rules (P8), and by `openPackage` for a test's
+ * dotted name.
+ *
+ * - A dotted name: "Identifiers containing the period character are reserved for use in prefixing"
+ *   (`info.txt:10122`), and a test reads such a name through an item ref, test part or section
+ *   (reading 48). What it reads is not a response its item declares: an outcome, a template
+ *   variable or a built-in. The fix is a response the item declares, written `ITEMREF.RESPONSE`.
+ * - A built-in ({@link builtInIdentifiers}): no declaration may take its name, so it has no mapping
+ *   and no correct response. `numAttempts` and `duration` are "built-in response variables"
+ *   (`info.txt:8466`), so the sentence calls each the built-in and never says it is no response.
+ *
+ * @param refusal The refusal.
+ * @param subject The element, or the element's attribute, as the sentence names it.
+ * @returns The sentence, or none for a name a declaration can give, whose sentence asks for it.
+ */
+const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<string> => {
+  if (
+    fact(refusal, "expected", "") !== "response" ||
+    Option.isSome(optionalFact(refusal, "declarer"))
+  ) {
+    return Option.none();
+  }
+
+  const name = fact(refusal, "identifier", "");
+  const identifier = code(name);
+
+  if (name.includes(".")) {
+    return Option.some(
+      sentence(
+        refusal,
+        `${subject} names ${identifier}, which reads, through an item ref, test part or section, a variable that is not a response its item declares.`,
+        `name a response the item declares, written ${code("ITEMREF.RESPONSE")}`,
+      ),
+    );
+  }
+
+  return builtInIdentifiers.has(name)
+    ? Option.some(
+        sentence(
+          refusal,
+          `${subject} names the built-in ${identifier}, which has no declaration, so no mapping or correct response.`,
+          "name a declared response",
+        ),
+      )
+    : Option.none();
+};
+
+/**
  * Word an `undeclared-variable` refusal, by the `check` its detail names.
  *
  * - `untimed-duration` (pantry's `item-duration`): the built-in `duration`, read where the item is
@@ -1641,7 +1704,9 @@ const attributeType = (refusal: Refusal): string => {
  *   target lists every kind the rule may set, space-separated, and the sentence offers them as
  *   alternatives (pantry's `DeclaredRefKind`). A test's printed variable carries `declarer:
  *   "test"`, and the sentence names the test as what declares no such variable (pantry's
- *   `binding-declared` for a test).
+ *   `binding-declared` for a test). A response that no declaration can give, a dotted name or a
+ *   built-in, is worded by {@link undeclarableResponse}, so the sentence never asks for it to be
+ *   declared.
  *
  * Each names the element, or the element's attribute when a reference attribute names the
  * variable.
@@ -1686,10 +1751,12 @@ const undeclaredVariable = (refusal: Refusal): string => {
       const kind = alternatives(fact(refusal, "expected", "variable"), variableKind);
       const declarer = fact(refusal, "declarer", "item") === "test" ? "test" : "item";
 
-      return sentence(
-        refusal,
-        `${subject} names ${identifier}, and the ${declarer} declares no ${kind} ${identifier}.`,
-        `declare ${identifier}, or name a declared ${kind}`,
+      return Option.getOrElse(undeclarableResponse(refusal, subject), () =>
+        sentence(
+          refusal,
+          `${subject} names ${identifier}, and the ${declarer} declares no ${kind} ${identifier}.`,
+          `declare ${identifier}, or name a declared ${kind}`,
+        ),
       );
     }
   }
