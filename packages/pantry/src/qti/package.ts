@@ -101,9 +101,9 @@ export const Package = relation("Package", { entries: drawn(natural), id: uuid, 
  * the listing, which the family draws from its place in the nesting.
  *
  * `content` is the entry's bytes as read, a grizzle `bytes` field: PostgreSQL's bytea, written in
- * binary and read back whole, at most grizzle's `bytesMaxLength` bytes, which its column's CHECK
- * holds. No law reads it. Whether it is the manifest is a function of `path`, and its byte length
- * one of `content`, so neither is stored (review R19).
+ * binary and read back whole, at most grizzle's `bytesMaxLength` bytes, PostgreSQL's longest bytea,
+ * past which grizzle refuses a value before any SQL. No law reads it. Whether it is the manifest is
+ * a function of `path`, and its byte length one of `content`, so neither is stored (review R19).
  */
 export const Entry = relation(
   "Entry",
