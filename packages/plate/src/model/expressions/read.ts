@@ -197,13 +197,6 @@ export const kindReaders: FamilyReaders<ExpressionKind> = {
 };
 
 /**
- * The kinds the item model reads: every one of the 64, since each has a reader spec, a kind rule
- * and an evaluator, in sorted order. The engine runs exactly these, beside the response rules
- * `renders.engine` lists in `#plate/vocabulary.ts`.
- */
-export const landedKinds: readonly ExpressionKind[] = expressionKinds;
-
-/**
  * Each kind, keyed by its element's local name, `qti-<kind>`.
  */
 const kindsByElement: ReadonlyMap<string, ExpressionKind> = new Map(

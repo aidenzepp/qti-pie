@@ -11,7 +11,7 @@ import { Option } from "effect";
 import type { TemplateRule } from "#plate/model/expression.ts";
 import type { Item, RecordDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
 import type { SolutionRecord } from "#plate/model/record.ts";
-import { nullOf } from "#plate/model/values.ts";
+import { nullOf, nullRecord } from "#plate/model/values.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { Responses } from "#plate/session/session.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
@@ -27,11 +27,6 @@ const correctOf = (declaration: ResponseDeclaration): Value =>
   Option.getOrElse(declaration.correct, () =>
     nullOf(declaration.baseType, declaration.cardinality),
   );
-
-/**
- * The NULL record: a record of no field.
- */
-const nullRecord: RecordValue = { cardinality: "record", fields: [] };
 
 /**
  * Give a record response declaration's correct response.

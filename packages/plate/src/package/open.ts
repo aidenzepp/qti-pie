@@ -76,7 +76,7 @@ import type {
   SourceElement,
   Visit,
 } from "#plate/document/source.ts";
-import { xsBooleanOf } from "#plate/model/attributes.ts";
+import { xmlWhitespaceRun, xsBooleanOf } from "#plate/model/attributes.ts";
 import {
   expressionKinds,
   floatOrRefOf,
@@ -91,7 +91,7 @@ import type {
   ReferenceEntry,
 } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
-import { itemRefsIn } from "#plate/model/item-refs.ts";
+import { itemRefsIn, occurrenceOf } from "#plate/model/item-refs.ts";
 import { withUnheldReads } from "#plate/model/test.ts";
 import type { UnheldRead } from "#plate/model/test.ts";
 import { isNcName, trimXmlSpace } from "#plate/model/values.ts";
@@ -443,14 +443,6 @@ const sectionRefElements: ReadonlySet<string> = new Set(["qti-assessment-section
 const durationScopes: ReadonlySet<string> = new Set(["qti-assessment-section", "qti-test-part"]);
 
 /**
- * The occurrence form of what follows a prefix, `N.VAR`: the variable of the item's Nth instance,
- * `N` counted from 1 as pantry's `prefixedReadings` reads it
- * (`packages/pantry/src/processing/prefixed.ts`). So `0.VAR` is no occurrence: it names the
- * variable `0.VAR`, which no item has, since an identifier never starts with a digit.
- */
-const occurrenceForm = /^0*[1-9]\d*\.(?<variable>.+)$/su;
-
-/**
  * The variables a test's processing holds besides those it declares, as pantry gives a test its
  * built-ins (`builtInsOf("test")` in `packages/pantry/src/processing/env.ts`).
  */
@@ -497,11 +489,6 @@ const classifiers = {
   ReferenceEntry["baseType"],
   (written: string, held: ReadonlySet<string>) => LiteralOrRef<unknown>
 >;
-
-/**
- * A run of XML whitespace inside an attribute value.
- */
-const xmlWhitespaceRun = /[\t\n\r ]+/gu;
 
 /**
  * Collapse a value's XML whitespace: its outer whitespace removed and each inner run of it one
@@ -953,9 +940,10 @@ const declaredType = (declaration: SourceElement): ExpressionType =>
  * Resolve one reading of a dotted reference (reading 48), in pantry's order (`resolveReading` in
  * `packages/pantry/src/processing/env.ts`).
  *
- * After an item ref, the rest names, directly or in the occurrence form `N.VAR` (reading 4), a
- * target of the item ref's variable mappings, else a variable its item declares, else one of the
- * built-ins every item has. After a part or a section, the rest is its `duration`, a built-in.
+ * After an item ref, the rest names, directly or in the occurrence form `N.VAR` (reading 4,
+ * {@link occurrenceOf}), a target of the item ref's variable mappings, else a variable its item
+ * declares, else one of the built-ins every item has. After a part or a section, the rest is its
+ * `duration`, a built-in.
  *
  * @param scope What the test's references resolve against.
  * @param prefix The part before the dot the reading splits at.
@@ -975,7 +963,7 @@ const readingOf = (scope: ReferenceScope, prefix: string, rest: string): Option.
       : Option.none();
   }
 
-  const variable = occurrenceForm.exec(rest)?.groups?.["variable"] ?? rest;
+  const { variable } = occurrenceOf(rest);
   const source = item.mapped.get(variable);
   if (source !== undefined) {
     return Option.some({

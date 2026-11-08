@@ -24,7 +24,7 @@ import { containersReaders, containersRules } from "#plate/model/expressions/con
 import { functionsReaders, functionsRules } from "#plate/model/expressions/functions.ts";
 import { integersReaders, integersRules } from "#plate/model/expressions/integers.ts";
 import { logicReaders, logicRules } from "#plate/model/expressions/logic.ts";
-import { kindReaders, kindRules, landedKinds } from "#plate/model/expressions/read.ts";
+import { kindReaders, kindRules } from "#plate/model/expressions/read.ts";
 import { referencesReaders, referencesRules } from "#plate/model/expressions/references.ts";
 import { roundingReaders, roundingRules } from "#plate/model/expressions/rounding.ts";
 import { testReaders, testRules } from "#plate/model/expressions/test.ts";
@@ -374,8 +374,8 @@ describe("kindRules", () => {
 });
 
 describe("kindReaders", () => {
-  it("lists as landed each of the 64 kinds, in the order of the kinds", () => {
-    assert.deepStrictEqual(landedKinds, expressionKinds);
+  it("holds a reader spec for each of the 64 kinds and for nothing else", () => {
+    assert.sameMembers(Object.keys(kindReaders), [...expressionKinds]);
   });
 });
 

@@ -10,10 +10,12 @@
  * scope is data: a session builds it (`testScopeOf` in `#plate/engine/outcome.ts`), and a test may
  * build one by hand.
  *
- * It is a browser module. It value-imports only `effect`'s `Option` and `Result` and two engine
- * leaves, `#plate/engine/failures.ts` and `#plate/engine/numbers.ts`, and reads the model's and the
- * evaluator's types as types: it imports no session value, and none of `#plate/engine/refs.ts`,
- * which reads a prefixed name through it.
+ * It is a browser module. It value-imports only `effect`'s `Option` and `Result`, two engine
+ * leaves, `#plate/engine/failures.ts` and `#plate/engine/numbers.ts`, and two of the model's,
+ * `#plate/model/item-refs.ts` for the occurrence form of a prefixed name's rest and
+ * `#plate/model/values.ts` for the NULL record, and reads the model's and the evaluator's types as
+ * types: it imports no session value, and none of `#plate/engine/refs.ts`, which reads a prefixed
+ * name through it.
  *
  * @module
  */
@@ -21,8 +23,10 @@ import { Option, Result } from "effect";
 import type { Declarations } from "#plate/engine/evaluate.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
 import { integerValue } from "#plate/engine/numbers.ts";
+import { occurrenceOf } from "#plate/model/item-refs.ts";
 import type { RecordDeclaration } from "#plate/model/item.ts";
 import type { ScopeRecord } from "#plate/model/record.ts";
+import { nullRecord } from "#plate/model/values.ts";
 import type { ModelledBaseType, RecordValue, Value } from "#plate/model/values.ts";
 
 /**
@@ -257,39 +261,6 @@ const ownValue = <A extends RecordValue | Value>(
   Object.hasOwn(values, identifier) ? Option.fromUndefinedOr(values[identifier]) : Option.none();
 
 /**
- * The occurrence form of a prefixed name's rest, `N.VAR` (reading 4): `N` a decimal from 1, its
- * leading zeros allowed, as pantry's `prefixedReadings` reads it (`processing/prefixed.ts`), so
- * `0.VAR` is no occurrence.
- */
-const occurrenceForm = /^(?<occurrence>0*[1-9]\d*)\.(?<variable>.+)$/su;
-
-/**
- * What the rest of a prefixed name names in its item: the occurrence, counted from 1, and the
- * variable's name.
- */
-export interface Occurrence {
-  readonly occurrence: bigint;
-  readonly variable: string;
-}
-
-/**
- * Split the rest of a prefixed name, what follows its item ref, into the occurrence it names and
- * the variable: `N.VAR` in the occurrence form (reading 4) names occurrence `N`, and any other rest
- * names occurrence 1 and is the variable whole.
- *
- * @param rest The part of the name after the item ref and its dot.
- * @returns The occurrence and the variable's name.
- */
-export const occurrenceOf = (rest: string): Occurrence => {
-  const groups = occurrenceForm.exec(rest)?.groups;
-
-  return {
-    occurrence: BigInt(groups?.["occurrence"] ?? "1"),
-    variable: groups?.["variable"] ?? rest,
-  };
-};
-
-/**
  * Report whether an item ref's categories share one with a list (9.25; G-R3, pending: one shared
  * category is enough to include an item, and one to exclude it).
  *
@@ -410,11 +381,6 @@ export const itemName = (item: ScopeItem, name: string): Option.Option<ItemName>
  * @returns It, `held`.
  */
 const held = (value: Value): Reading => ({ kind: "held", value });
-
-/**
- * The NULL record: a record with no field.
- */
-const nullRecord: RecordValue = { cardinality: "record", fields: [] };
 
 /**
  * Give NULL of a declared type: a record outcome, template or context variable reads the `unheld`

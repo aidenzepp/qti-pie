@@ -537,11 +537,7 @@ const evaluateIndex: Evaluator<"index"> = (expression, scope, evaluate) =>
 
     return Option.match(picked, {
       onNone: () => nullOf(container.baseType, "single"),
-      onSome: (single): Value => ({
-        baseType: container.baseType,
-        cardinality: "single",
-        values: [single],
-      }),
+      onSome: singleValue,
     });
   });
 
@@ -571,11 +567,7 @@ const evaluateRandom: Evaluator<"random"> = (expression, scope, evaluate) => {
 
     const picked = container.values[Number(drawBelow(scope.draw, BigInt(container.values.length)))];
 
-    return {
-      baseType: container.baseType,
-      cardinality: "single",
-      values: picked === undefined ? [] : [picked],
-    };
+    return picked === undefined ? nullOf(container.baseType, "single") : singleValue(picked);
   });
 };
 

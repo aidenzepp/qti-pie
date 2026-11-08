@@ -6,10 +6,9 @@
  * `#plate/vocabulary.ts`) and each expression through the registry's generic reader
  * (`readExpression` in `#plate/model/expressions/read.ts`), in the reading context the item model
  * builds, so the marks it records join the item's. Template processing that holds any element
- * outside that list, an expression kind the registry has not landed, a rule of a malformed shape,
- * or a rule that sets a record response is none, each such element marked, as response processing
- * is. It value-imports the registry, the attribute leaf and the vocabulary, never
- * `#plate/model/item.ts`, which imports it.
+ * outside that list, a rule of a malformed shape, or a rule that sets a record response is none,
+ * each such element marked, as response processing is. It value-imports the registry, the attribute
+ * leaf and the vocabulary, never `#plate/model/item.ts`, which imports it.
  *
  * @module
  */
@@ -266,12 +265,12 @@ const rule = (
 /**
  * Read a `qti-template-processing` into its template rules, in document order.
  *
- * A rule element outside the vocabulary's template rules, an expression kind the registry has not
- * landed, a rule of a malformed shape (a setting rule or a constraint without exactly one
- * expression, a branch with no condition, a stray part in a condition), or a rule that sets a
- * record response (`record-set`, {@link setting}) is marked at its path, and the whole processing
- * is then none, as `rules` in `#plate/model/item.ts` reads response processing. A
- * `qti-exit-template` is read whatever it holds, as a `qti-exit-response` is.
+ * A rule element outside the vocabulary's template rules, a rule of a malformed shape (a setting
+ * rule or a constraint without exactly one expression, a branch with no condition, a stray part in
+ * a condition), or a rule that sets a record response (`record-set`, {@link setting}) is marked at
+ * its path, and the whole processing is then none, as `rules` in `#plate/model/item.ts` reads
+ * response processing. A `qti-exit-template` is read whatever it holds, as a `qti-exit-response`
+ * is.
  *
  * @param reading The item's reading context, which `#plate/model/item.ts` builds for its build.
  * @param processing The `qti-template-processing` element.

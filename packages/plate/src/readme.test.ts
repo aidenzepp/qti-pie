@@ -7,7 +7,6 @@ import { afterAll, assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result, Schema } from "effect";
 import { storedVersion } from "#plate/codec/record.ts";
 import { expressionKinds } from "#plate/model/expression.ts";
-import { landedKinds } from "#plate/model/expressions/read.ts";
 import {
   acceptedItem,
   configure,
@@ -765,14 +764,11 @@ describe("README.md", () => {
   });
 
   it("[T-9] gives in Scoring the number of expressions plate runs, all of them, none left unlanded, and names qti-field-value", () => {
-    const unlanded = expressionKinds.filter((kind) => !landedKinds.includes(kind));
-
-    assert.deepStrictEqual(unlanded, []);
     assert.isTrue(
       paragraphsOf("## Scoring").some(
         (paragraph) =>
           paragraph.includes(
-            `Of the ${String(expressionKinds.length)} expressions QTI 3.0 defines, plate runs ${String(landedKinds.length)}.`,
+            `Of the ${String(expressionKinds.length)} expressions QTI 3.0 defines, plate runs ${String(expressionKinds.length)}.`,
           ) && paragraph.includes("`qti-field-value`"),
       ),
       "a paragraph of Scoring gives the count of expressions plate runs and names qti-field-value",

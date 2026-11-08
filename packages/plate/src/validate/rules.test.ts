@@ -860,7 +860,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-1] accepts a Text Entry bound to a record declaration, which phase 1 shows as a notice", () => {
+    it("[I-1] accepts a Text Entry bound to a record declaration, which renders as the string control", () => {
       assert.deepStrictEqual(
         judged(
           item(

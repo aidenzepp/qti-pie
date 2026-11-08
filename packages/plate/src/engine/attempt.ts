@@ -33,8 +33,8 @@ import {
   unrunTemplateProcessing,
 } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import { nullOf } from "#plate/model/values.ts";
-import type { RecordValue, Value } from "#plate/model/values.ts";
+import { nullOf, nullRecord } from "#plate/model/values.ts";
+import type { Value } from "#plate/model/values.ts";
 
 /**
  * Give each declared outcome of an item the value it holds before any processing sets it: the
@@ -71,11 +71,6 @@ const responseStart = (item: Item, defaults: ItemRecord["defaults"]): ItemRecord
       ),
     ]),
   );
-
-/**
- * The NULL record: a record of no field.
- */
-const nullRecord: RecordValue = { cardinality: "record", fields: [] };
 
 /**
  * Give each record response of an item its default (D4-11 for a record), by identifier: its
