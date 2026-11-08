@@ -2075,7 +2075,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE TABLE \"qti\".\"map_key_pair\" (\n  \"first\" \"qti\".\"__text_7nkeqry66t\" NOT NULL,\n  \"gap\" \"qti\".\"__text_qhjydx3ufb\" NOT NULL,\n  \"key\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"mapping\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"second\" \"qti\".\"__text_7nkeqry66t\" NOT NULL,\n  \"value\" \"qti\".\"__text_pwaizaq6lx\" GENERATED ALWAYS AS (CASE WHEN \"first\" <= \"second\" THEN \"first\" || ' '::\"pg_catalog\".\"text\" || \"second\" ELSE \"second\" || ' '::\"pg_catalog\".\"text\" || \"first\" END) STORED NOT NULL,\n  CONSTRAINT \"__map_key_pair_pk_6b7vea3xj2\" PRIMARY KEY (\"node\"),\n  CONSTRAINT \"__map_key_pair_key_mapping_value_xzaehwla2l\" UNIQUE NULLS DISTINCT (\"mapping\", \"value\"),\n  CONSTRAINT \"e_1_derived\" CHECK ((CASE WHEN \"pg_catalog\".\"char_length\"(\"key\") = \"pg_catalog\".\"char_length\"(\"first\" || \"gap\")::bigint + \"pg_catalog\".\"char_length\"(\"second\")::bigint THEN \"pg_catalog\".\"starts_with\"(\"key\", \"first\" || \"gap\") AND \"pg_catalog\".\"right\"(\"key\", \"pg_catalog\".\"char_length\"(\"second\")) = \"second\" ELSE \"pg_catalog\".\"char_length\"(\"key\") = \"pg_catalog\".\"char_length\"(\"first\" || \"gap\")::bigint + \"pg_catalog\".\"char_length\"(\"second\")::bigint END) IS TRUE),\n  CONSTRAINT \"__map_key_pair_key_node_mapping_key_qg43xvzors\" UNIQUE NULLS DISTINCT (\"node\", \"mapping\", \"key\")\n)"
+						"statement": "CREATE TABLE \"qti\".\"map_key_pair\" (\n  \"first\" \"qti\".\"__text_7nkeqry66t\" NOT NULL,\n  \"gap\" \"qti\".\"__text_qhjydx3ufb\" NOT NULL,\n  \"key\" \"qti\".\"__text_pwaizaq6lx\" NOT NULL,\n  \"mapping\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"node\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"second\" \"qti\".\"__text_7nkeqry66t\" NOT NULL,\n  \"value\" \"qti\".\"__text_pwaizaq6lx\" GENERATED ALWAYS AS (LEAST(\"first\", \"second\") || ' '::\"pg_catalog\".\"text\" || GREATEST(\"first\", \"second\")) STORED NOT NULL,\n  CONSTRAINT \"__map_key_pair_pk_6b7vea3xj2\" PRIMARY KEY (\"node\"),\n  CONSTRAINT \"__map_key_pair_key_mapping_value_xzaehwla2l\" UNIQUE NULLS DISTINCT (\"mapping\", \"value\"),\n  CONSTRAINT \"e_1_derived\" CHECK ((CASE WHEN \"pg_catalog\".\"char_length\"(\"key\") = \"pg_catalog\".\"char_length\"(\"first\" || \"gap\")::bigint + \"pg_catalog\".\"char_length\"(\"second\")::bigint THEN \"pg_catalog\".\"starts_with\"(\"key\", \"first\" || \"gap\") AND \"pg_catalog\".\"right\"(\"key\", \"pg_catalog\".\"char_length\"(\"second\")) = \"second\" ELSE \"pg_catalog\".\"char_length\"(\"key\") = \"pg_catalog\".\"char_length\"(\"first\" || \"gap\")::bigint + \"pg_catalog\".\"char_length\"(\"second\")::bigint END) IS TRUE),\n  CONSTRAINT \"__map_key_pair_key_node_mapping_key_qg43xvzors\" UNIQUE NULLS DISTINCT (\"node\", \"mapping\", \"key\")\n)"
 					},
 					{
 						"kind": "statement",
@@ -30530,7 +30530,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "f9ad291b6fb76264456bfb9f9a7ac9ab3581ddbfc7f2181a3b6e22961ea38b1b",
-		"target": "bff74c8a3a88d58e38650e1478e8a5315d84b959ef5ce529f62ff342ae5f4489"
+		"target": "012abc95e64cb45baeaf8e8e6087e5e2828f91c5432f98a9e24256669c0fd93b"
 	},
-	"seal": "eac35b7921cb51b2d44c1cebbf829f81feea9b3eb7d17f06745900db4e3e96d6"
+	"seal": "80fbbe1fc833c92a7e3dccf940a0504d41b9a0e9926dd002d7cd3978967fa7d1"
 }

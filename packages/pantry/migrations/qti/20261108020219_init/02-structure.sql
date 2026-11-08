@@ -1501,7 +1501,7 @@ CREATE TABLE "qti"."map_key_pair" (
   "mapping" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "second" "qti"."__text_7nkeqry66t" NOT NULL,
-  "value" "qti"."__text_pwaizaq6lx" GENERATED ALWAYS AS (CASE WHEN "first" <= "second" THEN "first" || ' '::"pg_catalog"."text" || "second" ELSE "second" || ' '::"pg_catalog"."text" || "first" END) STORED NOT NULL,
+  "value" "qti"."__text_pwaizaq6lx" GENERATED ALWAYS AS (LEAST("first", "second") || ' '::"pg_catalog"."text" || GREATEST("first", "second")) STORED NOT NULL,
   CONSTRAINT "__map_key_pair_pk_6b7vea3xj2" PRIMARY KEY ("node"),
   CONSTRAINT "__map_key_pair_key_mapping_value_xzaehwla2l" UNIQUE NULLS DISTINCT ("mapping", "value"),
   CONSTRAINT "e_1_derived" CHECK ((CASE WHEN "pg_catalog"."char_length"("key") = "pg_catalog"."char_length"("first" || "gap")::bigint + "pg_catalog"."char_length"("second")::bigint THEN "pg_catalog"."starts_with"("key", "first" || "gap") AND "pg_catalog"."right"("key", "pg_catalog"."char_length"("second")) = "second" ELSE "pg_catalog"."char_length"("key") = "pg_catalog"."char_length"("first" || "gap")::bigint + "pg_catalog"."char_length"("second")::bigint END) IS TRUE),
