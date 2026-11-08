@@ -5,8 +5,8 @@
  * and the bound the root puts on the chosen handler.
  */
 import { Config, Duration, Effect, Option, Predicate, Runtime, Schema } from "effect";
-import type { Command as CommandType } from "effect/cli";
-import { CliError, Command, Flag, GlobalFlag } from "effect/cli";
+import type { CliError, Command as CommandType } from "effect/cli";
+import { Command, Flag, GlobalFlag } from "effect/cli";
 import { cliKind, kindExitCode } from "#pantry/cli/errors.ts";
 import type { Kind } from "#pantry/cli/errors.ts";
 
@@ -87,7 +87,8 @@ export class CommandTimedOut extends Schema.TaggedError<CommandTimedOut>()("Comm
  *
  * Apply it to the command that holds the settings (the root), where it runs the handler `Command`
  * would have run, unchanged, inside `Effect.timeout`. When the limit passes first the handler is
- * interrupted and the run fails with {@link CommandTimedOut}.
+ * interrupted and the run fails with {@link CommandTimedOut}. A command that carries no handler,
+ * which no command Effect 4.1.2 builds is, dies naming the places its SAFETY note reads.
  */
 export const withTimeout = <Name extends string, Input, ContextInput, E, R>(
   self: CommandType.Command<Name, Input, ContextInput, E, R>,
@@ -112,7 +113,11 @@ export const withTimeout = <Name extends string, Input, ContextInput, E, R>(
       const limit = yield* timeoutSetting;
 
       if (handle === undefined) {
-        return yield* new CliError.ShowHelp({ commandPath: [self.name], errors: [] });
+        return yield* Effect.die(
+          new Error(
+            `The command ${self.name} carries no handle, but every command Effect 4.1.2 builds carries its handler as handle(input, commandPath), which withTimeout wraps. Re-read effect/src/cli/Command.ts (mapHandler at :2580, Command.run at :3488) and effect/src/cli/internal/command.ts:46-49 in the installed Effect, and rewrite withTimeout to match.`,
+          ),
+        );
       }
 
       return yield* handle(input, [self.name]).pipe(
