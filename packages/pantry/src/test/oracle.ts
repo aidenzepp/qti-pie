@@ -4364,34 +4364,34 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    // An outcome that writes no cardinality, or one outside its domain, is refused by AL3
-    // ("required-attribute") or that domain alone, as it has no `DeclarationName` for a reference
-    // to read (the orchestrator's ruling of 2026-11-06; lane NIL's audit, B11; spec reading 158).
-    const typed = cardinalityOf(overlay, outcome);
-    if (Option.isNone(typed)) {
-      return [];
-    }
-
     // §5.49.1: "an outcome variable that must have a base-type of identifier and be of either
-    // single or multiple cardinality". A record is neither, judged by its cardinality alone; an
-    // outcome is judged by its base type where it has one, and one with none, unwritten or spelling
-    // nothing, is Declaration base type's or its value domain's alone (lane NIL's audit, B12).
-    const cardinality = typed.value;
+    // single or multiple cardinality". Each half judges the outcome where what it reads spells
+    // something (spec readings 158 and 159): its cardinality where it has one, a record's being
+    // neither; its base type where it has one. One unwritten, or spelling nothing, is AL3's,
+    // Declaration base type's or its value domain's alone (the orchestrator's ruling of
+    // 2026-11-06; lane NIL's audit, B11 and B12).
+    const cardinality = cardinalityOf(overlay, outcome);
     const baseType = baseTypeOf(overlay, outcome);
-    const typedKeys = Option.match(baseType, {
-      onNone: () => ({}),
-      onSome: (held) => ({ baseType: held }),
-    });
 
-    return (cardinality === "single" || cardinality === "multiple") &&
-      Option.isNone(typeBreach(baseType, (held) => held === "identifier"))
-      ? []
-      : [
+    return Option.exists(cardinality, (held) => held !== "single" && held !== "multiple") ||
+      Option.isSome(typeBreach(baseType, (held) => held === "identifier"))
+      ? [
           {
-            keys: { ...typedKeys, cardinality, identifier: named.value },
+            keys: {
+              ...Option.match(baseType, {
+                onNone: () => ({}),
+                onSome: (held) => ({ baseType: held }),
+              }),
+              ...Option.match(cardinality, {
+                onNone: () => ({}),
+                onSome: (held) => ({ cardinality: held }),
+              }),
+              identifier: named.value,
+            },
             law: "Feedback outcome type",
           },
-        ];
+        ]
+      : [];
   },
   (node, overlay) => {
     const named = typedValueOf(overlay.view, node.id, "template-identifier");

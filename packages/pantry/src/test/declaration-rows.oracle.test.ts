@@ -17,9 +17,10 @@
  * - The oracle raises AL3's required attribute or the attribute's value domain at the declaration,
  *   and where only its cardinality or base type changed, nothing else;
  * - The importer writes its `Declaration` row and its value sets, and no typed row of the edited
- *   attribute: no `DeclarationCardinality`, and so no name, nor any row that reads a cardinality,
- *   binds or references it, for a cardinality; no `DeclarationBaseType`, nor any row that reads a
- *   base type of it, for a base type;
+ *   attribute: no `DeclarationCardinality`, and so no `DeclarationName`, nor any row that reads a
+ *   cardinality of it, for a cardinality, while a binding or a reference still resolves to it by
+ *   name (spec reading 159); no `DeclarationBaseType`, nor any row that reads a base type of it,
+ *   for a base type;
  * - No family member names an owner the import writes no row of (`#pantry/test/family-owners.ts`),
  *   and every `ChoiceVariableName` row counts at least one choice, hottext or declaration, as its
  *   `E1_derived` requires, so no row of a relation grizzle writes before `Node` breaks a CHECK.
@@ -79,18 +80,35 @@ const readRow = Schema.decodeUnknownSync(ReadSchema);
 
 /**
  * The relations whose rows hang from a declaration whatever its cardinality spells, each naming it
- * by its `declaration`: its values and its tables. Every other row that names it reads its
- * cardinality, binds or references it.
+ * by its `declaration`: its values and its tables, and the declaration rows of the bindings, the
+ * references and the lookups that resolve its name (spec reading 159). Every other row that names
+ * it reads its cardinality.
  */
 const hanging: ReadonlySet<string> = new Set([
   "AreaMapping",
+  "BindingDeclaration",
+  "ContextRefDeclaration",
   "DeclarationTable",
+  "FeedbackRefDeclaration",
   "LookupTable",
   "LookupValue",
   "LookupValueType",
   "Mapping",
   "MappingBaseType",
+  "MappingSourceDeclaration",
+  "PlacedBindingDeclaration",
+  "PlacedVariableRefDeclaration",
+  "PrintedVariableRefDeclaration",
+  "Reading",
+  "SectionContextRefDeclaration",
+  "SectionFeedbackRefDeclaration",
+  "SectionPrintedRefDeclaration",
+  "SectionTemplateRefDeclaration",
+  "TemplateDefaultTarget",
+  "TemplateRefDeclaration",
   "Value",
+  "VariableLookup",
+  "VariableRefDeclaration",
 ]);
 
 /**
@@ -194,7 +212,7 @@ const holds = (at: number) =>
           holder,
           identifier,
         ]),
-        ...[...inputs.DeclarationName.values()].map(({ document: holder, identifier }) => [
+        ...[...inputs.DeclarationIdentifier.values()].map(({ document: holder, identifier }) => [
           holder,
           identifier,
         ]),

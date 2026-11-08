@@ -11,14 +11,14 @@ import { Qti } from "#pantry/qti/schema.ts";
 import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
 
 /**
- * The committed migration's measured counts (the `_init` regenerated on grizzle `4b155e8`), as a
+ * The committed migration's measured counts (the `_init` regenerated on grizzle `1c536b5`), as a
  * ratchet: a change that moves one fails here until the count is measured again. A regeneration
  * updates them here, and only here.
  *
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
  * - `live`: one live set per roster whose sets a field holds, each beside its bits domain;
- * - `constants`: the closed constants the laws, generated fields and queries read, of the 63 closed
+ * - `constants`: the closed constants the laws, generated fields and queries read, of the 62 closed
  *   relations;
  * - `nodeAxes`: `Node`'s own foreign keys, its families' axes (the owner copy, the predecessor, the
  *   deferred last, and the attribute and namespace stand-ins);
@@ -26,12 +26,12 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  *   selections.
  */
 const measured = {
-  constants: 100,
+  constants: 102,
   live: 7,
-  names: 35,
-  nodeAxes: 5,
-  nodeKeys: 41,
-  tables: 170,
+  names: 37,
+  nodeAxes: 6,
+  nodeKeys: 39,
+  tables: 226,
 } as const;
 
 /**

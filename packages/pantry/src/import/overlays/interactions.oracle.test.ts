@@ -36,7 +36,11 @@ import type {
   XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
-import type { DeclarationBaseType, DeclarationName } from "#pantry/qti/declarations.ts";
+import type {
+  DeclarationBaseType,
+  DeclarationCardinality,
+  DeclarationIdentifier,
+} from "#pantry/qti/declarations.ts";
 import { choiceKinds, hottextInteraction, hottextKind } from "#pantry/qti/interactions.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
@@ -777,16 +781,28 @@ const assemblyOf = (tree: readonly Placement[]) => {
 
 /**
  * The name of the section box's test's declaration: an outcome `SCORED`, a single identifier, its
- * base type its {@link scoredBaseType}.
+ * cardinality its {@link scoredCardinality} and its base type its {@link scoredBaseType}.
  */
-const scored: Addition<typeof DeclarationName> = {
+const scored: Addition<typeof DeclarationIdentifier> = {
   baseTypes: 1n,
-  cardinality: "single",
+  cardinalities: 1n,
   declarationKind: "qti-outcome-declaration",
   document: testDocument,
   identifier: "SCORED",
+  identifierLead: "",
+  identifierLexical: "SCORED",
+  identifierTrail: "",
   node: idOf(1001),
   parentKind: "qti-assessment-test",
+};
+
+/**
+ * The cardinality of the section box's test's declaration, `SCORED`'s.
+ */
+const scoredCardinality: Addition<typeof DeclarationCardinality> = {
+  cardinality: "single",
+  cardinalityLexical: "single",
+  node: scored.node,
 };
 
 /**
@@ -848,6 +864,7 @@ describe("import/overlays/interactions.ts, section references", () => {
               );
               const rows = sectionRowsOf({
                 baseTypes: [scoredBaseType],
+                cardinalities: [scoredCardinality],
                 contexts: [],
                 declarations: [scored],
                 feedbacks: named.filter(({ attribute }) => attribute === "outcome-identifier"),
@@ -1006,8 +1023,8 @@ describe("import/overlays/interactions.ts, choice names", () => {
       // Oracle: the specification as a checker, reading 104's projection read off the tree: the set
       // of every choice's and hottext's identifier and every declaration's, each collapsed (XML
       // Schema Part 2 §4.3.6), under the document node and the item's root kind. A declaration
-      // without one has no DeclarationName and names nothing (lane NIL's audit, B10; spec reading
-      // 157), so AL3 refuses it alone.
+      // without one has no DeclarationIdentifier and names nothing (lane NIL's audit, B10; spec
+      // reading 157), so AL3 refuses it alone.
       // Bound: 0 to 2 declarations over 3 names by 0 to 2 marks over 3 kinds and 3 names,
       // 13 × 91 = 1,183.
       searched(
@@ -1408,7 +1425,7 @@ describe("import/overlays/interactions.ts, content reference declarations", () =
                         {
                           ...reference,
                           baseTypes: 1n,
-                          cardinality: "single",
+                          cardinalities: 1n,
                           declaration: declaration.id,
                           declarationKind: declaration.kind,
                         },

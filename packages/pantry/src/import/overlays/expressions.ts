@@ -88,11 +88,14 @@ import type {
   ReferenceDocument,
   ReferenceSegment,
   SectionIdentifier,
+  ReadingCardinality,
   TemplateDefault,
+  TemplateDefaultCardinality,
   TemplateDefaultTarget,
   TestReference,
   VariableLookup,
   VariableRef,
+  VariableRefCardinality,
   VariableRefDeclaration,
 } from "#pantry/qti/expressions.ts";
 import {
@@ -106,7 +109,7 @@ import {
   testKind,
 } from "#pantry/qti/tests.ts";
 import type { ItemRefDocument, ItemRefTarget } from "#pantry/qti/tests.ts";
-import type { DeclarationBaseType, DeclarationName } from "#pantry/qti/declarations.ts";
+import type { DeclarationCardinality, DeclarationIdentifier } from "#pantry/qti/declarations.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
@@ -145,17 +148,19 @@ export interface ExpressionRows {
   readonly TestReference: ReadonlyMap<string, Addition<typeof TestReference>>;
   readonly VariableLookup: ReadonlyMap<string, Addition<typeof VariableLookup>>;
   readonly VariableRef: ReadonlyMap<string, Addition<typeof VariableRef>>;
+  readonly VariableRefCardinality: ReadonlyMap<string, Addition<typeof VariableRefCardinality>>;
   readonly VariableRefDeclaration: ReadonlyMap<string, Addition<typeof VariableRefDeclaration>>;
 }
 
 /**
- * The declaration codes a row holds where it names no declaration: the null objects
- * `#pantry/qti/expressions.ts` states for `VariableLookup`'s absent rows (M2: a name's absence is
- * proved by the key of a row of its own) and for a `Reading` whose source is none.
+ * The declaration codes a row holds where it names no declaration: the null object
+ * `#pantry/qti/expressions.ts` states for `VariableLookup`'s absent rows' kind (M2: a name's
+ * absence is proved by the key of a row of its own) and for a `Reading` whose source is none, and
+ * no cardinality and no base type.
  */
 const undeclared = {
   baseTypes: 0n,
-  cardinality: "single",
+  cardinalities: 0n,
   declarationKind: "qti-outcome-declaration",
 } as const;
 
@@ -183,6 +188,22 @@ const baseOf = (baseType: Option.Option<(typeof BaseType.handles)[number]>): Val
   Option.match(baseType, { onNone: () => unknownType.baseType, onSome: valueBaseOf });
 
 /**
+ * Read a variable's cardinality as an expression's: its declaration code's `ValueCardinality`, and
+ * `unknown` where it has none, unwritten or spelling nothing (spec reading 159), as
+ * {@link baseOf} reads a base type.
+ *
+ * @param cardinality - The variable's cardinality, none where it has none.
+ * @returns The expression-typing code.
+ */
+const cardinalityOf = (
+  cardinality: Option.Option<(typeof Cardinality.handles)[number]>,
+): ValueCardinality =>
+  Option.match(cardinality, {
+    onNone: () => unknownType.cardinality,
+    onSome: valueCardinalityOf,
+  });
+
+/**
  * A reference's element type as {@link unknownType} gives it, which `withTypes` fills once every
  * expression is typed, and which stays where its element is no expression: the null object
  * `VariableRef` holds in the fields its case leaves unread.
@@ -194,11 +215,12 @@ const unfilledTypes = {
 
 /**
  * One declaration of the document as a reference resolves to it: its node, kind and codes, its
- * base type none where it writes none, a record's (lane NIL's audit, B12).
+ * base type none where it has none, a record's or one that spells nothing (lane NIL's audit, B12),
+ * and its cardinality none where it has none, unwritten or spelling nothing (spec reading 159).
  */
 interface DeclarationEntry {
   readonly baseType: Option.Option<(typeof BaseType.handles)[number]>;
-  readonly cardinality: (typeof Cardinality.handles)[number];
+  readonly cardinality: Option.Option<(typeof Cardinality.handles)[number]>;
   readonly kind: string;
   readonly node: NodeId;
   readonly tables: ReadonlySet<string>;
@@ -682,8 +704,7 @@ const typeOf = (kind: string, inputs: TypeInputs): Typed => {
 /**
  * One document as the builder reads it: its flat rows indexed by node, each node's attributes,
  * children, fold (`#pantry/import/fold.ts`, its nearest interaction among the rest) and processing
- * language, its root's kind, its declarations that have a `DeclarationName`, by name, and the
- * names only a declaration with no cardinality holds.
+ * language, its root's kind, and its named declarations, by name.
  */
 interface Document extends Tree {
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, AttributeRow<Composed>>>;
@@ -694,7 +715,6 @@ interface Document extends Tree {
   readonly charsOf: (node: NodeRow<Composed>) => string;
   readonly declarations: ReadonlyMap<string, DeclarationEntry>;
   readonly folds: Folds;
-  readonly untyped: ReadonlySet<string>;
   readonly id: NodeId;
   /**
    * A node's processing language ({@link languagesOf}), which every node of the document has.
@@ -821,27 +841,26 @@ const languagesOf = (rows: FlatRows<Composed>, tree: Tree): ((node: NodeId) => L
 };
 
 /**
- * The document's declarations by name: each that has a `DeclarationName` (`typedDeclarationOf`),
- * its identifier naming something and its cardinality spelling a code, the first of a repeated one
- * (which `declaration-key` refuses), with the tables it holds; and the names only declarations
- * with no cardinality hold, whose cardinality is unwritten or spells nothing. Such a name types
- * nothing, so no reference to it is written: AL3 or the value domain refuses its declaration
- * alone, and no law reads a type it does not have (lane NIL's audit, B11; spec reading 158). A
+ * The document's declarations by name: each that has a `DeclarationIdentifier`
+ * (`typedDeclarationOf`), its identifier naming something, whatever its cardinality and base type
+ * spell (spec reading 159), the first of a repeated one (which `Declaration key` refuses), with
+ * its codes, each none where it has none, and the tables it holds. A reference to a name whose
+ * declaration has no cardinality resolves to it, and only a law over the cardinality reads none:
+ * AL3 or the value domain refuses the declaration's attribute alone (spec reading 158). A
  * declaration whose identifier is unwritten or names nothing has its row but no name, so no
  * reference resolves to it (spec reading 157).
  *
  * @param rows - The document's flat rows.
  * @param attributes - Each element's attributes.
  * @param childrenOf - Each node's children.
- * @returns The declarations, and the untyped names.
+ * @returns The declarations.
  */
 const declarationsOf = (
   rows: FlatRows<Composed>,
   attributes: Document["attributes"],
   childrenOf: Tree["childrenOf"],
-): Pick<Document, "declarations" | "untyped"> => {
+): Document["declarations"] => {
   const declarations = new Map<string, DeclarationEntry>();
-  const unnamed = new Set<string>();
   for (const node of rows.nodes.filter(({ kind }) => declarationKinds.has(kind))) {
     const lexical = (attribute: string) => attributes.get(node.id)?.get(attribute)?.lexical;
     const typed = typedDeclarationOf({
@@ -849,13 +868,11 @@ const declarationsOf = (
       cardinality: lexical("cardinality"),
       identifier: lexical("identifier"),
     });
-    for (const [{ pieces }, cardinality] of Option.toArray(
-      Option.all([typed.name, typed.cardinality]),
-    )) {
+    for (const { pieces } of Option.toArray(typed.name)) {
       if (!declarations.has(pieces.name)) {
         declarations.set(pieces.name, {
           baseType: typed.baseType,
-          cardinality,
+          cardinality: typed.cardinality,
           kind: node.kind,
           node: node.id,
           tables: new Set(
@@ -864,17 +881,9 @@ const declarationsOf = (
         });
       }
     }
-
-    const identifier = lexical("identifier");
-    if (Option.isNone(typed.cardinality) && identifier !== undefined) {
-      unnamed.add(piecesOf(identifier).name);
-    }
   }
 
-  return {
-    declarations,
-    untyped: new Set([...unnamed].filter((name) => !declarations.has(name))),
-  };
+  return declarations;
 };
 
 /**
@@ -893,7 +902,7 @@ const documentOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Document =
     ...indexed,
     attributes,
     charsOf: charactersIn(rows),
-    ...declarationsOf(rows, attributes, indexed.childrenOf),
+    declarations: declarationsOf(rows, attributes, indexed.childrenOf),
     folds: foldOf(rows.nodes, ids.context),
     id: rows.document.node,
     languageOf: languagesOf(rows, indexed),
@@ -956,7 +965,7 @@ const resolve = (doc: Document, name: string) => {
       resolution: "declared" as const,
       type: {
         baseType: baseOf(declared.baseType),
-        cardinality: valueCardinalityOf(declared.cardinality),
+        cardinality: cardinalityOf(declared.cardinality),
       },
     };
   }
@@ -973,8 +982,7 @@ const resolve = (doc: Document, name: string) => {
  * @param doc - The document.
  * @param node - The element.
  * @param attribute - The attribute it makes the reference by.
- * @returns The row, or none for a literal value and for a name only a declaration with no
- *   cardinality holds (`declarationsOf`).
+ * @returns The row, or none for a literal value.
  */
 const referenceOf = (
   doc: Document,
@@ -982,7 +990,7 @@ const referenceOf = (
   attribute: AttributeRow<Composed>,
 ): Addition<typeof VariableRef> | undefined => {
   const spelled = spelledBy(node, attribute);
-  if (spelled === undefined || doc.untyped.has(spelled.name)) {
+  if (spelled === undefined) {
     return undefined;
   }
 
@@ -1310,7 +1318,7 @@ const declaredLookup = (
   declared: DeclarationEntry,
 ): Addition<typeof VariableLookup> => ({
   baseTypes: typedCountOf(declared.baseType),
-  cardinality: declared.cardinality,
+  cardinalities: typedCountOf(declared.cardinality),
   declaration: declared.node,
   declarationKind: declared.kind,
   declared: true,
@@ -1365,9 +1373,21 @@ const variableLookupsOf = (
 };
 
 /**
+ * A document's declared references' declarations, each a row of its own, and their declarations'
+ * cardinalities, each where the declaration has one, by `[node, attribute]`.
+ */
+interface ReferenceDeclarations {
+  readonly cardinalities: ReadonlyMap<string, Addition<typeof VariableRefCardinality>>;
+  readonly declarations: ReadonlyMap<string, Addition<typeof VariableRefDeclaration>>;
+}
+
+/**
  * Write each declared reference's declaration as a row of its own (lane NIL's NS1): the declaration
- * of the document its name resolves to, with its codes, and the reference's fields its laws read
- * beside them. A reference to a built-in variable or to nothing has none.
+ * of the document its name resolves to, whatever its cardinality spells (spec reading 159), with
+ * its kind and its counts of cardinalities and base types, and the reference's fields its laws
+ * read beside them; and, where the declaration has a cardinality, that cardinality beside the
+ * reference's type's, a row of its own. A reference to a built-in variable or to nothing has
+ * neither.
  *
  * @param doc - The document.
  * @param references - Its references, their types filled.
@@ -1378,13 +1398,11 @@ const variableLookupsOf = (
 const referenceDeclarationsOf = (
   doc: Document,
   references: ReadonlyMap<string, Addition<typeof VariableRef>>,
-): ReadonlyMap<string, Addition<typeof VariableRefDeclaration>> =>
-  new Map(
-    [...references].flatMap(([at, reference]) => {
-      if (reference.resolution !== "declared") {
-        return [];
-      }
-
+): ReferenceDeclarations => {
+  const declarations = new Map<string, Addition<typeof VariableRefDeclaration>>();
+  const cardinalities = new Map<string, Addition<typeof VariableRefCardinality>>();
+  for (const [at, reference] of references) {
+    if (reference.resolution === "declared") {
       const declared = Option.getOrThrowWith(
         Option.fromNullishOr(doc.declarations.get(reference.identifier)),
         () =>
@@ -1392,29 +1410,35 @@ const referenceDeclarationsOf = (
             `The reference ${reference.node} ${reference.attribute} resolved to a declaration of ${reference.identifier}, which its document's declarations do not hold. Resolve a reference against its own document's declarations.`,
           ),
       );
+      declarations.set(at, {
+        attribute: reference.attribute,
+        baseType: reference.baseType,
+        cardinality: reference.cardinality,
+        declBaseTypes: typedCountOf(declared.baseType),
+        declCardinalities: typedCountOf(declared.cardinality),
+        declaration: declared.node,
+        declarationKind: declared.kind,
+        document: reference.document,
+        identifier: reference.identifier,
+        kind: reference.kind,
+        language: reference.language,
+        node: reference.node,
+        table: reference.table,
+      });
+      for (const declCardinality of Option.toArray(declared.cardinality)) {
+        cardinalities.set(at, {
+          attribute: reference.attribute,
+          cardinality: reference.cardinality,
+          declCardinality,
+          declaration: declared.node,
+          node: reference.node,
+        });
+      }
+    }
+  }
 
-      return [
-        [
-          at,
-          {
-            attribute: reference.attribute,
-            baseType: reference.baseType,
-            cardinality: reference.cardinality,
-            declBaseTypes: typedCountOf(declared.baseType),
-            declCardinality: declared.cardinality,
-            declaration: declared.node,
-            declarationKind: declared.kind,
-            document: reference.document,
-            identifier: reference.identifier,
-            kind: reference.kind,
-            language: reference.language,
-            node: reference.node,
-            table: reference.table,
-          },
-        ] as const,
-      ];
-    }),
-  );
+  return { cardinalities, declarations };
+};
 
 /**
  * The lookup table a declaration holds: its match table, else its interpolation table, else none.
@@ -1597,11 +1621,11 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
   }
 
   const sectionIdentifiers = sectionIdentifiersOf(doc);
-  const declarations = referenceDeclarationsOf(doc, references);
+  const declared = referenceDeclarationsOf(doc, references);
 
   return {
     ...built,
-    DeclarationTable: declarationTablesOf(doc, declarations),
+    DeclarationTable: declarationTablesOf(doc, declared.declarations),
     HeldType: heldTypesOf(references, built.Expression),
     ReferenceDocument:
       doc.rootKind === itemKind
@@ -1610,15 +1634,18 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
     SectionIdentifier: sectionIdentifiers,
     TestReference: testReferencesOf(doc, references, sectionIdentifiers),
     VariableLookup: variableLookupsOf(doc, references),
-    VariableRefDeclaration: declarations,
+    VariableRefCardinality: declared.cardinalities,
+    VariableRefDeclaration: declared.declarations,
   };
 };
 
 /**
- * One document as the package-level builder reads it: its expression rows, its test rows, its
- * tree and the ids its rows are written under.
+ * One document as the package-level builder reads it: its declarations' cardinalities, each where
+ * it has one (Q5.08's `DeclarationCardinality` rows), its expression rows, its test rows, its tree
+ * and the ids its rows are written under.
  */
 export interface AssembledExpressionInput {
+  readonly cardinalities: ReadonlyMap<string, Addition<typeof DeclarationCardinality>>;
   readonly expressions: ExpressionRows;
   readonly ids: TestIds;
   readonly tests: TestRows;
@@ -1667,7 +1694,12 @@ export interface AssembledExpressionRows {
   readonly PlacedDocument: ReadonlyMap<string, Addition<typeof PlacedDocument>>;
   readonly PlacedReference: ReadonlyMap<string, Addition<typeof PlacedReference>>;
   readonly Reading: ReadonlyMap<string, Addition<typeof Reading>>;
+  readonly ReadingCardinality: ReadonlyMap<string, Addition<typeof ReadingCardinality>>;
   readonly TemplateDefault: ReadonlyMap<string, Addition<typeof TemplateDefault>>;
+  readonly TemplateDefaultCardinality: ReadonlyMap<
+    string,
+    Addition<typeof TemplateDefaultCardinality>
+  >;
   readonly TemplateDefaultTarget: ReadonlyMap<string, Addition<typeof TemplateDefaultTarget>>;
   readonly VariableLookup: ReadonlyMap<string, Addition<typeof VariableLookup>>;
 }
@@ -1698,6 +1730,11 @@ const digits = /^[0-9]+$/u;
  * The lookups the package-level builder reads and the probes it writes.
  */
 interface Lookups {
+  /**
+   * Each declaration's cardinality, by the declaration's node, where it has one (spec reading
+   * 159): a declaration whose cardinality is unwritten or spells nothing has none.
+   */
+  readonly cardinalities: ReadonlyMap<string, Addition<typeof DeclarationCardinality>>;
   readonly declarations: ReadonlyMap<string, Addition<typeof VariableLookup>>;
   readonly items: ReadonlyMap<string, NodeId>;
   readonly mappings: Map<string, Addition<typeof MappingLookup>>;
@@ -1710,6 +1747,23 @@ interface Lookups {
   readonly probes: Map<string, Addition<typeof VariableLookup>>;
   readonly targets: ReadonlyMap<string, Addition<typeof ItemRefTarget>["type"]>;
 }
+
+/**
+ * Read a declaration's cardinality, where it has one: none for a declaration whose cardinality is
+ * unwritten or spells nothing, and for a node that declares nothing, the document a probe names.
+ *
+ * @param lookups - The lookups.
+ * @param declaration - The declaration's node.
+ * @returns Its cardinality, or none.
+ */
+const cardinalityAt = (
+  lookups: Lookups,
+  declaration: NodeId,
+): Option.Option<Addition<typeof DeclarationCardinality>["cardinality"]> =>
+  Option.map(
+    Option.fromNullishOr(lookups.cardinalities.get(declaration)),
+    ({ cardinality }) => cardinality,
+  );
 
 /**
  * Look a name up in a document's declarations, writing an absent probe where it declares none.
@@ -1930,12 +1984,12 @@ const sourceOf = (
   scope: Scope,
 ): Pick<
   Addition<typeof Reading>,
-  "declBaseTypes" | "declCardinality" | "declaration" | "declarationKind" | "source"
+  "declBaseTypes" | "declCardinalities" | "declaration" | "declarationKind" | "source"
 > => {
   if (declared?.declared === true) {
     return {
       declBaseTypes: declared.baseTypes,
-      declCardinality: declared.cardinality,
+      declCardinalities: declared.cardinalities,
       declaration: declared.declaration,
       declarationKind: declared.declarationKind,
       source: "declared",
@@ -1946,14 +2000,14 @@ const sourceOf = (
     return mappedSource === undefined
       ? {
           declBaseTypes: undeclared.baseTypes,
-          declCardinality: undeclared.cardinality,
+          declCardinalities: undeclared.cardinalities,
           declaration: scope.itemDocument,
           declarationKind: undeclared.declarationKind,
           source: "mapped",
         }
       : {
           declBaseTypes: mappedSource.declBaseTypes,
-          declCardinality: mappedSource.declCardinality,
+          declCardinalities: mappedSource.declCardinalities,
           declaration: mappedSource.declaration,
           declarationKind: mappedSource.declarationKind,
           source: "mapped",
@@ -1963,14 +2017,14 @@ const sourceOf = (
   return Option.match(builtIn, {
     onNone: () => ({
       declBaseTypes: undeclared.baseTypes,
-      declCardinality: undeclared.cardinality,
+      declCardinalities: undeclared.cardinalities,
       declaration: scope.itemDocument,
       declarationKind: undeclared.declarationKind,
       source: "none" as const,
     }),
     onSome: ({ declarationKind }) => ({
       declBaseTypes: undeclared.baseTypes,
-      declCardinality: undeclared.cardinality,
+      declCardinalities: undeclared.cardinalities,
       declaration: scope.itemDocument,
       declarationKind,
       source: "builtIn" as const,
@@ -2055,10 +2109,55 @@ const readingOf = (
 };
 
 /**
- * A reference as one test reads it: its row with its name's pieces nested, and its readings by
+ * Whether a reading resolves (M3), as `Reading`'s `resolves` states it: it reads a variable, which
+ * a source names, a setter's only unsplit, and, numbered, through an item ref a replacement can
+ * repeat, at a number of at least 1 (reading 88).
+ *
+ * @param reading - The reading.
+ * @returns Whether it resolves.
+ */
+const readingResolves = (reading: Addition<typeof Reading>): boolean =>
+  reading.form !== "name" &&
+  reading.source !== "none" &&
+  (reading.form === "unsplit" || !setters.has(reading.kind)) &&
+  (reading.form !== "numbered" ||
+    (reading.replaced && /^[0-9]*[1-9][0-9]*$/u.test(reading.number)));
+
+/**
+ * Write a reading's declaration's cardinality where `Reference_type` reads it, as a row of its own:
+ * a resolving reading by an attribute other than `identifier`, one that stands for a literal, of a
+ * declared or mapped variable whose declaration has a cardinality (spec reading 159). Any other
+ * reading has none.
+ *
+ * @param lookups - The lookups.
+ * @param reading - The reading.
+ * @returns Its cardinality row, or none.
+ */
+const readingCardinalityOf = (
+  lookups: Lookups,
+  reading: Addition<typeof Reading>,
+): Option.Option<Addition<typeof ReadingCardinality>> =>
+  reading.attribute !== "identifier" &&
+  readingResolves(reading) &&
+  (reading.source === "declared" || reading.source === "mapped")
+    ? Option.map(cardinalityAt(lookups, reading.declaration), (declCardinality) => ({
+        assembly: reading.assembly,
+        attribute: reading.attribute,
+        declCardinality,
+        declaration: reading.declaration,
+        form: reading.form,
+        node: reading.node,
+        split: reading.split,
+      }))
+    : Option.none();
+
+/**
+ * A reference as one test reads it: its row with its name's pieces nested, and its readings and
+ * their declarations' cardinalities where `Reference_type` reads one, each by
  * `[assembly, node, attribute, form, split]`.
  */
 interface ReadReference {
+  readonly cardinalities: ReadonlyMap<string, Addition<typeof ReadingCardinality>>;
   readonly readings: ReadonlyMap<string, Addition<typeof Reading>>;
   readonly row: AssembledReferenceRow;
 }
@@ -2082,23 +2181,29 @@ const assembledReferenceOf = (
     piece,
     separator: at === 0 ? "" : ".",
   }));
-  const readings = readingTextsOf(reference.identifier, reference.role).map((text) =>
-    readingOf(lookups, assembly, reference, text),
-  );
+  const readings = readingTextsOf(reference.identifier, reference.role).map((text) => {
+    const reading = readingOf(lookups, assembly, reference, text);
+
+    return {
+      at: JSON.stringify([
+        assembly,
+        reading.node,
+        reading.attribute,
+        reading.form,
+        String(reading.split),
+      ]),
+      cardinality: readingCardinalityOf(lookups, reading),
+      reading,
+    };
+  });
 
   return {
-    readings: new Map(
-      readings.map((reading) => [
-        JSON.stringify([
-          assembly,
-          reading.node,
-          reading.attribute,
-          reading.form,
-          String(reading.split),
-        ]),
-        reading,
-      ]),
+    cardinalities: new Map(
+      readings.flatMap(({ at, cardinality }) =>
+        Option.toArray(cardinality).map((row) => [at, row] as const),
+      ),
     ),
+    readings: new Map(readings.map(({ at, reading }) => [at, reading])),
     row: {
       assembly,
       attribute: reference.attribute,
@@ -2125,10 +2230,15 @@ const instancesIn = (
 ): readonly (InstanceMember | InstanceRoot)[] => [member, ...member.children.flatMap(instancesIn)];
 
 /**
- * A test's template defaults, each by its node: its row, and its target, the template declaration
- * of the item its item ref names, where that item declares a variable of its name.
+ * A test's template defaults, each by its node: its row; its target, the declaration of the item
+ * its item ref names, where that item declares a variable of its name; and its target's
+ * declaration's cardinality, where the declaration has one.
  */
 interface TemplateDefaultRows {
+  readonly cardinalities: readonly (readonly [
+    string,
+    Addition<typeof TemplateDefaultCardinality>,
+  ])[];
   readonly targets: readonly (readonly [string, Addition<typeof TemplateDefaultTarget>])[];
   readonly templateDefaults: readonly (readonly [string, Addition<typeof TemplateDefault>])[];
 }
@@ -2136,9 +2246,11 @@ interface TemplateDefaultRows {
 /**
  * Write a test's template defaults, each that writes its `template-identifier`, which every one
  * must (AL3): its row, and its target where its item ref names an item that declares a variable of
- * its template's name and it holds its expression, with that declaration and the expression's
- * type. A template default with no target has none: no value stands for the declaration it lacks,
- * so "Template default target" refuses it, and its row says nothing of an item.
+ * its template's name, whatever its cardinality spells (spec reading 159), and it holds its
+ * expression, with that declaration and the expression's type, and beside the target the
+ * declaration's cardinality where it has one. A template default with no target has none: no value
+ * stands for the declaration it lacks, so "Template default target" refuses it, and its row says
+ * nothing of an item.
  *
  * @param input - A document.
  * @param lookups - The lookups.
@@ -2166,35 +2278,51 @@ const templateDefaultsOf = (
       : [{ lexical: attribute.lexical, node, pieces: piecesOf(attribute.lexical) }];
   });
 
-  return {
-    targets: defaults.flatMap(({ node, pieces }) => {
-      const itemDocument = lookups.items.get(node.parent);
-      const declared =
-        itemDocument === undefined
-          ? undefined
-          : lookups.declarations.get(lookupKey(itemDocument, pieces.name));
-      const expression = held.get(node.id);
+  const targets = defaults.flatMap(({ node, pieces }) => {
+    const itemDocument = lookups.items.get(node.parent);
+    const declared =
+      itemDocument === undefined
+        ? undefined
+        : lookups.declarations.get(lookupKey(itemDocument, pieces.name));
+    const expression = held.get(node.id);
 
-      return itemDocument === undefined || declared?.declared !== true || expression === undefined
-        ? []
-        : [
-            [
-              node.id,
-              {
-                declBaseTypes: declared.baseTypes,
-                declCardinality: declared.cardinality,
-                declaration: declared.declaration,
-                declarationKind: declared.declarationKind,
-                heldBase: expression.baseType,
-                heldCardinality: expression.cardinality,
-                itemDocument,
-                itemRef: node.parent,
-                node: node.id,
-                template: pieces.name,
-              },
-            ] as const,
-          ];
-    }),
+    return itemDocument === undefined || declared?.declared !== true || expression === undefined
+      ? []
+      : [
+          [
+            node.id,
+            {
+              declBaseTypes: declared.baseTypes,
+              declCardinalities: declared.cardinalities,
+              declaration: declared.declaration,
+              declarationKind: declared.declarationKind,
+              heldBase: expression.baseType,
+              heldCardinality: expression.cardinality,
+              itemDocument,
+              itemRef: node.parent,
+              node: node.id,
+              template: pieces.name,
+            },
+          ] as const,
+        ];
+  });
+
+  return {
+    cardinalities: targets.flatMap(([at, target]) =>
+      Option.toArray(cardinalityAt(lookups, target.declaration)).map(
+        (declCardinality) =>
+          [
+            at,
+            {
+              declCardinality,
+              declaration: target.declaration,
+              heldCardinality: target.heldCardinality,
+              node: target.node,
+            },
+          ] as const,
+      ),
+    ),
+    targets,
     templateDefaults: defaults.map(
       ({ lexical, node, pieces: { lead, name, trail } }) =>
         [
@@ -2269,8 +2397,8 @@ const itemRefTargetsOf = (
 };
 
 /**
- * Read the lookups a package's documents hold: each document's declarations, and what each item
- * ref names.
+ * Read the lookups a package's documents hold: each document's declarations and their
+ * cardinalities, and what each item ref names.
  *
  * @param documents - Every document of the package.
  * @param items - What each item ref names.
@@ -2280,6 +2408,7 @@ const lookupsOf = (
   documents: readonly AssembledExpressionInput[],
   items: ItemRefRows,
 ): Lookups => ({
+  cardinalities: new Map(documents.flatMap((input) => [...input.cardinalities])),
   declarations: new Map(documents.flatMap((input) => [...input.expressions.VariableLookup])),
   items: new Map(
     [...items.itemRefDocuments.values()].map(({ document, node }) => [node, document]),
@@ -2321,7 +2450,7 @@ const mappingSourcesOf = (
       if (itemDocument !== undefined && source?.declared === true) {
         const row: Addition<typeof MappingSourceDeclaration> = {
           declBaseTypes: source.baseTypes,
-          declCardinality: source.cardinality,
+          declCardinalities: source.cardinalities,
           declaration: source.declaration,
           declarationKind: source.declarationKind,
           itemDocument,
@@ -2451,6 +2580,7 @@ interface PlacedRows {
   readonly PlacedDocument: ReadonlyMap<string, Addition<typeof PlacedDocument>>;
   readonly PlacedReference: ReadonlyMap<string, Addition<typeof PlacedReference>>;
   readonly Reading: ReadonlyMap<string, Addition<typeof Reading>>;
+  readonly ReadingCardinality: ReadonlyMap<string, Addition<typeof ReadingCardinality>>;
 }
 
 /**
@@ -2476,6 +2606,7 @@ const placedRowsOf = (
   const placedReferences = new Map<string, Addition<typeof PlacedReference>>();
   const assembledReferences = new Map<string, AssembledReferenceRow>();
   const readings = new Map<string, Addition<typeof Reading>>();
+  const cardinalities = new Map<string, Addition<typeof ReadingCardinality>>();
   const roots = [...assembled.Instance.values()].filter(
     ({ assemblyKind }) => assemblyKind === testKind,
   );
@@ -2506,6 +2637,10 @@ const placedRowsOf = (
           for (const [key, reading] of read.readings) {
             readings.set(key, reading);
           }
+
+          for (const [key, cardinality] of read.cardinalities) {
+            cardinalities.set(key, cardinality);
+          }
         }
       }
     }
@@ -2516,6 +2651,7 @@ const placedRowsOf = (
     PlacedDocument: placedDocuments,
     PlacedReference: placedReferences,
     Reading: readings,
+    ReadingCardinality: cardinalities,
   };
 };
 
@@ -2559,6 +2695,7 @@ export const assembledExpressionRowsOf = (
     MappingSourceDeclaration: sources,
     NameLookup: lookups.names,
     TemplateDefault: new Map(templateDefaults.flatMap((rows) => rows.templateDefaults)),
+    TemplateDefaultCardinality: new Map(templateDefaults.flatMap((rows) => rows.cardinalities)),
     TemplateDefaultTarget: new Map(templateDefaults.flatMap((rows) => rows.targets)),
     VariableLookup: lookups.probes,
   };
@@ -2574,16 +2711,8 @@ export const assembledExpressionRowsOf = (
 export const resolvingReadingsOf = (
   rows: Pick<AssembledExpressionRows, "Reading">,
 ): ReadonlyMap<string, readonly Addition<typeof Reading>[]> =>
-  Map.groupBy(
-    [...rows.Reading.values()].filter(
-      (reading) =>
-        reading.form !== "name" &&
-        reading.source !== "none" &&
-        (reading.form === "unsplit" || !setters.has(reading.kind)) &&
-        (reading.form !== "numbered" ||
-          (reading.replaced && /^[0-9]*[1-9][0-9]*$/u.test(reading.number))),
-    ),
-    ({ assembly, attribute, node }) => keyOf([assembly, node, attribute]),
+  Map.groupBy([...rows.Reading.values()].filter(readingResolves), ({ assembly, attribute, node }) =>
+    keyOf([assembly, node, attribute]),
   );
 
 /**
@@ -2607,7 +2736,7 @@ export interface PlacedVariableRows {
  * @returns The resolution.
  */
 const placedResolutionOf = (
-  declaration: Addition<typeof DeclarationName> | undefined,
+  declaration: Addition<typeof DeclarationIdentifier> | undefined,
   name: string,
 ): Addition<typeof PlacedVariableRef>["resolution"] => {
   if (declaration !== undefined) {
@@ -2620,35 +2749,26 @@ const placedResolutionOf = (
 /**
  * Build a package's variable references in place (spec reading 117): under each instance of an
  * item's assembly, every `VariableRef` of the instance's document, its name resolved as an item's
- * own is, among the item's declarations, else to one of an item's built-in variables, else to
- * nothing, which "Variable declared" refuses; and for each name that resolves to no declaration,
- * the item's absent lookup that proves it. A name only an item's declaration with no cardinality
- * holds is placed nowhere, as its own references are written nowhere (`declarationsOf`).
+ * own is, among the item's declarations, whatever their cardinality spells (spec reading 159),
+ * else to one of an item's built-in variables, else to nothing, which "Variable declared" refuses;
+ * and for each name that resolves to no declaration, the item's absent lookup that proves it.
  *
  * @param input - The package's rows the placed references read.
- * @param input.baseTypes - Every declaration's base type, where it has one (Q5.08's
- *   `DeclarationBaseType` rows).
- * @param input.declarations - Every named declaration of the package (Q5.08's `DeclarationName`
- *   rows).
+ * @param input.declarations - Every named declaration of the package, with its counts of
+ *   cardinalities and base types (Q5.08's `DeclarationIdentifier` rows).
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
  *   `assembledRowsOf`).
  * @param input.references - Every document's references ({@link rowsOf}'s `VariableRef`).
- * @param input.untyped - Every document's names only a declaration with no cardinality holds
- *   (`#pantry/import/overlays/declarations.ts` `untypedNamesOf`).
  * @returns The rows.
  */
 export const placedVariableRowsOf = (input: {
-  readonly baseTypes: Iterable<Addition<typeof DeclarationBaseType>>;
-  readonly declarations: Iterable<Addition<typeof DeclarationName>>;
+  readonly declarations: Iterable<Addition<typeof DeclarationIdentifier>>;
   readonly instances: Iterable<InstanceRoot>;
   readonly references: Iterable<Addition<typeof VariableRef>>;
-  readonly untyped: Iterable<{ readonly document: NodeId; readonly name: string }>;
 }): PlacedVariableRows => {
   const declared = new Map(
     [...input.declarations].map((row) => [keyOf([row.document, row.identifier]), row] as const),
   );
-  const untyped = new Set([...input.untyped].map(({ document, name }) => keyOf([document, name])));
-  const baseTyped = new Set([...input.baseTypes].map(({ node }) => node));
   const referencesOf = Map.groupBy(input.references, ({ document }) => document);
   const placed = new Map<string, Addition<typeof PlacedVariableRef>>();
   const placedDeclarations = new Map<string, Addition<typeof PlacedVariableRefDeclaration>>();
@@ -2658,7 +2778,7 @@ export const placedVariableRowsOf = (input: {
       for (const reference of Option.getOrElse(
         Option.fromNullishOr(referencesOf.get(instance.document)),
         Arr.empty,
-      ).filter(({ identifier }) => !untyped.has(keyOf([root.assembly, identifier])))) {
+      )) {
         const declaration = declared.get(keyOf([root.assembly, reference.identifier]));
         const at = keyOf([instance.id, reference.node, reference.attribute]);
         placed.set(at, {
@@ -2681,8 +2801,8 @@ export const placedVariableRowsOf = (input: {
           placedDeclarations.set(at, {
             assembly: root.assembly,
             attribute: reference.attribute,
-            declBaseTypes: baseTyped.has(declaration.node) ? 1n : 0n,
-            declCardinality: declaration.cardinality,
+            declBaseTypes: declaration.baseTypes,
+            declCardinalities: declaration.cardinalities,
             declaration: declaration.node,
             declarationKind: declaration.declarationKind,
             identifier: reference.identifier,

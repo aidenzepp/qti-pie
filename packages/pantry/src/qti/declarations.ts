@@ -13,9 +13,12 @@
  *   counted member of its {@link Declaration}.
  * - {@link DeclarationBaseType}, a declaration's `base-type`, where it spells a code, a counted
  *   member of its {@link Declaration}.
- * - {@link DeclarationIdentifier}, a declaration's `identifier`, where it names something.
- * - {@link DeclarationName}, a declaration's name and type, where it has a name and a cardinality:
- *   the one row a reference by name resolves against, through {@link declarationNameRef}.
+ * - {@link DeclarationIdentifier}, a declaration's `identifier`, where it names something: the one
+ *   row a binding, a reference and a choice's name resolve against by name, through
+ *   {@link declarationIdentifierRef}, whatever the declaration's cardinality spells (spec reading
+ *   159).
+ * - {@link DeclarationName}, a declaration's name beside its cardinality, where it has both: the row
+ *   `Reserved type` judges a typed name's cardinality on.
  * - {@link ValueSet}, one per `qti-default-value` and `qti-correct-response` of a declaration: its
  *   declaration's {@link declarationRef} tuple, and its count of values, `Node.elementChildren`;
  *   and {@link ValueSetCardinality}, a set beside its declaration's cardinality, where it has one.
@@ -323,18 +326,18 @@ export const DeclarationIdentifier = relation(
 );
 
 /**
- * A declared variable as a reference by name resolves it, keyed by its declaration's node, where
- * the declaration has both a name and a cardinality: its {@link DeclarationIdentifier}'s
- * `identifier`, document, declaration kind and count of base types, and its
- * {@link DeclarationCardinality}'s `cardinality`, the fields every reference copies through
- * {@link declarationNameRef}, and the type a reference reads; and `parentKind`, its
- * {@link Declaration}'s, which `Reserved type` reads where it reads the cardinality (reading 160).
+ * A declared name beside its cardinality, keyed by its declaration's node, where the declaration
+ * has both a name and a cardinality: its {@link DeclarationIdentifier}'s `identifier`, document,
+ * declaration kind and count of base types, and its {@link DeclarationCardinality}'s
+ * `cardinality`, which `Reserved type` reads beside the name (a typed outcome name is no record,
+ * and QTI_CONTEXT is one); and `parentKind`, its {@link Declaration}'s, which `Reserved type`
+ * reads where it reads the cardinality (reading 160).
  *
- * A named declaration whose cardinality is unwritten or spells nothing has no row: its name types
- * nothing, so no reference resolves to it and no law reads a type it does not have, and AL3 or its
- * value domain refuses it alone (spec reading 158). Its base type is no field: a record has none,
- * and a declaration whose base type spells nothing has none either, so a reference reads it from
- * {@link DeclarationBaseType}, where `baseTypes` is 1.
+ * A named declaration whose cardinality is unwritten or spells nothing has no row, so no law reads
+ * a cardinality it does not have, and AL3 or its value domain refuses it alone (spec reading 158);
+ * a reference still resolves to it, through {@link declarationIdentifierRef} (spec reading 159).
+ * Its base type is no field: a record has none, and a declaration whose base type spells nothing
+ * has none either, so a law reads it from {@link DeclarationBaseType}, where `baseTypes` is 1.
  */
 export const DeclarationName = relation(
   "DeclarationName",
@@ -385,22 +388,6 @@ export const declarationIdentifierRef = on(
   "identifier",
   "declarationKind",
   "cardinalities",
-  "baseTypes",
-);
-
-/**
- * The one tuple of a declared variable every row that references a declaration by its identifier
- * copies: its node, document, name, declaration kind, cardinality and count of base types, so
- * `DeclarationName` carries one superkey UNIQUE for them all. A declaration with no name or no
- * cardinality has no row here, and no reference resolves to it (spec readings 157 and 158).
- */
-export const declarationNameRef = on(
-  DeclarationName,
-  "node",
-  "document",
-  "identifier",
-  "declarationKind",
-  "cardinality",
   "baseTypes",
 );
 

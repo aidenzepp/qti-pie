@@ -7,8 +7,9 @@
  * - A key the host finds is written through the author role (`db.apply`): two declarations of one
  *   identifier in one document are refused before any SQL, `invariant-rejected` with the key law
  *   among its `refused.laws` (membership, C22). Each is written with its identifier alone, a
- *   `DeclarationIdentifier`, a member of no immutable owner's family (README, "Families": "An
- *   immutable owner's family is fixed when the owner is inserted").
+ *   `DeclarationIdentifier`, beside the `ChoiceVariableName` row its name's family hangs from (spec
+ *   reading 159), its immutable owner (README, "Families": "An immutable owner's family is fixed
+ *   when the owner is inserted").
  * - A containment a declaration's cardinality states, a foreign key grizzle defers, is judged by the
  *   same direct SQL writer with that one key set immediate: SQLSTATE 23503 and its name.
  * - A row's own CHECKs are judged by a direct SQL writer, as the rules file's rule 8 and grizzle's
@@ -340,13 +341,17 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // Oracle: the specification as a checker, reading 74: no two declarations of a document
           // share an identifier, compared collapsed (XML Schema Part 2, §4.3.6).
           // Bound: two declarations, the second's lexical form `A` and ` A`, each with its
-          // identifier and neither a cardinality nor a name, so no family of an immutable owner
-          // holds them; the host finds the key, so `laws` holds it whether or not any SQL ran.
+          // identifier and neither a cardinality nor a name, and the `ChoiceVariableName` row of
+          // their name, whose family counts every declared name (spec reading 159), inserted beside
+          // them; the host finds the key, so `laws` holds it whether or not any SQL ran.
           Effect.gen(function* declarationKey() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const second of ["A", " A"]) {
               const outcome = yield* db.apply(
                 ChangeSet.empty(Author)
+                  .insert(ChoiceVariableName, [
+                    { document: strayDocument, identifier: "A", rootKind: "qti-assessment-item" },
+                  ])
                   .insert(Declaration, [declarationFact(1), declarationFact(2)])
                   .insert(DeclarationIdentifier, [
                     identifierFact(1, "A"),

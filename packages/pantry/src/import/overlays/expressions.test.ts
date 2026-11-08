@@ -42,6 +42,7 @@ import type {
 } from "#pantry/import/overlays/expressions.ts";
 import { contextsOf } from "#pantry/import/context.ts";
 import { ownContext } from "#pantry/import/fold.ts";
+import { rowsOf as declarationRowsOf } from "#pantry/import/overlays/declarations.ts";
 import { assembledRowsOf, keyOf, rowsOf as testRowsOf } from "#pantry/import/overlays/tests.ts";
 import type { AssembledRows, TestIds } from "#pantry/import/overlays/tests.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -467,11 +468,18 @@ const resolves = (v: Reference, rows: ExpressionRows): boolean => {
   switch (v.resolution) {
     case "declared": {
       // A declared variable with no base type, a record, is `unknown`; one with a base type has its
-      // declaration's, which the containment into `DeclarationBaseType` copies.
+      // declaration's, which the containment into `DeclarationBaseType` copies. Its cardinality is
+      // `unknown` where its declaration has none, and else its cardinality row's image (spec
+      // reading 159).
+      const cardinality = rows.VariableRefCardinality.get(JSON.stringify([v.node, v.attribute]));
+
       return (
         declared !== undefined &&
         (declared.declBaseTypes === 1n || v.baseType === "unknown") &&
-        v.cardinality === valueCardinalityOf.get(declared.declCardinality)
+        (cardinality === undefined
+          ? declared.declCardinalities === 0n && v.cardinality === "unknown"
+          : declared.declCardinalities === 1n &&
+            v.cardinality === valueCardinalityOf.get(cardinality.declCardinality))
       );
     }
     case "builtIn": {
@@ -1126,7 +1134,13 @@ const packageRowsOf = (
         })),
     };
 
-    return { expressions: rowsOf(tree, ids), ids, tests: testRowsOf(tree, ids), tree };
+    return {
+      cardinalities: declarationRowsOf(tree, ids).DeclarationCardinality,
+      expressions: rowsOf(tree, ids),
+      ids,
+      tests: testRowsOf(tree, ids),
+      tree,
+    };
   });
   let minted = 0;
   const assembled = assembledRowsOf(

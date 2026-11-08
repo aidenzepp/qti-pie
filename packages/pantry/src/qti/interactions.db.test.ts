@@ -33,7 +33,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { Declaration, DeclarationName } from "#pantry/qti/declarations.ts";
+import { Declaration, DeclarationIdentifier } from "#pantry/qti/declarations.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   AriaRange,
@@ -47,6 +47,7 @@ import {
   CountBound,
   CountRange,
   FeedbackRef,
+  FeedbackRefCardinality,
   FeedbackRefDeclaration,
   Hotspot,
   Hottext,
@@ -56,6 +57,7 @@ import {
   ReferringDocument,
   SectionFeedbackName,
   SectionFeedbackRef,
+  SectionFeedbackRefCardinality,
   SectionFeedbackRefDeclaration,
   SectionScope,
   SectionTemplateName,
@@ -336,8 +338,8 @@ const feedbackOf = (fields: Partial<Fact<typeof FeedbackRef>> = {}) =>
   }) satisfies Fact<typeof FeedbackRef>;
 
 /**
- * The declaration a stray feedback block's outcome reference names: a declared single identifier
- * outcome.
+ * The declaration a stray feedback block's outcome reference names: a declared identifier outcome
+ * with a cardinality, which its {@link feedbackCardinalityOf} row holds (spec reading 159).
  *
  * @param fields - The fields the case sets.
  * @returns The row.
@@ -346,7 +348,7 @@ const feedbackDeclarationOf = (fields: Partial<Fact<typeof FeedbackRefDeclaratio
   ({
     ...feedbackOf(),
     baseTypes: 1n,
-    cardinality: "single",
+    cardinalities: 1n,
     declaration: stray,
     declarationKind: "qti-outcome-declaration",
     ...fields,
@@ -380,11 +382,26 @@ const templateDeclarationOf = (fields: Partial<Fact<typeof TemplateRefDeclaratio
   ({
     ...templateOf(),
     baseTypes: 1n,
-    cardinality: "single",
+    cardinalities: 1n,
     declaration: stray,
     declarationKind: "qti-template-declaration",
     ...fields,
   }) satisfies Fact<typeof TemplateRefDeclaration>;
+
+/**
+ * The cardinality of the outcome a stray feedback block's outcome reference names, the row
+ * "Feedback outcome type" judges it on.
+ *
+ * @param cardinality - The outcome's cardinality.
+ * @returns The row.
+ */
+const feedbackCardinalityOf = (cardinality: string) => {
+  const { attribute, node } = feedbackOf();
+
+  return { attribute, cardinality, declaration: stray, node } satisfies Fact<
+    typeof FeedbackRefCardinality
+  >;
+};
 
 /**
  * A stray choice of one interaction.
@@ -993,8 +1010,9 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a feedback outcome of another type, in an item's or a section's placement, and a reference to a built-in its law does not allow, by Feedback outcome type and Feedback reference",
         () =>
-          // Oracle: PostgreSQL, the `Feedback_outcome_type` check over the declaration rows (reading
-          // 77) and the `Feedback_reference` check that a built-in's name is one `ContentReference`
+          // Oracle: PostgreSQL, the `Feedback_outcome_type` check over the cardinality rows (reading
+          // 77; spec reading 159: a row of the reference's own where its outcome has a cardinality)
+          // and the `Feedback_reference` check that a built-in's name is one `ContentReference`
           // lets the reference name.
           // Bound: an ordered outcome, of an item's feedback and of a section's feedback placed under
           // a test (port audit A45); a feedback naming the response built-in numAttempts. The placed
@@ -1006,13 +1024,12 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const typed = yield* db.apply(
               ChangeSet.empty(Author)
                 .insert(FeedbackRef, [feedbackOf()])
-                .insert(FeedbackRefDeclaration, [
-                  feedbackDeclarationOf({ cardinality: "ordered" }),
-                ]),
+                .insert(FeedbackRefDeclaration, [feedbackDeclarationOf()])
+                .insert(FeedbackRefCardinality, [feedbackCardinalityOf("ordered")]),
               {},
             );
             assert.isTrue(
-              rejectedBy(typed, checkNamed("FeedbackRefDeclaration", "Feedback_outcome_type")),
+              rejectedBy(typed, checkNamed("FeedbackRefCardinality", "Feedback_outcome_type")),
             );
 
             const builtIn = yield* db.apply(
@@ -1039,14 +1056,17 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                 ])
                 .insert(SectionFeedbackRef, [{ ...feedbackOf(), ...placement }])
                 .insert(SectionFeedbackRefDeclaration, [
-                  { ...feedbackDeclarationOf({ cardinality: "ordered" }), ...placement },
+                  { ...feedbackDeclarationOf(), ...placement },
+                ])
+                .insert(SectionFeedbackRefCardinality, [
+                  { ...feedbackCardinalityOf("ordered"), instance: placement.instance },
                 ]),
               {},
             );
             assert.isTrue(
               rejectedBy(
                 placed,
-                checkNamed("SectionFeedbackRefDeclaration", "Feedback_outcome_type"),
+                checkNamed("SectionFeedbackRefCardinality", "Feedback_outcome_type"),
               ),
             );
           }),
@@ -1223,9 +1243,10 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, the `Choice_not_variable` check on `ChoiceVariableName` (reading 104:
           // "This identifier must not be used by any other choice or item variable"), over the
-          // counts its three families draw from the rows the ChangeSet writes.
-          // Bound: a simple choice and an outcome declaration named A; a hottext and that
-          // declaration; a simple choice named numAttempts in an item.
+          // counts its three families draw from the rows the ChangeSet writes, a declaration's by its
+          // `DeclarationIdentifier`, whatever its cardinality spells (spec reading 159).
+          // Bound: a simple choice and an outcome declaration named A with no cardinality; a hottext
+          // and that declaration; a simple choice named numAttempts in an item.
           Effect.gen(function* choiceNotVariable() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const declared = {
@@ -1241,13 +1262,16 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             } satisfies Addition<typeof Declaration>;
             const name = {
               baseTypes: 0n,
-              cardinality: "single",
+              cardinalities: 0n,
               declarationKind: "qti-outcome-declaration",
               document: stray,
               identifier: "A",
+              identifierLead: "",
+              identifierLexical: "A",
+              identifierTrail: "",
               node: strayNode(50),
               parentKind: "qti-assessment-item",
-            } satisfies Addition<typeof DeclarationName>;
+            } satisfies Addition<typeof DeclarationIdentifier>;
 
             const choice = yield* db.apply(
               ChangeSet.empty(Author)
@@ -1255,7 +1279,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                 .insert(ChoiceVariableName, [nameOf("A")])
                 .insert(Choice, [choiceOf(0, "A")])
                 .insert(Declaration, [declared])
-                .insert(DeclarationName, [name]),
+                .insert(DeclarationIdentifier, [name]),
               {},
             );
             assert.isTrue(
@@ -1269,7 +1293,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                 .insert(ChoiceVariableName, [nameOf("A")])
                 .insert(Hottext, [hottextOf(0, { identifier: "A" })])
                 .insert(Declaration, [declared])
-                .insert(DeclarationName, [name]),
+                .insert(DeclarationIdentifier, [name]),
               {},
             );
             assert.isTrue(

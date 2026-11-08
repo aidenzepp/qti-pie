@@ -6,11 +6,12 @@
  * alone (spec reading 157), which `src/import/overlays/unnamed-declarations.oracle.test.ts` holds.
  *
  * Such a declaration keeps its row and every row below it, and has no `DeclarationCardinality` or
- * `DeclarationBaseType` alone; one with no cardinality has no `DeclarationName`, so nothing binds
- * or references it in the importer's rows (`#pantry/import/overlays/declarations.ts`
- * `typedDeclarationOf`): its own law, AL3's required attribute or the attribute's value domain,
- * refuses it. `src/test/declaration-rows.oracle.test.ts` holds the oracle and the rows to that, and
- * `src/import/declaration-rows.db.test.ts` the database.
+ * `DeclarationBaseType` alone; one with no cardinality has no `DeclarationName`, and a binding or a
+ * reference still resolves to it by name, reading no cardinality of it (spec reading 159;
+ * `#pantry/import/overlays/declarations.ts` `typedDeclarationOf`): its own law, AL3's required
+ * attribute or the attribute's value domain, refuses it. `src/test/declaration-rows.oracle.test.ts`
+ * holds the oracle and the rows to that, and `src/import/declaration-rows.db.test.ts` the
+ * database.
  */
 import { everyRelationPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";

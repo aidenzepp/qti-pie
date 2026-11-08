@@ -875,16 +875,15 @@ export const expressionPackageBreaches = (
               Option.contains(typedValueOf(item.rows, held.id, "identifier"), template),
           ),
         ).pipe(
-          // A declaration that writes no cardinality, or one outside its domain, is refused by AL3
-          // or that domain alone, as it has no `DeclarationName` to compare against; a base type
-          // outside its domain types nothing, as an unwritten one does (the orchestrator's ruling
-          // of 2026-11-06; lane NIL's audit, B11; spec reading 158).
-          Option.flatMap((declaration) =>
-            Option.map(typedValueOf(item.rows, declaration.id, "cardinality"), (cardinality) => ({
-              base: valueBaseOf(typedValueOf(item.rows, declaration.id, "base-type")),
-              cardinality,
-            })),
-          ),
+          // Each half judges the declaration where what it reads spells something (spec readings
+          // 158 and 159): its cardinality where it has one, and its base type where it has one. A
+          // cardinality or a base type unwritten, or outside its domain, types nothing: AL3 or
+          // that domain refuses it alone (the orchestrator's ruling of 2026-11-06; lane NIL's
+          // audit, B11).
+          Option.map((declaration) => ({
+            base: valueBaseOf(typedValueOf(item.rows, declaration.id, "base-type")),
+            cardinality: typedValueOf(item.rows, declaration.id, "cardinality"),
+          })),
         ),
       );
       const held = typed.typeOf(expression);
@@ -893,7 +892,11 @@ export const expressionPackageBreaches = (
         onNone: () => true,
         onSome: (type) =>
           (held.base === type.base || silent.has(held.base) || type.base === "unknown") &&
-          (held.cardinality === type.cardinality || held.cardinality === "unknown"),
+          (held.cardinality === "unknown" ||
+            Option.match(type.cardinality, {
+              onNone: () => true,
+              onSome: (cardinality) => held.cardinality === cardinality,
+            })),
       });
 
       return fitting
@@ -902,7 +905,7 @@ export const expressionPackageBreaches = (
             breachAt(rows, node, "Template default type", {
               declared: Option.match(declared, {
                 onNone: () => "",
-                onSome: ({ base, cardinality }) => `${base} ${cardinality}`,
+                onSome: ({ base, cardinality }) => [base, ...Option.toArray(cardinality)].join(" "),
               }),
               held: `${held.base} ${held.cardinality}`,
               itemRef: Option.getOrElse(typedValueOf(rows, itemRef.id, "identifier"), () => ""),

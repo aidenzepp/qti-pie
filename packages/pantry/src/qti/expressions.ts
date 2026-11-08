@@ -17,11 +17,14 @@
  * - **{@link Processing}**, one row per rule and processing element, carries the processing language
  *   from its root down; each expression takes its parent's.
  * - **{@link VariableRef}**, one row per variable reference a processing element makes, resolves it
- *   to a declaration of its document (`declarationNameRef`), a built-in variable (the installed
- *   `BuiltInVariable`, A63), or nothing, which only a document that is no item may hold; a claim of
- *   no declaration is proved by {@link VariableLookup}, and a table it reads by
- *   {@link DeclarationTable} (M2). The type a setter or a lookup sets its variable to is a row of
- *   its own, {@link HeldType}.
+ *   to a declaration of its document (`declarationIdentifierRef`, whatever the declaration's
+ *   cardinality spells: spec reading 159), a built-in variable (the installed `BuiltInVariable`,
+ *   A63), or nothing, which only a document that is no item may hold; a claim of no declaration is
+ *   proved by {@link VariableLookup}, and a table it reads by {@link DeclarationTable} (M2). The
+ *   type a setter or a lookup sets its variable to is a row of its own, {@link HeldType}, and so is
+ *   the cardinality of each declaration a reference reads one of, where it has one
+ *   ({@link VariableRefCardinality}, {@link TemplateDefaultCardinality},
+ *   {@link ReadingCardinality}).
  * - **{@link ExpressionAttribute}** carries the attributes an expression's type follows from
  *   (`base-type`, `name`, `weight-identifier`), an unwritten one included, {@link Literal} a base
  *   value's text, and {@link ProcessingTemplate} a response processing's published template.
@@ -104,8 +107,9 @@ import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   DeclarationBaseType,
-  DeclarationName,
-  declarationNameRef,
+  DeclarationCardinality,
+  DeclarationIdentifier,
+  declarationIdentifierRef,
 } from "#pantry/qti/declarations.ts";
 import {
   BaseTypePattern,
@@ -355,12 +359,14 @@ export const VariableRef = relation(
 
 /**
  * The declaration a declared {@link VariableRef} names, keyed as the reference: its
- * `declarationNameRef` tuple (`declaration`, `declarationKind`, `declCardinality` and
- * `declBaseTypes`, with its reference's `document` and `identifier`), and the reference's fields
- * its laws read beside it, each copied from the reference: its `baseType` is `unknown` where the
- * declaration has no base type, a record's, and else its {@link DeclarationBaseType}'s `valueBase`
- * (lane NIL's audit, B12). A reference exactly where its `resolution` is `declared` has one (lane
- * NIL's NS1), so one that names a built-in variable or nothing has none.
+ * `declarationIdentifierRef` tuple (`declaration`, `declarationKind`, `declCardinalities` and
+ * `declBaseTypes`, with its reference's `document` and `identifier`), whatever the declaration's
+ * cardinality spells (spec reading 159), and the reference's fields its laws read beside it, each
+ * copied from the reference: its `baseType` is `unknown` where the declaration has no base type, a
+ * record's or one that spells nothing, and else its {@link DeclarationBaseType}'s `valueBase` (lane
+ * NIL's audit, B12); its `cardinality` is `unknown` where the declaration has no cardinality, and
+ * else its {@link VariableRefCardinality}'s. A reference exactly where its `resolution` is
+ * `declared` has one (lane NIL's NS1), so one that names a built-in variable or nothing has none.
  */
 export const VariableRefDeclaration = relation(
   "VariableRefDeclaration",
@@ -369,7 +375,7 @@ export const VariableRefDeclaration = relation(
     baseType: closedId(ValueBase),
     cardinality: closedId(ValueCardinality),
     declBaseTypes: natural,
-    declCardinality: closedId(Cardinality),
+    declCardinalities: natural,
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     document: uuid,
@@ -378,6 +384,28 @@ export const VariableRefDeclaration = relation(
     language: closedId(Language),
     node: uuid,
     table: closedId(ReferencedTable),
+  },
+  ["node", "attribute"],
+);
+
+/**
+ * A declared {@link VariableRef}'s declaration beside its cardinality, keyed as the reference,
+ * where the declaration has one (spec reading 159): `declaration`, its
+ * {@link VariableRefDeclaration}'s; `declCardinality`, the declaration's
+ * {@link DeclarationCardinality}'s; and `cardinality`, the reference's type's, which `E1_derived`
+ * holds to `ValueCardinalityOf`'s image of it. A reference to a declaration whose cardinality is
+ * unwritten or spells nothing has none, and its type's cardinality is `unknown`, so no law reads a
+ * cardinality the declaration does not have, and AL3 or its value domain refuses it alone (spec
+ * reading 158): a missing value is a row of its own relation, never a sentinel.
+ */
+export const VariableRefCardinality = relation(
+  "VariableRefCardinality",
+  {
+    attribute: closedId(AttributeName),
+    cardinality: closedId(ValueCardinality),
+    declCardinality: closedId(Cardinality),
+    declaration: uuid,
+    node: uuid,
   },
   ["node", "attribute"],
 );
@@ -442,9 +470,10 @@ export const PlacedVariableRef = relation(
 
 /**
  * The declaration a declared {@link PlacedVariableRef} names among its assembly's item's
- * declarations, keyed as the placed reference: its `declarationNameRef` tuple (with its `assembly`
- * as its document and its `identifier`), and its reference's `kind` and `attribute`. A placed
- * reference exactly where its `resolution` is `declared` has one (lane NIL's NS1).
+ * declarations, keyed as the placed reference: its `declarationIdentifierRef` tuple (with its
+ * `assembly` as its document and its `identifier`), whatever the declaration's cardinality spells
+ * (spec reading 159), and its reference's `kind` and `attribute`. A placed reference exactly where
+ * its `resolution` is `declared` has one (lane NIL's NS1).
  */
 export const PlacedVariableRefDeclaration = relation(
   "PlacedVariableRefDeclaration",
@@ -452,7 +481,7 @@ export const PlacedVariableRefDeclaration = relation(
     assembly: uuid,
     attribute: closedId(AttributeName),
     declBaseTypes: natural,
-    declCardinality: closedId(Cardinality),
+    declCardinalities: natural,
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     identifier: keyText,
@@ -578,10 +607,11 @@ export const DeclarationTable = relation(
 
 /**
  * Whether a document declares a name, keyed by the document and the name (M2): each name a
- * document declares is forced in, `declared`, its row naming a declaration of that name with its
- * codes and its count of base types, the one `Declaration key` allows; every other row is a probe
- * of a name the document does not declare, its declaration the document itself and its codes the
- * null objects (`qti-outcome-declaration`, `single`, and no base type). The key leaves no room for
+ * document declares is forced in, `declared`, whatever its declaration's cardinality spells (spec
+ * reading 159), its row naming a declaration of that name with its kind and its counts of
+ * cardinalities and base types, the one `Declaration key` allows; every other row is a probe of a
+ * name the document does not declare, its declaration the document itself, its kind the null
+ * object `qti-outcome-declaration`, and no cardinality and no base type. The key leaves no room for
  * an absent row where a declaration is, so a probe reads the truth: a reference's claim that it
  * names no declaration, a reading's variable, a mapping target.
  */
@@ -589,7 +619,7 @@ export const VariableLookup = relation(
   "VariableLookup",
   {
     baseTypes: natural,
-    cardinality: closedId(Cardinality),
+    cardinalities: natural,
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     declared: pg.boolean,
@@ -628,17 +658,20 @@ export const TemplateDefault = relation(
  * own, since a template default whose item declares no such variable has none (the ruling of
  * 2026-11-06, AGENTS.md's Schema intent: a value that may be missing is a row of its own relation).
  * It holds the item its item ref names (`itemDocument`, through `ItemRefDocument`), the
- * declaration of that item `template` names with the declaration's codes, and `heldBase` and
+ * declaration of that item `template` names, whatever its cardinality spells (spec reading 159),
+ * with its kind and its counts of cardinalities and base types, and `heldBase` and
  * `heldCardinality`, its one expression's type, with its `TemplateDefault`'s `itemRef` and
  * `template`. Every template default has one ("Template default target"), whose declaration is a
  * template declaration (`Template_default_target`) of a type its expression fits
- * (`Template_default_type`).
+ * (`Template_default_type`): its base type, where the declaration has one, its
+ * {@link DeclarationBaseType}'s, and its cardinality, where it has one, its
+ * {@link TemplateDefaultCardinality}'s.
  */
 export const TemplateDefaultTarget = relation(
   "TemplateDefaultTarget",
   {
     declBaseTypes: natural,
-    declCardinality: closedId(Cardinality),
+    declCardinalities: natural,
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     heldBase: closedId(ValueBase),
@@ -652,21 +685,42 @@ export const TemplateDefaultTarget = relation(
 );
 
 /**
- * A variable mapping's source in the item it maps, keyed by the mapping's node (the UP audit's
- * A34; spec readings 97 and 107): a row of its own, since a mapping whose item declares no
- * variable of its source's name has none (the ruling of 2026-11-06). It holds its item ref and the
- * item that names (`itemDocument`, through `ItemRefDocument`), its collapsed `source` and `target`
+ * A template default's target beside its declaration's cardinality, keyed by the template default's
+ * node, where the declaration has one (spec reading 159): `declaration` and `heldCardinality`, its
+ * {@link TemplateDefaultTarget}'s, and `declCardinality`, the declaration's
+ * {@link DeclarationCardinality}'s, which `Template_default_type` holds the expression's
+ * cardinality to. A target whose declaration's cardinality is unwritten or spells nothing has none,
+ * so the law reads no cardinality the declaration does not have, and AL3 or its value domain
+ * refuses it alone (spec reading 158).
+ */
+export const TemplateDefaultCardinality = relation(
+  "TemplateDefaultCardinality",
+  {
+    declCardinality: closedId(Cardinality),
+    declaration: uuid,
+    heldCardinality: closedId(ValueCardinality),
+    node: uuid,
+  },
+  ["node"],
+);
+
+/**
+ * A variable mapping's source in the item it maps, keyed by the mapping's node (the UP audit's A34;
+ * spec readings 97 and 107): a row of its own, since a mapping whose item declares no variable of
+ * its source's name has none (the ruling of 2026-11-06). It holds its item ref and the item that
+ * names (`itemDocument`, through `ItemRefDocument`), its collapsed `source` and `target`
  * (`VariableMapping`'s, each copied by a containment of its own, since one index holds at most one
- * key text, `#pantry/qti/limits.ts`), the declaration of the item `source` names with its codes,
- * and `targetDeclared`, whether the item declares `target` too, read from {@link VariableLookup}.
- * Every mapping has one ("Variable mapping source"), whose declaration is an outcome declaration
- * (`Variable_mapping_source`).
+ * key text, `#pantry/qti/limits.ts`), the declaration of the item `source` names, whatever its
+ * cardinality spells (spec reading 159), with its kind and its counts of cardinalities and base
+ * types, and `targetDeclared`, whether the item declares `target` too, read from
+ * {@link VariableLookup}. Every mapping has one ("Variable mapping source"), whose declaration is
+ * an outcome declaration (`Variable_mapping_source`).
  */
 export const MappingSourceDeclaration = relation(
   "MappingSourceDeclaration",
   {
     declBaseTypes: natural,
-    declCardinality: closedId(Cardinality),
+    declCardinalities: natural,
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     itemDocument: uuid,
@@ -925,12 +979,15 @@ export const ReferenceSegment = relation.generated(
  *   unsplit reading;
  * - **the variable:** `declared`, read from {@link VariableLookup} in `lookupDocument` (the test's or
  *   the item's), `mapped`, from {@link MappingLookup} at the item ref, and `source`, which of the
- *   two or a built-in of the scope names it; `declaration` and its codes, the declared or mapped
- *   variable's;
+ *   two or a built-in of the scope names it; `declaration`, `declarationKind`, `declCardinalities`
+ *   and `declBaseTypes`, the declared or mapped variable's declaration, its kind and its counts of
+ *   cardinalities and base types, whatever its cardinality spells (spec reading 159);
  * - **the copy:** `identifier`, `kind`, `role`, its {@link AssembledReference}'s.
  *
  * A reading resolves when its variable is named and, numbered, its item ref can repeat and its
  * number is at least 1 (reading 88). Exactly one reading of a variable reference resolves (M3).
+ * The cardinality of a resolving reading's declaration that `Reference_type` reads is a row of its
+ * own, {@link ReadingCardinality}.
  */
 export const Reading = relation(
   "Reading",
@@ -938,7 +995,7 @@ export const Reading = relation(
     assembly: uuid,
     attribute: closedId(AttributeName),
     declBaseTypes: natural,
-    declCardinality: closedId(Cardinality),
+    declCardinalities: natural,
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     declared: pg.boolean,
@@ -965,6 +1022,30 @@ export const Reading = relation(
 );
 
 /**
+ * A reading that stands for a literal beside its declaration's cardinality, keyed as its
+ * {@link Reading}, where the reading resolves to a declared or mapped variable by an attribute
+ * other than `identifier` and the variable's declaration has a cardinality (spec reading 159):
+ * `declaration`, its reading's, and `declCardinality`, the declaration's
+ * {@link DeclarationCardinality}'s, which `Reference_type` holds to a single value (P24). A reading
+ * whose declaration's cardinality is unwritten or spells nothing has none, so the law reads no
+ * cardinality the declaration does not have, and AL3 or its value domain refuses it alone (spec
+ * reading 158).
+ */
+export const ReadingCardinality = relation(
+  "ReadingCardinality",
+  {
+    assembly: uuid,
+    attribute: closedId(AttributeName),
+    declCardinality: closedId(Cardinality),
+    declaration: uuid,
+    form: closedId(ReadingForm),
+    node: uuid,
+    split: natural,
+  },
+  ["assembly", "node", "attribute", "form", "split"],
+);
+
+/**
  * The relations of a test's references, the lookups they read and an item ref's declarations,
  * each under its own name, as `#pantry/qti/schema.ts` composes them.
  */
@@ -982,13 +1063,16 @@ export const referenceRelations = {
   PlacedVariableRef,
   PlacedVariableRefDeclaration,
   Reading,
+  ReadingCardinality,
   ReferenceDocument,
   ReferenceSegment,
   SectionIdentifier,
   TemplateDefault,
+  TemplateDefaultCardinality,
   TemplateDefaultTarget,
   TestReference,
   VariableLookup,
+  VariableRefCardinality,
   VariableRefDeclaration,
 };
 
@@ -1230,9 +1314,10 @@ const prefixedName = "^.*[.].*$";
 
 /**
  * State the type a reference's resolution gives it: a declared variable's, which its
- * {@link VariableRefDeclaration}'s `E1_derived` states: its cardinality through
- * `ValueCardinalityOf`, and its base type `unknown` where it has none, a record's (lane NIL's
- * audit, B12), and else its {@link DeclarationBaseType}'s `valueBase`, which
+ * {@link VariableRefDeclaration}'s `E1_derived` states: its cardinality `unknown` where the
+ * declaration has none, and else its {@link VariableRefCardinality}'s image through
+ * `ValueCardinalityOf` (spec reading 159), and its base type `unknown` where it has none, a
+ * record's (lane NIL's audit, B12), and else its {@link DeclarationBaseType}'s `valueBase`, which
  * {@link typedVariableRefs} copies; a built-in's by its name, among its root's built-ins; nothing
  * for an unresolved one, whose name is none of them.
  *
@@ -1680,6 +1765,20 @@ const prefixedMapReaders = select(Reading, (r) =>
 );
 
 /**
+ * The resolving readings that stand for a literal, by an attribute other than `identifier`, of a
+ * declared or mapped variable whose declaration has a cardinality: each has its
+ * {@link ReadingCardinality}, which `Reference_type` reads (spec reading 159).
+ */
+const standInReadings = select(Reading, (r) =>
+  r.and(
+    r.ne(r.attribute, "identifier"),
+    resolves(r),
+    r.in(r.source, ["declared", "mapped"]),
+    r.eq(r.declCardinalities, 1n),
+  ),
+);
+
+/**
  * The resolving readings of a reference by `identifier`: each names one of the declaration kinds
  * its element reads or sets.
  */
@@ -1841,21 +1940,25 @@ export const readingFamily = counted(
  * law:
  *
  * - **the lookups:** `VariableLookup`, `NameLookup` and `MappingLookup`, each with its facts forced
- *   in and its found rows justified; `VariableLookup`'s and `NameLookup`'s absent rows' null
- *   objects (`E1_derived`); `MappingLookup` holds its verdict alone;
+ *   in and its found rows justified, every named declaration's name whatever its cardinality spells
+ *   (spec reading 159); `VariableLookup`'s and `NameLookup`'s absent rows' null objects
+ *   (`E1_derived`); `MappingLookup` holds its verdict alone;
  * - **an item ref's declarations,** each a row of its own that every template default and every
  *   mapping must have, so a name its item declares nothing under is refused by that law alone: a
  *   template default's {@link TemplateDefaultTarget}, a template declaration
- *   (`Template_default_target`) its expression's type fits (`Template_default_type`, P20); a
- *   mapping's {@link MappingSourceDeclaration}, an outcome of the item (`Variable_mapping_source`),
- *   and its target, no other variable of the item (`Variable_mapping_target`, reading 97); and a
- *   mapped reading's declaration, its mapping's source's;
+ *   (`Template_default_target`) its expression's type fits (`Template_default_type`, P20), its base
+ *   type where the declaration has one and its cardinality where it has one, read from its
+ *   {@link TemplateDefaultCardinality}; a mapping's {@link MappingSourceDeclaration}, an outcome of
+ *   the item (`Variable_mapping_source`), and its target, no other variable of the item
+ *   (`Variable_mapping_target`, reading 97); and a mapped reading's declaration, its mapping's
+ *   source's;
  * - **the references:** each test or section document's, placed once per instance of every test that
  *   places its document and read once per test, its name split at every dot (A59's concatenation),
  *   its readings exactly the readings of its name, exactly one of them resolving
  *   (`Prefixed_reference`, M3, the refusal naming both), none through a name two placements give
  *   (reading 86), an unsplit name declared (`Variable_declared`, P8), a literal's stand-in typed
- *   (`Reference_type`, P24), and a `section-identifier` a section's (`Section_identifier_target`).
+ *   (`Reference_type`, P24, its cardinality read from its {@link ReadingCardinality} where its
+ *   declaration has one), and a `section-identifier` a section's (`Section_identifier_target`).
  */
 export const referenceLawsByName = {
   "DocumentId key": [
@@ -1869,13 +1972,14 @@ export const referenceLawsByName = {
     key(on(sectionIdentifierAttributes, "node")),
   ],
   "E1 derived": [
-    // VariableLookup: every declared name forced in, each found one justified, the absent null
-    // objects. The force-in reads a declaration's name, never its node: the lookup is keyed by the
-    // document and the name, so a force-in of each declaration's node would state Declaration key
-    // again, and a second declaration of a name would break both. Declaration key alone says a
-    // name's declaration is one, and the justification makes a found row that one, with its codes.
+    // VariableLookup: every declared name forced in, whatever its declaration's cardinality spells
+    // (spec reading 159), each found one justified, the absent null objects. The force-in reads a
+    // declaration's name, never its node: the lookup is keyed by the document and the name, so a
+    // force-in of each declaration's node would state Declaration key again, and a second
+    // declaration of a name would break both. Declaration key alone says a name's declaration is
+    // one, and the justification makes a found row that one, with its kind and counts.
     contained(
-      on(DeclarationName, "document", "identifier", constant(true)),
+      on(DeclarationIdentifier, "document", "identifier", constant(true)),
       on(VariableLookup, "document", "name", "declared"),
     ),
     contained(
@@ -1885,10 +1989,10 @@ export const referenceLawsByName = {
         "document",
         "name",
         "declarationKind",
-        "cardinality",
+        "cardinalities",
         "baseTypes",
       ),
-      declarationNameRef,
+      declarationIdentifierRef,
     ),
     key(on(absentNames, "document", "name")),
     check("E1_derived", VariableLookup, (l) =>
@@ -1899,7 +2003,7 @@ export const referenceLawsByName = {
           l.eq(l.declaration, l.document),
           l.eq(l.declarationKind, "qti-outcome-declaration"),
           l.eq(l.baseTypes, 0n),
-          l.eq(l.cardinality, "single"),
+          l.eq(l.cardinalities, 0n),
         ),
       ),
     ),
@@ -1967,6 +2071,23 @@ export const referenceLawsByName = {
     contained(
       on(TemplateDefaultTarget, "node", "heldBase", "heldCardinality"),
       on(templateDefaultExpressions, "parent", "baseType", "cardinality"),
+    ),
+    // TemplateDefaultCardinality: a target's declaration's cardinality where it has one (spec
+    // reading 159), copied from its target and its declaration.
+    contained(
+      on(
+        select(TemplateDefaultTarget, (t) => t.eq(t.declCardinalities, 1n)),
+        "node",
+      ),
+      on(TemplateDefaultCardinality, "node"),
+    ),
+    contained(
+      on(TemplateDefaultCardinality, "node", "declaration", "heldCardinality"),
+      on(TemplateDefaultTarget, "node", "declaration", "heldCardinality"),
+    ),
+    contained(
+      on(TemplateDefaultCardinality, "declaration", "declCardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
     ),
     // MappingSourceDeclaration's copy of its mapping and its target's lookup; MappingLookup's
     // mapped rows, each mapping's target forced in and each a mapping's (A34, A35).
@@ -2198,7 +2319,7 @@ export const referenceLawsByName = {
         "variable",
         "declaration",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ),
       on(
@@ -2207,7 +2328,7 @@ export const referenceLawsByName = {
         "name",
         "declaration",
         "declarationKind",
-        "cardinality",
+        "cardinalities",
         "baseTypes",
       ),
     ),
@@ -2281,7 +2402,7 @@ export const referenceLawsByName = {
           r.and(
             r.eq(r.declaration, r.lookupDocument),
             r.eq(r.declBaseTypes, 0n),
-            r.eq(r.declCardinality, "single"),
+            r.eq(r.declCardinalities, 0n),
             r.or(
               r.and(r.eq(r.source, "none"), r.eq(r.declarationKind, "qti-outcome-declaration")),
               r.and(r.eq(r.source, "builtIn"), builtInKindOfScope(r)),
@@ -2289,6 +2410,20 @@ export const referenceLawsByName = {
           ),
         ),
       ),
+    ),
+    // ReadingCardinality: a reading that stands for a literal, its declaration's cardinality where
+    // it has one (spec reading 159), copied from its reading and its declaration.
+    contained(
+      on(standInReadings, "assembly", "node", "attribute", "form", "split"),
+      on(ReadingCardinality, "assembly", "node", "attribute", "form", "split"),
+    ),
+    contained(
+      on(ReadingCardinality, "assembly", "node", "attribute", "form", "split", "declaration"),
+      on(Reading, "assembly", "node", "attribute", "form", "split", "declaration"),
+    ),
+    contained(
+      on(ReadingCardinality, "declaration", "declCardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
     ),
   ],
   "Item ref target": [
@@ -2337,9 +2472,11 @@ export const referenceLawsByName = {
         r.and(
           r.in(r.source, ["declared", "mapped"]),
           r.in(r.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
-          r.in(ValueCardinalityOf.at("value", r.declCardinality), ["single", "unknown"]),
         ),
       ),
+    ),
+    check("Reference_type", ReadingCardinality, (r) =>
+      r.in(ValueCardinalityOf.at("value", r.declCardinality), ["single", "unknown"]),
     ),
     ...referenceBases.map((base) =>
       contained(
@@ -2393,17 +2530,17 @@ export const referenceLawsByName = {
         "itemDocument",
         "template",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ),
-      declarationNameRef,
+      declarationIdentifierRef,
     ),
     check("Template_default_target", TemplateDefaultTarget, (t) =>
       t.eq(t.declarationKind, "qti-template-declaration"),
     ),
   ],
   "Template default type": [
-    check("Template_default_type", TemplateDefaultTarget, (t) =>
+    check("Template_default_type", TemplateDefaultCardinality, (t) =>
       t.or(
         t.eq(t.heldCardinality, ValueCardinalityOf.at("value", t.declCardinality)),
         t.eq(t.heldCardinality, "unknown"),
@@ -2466,10 +2603,10 @@ export const referenceLawsByName = {
         "itemDocument",
         "source",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ),
-      declarationNameRef,
+      declarationIdentifierRef,
     ),
     check("Variable_mapping_source", MappingSourceDeclaration, (m) =>
       m.eq(m.declarationKind, "qti-outcome-declaration"),
@@ -2484,7 +2621,7 @@ export const referenceLawsByName = {
         "variable",
         "declaration",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ),
       on(
@@ -2493,7 +2630,7 @@ export const referenceLawsByName = {
         "target",
         "declaration",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ),
     ),
@@ -2811,8 +2948,30 @@ export const expressionLawsByName = {
     check("E1_derived", VariableRefDeclaration, (d) =>
       d.and(
         d.or(d.eq(d.declBaseTypes, 1n), d.eq(d.baseType, "unknown")),
-        d.eq(d.cardinality, ValueCardinalityOf.at("value", d.declCardinality)),
+        d.or(d.eq(d.declCardinalities, 1n), d.eq(d.cardinality, "unknown")),
       ),
+    ),
+    // VariableRefCardinality: a declared reference's declaration's cardinality where it has one
+    // (spec reading 159), copied from its declaration row and its declaration, and the reference's
+    // type's cardinality its image.
+    contained(
+      on(
+        select(VariableRefDeclaration, (d) => d.eq(d.declCardinalities, 1n)),
+        "node",
+        "attribute",
+      ),
+      on(VariableRefCardinality, "node", "attribute"),
+    ),
+    contained(
+      on(VariableRefCardinality, "node", "attribute", "declaration", "cardinality"),
+      on(VariableRefDeclaration, "node", "attribute", "declaration", "cardinality"),
+    ),
+    contained(
+      on(VariableRefCardinality, "declaration", "declCardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
+    ),
+    check("E1_derived", VariableRefCardinality, (c) =>
+      c.eq(c.cardinality, ValueCardinalityOf.at("value", c.declCardinality)),
     ),
     contained(
       on(typedVariableRefs, "declaration", "baseType"),
@@ -3116,10 +3275,10 @@ export const expressionLawsByName = {
         "document",
         "identifier",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ),
-      declarationNameRef,
+      declarationIdentifierRef,
     ),
     check("Variable_declared", VariableRef, (v) =>
       v.or(
@@ -3144,10 +3303,10 @@ export const expressionLawsByName = {
         "assembly",
         "identifier",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ),
-      declarationNameRef,
+      declarationIdentifierRef,
     ),
     check("Variable_declared", PlacedVariableRef, (v) =>
       v.or(

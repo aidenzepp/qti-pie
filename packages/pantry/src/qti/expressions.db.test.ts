@@ -51,7 +51,9 @@ import {
   Operand,
   ProcessingTemplate,
   Reading,
+  ReadingCardinality,
   ReferenceDocument,
+  TemplateDefaultCardinality,
   TemplateDefaultTarget,
   TestReference,
   VariableRef,
@@ -318,7 +320,7 @@ const readingRow = (fields: Partial<Addition<typeof Reading>>): Addition<typeof 
   assembly: strayNode,
   attribute: "identifier",
   declBaseTypes: 1n,
-  declCardinality: "single",
+  declCardinalities: 1n,
   declaration: nodeOf(50),
   declarationKind: "qti-outcome-declaration",
   declared: true,
@@ -811,12 +813,52 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             const client = yield* loginSession;
             const undeclared = {
               declBaseTypes: 0n,
-              declCardinality: "single",
+              declCardinalities: 0n,
               declaration: strayNode,
               declarationKind: "qti-outcome-declaration",
               declared: false,
               source: "none",
             } as const;
+            const standIn = readingRow({ attribute: "max", kind: "qti-random-integer" });
+            const cardinalityOf = (
+              declCardinality: Addition<typeof ReadingCardinality>["declCardinality"],
+            ): readonly Stated[] => [
+              {
+                fact: {
+                  assembly: standIn.assembly,
+                  attribute: standIn.attribute,
+                  declCardinality,
+                  declaration: standIn.declaration,
+                  form: standIn.form,
+                  node: standIn.node,
+                  split: standIn.split,
+                },
+                relation: ReadingCardinality,
+              },
+            ];
+            // The check judges a stand-in reading's declaration's cardinality, a row of its own
+            // where the declaration has one (spec reading 159); its base type, where its
+            // declaration has one, is the containment into `DeclarationBaseType`'s, a key the host
+            // tier holds.
+            assertVerdict(
+              yield* judged(
+                client,
+                statedInserts([...readingFacts([standIn]), ...cardinalityOf("multiple")]),
+              ),
+              "reference_type",
+              true,
+              "reference_type, broken",
+            );
+            assertVerdict(
+              yield* judged(
+                client,
+                statedInserts([...readingFacts([standIn]), ...cardinalityOf("single")]),
+              ),
+              "reference_type",
+              false,
+              "reference_type, repaired",
+            );
+
             const cases = [
               {
                 broken: readingRow({ ...throughItem, placements: 2n }),
@@ -827,17 +869,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 broken: readingRow({ ...undeclared, identifier: "X", variable: "X" }),
                 check: "variable_declared",
                 repaired: { identifier: "a.X", variable: "a.X" },
-              },
-              {
-                // The check judges a reading's cardinality; its base type, where its declaration has
-                // one, is the containment into `DeclarationBaseType`'s, a key the host tier holds.
-                broken: readingRow({
-                  attribute: "max",
-                  declCardinality: "multiple",
-                  kind: "qti-random-integer",
-                }),
-                check: "reference_type",
-                repaired: { declCardinality: "single" },
               },
               {
                 broken: readingRow({
@@ -1010,20 +1041,21 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
           // Oracle: PostgreSQL, `Template_default_target` and `Template_default_type` (A37, A38,
           // spec reading 108) and `Variable_mapping_source` and `Variable_mapping_target` (A34,
           // reading 97), each a CHECK on the declaration's own row (`TemplateDefaultTarget`,
-          // `MappingSourceDeclaration`): `Template_default_type`'s over the cardinality, since the
-          // declaration's base type, where it has one, is `DeclarationBaseType`'s, which a
-          // containment reads. Bound: one breach of each, breaking that law alone, since
-          // PostgreSQL names the first CHECK a row breaks by name, beside its repair, which keeps
-          // all four.
+          // `MappingSourceDeclaration`), `Template_default_type`'s on its cardinality's
+          // (`TemplateDefaultCardinality`, a row of its own where the declaration has one, spec
+          // reading 159), since the declaration's base type, where it has one, is
+          // `DeclarationBaseType`'s, which a containment reads. Bound: one breach of each, breaking
+          // that law alone, since PostgreSQL names the first CHECK a row breaks by name, beside its
+          // repair, which keeps all four.
           Effect.gen(function* itemRefLaws() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const templateDefault: Addition<typeof TemplateDefaultTarget> = {
               declBaseTypes: 1n,
-              declCardinality: "single",
+              declCardinalities: 1n,
               declaration: nodeOf(80),
               declarationKind: "qti-template-declaration",
               heldBase: "integer",
-              heldCardinality: "multiple",
+              heldCardinality: "single",
               itemDocument: nodeOf(70),
               itemRef: nodeOf(60),
               node: nodeOf(1),
@@ -1031,7 +1063,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             };
             const mapping: Addition<typeof MappingSourceDeclaration> = {
               declBaseTypes: 1n,
-              declCardinality: "single",
+              declCardinalities: 1n,
               declaration: nodeOf(81),
               declarationKind: "qti-outcome-declaration",
               itemDocument: nodeOf(70),
@@ -1047,18 +1079,9 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               readonly repaired: Addition<typeof TemplateDefaultTarget>;
             }[] = [
               {
-                broken: templateDefault,
-                law: "Template_default_type",
-                repaired: { ...templateDefault, heldCardinality: "single" },
-              },
-              {
-                broken: {
-                  ...templateDefault,
-                  declarationKind: "qti-outcome-declaration",
-                  heldCardinality: "single",
-                },
+                broken: { ...templateDefault, declarationKind: "qti-outcome-declaration" },
                 law: "Template_default_target",
-                repaired: { ...templateDefault, heldCardinality: "single" },
+                repaired: templateDefault,
               },
             ];
             for (const { broken, law, repaired } of templateCases) {
@@ -1074,6 +1097,32 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               assert.isTrue(names(refused, "TemplateDefaultTarget", law), law);
               assert.isFalse(names(kept, "TemplateDefaultTarget", law), law);
             }
+
+            const templateCardinality: Addition<typeof TemplateDefaultCardinality> = {
+              declCardinality: "single",
+              declaration: templateDefault.declaration,
+              heldCardinality: "multiple",
+              node: templateDefault.node,
+            };
+            const refusedType = yield* db.apply(
+              ChangeSet.empty(Author).insert(TemplateDefaultCardinality, [templateCardinality]),
+              {},
+            );
+            const keptType = yield* db.apply(
+              ChangeSet.empty(Author).insert(TemplateDefaultCardinality, [
+                { ...templateCardinality, heldCardinality: "single" },
+              ]),
+              {},
+            );
+
+            assert.isTrue(
+              names(refusedType, "TemplateDefaultCardinality", "Template_default_type"),
+              "Template_default_type",
+            );
+            assert.isFalse(
+              names(keptType, "TemplateDefaultCardinality", "Template_default_type"),
+              "Template_default_type",
+            );
 
             const mappingCases: readonly {
               readonly broken: Addition<typeof MappingSourceDeclaration>;
