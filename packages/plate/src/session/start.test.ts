@@ -5,10 +5,11 @@ import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
+import { decode } from "#plate/form/encoding.ts";
 import { defaultLabel, drawBelow, drawStream, templateLabel } from "#plate/engine/random.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { openPackage } from "#plate/package/open.ts";
 import type { PackageVerdict } from "#plate/package/open.ts";
 import { manifestFile } from "#plate/package/store.ts";
@@ -829,7 +830,7 @@ describe("startTest", () => {
   );
 
   it.effect(
-    "[T-1] keeps the configuration's seed as the shuffle seed, none when it has none, and a session stored at version 3 keeps either",
+    "[T-1] keeps the configuration's seed as the shuffle seed, none when it has none, and a session stored at version 4 keeps either",
     () =>
       Effect.gen(function* keepsShuffleSeed() {
         const delivery = yield* builtDelivery("shuffled", [
@@ -2725,6 +2726,166 @@ describe("a package whose test reads an item's context variable", () => {
 
         assert.deepStrictEqual(session.items[1]?.templateDefaults, Option.none());
         assert.deepStrictEqual([templates["T"], templates["DOUBLED"]], [integer(3n), integer(6n)]);
+      }),
+  );
+});
+
+/**
+ * The text of the hand-built item `I1` whose `record` response `R` a Text Entry binds, with no
+ * processing of its own, so a test reads `R` through its item ref as the record the item holds.
+ */
+const recordItemXml = [
+  `<qti-assessment-item xmlns="${qtiNamespace}" identifier="I1" title="I1" adaptive="false" time-dependent="false">`,
+  '<qti-response-declaration identifier="R" cardinality="record"/>',
+  '<qti-item-body><p><qti-text-entry-interaction response-identifier="R"/></p></qti-item-body>',
+  "</qti-assessment-item>",
+].join("");
+
+/**
+ * What a hand-built test writes to set its float `T_SCORE`, which defaults to 0, from one field of
+ * `I1.R` through `qti-field-value`. `openPackage` accepts it whatever the field: a `record`
+ * declaration types none of its fields, so the check cannot see the field's base type.
+ *
+ * @param field The field `qti-field-value` reads.
+ * @returns The test, over {@link recordItemXml}.
+ */
+const fieldTest = (field: "floatValue" | "integerValue"): UnheldTest => ({
+  declarations:
+    '<qti-outcome-declaration identifier="T_SCORE" cardinality="single" base-type="float"><qti-default-value><qti-value>0</qti-value></qti-default-value></qti-outcome-declaration>',
+  defaults: "",
+  item: recordItemXml,
+  rules: `<qti-set-outcome-value identifier="T_SCORE"><qti-field-value field-identifier="${field}">${read("I1.R")}</qti-field-value></qti-set-outcome-value>`,
+});
+
+/**
+ * Start a session of a package's test and submit `I1` through `advance`, with `R` decoded from the
+ * text a candidate typed, as a host's `decode` reads it.
+ *
+ * @param delivery The test and its items.
+ * @param text The text typed into `R`'s Text Entry.
+ * @returns What `advance` returned.
+ */
+const submittedText = Effect.fnUntraced(function* submittedText(delivery: Delivery, text: string) {
+  assert.strictEqual(delivery.test.test.outcomeProcessing.kind, "runs");
+
+  const configuration = yield* configure({});
+  const typed: RecordValue = Result.getOrElse(
+    decode([["sitting.1.R", text]], { cardinality: "record", name: "sitting.1.R" }),
+    (failure) => assert.fail(`decode refused ${text}: ${failure._tag}`),
+  );
+
+  return advance(
+    delivery.test,
+    delivery.items,
+    started(delivery, configuration, "field"),
+    { intent: { kind: "submit-item" }, responses: { R: typed } },
+    configuration,
+    { now: after(1000) },
+  );
+});
+
+describe("a package whose test sets an outcome from a field of an item's record response", () => {
+  it.effect(
+    "[T-9] openPackage accepts a test that sets the float T_SCORE from I1.R's integerValue, and advance's submit-item of 12 returns OutcomeMismatchError for T_SCORE, never a throw: a field of another base type; floatValue gives T_SCORE 12",
+    () =>
+      Effect.gen(function* fieldOfAnotherBaseType() {
+        const mismatch = failureTagged(
+          yield* submittedText(yield* unheldPackage(fieldTest("integerValue")), "12"),
+          "OutcomeMismatchError",
+        );
+
+        assert.deepStrictEqual(
+          [mismatch.identifier, mismatch.actual, mismatch.expected],
+          ["T_SCORE", "integer single", "float single"],
+        );
+
+        const submitted = Result.getOrElse(
+          yield* submittedText(yield* unheldPackage(fieldTest("floatValue")), "12"),
+          (failure) => assert.fail(`submit-item failed: ${failure._tag}: ${failure.message}`),
+        );
+
+        assert.deepStrictEqual(submitted.outcomes["T_SCORE"], float(12));
+      }),
+  );
+});
+
+/**
+ * Write the text of a hand-built item whose `record` response `R`, which a Text Entry binds,
+ * declares the default record holding the one field `floatValue`, 5, so a test reads that record
+ * through `qti-default` with no answer given.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const declaredRecordXml = (identifier: string): string =>
+  [
+    `<qti-assessment-item xmlns="${qtiNamespace}" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-response-declaration identifier="R" cardinality="record"><qti-default-value>',
+    '<qti-value field-identifier="floatValue" base-type="float">5</qti-value>',
+    "</qti-default-value></qti-response-declaration>",
+    '<qti-item-body><p><qti-text-entry-interaction response-identifier="R"/></p></qti-item-body>',
+    "</qti-assessment-item>",
+  ].join("");
+
+/**
+ * The item refs of a hand-built one-part test: `first`, {@link declaredRecordXml}, with no default,
+ * then `second`, {@link doublingXml}, whose template default gives its integer `T` the field
+ * `floatValue` of `first.R`'s declared default record. `openPackage` accepts it: a `record`
+ * declaration types none of its fields, so the check cannot see that the field is a float.
+ */
+const fieldDefaultRefs: readonly DefaultedRef[] = [
+  ["first", "", declaredRecordXml("first")],
+  [
+    "second",
+    defaultXml(
+      "T",
+      '<qti-field-value field-identifier="floatValue"><qti-default identifier="first.R"/></qti-field-value>',
+    ),
+    doublingXml("second"),
+  ],
+];
+
+describe("a package whose item ref's template default reads a field of an item's declared record", () => {
+  it.effect(
+    "[T-9] type follows a field: a nonlinear part whose template default gives the integer T first.R's declared floatValue, which openPackage accepts, returns startTest's OutcomeMismatchError for T, never a throw",
+    () =>
+      Effect.gen(function* nonlinearFieldDefault() {
+        const delivery = packagedDelivery(yield* onePartPackage("nonlinear", fieldDefaultRefs));
+        const mismatch = failureTagged(yield* startedOrFailed(delivery), "OutcomeMismatchError");
+
+        assert.deepStrictEqual(
+          [mismatch.identifier, mismatch.actual, mismatch.expected],
+          ["T", "float single", "integer single"],
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-9] type follows a field: a linear part whose template default gives the integer T first.R's declared floatValue, which openPackage accepts, starts, and advance's next, which shows second, returns OutcomeMismatchError for T, never a throw",
+    () =>
+      Effect.gen(function* linearFieldDefault() {
+        const delivery = packagedDelivery(yield* onePartPackage("linear", fieldDefaultRefs));
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration, "defaults");
+        const returned = Result.getOrElse(
+          Result.try(() =>
+            advance(
+              delivery.test,
+              delivery.items,
+              session,
+              { intent: { kind: "next" } },
+              configuration,
+              { now: after(1000) },
+            ),
+          ),
+          () => assert.fail("advance threw instead of returning its failure"),
+        );
+        const mismatch = failureTagged(returned, "OutcomeMismatchError");
+
+        assert.deepStrictEqual(
+          [mismatch.identifier, mismatch.actual, mismatch.expected],
+          ["T", "float single", "integer single"],
+        );
       }),
   );
 });

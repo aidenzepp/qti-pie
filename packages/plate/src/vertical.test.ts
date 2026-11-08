@@ -25,6 +25,7 @@ import type {
   Node,
   Options,
   Redacted,
+  ResponseValue,
   StoredRecord,
   Value,
   Verdict,
@@ -425,7 +426,7 @@ const complete = Effect.fnUntraced(function* complete(
     assert.fail("the keys never submit the form"),
   );
   const posted = partition(entries, rendered.instance);
-  const responses: Readonly<Record<string, Value>> = yield* Effect.fromResult(
+  const responses: Readonly<Record<string, ResponseValue>> = yield* Effect.fromResult(
     Result.all(
       Object.fromEntries(
         postings(redacted, rendered.instance).map(

@@ -15,7 +15,7 @@
  * @module
  */
 import { Effect, Option } from "effect";
-import { enumerated, valueOf, xsBoolean } from "#plate/model/attributes.ts";
+import { enumerated, valueOf, xmlWhitespaceRun, xsBoolean } from "#plate/model/attributes.ts";
 import {
   accepts,
   everyOperand,
@@ -183,11 +183,6 @@ export const comparisonRules: FamilyRules<
   lte: orderRule,
   match: matchRule,
 };
-
-/**
- * A run of XML whitespace, which separates the tokens of an XSD list such as `tolerance`.
- */
-const xmlWhitespaceRun = /[\t\n\r ]+/gu;
 
 /**
  * The reader spec of `qti-match`: its two operands, and no attribute.

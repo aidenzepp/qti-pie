@@ -24,7 +24,6 @@ import {
   expressionKinds,
   floatOrRefOf,
   integerOrRefOf,
-  isUnlanded,
   singleOf,
   stringOrRefOf,
 } from "#plate/model/expression.ts";
@@ -70,9 +69,10 @@ interface Requirement {
  * The binding each interaction plate renders requires, by its information-model class, quoted from
  * QTI 3.0's information model.
  *
- * This is what QTI allows, not what plate renders: a Text Entry bound to `record` or an Extended
- * Text bound to `multiple` is valid and becomes a notice (`renders` in the vocabulary), so it is
- * not refused here. Other interactions' bindings are not checked.
+ * This is what QTI allows, not what plate renders: a binding QTI allows and plate does not render,
+ * such as a Text Entry bound to a record response with a `file` field, is valid and becomes a
+ * notice (`renders` in the vocabulary), so it is not refused here. Other interactions' bindings are
+ * not checked.
  */
 const requirements = {
   // "The qti-choice-interaction must be bound to a response variable with a base-type of identifier
@@ -345,7 +345,7 @@ const duplicateIdentifier = (
  * Reading 19: an Extended Text bound to a `multiple` or `ordered` declaration carries `max-strings`
  * (the information model requires it of a container binding; the XSD makes it optional because it
  * cannot see the binding). Without it the interaction is `missing-attribute`; the binding itself
- * stays valid and keeps its notice.
+ * stays valid.
  *
  * @param source The document.
  * @param visit The interaction's visit.
@@ -684,19 +684,19 @@ const templateRequirements = (
 /**
  * Climb from an element through its ancestors, each passing its step's test in turn.
  *
- * @param context The parents the walk has met.
+ * @param parents Each element's parent, as the walk has met them.
  * @param element The element to climb from.
  * @param steps One test per ancestor, the parent's first.
  * @returns The last ancestor climbed to, or none when an ancestor is missing or fails its test.
  */
 const enclosing = (
-  context: Context,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
   element: SourceElement,
   steps: readonly ((ancestor: SourceElement) => boolean)[],
 ): Option.Option<SourceElement> => {
   let reached = element;
   for (const step of steps) {
-    const ancestor = context.parents.get(reached);
+    const ancestor = parents.get(reached);
     if (ancestor === undefined || !step(ancestor)) {
       return Option.none();
     }
@@ -891,21 +891,30 @@ const modelledBaseType = (element: SourceElement): Option.Option<ModelledBaseTyp
   );
 
 /**
- * Give the base type a declaration's typed values take, when this rule judges them.
- *
- * A `record` declaration's values are typed field by field, so they are not judged, and neither
- * are values of a base type {@link modelledBaseType} does not give.
+ * Report whether a declaration is a record: its `cardinality` is `record`.
  *
  * @param declaration The declaration.
- * @returns Its base type, none when its values are not judged.
+ * @returns Whether it declares a record.
  */
-const declaredBaseType = (declaration: SourceElement): Option.Option<ModelledBaseType> =>
+const isRecordDeclaration = (declaration: SourceElement): boolean =>
   Option.exists(
     attributeOf(declaration, "cardinality"),
     (attribute) => attribute.value === "record",
-  )
-    ? Option.none()
-    : modelledBaseType(declaration);
+  );
+
+/**
+ * Give the base type a declaration's typed values take, when this rule judges them.
+ *
+ * A `record` declaration's values are typed field by field, each by its own `base-type`
+ * ({@link textBaseType}), so a `base-type` the record declaration itself carries types none of
+ * them and is accepted unread (G-R4, pending). Values of a base type {@link modelledBaseType} does
+ * not give are not judged either.
+ *
+ * @param declaration The declaration.
+ * @returns Its base type, none when its values are not judged under it.
+ */
+const declaredBaseType = (declaration: SourceElement): Option.Option<ModelledBaseType> =>
+  isRecordDeclaration(declaration) ? Option.none() : modelledBaseType(declaration);
 
 /**
  * Join an element's text children, the content of a `qti-value` or a `qti-base-value`, as the item
@@ -1013,7 +1022,7 @@ const attributeValueType = (
 
     const attribute = attributeOf(visit.element, typed.attribute);
     const baseType = Option.flatMap(
-      enclosing(context, visit.element, typed.steps),
+      enclosing(context.parents, visit.element, typed.steps),
       declaredBaseType,
     );
     if (Option.isNone(attribute) || Option.isNone(baseType)) {
@@ -1031,9 +1040,29 @@ const attributeValueType = (
   });
 
 /**
+ * The steps from a `qti-value` up to the declaration whose `qti-correct-response` or
+ * `qti-default-value` holds it.
+ */
+const valueToDeclaration = [named("qti-correct-response", "qti-default-value"), isDeclaration];
+
+/**
+ * Report whether an element is a field of a record declaration's value: a `qti-value` in the
+ * `qti-correct-response` or the `qti-default-value` of a declaration whose `cardinality` is
+ * `record`, any of an item's four kinds or a test's outcome or context declaration.
+ *
+ * @param visit The element's visit.
+ * @param parents Each element's parent, as the walk has met them.
+ * @returns Whether it is such a field.
+ */
+const isRecordField = (visit: Visit, parents: ReadonlyMap<SourceElement, SourceElement>): boolean =>
+  isQti(visit.element, (local) => local === "qti-value") &&
+  Option.exists(enclosing(parents, visit.element, valueToDeclaration), isRecordDeclaration);
+
+/**
  * Give the base type an element's text is read in, when its text is a typed value this rule
- * judges: a `qti-base-value`'s own `base-type`, or the declaration's for a `qti-value` in a
- * declaration's `qti-correct-response` or `qti-default-value`.
+ * judges: a `qti-base-value`'s own `base-type`; for a `qti-value` in a declaration's
+ * `qti-correct-response` or `qti-default-value`, the declaration's, or, when the declaration is a
+ * record, the field's own `base-type` ({@link isRecordField}).
  *
  * @param visit The element's visit.
  * @param context The parents the walk has met.
@@ -1049,26 +1078,46 @@ const textBaseType = (visit: Visit, context: Context): Option.Option<ModelledBas
   }
 
   return Option.flatMap(
-    enclosing(context, visit.element, [
-      named("qti-correct-response", "qti-default-value"),
-      isDeclaration,
-    ]),
-    declaredBaseType,
+    enclosing(context.parents, visit.element, valueToDeclaration),
+    (declaration) =>
+      modelledBaseType(isRecordDeclaration(declaration) ? visit.element : declaration),
   );
 };
+
+/**
+ * Apply `value-type` to an element's text under a base type, read as the value model's
+ * `parseElementText` reads element text (reading 7's trim).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param baseType The base type its text is read in, none when it is not judged.
+ * @returns The refusal at the element's path when its text is outside the base type; none when it
+ *   parses or no base type is given.
+ */
+const textUnder = (
+  source: SourceDocument,
+  visit: Visit,
+  baseType: Option.Option<ModelledBaseType>,
+): readonly Refusal[] =>
+  Option.match(baseType, {
+    onNone: () => [],
+    onSome: (type) =>
+      valueRefusals(source, visit.path, parseElementText(type, textOf(visit.element))),
+  });
 
 /**
  * Apply `value-type` to an element whose text is a typed value.
  *
  * Reading 1 and the value model's lexical spaces (research `ea422814` §3): a `qti-value` in a
  * declaration's `qti-correct-response` or `qti-default-value` parses under the declaration's base
- * type, and a `qti-base-value` under its own `base-type`, after reading 7's trim of element text,
- * which the value model's `parseElementText` applies. A boolean is `true` or `false`, never `1` or
- * `0` (reading 34). The XSD does not decide, typing `qti-value` as `xs:normalizedString` and
- * `qti-base-value` as `xs:string`; the information model's boolean base type is the boolean
- * primitive's set (`info.txt:72950`), "with permitted values of "true" and "false""
- * (`info.txt:74908`). XML Schema's `1` and `0` belong only to the attributes the XSD types
- * `xs:boolean`.
+ * type, a field of a record declaration's value under its own `base-type` (as pantry's import reads
+ * it, `valueRows` in `packages/pantry/src/import/item.ts`), and a `qti-base-value` under its own
+ * `base-type`, after reading 7's trim of element text, which the value model's `parseElementText`
+ * applies. A boolean is `true` or `false`, never `1` or `0` (reading 34). The XSD does not decide,
+ * typing `qti-value` as `xs:normalizedString` and `qti-base-value` as `xs:string`; the information
+ * model's boolean base type is the boolean primitive's set (`info.txt:72950`), "with permitted
+ * values of "true" and "false"" (`info.txt:74908`). XML Schema's `1` and `0` belong only to the
+ * attributes the XSD types `xs:boolean`.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1080,12 +1129,93 @@ const textValueType = (
   source: SourceDocument,
   visit: Visit,
   context: Context,
+): readonly Refusal[] => textUnder(source, visit, textBaseType(visit, context));
+
+/**
+ * The attributes each field of a record declaration's value carries.
+ */
+const fieldAttributes = ["field-identifier", "base-type"] as const;
+
+/**
+ * Construct the `missing-attribute` refusals of a field of a record declaration's value, one at
+ * each of {@link fieldAttributes} it does not carry.
+ *
+ * @param source The document.
+ * @param visit The field's visit.
+ * @returns One refusal at each missing attribute's path, `field-identifier`'s first.
+ */
+const missingFieldAttributes = (source: SourceDocument, visit: Visit): readonly Refusal[] =>
+  fieldAttributes.flatMap((attribute) =>
+    Option.isSome(attributeOf(visit.element, attribute))
+      ? []
+      : [
+          refusal(
+            source,
+            "missing-attribute",
+            attributePath(visit.path, { local: attribute, namespace: "" }),
+            { attribute, element: "qti-value", source: "info.txt:73046" },
+          ),
+        ],
+  );
+
+/**
+ * Apply `missing-attribute` to a field of a record declaration's value: a `qti-value` in the
+ * `qti-correct-response` or `qti-default-value` of a declaration whose `cardinality` is `record`
+ * ({@link isRecordField}) carries both `field-identifier` and `base-type`.
+ *
+ * The XSD makes both optional on every `qti-value`; the information model requires them of a
+ * record's: a record "contains a set of independent values each identified by its own identifier
+ * and having its own base-type" (`info.txt:73046`). The qti package refuses the same document:
+ * a field with no `base-type` has no arm, which its commit refuses (`valueRows` in
+ * `packages/pantry/src/import/item.ts`), and one with no `field-identifier` fails the NCName
+ * contract `RecordFieldIdentifier` (`packages/pantry/src/schema/contracts.ts`). A field whose text
+ * is outside its own `base-type` is `value-type`'s ({@link textValueType}).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The parents the walk has met.
+ * @returns One refusal at each missing attribute's path, `field-identifier`'s first; none for any
+ *   other element.
+ */
+const recordFieldAttributes = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
 ): readonly Refusal[] =>
-  Option.match(textBaseType(visit, context), {
-    onNone: () => [],
-    onSome: (baseType) =>
-      valueRefusals(source, visit.path, parseElementText(baseType, textOf(visit.element))),
-  });
+  isRecordField(visit, context.parents) ? missingFieldAttributes(source, visit) : [];
+
+/**
+ * Apply an item's rules for a field of a record declaration's value to one visit of a test or a
+ * section document: `missing-attribute` for each of `field-identifier` and `base-type` the field
+ * lacks ({@link recordFieldAttributes}), then `value-type` when its text is outside its own
+ * `base-type` ({@link textValueType}'s record branch), with the paths and details an item's field
+ * gets. `checkTestRules` calls it once per judged visit.
+ *
+ * A test's record declarations take their fields as an item's do. The information model requires
+ * both attributes of every record's field (`info.txt:73046`), and the qti package's test import
+ * runs the item builder's declaration pass (`packages/pantry/src/import/test.ts` calling
+ * `semanticRows` of `packages/pantry/src/import/item.ts`), which refuses a field with no
+ * `base-type` (it has no arm) and one with no `field-identifier` (the NCName contract
+ * `RecordFieldIdentifier`). The rest of a test's record declaration is the test model's, which
+ * marks it `cardinality="record"`.
+ *
+ * @param source The test or section document.
+ * @param visit The element's visit.
+ * @param parents Each element of the document with its parent.
+ * @returns The refusals, `missing-attribute`'s first; none for an element that is not a field of a
+ *   record declaration's value.
+ */
+export const recordFieldRefusals = (
+  source: SourceDocument,
+  visit: Visit,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+): readonly Refusal[] =>
+  isRecordField(visit, parents)
+    ? [
+        ...missingFieldAttributes(source, visit),
+        ...textUnder(source, visit, modelledBaseType(visit.element)),
+      ]
+    : [];
 
 /**
  * Apply `value-type` to a `qti-base-value` that lies in a processing ({@link processings}), as
@@ -1350,8 +1480,8 @@ const kindOf = (element: SourceElement): Option.Option<ExpressionKind> =>
  * Give the attribute through which an element names a variable, and the kind of variable it must
  * name: a rule of {@link referencing}, or an expression whose kind's rule declares a declaration
  * facet (`qti-variable` and `qti-default` name any variable; `qti-correct`, `qti-map-response` and
- * `qti-map-response-point` a response). So a family that lands a kind with the facet has its
- * identifier checked here with no edit to this module.
+ * `qti-map-response-point` a response). So a kind whose rule declares the facet has its identifier
+ * checked here with no edit to this module.
  *
  * "This expression looks up the value of an item variable that has been declared in a
  * corresponding variable declaration or is one of the built-in variables" (`qti-variable`,
@@ -1762,12 +1892,10 @@ const resultAttributes = (
  * same way, and its {@link resultAttributes}. The qti package types expressions alike
  * (`resultType` in `packages/pantry/src/processing/types.ts`).
  *
- * An expression is untyped (none) when its element is no expression kind, when its kind's rule is
- * the unlanded rule, when any of its operands is untyped, or when its declaration facet names no
- * variable (ruling R3). Untyped is not judged, so a processing that holds a kind its family has
- * not landed is accepted untyped, and the qti package's typing of that kind returns family by
- * family as each lands (spec Q15, ruled B). Untyped is not a landed kind's `unknown` or `any`,
- * which pass up as the qti package passes them and satisfy every rule.
+ * An expression is untyped (none) when its element is no expression kind, when any of its operands
+ * is untyped, or when its declaration facet names no variable (ruling R3). Untyped is not judged,
+ * and it is not a kind's `unknown` or `any`, which pass up as the qti package passes them and
+ * satisfy every rule.
  *
  * Each type is kept in the context, so an expression is typed once however many of its ancestors
  * judge their operands.
@@ -1787,9 +1915,6 @@ const expressionType = (
 
   const type = Option.flatMap(kindOf(expression), (kind) => {
     const rule: KindRule = kindRules[kind];
-    if (isUnlanded(rule)) {
-      return Option.none();
-    }
 
     return Option.flatMap(
       Option.all(operandsOf(expression).map((operand) => expressionType(operand, context))),
@@ -2299,7 +2424,7 @@ const lookupOperandType = (
  * rules out `base-type` integer (`info.txt:71457`; G-R3 199). One with no `base-type` is not
  * refused, and is a float (`testRules` in `#plate/model/expressions/test.ts`). A `base-type`
  * outside the vocabulary is the structural validator's refusal, so it is not judged here. It reads
- * the two attributes alone, so it judges the kind whether its family has landed or not.
+ * the two attributes alone.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -3164,9 +3289,10 @@ const setCorrectResponses = (
  * kind's rule, the variables its reference attributes name, a read template processing may not
  * make, and the kind and type of the variables a `qti-printed-variable` or a `template-identifier`
  * names. Each expression is typed through its kind's rule in the registry (`kindRules` in
- * `#plate/model/expressions/read.ts`), and one whose kind's family has not landed is untyped and
- * not judged. The variable, type and reference rules judge inline response processing and template
- * processing alike, as the qti package does.
+ * `#plate/model/expressions/read.ts`). The variable, type and reference rules judge inline response
+ * processing and template processing alike, as the qti package does. A field of a record
+ * declaration's value that lacks its `field-identifier` or its `base-type` is `missing-attribute`
+ * ({@link recordFieldAttributes}).
  *
  * The rules judge exactly what the structural walk checks, and only an item they can read whole:
  *
@@ -3231,6 +3357,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...mapResponseRequirements(source, visit, context),
       ...attributeValueType(source, visit, context),
       ...textValueType(source, visit, context),
+      ...recordFieldAttributes(source, visit, context),
       ...undeclaredVariable(source, visit, context),
       ...templateTarget(source, visit, context),
       ...templateReads(source, visit, context),

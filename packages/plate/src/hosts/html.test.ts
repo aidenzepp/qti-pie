@@ -1,15 +1,17 @@
 import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
-import { htmlHost } from "#plate/hosts/html.ts";
+import { htmlHost, itemHost } from "#plate/hosts/html.ts";
 import { message } from "#plate/messages.ts";
+import type { Item } from "#plate/model/item.ts";
 import { textOf } from "#plate/test/accessibility.ts";
 import { readImports } from "#plate/test/imports.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { acceptForTest } from "#plate/validate/verdict.ts";
 
 /**
  * BG007's path under the corpus root, which the host takes as the item's location; its bytes are
@@ -28,6 +30,43 @@ const hexItem = {
   ),
   location: "largest-byte.xml",
 } as const;
+
+/**
+ * An item built by hand, as the model builds no interaction bound to a record yet: one Text Entry,
+ * for a string, bound to the record response `ANSWER`, and no response processing.
+ */
+const answerItem: Item = {
+  body: [
+    {
+      ariaLabel: Option.none(),
+      ariaLabelledby: Option.none(),
+      base: 10,
+      baseType: "string",
+      cardinality: "single",
+      class: "",
+      expectedLength: Option.none(),
+      kind: "text-entry",
+      path: "qti-assessment-item/qti-item-body/qti-text-entry-interaction",
+      patternMask: Option.none(),
+      patternMaskMessage: Option.none(),
+      placeholder: Option.none(),
+      response: "ANSWER",
+    },
+  ],
+  document: "answer.xml",
+  identifier: "answer",
+  lang: Option.some("en"),
+  outcomes: new Map(),
+  processing: Option.none(),
+  records: new Map([
+    ["ANSWER", { correct: Option.none(), defaultValue: Option.none(), identifier: "ANSWER" }],
+  ]),
+  responses: new Map(),
+  templateProcessing: Option.none(),
+  templates: new Map(),
+  title: "Answer",
+  unsupported: [],
+};
 
 /**
  * The origin every request here names; the handler reads only the path.
@@ -318,6 +357,47 @@ describe("the plain-HTML host", () => {
         );
       }),
     { tags: ["corpus"] },
+  );
+
+  it.effect(
+    "[Q-20] record binding in the page: decodes a post for a record-bound Text Entry under its record binding, recording one entry and refusing two",
+    () =>
+      Effect.gen(function* postRecord() {
+        const configuration = yield* configure({});
+        const { locale } = configuration;
+        const handler = itemHost(acceptForTest(answerItem), configuration);
+        const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
+        const name = textEntryName(page.elements);
+        const one = yield* Effect.promise(() => handler(formPost([[name, "abc"]])));
+        const two = yield* Effect.promise(() =>
+          handler(
+            formPost([
+              [name, "abc"],
+              [name, "def"],
+            ]),
+          ),
+        );
+        const recorded = yield* pageOf(one);
+        const refused = yield* pageOf(two);
+        const [recordedStatus] = slotted(recorded.elements, rowFor("item", "status").slot);
+        const [refusedStatus] = slotted(refused.elements, rowFor("item", "status").slot);
+        const refusals = slotted(refused.elements, rowFor("item", "message").slot);
+
+        assert.deepStrictEqual([one.status, two.status], [200, 200]);
+        assert.include(
+          textOf(recordedStatus ?? assert.fail("the recorded page holds no Status part")),
+          message(locale, "responseRecorded"),
+        );
+        assert.lengthOf(slotted(recorded.elements, rowFor("item", "message").slot), 0);
+        assert.include(
+          textOf(refusedStatus ?? assert.fail("the refused page holds no Status part")),
+          message(locale, "notAccepted"),
+        );
+        assert.deepStrictEqual(
+          refusals.map((refusal) => textOf(refusal)),
+          [message(locale, "malformedSingleMany")],
+        );
+      }),
   );
 
   it("imports only #plate/index.ts and node: modules, type imports included", () => {

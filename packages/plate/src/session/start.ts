@@ -706,7 +706,11 @@ const templateDefaultsOf = (
  *   a default, or one from another document than its record's; or the first {@link EngineFailure},
  *   in sequence order: a default reads a value the session's records lack (an
  *   `UnknownIdentifierError`, holder `record`), names no template variable of its item (holder
- *   `item`), or is a value of another type than its variable's (an `OutcomeMismatchError`).
+ *   `item`), or is a value of another type than its variable's (an `OutcomeMismatchError`). A
+ *   package that holds the test and its items refuses each of these at `openPackage` but one: a
+ *   default whose type a `qti-field-value` decides at run time, such as a field of an item's
+ *   declared `record` read through `qti-default`, whose `OutcomeMismatchError` reaches the session
+ *   with no answer given, since a `record` declaration types none of its fields.
  */
 export const partStarted = (
   test: Test,
@@ -846,7 +850,9 @@ const presentedIn = (
  *
  * A test and its items each pass `check` apart, so a template default that does not fit its item is
  * caller input: it is returned, never thrown. A package that holds the test and its items refuses
- * such a default at `open`.
+ * such a default at `openPackage`, except one whose type a `qti-field-value` decides at run time,
+ * which `openPackage` cannot type, since a `record` declaration types none of its fields: its
+ * `OutcomeMismatchError` is returned here.
  *
  * @example
  *   present(test.test, items, session, 2, new Date()); // item 2 presented, its template values and defaults written
@@ -976,7 +982,11 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  *   `UnknownIdentifierError`, holder `record`), names no template variable of its item (holder
  *   `item`), or is a value of another type than its variable's (an `OutcomeMismatchError`). A test
  *   and its items each pass `check` apart, so a default that does not fit is caller input; a
- *   package that holds them refuses it at `open`.
+ *   package that holds them refuses it at `openPackage`, except a default whose type a
+ *   `qti-field-value` decides at run time, which `openPackage` cannot type, since a `record`
+ *   declaration types none of its fields. Such a default can fail here with no answer given, when
+ *   it reads a field of an item's declared `record` through `qti-default` or `qti-correct`: its
+ *   `OutcomeMismatchError` is returned, never thrown.
  */
 export const startTest = (
   test: AcceptedTest,
@@ -1175,16 +1185,22 @@ const inspect = (
   });
 
 /**
- * Give an item's values: each response's saved value, else its record's.
+ * Give an item's values, which its view shows and its attempt is processed with: each saved
+ * response, else its record's, which holds NULL or, once the item is presented, its default
+ * (D4-11): the one its template processing set, else its declared one. A record response's comes
+ * from the record's `records`, the rest from its `responses`.
  *
  * @param item The session item.
  * @returns The values, by response identifier.
  */
-const valuesOf = (item: SessionItem): Responses =>
-  Option.match(item.saved, {
-    onNone: () => item.record.responses,
-    onSome: (saved) => ({ ...item.record.responses, ...saved }),
+export const valuesOf = (item: SessionItem): Responses => {
+  const held: Responses = { ...item.record.responses, ...item.record.records };
+
+  return Option.match(item.saved, {
+    onNone: () => held,
+    onSome: (saved) => ({ ...held, ...saved }),
   });
+};
 
 /**
  * Build the view of one session item.

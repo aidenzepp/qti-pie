@@ -1,22 +1,27 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Result } from "effect";
-import type { Declarations, Variables } from "#plate/engine/evaluate.ts";
-import { UnknownIdentifierError } from "#plate/engine/failures.ts";
+import { evaluateExpression } from "#plate/engine/evaluate.ts";
+import type { Declarations, Evaluate, Scope, Variables } from "#plate/engine/evaluate.ts";
+import { RecordOperandError, UnknownIdentifierError } from "#plate/engine/failures.ts";
+import { drawStream } from "#plate/engine/random.ts";
 import {
   builtInType,
   builtInValue,
+  recordOrValue,
   referenceInteger,
   referenceValue,
   variableValue,
 } from "#plate/engine/refs.ts";
 import type { ScopeItem, TestScope } from "#plate/engine/scope.ts";
+import type { Expression } from "#plate/model/expression.ts";
 import type {
   OutcomeDeclaration,
+  RecordDeclaration,
   ResponseDeclaration,
   TemplateDeclaration,
 } from "#plate/model/item.ts";
 import { isNull, nullOf } from "#plate/model/values.ts";
-import type { ModelledBaseType, Value } from "#plate/model/values.ts";
+import type { ModelledBaseType, RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 
 /**
  * A single identifier response value.
@@ -145,6 +150,37 @@ describe("variableValue", () => {
       { _tag: failure._tag, holder: failure.holder, role: failure.role },
       { _tag: "UnknownIdentifierError", holder: "record", role: "variable" },
     );
+  });
+
+  it("[I-9a] fails a value read of a record response with RecordOperandError, naming it, at a qti-variable and at a reference attribute alike", () => {
+    const recorded: Variables = {
+      ...referenced,
+      records: {
+        ANSWER: {
+          cardinality: "record",
+          fields: [{ identifier: "stringValue", value: { baseType: "string", value: "12" } }],
+        },
+      },
+    };
+    const failures = [
+      failureOf(variableValue(recorded, "ANSWER")),
+      failureOf(
+        referenceValue(recorded, {
+          baseType: "integer",
+          checked: true,
+          reference: { _tag: "ref", identifier: "ANSWER" },
+        }),
+      ),
+    ];
+
+    for (const failure of failures) {
+      assert.instanceOf(failure, RecordOperandError);
+      assert.deepStrictEqual(
+        { _tag: failure._tag, identifier: failure.identifier },
+        { _tag: "RecordOperandError", identifier: "ANSWER" },
+      );
+    }
+    assert.deepStrictEqual(Result.getOrThrow(variableValue(recorded, "SCORE")), score);
   });
 
   for (const identifier of ["MISSING", "numAttempts", "completionStatus", "constructor"]) {
@@ -433,6 +469,7 @@ const firstItem: ScopeItem = {
     correct: {},
     defaults: {},
     outcomes: { N: count, NOTA: floatOf(0.5), SCORE: floatOf(1.5) },
+    records: {},
     responses: { RESPONSE: answer },
     templates: { T: count },
   },
@@ -454,6 +491,7 @@ const secondItem: ScopeItem = {
     correct: {},
     defaults: {},
     outcomes: { N: count, NOTA: floatOf(0.75), SCORE: floatOf(0) },
+    records: {},
     responses: { RESPONSE: nullOf("identifier", "single") },
     templates: {},
   },
@@ -531,6 +569,7 @@ describe("a test's run reads a prefixed name through its item ref [T-9]", () => 
   it("[T-9] variableValue without a test scope makes no read through its item ref: ITEM1.SCORE is the record's gap", () => {
     const failure = failureOf(variableValue(variables, "ITEM1.SCORE"));
 
+    assert.instanceOf(failure, UnknownIdentifierError);
     assert.deepStrictEqual(
       {
         _tag: failure._tag,
@@ -617,6 +656,204 @@ describe("builtInType in a test's run [T-9]", () => {
         Option.none(),
         Option.some({ baseType: "duration", cardinality: "single" }),
       ],
+    );
+  });
+});
+
+/**
+ * Construct a record of string fields.
+ *
+ * @param fields Each field's identifier keyed to its text.
+ * @returns The record.
+ */
+const stringRecord = (fields: Readonly<Record<string, string>>): RecordValue => ({
+  cardinality: "record",
+  fields: Object.entries(fields).map(([identifier, value]) => ({
+    identifier,
+    value: { baseType: "string", value },
+  })),
+});
+
+/**
+ * The NULL record: a record with no field.
+ */
+const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+/**
+ * The record `ITEM3`'s record holds of its record response `RREC`: `stringValue` "12" and
+ * `floatValue` 12.
+ */
+const answeredRecord: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "stringValue", value: { baseType: "string", value: "12" } },
+    { identifier: "floatValue", value: { baseType: "float", value: 12 } },
+  ],
+};
+
+/**
+ * A record response declaration, `RREC`.
+ *
+ * @param declared Its declared correct response and default, each none unless given.
+ * @param declared.correct The correct response.
+ * @param declared.defaultValue The default.
+ * @returns The declaration.
+ */
+const recordDeclaration = (
+  declared: { readonly correct?: RecordValue; readonly defaultValue?: RecordValue } = {},
+): RecordDeclaration => ({
+  correct: Option.fromUndefinedOr(declared.correct),
+  defaultValue: Option.fromUndefinedOr(declared.defaultValue),
+  identifier: "RREC",
+});
+
+/**
+ * `ITEM3`, answered: it declares the record response `RREC` with the correct response
+ * `stringValue` "12" and the default `stringValue` "0", and its record holds
+ * {@link answeredRecord} of it.
+ */
+const answeredItem: ScopeItem = {
+  ...firstItem,
+  record: { ...firstItem.record, records: { RREC: answeredRecord } },
+  records: new Map([
+    [
+      "RREC",
+      recordDeclaration({
+        correct: stringRecord({ stringValue: "12" }),
+        defaultValue: stringRecord({ stringValue: "0" }),
+      }),
+    ],
+  ]),
+  ref: "ITEM3",
+};
+
+/**
+ * `ITEM4`, unanswered: it declares the record response `RREC` with no correct response and no
+ * default, and its record holds no record of it.
+ */
+const openItem: ScopeItem = {
+  ...firstItem,
+  records: new Map([["RREC", recordDeclaration()]]),
+  ref: "ITEM4",
+};
+
+/**
+ * The variables of a test's run over `ITEM3` and `ITEM4`, whose own outcome `ITEM4.LOOSE` is
+ * named as a read through an item ref would be.
+ */
+const recordRun: Variables = {
+  outcomes: { "ITEM4.LOOSE": score, TOTAL: score },
+  responses: {},
+  test: {
+    declared: new Set(["TOTAL"]),
+    duration: Option.none(),
+    items: [answeredItem, openItem],
+    parts: new Map([["P1", ["ITEM3", "ITEM4"]]]),
+    sections: new Map(),
+  },
+};
+
+/**
+ * The scope of {@link recordRun}: the test's holder, which declares no response, and the default
+ * stream.
+ */
+const recordScope: Scope = {
+  draw: drawStream("", ""),
+  item: { outcomes: new Map(), responses: new Map(), templates: new Map() },
+  variables: recordRun,
+};
+
+/**
+ * The evaluator `recordOrValue` calls for an operand that names no record.
+ *
+ * @param expression The operand.
+ * @param scope Its scope.
+ * @returns Its value, or its failure.
+ */
+const evaluateOperand: Evaluate = (expression, scope) =>
+  evaluateExpression(expression, scope.item, scope.variables, scope.draw);
+
+/**
+ * Give what `recordOrValue` reads of an operand in {@link recordScope}, failing the case on a
+ * failure.
+ *
+ * @param operand The operand.
+ * @returns The record or the value.
+ */
+const operandOf = (operand: Expression): ResponseValue =>
+  Result.getOrThrow(recordOrValue(operand, recordScope, evaluateOperand));
+
+/**
+ * Construct an unweighted `qti-variable`.
+ *
+ * @param identifier The name it reads.
+ * @returns The expression.
+ */
+const variableOf = (identifier: string): Expression => ({
+  identifier,
+  kind: "variable",
+  operands: [],
+  weightIdentifier: Option.none(),
+});
+
+/**
+ * Give what `recordOrValue` reads of a `qti-correct` or a `qti-default` in {@link recordScope}.
+ *
+ * @param kind The kind.
+ * @param identifier The name it writes.
+ * @returns The record or the value.
+ */
+const declared = (kind: "correct" | "default", identifier: string): ResponseValue =>
+  operandOf({ identifier, kind, operands: [] });
+
+describe("a test's run reads an item's record response through its item ref [T-9]", () => {
+  it("[T-9] recordOrValue reads a record response through its item ref as the record its item's record holds, the NULL record when it holds none or the name reads a second occurrence", () => {
+    assert.deepStrictEqual(
+      [
+        operandOf(variableOf("ITEM3.RREC")),
+        operandOf(variableOf("ITEM3.1.RREC")),
+        operandOf(variableOf("ITEM4.RREC")),
+        operandOf(variableOf("ITEM3.2.RREC")),
+      ],
+      [answeredRecord, answeredRecord, nullRecord, nullRecord],
+    );
+    // The control: the run's own outcome named as a read through an item ref is its value.
+    assert.deepStrictEqual(operandOf(variableOf("ITEM4.LOOSE")), score);
+  });
+
+  it("[T-9] recordOrValue reads a prefixed qti-correct and qti-default of a record response through its item ref as the item's declared correct response and default, the NULL record when it declares none", () => {
+    assert.deepStrictEqual(
+      [
+        declared("correct", "ITEM3.RREC"),
+        declared("default", "ITEM3.RREC"),
+        declared("correct", "ITEM4.RREC"),
+        declared("default", "ITEM4.RREC"),
+        declared("correct", "ITEM3.2.RREC"),
+      ],
+      [
+        stringRecord({ stringValue: "12" }),
+        stringRecord({ stringValue: "0" }),
+        nullRecord,
+        nullRecord,
+        nullRecord,
+      ],
+    );
+    // The control: a prefixed qti-default of an item's modelled outcome is its value, no record.
+    assert.deepStrictEqual(declared("default", "ITEM3.SCORE"), nullOf("float", "single"));
+  });
+
+  it("[T-9] variableValue fails a value read of a record response through its item ref with RecordOperandError, naming it as the rules write it", () => {
+    const failure = failureOf(variableValue(recordRun, "ITEM3.RREC"));
+
+    assert.instanceOf(failure, RecordOperandError);
+    assert.deepStrictEqual(
+      { _tag: failure._tag, identifier: failure.identifier },
+      { _tag: "RecordOperandError", identifier: "ITEM3.RREC" },
+    );
+    // The control: a value read of the item's modelled outcome through the same item ref succeeds.
+    assert.deepStrictEqual(
+      Result.getOrThrow(variableValue(recordRun, "ITEM3.SCORE")),
+      floatOf(1.5),
     );
   });
 });

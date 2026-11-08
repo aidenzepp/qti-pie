@@ -1213,13 +1213,13 @@ describe("buildTest's template defaults", () => {
   );
 
   it.effect(
-    "[T-9] reads the template default that holds a kind not landed as marked by the kind at its element, and leaves it out",
+    "[T-9] reads the template default that holds a qti-field-value of ITEM2.R, its field-identifier and its operand, with no mark",
     () =>
-      Effect.gen(function* marksUnlanded() {
+      Effect.gen(function* readsFieldValue() {
         const document = defaulted([
           templateDefault(
             "T1",
-            el("qti-field-value", [attr("field-identifier", "F")], [variable("ITEM2.R")]),
+            el("qti-field-value", [attr("field-identifier", " F ")], [variable("ITEM2.R")]),
           ),
           templateDefault("T2", baseValue("integer", "2")),
         ]);
@@ -1227,11 +1227,17 @@ describe("buildTest's template defaults", () => {
 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(defaultsOf(built), [
+          {
+            expression: {
+              fieldIdentifier: "F",
+              kind: "field-value",
+              operands: [variableRead("ITEM2.R")],
+            },
+            templateIdentifier: "T1",
+          },
           { expression: integerValue(2n), templateIdentifier: "T2" },
         ]);
-        assert.deepStrictEqual(built.unsupported, [
-          mark("qti-field-value", `${defaultPath(1)}/qti-field-value`),
-        ]);
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 

@@ -31,6 +31,7 @@ import {
   identifierAttribute,
   identifierOf,
   valueOf,
+  xmlWhitespaceRun,
 } from "#plate/model/attributes.ts";
 import { acceptsAnyOperands, singleOf } from "#plate/model/expression.ts";
 import type { FamilyRules, KindRule } from "#plate/model/expression.ts";
@@ -131,11 +132,6 @@ export const testRules: FamilyRules<TestKind> = {
   "outcome-minimum": extremesRule,
   "test-variables": testVariablesRule,
 };
-
-/**
- * A run of XML whitespace, which separates the identifiers of an XSD list.
- */
-const xmlWhitespaceRun = /[\t\n\r ]+/u;
 
 /**
  * Read a category list attribute, an XSD list of identifiers: its identifiers in written order,

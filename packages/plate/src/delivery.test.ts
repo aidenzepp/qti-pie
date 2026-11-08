@@ -52,6 +52,7 @@ import type {
   TestSession,
   Value,
 } from "#plate/index.ts";
+import { isRecordValue } from "#plate/model/values.ts";
 import { attribute, checkTree, inputType } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
@@ -372,7 +373,11 @@ const textOf = (single: Value["values"][number]): readonly string[] =>
  * @returns Their text values.
  */
 const textsOf = (values: Responses): readonly string[] =>
-  Object.values(values).flatMap((value) => value.values.flatMap(textOf));
+  Object.values(values).flatMap((value) =>
+    isRecordValue(value)
+      ? value.fields.flatMap((field) => textOf(field.value))
+      : value.values.flatMap(textOf),
+  );
 
 /**
  * Give what an item holds that its page must not know, as text: each correct response, mapping

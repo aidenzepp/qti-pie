@@ -9,9 +9,12 @@
  * withinTolerance}). A duration is its seconds in a double, and the two duration kinds compare
  * those doubles as they are ({@link comparingDurations}).
  *
- * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option` and
- * `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
- * dispatcher's table may import it without a cycle.
+ * `qti-match` compares two records too, each read through `recordOrValue`
+ * (`#plate/engine/refs.ts`), which gives the record an operand names before any value read.
+ *
+ * It value-imports only engine leaves, `#plate/engine/refs.ts` among them, `#plate/model/values.ts`
+ * and `effect`'s `Option` and `Result`, and reads the evaluator's types from
+ * `#plate/engine/evaluate.ts` as types, so the dispatcher's table may import it without a cycle.
  *
  * @module
  */
@@ -20,20 +23,39 @@ import type { Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
 import { booleanNull, booleanOf, floatOf, numberOf, sameNumber } from "#plate/engine/numbers.ts";
 import type { NumberSingle } from "#plate/engine/numbers.ts";
-import { referenceValue } from "#plate/engine/refs.ts";
+import { recordOrValue, referenceValue } from "#plate/engine/refs.ts";
 import type { Expression, FloatOrRef } from "#plate/model/expression.ts";
-import { isNull, match } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import { isNull, isNullResponse, isRecordValue, match, sameRecord } from "#plate/model/values.ts";
+import type { ResponseValue, Value } from "#plate/model/values.ts";
 
 /**
- * Give the value of a `qti-match`: a single boolean, whether the operands match by `match` of the
- * value model; NULL when either is NULL.
+ * Report whether two operands of a `qti-match`, neither NULL, match: two records by `sameRecord`,
+ * the same fields in any order; two values by `match`; and a record never matches a value, as two
+ * values of different cardinalities never match. On a checked item the kind's rule refuses a record
+ * beside a single, multiple or ordered operand (P23), so only the first two meet.
  *
- * Operands are evaluated left to right, and the first failure is the result.
+ * @param left One operand's record or value.
+ * @param right The other's.
+ * @returns Whether they match.
+ */
+const matches = (left: ResponseValue, right: ResponseValue): boolean => {
+  if (isRecordValue(left) || isRecordValue(right)) {
+    return isRecordValue(left) && isRecordValue(right) && sameRecord(left, right);
+  }
+
+  return match(left, right);
+};
+
+/**
+ * Give the value of a `qti-match`: a single boolean, whether the operands match ({@link matches});
+ * NULL when either is NULL, a record with no field among them. An operand that names a record
+ * response gives its record (`recordOrValue` in `#plate/engine/refs.ts`).
+ *
+ * Operands are read left to right, and the first failure is the result.
  *
  * @param expression The `qti-match`.
  * @param scope The item and the variables of the attempt.
- * @param evaluate The evaluator, which gives each operand's value.
+ * @param evaluate The evaluator, which gives each operand's value when it names no record.
  * @returns The single boolean, or the first operand's failure.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMatch
  */
@@ -41,12 +63,12 @@ const evaluateMatch: Evaluator<"match"> = (expression, scope, evaluate) => {
   const [left, right] = expression.operands;
 
   return Result.gen(function* matchOperands() {
-    const leftValue = yield* evaluate(left, scope);
-    const rightValue = yield* evaluate(right, scope);
+    const leftValue = yield* recordOrValue(left, scope, evaluate);
+    const rightValue = yield* recordOrValue(right, scope, evaluate);
 
-    return isNull(leftValue) || isNull(rightValue)
+    return isNullResponse(leftValue) || isNullResponse(rightValue)
       ? booleanNull
-      : booleanOf(match(leftValue, rightValue));
+      : booleanOf(matches(leftValue, rightValue));
   });
 };
 

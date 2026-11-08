@@ -15,6 +15,7 @@ import {
 } from "#plate/test/imports.ts";
 import {
   acceptForTest,
+  acceptMarkedTest,
   acceptSectionForTest,
   acceptStimulusForTest,
   acceptTestForTest,
@@ -286,6 +287,21 @@ const modules = sourceModules();
 const closure = valueClosure(modules, ["src/index.ts"]);
 
 /**
+ * List the public surface's exports that are one of some named values, by its own name or under
+ * any other.
+ *
+ * @param named The values, by the name each is declared with.
+ * @returns The names `src/index.ts` exports one of them under, empty when it exports none.
+ */
+const exportedAmong = (named: ReadonlyMap<string, unknown>): readonly string[] => {
+  const values = new Set(named.values());
+
+  return Object.entries(plate).flatMap(([name, value]) =>
+    named.has(name) || values.has(value) ? [name] : [],
+  );
+};
+
+/**
  * The parts of `package.json` this witness reads.
  */
 const Manifest = Schema.Struct({
@@ -330,17 +346,14 @@ describe("the core, from src/index.ts", () => {
       ["brandRedacted", brandRedacted],
       ["PartlessTestDefect", PartlessTestDefect],
     ]);
-    const values = new Set(seams.values());
-    const exported = Object.entries(plate);
 
-    assert.includeMembers(
-      exported.map(([name]) => name),
-      ["open", "redact"],
-    );
-    assert.deepStrictEqual(
-      exported.flatMap(([name, value]) => (seams.has(name) || values.has(value) ? [name] : [])),
-      [],
-    );
+    assert.includeMembers(Object.keys(plate), ["open", "redact"]);
+    assert.deepStrictEqual(exportedAmong(seams), []);
+  });
+
+  it("exports no marked-test seam, openPackage's constructor of an accepted test it marked, under any name (ledger D9-15)", () => {
+    // `acceptMarkedTest` brands an `AcceptedTest` without `check`, so only `openPackage` calls it.
+    assert.deepStrictEqual(exportedAmong(new Map([["acceptMarkedTest", acceptMarkedTest]])), []);
   });
 
   it("publishes src/index.ts as the exports map's only script module", () => {

@@ -1396,6 +1396,78 @@ describe("check, a test's lookup of an outcome it reads through an item ref (rea
   });
 });
 
+/**
+ * Construct a test whose record outcome `R` holds a `qti-default-value` of one field.
+ *
+ * @param attributes The field's attributes, as `[local, value]` pairs.
+ * @param written The field's text, as written.
+ * @returns The test.
+ */
+const recordFieldTest = (
+  attributes: readonly (readonly [string, string])[],
+  written: string,
+): SourceDocument =>
+  assessmentTest(
+    [itemRef("I1")],
+    [
+      el(
+        "qti-outcome-declaration",
+        [attr("cardinality", "record"), attr("identifier", "R")],
+        [
+          el(
+            "qti-default-value",
+            [],
+            [
+              el(
+                "qti-value",
+                attributes.map(([local, value]) => attr(local, value)),
+                [text(written)],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
+
+describe("check, a record outcome's field in a test (info.txt:73046; pantry's test import runs semanticRows)", () => {
+  const field = "qti-assessment-test/qti-outcome-declaration/qti-default-value/qti-value";
+  const named = ["field-identifier", "n"] as const;
+  const integer = ["base-type", "integer"] as const;
+
+  it("[I-1] refuses, in the test's own verdict, a record field in a test declaration that lacks field-identifier, lacks base-type, or is outside its base-type", () => {
+    assert.deepStrictEqual(
+      [
+        refusalsOf(verdictOf(recordFieldTest([integer], "1"))),
+        refusalsOf(verdictOf(recordFieldTest([named], "1"))),
+        refusalsOf(verdictOf(recordFieldTest([named, integer], "abc"))),
+      ],
+      [
+        [
+          {
+            location: { kind: "path", path: `${field}/@field-identifier` },
+            rule: "missing-attribute",
+          },
+        ],
+        [{ location: { kind: "path", path: `${field}/@base-type` }, rule: "missing-attribute" }],
+        [{ location: { kind: "path", path: field }, rule: "value-type" }],
+      ],
+    );
+  });
+
+  it("[I-1] accepts a record field in a test declaration that names its field and fits its base-type, marked cardinality=record as before (G-R4, pending)", () => {
+    assert.deepStrictEqual(
+      featuresOf(
+        acceptedTestOf(
+          verdictOf(recordFieldTest([named, integer], "1")),
+          "accepted-with-unsupported",
+        ).unsupported,
+      ),
+      ['cardinality="record"@qti-assessment-test/qti-outcome-declaration'],
+    );
+  });
+});
+
 describe("check, every QTI 3 root", () => {
   it.effect(
     "[T-4] [S-0] accepts BGtest.xml as a test it delivers in full",

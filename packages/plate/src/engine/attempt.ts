@@ -4,11 +4,12 @@
  *
  * {@link firstAttempt} starts the record: it runs the item's template processing under the record's
  * seed, from the declared state with any template defaults the test gives, and sets every response
- * and outcome to its default. {@link runAttempt} sets the responses, counts the attempt, resets the
- * declared outcomes, carries the built-in `completionStatus` over, and runs the item's rules with
- * the evaluator over the record's template values and overrides. Both are pure and return the
- * engine's failure rather than throw it. The author's flow decides whether an attempt may run (rule
- * `a9d04969`); this module only runs it.
+ * and outcome to its default, a record response's being its declared default or the NULL record.
+ * {@link runAttempt} sets the responses, counts the attempt, resets the declared outcomes, carries
+ * the built-in `completionStatus` over, and runs the item's rules with the evaluator over the
+ * record's template values and overrides. Both are pure and return the engine's failure rather
+ * than throw it. The author's flow decides whether an attempt may run (rule `a9d04969`); this
+ * module only runs it.
  *
  * Value imports point one way: here to the template interpreter (`#plate/engine/template.ts`), and
  * both to the evaluator.
@@ -32,7 +33,7 @@ import {
   unrunTemplateProcessing,
 } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import { nullOf } from "#plate/model/values.ts";
+import { nullOf, nullRecord } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
 /**
@@ -68,6 +69,25 @@ const responseStart = (item: Item, defaults: ItemRecord["defaults"]): ItemRecord
         Option.orElse(own(defaults, identifier), () => response.defaultValue),
         () => nullOf(response.baseType, response.cardinality),
       ),
+    ]),
+  );
+
+/**
+ * Give each record response of an item its default (D4-11 for a record), by identifier: its
+ * declared default, else the NULL record. Template processing never sets a record response's
+ * default (a rule that would is marked `record-set` and does not run), so the declaration's is the
+ * only one. Every record response the item holds then has an entry, so a `qti-field-value`,
+ * `qti-is-null` or `qti-match` over one the attempt is not given reads its default, NULL included,
+ * as results do, and never fails for want of a value.
+ *
+ * @param item The item.
+ * @returns The record responses' values, keyed by identifier.
+ */
+const recordStart = (item: Item): ItemRecord["records"] =>
+  Object.fromEntries(
+    [...(item.records?.values() ?? [])].map((declared) => [
+      declared.identifier,
+      Option.getOrElse(declared.defaultValue, () => nullRecord),
     ]),
   );
 
@@ -123,9 +143,10 @@ const startingOutcomes = (item: Item, record: ItemRecord): ItemRecord["outcomes"
  * raises it at the start of each attempt, and may read and set `completionStatus`, which the
  * record then keeps into the next attempt. They read the record's template values, and a
  * `qti-correct` or a `qti-default` reads the correct response or default the record's template
- * processing set before the declaration's. The record's seed, template values, correct responses
- * and defaults are copied unchanged, since a stored value always wins over recomputation. The
- * record passed in is not changed, on success or on failure.
+ * processing set before the declaration's. They are given each record response's value from the
+ * record's `records`, beside the responses. The record's seed, template values, correct responses,
+ * defaults and record responses' values are copied unchanged, since a stored value always wins
+ * over recomputation. The record passed in is not changed, on success or on failure.
  *
  * The rules draw from one stream, keyed by the record's seed under the attempt's response label
  * (`responseLabel`): `<instance>\u001Fresponse\u001F<numAttempts>`, with the record's instance and
@@ -156,6 +177,7 @@ export const runAttempt = (
     defaults: record.defaults,
     numAttempts: BigInt(numAttempts),
     outcomes: startingOutcomes(item, record),
+    records: record.records,
     responses: { ...record.responses, ...responses },
     templates: record.templates,
   };
@@ -182,8 +204,8 @@ export const runAttempt = (
 };
 
 /**
- * Start the record of an item's first attempt: template processing, then the response and outcome
- * defaults (D4-11).
+ * Start the record of an item's first attempt: template processing, then the response, record
+ * response and outcome defaults (D4-11).
  *
  * The record is {@link fresh}'s for the instance, under the given seed, with:
  *
@@ -207,6 +229,8 @@ export const runAttempt = (
  *     (`variable:<identifier>` at `qti-template-processing` for a name the engine does not hold).
  * - `responses`: each at its default, the one template processing set, else the declared one, else
  *   NULL of its type, before any response is given.
+ * - `records`: each record response at its declared default, else the NULL record, before any
+ *   response is given ({@link recordStart}).
  * - `outcomes`: each declared outcome at its default, the one template processing set, else its
  *   starting value (`startingValue` in `#plate/model/record.ts`), and the built-in
  *   `completionStatus` at `not_attempted`, as {@link fresh} writes it.
@@ -263,6 +287,7 @@ export const firstAttempt = (
       correct: values.correct,
       defaults: values.defaults,
       outcomes: outcomeStart(item, values.defaults),
+      records: recordStart(item),
       responses: responseStart(item, values.defaults),
       seed: start.seed,
       templates: values.templates,

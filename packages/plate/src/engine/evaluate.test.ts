@@ -1625,12 +1625,10 @@ describe("map-response-point", () => {
 });
 
 describe("evaluators", () => {
-  it("holds one entry for each of the 64 kinds, each an evaluator or the stub marker", () => {
+  it("holds one entry for each of the 64 kinds, each an evaluator", () => {
     const entries = Object.entries(evaluators);
     for (const [kind, entry] of entries) {
-      if (entry !== "unlanded") {
-        assert.isFunction(entry, kind);
-      }
+      assert.isFunction(entry, kind);
     }
 
     assert.deepStrictEqual(entries.map(([kind]) => kind).toSorted(), expressionKinds.toSorted());

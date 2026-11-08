@@ -29,6 +29,7 @@ import { nullOf } from "#plate/model/values.ts";
 import { redact, render } from "#plate/render.ts";
 import { restore } from "#plate/restore.ts";
 import { score } from "#plate/score.ts";
+import type { Responses } from "#plate/session/session.ts";
 import {
   determinismConfiguration,
   determinismInstance,
@@ -82,11 +83,7 @@ const opened = Effect.fnUntraced(function* opened() {
  * @param values The values the controls show, none by default.
  * @returns The HTML.
  */
-const renderedFrom = (
-  accepted: Accepted,
-  record: ItemRecord,
-  values: ItemRecord["responses"] = {},
-): string =>
+const renderedFrom = (accepted: Accepted, record: ItemRecord, values: Responses = {}): string =>
   Result.getOrThrow(
     render(redact(accepted, record), determinismConfiguration, {
       instance: determinismInstance,
@@ -313,6 +310,7 @@ describe("criterion 7 in Node: the determinism fixture's test", () => {
       correct: after.correct,
       defaults: after.defaults,
       outcomes: after.outcomes,
+      records: after.records,
       responses: after.responses,
       templates: after.templates,
     });
@@ -400,6 +398,7 @@ describe("criterion 7 in Node: the determinism fixture's template defaults", () 
       correct: record.correct,
       defaults: record.defaults,
       outcomes: record.outcomes,
+      records: record.records,
       responses: record.responses,
       templates: record.templates,
     });

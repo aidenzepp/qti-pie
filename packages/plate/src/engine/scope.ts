@@ -10,10 +10,12 @@
  * scope is data: a session builds it (`testScopeOf` in `#plate/engine/outcome.ts`), and a test may
  * build one by hand.
  *
- * It is a browser module. It value-imports only `effect`'s `Option` and `Result` and two engine
- * leaves, `#plate/engine/failures.ts` and `#plate/engine/numbers.ts`, and reads the model's and the
- * evaluator's types as types: it imports no session value, and none of `#plate/engine/refs.ts`,
- * which reads a prefixed name through it.
+ * It is a browser module. It value-imports only `effect`'s `Option` and `Result`, two engine
+ * leaves, `#plate/engine/failures.ts` and `#plate/engine/numbers.ts`, and two of the model's,
+ * `#plate/model/item-refs.ts` for the occurrence form of a prefixed name's rest and
+ * `#plate/model/values.ts` for the NULL record, and reads the model's and the evaluator's types as
+ * types: it imports no session value, and none of `#plate/engine/refs.ts`, which reads a prefixed
+ * name through it.
  *
  * @module
  */
@@ -21,8 +23,11 @@ import { Option, Result } from "effect";
 import type { Declarations } from "#plate/engine/evaluate.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
 import { integerValue } from "#plate/engine/numbers.ts";
+import { occurrenceOf } from "#plate/model/item-refs.ts";
+import type { RecordDeclaration } from "#plate/model/item.ts";
 import type { ScopeRecord } from "#plate/model/record.ts";
-import type { ModelledBaseType, Value } from "#plate/model/values.ts";
+import { nullRecord } from "#plate/model/values.ts";
+import type { ModelledBaseType, RecordValue, Value } from "#plate/model/values.ts";
 
 /**
  * A type a declaration may give a variable: any of QTI's base types, `file` included, and any of
@@ -35,8 +40,8 @@ export interface DeclaredType {
 
 /**
  * One item of the session, as the test's processing reads it: its item ref's identifier,
- * categories, weights and variable mappings; its item's declarations; what its record holds;
- * whether it was presented; and how many of its attempts have started.
+ * categories, weights and variable mappings; its item's declarations, its record responses among
+ * them; what its record holds; whether it was presented; and how many of its attempts have started.
  */
 export interface ScopeItem {
   /**
@@ -62,27 +67,38 @@ export interface ScopeItem {
    */
   readonly presented: boolean;
   /**
-   * What the item's record holds: its responses, its outcomes (the built-in `completionStatus`
-   * among them), its template values, and the correct responses and defaults its template
-   * processing set.
+   * What the item's record holds: its responses and its record responses' records, its outcomes
+   * (the built-in `completionStatus` among them), its template values, and the correct responses
+   * and defaults its template processing set.
    */
   readonly record: ScopeRecord;
+  /**
+   * The item's record response declarations, by identifier, each with its declared correct
+   * response and default; absent, as in a scope built by hand, when the item makes none. A read of
+   * one gives the record its item's record holds ({@link Reading}), and `qti-number-responded`,
+   * `qti-number-correct` and `qti-number-incorrect` judge it against its declared default and
+   * correct response.
+   */
+  readonly records?: ReadonlyMap<string, RecordDeclaration>;
   /**
    * The identifier of the item ref the item delivers.
    */
   readonly ref: string;
   /**
-   * The item's declarations of a type the value model holds no value of, base type `file` or
-   * cardinality `record`, by identifier. The record never holds a value of one, so a read of one
-   * gives NULL of its declared type.
+   * The item's declarations of a type the value model holds no value of, by identifier: those of
+   * base type `file`, its outcome and template declarations of cardinality `record`, and a record
+   * response with a field of base type `file`. The record never holds a value of one, so a read of
+   * one gives NULL of its declared type. The record responses the item model holds are
+   * {@link ScopeItem.records}, never here.
    */
   readonly unheld: ReadonlyMap<string, DeclaredType>;
   /**
-   * The item's response declarations of a type the value model holds no value of, by identifier,
-   * each keyed to whether it declares a correct response; absent, as in a scope built by hand,
-   * when the item makes none. `qti-number-correct` and `qti-number-incorrect` read it: they do not
-   * judge an item one of whose responses declares no correct response, and a judged item's unheld
-   * response reads NULL, which matches no correct response.
+   * The item's response declarations of a type the value model holds no value of, the record
+   * responses of {@link ScopeItem.records} not among them, by identifier, each keyed to whether it
+   * declares a correct response; absent, as in a scope built by hand, when the item makes none.
+   * `qti-number-correct` and `qti-number-incorrect` read it: they do not judge an item one of whose
+   * responses declares no correct response, and a judged item's unheld response reads NULL, which
+   * matches no correct response.
    */
   readonly unheldResponses?: ReadonlyMap<string, boolean>;
   /**
@@ -136,11 +152,15 @@ export interface ItemFilters {
 
 /**
  * What a test-level read of an item variable gives: `held`, a value of a type the value model
- * holds, NULL included; or `unheld`, NULL of a declared type it does not hold, base type `file` or
- * cardinality `record`.
+ * holds, NULL included; `record`, the record a record response holds, the NULL record included;
+ * or `unheld`, NULL of a declared type the value model does not hold, base type `file` or a record
+ * outcome or template variable. A context variable read through an item ref is not read:
+ * `openPackage` marks the processing that reads it (repair9-9), and in documents opened apart the
+ * read fails {@link UnknownIdentifierError}.
  */
 export type Reading =
   | { readonly kind: "held"; readonly value: Value }
+  | { readonly kind: "record"; readonly value: RecordValue }
   | { readonly kind: "unheld"; readonly type: DeclaredType };
 
 /**
@@ -181,13 +201,14 @@ type ItemBuiltIn = "completionStatus" | "duration" | "numAttempts";
 
 /**
  * What a name read through an item ref names in its item, with the variable's type: one of its
- * declared variables of a modelled type, by the item's own identifier; one of a type the value
- * model does not hold; or an item-session built-in.
+ * declared variables of a modelled type, by the item's own identifier; one of its record responses
+ * ({@link ScopeItem.records}); one of a type the value model does not hold; or an item-session
+ * built-in.
  */
 export type ItemName =
   | {
       readonly identifier: string;
-      readonly kind: "outcome" | "response" | "template";
+      readonly kind: "outcome" | "record" | "response" | "template";
       readonly type: DeclaredType;
     }
   | { readonly identifier: string; readonly kind: "unheld"; readonly type: DeclaredType }
@@ -231,48 +252,15 @@ const isItemBuiltIn = (name: string): name is ItemBuiltIn => Object.hasOwn(itemB
  * `constructor`, a valid identifier, is never read as a value (as `own` in
  * `#plate/engine/refs.ts` reads the variables, which this module may not value-import).
  *
- * @param values The record's responses, outcomes or template values.
+ * @param values The record's responses, record responses' records, outcomes or template values.
  * @param identifier The identifier.
  * @returns The value, or none when the map holds no value by that name.
  */
-const ownValue = (
-  values: Readonly<Record<string, Value>>,
+const ownValue = <A extends RecordValue | Value>(
+  values: Readonly<Record<string, A>>,
   identifier: string,
-): Option.Option<Value> =>
+): Option.Option<A> =>
   Object.hasOwn(values, identifier) ? Option.fromUndefinedOr(values[identifier]) : Option.none();
-
-/**
- * The occurrence form of a prefixed name's rest, `N.VAR` (reading 4): `N` a decimal from 1, its
- * leading zeros allowed, as pantry's `prefixedReadings` reads it (`processing/prefixed.ts`), so
- * `0.VAR` is no occurrence.
- */
-const occurrenceForm = /^(?<occurrence>0*[1-9]\d*)\.(?<variable>.+)$/su;
-
-/**
- * What the rest of a prefixed name names in its item: the occurrence, counted from 1, and the
- * variable's name.
- */
-export interface Occurrence {
-  readonly occurrence: bigint;
-  readonly variable: string;
-}
-
-/**
- * Split the rest of a prefixed name, what follows its item ref, into the occurrence it names and
- * the variable: `N.VAR` in the occurrence form (reading 4) names occurrence `N`, and any other rest
- * names occurrence 1 and is the variable whole.
- *
- * @param rest The part of the name after the item ref and its dot.
- * @returns The occurrence and the variable's name.
- */
-export const occurrenceOf = (rest: string): Occurrence => {
-  const groups = occurrenceForm.exec(rest)?.groups;
-
-  return {
-    occurrence: BigInt(groups?.["occurrence"] ?? "1"),
-    variable: groups?.["variable"] ?? rest,
-  };
-};
 
 /**
  * Report whether an item ref's categories share one with a list (9.25; G-R3, pending: one shared
@@ -318,10 +306,17 @@ export const keptItems = (scope: TestScope, filters: ItemFilters): readonly Scop
 };
 
 /**
+ * The type a record response is read by. A record has no base type of its own, and the scope's
+ * type holds one, so it is read as of base type `file`, which the value model does not hold
+ * either: no filter on a modelled base type keeps it, and no kind that reads a single keeps it.
+ */
+const recordType: DeclaredType = { baseType: "file", cardinality: "record" };
+
+/**
  * Find the declaration an item makes of a variable, of a modelled type or not.
  *
  * Declaration identifiers are unique together, so the order responses, outcomes, template
- * variables, unheld never decides between two.
+ * variables, record responses, unheld never decides between two.
  *
  * @param item The item.
  * @param identifier The variable's identifier in the item.
@@ -343,6 +338,11 @@ const declarationOf = (item: ScopeItem, identifier: string): Option.Option<ItemN
     declared("response", responses.get(identifier)),
     declared("outcome", outcomes.get(identifier)),
     declared("template", templates.get(identifier)),
+    Option.map(Option.fromUndefinedOr(item.records?.get(identifier)), (): ItemName => ({
+      identifier,
+      kind: "record",
+      type: recordType,
+    })),
     Option.map(Option.fromUndefinedOr(item.unheld.get(identifier)), (type): ItemName => ({
       identifier,
       kind: "unheld",
@@ -385,7 +385,11 @@ export const itemName = (item: ScopeItem, name: string): Option.Option<ItemName>
 const held = (value: Value): Reading => ({ kind: "held", value });
 
 /**
- * Give NULL of a declared type.
+ * Give NULL of a declared type: a record outcome or template variable reads the `unheld` NULL, as
+ * does a variable of base type `file` (G-R4, pending: a record outcome or template variable read
+ * through an item ref reads NULL). A context variable read through an item ref is not read:
+ * `openPackage` marks the processing that reads it (repair9-9), and in documents opened apart the
+ * read fails {@link UnknownIdentifierError}.
  *
  * @param type The type.
  * @returns The `held` NULL of a type the value model holds, else the `unheld` NULL.
@@ -399,15 +403,29 @@ const nullReading = (type: DeclaredType): Reading => {
 };
 
 /**
+ * Give what a name that names an occurrence that does not exist reads: the NULL record of a record
+ * response, else NULL of the variable's declared type ({@link nullReading}).
+ *
+ * @param named What the name names.
+ * @returns The reading.
+ */
+const absentReading = (named: ItemName): Reading =>
+  named.kind === "record" ? { kind: "record", value: nullRecord } : nullReading(named.type);
+
+/**
  * Read the value of the variable a name names in an item, from its record.
  *
  * - A response or an outcome reads the record's value; a record that holds none is the record's gap,
  *   as a stored record lacking a value is in an item's own processing.
+ * - A record response reads the record its item's record holds of it, the NULL record when it holds
+ *   none: an unanswered record response with no declared default holds none.
  * - A template variable reads the record's value; with none, because the item has not been presented
  *   or its template processing does not run, it reads NULL of its declared type (G-R3, pending: an
  *   item variable with no value reads NULL; Admission A3).
- * - A variable of base type `file` or cardinality `record` reads NULL of its declared type, which the
- *   record never holds (G-R3, pending).
+ * - A variable of base type `file`, and a record outcome or template variable, reads NULL of its
+ *   declared type, which the record never holds (G-R3, pending; G-R4, pending). A context variable
+ *   read through an item ref is not read: `openPackage` marks the processing that reads it
+ *   (repair9-9), and in documents opened apart the read fails {@link UnknownIdentifierError}.
  * - The built-in `numAttempts` reads the started attempt count ({@link ScopeItem.numAttempts}), a
  *   single integer, and `completionStatus` the record's outcome of that name. The engine holds no
  *   item's `duration`, and the test model marks a processing that reads it, so it is the record's
@@ -445,6 +463,12 @@ const readingOf = (
         }),
       );
     }
+    case "record": {
+      return Result.succeed({
+        kind: "record",
+        value: Option.getOrElse(ownValue(record.records, named.identifier), () => nullRecord),
+      });
+    }
     case "unheld": {
       return Result.succeed(nullReading(named.type));
     }
@@ -471,8 +495,9 @@ const readingOf = (
  * the item's record.
  *
  * A response or an outcome reads the record's value, a template variable the record's value or,
- * with none, NULL of its declared type, a variable of base type `file` or cardinality `record`
- * NULL of its declared type, `numAttempts` the started attempt count and `completionStatus` the
+ * with none, NULL of its declared type, a record response its record, the NULL record when the
+ * record holds none, a variable of base type `file` or a record outcome or template variable NULL
+ * of its declared type, `numAttempts` the started attempt count and `completionStatus` the
  * record's (G-R3, pending: an item variable with no value reads NULL; Admission A3).
  *
  * @param item The item.
@@ -543,7 +568,7 @@ const resolve = (scope: TestScope, prefix: string, rest: string): Option.Option<
  * resolving reading ({@link resolve}): `ITEMREF.VAR` and `ITEMREF.1.VAR` read the item's variable
  * as {@link itemVariable} does, a mapping target first. `ITEMREF.N.VAR` with `N` other than 1
  * names an occurrence that does not exist, since selection with replacement is marked, and reads
- * NULL of the variable's type (G-R3, pending; Admission A3).
+ * NULL of the variable's type, the NULL record of a record response (G-R3, pending; Admission A3).
  *
  * A name the test declares whole is never split. A name no reading resolves, or two readings
  * resolve (Admission A4), reads nothing: on a checked package the first is refused
@@ -584,7 +609,7 @@ export const prefixedVariable = (
 
   const { item, named, occurrence } = only;
   if (occurrence !== 1n) {
-    return Result.succeed({ item, named, occurrence, reading: nullReading(named.type) });
+    return Result.succeed({ item, named, occurrence, reading: absentReading(named) });
   }
 
   return Result.map(readingOf(item, named), (reading) => ({ item, named, occurrence, reading }));

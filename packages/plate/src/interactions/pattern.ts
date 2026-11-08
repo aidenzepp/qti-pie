@@ -12,8 +12,9 @@
  * none of them after its checks return. A value of base type `integer` or `float` is matched in its
  * canonical lexical form, as `format` writes it, so on a `float` binding a posted `1.50` is matched
  * as `1.5` and on an `integer` binding `007` as `7`. A `string` is matched as the candidate typed
- * it, its line breaks already LF. Each member of a `multiple` or `ordered` value is matched on its
- * own.
+ * it, its line breaks already LF, and so is a record's `stringValue`, which `checkResponses` passes
+ * as that string, so on a record binding `12.0` is matched as typed, never as `12`. Each member of
+ * a `multiple` or `ordered` value is matched on its own.
  *
  * The check is this function, which the host runs with the posted response; no native `pattern`
  * attribute is written.

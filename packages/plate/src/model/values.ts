@@ -1,9 +1,11 @@
 /**
  * QTI values and NULL as the value model holds them: a base type, a cardinality and the values,
- * with the lexical parse and format of each base type and the equality `qti-match` uses.
+ * with the lexical parse and format of each base type and the equality `qti-match` uses. A record
+ * is its own type, {@link RecordValue}: named fields, each a single, with no base type of its own.
  *
- * The session record, the engine and the form encoding all carry a {@link Value}, so this module
- * owns the one value representation, and the one NCName rule the validator reuses.
+ * The session record, the engine and the form encoding all carry a {@link Value}, and a record
+ * response's {@link RecordValue} beside it, so this module owns the one value representation, and
+ * the one NCName rule the validator reuses.
  *
  * @module
  */
@@ -31,7 +33,8 @@ export const modelledBaseTypes = [
 export type ModelledBaseType = (typeof modelledBaseTypes)[number];
 
 /**
- * The cardinalities the value model holds values of. Records are not modelled.
+ * The cardinalities a {@link Value} holds. A record is its own type, {@link RecordValue}, since its
+ * fields each carry their own base type.
  */
 export const modelledCardinalities = ["single", "multiple", "ordered"] as const;
 
@@ -212,6 +215,45 @@ export interface Value {
 }
 
 /**
+ * One field of a {@link RecordValue}: its identifier, an NCName, and its value, a single of a
+ * modelled base type. A NULL field is no field, so a field always holds a value.
+ */
+export interface RecordField {
+  readonly identifier: string;
+  readonly value: Single;
+}
+
+/**
+ * A QTI value of cardinality `record`, as a record response holds it: its fields, each named once.
+ *
+ * A record has no base type of its own; each field carries its own. A NULL field is no field, and a
+ * record with no field is NULL, so there is one spelling of NULL here too. The order of the fields
+ * means nothing ({@link sameRecord}). `RecordValueSchema` in `#plate/codec/values.ts` checks these
+ * rules at the boundaries.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Variables
+ */
+export interface RecordValue {
+  readonly cardinality: "record";
+  readonly fields: readonly RecordField[];
+}
+
+/**
+ * The value a response holds: a {@link Value} of a modelled base type and cardinality, or a
+ * {@link RecordValue}.
+ */
+export type ResponseValue = Value | RecordValue;
+
+/**
+ * Report whether a response's value is a record.
+ *
+ * @param value The value to test.
+ * @returns Whether `value` is a {@link RecordValue}.
+ */
+export const isRecordValue = (value: ResponseValue): value is RecordValue =>
+  value.cardinality === "record";
+
+/**
  * Construct the NULL value of a base type and cardinality.
  *
  * @param baseType The value's base type.
@@ -225,12 +267,27 @@ export const nullOf = (baseType: ModelledBaseType, cardinality: Value["cardinali
 });
 
 /**
+ * The NULL record: a record with no field, since a NULL field is no field.
+ */
+export const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+/**
  * Report whether a value is NULL.
  *
  * @param value The value to test.
  * @returns Whether `value` holds no values.
  */
 export const isNull = (value: Value): boolean => value.values.length === 0;
+
+/**
+ * Report whether a response's value is NULL: a {@link Value} with no values, or a record with no
+ * field.
+ *
+ * @param value The value to test.
+ * @returns Whether `value` holds nothing.
+ */
+export const isNullResponse = (value: ResponseValue): boolean =>
+  isRecordValue(value) ? value.fields.length === 0 : isNull(value);
 
 /**
  * Say what to write for a duration: its seconds as an xs:double, never an ISO 8601 duration. A
@@ -529,6 +586,48 @@ export const sameSingle = (left: Single, right: Single): boolean => {
 };
 
 /**
+ * Give a record's fields by identifier, in linear time. A record names each identifier once
+ * (`RecordValueSchema` refuses one that does not); where one built by hand names an identifier
+ * twice, its first field is the one kept, as a record keeps the first written.
+ *
+ * @param record The record.
+ * @returns Each field's value by its identifier.
+ */
+const fieldsOf = (record: RecordValue): ReadonlyMap<string, Single> => {
+  const fields = new Map<string, Single>();
+  for (const field of record.fields) {
+    if (!fields.has(field.identifier)) {
+      fields.set(field.identifier, field.value);
+    }
+  }
+
+  return fields;
+};
+
+/**
+ * Report whether two records hold the same fields, in any order.
+ *
+ * @param left One record.
+ * @param right The other record.
+ * @returns Whether they name the same set of identifiers and, for each, fields of one base type
+ *   that are equal as {@link sameSingle} compares them. Two NULL records name no identifier, so
+ *   they are the same; `qti-match`'s NULL rule is its caller's.
+ */
+export const sameRecord = (left: RecordValue, right: RecordValue): boolean => {
+  const leftFields = fieldsOf(left);
+  const rightFields = fieldsOf(right);
+
+  return (
+    leftFields.size === rightFields.size &&
+    [...leftFields].every(([identifier, single]) => {
+      const other = rightFields.get(identifier);
+
+      return other !== undefined && sameSingle(single, other);
+    })
+  );
+};
+
+/**
  * Report whether two equally long lists hold the same values as multisets.
  *
  * @param left One list.
@@ -581,3 +680,17 @@ export const match = (left: Value, right: Value): boolean => {
         return other !== undefined && sameSingle(single, other);
       });
 };
+
+/**
+ * Report whether a response's value is its default, as skipping and Results Reporting's answered
+ * status read it: a value that matches it ({@link match}), or a record that holds the same fields
+ * in any order ({@link sameRecord}). A value is never a record's default, nor a record a value's.
+ *
+ * @param value The value given, not NULL.
+ * @param fallback The response's default.
+ * @returns Whether `value` is `fallback`.
+ */
+export const atDefault = (value: ResponseValue, fallback: ResponseValue): boolean =>
+  isRecordValue(value)
+    ? isRecordValue(fallback) && sameRecord(value, fallback)
+    : !isRecordValue(fallback) && match(value, fallback);

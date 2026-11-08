@@ -4,8 +4,8 @@
  * expression element through them.
  *
  * The model, the validator and the engine read a kind through its entry here in place of a case
- * per kind, so a family lands a kind by replacing its entries in its own files. It value-imports
- * the ten families, which value-import `#plate/model/expression.ts` and the leaf
+ * per kind, so a kind's rule and reader spec change in its family's own files alone. It
+ * value-imports the ten families, which value-import `#plate/model/expression.ts` and the leaf
  * `#plate/model/attributes.ts`, never this module: they name its reader types with `import type`
  * only. So the value imports point one way: from the item model and the validator to here, and
  * from here to the families.
@@ -93,15 +93,6 @@ export interface ReaderContext extends ExpressionReading {
 }
 
 /**
- * The reader spec of a kind its family has not landed: the generic reader marks the element
- * `qti-<kind>` at its path, as it marks any element the engine does not run, and reads nothing in
- * it.
- */
-export interface UnlandedReader {
-  readonly _tag: "unlanded";
-}
-
-/**
  * The reader spec of a kind that reads itself: its operand count, its attributes, its marks and
  * its operands, in that order, through the context. `qti-base-value` reads its typed text and
  * `qti-custom-operator` marks itself and keeps reading.
@@ -155,9 +146,8 @@ interface GenericReader<
 }
 
 /**
- * How the item model reads one expression kind: the stub of an unlanded kind, a custom reader, or a
- * generic spec of one of the five operand counts, whose build takes the operands as the count
- * types them.
+ * How the item model reads one expression kind: a custom reader, or a generic spec of one of the
+ * five operand counts, whose build takes the operands as the count types them.
  */
 export type ReaderSpec<K extends ExpressionKind> =
   | CustomReader<K>
@@ -165,8 +155,7 @@ export type ReaderSpec<K extends ExpressionKind> =
   | GenericReader<K, "none", readonly []>
   | GenericReader<K, "one", readonly [Expression]>
   | GenericReader<K, "some", readonly [Expression, ...Expression[]]>
-  | GenericReader<K, "two", readonly [Expression, Expression]>
-  | UnlandedReader;
+  | GenericReader<K, "two", readonly [Expression, Expression]>;
 
 /**
  * A family's reader specs: one entry per kind of the family.
@@ -208,15 +197,6 @@ export const kindReaders: FamilyReaders<ExpressionKind> = {
 };
 
 /**
- * The kinds the item model reads, those whose reader spec is not the stub, in sorted order. The
- * engine runs exactly these, beside the response rules `renders.engine` lists in
- * `#plate/vocabulary.ts`.
- */
-export const landedKinds: readonly ExpressionKind[] = expressionKinds.filter(
-  (kind) => kindReaders[kind]._tag !== "unlanded",
-);
-
-/**
  * Each kind, keyed by its element's local name, `qti-<kind>`.
  */
 const kindsByElement: ReadonlyMap<string, ExpressionKind> = new Map(
@@ -255,7 +235,7 @@ const readAll = (
 const readGeneric = (
   context: ReaderContext,
   element: SourceElement,
-  spec: Exclude<ReaderSpec<ExpressionKind>, CustomReader<ExpressionKind> | UnlandedReader>,
+  spec: Exclude<ReaderSpec<ExpressionKind>, CustomReader<ExpressionKind>>,
 ): Effect.Effect<Option.Option<Expression>, Refusal> =>
   Effect.gen(function* readOperands() {
     const children = elementsOf(element);
@@ -323,8 +303,7 @@ const readGeneric = (
 /**
  * Read an expression element: one in the QTI namespace named `qti-<kind>` for one of the 64 kinds
  * by that kind's reader spec, and any other element as one the engine does not run, marked by its
- * name. A kind whose family has not landed is marked `qti-<kind>` at its path, and nothing in it
- * is read. Operands are read through this reader again.
+ * name. Operands are read through this reader again.
  *
  * @param reading The item's reading context.
  * @param element The expression element.
@@ -347,9 +326,6 @@ export const readExpression = (
   };
   const spec: ReaderSpec<ExpressionKind> = kindReaders[kind];
   switch (spec._tag) {
-    case "unlanded": {
-      return reading.unread(element);
-    }
     case "custom": {
       return spec.read(context, element);
     }
