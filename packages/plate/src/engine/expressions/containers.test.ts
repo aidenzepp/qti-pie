@@ -7,7 +7,6 @@ import type { Evaluate, Variables } from "#plate/engine/evaluate.ts";
 import { containersEvaluators } from "#plate/engine/expressions/containers.ts";
 import { drawBelow, drawFloat, drawStream } from "#plate/engine/random.ts";
 import type { Draw } from "#plate/engine/random.ts";
-import { isUnlanded } from "#plate/model/expression.ts";
 import type {
   Expression,
   ExpressionType,
@@ -588,7 +587,7 @@ describe("the containers family's evaluators over an untyped operand", () => {
     );
   });
 
-  it("hold the kinds the engine treats as untyped to the kind rules: each landed kind whose rule gives no base type over an unknown operand, and at which position", () => {
+  it("hold the kinds the engine treats as untyped to the kind rules: each kind whose rule gives no base type over an unknown operand, and at which position", () => {
     const unknown1: ExpressionType = { baseType: "unknown", cardinality: "single" };
     const integer1: ExpressionType = { baseType: "integer", cardinality: "single" };
     const attributes: ResultAttributes = {
@@ -597,10 +596,6 @@ describe("the containers family's evaluators over an untyped operand", () => {
       name: "abs",
     };
     const passing = Object.entries(kindRules).flatMap(([kind, rule]) => {
-      if (isUnlanded(rule)) {
-        return [];
-      }
-
       if (rule.resultType([integer1, integer1], attributes).baseType === "unknown") {
         return [[kind, "always"] as const];
       }
@@ -690,10 +685,6 @@ describe("the containers family's bound on a computed container (operator ruling
 
   it("[I-9a] qti-repeat evaluates its operands once and repeats that pass's values, so an operand whose later values would grow past 1,000,000 is never evaluated again", () => {
     const { repeat } = containersEvaluators;
-    assert.notStrictEqual(repeat, "unlanded", "qti-repeat is landed");
-    if (repeat === "unlanded") {
-      return;
-    }
 
     let evaluations = 0;
     const growing: Evaluate = () => {
@@ -859,10 +850,6 @@ describe("the containers family's drawing qti-repeat (an operand holds a random 
 
   it("[I-9a] checks the running size before each pass's values are added, so a pass that would grow the container past 1,000,000 values gives NULL", () => {
     const { repeat } = containersEvaluators;
-    assert.notStrictEqual(repeat, "unlanded", "qti-repeat is landed");
-    if (repeat === "unlanded") {
-      return;
-    }
 
     let passes = 0;
     const growing: Evaluate = () => {

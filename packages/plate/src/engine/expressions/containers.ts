@@ -175,8 +175,7 @@ const typeSourcesOf = (expression: Expression): readonly Expression[] => {
  * `qti-product`, `qti-subtract`, `qti-min` and `qti-max` (`numericalAggregate` in
  * `#plate/model/expressions/arithmetic.ts`). A variable of a `record` declaration is typed unknown
  * too, but no kind this reads takes a record operand (P23 refuses one), and a kind that names a
- * variable the engine does not hold, or a kind its family has not landed, is marked, so its
- * processing never runs.
+ * variable the engine does not hold is marked, so its processing never runs.
  *
  * A container built over such an expression is NULL ({@link containerOf}, {@link evaluateRepeat}),
  * though a `qti-field-value` holds a value: the model types the container unknown, so a rule that
