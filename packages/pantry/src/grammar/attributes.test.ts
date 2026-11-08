@@ -366,7 +366,7 @@ const printfSpecifiers = (value: string): readonly boolean[] => {
       }
 
       const code = points[next];
-      const wellFormed = code !== undefined && "EefGgrRioXx".includes(code);
+      const wellFormed = code !== undefined && "EefGgrRiodXx".includes(code);
       specifiers.push(wellFormed);
       next += wellFormed ? 1 : 0;
     } else {
@@ -1327,16 +1327,14 @@ describe("The spec readings", () => {
           matches(format, "100%%") &&
           matches(format, "%i of %i") &&
           matches(format, "%%%e%%%G") &&
-          matches(format, "%i, %.2f and %#x"),
+          matches(format, "%i, %.2f and %#x") &&
+          matches(format, "%d") &&
+          matches(format, "%d %d") &&
+          matches(format, "%i of %d"),
         version,
       );
       assert.isFalse(
-        matches(format, "%d") ||
-          matches(format, "%") ||
-          matches(format, "%q") ||
-          matches(format, "%d %d") ||
-          matches(format, "%i of %d") ||
-          matches(format, "%i of %"),
+        matches(format, "%") || matches(format, "%q") || matches(format, "%i of %"),
         version,
       );
     }
