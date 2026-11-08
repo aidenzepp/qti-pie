@@ -233,15 +233,18 @@ export const successEnvelope = <const Name extends string, Data extends Schema.C
 /**
  * Print `value`, encoded through `schema`, as one line of JSON.
  *
- * `value` is unknown to the type checker because the envelope's schema is built from a schema
- * parameter; encoding still checks it against that schema, and a mismatch is a defect in qti.
+ * The type checker holds `value` to the schema's type; a value the schema's checks still refuse,
+ * such as a fractional `exit_code`, is a defect in qti and dies.
+ *
+ * @param schema - The line's schema.
+ * @param value - The line, of the schema's type.
+ * @returns Prints the line.
  */
-const printLine = (
-  schema: Schema.Constraint & { readonly EncodingServices: never },
-  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The envelope's schema is built from a schema parameter, so its type is not nameable here; `encodeUnknownEffect` is the check that parses `value`.
-  value: unknown,
+const printLine = <S extends Schema.Constraint & { readonly EncodingServices: never }>(
+  schema: S,
+  value: S["Type"],
 ) =>
-  Schema.encodeUnknownEffect(Schema.fromJsonString(schema))(value).pipe(
+  Schema.encodeEffect(Schema.fromJsonString(schema))(value).pipe(
     Effect.orDie,
     Effect.flatMap((line) => Console.log(line)),
   );
@@ -251,12 +254,16 @@ const printLine = (
  *
  * `stream` is for a command whose data holds a list: in `jsonl` each of its `lines` is printed
  * first, then the envelope with `summary` as its data in place of the whole.
+ *
+ * Its type parameters are the values' types, each schema a `Schema.Codec` of one, never the
+ * schemas' own types. `Schema.Struct` reads a field's optionality off its schema's type by a
+ * conditional type, which over a type parameter stays unresolved, so an envelope built around a
+ * schema parameter has no type to check its value against. A `Schema.Codec`'s optionality does not
+ * depend on its type parameter, so {@link successEnvelope} of one resolves to the type `printLine`
+ * checks the envelope by. `data`, `lines` and `summary` are `NoInfer`, so each value's type is read
+ * from its schema alone.
  */
-export interface Emission<
-  Data extends Schema.Constraint & { readonly EncodingServices: never },
-  Line extends Schema.Constraint & { readonly EncodingServices: never },
-  Summary extends Schema.Constraint & { readonly EncodingServices: never },
-> {
+export interface Emission<Data, Line, Summary> {
   /**
    * The command's name.
    */
@@ -264,11 +271,11 @@ export interface Emission<
   /**
    * What the command returns, for `json` and for `jsonl` without a `stream`.
    */
-  readonly data: Data["Type"];
+  readonly data: NoInfer<Data>;
   /**
    * The schema of `data`.
    */
-  readonly dataSchema: Data;
+  readonly dataSchema: Schema.Codec<Data, unknown, unknown>;
   /**
    * False only when the command succeeded in running but its result is a failure to match, as a
    * round trip whose report holds a differing entry.
@@ -278,10 +285,10 @@ export interface Emission<
    * The lines `jsonl` prints before its summary, and the summary.
    */
   readonly stream?: {
-    readonly lines: readonly Line["Type"][];
-    readonly lineSchema: Line;
-    readonly summary: Summary["Type"];
-    readonly summarySchema: Summary;
+    readonly lines: readonly NoInfer<Line>[];
+    readonly lineSchema: Schema.Codec<Line, unknown, unknown>;
+    readonly summary: NoInfer<Summary>;
+    readonly summarySchema: Schema.Codec<Summary, unknown, unknown>;
   };
   /**
    * What `text` mode prints, exactly as the command printed it before `--output` existed, or
@@ -297,11 +304,10 @@ export interface Emission<
  * @param mode - The output mode the run resolved.
  * @param emission - The command's name, its data and the text it prints.
  */
-export const emitSuccess = Effect.fn("cli.emitSuccess")(function* emitSuccess<
-  Data extends Schema.Constraint & { readonly EncodingServices: never },
-  Line extends Schema.Constraint & { readonly EncodingServices: never },
-  Summary extends Schema.Constraint & { readonly EncodingServices: never },
->(mode: OutputMode, emission: Emission<Data, Line, Summary>) {
+export const emitSuccess = Effect.fn("cli.emitSuccess")(function* emitSuccess<Data, Line, Summary>(
+  mode: OutputMode,
+  emission: Emission<Data, Line, Summary>,
+) {
   const { command, data, dataSchema, ok, stream, text } = emission;
 
   if (mode === "text") {
