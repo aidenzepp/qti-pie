@@ -63,9 +63,12 @@ const unreadGenerated = (term: string): string =>
 
 /**
  * Why a typed map key's value is absent: PostgreSQL generates it from the map key's text by a
- * conditional, or a float key's by grizzle's `Compute.parseDouble` (`#pantry/qti/mapping.ts`).
+ * conditional, a pair key's by grizzle's `Compute.least` and `Compute.greatest`, or a float key's
+ * by its `Compute.parseDouble` (`#pantry/qti/mapping.ts`).
  */
-const typedKeyValue = unreadGenerated("a conditional or a parse of the map key's text");
+const typedKeyValue = unreadGenerated(
+  "a conditional, a least and a greatest, or a parse of the map key's text",
+);
 
 /**
  * Every value the host does not restore that a law over the every-relation package's rows reads,

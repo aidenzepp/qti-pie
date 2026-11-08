@@ -499,9 +499,13 @@ export const recorded: readonly Recorded[] = [
     reason: {
       _tag: "reading",
       reading: 132,
-      says: "A format is read as a C format string, whose conversion specifiers the information model restricts",
-      why: "the information model's printf grammar (§2.3.4), each conversion specifier over its listed codes, any number of them (reading 161), where the XSD types format xs:normalizedString",
+      says: "The rest of this reading stands: each specifier ends in one of the listed codes, and `%q`, `2f%`, `%` and `%d` are still refused under `attribute-lexical`.",
+      why: "the information model's printf grammar (§2.3.4) refuses a `%` that begins neither the escape `%%` nor a conversion specifier over its listed codes, where the XSD types format xs:normalizedString; a format of any number of well-formed specifiers is admitted (reading 161), so its refusal stays unrecorded",
     },
+    // The value read from the left as C reads a format: text, `%%` and well-formed specifiers, then a
+    // `%` that begins neither, each XML space a flag as normalizedString's replace makes it a space.
+    value:
+      /^(?:[^%]|%%|%[\t\n\r #+\-0]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXx])*%(?!%|[\t\n\r #+\-0]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXx])/u,
     xsd: "valid",
   },
   {
@@ -612,7 +616,7 @@ export const enumerationsOf = (domain: Domain): readonly string[] => {
 /**
  * Boundary forms of each datatype family, keyed by the family's primitive or built-in local name:
  * the forms where lexical spaces differ in practice (signs, leading zeros, exponents, the special
- * doubles, case, separators).
+ * doubles, case, separators, escapes: a lone `%` is no URI and no printf format).
  */
 export const families = {
   anyURI: [
@@ -700,7 +704,7 @@ export const families = {
   ],
   language: ["en", "en-US", "x-klingon", "i-default", "en_US", "123", "abcdefghi", "a-b-c-d-e-f-g"],
   name: ["a", "a.b", "_a", "a-b", "a1", "1a", "-a", ".a", "a:b", "a b", "é"],
-  string: ["a", "a b", "a  b", "é", "ä€𝄞", "a\tb", "a\nb", "<", '"', "&", ":"],
+  string: ["a", "a b", "a  b", "é", "ä€𝄞", "a\tb", "a\nb", "<", '"', "&", ":", "%"],
 } satisfies Readonly<Record<string, readonly string[]>>;
 
 /**
