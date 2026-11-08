@@ -5,8 +5,10 @@
  *
  * A path segment's percent escapes are decoded before the dot segments are removed, as a package
  * keys each file by its real name: `items/a%20b.xml` names `items/a b.xml`, and `%2E%2E` climbs a
- * directory as `..` does. `src/session/start.ts`, a browser module, reads this module, so it
- * value-imports only `Option` and `Result` from effect.
+ * directory as `..` does. The path is split at `/` before it is decoded, so an escaped `/` stays
+ * data inside its segment ({@link decodeSegment}), and `openPackage` and `startTest` read that one
+ * rule. `src/session/start.ts`, a browser module, reads this module, so it value-imports only
+ * `Option` and `Result` from effect.
  *
  * @module
  */
@@ -29,15 +31,37 @@ export const schemePrefix = /^[A-Za-z][\d+.A-Za-z-]*:/u;
 export const withoutQuery = (reference: string): string => reference.split(/[#?]/u, 1)[0] ?? "";
 
 /**
- * Decode a path segment's percent escapes, leaving a segment whose escapes are malformed as it is
- * written.
+ * A percent escape of `/`, in either case, captured so a split keeps it.
+ */
+const escapedSlash = /(?<slash>%2F)/iu;
+
+/**
+ * Decode a path segment's percent escapes but those of `/`, which stay as written, and leave a
+ * segment whose escapes are malformed as it is written.
+ *
+ * An escaped `/` is data inside its segment, never a separator (RFC 3986 section 2.2: a
+ * percent-encoded reserved character is not equivalent to the character; reading 102). A package
+ * keys a file by one text whose segments `/` separates, which cannot hold a `/` inside a segment,
+ * so the escape keeps its place in the segment: `a%2Fb.xml` names the key `a%2Fb.xml`, never the
+ * file `b.xml` in the directory `a`. Its limit, a case no official package has (rule `db2ef322`):
+ * `a%2Fb.xml` and `a%252Fb.xml` name one key, the file whose name is spelled `a%2Fb.xml`.
  *
  * @param segment The segment.
  * @returns The segment decoded.
+ * @see https://www.rfc-editor.org/rfc/rfc3986#section-2.2
  */
 export const decodeSegment = (segment: string): string =>
   Result.getOrElse(
-    Result.try(() => decodeURIComponent(segment)),
+    Result.map(
+      Result.all(
+        segment
+          .split(escapedSlash)
+          .map((piece, index) =>
+            index % 2 === 1 ? Result.succeed(piece) : Result.try(() => decodeURIComponent(piece)),
+          ),
+      ),
+      (pieces) => pieces.join(""),
+    ),
     () => segment,
   );
 
