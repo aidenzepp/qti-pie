@@ -32,7 +32,7 @@ import { materializeSpec } from "#pantry/test/fixtures.ts";
 import type { FixtureSpec } from "#pantry/test/fixtures.ts";
 import { materializeMathml, mathmlNegatives, mathmlSpecOf } from "#pantry/test/fixtures.mathml.ts";
 import type { MathmlFixtureName } from "#pantry/test/fixtures.mathml.ts";
-import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
+import { judge, lawsOf, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -96,10 +96,11 @@ const refusals = [
     name: "a selection of 3 over two children",
   },
   {
-    // The law oracle ranks the content model's `child-set` above the selection law's `union-count`
-    // (both are among its breaches), and the importer names the database's refusal, `union-count`:
-    // the two agree on the refusal and on the law, and differ in the rule of the verdict. Reported
-    // as a finding, not a table edit.
+    // Both judges refuse it under this law, and name different rules: the oracle's verdict is the
+    // catalog's most specific breach, `child-set` (N7 Last ranks first), where the importer names
+    // the first PostgreSQL object to refuse, `union-count`. That is the stated limit in
+    // `#pantry/import/package.ts` (grizzle writes in relation-name order), so the import's rule is
+    // held to be among the oracle's breach rules, not equal to its verdict.
     dir: () =>
       materializeSpec(
         formulaSpec(
@@ -109,7 +110,7 @@ const refusals = [
       ),
     law: "MathML maction selection",
     name: "an maction with no child",
-    oracleRule: "child-set",
+    precedence: false,
     rule: "union-count",
   },
   {
@@ -239,7 +240,7 @@ describe.skipIf(!hasLease)(
     })("the align laws, judged by PostgreSQL", (it) => {
       for (const { dir, law, name, ...stated } of refusals) {
         const { rule } = stated;
-        const oracleRule = "oracleRule" in stated ? stated.oracleRule : rule;
+        const verdictEqual = !("precedence" in stated);
 
         it.effect(`refuses ${name} under ${law}, as the law oracle predicts`, () =>
           // Oracle: the specification as a checker (MathML 3 §3.7.1.1 and §3.5.5.2, reading 2): the
@@ -254,11 +255,16 @@ describe.skipIf(!hasLease)(
               judgment._tag === "Judged" && judgment.breaches.some((breach) => breach.law === law),
               `${name}: the oracle's breaches name ${law}`,
             );
-            assert.deepStrictEqual(
-              verdictOf(judgment),
-              { rule: oracleRule, verdict: "refused" },
-              name,
-            );
+            if (verdictEqual) {
+              assert.deepStrictEqual(verdictOf(judgment), { rule, verdict: "refused" }, name);
+            } else {
+              assert.isTrue(
+                judgment._tag === "Judged" &&
+                  judgment.breaches.some((breach) => ruleOf(breach.law) === rule),
+                `${name}: the import's rule ${rule} is among the oracle's breach rules`,
+              );
+            }
+
             assert.isTrue(refused instanceof ImportRefused, `${name}: ${refused._tag}`);
 
             if (refused instanceof ImportRefused) {
