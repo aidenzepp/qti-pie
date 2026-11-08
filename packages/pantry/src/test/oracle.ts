@@ -6704,8 +6704,11 @@ const ownLaws = {
       `a usage value of baseType ${JSON.stringify(field(keys, "baseType"))} is written ${JSON.stringify(field(keys, "text"))}, which is no lexical form of it`,
   },
   "Value cardinality": {
+    // A declaration whose cardinality spells nothing keeps only the rule that reads neither
+    // attribute, a value's field-identifier and base-type both or neither (reading 158), and its
+    // breach holds no cardinality to name.
     explain: (keys) =>
-      `a value set of ${JSON.stringify(field(keys, "cardinality"))} cardinality holds ${field(keys, "values")} values, ${field(keys, "fields")} of them with a field-identifier and ${field(keys, "typed")} with a base-type, where a record's values each carry both and any other's neither`,
+      `a value set of ${keys["cardinality"] === undefined ? "a declaration whose cardinality spells nothing" : `${JSON.stringify(keys["cardinality"])} cardinality`} holds ${field(keys, "values")} values, ${field(keys, "fields")} of them with a field-identifier and ${field(keys, "typed")} with a base-type, where ${keys["cardinality"] === undefined ? "each value carries both or neither" : "a record's values each carry both and any other's neither"}`,
   },
   "Variable declared": {
     explain: (keys) =>

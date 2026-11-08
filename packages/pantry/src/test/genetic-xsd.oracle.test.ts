@@ -427,6 +427,14 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * valid in both oracles since reading 26's rule was withdrawn (7858a46c). At Aiden's head
  * (1ee51d8d) the law oracle refused the manifest under `xsi-type`, a class xmllint's refusal does
  * not share, and the section under `child-set`, where xmllint accepts it.
+ *
+ * The last is TEST_SEED=101's drawn seed #60, unedited, reduced to its one context declaration:
+ * one that writes no identifier and no cardinality, whose default value's second value writes a
+ * `base-type` spelling nothing and no `field-identifier`. Both oracles refuse the missing
+ * attributes and the base type's form, and the law oracle refuses Value cardinality beyond the XSD,
+ * since a value writes both or neither whatever its declaration's cardinality spells (reading 158);
+ * the search had no record of the rule (`value-cardinality` in `generatedRecorded`), and the law's
+ * explanation named the absent cardinality `""`.
  */
 const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
   {
@@ -484,6 +492,10 @@ const keptDocuments: readonly { readonly name: string; readonly text: string }[]
   {
     name: "a section holding only a branch rule",
     text: '<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="S" title="s" visible="true"><qti-branch-rule target="EXIT_TEST"><qti-base-value base-type="boolean">true</qti-base-value></qti-branch-rule></qti-assessment-section>',
+  },
+  {
+    name: "a context declaration with no cardinality, a value of whose default writes a base-type alone",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-context-declaration><qti-default-value><qti-value>a</qti-value><qti-value base-type="a b&lt;év">b</qti-value></qti-default-value></qti-context-declaration></qti-assessment-item>',
   },
 ];
 

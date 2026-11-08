@@ -1094,6 +1094,17 @@ export const generatedRecorded: readonly Recorded[] = [
     class: "beyond",
     direction: "beyond",
     reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_CardinalityEnum (§8.16, CardinalityEnum, normative, of single: 'A cardinality of single i.e. a single value.') and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Value (§7.46.1, of field-identifier: 'This characterisic is only used for specifying the field identifier for a value that forms part of a record.'; §7.46.2, of base-type: 'This characteristic is only used for specifying the base-type of a value that forms part of a record.')",
+      why: "a single variable's value set holds one value, and a value writes a field-identifier and a base-type exactly when it is a record's field, both or neither whatever its declaration's cardinality spells (reading 158); the XSD admits any number of qti-value children, each with either attribute, under any declaration",
+    },
+    rule: "value-cardinality",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
       _tag: "reading",
       reading: 77,
       says: "A response variable, declared or built in, is refused for both",
