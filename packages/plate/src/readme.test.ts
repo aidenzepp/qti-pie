@@ -875,6 +875,32 @@ describe("README.md", () => {
     );
   });
 
+  it("states round 9h in the README: a value two map entries match maps by the first listed, the XSD cache's folders and the tag of the tests that read the Results Reporting XSD, and a section ref's outcome-only mark", () => {
+    assert.include(
+      flatSectionOf("## Scoring"),
+      "A value that two or more entries of a `qti-mapping` match maps by the first entry listed *(pending)*, as a point that two areas of a `qti-area-mapping` hold maps by the first area listed.",
+    );
+
+    const development = flatSectionOf("## Development");
+
+    for (const fragment of [
+      "every other XSD in its publisher's folder: `cpext/`, `csm/`, `drd/`, `lom/`, `mathml/`, `ssml/`, `w3/` and `xlink/`",
+      "keeps the ASI, metadata, content-packaging and Results Reporting XSDs at its top",
+      "[`src/test/xsd-layout.ts`](src/test/xsd-layout.ts) lists each file",
+      "The tests that validate against the Results Reporting XSD carry the tag `results-xsd`",
+    ]) {
+      assert.include(development, fragment);
+    }
+
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    assert.include(outcomes, "when the processing holds one of the eight expressions above");
+    assert.include(
+      outcomes,
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that does not start with a part, section or item ref of the test document itself",
+    );
+  });
+
   it.effect("runs the plain server action on a base-16 Text Entry, which scores ff as 255", () =>
     Effect.gen(function* runsServerAction() {
       const step = yield* serverAction();

@@ -417,6 +417,9 @@ Until it lands, the [ledger](#conformance-ledger) reports row I-9a (Response Pro
 [Outcome processing](#outcome-processing) says, so `open` refuses one in an item with
 `expression-placement`.
 
+A value that two or more entries of a `qti-mapping` match maps by the first entry listed
+*(pending)*, as a point that two areas of a `qti-area-mapping` hold maps by the first area listed.
+
 The verdict marks each of these, and `score` runs no processing that holds one:
 
 - `qti-field-value`, which M3.b-4 brings
@@ -662,8 +665,10 @@ sets a variable plate holds no value for in a test *(pending)*: the test's own `
 item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`, or a
 `qti-test-variables` of `duration`. In a test that holds a `qti-assessment-section-ref`, it also
 marks a dotted name that does not start with a part, section or item ref of the test document
-itself, such as `I1.SCORE` where `I1` is an item ref in a section document. `open` accepts these,
-as pantry does.
+itself, such as `I1.SCORE` where `I1` is an item ref in a section document. It also marks such a
+test's outcome processing when the processing holds one of the eight expressions above, because they
+would look up only the test document's own items: a session delivers none of a section document's
+items. `open` accepts these, as pantry does.
 
 Where QTI 3.0 leaves a choice open, plate makes one. A choice marked *(pending)* awaits approval
 and can change.
@@ -896,6 +901,13 @@ with its path. When a cache is missing, the run prints where it belongs and how 
 skips the tests that need it, or fails them when `PLATE_REQUIRE_CACHES=1` is set.
 [`docs/spec-readings.md`](../../docs/spec-readings.md) records how the packages read the
 specifications. Agents start at [`AGENTS.md`](../../AGENTS.md).
+
+The XSD cache, `~/.cache/gr8des/qti3/xsd/`, keeps the ASI, metadata, content-packaging and Results
+Reporting XSDs at its top, and every other XSD in its publisher's folder: `cpext/`, `csm/`, `drd/`,
+`lom/`, `mathml/`, `ssml/`, `w3/` and `xlink/`. [`src/test/xsd-layout.ts`](src/test/xsd-layout.ts)
+lists each file with the URL it is published at and its SHA-256. The tests that validate against the
+Results Reporting XSD carry the tag `results-xsd`, and the other tests that read the cache carry
+`qti-xsd`.
 
 ## License
 
