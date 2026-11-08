@@ -23,6 +23,7 @@ import type { SessionMismatch, StoredTestSession } from "#plate/codec/session.ts
 import type { Configuration } from "#plate/configuration.ts";
 import { xmlnsNamespace } from "#plate/document/source.ts";
 import { writeDocument } from "#plate/document/write.ts";
+import { attemptsStarted } from "#plate/engine/scope.ts";
 import { isXmlText } from "#plate/form/encoding.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type {
@@ -420,11 +421,13 @@ const templateVariables = (
 /**
  * Derive an item session's built-in attempt count and status, with nothing stored for either.
  *
- * An attempt starts at the item's first presentation, and again at once after each submission
- * that leaves the item open. So a presented item has started one more attempt than it has
- * processed, unless its last submission reached its effective limit and closed it. Results
- * Reporting 2.7.7: `initial` exactly when none has started, `final` when the item closed at a
- * submission, and `pendingSubmission` while a started attempt is unprocessed.
+ * The count is `attemptsStarted`'s in `#plate/engine/scope.ts`, the one a test's outcome
+ * processing reads through the test scope, so the report and the processing cannot disagree: an
+ * attempt starts at the item's first presentation, and again at once after each submission that
+ * leaves the item open, so a presented item has started one more attempt than it has processed,
+ * unless its last submission reached its effective limit and closed it. Results Reporting 2.7.7:
+ * `initial` exactly when none has started, `final` when the item closed at a submission, and
+ * `pendingSubmission` while a started attempt is unprocessed.
  *
  * @param presented Whether the candidate was shown the item.
  * @param processed The record's count of processed attempts.
@@ -432,13 +435,12 @@ const templateVariables = (
  * @returns The attempts started and the session status.
  */
 const attemptsOf = (presented: boolean, processed: number, limit: number): Attempts => {
+  const started = attemptsStarted(presented, processed, limit);
   if (!presented) {
-    return { started: 0, status: "initial" };
+    return { started, status: "initial" };
   }
 
-  return limit > 0 && processed >= limit
-    ? { started: processed, status: "final" }
-    : { started: processed + 1, status: "pendingSubmission" };
+  return { started, status: limit > 0 && processed >= limit ? "final" : "pendingSubmission" };
 };
 
 /**

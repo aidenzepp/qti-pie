@@ -10,9 +10,10 @@
  * stream are the caller's: run `n` of a session draws from
  * `drawStream(session.seed, outcomeLabel(session.instance, n))`, never from the default key.
  *
- * It is a browser module. It value-imports only `effect`'s `Option` and `Result`, the evaluator
- * and the record's `startingValue`, and reads the session's and the models' types as types: the
- * engine imports no session value.
+ * It is a browser module. It value-imports only `effect`'s `Option` and `Result`, the evaluator,
+ * the scope's `attemptsStarted` and the record's `startingValue`, and reads the session's and the
+ * models' types as types: the engine imports no session value, so a session's caller passes each
+ * item ref's attempt limit.
  *
  * @module
  */
@@ -20,6 +21,7 @@ import { Option, Result } from "effect";
 import { runRules } from "#plate/engine/evaluate.ts";
 import type { Declarations, EngineFailure } from "#plate/engine/evaluate.ts";
 import type { Draw } from "#plate/engine/random.ts";
+import { attemptsStarted } from "#plate/engine/scope.ts";
 import type { DeclaredType, ScopeItem, TestScope } from "#plate/engine/scope.ts";
 import type {
   Item,
@@ -203,12 +205,14 @@ const undelivered: DeliveredItem["item"] = {
  * @param sessionItem The session item.
  * @param ref Its item ref, none when the test holds no item ref by its `ref`.
  * @param delivered The item the host passed for its ref, none when it passed none.
+ * @param limit Its item ref's effective attempt limit, 0 for none.
  * @returns The entry.
  */
 const entryOf = (
   sessionItem: SessionItem,
   ref: Option.Option<ItemRef>,
   delivered: Option.Option<DeliveredItem>,
+  limit: number,
 ): ScopeItem => {
   const { category, mappings, weights } = Option.getOrElse(ref, () => unreferenced);
   const item = Option.match(delivered, { onNone: () => undelivered, onSome: (each) => each.item });
@@ -219,7 +223,7 @@ const entryOf = (
     categories: category,
     declarations: { outcomes: item.outcomes, responses: item.responses, templates: item.templates },
     mappings,
-    numAttempts: record.numAttempts,
+    numAttempts: attemptsStarted(sessionItem.presented, record.numAttempts, limit),
     presented: sessionItem.presented,
     record: {
       correct: record.correct,
@@ -252,18 +256,23 @@ const entryOf = (
  * and variable mappings, its item's declarations, those of a type the value model does not hold
  * among them (with whether each such response declares a correct response), its record's responses,
  * outcomes, template values, and the correct responses and defaults its template processing set (no
- * seed), whether it was presented, and its processed attempt count. The scope holds every part's
- * and every section's item refs at any depth, and the names the test declares: its outcomes'
- * identifiers and every identifier its outcome and context declarations declare (`Test.declared`).
+ * seed), whether it was presented, and the attempts it has started under its item ref's limit
+ * (`attemptsStarted`, the count the results report writes). The scope holds every part's and every
+ * section's item refs at any depth, and the names the test declares: its outcomes' identifiers and
+ * every identifier its outcome and context declarations declare (`Test.declared`).
  *
- * A session and items that do not fit the test meet two fallbacks: an entry whose `ref` names no
- * item ref of the test has no category, weight or mapping, and one whose item the map lacks
- * declares nothing, so a read through it names nothing of the item.
+ * A session and items that do not fit the test meet three fallbacks: an entry whose `ref` names no
+ * item ref of the test has no category, weight or mapping, one whose item the map lacks declares
+ * nothing, so a read through it names nothing of the item, and one whose `ref` the limits lack
+ * counts its attempts as under no limit.
  *
  * @param test The test: its parts, its outcome declarations, and the identifiers it declares.
  * @param items The items the host passed, keyed by item ref identifier, as the session's
  *   transitions take them.
  * @param session The session.
+ * @param limits Each item ref's effective attempt limit, 0 for none, keyed by its identifier, as
+ *   `attemptLimits` in `#plate/session/control.ts` derives them: the engine imports no session
+ *   value, so the caller passes them.
  * @param duration The test's own `duration` in seconds, from the session's start to the
  *   transition's time; none in a scope that holds no time, such as a template default's.
  * @returns The scope.
@@ -272,6 +281,7 @@ export const testScopeOf = (
   test: Pick<Test, "declared" | "outcomes" | "parts">,
   items: ReadonlyMap<string, DeliveredItem>,
   session: Pick<TestSession, "items">,
+  limits: ReadonlyMap<string, number>,
   duration: Option.Option<number>,
 ): TestScope => {
   const { parts, refs, sections } = structureOf(test);
@@ -284,6 +294,7 @@ export const testScopeOf = (
         sessionItem,
         Option.fromUndefinedOr(refs.get(sessionItem.ref)),
         Option.fromUndefinedOr(items.get(sessionItem.ref)),
+        limits.get(sessionItem.ref) ?? 0,
       ),
     ),
     parts,

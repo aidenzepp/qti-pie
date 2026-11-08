@@ -36,7 +36,7 @@ export interface DeclaredType {
 /**
  * One item of the session, as the test's processing reads it: its item ref's identifier,
  * categories, weights and variable mappings; its item's declarations; what its record holds;
- * whether it was presented; and how many of its attempts were processed.
+ * whether it was presented; and how many of its attempts have started.
  */
 export interface ScopeItem {
   /**
@@ -53,7 +53,8 @@ export interface ScopeItem {
    */
   readonly mappings: ReadonlyMap<string, string>;
   /**
-   * The number of the item's attempts processed, which its built-in `numAttempts` reads.
+   * The number of the item's attempts started ({@link attemptsStarted}), which its built-in
+   * `numAttempts` reads: 0 until the item is presented, and at least 1 once it is.
    */
   readonly numAttempts: number;
   /**
@@ -137,6 +138,36 @@ export interface ItemFilters {
 export type Reading =
   | { readonly kind: "held"; readonly value: Value }
   | { readonly kind: "unheld"; readonly type: DeclaredType };
+
+/**
+ * Count the attempts an item session has started, its built-in `numAttempts`, from what a session
+ * stores: whether the item was presented, how many of its attempts were processed, and its
+ * effective attempt limit.
+ *
+ * The count "defaults to '0' initially and then increases by '1' at the start of each attempt"
+ * (`info.txt:8468`). An attempt starts at the item's first presentation, and again at once after
+ * each submission that leaves the item open, so a presented item has started one more attempt than
+ * it has processed, unless its processed attempts reached its limit and closed it. The results
+ * report writes this count, and a test's processing reads it through the test scope, so the two
+ * agree.
+ *
+ * @example
+ *   attemptsStarted(true, 0, 1); // 1: presented, its one attempt not yet submitted
+ *   attemptsStarted(true, 1, 2); // 2: one wrong submission, the item still open
+ *   attemptsStarted(true, 2, 2); // 2: the limit reached, the item closed
+ *
+ * @param presented Whether the candidate was shown the item.
+ * @param processed The record's count of processed attempts.
+ * @param limit The effective attempt limit, 0 for none.
+ * @returns The attempts started, 0 when the item was never presented.
+ */
+export const attemptsStarted = (presented: boolean, processed: number, limit: number): number => {
+  if (!presented) {
+    return 0;
+  }
+
+  return limit > 0 && processed >= limit ? processed : processed + 1;
+};
 
 /**
  * The item-session built-ins a test reads through an item ref (pantry's `itemSessionBuiltIns`,
@@ -366,9 +397,10 @@ const nullReading = (type: DeclaredType): Reading => {
  *   item variable with no value reads NULL; Admission A3).
  * - A variable of base type `file` or cardinality `record` reads NULL of its declared type, which the
  *   record never holds (G-R3, pending).
- * - The built-in `numAttempts` reads the processed attempt count, a single integer, and
- *   `completionStatus` the record's outcome of that name. The engine holds no item's `duration`,
- *   and the test model marks a processing that reads it, so it is the record's gap.
+ * - The built-in `numAttempts` reads the started attempt count ({@link ScopeItem.numAttempts}), a
+ *   single integer, and `completionStatus` the record's outcome of that name. The engine holds no
+ *   item's `duration`, and the test model marks a processing that reads it, so it is the record's
+ *   gap.
  *
  * @param item The item.
  * @param named What the name names.
@@ -429,7 +461,7 @@ const readingOf = (
  *
  * A response or an outcome reads the record's value, a template variable the record's value or,
  * with none, NULL of its declared type, a variable of base type `file` or cardinality `record`
- * NULL of its declared type, `numAttempts` the processed attempt count and `completionStatus` the
+ * NULL of its declared type, `numAttempts` the started attempt count and `completionStatus` the
  * record's (G-R3, pending: an item variable with no value reads NULL; Admission A3).
  *
  * @param item The item.
