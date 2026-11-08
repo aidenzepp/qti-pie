@@ -7,11 +7,12 @@
  * same value: an integer as its exact digits at any size (reading 45), a float as its shortest
  * round trip with `INF`, `-INF` and `NaN`, and a point, pair or directed pair as its two parts
  * separated by one space. A duration is its seconds, written as a float is (readings 29 and 68).
+ * A record writes one `value` per field, each in its own base type's form.
  *
  * @module
  */
 import { format } from "#plate/model/values.ts";
-import type { Single, Value } from "#plate/model/values.ts";
+import type { RecordValue, Single, Value } from "#plate/model/values.ts";
 
 /**
  * One value a result writes: a value of the value model, a duration among them.
@@ -45,3 +46,33 @@ export const resultValue = (single: ResultSingle): string => format(single);
  * @returns One lexical form per member, in order.
  */
 export const resultValues = (value: Value): readonly string[] => value.values.map(resultValue);
+
+/**
+ * One field of a record as a result's `value` element writes it: the field's identifier, which the
+ * element carries as `fieldIdentifier`, its value's base type, which it carries as `baseType`,
+ * since a record variable declares none of its own, and the lexical form {@link resultValue} writes.
+ */
+export interface ResultField {
+  readonly baseType: Single["baseType"];
+  readonly identifier: string;
+  readonly lexical: string;
+}
+
+/**
+ * Write the fields of a record in the form a result's `value` elements hold them, one entry per
+ * `value` element.
+ *
+ * Each field gives one entry, in the order the record holds them. A NULL field is no field, so it
+ * gives none, and a NULL record, which holds no field, gives none at all. A decoded record names
+ * each identifier once (`RecordValueSchema` in `#plate/codec/values.ts`), so no two entries share
+ * one.
+ *
+ * @param record The record to write.
+ * @returns One entry per field, in order.
+ */
+export const resultFields = (record: RecordValue): readonly ResultField[] =>
+  record.fields.map(({ identifier, value }) => ({
+    baseType: value.baseType,
+    identifier,
+    lexical: resultValue(value),
+  }));

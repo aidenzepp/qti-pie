@@ -4,13 +4,13 @@
  *
  * Nothing new is stored for a result. The built-in `numAttempts` and `sessionStatus` are derived
  * from whether an item was presented, its record's count of processed attempts and its effective
- * attempt limit; `answeredStatus` from its values, its defaults and `checkResponses`. The
- * built-in `completionStatus` is the record's once an attempt is processed, and derived like the
- * others before. Every value is written in the lexical form `#plate/results/values.ts`
- * fixes, and no `correctResponse` is written. A result names its item's or test's outcomes and
- * each item's template values, so a page that writes one holds the candidate's scores and the
- * values that can give its answers away. A test result resolves every item's session control in
- * one walk of the test, so it takes time linear in the test's item refs.
+ * attempt limit; `answeredStatus` from its values, its defaults and `checkResponses`. The built-in
+ * `completionStatus` is the record's once an attempt is processed, and derived like the others
+ * before. Every value is written in the lexical form `#plate/results/values.ts` fixes, a record
+ * response's as one `value` per field, and no `correctResponse` is written. A result names its
+ * item's or test's outcomes and each item's template values, so a page that writes one holds the
+ * candidate's scores and the values that can give its answers away. A test result resolves every
+ * item's session control in one walk of the test, so it takes time linear in the test's item refs.
  *
  * @module
  */
@@ -40,13 +40,20 @@ import {
   startingValue,
 } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import { isNcName, isNull, match, nullOf } from "#plate/model/values.ts";
-import type { ModelledBaseType, Value } from "#plate/model/values.ts";
+import {
+  isNcName,
+  isNullResponse,
+  isRecordValue,
+  match,
+  nullOf,
+  sameRecord,
+} from "#plate/model/values.ts";
+import type { ModelledBaseType, RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 import { defaultOutputBudget } from "#plate/output-budget.ts";
 import { choiceOrder, hiddenOnlyResponses, redactStructure } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
-import { resultValue, resultValues } from "#plate/results/values.ts";
-import type { ResultSingle } from "#plate/results/values.ts";
+import { resultFields, resultValue, resultValues } from "#plate/results/values.ts";
+import type { ResultField, ResultSingle } from "#plate/results/values.ts";
 import { belonging, fitting, splitResponses } from "#plate/score.ts";
 import type { RecordMismatch } from "#plate/score.ts";
 import { itemConfiguration, sessionControls } from "#plate/session/control.ts";
@@ -216,6 +223,10 @@ interface ItemReport {
    */
   readonly processed: number;
   /**
+   * The records reported for its record responses, by identifier.
+   */
+  readonly records: ItemRecord["records"];
+  /**
    * The order each shuffled Choice and Inline Choice was presented in, by response identifier.
    */
   readonly sequences: ReadonlyMap<string, string>;
@@ -287,6 +298,26 @@ const valueElement = (lexical: string): Element =>
   element("value", [], [{ cdata: false, kind: "text", value: lexical }]);
 
 /**
+ * Construct the `value` element of one field of a record: its text the field's lexical form, with
+ * the `fieldIdentifier` and `baseType` the Results XSD gives a value of a variable of cardinality
+ * record, which declares no base type of its own.
+ *
+ * @param field The field as written.
+ * @returns The element.
+ */
+const fieldElement = (field: ResultField): Element =>
+  element(
+    "value",
+    [attribute("fieldIdentifier", field.identifier), attribute("baseType", field.baseType)],
+    [{ cdata: false, kind: "text", value: field.lexical }],
+  );
+
+/**
+ * The NULL record: no field. A record response the values reported lack holds it.
+ */
+const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+/**
  * Give an optional attribute, none when it has no value.
  *
  * @param local Its name.
@@ -333,7 +364,7 @@ const builtInResponse = (identifier: string, single: ResultSingle): Element =>
  * @param identifier The identifier.
  * @returns Its value, none when `values` has no own entry for it.
  */
-const own = (values: Readonly<Record<string, Value>>, identifier: string): Option.Option<Value> =>
+const own = <V>(values: Readonly<Record<string, V>>, identifier: string): Option.Option<V> =>
   Object.hasOwn(values, identifier) ? Option.fromUndefinedOr(values[identifier]) : Option.none();
 
 /**
@@ -444,23 +475,39 @@ const attemptsOf = (presented: boolean, processed: number, limit: number): Attem
 };
 
 /**
+ * Report whether a response's value is its default: a value that matches it (`match`), or a record
+ * that holds the same fields in any order (`sameRecord`). A value is never a record's default, nor
+ * a record a value's.
+ *
+ * @param value The value reported, not NULL.
+ * @param fallback The response's default.
+ * @returns Whether `value` is `fallback`.
+ */
+const atDefault = (value: ResponseValue, fallback: ResponseValue): boolean =>
+  isRecordValue(value)
+    ? isRecordValue(fallback) && sameRecord(value, fallback)
+    : !isRecordValue(fallback) && match(value, fallback);
+
+/**
  * Give a response's answered status by Results Reporting 2.7.1's criteria.
  *
  * A response at its default is skipped, as `allow-skipping` reads it ("all responses submitted
  * with their default value or NULL", `info.txt:68904`), so its default is the one the attempt
- * starts it with (D4-11): the one the item's template processing set, else its declared one.
+ * starts it with (D4-11): the one the item's template processing set, else its declared one. A
+ * record response's is its declared one, since template processing never sets a record.
  *
  * @param responseDefault The response's default, if any: the one template processing set, else
  *   its declared one.
- * @param value The value reported.
+ * @param value The value reported, a record for a record response.
  * @param presented Whether the candidate was shown the item.
  * @param invalid Whether the item's interaction refuses the value, on any limit of either tier.
- * @returns `notpresented` for an item never shown; `presented` for NULL or the response's default,
- *   which is skipping it; `attempted` for a value the interaction refuses; else `answered`.
+ * @returns `notpresented` for an item never shown; `presented` for NULL (a record with no field
+ *   among them) or the response's default ({@link atDefault}), which is skipping it; `attempted`
+ *   for a value the interaction refuses; else `answered`.
  */
 const answeredStatusOf = (
-  responseDefault: Option.Option<Value>,
-  value: Value,
+  responseDefault: Option.Option<ResponseValue>,
+  value: ResponseValue,
   presented: boolean,
   invalid: boolean,
 ): AnsweredStatus => {
@@ -468,7 +515,10 @@ const answeredStatusOf = (
     return "notpresented";
   }
 
-  if (isNull(value) || Option.exists(responseDefault, (fallback) => match(value, fallback))) {
+  if (
+    isNullResponse(value) ||
+    Option.exists(responseDefault, (fallback) => atDefault(value, fallback))
+  ) {
     return "presented";
   }
 
@@ -505,11 +555,15 @@ const completionOf = (report: ItemReport): Value => {
  *
  * The built-ins come first: `numAttempts`, `duration` when it is known and `completionStatus`
  * ({@link completionOf}). Then one response variable per declared response with its answered
- * status, one template variable per declared template variable ({@link templateVariables}), and
- * one outcome variable per declared outcome, in the order the Results XSD lists the three. An
- * answered status judges only the interactions the page showed under the record's template values,
- * as `checkResponses` does, and reads a response's default as the record's template processing set
- * it, else as declared ({@link answeredStatusOf}).
+ * status, then one per record response the item holds (`Item.records`), one template variable per
+ * declared template variable ({@link templateVariables}), and one outcome variable per declared
+ * outcome, in the order the Results XSD lists the three. A record response's variable has
+ * cardinality `record` and no base type, and its candidate response one `value` per field of the
+ * record reported, in the record's order, each with its `fieldIdentifier` and `baseType`: none for
+ * a NULL record, which a record response the values reported lack holds. An answered status judges
+ * only the interactions the page showed under the record's template values, as `checkResponses`
+ * does, and reads a response's default as the record's template processing set it, else as
+ * declared ({@link answeredStatusOf}).
  *
  * @param report What the result says about the item.
  * @returns The `itemResult`.
@@ -545,6 +599,25 @@ const itemResult = (report: ItemReport): Element => {
       [element("candidateResponse", [], resultValues(value).map(valueElement))],
     );
   });
+  const records = Array.from(item.records?.values() ?? [], (declaration) => {
+    const value = Option.getOrElse(own(report.records, declaration.identifier), () => nullRecord);
+    const answered = answeredStatusOf(
+      declaration.defaultValue,
+      value,
+      report.presented,
+      invalid.has(declaration.identifier),
+    );
+
+    return element(
+      "responseVariable",
+      [
+        attribute("identifier", declaration.identifier),
+        attribute("cardinality", "record"),
+        attribute("answeredStatus", answered),
+      ],
+      [element("candidateResponse", [], resultFields(value).map(fieldElement))],
+    );
+  });
 
   return element(
     "itemResult",
@@ -569,6 +642,7 @@ const itemResult = (report: ItemReport): Element => {
         resultValues(completionOf(report)).map(valueElement),
       ),
       ...responses,
+      ...records,
       ...templateVariables(item.templates, report.templates),
       ...outcomeVariables(item.outcomes, report.outcomes),
     ],
@@ -700,6 +774,7 @@ const itemResults = (
         outcomes: record.outcomes,
         presented,
         processed: record.numAttempts,
+        records: record.records,
         sequenceIndex: Option.none(),
         sequences: new Map(),
         session: attemptsOf(presented, record.numAttempts, 1),
@@ -868,18 +943,49 @@ const deliveredItem = (
   });
 
 /**
+ * Give the values a test result reports for some responses of a session item: each the value saved
+ * and not yet processed, else the record's, but the record's for a response bound only by content
+ * the page does not see, as `score` keeps it. A response neither holds is left out.
+ *
+ * @param identifiers The responses' identifiers.
+ * @param hidden The responses bound only by content the page does not see under the record.
+ * @param saved The values saved and not yet processed, by identifier.
+ * @param recorded The record's values, by identifier.
+ * @returns The values to report, by identifier.
+ */
+const reportedOf = <V>(
+  identifiers: Iterable<string>,
+  hidden: ReadonlySet<string>,
+  saved: Readonly<Record<string, V>>,
+  recorded: Readonly<Record<string, V>>,
+): Readonly<Record<string, V>> =>
+  Object.fromEntries(
+    [...identifiers].flatMap((identifier) =>
+      Option.toArray(
+        Option.map(
+          Option.orElse(hidden.has(identifier) ? Option.none() : own(saved, identifier), () =>
+            own(recorded, identifier),
+          ),
+          (value) => [identifier, value] as const,
+        ),
+      ),
+    ),
+  );
+
+/**
  * Report one item of a test session.
  *
- * The values reported are the responses saved and not yet processed, else the record's; a response
- * bound only by content the page does not see under the record ({@link hiddenOnlyResponses})
- * reports the record's value and never the saved one, as `score` keeps it, so its answered status
- * is judged on that value. Its outcomes are the first processed attempt's when its effective limit
- * is 0, since a delivery engine that does not limit attempts reports only the first outcomes of a
- * non-adaptive item, and the record's otherwise: the last processed, or the starting values before
- * any. A presented shuffled Choice or Inline Choice carries the order it was presented in, under
- * the session's shuffle seed (none when it has none) and the item's instance
- * `<session instance>.<sequenceIndex>`, listing only the choices the record's template values
- * showed. Its template values, and the defaults its answered status reads, are its record's.
+ * The values reported are the responses saved and not yet processed, else the record's, a record
+ * response's among them ({@link reportedOf}); a response bound only by content the page does not
+ * see under the record ({@link hiddenOnlyResponses}) reports the record's value and never the saved
+ * one, as `score` keeps it, so its answered status is judged on that value. Its outcomes are the
+ * first processed attempt's when its effective limit is 0, since a delivery engine that does not
+ * limit attempts reports only the first outcomes of a non-adaptive item, and the record's
+ * otherwise: the last processed, or the starting values before any. A presented shuffled Choice or
+ * Inline Choice carries the order it was presented in, under the session's shuffle seed (none when
+ * it has none) and the item's instance `<session instance>.<sequenceIndex>`, listing only the
+ * choices the record's template values showed. Its template values, and the defaults its answered
+ * status reads, are its record's.
  *
  * @param test The test.
  * @param controls The session control of each of the test's item refs, by identifier, as
@@ -908,26 +1014,19 @@ const sessionItemReport = (
     );
     const document = yield* deliveredItem(items, entry);
     const limit = itemConfiguration(judging, control).maxAttempts;
-    const saved = Option.match(entry.saved, {
-      onNone: () => ({}),
-      onSome: (responses) => splitResponses(responses).responses,
+    const saved: Pick<ItemRecord, "records" | "responses"> = Option.match(entry.saved, {
+      onNone: () => ({ records: {}, responses: {} }),
+      onSome: splitResponses,
     });
     const hidden = hiddenOnlyResponses(document.item, entry.record);
-    const answers = Object.fromEntries(
-      [...document.item.responses.keys()].flatMap((identifier) =>
-        Option.toArray(
-          Option.map(
-            Option.orElse(hidden.has(identifier) ? Option.none() : own(saved, identifier), () =>
-              own(entry.record.responses, identifier),
-            ),
-            (value) => [identifier, value] as const,
-          ),
-        ),
-      ),
-    );
 
     return {
-      answers,
+      answers: reportedOf(
+        document.item.responses.keys(),
+        hidden,
+        saved.responses,
+        entry.record.responses,
+      ),
       datestamp: entry.datestamp,
       defaults: entry.record.defaults,
       duration: Option.some(entry.duration),
@@ -939,6 +1038,12 @@ const sessionItemReport = (
           : entry.record.outcomes,
       presented: entry.presented,
       processed: entry.record.numAttempts,
+      records: reportedOf(
+        document.item.records?.keys() ?? [],
+        hidden,
+        saved.records,
+        entry.record.records,
+      ),
       sequenceIndex: Option.some(entry.sequenceIndex),
       sequences: entry.presented
         ? choiceSequences(
@@ -1040,7 +1145,9 @@ const testResults = (
  * A test result holds a `testResult` and one `itemResult` per session item, in sequence order; an
  * item result holds the item's `itemResult`. Each item result reports the built-ins
  * `numAttempts`, `duration` (in a test) and `completionStatus`, the session status, every
- * declared response with its answered status, every declared template variable with the value its
+ * declared response with its answered status (a record response with cardinality `record`, no base
+ * type and one `value` per field, each with its `fieldIdentifier` and `baseType`), every declared
+ * template variable with the value its
  * record holds (none where it holds none) and every declared outcome, never a correct response. In
  * a test, a presented shuffled Choice's or Inline Choice's response carries the order it was
  * presented in as `choiceSequence`, the choices its template values hid left out.
