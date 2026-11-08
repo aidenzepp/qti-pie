@@ -15,25 +15,29 @@
  *   templates;
  * - Each test reaches, through its section refs and then each reached section document's, every
  *   section document a section resource names, each once, as if it were inline; that reach is its
- *   own parts, sections and item refs and each reached document's. Each item ref in the reach
- *   resolves against its own document's path to an item resource the manifest lists (a test's own
- *   that does not is `item-ref-unresolved`), and each dotted reference in the test that it does not
- *   declare whole, a name an expression reads or an outcome rule sets, is judged by reading 48
- *   against the items they resolve to, their variable mappings and the reach's parts and sections:
- *   one no reading resolves, or one that an expression reads as the `duration` of an item that is
- *   not time dependent, is `undeclared-variable`, and one two readings resolve is
- *   `ambiguous-reference`; each item ref's variable mappings, the test's own and a reached section
- *   document's, name an outcome its item declares as their source (`undeclared-variable`) and each
- *   its own target (`duplicate-identifier`), and its template defaults a template variable its item
- *   declares (`undeclared-variable`), each refusal at its own document and given once however many
- *   tests reach it; a reference attribute reads through an item ref only a template or outcome
- *   variable, a `qti-correct` only a response, and a mapping expression only a response with the
- *   mapping it needs; and the test's expressions are typed through its reach, so the item's
- *   processing rules judge what it reads there and what each template default sets
- *   (`expression-type`). Each section document a test reaches is judged under that test as the test
- *   is, its dotted references against the test's reach and its expressions in the test's processing
- *   scope (`undeclared-variable`, `expression-type`; reading 5), each refusal at the section
- *   document and given once however many tests give it;
+ *   own parts, sections and item refs and each reached document's. Through that reach:
+ *
+ *   - Each item ref resolves against its own document's path to an item resource the manifest lists; a
+ *     test's own item ref that does not is `item-ref-unresolved`;
+ *   - Each dotted reference in the test that it does not declare whole, a name an expression reads or
+ *     an outcome rule sets, is judged by reading 48 against the items the item refs resolve to, their
+ *     variable mappings and the reach's parts and sections: one no reading resolves, or one that an
+ *     expression reads as the `duration` of an item that is not time dependent, is
+ *     `undeclared-variable`, and one two readings resolve is `ambiguous-reference`. A reference
+ *     attribute reads through an item ref only a template or outcome variable (`expression-type`), a
+ *     `qti-correct` only a response (`undeclared-variable`), and a mapping expression only a response
+ *     (`undeclared-variable`) with the mapping it needs (`template-requirements`);
+ *   - Each item ref's variable mappings, the test's own and a reached section document's, name an
+ *     outcome its item declares as their source (`undeclared-variable`) and each its own target
+ *     (`duplicate-identifier`), and its template defaults a template variable its item declares
+ *     (`undeclared-variable`), each refusal at its own document and given once however many tests
+ *     reach it;
+ *   - The test's expressions are typed through its reach, so the item's processing rules judge what
+ *     they read there and what each template default sets (`expression-type`);
+ *   - Each section document a test reaches is judged under that test as the test is, its dotted
+ *     references against the test's reach and its expressions in the test's processing scope
+ *     (`undeclared-variable`, `expression-type`; reading 5), each refusal at the section document and
+ *     given once however many tests give it;
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
  *   62).
@@ -440,10 +444,10 @@ const kindsByElement: ReadonlyMap<string, ExpressionKind> = new Map(
 );
 
 /**
- * Classify one value of a reference attribute as the literal or the reference it holds, through
- * the classifier of the base type its facet entry names, the one the item model's reader and the
- * validator use (`#plate/model/expression.ts`). Only the string classifier reads the names it is
- * given: a `pattern` is a reference only as a braced name of a variable held (ruling R1).
+ * The classifier of each base type a reference facet entry names, the one the item model's reader
+ * and the validator use (`#plate/model/expression.ts`): each classifies one value of a reference
+ * attribute as the literal or the reference it holds. Only the string classifier reads the names
+ * it is given: a `pattern` is a reference only as a braced name of a variable held (ruling R1).
  */
 const classifiers = {
   float: floatOrRefOf,
@@ -1167,7 +1171,7 @@ const judgeReference = (
   }
 
   const { variable } = first;
-  const mapped = byIdentifier && isQti(visit.element, mappingExpressions);
+  const isMapping = byIdentifier && isQti(visit.element, mappingExpressions);
   const response = Option.exists(variable.declaration, (declaration) =>
     isQti(declaration, responseDeclarations),
   );
@@ -1200,7 +1204,7 @@ const judgeReference = (
           Option.toArray,
         )),
     ...variable.declaration.pipe(
-      Option.filter(() => mapped && response),
+      Option.filter(() => isMapping && response),
       Option.flatMap((declaration) => mappingRequirement(element, identifier, declaration)),
       Option.map((detail) => refuse(document, "template-requirements", visit.path, detail)),
       Option.toArray,
@@ -1243,8 +1247,21 @@ const judgeMappings = (
       Option.getOrUndefined,
     );
     if (itemRef !== undefined && isQti(element, mappingElements)) {
+      /**
+       * Give the variable an attribute of the mapping names.
+       *
+       * @param local The attribute's local name.
+       * @returns Its value with its outer XML whitespace removed, none when the mapping has no
+       *   such attribute or its value is no NCName.
+       */
       const named = (local: string): Option.Option<string> =>
         attributeOf(element, local).pipe(Option.map(trimXmlSpace), Option.filter(isNcName));
+      /**
+       * Give the path of an attribute of the mapping, where a refusal of it is located.
+       *
+       * @param local The attribute's local name.
+       * @returns Its path.
+       */
       const at = (local: string): string => attributePath(path, { local, namespace: "" });
       for (const source of Option.toArray(named("source-identifier"))) {
         if (
@@ -1327,35 +1344,33 @@ const judgeTemplateDefaults = (
       Option.filter((one) => isQti(one, itemRefElements)),
       Option.getOrUndefined,
     );
-    const variables = itemRef === undefined ? Option.none() : variablesFor(itemRef);
-    const target = attributeOf(element, "template-identifier").pipe(
-      Option.map(trimXmlSpace),
-      Option.filter(isNcName),
-    );
-    if (
-      isQti(element, templateDefaultElements) &&
-      Option.isSome(variables) &&
-      Option.isSome(target)
-    ) {
-      const declaration = variables.value.declarations.get(target.value);
-      if (declaration?.local === "qti-template-declaration") {
-        for (const type of Option.toArray(declarationType(declaration))) {
-          targets.set(element, type);
+    if (itemRef !== undefined && isQti(element, templateDefaultElements)) {
+      const variables = variablesFor(itemRef);
+      const target = attributeOf(element, "template-identifier").pipe(
+        Option.map(trimXmlSpace),
+        Option.filter(isNcName),
+      );
+      if (Option.isSome(variables) && Option.isSome(target)) {
+        const declaration = variables.value.declarations.get(target.value);
+        if (declaration?.local === "qti-template-declaration") {
+          for (const type of Option.toArray(declarationType(declaration))) {
+            targets.set(element, type);
+          }
+        } else {
+          refusals.push(
+            refuse(
+              document,
+              "undeclared-variable",
+              attributePath(path, { local: "template-identifier", namespace: "" }),
+              {
+                attribute: "template-identifier",
+                element: element.local,
+                expected: "template",
+                identifier: target.value,
+              },
+            ),
+          );
         }
-      } else {
-        refusals.push(
-          refuse(
-            document,
-            "undeclared-variable",
-            attributePath(path, { local: "template-identifier", namespace: "" }),
-            {
-              attribute: "template-identifier",
-              element: element.local,
-              expected: "template",
-              identifier: target.value,
-            },
-          ),
-        );
       }
     }
   }
@@ -1436,6 +1451,10 @@ interface DocumentStructure {
    * Each item ref that resolves to no item resource, `item-ref-unresolved` at the item ref.
    */
   readonly unresolved: readonly Refusal[];
+  /**
+   * The visits of its elements, in document order, which its references, variable mappings and
+   * template defaults are judged over.
+   */
   readonly visits: readonly Visit[];
 }
 
@@ -1554,6 +1573,12 @@ const sectionsReached = (
 ): readonly ReachedSection[] => {
   const reached: ReachedSection[] = [];
   const seen = new Set<string>();
+  /**
+   * Reach the section document each of some section refs names that is not yet reached, then,
+   * before the next ref, the ones its own section refs name.
+   *
+   * @param sectionRefs The paths the section refs name, in document order.
+   */
   const follow = (sectionRefs: readonly string[]): void => {
     for (const path of sectionRefs) {
       const source = sectionDocumentAt(path, sectionPaths, documents);
@@ -1693,7 +1718,7 @@ const judgeTest = (
   }
 
   const variablesFor = variablesThrough(own.itemRefs, documents);
-  const mapped = judgeMappings(source.location, own.visits, variablesFor);
+  const mappingRefusals = judgeMappings(source.location, own.visits, variablesFor);
   const defaults = judgeTemplateDefaults(source.location, own.visits, variablesFor);
   const scope: ReferenceScope = {
     durations: new Set([
@@ -1710,6 +1735,14 @@ const judgeTest = (
         : [],
     ),
   ]);
+  /**
+   * Report whether the test holds a variable by a name, as it must for a `pattern`'s braced name to
+   * reference it (ruling R1).
+   *
+   * @param name The name.
+   * @returns Whether the test declares it whole, holds it as a built-in, or resolves it by a
+   *   reading.
+   */
   const held = (name: string): boolean => whole.has(name) || readingsOf(scope, name).length > 0;
 
   /**
@@ -1773,7 +1806,13 @@ const judgeTest = (
   return {
     reached,
     refs: new Map([...refs].map(([identifier, itemRef]) => [identifier, itemRef.path] as const)),
-    refusals: [...own.unresolved, ...mapped, ...defaults.refusals, ...references, ...processing],
+    refusals: [
+      ...own.unresolved,
+      ...mappingRefusals,
+      ...defaults.refusals,
+      ...references,
+      ...processing,
+    ],
     sections,
   };
 };
