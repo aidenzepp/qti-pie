@@ -4274,7 +4274,7 @@ type Judged = ReturnType<typeof judged>[number];
  * @returns The refusals, reduced; empty for an accepting verdict.
  */
 const verdictRefusals = (source: SourceDocument): readonly Judged[] => {
-  const verdict = check(source, tables);
+  const verdict = check(source, tables, Option.none());
   assert.notStrictEqual(verdict.verdict, "unchecked");
 
   return verdict.verdict === "refused"
