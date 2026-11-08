@@ -765,9 +765,10 @@ describe.skipIf(!hasLease)(
           name: "a match table on a multiple-cardinality outcome (lookup-cardinality, Q5.11)",
         },
         {
-          // P2's (resource type, root kind) containment into RootOfType (`qti/package.ts`
-          // packageLaws): of the statements named RootOfType, the one this edit breaks, and the
-          // oracle's one breach.
+          // P2's (resource type, root kind) containment into RootOfType, read from the document's
+          // ResourceDocument, the row its resource type is held in (`qti/package.ts` packageLaws,
+          // spec reading 167): of the statements named RootOfType, the one this edit breaks; the
+          // oracle's one breach; and the rule the import names for it, root-type-reverse.
           apply: () =>
             Effect.flatMap(
               editedSimple("stimulus-root", [
@@ -789,10 +790,17 @@ describe.skipIf(!hasLease)(
                     "the oracle finds RootOfType alone broken",
                   );
 
-                  return yield* applyEdited(dir);
+                  const applied = yield* applyEdited(dir);
+
+                  yield* holdsVerdict("an item named as a stimulus", dir, {
+                    rule: "root-type-reverse",
+                    verdict: "refused",
+                  });
+
+                  return applied;
                 }),
             ),
-          laws: [containedIn("Document", "RootOfType")],
+          laws: [containedIn("ResourceDocument", "RootOfType")],
           name: "an item named as a stimulus, a root its resource type does not name (root-type-reverse, Q5.06)",
         },
         {
