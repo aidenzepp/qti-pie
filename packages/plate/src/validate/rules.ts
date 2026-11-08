@@ -3138,55 +3138,95 @@ const testProcessingBuiltIns: ReadonlyMap<string, NamedVariable> = new Map(
 );
 
 /**
+ * What a processing scope gives the rules' {@link Context}: the names a test's or a section's
+ * expressions resolve against, beside its outcomes.
+ */
+type ProcessingScope = Pick<
+  Context,
+  "builtIns" | "declarer" | "outcomes" | "typeUnanswered" | "variables"
+>;
+
+/**
+ * The processing scope of a test: its outcome and context declarations, the four built-ins its
+ * processing reads ({@link testProcessingBuiltIns}), and the typer of a prefixed read, a name with
+ * a `.` that no declaration answers whole.
+ *
+ * A dotted name the test declares whole is that declaration and never a prefixed read (reading 37),
+ * whatever kind of variable the reference expects: where it expects another kind
+ * ({@link variableType}), a `qti-map-response` or a `qti-correct` of a test outcome `A.B`, or a
+ * `qti-set-outcome-value` of a context variable `C.X`, nothing answers it, and it is refused
+ * `undeclared-variable` as its undotted form is (pantry P8 and P27, whose `DeclaredRefKind` admits
+ * only a declaration of the kind).
+ *
+ * @param test The test document.
+ * @param typePrefixed The typer of its prefixed reads.
+ * @returns The scope.
+ */
+const testProcessingScope = (
+  test: SourceDocument,
+  typePrefixed: PrefixedTyper,
+): ProcessingScope => {
+  const variables = new Map(
+    variableDeclarations.flatMap((kind) => [...declarationsOf(test, kind)]),
+  );
+
+  return {
+    builtIns: testProcessingBuiltIns,
+    declarer: "test",
+    outcomes: declarationsOf(test, "qti-outcome-declaration"),
+    typeUnanswered: (identifier) =>
+      identifier.includes(".") && !variables.has(identifier)
+        ? Option.some(typePrefixed(identifier))
+        : Option.none(),
+    variables,
+  };
+};
+
+/**
+ * The processing scope of a section document on its own: no declaration and no built-in, with
+ * every name typed `unknown`, so only the rules that need no declaration judge it. A section
+ * resolves its names in each test that holds it (reading 5), so this is the scope its own verdict
+ * judges it under.
+ */
+const sectionProcessingScope: ProcessingScope = {
+  builtIns: new Map(),
+  declarer: "test",
+  outcomes: new Map(),
+  typeUnanswered: () => Option.some(untyped),
+  variables: new Map(),
+};
+
+/**
  * The processing scope of a test or a section: what its expressions resolve a name against, beside
  * its outcomes ({@link Context}).
  *
- * A test's is its outcome and context declarations, the four built-ins its processing reads
- * ({@link testProcessingBuiltIns}), and the typer of a prefixed read: a name with a `.` that no
- * declaration answers whole. A dotted name the test declares whole is that declaration and never a
- * prefixed read (reading 37), whatever kind of variable the reference expects: where it expects
- * another kind ({@link variableType}), a `qti-map-response` or a `qti-correct` of a test outcome
- * `A.B`, or a `qti-set-outcome-value` of a context variable `C.X`, nothing answers it, and it is
- * refused `undeclared-variable` as its undotted form is (pantry P8 and P27, whose `DeclaredRefKind`
- * admits only a declaration of the kind). A section's is no declaration and no built-in, with every
- * name typed `unknown`: a section resolves its names in each test that holds it (reading 5), so
- * only the rules that need no declaration judge it.
+ * A test's is its own ({@link testProcessingScope}). A section document's is, under a test that
+ * reaches it, that test's, its prefixed reads typed by `typePrefixed`, since its references
+ * "resolve once for each test that includes the section, not once for the section on its own"
+ * (reading 5); on its own it is {@link sectionProcessingScope}, every name `unknown`.
  *
  * @param source The document.
- * @param typePrefixed The typer of a test's prefixed reads.
+ * @param typePrefixed The typer of a test's prefixed reads, the reaching test's for a section.
+ * @param reaching The test document a section is judged under, none for a section on its own;
+ *   passed over for a test.
  * @returns The scope, none for a root that is neither a QTI test nor a QTI section.
  */
 const processingScope = (
   source: SourceDocument,
   typePrefixed: PrefixedTyper,
-): Option.Option<
-  Pick<Context, "builtIns" | "declarer" | "outcomes" | "typeUnanswered" | "variables">
-> => {
+  reaching: Option.Option<SourceDocument>,
+): Option.Option<ProcessingScope> => {
   if (isQti(source.root, (local) => local === "qti-assessment-test")) {
-    const variables = new Map(
-      variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)]),
-    );
-
-    return Option.some({
-      builtIns: testProcessingBuiltIns,
-      declarer: "test",
-      outcomes: declarationsOf(source, "qti-outcome-declaration"),
-      typeUnanswered: (identifier) =>
-        identifier.includes(".") && !variables.has(identifier)
-          ? Option.some(typePrefixed(identifier))
-          : Option.none(),
-      variables,
-    });
+    return Option.some(testProcessingScope(source, typePrefixed));
   }
 
   return isQti(source.root, (local) => local === "qti-assessment-section")
-    ? Option.some({
-        builtIns: new Map(),
-        declarer: "test",
-        outcomes: new Map(),
-        typeUnanswered: () => Option.some(untyped),
-        variables: new Map(),
-      })
+    ? Option.some(
+        Option.match(reaching, {
+          onNone: () => sectionProcessingScope,
+          onSome: (test) => testProcessingScope(test, typePrefixed),
+        }),
+      )
     : Option.none();
 };
 
@@ -3214,11 +3254,15 @@ const processingScope = (
  * The rules are the item's own, so the two runs cannot drift. Names resolve against the processing
  * scope ({@link processingScope}): a test's declarations and built-ins, where a name with a `.`
  * that the test does not declare whole is a prefixed read, typed by `typePrefixed` and never
- * refused `undeclared-variable` here (reading 48 is a package's); a section's names are all typed
- * `unknown`. A template default is an expression, so the template read rule (P26) and the template
- * rules' targets do not judge it; its own target is an item's template variable, which only a
- * package can find, so its expression is judged against that variable (P20, {@link setType}) only
- * where `templateDefaultType` types it.
+ * refused `undeclared-variable` here (reading 48 is a package's). A section document's names are
+ * all typed `unknown` on its own, as its own verdict judges it; under a test that reaches it
+ * (`reaching`), as a package judges it once for each such test, they resolve against that test's
+ * scope, so a name the test neither declares nor holds as a built-in is `undeclared-variable` and
+ * each prefixed read is typed by the reaching test's `typePrefixed` (pantry's
+ * `testProcessingRows`, `packages/pantry/src/import/reference.ts`). A template default is an
+ * expression, so the template read rule (P26) and the template rules' targets do not judge it; its
+ * own target is an item's template variable, which only a package can find, so its expression is
+ * judged against that variable (P20, {@link setType}) only where `templateDefaultType` types it.
  *
  * As {@link checkRules} does, it judges exactly what the structural walk checks, and gives no
  * refusal for a document whose judged elements hold an unexpanded entity reference. Every refusal
@@ -3232,7 +3276,10 @@ const processingScope = (
  * @param templateDefaultType The type of the template variable a `qti-template-default` sets, its
  *   item ref's item's (`templateOf` in `packages/pantry/src/processing/check.ts`): none unless
  *   given, as for a test checked alone, which judges no default against its target; a package's
- *   for a test it holds.
+ *   for a test it holds, or a section document a test reaches.
+ * @param reaching For a section document, the test document it is judged under, a test that
+ *   reaches it: none unless given, which judges the section on its own, every name `unknown`.
+ *   Passed over for a test.
  * @returns The refusals, empty when every rule holds or the document is not a test or a section.
  */
 export const processingRefusals = (
@@ -3241,8 +3288,9 @@ export const processingRefusals = (
   typePrefixed: PrefixedTyper,
   templateDefaultType: (templateDefault: SourceElement) => Option.Option<ExpressionType> = () =>
     Option.none(),
+  reaching: Option.Option<SourceDocument> = Option.none(),
 ): readonly Refusal[] => {
-  const scope = processingScope(source, typePrefixed);
+  const scope = processingScope(source, typePrefixed, reaching);
   if (Option.isNone(scope)) {
     return [];
   }
