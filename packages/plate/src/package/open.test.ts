@@ -510,6 +510,17 @@ const reachedItemXml = `<qti-assessment-item xmlns="${qti}" identifier="a" title
 const otherItemXml = `<qti-assessment-item xmlns="${qti}" identifier="b" title="b" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="S" cardinality="single" base-type="string"/><qti-outcome-declaration identifier="M" cardinality="multiple" base-type="integer"/><qti-outcome-declaration identifier="N" cardinality="single" base-type="integer"/><qti-item-body><p>b</p></qti-item-body></qti-assessment-item>`;
 
 /**
+ * Write a test of one part `P` and one section `SEC` holding the given item refs, which declares a
+ * float outcome `TOTAL`, with the given outcome processing.
+ *
+ * @param processing What the test's outcome processing holds, as written.
+ * @param refs Each item ref, as written.
+ * @returns The test's text.
+ */
+const processingTestXml = (processing: string, ...refs: readonly string[]): string =>
+  `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="SEC" title="SEC" visible="true">${refs.join("")}</qti-assessment-section></qti-test-part><qti-outcome-processing>${processing}</qti-outcome-processing></qti-assessment-test>`;
+
+/**
  * A package whose test, with a float outcome `TOTAL`, holds the item refs `ITEM1`, to
  * {@link reachedItemXml}, and `ITEM2`, to {@link otherItemXml}, and the given outcome processing.
  *
@@ -519,7 +530,11 @@ const otherItemXml = `<qti-assessment-item xmlns="${qti}" identifier="b" title="
  */
 const reachPackage = (processing: string, firstRef = ""): ReadonlyMap<string, Uint8Array> =>
   readingPackage(
-    `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="SEC" title="SEC" visible="true">${itemRefXml("ITEM1", "items/a.xml", firstRef)}${itemRefXml("ITEM2", "items/b.xml")}</qti-assessment-section></qti-test-part><qti-outcome-processing>${processing}</qti-outcome-processing></qti-assessment-test>`,
+    processingTestXml(
+      processing,
+      itemRefXml("ITEM1", "items/a.xml", firstRef),
+      itemRefXml("ITEM2", "items/b.xml"),
+    ),
     { "items/a.xml": reachedItemXml, "items/b.xml": otherItemXml },
   );
 
@@ -586,6 +601,66 @@ const openDefaulting = (target: string, expression: string) =>
       settingTotal(oneFloat),
       `<qti-template-default template-identifier="${target}">${expression}</qti-template-default>`,
     ),
+  );
+
+/**
+ * Open a {@link reachPackage} whose outcome processing sets `TOTAL` to 1 when an expression is
+ * NULL, so that the expression may be of any type.
+ *
+ * @param expression The expression `qti-is-null` tests, as written.
+ * @returns The package's verdict.
+ */
+const openTestingNull = (expression: string) =>
+  openPackage(
+    location,
+    reachPackage(
+      `<qti-outcome-condition><qti-outcome-if><qti-is-null>${expression}</qti-is-null>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition>`,
+    ),
+  );
+
+/**
+ * The path of the expression {@link openTestingNull} tests, by its local name.
+ *
+ * @param local The expression's local name.
+ * @returns Its path.
+ */
+const nullTestedAt = (local: string): string =>
+  `qti-assessment-test/qti-outcome-processing/qti-outcome-condition/qti-outcome-if/qti-is-null/${local}`;
+
+/**
+ * The path of a test's one outcome rule, by its local name.
+ *
+ * @param local The rule's local name.
+ * @returns Its path.
+ */
+const ruleAt = (local: string): string => `qti-assessment-test/qti-outcome-processing/${local}`;
+
+/**
+ * Write an outcome rule that sets a variable to the float 1.
+ *
+ * @param local The rule's local name: `qti-set-outcome-value` or `qti-lookup-outcome-value`.
+ * @param identifier The variable it sets.
+ * @returns The rule's text.
+ */
+const settingOne = (local: string, identifier: string): string =>
+  `<${local} identifier="${identifier}">${oneFloat}</${local}>`;
+
+/**
+ * A package whose test, with a float outcome `TOTAL`, holds the item refs `ITEM1`, whose item
+ * declares a float outcome `X.SCORE`, and `ITEM1.X`, whose item declares `SCORE`, so that two
+ * readings resolve `ITEM1.X.SCORE`, and the given outcome processing.
+ *
+ * @param processing What the test's outcome processing holds, as written.
+ * @returns The package's files.
+ */
+const nestedRefsPackage = (processing: string): ReadonlyMap<string, Uint8Array> =>
+  readingPackage(
+    processingTestXml(
+      processing,
+      itemRefXml("ITEM1", "items/a.xml"),
+      itemRefXml("ITEM1.X", "items/ax.xml"),
+    ),
+    { "items/a.xml": itemXml("a", "X.SCORE"), "items/ax.xml": itemXml("ax", "SCORE") },
   );
 
 describe("package/open.ts", () => {
@@ -1402,6 +1477,145 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(
             refusalsOf(verdict).map(({ detail, rule }) => [rule, detail["check"]]),
             [["undeclared-variable", "reading"]],
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] qti-correct reads a response: refuses ITEM1.SCORE, ITEM1.T and ITEM1.numAttempts, an outcome, a template variable and a built-in, once each as undeclared-variable expecting a response (info.txt:9302; G-R3, pending)",
+      () =>
+        Effect.gen(function* correctOfNoResponse() {
+          for (const reference of ["ITEM1.SCORE", "ITEM1.T", "ITEM1.numAttempts"]) {
+            const verdict = yield* openTestingNull(`<qti-correct identifier="${reference}"/>`);
+            assert.deepStrictEqual(
+              refusalsOf(verdict),
+              [
+                {
+                  detail: { element: "qti-correct", expected: "response", identifier: reference },
+                  document: fileLocation(location, "test.xml"),
+                  location: { kind: "path", path: `${nullTestedAt("qti-correct")}/@identifier` },
+                  rule: "undeclared-variable",
+                },
+              ],
+              reference,
+            );
+            assert.isTrue(acceptedAlone(verdict), reference);
+          }
+        }),
+    );
+
+    it.effect(
+      "[T-9] controls for qti-correct reads a response: ITEM1.RESPONSE, a response, and a qti-default of ITEM1.SCORE are accepted, and an unresolvable ITEM9.RESPONSE keeps its one reading refusal (reading 48)",
+      () =>
+        Effect.gen(function* correctOfResponseControls() {
+          acceptedOf(yield* openTestingNull('<qti-correct identifier="ITEM1.RESPONSE"/>'));
+          acceptedOf(yield* openTestingNull('<qti-default identifier="ITEM1.SCORE"/>'));
+          assert.deepStrictEqual(
+            refusalsOf(yield* openTestingNull('<qti-correct identifier="ITEM9.RESPONSE"/>')),
+            [
+              {
+                detail: {
+                  check: "reading",
+                  element: "qti-correct",
+                  identifier: "ITEM9.RESPONSE",
+                  reading: "48",
+                },
+                document: fileLocation(location, "test.xml"),
+                location: { kind: "path", path: `${nullTestedAt("qti-correct")}/@identifier` },
+                rule: "undeclared-variable",
+              },
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a dotted rule target no reading resolves, ITEM9.SCORE set by qti-set-outcome-value or qti-lookup-outcome-value, as undeclared-variable, pantry's prefixed-ref (reading 48)",
+      () =>
+        Effect.gen(function* unresolvedTarget() {
+          for (const element of ["qti-set-outcome-value", "qti-lookup-outcome-value"]) {
+            const verdict = yield* openPackage(
+              location,
+              reachPackage(settingOne(element, "ITEM9.SCORE")),
+            );
+            assert.deepStrictEqual(
+              refusalsOf(verdict),
+              [
+                {
+                  detail: { check: "reading", element, identifier: "ITEM9.SCORE", reading: "48" },
+                  document: fileLocation(location, "test.xml"),
+                  location: { kind: "path", path: `${ruleAt(element)}/@identifier` },
+                  rule: "undeclared-variable",
+                },
+              ],
+              element,
+            );
+            assert.isTrue(acceptedAlone(verdict), element);
+          }
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a dotted rule target two readings resolve, ITEM1.X.SCORE beside item refs ITEM1 and ITEM1.X, as ambiguous-reference with both readings, pantry's prefixed-ref (reading 48)",
+      () =>
+        Effect.gen(function* ambiguousTarget() {
+          const verdict = yield* openPackage(
+            location,
+            nestedRefsPackage(settingOne("qti-set-outcome-value", "ITEM1.X.SCORE")),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                firstPrefix: "ITEM1",
+                firstVariable: "X.SCORE",
+                reading: "48",
+                reference: "ITEM1.X.SCORE",
+                secondPrefix: "ITEM1.X",
+                secondVariable: "SCORE",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: {
+                kind: "path",
+                path: `${ruleAt("qti-set-outcome-value")}/@identifier`,
+              },
+              rule: "ambiguous-reference",
+            },
+          ]);
+          assert.isTrue(acceptedAlone(verdict));
+        }),
+    );
+
+    it.effect(
+      "[T-9] controls for a dotted rule target: ITEM1.SCORE, which resolves, is accepted, ITEM1.duration of an item that is not time dependent gets no untimed-duration, and the qti-variable forms of ITEM9.SCORE and ITEM1.X.SCORE are refused as before (reading 48)",
+      () =>
+        Effect.gen(function* dottedTargetControls() {
+          acceptedOf(
+            yield* openPackage(
+              location,
+              reachPackage(settingOne("qti-set-outcome-value", "ITEM1.SCORE")),
+            ),
+          );
+          acceptedOf(
+            yield* openPackage(
+              location,
+              reachPackage(settingOne("qti-set-outcome-value", "ITEM1.duration")),
+            ),
+          );
+          assert.deepStrictEqual(
+            refusalsOf(yield* openSettingTotal(variableXml("ITEM9.SCORE"))).map(
+              ({ detail, rule }) => [rule, detail["check"]],
+            ),
+            [["undeclared-variable", "reading"]],
+          );
+          assert.deepStrictEqual(
+            readings(
+              yield* openPackage(
+                location,
+                nestedRefsPackage(settingTotal(variableXml("ITEM1.X.SCORE"))),
+              ),
+            ),
+            [["ITEM1", "X.SCORE", "ITEM1.X", "SCORE"]],
           );
         }),
     );
