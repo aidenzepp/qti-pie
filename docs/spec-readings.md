@@ -3201,14 +3201,16 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      `York` with `case-sensitive="true"` beside `york` with the default, and the response `York` matches both. Where
      QTI states a tie-break it is order: AreaMapping's areas are checked with "those listed first taking priority"
      (section 5.115). Mapping states none, so the same rule applies to it: the first listed entry that matches gives
-     the value. Two string entries are one key only when they are written identically and matched the same way (both
-     case-folded, or both by code points); `York` and `york` are two keys, and `york` written twice is a repeat. This
+     the value. Keys written apart are two keys whatever their matching: `York` and `york` are two keys. A key written
+     twice is one key whatever each entry's `case-sensitive` says, so `york` written twice, once matched
+     case-sensitively and once by the default, maps one source twice and is refused under Map key (reading 160). This
      narrows reading 98's string clause: its sentence that `York` and `york` repeat in a string mapping whose entries
      leave `case-sensitive` at its default no longer holds, and everything else in reading 98 stands, including the
      refusal of an exact repeat and of `1` and `01` in an integer mapping. A reader that picks among several matching
      entries, plate's score included, takes the lowest start (the first listed) and invents no other policy. This binds
-     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision
-     425, delegated by the operator in mail 69fd02ec; register row B11.)
+     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 425,
+     delegated by the operator in mail 69fd02ec; register row B11. Amended 2026-11-07 by the Mind, decision 433: a key
+     written twice is a repeat whatever its matching, as reading 160 holds.)
 164. **A test's prefixed `qti-map-response` names a response variable whose declaration holds a `qti-mapping`, and a
      test's prefixed `qti-correct` names a response variable.** A test's outcome processing may name an item's variable
      through its item ref (reading 48), `I.RESPONSE`. The information model's section 7.22, MapResponse

@@ -363,8 +363,7 @@ describe("import/overlays/mapping.ts, how a map key is matched", () => {
 });
 
 /**
- * The identity of each entry of a default-matched string mapping's keys: its mapping, whether its
- * key is folded, and the key as written.
+ * The identity of each entry of a string mapping's keys: its mapping and the key as written.
  *
  * @param entries - The mapping's entries.
  * @returns One identity text per entry.
@@ -378,13 +377,14 @@ const identityOf = (entries: readonly { caseSensitive?: string; key: string }[])
       }),
       ids,
     ).MapKey.values(),
-  ].map((row) => JSON.stringify([row.mapping, row.folded, row.key]));
+  ].map((row) => JSON.stringify([row.mapping, row.key]));
 
 describe("import/overlays/mapping.ts, which map keys are one key", () => {
-  it("writes the key as written beside how it is matched as a key's identity, so York and york are two keys and york written twice is one (reading 163)", () => {
-    // Oracle: reading 163 (decision 425): two string entries are one key only when they are
-    // written identically and matched the same way; the schema's uniqueness is
-    // `key(MapKey(mapping, folded, key))`, so the identity read here is that tuple.
+  it("writes the key as written as a key's identity, so York and york are two keys and york written twice is one whatever its matching (readings 160 and 163)", () => {
+    // Oracle: readings 160 and 163 (decisions 425 and 433): keys written apart are two keys
+    // whatever their matching, and a key written twice is one whatever each entry's
+    // case-sensitive says; the schema's uniqueness is `key(MapKey(mapping, key))`, so the
+    // identity read here is that pair.
     // Bound: the one string mapping, its entries named.
     assert.strictEqual(new Set(identityOf([{ key: "York" }, { key: "york" }])).size, 2);
     assert.strictEqual(new Set(identityOf([{ key: "york" }, { key: "york" }])).size, 1);
@@ -394,7 +394,7 @@ describe("import/overlays/mapping.ts, which map keys are one key", () => {
     );
     assert.strictEqual(
       new Set(identityOf([{ caseSensitive: "true", key: "york" }, { key: "york" }])).size,
-      2,
+      1,
     );
   });
 });

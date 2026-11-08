@@ -710,7 +710,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [keyOn("MapKey", "mapping", "folded", "matched")],
+          laws: [keyOn("MapKey", "mapping", "key")],
           name: "two identical map entries (map-key-unique, Q5.11)",
         },
         {

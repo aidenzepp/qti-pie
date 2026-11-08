@@ -495,7 +495,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     98,
     {
       owner:
-        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, folded, key))` (reading 163 narrows it: a key's identity is the key as written), where `E1_derived` sets `folded` for a string key whose entry is not `case-sensitive=\"true\"` and `matched` to its ASCII lowercase (`Compute.lowerAscii`, grizzle offering no Unicode fold) and otherwise to the key as written, so a case-sensitive entry never meets a case-insensitive one, and `key(mapping, value)` over each typed relation, `MapKeyInteger`, `MapKeyFloat` (reading 154), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; the oracle's `Map key` (`keyIdentityOf`, `src/test/oracle.ts`)",
+        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over the lexical key (readings 160 and 163 narrow it: a key's identity is the key as written, whatever its matching), and `key(mapping, value)` over each typed relation, `MapKeyInteger`, `MapKeyFloat` (reading 154), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; for matching, `E1_derived` sets `folded` for a string key whose entry is not `case-sensitive=\"true\"` and `matched` to its ASCII lowercase (`Compute.lowerAscii`, grizzle offering no Unicode fold) and otherwise to the key as written; the oracle's `Map key` (`mapKeyValueOf`, `src/test/oracle.ts`)",
       status: "G",
     },
   ],
@@ -1007,7 +1007,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     163,
     {
       owner:
-        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, folded, key))`, the key as written beside how it is matched, so `York` and `york` are two keys and one key written twice is a repeat (`MapKey.matched` stays for matching, set by `E1_derived`); the oracle's `Map key` (`keyIdentityOf`, `src/test/oracle.ts`), the same identity; held by `src/qti/mapping.oracle.test.ts` and `src/import/overlays/mapping.test.ts`",
+        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))`, the key as written whatever its matching (reading 160, decision 433), so `York` and `york` are two keys and one key written twice is a repeat whatever each entry's `case-sensitive` says (`MapKey.folded` and `matched` stay for matching, set by `E1_derived`); the oracle's `Map key` (`mapKeyValueOf`, `src/test/oracle.ts`), the same identity; held by `src/qti/mapping.oracle.test.ts` and `src/import/overlays/mapping.test.ts`",
       status: "G",
     },
   ],

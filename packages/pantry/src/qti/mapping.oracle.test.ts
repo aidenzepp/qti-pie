@@ -511,6 +511,15 @@ describe("qti/mapping.ts, the oracle's mapping laws", { timeout: searchTimeout }
           "one case-sensitive key written twice",
         );
 
+        const apart = yield* mappingBreachesOf(
+          mappedItem("string", ["york", "york"], "7", ["true"]),
+        );
+        assert.deepStrictEqual(
+          apart.map((breach) => breach.split(" {")[0]),
+          ["Map key"],
+          "one key written twice, once case-sensitive and once by the default (reading 160, decision 433)",
+        );
+
         const target = yield* mappingBreachesOf(mappedItem("string", ["a"], "x"));
         assert.deepStrictEqual(
           target.map((breach) => breach.split(" {")[0]),

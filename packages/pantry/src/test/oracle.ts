@@ -3472,29 +3472,6 @@ const mapKeyValueOf = (baseType: string, key: string): string => {
 };
 
 /**
- * Read a map key as the identity its mapping holds it under (Map key, readings 98 and 163): a
- * string key whose own entry's `case-sensitive` is not true is `folded`, a response meeting it
- * without regard to case, and is the key as written, so `York` and `york` are two keys and a
- * `york` written twice is one; a key matched by code points is never the same key as a folded one;
- * every other key is {@link mapKeyValueOf}'s.
- *
- * @param baseType - The mapping's base type.
- * @param key - The key, as written.
- * @param caseSensitive - The entry's collapsed `case-sensitive`, none when unwritten.
- * @returns The identity's text, `folded` and the key as written where the entry matches without
- *   regard to case, and {@link mapKeyValueOf}'s text otherwise.
- */
-const keyIdentityOf = (
-  baseType: string,
-  key: string,
-  caseSensitive: Option.Option<string>,
-): string =>
-  baseType === "string" &&
-  !Option.exists(caseSensitive, (form) => Option.contains(booleanOf(form), true))
-    ? `folded ${key}`
-    : mapKeyValueOf(baseType, key);
-
-/**
  * Compile a built-in XSD type's lexical space as an attribute's typed value is read: exactly, its
  * whitespace class applied to nothing (reading 7), the pattern's anchors dropped so a list can
  * repeat it.
@@ -4128,12 +4105,7 @@ const overlayLaws: readonly ((
         ).map((keys): Finding => ({ keys: { ...keys, value: key }, law: "Typed attribute value" }));
         const value = Option.match(baseType, {
           onNone: () => `lexical ${key}`,
-          onSome: (held) =>
-            keyIdentityOf(
-              held,
-              key,
-              valueOf(overlay.view, id, "case-sensitive").pipe(Option.map(collapsed)),
-            ),
+          onSome: (held) => mapKeyValueOf(held, key),
         });
         if (!seen.has(value)) {
           seen.add(value);
