@@ -52,7 +52,8 @@ export const xsdPart2Path: Config.Config<string> = Config.String("HOME").pipe(
 const resultsXsd: XsdPath = "imsqti_resultv3p0_v1p0.xsd";
 
 /**
- * The XSD the Results Reporting XSD imports, for the `xml:` attributes, under the XSD cache.
+ * The path under the XSD cache of the one XSD the Results Reporting XSD imports, for its `xml:`
+ * attributes.
  */
 const xmlXsd: XsdPath = "w3/xml.xsd";
 

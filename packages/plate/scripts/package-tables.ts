@@ -13,8 +13,9 @@
  * For each profile the script reads the closure of its `xs:import`s, hashing every file, and runs
  * `generateTables` and `generateOccurrences` once per namespace the profile's tables reach, since
  * each reads one schema and records a reference into another namespace by name only. An import's
- * purl location is followed only to the path that table gives it. A schema the closure holds but
- * nothing reaches, such as `xlink/xlink.xsd`, is read and hashed and gives no table.
+ * purl location is followed only to the path `src/test/xsd-layout.ts` gives it. A schema the
+ * closure holds but nothing reaches, such as `xlink/xlink.xsd`, is read and hashed and gives no
+ * table.
  * A `TableGenerationError` names an XSD construct the generator has no table form for; map it in
  * `src/validate/xsd.ts` before committing tables from that XSD.
  */
