@@ -7,19 +7,28 @@
  * tests (`#pantry/import/overlays/tests.test.ts`) judge the rows the laws read.
  */
 import { schema } from "@bjornpagen/grizzle";
-import { assert, describe, it } from "@effect/vitest";
+import type { Law } from "@bjornpagen/grizzle";
+import { NodeServices } from "@effect/platform-node";
+import { assert, describe, it, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Option, Schema } from "effect";
+import { grammar } from "#pantry/grammar/install.ts";
+import { readProgram } from "#pantry/import/program.ts";
+import { lawNameOf } from "#pantry/import/refusal.ts";
+import { readPackage } from "#pantry/package/read.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { collapsedPattern, testLaws, testRelations } from "#pantry/qti/tests.ts";
-import { lawNames, ruleOf } from "#pantry/test/oracle.ts";
+import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
+import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { judge as judgeOracle, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
 describe("qti/tests.ts, declared", () => {
   it("builds a schema of Node, the character data, the attributes, the package and the test layer with every law, each statement once", () => {
@@ -72,6 +81,7 @@ describe("qti/tests.ts, declared", () => {
       "Fragment context",
       "Inclusion cycle",
       "Item ref target",
+      "Remote section ref",
       "Selection bound",
       "Selection required",
       "Test name key",
@@ -304,10 +314,12 @@ describe("qti/tests.ts, an external include", () => {
     // Oracle: reading 115 and the href scopes of readings 35 and 102: an include whose href
     // resolves outside the package is stored as written and never fetched, so it names no
     // document and breaks no law; one in the package names a listed document or is refused
-    // "Include target". A section ref names a section document wherever its href resolves.
+    // "Include target". A section ref in the package names a section document, and one outside it
+    // is the stated limit "Remote section ref"'s alone (reading 170).
     const include = { external: false, kind: "xi:include" };
     const external = { ...include, external: true };
-    const sectionRef = { external: true, kind: "qti-assessment-section-ref" };
+    const sectionRef = { external: false, kind: "qti-assessment-section-ref" };
+    const remoteRef = { ...sectionRef, external: true };
 
     // A site's href is its SitePath (#46's row of its own): "Include target" is an include's
     // SitePath, and a section ref's "Document entry" its own, each then into its ReferencePath.
@@ -329,7 +341,8 @@ describe("qti/tests.ts, an external include", () => {
     if (entry !== undefined) {
       assert.isFalse(selects(entry.left, include), "an include is judged by Include target");
       assert.isFalse(selects(entry.left, external), "an external include has none");
-      assert.isTrue(selects(entry.left, sectionRef), "a section ref has one wherever it resolves");
+      assert.isTrue(selects(entry.left, sectionRef), "an in-package section ref has one");
+      assert.isFalse(selects(entry.left, remoteRef), "an external section ref is Remote's alone");
     }
 
     const [reached, ...moreReached] = containmentsOf(
@@ -355,3 +368,123 @@ describe("qti/tests.ts, an external include", () => {
     }
   });
 });
+
+/**
+ * The section ref the every-relation test writes, placing its section document.
+ */
+const placement = '<qti-assessment-section-ref identifier="placement" href="section.xml"/>';
+
+/**
+ * The hrefs the section ref box writes: the package's own, and three that resolve outside the
+ * package (readings 35 and 102), by a scheme, a leading slash and a climb above the root.
+ */
+const sectionRefHrefs = [
+  "section.xml",
+  "https://example.com/section.xml",
+  "/section.xml",
+  "../section.xml",
+] as const;
+
+/**
+ * A situation the section ref box must reach.
+ */
+type SectionRefSituation = "in the package" | "outside the package";
+
+/**
+ * Build the every-relation package with its section ref's href replaced.
+ *
+ * @param href - The href.
+ * @returns The package's entries, by path.
+ */
+const sectionRefPackage = (href: string) => {
+  const entries = new Map(everyRelationPackage({ choices: 2, hotspots: 1, hottexts: 1 }));
+  const test = new TextDecoder().decode(entries.get("test.xml"));
+  if (!test.includes(placement)) {
+    throw new Error(
+      `The every-relation test no longer writes ${placement}. Point the section ref box at the test's own section ref.`,
+    );
+  }
+
+  entries.set(
+    "test.xml",
+    new TextEncoder().encode(test.replace(placement, placement.replace("section.xml", href))),
+  );
+
+  return entries;
+};
+
+/**
+ * Name the laws a host judgment lists.
+ *
+ * @param laws - The broken or skipped laws.
+ * @returns Their names.
+ */
+const namedLaws = (laws: readonly { readonly law: Law }[]): ReadonlySet<string> =>
+  new Set(laws.flatMap(({ law }) => Option.toArray(lawNameOf(law))));
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "qti/tests.ts, an external section ref",
+  (test) => {
+    test.effect(
+      "breaks the stated limit Remote section ref alone, by the law oracle and by the schema's laws over the import's rows, and one in the package breaks none",
+      (ctx) =>
+        // Oracle: two implementations side by side, the law oracle's site laws and the schema's
+        // laws over the import's rows (`#pantry/test/host-judge.ts`), held to reading 170 by hand:
+        // a section ref whose href resolves outside the package is refused under "Remote section
+        // ref" and under no other law, "Document entry" included.
+        // Bound: the package's own href and three external ones, 4.
+        searched(
+          ctx,
+          exhaust(
+            {
+              box: "the every-relation test's section ref, its href the package's own or one outside the package by a scheme, a leading slash or a climb above the root",
+              caseHang: Duration.seconds(120),
+              coverage: requiredInSpace<SectionRefSituation>([
+                "in the package",
+                "outside the package",
+              ]),
+              generator: element(sectionRefHrefs),
+              limit: sectionRefHrefs.length,
+              literal: JSON.stringify,
+              oracle: {
+                kind: "second-implementation",
+                name: "the law oracle's site laws and the schema's laws over the import's rows, held to reading 170 by hand",
+              },
+              suite: "qti/tests-remote-section-ref",
+            },
+            (href: string, c) =>
+              Effect.scoped(
+                Effect.gen(function* remoteSectionRef() {
+                  const external = href !== "section.xml";
+                  c.note(external ? "outside the package" : "in the package");
+
+                  const expected = external ? ["Remote section ref"] : [];
+                  const dir = yield* scopedPackage(sectionRefPackage(href));
+                  const judgment = yield* judgeOracle(
+                    yield* readPackage(dir),
+                    grammar,
+                    lawsOf(grammar),
+                  );
+                  assert.strictEqual(judgment._tag, "Judged", href);
+
+                  const oracle = new Set<string>(
+                    judgment._tag === "Judged" ? judgment.breaches.map(({ law }) => law) : [],
+                  );
+                  const host = judge(hostRowsOf((yield* readProgram(dir)).inputs), judgedLaws(Qti));
+                  assert.deepStrictEqual(
+                    [...oracle].toSorted(),
+                    expected,
+                    `${href}: the law oracle breaks ${[...oracle].join(", ") || "no law"}`,
+                  );
+                  assert.deepStrictEqual(
+                    [...namedLaws(host.broken)].toSorted(),
+                    expected,
+                    `${href}: the import's rows break ${[...namedLaws(host.broken)].join(", ") || "no law"}`,
+                  );
+                }),
+              ),
+          ),
+        ),
+    );
+  },
+);

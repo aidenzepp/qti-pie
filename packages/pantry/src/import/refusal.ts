@@ -249,7 +249,9 @@ const codecRules = [
  * href the importer reads no name from (reading 102, `overlays/package.ts` `Limit`), and
  * `fragment-context` the one context an included fragment's rows are judged in (reading 117,
  * `tests.ts` `Fragment_context`): a fragment two includes place in different interactions would
- * need two rows per node.
+ * need two rows per node, and `remote-section` a section ref whose href resolves outside the
+ * package (reading 170, `tests.ts` `Remote_section_ref`): the import is offline and never fetches
+ * the section, which is the test's own content, so it cannot assemble the test.
  *
  * A value over the bound is valid QTI the model cannot key, so its verdict says so by its rule. The
  * import meets it as the bound's pattern law: grizzle's encoder and its family fill check a text's
@@ -262,6 +264,7 @@ export const limitRules = [
   "key-text-bound",
   "href-form",
   "fragment-context",
+  "remote-section",
 ] as const satisfies readonly (typeof precedence)[number][];
 
 /**

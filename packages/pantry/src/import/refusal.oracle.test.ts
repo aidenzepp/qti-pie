@@ -1276,6 +1276,11 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ],
   [
     "fragment-context",
+    "remote-section",
+    "limitRules' order: the fragment's one context (reading 117), then the remote section ref (reading 170)",
+  ],
+  [
+    "remote-section",
     "namespace-name",
     "the document layer: its stated limits before its laws, the first a namespace name (reading 131)",
   ],

@@ -243,6 +243,7 @@ export const oracleRules = [
   "reachability",
   "reader-refusal",
   "record-binding-fit",
+  "remote-section",
   "required-attribute",
   "reserved-type",
   "root-type-reverse",
@@ -5434,7 +5435,11 @@ const sameContexts = (
  * - **"Document entry"**, of a section ref: a section ref that writes an href names, by an href this
  *   representation resolves, a section document the manifest lists (information model §7.5, a
  *   section ref "functions as a facade for the qti-assessment-section to which it refers"); one
- *   with no href is AL3's, and one whose path no entry holds "File exists"'s;
+ *   with no href is AL3's, one whose path no entry holds "File exists"'s, and one whose href
+ *   resolves outside the package "Remote section ref"'s;
+ * - **"Remote section ref"**, a stated limit (reading 170): no section ref's href resolves outside
+ *   the package, since the import never fetches the section it would name, which is the test's own
+ *   content;
  * - **"Include fragment identifier":** no include's href carries a `#` after its path (XInclude 1.0
  *   §3.1), wherever the include stands;
  * - **"Fragment context"**, a stated limit: the sites that name one document stand inside one
@@ -5500,6 +5505,12 @@ const inclusionBreaches = (
     ...sites.flatMap((site) => {
       if (Option.exists(site.path, (path) => !entryPaths.has(path))) {
         return [];
+      }
+
+      if (site.node.kind !== "xi:include" && site.external) {
+        return [
+          siteBreach(site, "Remote section ref", { href: Option.getOrElse(site.href, () => "") }),
+        ];
       }
 
       if (site.node.kind !== "xi:include") {
@@ -7500,6 +7511,10 @@ const ownLaws = {
   "Reference type": {
     explain: (keys) =>
       `${field(keys, "kind")}'s ${field(keys, "attribute")} names ${field(keys, "identifier")}, which is no ${field(keys, "base")} single template or outcome variable`,
+  },
+  "Remote section ref": {
+    explain: (keys) =>
+      `the section ref's href ${JSON.stringify(field(keys, "href"))} names a section outside the package, which the import never fetches, so it cannot assemble the test: a limit of the representation (reading 170)`,
   },
   "Reserved type": {
     explain: (keys) =>
