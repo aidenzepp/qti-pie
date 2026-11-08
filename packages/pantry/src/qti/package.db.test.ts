@@ -79,10 +79,22 @@ const someContent = Uint8Array.of(0x00, 0x01);
 const largeEntryBytes = 64 * 1024 * 1024;
 
 /**
- * The large entries: the fewest whose bytes alone are past one Bind message, grizzle's
- * `messageMaxBytes`, since a `bytes` value is written in binary.
+ * The text a family write carries for one large entry: its hex form, `\x` and two digits a byte.
+ * grizzle 1.0.0-beta.1 writes a family member's `bytes` value as that text in a text array
+ * (grizzle-engine `scalar/values/bytes.ts` `bytesText`, `codec/recordset.ts` `arrayTexts`), though
+ * its README says a `bytes` value is written in binary, as only an array outside a family is
+ * (`codec/bytea.ts`).
  */
-const largeEntries = Math.floor(messageMaxBytes.value / largeEntryBytes) + 1;
+const largeEntryTextBytes = "\\x".length + 2 * largeEntryBytes;
+
+/**
+ * The large entries: the fewest whose text, as a family write carries it, is past one Bind
+ * message, grizzle's `messageMaxBytes`: 8. Twice as many, past it in raw bytes, make about 2 GiB
+ * of text, which grizzle 1.0.0-beta.1 sends as one TLS write that Node refuses (`SSL_write` takes
+ * an `int` length), so it loses the connection after sending COMMIT and answers `CommitUnknown`.
+ * They return to 16 once grizzle writes a family's bytes in binary and bounds a flight.
+ */
+const largeEntries = Math.floor(messageMaxBytes.value / largeEntryTextBytes) + 1;
 
 /**
  * Whether an outcome is `invariant-rejected` with a law among its `laws` that the predicate picks.
@@ -226,13 +238,19 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           // file-listed over its unlisted entries, as for a small package, and never
           // `InputTooLarge`. The accepted form needs a whole manifest, which the importer's
           // ChangeSet writes (Q5.15).
-          // Bound: the fewest entries of 64 MiB past the Bind bound, 16, sharing one buffer, so the
-          // host holds 64 MiB of content beside grizzle's admitted copies and its chunks.
+          // Bound: the fewest entries of 64 MiB whose text passes the Bind bound, 8, sharing one
+          // buffer, so the test holds 64 MiB of content; grizzle's copies of it take the heap the
+          // database project states (`vite.config.ts`).
           Effect.gen(function* pastOneStatement() {
             assert.isAtMost(
               largeEntryBytes,
               bytesMaxLength.value,
               "a large entry is one bytes value",
+            );
+            assert.isAbove(
+              largeEntries * largeEntryTextBytes,
+              messageMaxBytes.value,
+              "the large entries' text fits one Bind message",
             );
 
             const db = yield* Db.open(AuthorApp.roles.author, {});
