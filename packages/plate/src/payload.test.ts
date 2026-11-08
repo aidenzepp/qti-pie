@@ -6,6 +6,7 @@ import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/docu
 import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
+import type { ValueBinding } from "#plate/form/encoding.ts";
 import { encodeRedacted } from "#plate/codec/redacted.ts";
 import { interactionsIn as bodyInteractions } from "#plate/model/interactions.ts";
 import type {
@@ -2841,7 +2842,7 @@ describe("choiceOrder", () => {
  */
 const postingOf = (
   identifier: string,
-  baseType: Posting["binding"]["baseType"],
+  baseType: ValueBinding["baseType"],
   base: number,
 ): Posting => ({
   binding: { baseType, cardinality: "single", name: entryName(instance, identifier) },
@@ -2968,6 +2969,35 @@ describe("postings", () => {
       ),
       Option.some(["Malformed", "single-many"]),
     );
+  });
+
+  it("[Q-20] record binding in the page: postings gives a record response a Text Entry binds its RecordBinding, after the responses of a base type, and none to a record response no interaction binds", () => {
+    const answer = { correct: Option.none(), defaultValue: Option.none(), identifier: "ANSWER" };
+    const recorded: Item = {
+      ...item,
+      body: [choice, textEntry("ANSWER")],
+      records: new Map([
+        ["ANSWER", answer],
+        ["UNBOUND", { ...answer, identifier: "UNBOUND" }],
+      ]),
+    };
+    const shown = redactItem(recorded);
+
+    assert.deepStrictEqual(
+      shown.responses.filter((binding) => binding.cardinality === "record"),
+      [
+        { cardinality: "record", identifier: "ANSWER" },
+        { cardinality: "record", identifier: "UNBOUND" },
+      ],
+    );
+    assert.deepStrictEqual(postings(shown, instance), [
+      postingOf("CAPITAL", "identifier", 10),
+      {
+        binding: { cardinality: "record", name: entryName(instance, "ANSWER") },
+        identifier: "ANSWER",
+        options: { base: 10 },
+      },
+    ]);
   });
 
   it("gives no posting to a declared response no interaction binds, so a post carries nothing over its record value", () => {

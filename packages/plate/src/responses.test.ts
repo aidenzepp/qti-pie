@@ -2,10 +2,11 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { message } from "#plate/messages.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { Item } from "#plate/model/item.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { open } from "#plate/validate/open.ts";
-import { acceptedItem } from "#plate/validate/verdict.ts";
+import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * Write an item document whose template processing sets the ordered template variable `S` to a
@@ -130,6 +131,61 @@ describe("checkResponses and the printed variables of the item it judges", () =>
           [],
         );
         assert.strictEqual(printed.reads(), 0);
+      }),
+  );
+});
+
+/**
+ * An item built by hand, as the model builds no interaction bound to a record yet: one Text Entry,
+ * for a string, with `pattern-mask="[0-9]+"`, bound to the record response `ANSWER`.
+ */
+const answerItem: Item = {
+  body: [
+    {
+      ariaLabel: Option.none(),
+      ariaLabelledby: Option.none(),
+      base: 10,
+      baseType: "string",
+      class: "",
+      expectedLength: Option.none(),
+      kind: "text-entry",
+      path: "qti-assessment-item/qti-item-body/qti-text-entry-interaction",
+      patternMask: Option.some("[0-9]+"),
+      patternMaskMessage: Option.none(),
+      placeholder: Option.none(),
+      response: "ANSWER",
+    },
+  ],
+  document: "items/answer.xml",
+  identifier: "answer",
+  lang: Option.none(),
+  outcomes: new Map(),
+  processing: Option.none(),
+  records: new Map([
+    ["ANSWER", { correct: Option.none(), defaultValue: Option.none(), identifier: "ANSWER" }],
+  ]),
+  responses: new Map(),
+  templateProcessing: Option.none(),
+  templates: new Map(),
+  title: "Answer",
+  unsupported: [],
+};
+
+describe("checkResponses and a record", () => {
+  it.effect(
+    "[Q-20] record binding in the page: checkResponses takes a record for a record-bound Text Entry and gives no message for it",
+    () =>
+      Effect.gen(function* takesRecord() {
+        const configuration = yield* configure({ validateResponses: true });
+        const answer: RecordValue = {
+          cardinality: "record",
+          fields: [{ identifier: "stringValue", value: { baseType: "string", value: "12" } }],
+        };
+
+        assert.deepStrictEqual(
+          checkResponses(acceptForTest(answerItem), { ANSWER: answer }, configuration),
+          [],
+        );
       }),
   );
 });
