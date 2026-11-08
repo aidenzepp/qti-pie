@@ -897,6 +897,33 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
   );
 
   it.effect(
+    "[T-9] an occurrence duration is marked: I1.1.duration and I1.02.duration are marked by name at the processing, as I1.duration is, and I1.1.SCORE is held",
+    () =>
+      Effect.gen(function* marksOccurrenceDurations() {
+        const reads = (name: string): SourceDocument =>
+          processed([setting("qti-set-outcome-value", "TIME", variable(name))]);
+        const first = reads("I1.1.duration");
+        const built = yield* buildTest(first);
+        const padded = yield* buildTest(reads("I1.02.duration"));
+        const plain = yield* buildTest(reads("I1.duration"));
+        const scored = yield* buildTest(
+          processed([setting("qti-set-outcome-value", "SCORE", variable("I1.1.SCORE"))]),
+        );
+
+        assert.deepStrictEqual(checkStructure(first, tables), []);
+        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(built.unsupported, [mark("variable:I1.1.duration", processingPath)]);
+        assert.deepStrictEqual(padded.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(padded.unsupported, [
+          mark("variable:I1.02.duration", processingPath),
+        ]);
+        assert.deepStrictEqual(plain.unsupported, [mark("variable:I1.duration", processingPath)]);
+        assert.strictEqual(scored.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(scored.unsupported, []);
+      }),
+  );
+
+  it.effect(
     "[T-9] absent, marked or runs: one whose qti-test-variables names duration is marked variable:duration at the processing",
     () =>
       Effect.gen(function* collectsDurations() {
@@ -1042,6 +1069,39 @@ const integerValue = (value: bigint) =>
 const defaultsOf = (built: Test): readonly TemplateDefault[] =>
   nodeNamed(built, "ITEM1", "item-ref").templateDefaults;
 
+/**
+ * The path of the `qti-assessment-section-ref` of a {@link referring} test.
+ */
+const sectionRefPath = `${firstPart}/qti-assessment-section-ref`;
+
+/**
+ * Construct a test of one part `P1` whose section `S1` holds one item reference and which holds a
+ * `qti-assessment-section-ref` `R1` after it, with a float `SCORE`, a duration `TIME` and outcome
+ * processing of the given rules.
+ *
+ * @param own The item reference's identifier.
+ * @param rules The rules its `qti-outcome-processing` holds.
+ * @param defaults The item reference's template defaults, none by default.
+ * @returns The document.
+ */
+const referring = (
+  own: string,
+  rules: readonly SourceChild[],
+  defaults: readonly SourceElement[] = [],
+): SourceDocument =>
+  test([
+    outcome("SCORE", "float", [defaultValue("0")]),
+    outcome("TIME", "duration"),
+    part("P1", "linear", "individual", [
+      section("S1", [itemRef(own, "items/one.xml", [], defaults)]),
+      el("qti-assessment-section-ref", [
+        attr("href", "sections/more.xml"),
+        attr("identifier", "R1"),
+      ]),
+    ]),
+    el("qti-outcome-processing", [], rules),
+  ]);
+
 describe("buildTest's template defaults", () => {
   it.effect(
     "[T-9] reads the template default of each qti-template-default on an item ref, in document order with its expression",
@@ -1132,6 +1192,59 @@ describe("buildTest's template defaults", () => {
         assert.deepStrictEqual(built.unsupported, [
           mark("qti-field-value", `${defaultPath(1)}/qti-field-value`),
         ]);
+      }),
+  );
+
+  it.effect(
+    "[T-9] a read through a section ref is marked: in a test that holds one, I1.SCORE and S2.duration with no own I1 or S2 are marked by name at the processing and at a template default",
+    () =>
+      Effect.gen(function* marksSectionRefReads() {
+        const document = referring("I0", [
+          setting("qti-set-outcome-value", "SCORE", variable("I1.SCORE")),
+          setting("qti-set-outcome-value", "TIME", variable("S2.duration")),
+        ]);
+        const built = yield* buildTest(document);
+        const withDefaults = referring(
+          "I0",
+          [setting("qti-set-outcome-value", "SCORE", baseValue("float", "1"))],
+          [
+            templateDefault("T1", variable("I1.SCORE")),
+            templateDefault("T2", baseValue("integer", "2")),
+          ],
+        );
+        const defaultsBuilt = yield* buildTest(withDefaults);
+        const own = yield* buildTest(
+          referring("I1", [setting("qti-set-outcome-value", "SCORE", variable("I1.SCORE"))]),
+        );
+        const unreferred = yield* buildTest(
+          processed([setting("qti-set-outcome-value", "SCORE", variable("I9.SCORE"))]),
+        );
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(checkStructure(withDefaults, tables), []);
+        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-assessment-section-ref", sectionRefPath),
+          mark("variable:I1.SCORE", processingPath),
+          mark("variable:S2.duration", processingPath),
+        ]);
+        assert.deepStrictEqual(nodeNamed(defaultsBuilt, "I0", "item-ref").templateDefaults, [
+          { expression: integerValue(2n), templateIdentifier: "T2" },
+        ]);
+        assert.deepStrictEqual(defaultsBuilt.unsupported, [
+          mark(
+            "variable:I1.SCORE",
+            `${firstPart}/qti-assessment-section/qti-assessment-item-ref/qti-template-default[1]`,
+          ),
+          mark("qti-assessment-section-ref", sectionRefPath),
+        ]);
+        assert.strictEqual(defaultsBuilt.outcomeProcessing.kind, "runs");
+        assert.strictEqual(own.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(own.unsupported, [
+          mark("qti-assessment-section-ref", sectionRefPath),
+        ]);
+        assert.strictEqual(unreferred.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(unreferred.unsupported, []);
       }),
   );
 });
