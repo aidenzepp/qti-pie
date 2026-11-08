@@ -628,6 +628,55 @@ const nullTestedAt = (local: string): string =>
   `qti-assessment-test/qti-outcome-processing/qti-outcome-condition/qti-outcome-if/qti-is-null/${local}`;
 
 /**
+ * Write the item the map-response pins reach: a point response `MAPPED_POINT` that declares a
+ * `qti-mapping` and no `qti-area-mapping`, a point response `AREA_POINT` that declares a
+ * `qti-area-mapping`, and a float outcome `SCORE`.
+ *
+ * @param timeDependent The item's `time-dependent`, which decides whether its `duration` is read.
+ * @param processing The item's response processing, as written after its body.
+ * @returns The item's text.
+ */
+const pointsItemXml = (timeDependent: "false" | "true", processing = ""): string =>
+  `<qti-assessment-item xmlns="${qti}" identifier="a" title="a" adaptive="false" time-dependent="${timeDependent}"><qti-response-declaration identifier="MAPPED_POINT" cardinality="single" base-type="point"><qti-mapping default-value="0"><qti-map-entry map-key="1 1" mapped-value="1"/></qti-mapping></qti-response-declaration><qti-response-declaration identifier="AREA_POINT" cardinality="single" base-type="point"><qti-area-mapping default-value="0"><qti-area-map-entry shape="rect" coords="0,0,10,10" mapped-value="1"/></qti-area-mapping></qti-response-declaration><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>a</p></qti-item-body>${processing}</qti-assessment-item>`;
+
+/**
+ * Open a package whose test, of part `P` and section `SEC`, sets `TOTAL` to an expression through
+ * its one item ref `ITEM1`, to {@link pointsItemXml}.
+ *
+ * @param timeDependent The item's `time-dependent`.
+ * @param expression The expression, as written.
+ * @returns The package's verdict.
+ */
+const openSettingThroughPoints = (timeDependent: "false" | "true", expression: string) =>
+  openPackage(
+    location,
+    readingPackage(
+      processingTestXml(settingTotal(expression), itemRefXml("ITEM1", "items/a.xml")),
+      { "items/a.xml": pointsItemXml(timeDependent) },
+    ),
+  );
+
+/**
+ * Open a package of one item, {@link pointsItemXml}, whose response processing sets `SCORE` to an
+ * expression.
+ *
+ * @param timeDependent The item's `time-dependent`.
+ * @param expression The expression, as written.
+ * @returns The package's verdict.
+ */
+const openScoringPoints = (timeDependent: "false" | "true", expression: string) =>
+  openPackage(
+    location,
+    packageOf({
+      [manifestFile]: manifestXml(resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml")),
+      "items/a.xml": pointsItemXml(
+        timeDependent,
+        `<qti-response-processing><qti-set-outcome-value identifier="SCORE">${expression}</qti-set-outcome-value></qti-response-processing>`,
+      ),
+    }),
+  );
+
+/**
  * The path of a test's one outcome rule, by its local name.
  *
  * @param local The rule's local name.
@@ -1695,6 +1744,143 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(
             refusalsOf(verdict).map(({ detail, rule }) => [rule, detail["check"]]),
             [["undeclared-variable", "reading"]],
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a dotted point without an area mapping, ITEM1.MAPPED_POINT, a point response that declares a qti-mapping only, once as template-requirements, as an item's, and accepts ITEM1.AREA_POINT (info.txt:9314; pantry's reading 163)",
+      () =>
+        Effect.gen(function* dottedPointWithoutAreaMapping() {
+          const verdict = yield* openSettingThroughPoints(
+            "false",
+            '<qti-map-response-point identifier="ITEM1.MAPPED_POINT"/>',
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                baseType: "point",
+                child: "qti-area-mapping",
+                declaration: "qti-response-declaration",
+                element: "qti-map-response-point",
+                identifier: "ITEM1.MAPPED_POINT",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: { kind: "path", path: expressionAt("qti-map-response-point") },
+              rule: "template-requirements",
+            },
+          ]);
+          assert.isTrue(acceptedAlone(verdict), "the test alone is accepted");
+          acceptedOf(
+            yield* openSettingThroughPoints(
+              "false",
+              '<qti-map-response-point identifier="ITEM1.AREA_POINT"/>',
+            ),
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] built-in maps nothing: a dotted map-response-point of ITEM1.numAttempts, and a dotted map-response of a timed ITEM1.duration, of ITEM1.1.numAttempts and of P.duration and SEC.duration, are refused once as undeclared-variable expecting a response (info.txt:9306, info.txt:9314; pantry's reading 163)",
+      () =>
+        Effect.gen(function* builtInMapsNothing() {
+          const cases = [
+            ["qti-map-response-point", "ITEM1.numAttempts", "false"],
+            ["qti-map-response", "ITEM1.duration", "true"],
+            ["qti-map-response", "ITEM1.1.numAttempts", "false"],
+            ["qti-map-response", "P.duration", "false"],
+            ["qti-map-response", "SEC.duration", "false"],
+          ] as const;
+
+          for (const [element, reference, timeDependent] of cases) {
+            const verdict = yield* openSettingThroughPoints(
+              timeDependent,
+              `<${element} identifier="${reference}"/>`,
+            );
+            assert.deepStrictEqual(
+              refusalsOf(verdict),
+              [
+                {
+                  detail: { element, expected: "response", identifier: reference },
+                  document: fileLocation(location, "test.xml"),
+                  location: { kind: "path", path: `${expressionAt(element)}/@identifier` },
+                  rule: "undeclared-variable",
+                },
+              ],
+              `${element} ${reference}`,
+            );
+            assert.isTrue(acceptedAlone(verdict), `${element} ${reference}`);
+          }
+        }),
+    );
+
+    it.effect(
+      "[T-9] built-in maps nothing: a dotted map-response of an untimed item's ITEM1.duration is refused twice as undeclared-variable, the untimed duration and then the response it does not read (info.txt:9306; pantry's reading 163)",
+      () =>
+        Effect.gen(function* untimedBuiltInMapsNothing() {
+          const verdict = yield* openSettingThroughPoints(
+            "false",
+            '<qti-map-response identifier="ITEM1.duration"/>',
+          );
+          const at = {
+            document: fileLocation(location, "test.xml"),
+            location: { kind: "path", path: `${expressionAt("qti-map-response")}/@identifier` },
+            rule: "undeclared-variable",
+          } as const;
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              ...at,
+              detail: {
+                check: "untimed-duration",
+                element: "qti-map-response",
+                identifier: "ITEM1.duration",
+              },
+            },
+            {
+              ...at,
+              detail: {
+                element: "qti-map-response",
+                expected: "response",
+                identifier: "ITEM1.duration",
+              },
+            },
+          ]);
+          assert.isTrue(acceptedAlone(verdict), "the test alone is accepted");
+        }),
+    );
+
+    it.effect(
+      "built-in maps nothing in an item: a qti-map-response of numAttempts, and a qti-map-response-point of a timed item's duration, are refused as undeclared-variable expecting a response at the item's own document, and AREA_POINT is accepted (info.txt:9306, info.txt:9314; pantry's reading 163)",
+      () =>
+        Effect.gen(function* itemBuiltInMapsNothing() {
+          const cases = [
+            ["qti-map-response", "numAttempts", "false"],
+            ["qti-map-response-point", "duration", "true"],
+          ] as const;
+
+          for (const [element, identifier, timeDependent] of cases) {
+            assert.deepStrictEqual(
+              refusalsOf(
+                yield* openScoringPoints(timeDependent, `<${element} identifier="${identifier}"/>`),
+              ),
+              [
+                {
+                  detail: { element, expected: "response", identifier },
+                  document: fileLocation(location, "items/a.xml"),
+                  location: {
+                    kind: "path",
+                    path: `qti-assessment-item/qti-response-processing/qti-set-outcome-value/${element}`,
+                  },
+                  rule: "undeclared-variable",
+                },
+              ],
+              `${element} ${identifier}`,
+            );
+          }
+          acceptedOf(
+            yield* openScoringPoints("false", '<qti-map-response-point identifier="AREA_POINT"/>'),
           );
         }),
     );
