@@ -342,7 +342,8 @@ export const MapKeyPoint = relation.generated(
 /**
  * A pair map key's typed value, keyed by its entry's node: its key split into its two identifiers
  * and the whitespace between them, which the host writes and `E1_derived` proves, and `value`,
- * which PostgreSQL generates from them: the two in code-point order with one space between.
+ * which PostgreSQL generates from them: their least, one space and their greatest, so the two in
+ * code-point order with one space between.
  *
  * A pair's association "is undirected so (A,B) and (B,A) are equivalent" (information model §8.13),
  * so `key(mapping, value)` is uniqueness by typed value: `A B`, `B A` and `A`, a tab, `B` are one
@@ -355,10 +356,9 @@ export const MapKeyPair = relation.generated(
   (r) => ({
     value: generated(
       keyText,
-      Compute.cond(
-        Compute.le(r.first, r.second),
-        Compute.concat(Compute.concat(r.first, " "), r.second),
-        Compute.concat(Compute.concat(r.second, " "), r.first),
+      Compute.concat(
+        Compute.concat(Compute.least(r.first, r.second), " "),
+        Compute.greatest(r.first, r.second),
       ),
     ),
   }),
