@@ -471,7 +471,9 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           //   is not external; one whose target is not empty but whose scope is its own document's
           //   (reading 102);
           // - Href_form, the stated limit: a resource href, a file and a reference the importer
-          //   reads no name from, and a srcset of two candidates even where external;
+          //   reads no name from, and a srcset of two candidates or with a descriptor whatever
+          //   its scope, external, or resolved in the package as the importer resolves every
+          //   srcset, as one href;
           // - Document_entry: a document-typed resource href outside the package;
           // - Self_dependency: a dependency whose identifierref names its own resource, its target
           //   (CP 1.2 §6.11.5 B ii).
@@ -623,6 +625,22 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                       name: "srcset",
                       scope: "external",
                       target: "http://x.org/a.png,http://x.org/b.png",
+                    },
+                  ]),
+                  {},
+                ),
+              },
+              {
+                law: checkNamed("Reference", "Href_form"),
+                name: "srcset with a descriptor resolved in the package",
+                outcome: db.apply(
+                  ChangeSet.empty(Author).insert(Reference, [
+                    {
+                      ...reference,
+                      kind: "source",
+                      lexical: "a.png 1x",
+                      name: "srcset",
+                      target: "a.png 1x",
                     },
                   ]),
                   {},

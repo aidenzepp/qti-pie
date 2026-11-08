@@ -35,12 +35,12 @@ import {
   rowsOf,
 } from "#pantry/import/overlays/package.ts";
 import type {
-  CensusEntry,
   DocumentIds,
   ManifestIds,
   PackageRows,
   ReferenceCensus,
   ReferenceRows,
+  WhiteSpace,
 } from "#pantry/import/overlays/package.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -57,8 +57,13 @@ import { readPackage } from "#pantry/package/read.ts";
 import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import type { FixtureName, NamedPackage } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
-import { hrefParamsPattern, hrefPathPattern, manifestPath } from "#pantry/qti/package.ts";
-import { comparedPath, oracleValueOf, resolve, resolveAttribute } from "#pantry/test/resolution.ts";
+import {
+  hrefParamsPattern,
+  hrefPathPattern,
+  manifestPath,
+  srcsetCandidatePattern,
+} from "#pantry/qti/package.ts";
+import { comparedPath, oracleValueOf, resolve } from "#pantry/test/resolution.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
 /**
@@ -817,11 +822,11 @@ type SplitSituation = "fragment" | "lead" | "plain" | "query" | "trail";
  */
 const census: ReferenceCensus = (_version, kind, name) =>
   Option.fromUndefinedOr(
-    new Map<string, CensusEntry>([
-      ["a href", { form: "uri", whiteSpace: "collapse" }],
-      ["img src", { form: "uri", whiteSpace: "collapse" }],
-      ["source srcset", { form: "srcset", whiteSpace: "replace" }],
-      ["video poster", { form: "uri", whiteSpace: "replace" }],
+    new Map<string, WhiteSpace>([
+      ["a href", "collapse"],
+      ["img src", "collapse"],
+      ["source srcset", "replace"],
+      ["video poster", "replace"],
     ]).get(`${kind} ${name}`),
   );
 
@@ -932,8 +937,10 @@ const referenceTreeOf = (input: ReferenceCase): XdmDocument<Composed> => ({
 /**
  * The reference rows a generated document implies, by a second reading: its nodes numbered in
  * document order (the document node 0, its root 1, then each whitespace node and element in turn),
- * each census attribute split by RFC 3986's Appendix B, and each value resolved by the law
- * oracle's own resolver with the root's and the element's `xml:base`, outermost first.
+ * each census attribute split by RFC 3986's Appendix B, and each value, a `srcset`'s too, resolved
+ * as one href by the law oracle's own resolver with the root's and the element's `xml:base`,
+ * outermost first. A `srcset` of several candidates or with a descriptor is "Href form"'s to refuse
+ * by its pattern over the lexical form, never the resolution's.
  *
  * @param input - The document.
  * @param documentIds - The ids its rows are written under.
@@ -946,13 +953,11 @@ const expectedReferences = (input: ReferenceCase, documentIds: DocumentIds) => {
   for (const [at, { base, carrier, value }] of input.elements.entries()) {
     const [kind, name] = carrier;
     const node = documentIds.idOf(3 + 2 * at);
-    for (const entry of Option.toArray(census("3.0.1", kind, name))) {
-      const resolution = resolveAttribute({
+    for (const whiteSpace of Option.toArray(census("3.0.1", kind, name))) {
+      const resolution = resolve({
         bases: [input.base, base].flatMap((written) => (written === undefined ? [] : [written])),
         document: documentIds.path,
-        lexical: value,
-        srcset: entry.form === "srcset",
-        whiteSpace: entry.whiteSpace,
+        value: oracleValueOf(value, whiteSpace),
       });
       references.set(JSON.stringify([node, name]), {
         document,
@@ -980,8 +985,9 @@ const expectedReferences = (input: ReferenceCase, documentIds: DocumentIds) => {
 };
 
 /**
- * A situation the reference rows' search must reach: each scope, each kind of value, and an
- * `xml:base` in scope of a resolved reference.
+ * A situation the reference rows' search must reach: each scope, each kind of value, an `xml:base`
+ * in scope of a resolved reference, and a `srcset` "Href form"'s pattern refuses that resolves as
+ * one href in the package, which no limit of the resolver turns unresolved.
  */
 type ReferenceSituation =
   | "base beside a reference"
@@ -993,7 +999,13 @@ type ReferenceSituation =
   | "resolved"
   | "same document"
   | "srcset"
+  | "srcset of candidates resolved"
   | "unresolved";
+
+/**
+ * `srcsetCandidatePattern` as the database reads it, ECMAScript under `u`.
+ */
+const oneCandidate = new RegExp(srcsetCandidatePattern, "u");
 
 /**
  * Name the situations one generated document reaches.
@@ -1018,6 +1030,13 @@ const referenceSituationsOf = (
     ["padded", references.some(({ lead, trail }) => lead !== "" || trail !== "")],
     ["params", references.some(({ params }) => params !== "")],
     ["srcset", references.some(({ name }) => name === "srcset")],
+    [
+      "srcset of candidates resolved",
+      references.some(
+        ({ lexical, name, scope }) =>
+          name === "srcset" && scope === "entry" && !oneCandidate.test(lexical),
+      ),
+    ],
     ["not in the census", input.elements.some(({ carrier: [kind] }) => kind === "div")],
   ];
 
@@ -1045,16 +1064,16 @@ const declaredWhiteSpace = (version: string, kind: string, name: string) => {
 };
 
 describe("import/overlays/package.ts, hrefs and references", () => {
-  it("reads the grammar's census as ReferenceAttribute's rows hold it, each with its type's whitespace class, and no form for an attribute outside it", () => {
+  it("reads the grammar's census as ReferenceAttribute's rows hold it, each with its type's whitespace class, and none for an attribute outside it", () => {
     // Oracle: the closed relation's own rows (`ReferenceAttribute`, spec reading 103), which the
     // database's copy into Reference selects by, against the builder's lookup; and the attribute
     // inventory's declarations, read by a second walk, for each one's whitespace class.
     // Bound: every row of ReferenceAttribute, and three attributes outside it.
     assert.isNotEmpty(ReferenceAttribute.rows);
-    for (const { form, kind, name, version } of ReferenceAttribute.rows) {
+    for (const { kind, name, version } of ReferenceAttribute.rows) {
       assert.deepStrictEqual(
         referenceCensus(version, kind, name),
-        Option.some({ form, whiteSpace: declaredWhiteSpace(version, kind, name) }),
+        Option.some(declaredWhiteSpace(version, kind, name)),
         `${version} ${kind} ${name}`,
       );
     }
@@ -1158,6 +1177,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
                 "padded",
                 "params",
                 "srcset",
+                "srcset of candidates resolved",
                 "not in the census",
               ],
               { cases: 300, sense: notesOnly },

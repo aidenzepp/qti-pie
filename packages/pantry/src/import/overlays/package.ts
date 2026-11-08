@@ -307,17 +307,12 @@ export const hrefValueOf = (lexical: string, whiteSpace: WhiteSpace): string => 
  * - `colon`: a `:` in the first segment of a path with no scheme (`1:a.png`). RFC 3986, §4.2, makes
  *   it no relative reference ("would be mistaken for a scheme name"), and the URL Standard reads it
  *   as a path.
- * - `srcset`: a `srcset` of several image candidates or with a descriptor, which the HTML Standard's
- *   own parsing algorithm splits (`#pantry/qti/package.ts` `srcsetCandidatePattern`).
+ *
+ * A `srcset` of several image candidates or with a descriptor meets no limit here: the importer
+ * resolves it as one href, and "Href form" refuses its lexical form by `srcsetCandidatePattern`
+ * (`#pantry/qti/package.ts`) whatever its resolution.
  */
-export type Limit =
-  | "backslash"
-  | "colon"
-  | "control"
-  | "octets"
-  | "percent"
-  | "separator"
-  | "srcset";
+export type Limit = "backslash" | "colon" | "control" | "octets" | "percent" | "separator";
 
 /**
  * How an href resolves, the `HrefScope` its row holds (`#pantry/qti/package.ts`): in the
@@ -975,29 +970,14 @@ export interface DocumentIds extends ManifestIds {
 }
 
 /**
- * How an attribute of the reference census holds its references: one URL, or a `srcset`'s image
- * candidates (`ReferenceAttribute`'s `form`, the grammar's).
- */
-export type ReferenceForm = "srcset" | "uri";
-
-/**
- * A census attribute as the builder reads it: the form of the references it holds, and the
- * whitespace class of its type, which its value is read under before it resolves.
- */
-export interface CensusEntry {
-  readonly form: ReferenceForm;
-  readonly whiteSpace: WhiteSpace;
-}
-
-/**
- * The reference census: how an attribute of a name on an element of a kind holds its references,
- * under a schema version, none for an attribute that names no file.
+ * The reference census: the whitespace class an attribute of a name on an element of a kind is read
+ * under before it resolves, under a schema version, none for an attribute that names no file.
  */
 export type ReferenceCensus = (
   version: string,
   kind: string,
   name: string,
-) => Option.Option<CensusEntry>;
+) => Option.Option<WhiteSpace>;
 
 /**
  * Each declared attribute's whitespace class, by `version kind name`: its type's, a union's read
@@ -1046,12 +1026,11 @@ const whiteSpaceOf = (version: string, kind: string, name: string): WhiteSpace =
  * @param version - The element's schema version.
  * @param kind - Its kind.
  * @param name - The attribute's name.
- * @returns How it holds its references, none for an attribute the census does not list.
+ * @returns Its whitespace class, none for an attribute the census does not list.
  */
 export const referenceCensus: ReferenceCensus = (version, kind, name) =>
-  Option.map(
-    grammar.references.referenceAttribute.lookup({ kind, name, version }),
-    ({ form }): CensusEntry => ({ form, whiteSpace: whiteSpaceOf(version, kind, name) }),
+  Option.map(grammar.references.referenceAttribute.lookup({ kind, name, version }), () =>
+    whiteSpaceOf(version, kind, name),
   );
 
 /**
@@ -1064,36 +1043,14 @@ export interface ReferenceRows {
 }
 
 /**
- * Resolve a census attribute's value as its row holds it: as any href ({@link resolveIn}), but a
- * `srcset` whose value holds a comma or inner whitespace, several candidates or one with a
- * descriptor, is unresolved under the `srcset` limit unless it is external, where `Href_form`'s
- * own pattern over the lexical form refuses it (`srcsetCandidatePattern`).
- *
- * @param resolve - The document's resolver.
- * @param node - The attribute's element.
- * @param lexical - Its lexical form.
- * @param entry - Its census entry.
- * @returns Its resolution.
- */
-const censusResolutionOf = (
-  resolve: HrefResolver,
-  node: NodeId,
-  lexical: string,
-  entry: CensusEntry,
-): HrefResolution => {
-  const resolution = resolve(node, lexical, entry.whiteSpace);
-
-  return entry.form === "srcset" &&
-    resolution.scope !== "external" &&
-    /[,\t\n\r ]/u.test(hrefValueOf(lexical, entry.whiteSpace))
-    ? { limit: "srcset", scope: "unresolved" }
-    : resolution;
-};
-
-/**
  * Build a document's reference rows (`#pantry/qti/package.ts`): each attribute of the census with
  * its written split and its `HrefScope`, and each that resolves in the package with the
  * entry path it names, its `ReferencePath`.
+ *
+ * Every value, a `srcset`'s too, resolves as one href ({@link resolveIn}), read by its whitespace
+ * class. A `srcset` of several image candidates or with a descriptor is refused by "Href form" over
+ * its lexical form (`srcsetCandidatePattern`), whatever scope its resolution writes, so the builder
+ * judges no candidate.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under, and its path.
@@ -1125,8 +1082,7 @@ export const referenceRowsOf = (
       continue;
     }
 
-    const entry = listed.value;
-    const resolution = censusResolutionOf(resolve, node, lexical, entry);
+    const resolution = resolve(node, lexical, listed.value);
     const key = headingKey([node, attribute]);
     references.set(key, {
       document,
