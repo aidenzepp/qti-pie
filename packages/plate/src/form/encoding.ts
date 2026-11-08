@@ -5,7 +5,8 @@
  *
  * Entries carry QTI's lexical forms, so a value's form is {@link format}'s and its reading is
  * {@link parseLexical}'s, with the allowances a posted form needs: a number is trimmed, and a
- * string's line breaks are a textarea's.
+ * string's line breaks are a textarea's. A record posts the text it was typed as, and its other
+ * fields are read from that text.
  *
  * @module
  */
@@ -213,10 +214,20 @@ export const checkInstance = (token: string): Option.Option<InstanceRequirement>
 export const entryName = (instance: string, response: string): string => `${instance}.${response}`;
 
 /**
+ * Give the text a record was typed as: its `stringValue` field, which {@link encode} posts for the
+ * record and the text control bound to it shows and checks.
+ *
+ * @param record The record.
+ * @returns Its `stringValue`, or none when it has no such field, as the NULL record has none.
+ */
+export const recordText = (record: RecordValue): readonly Single[] =>
+  record.fields.flatMap(({ identifier, value }) => (identifier === "stringValue" ? [value] : []));
+
+/**
  * Encode a value as the entries a form posts for it.
  *
- * A record posts its `stringValue` field, the text {@link decode} reads every other field from, so
- * a record decoded from a post encodes back to that post.
+ * A record posts its `stringValue` field ({@link recordText}), the text {@link decode} reads every
+ * other field from, so a record decoded from a post encodes back to that post.
  *
  * @param value The response's value.
  * @param binding The response's binding, which names the entries.
@@ -225,11 +236,7 @@ export const entryName = (instance: string, response: string): string => `${inst
  *   all under the binding's name and in {@link format}'s lexical form.
  */
 export const encode = (value: ResponseValue, binding: Binding): readonly Entry[] => {
-  const singles = isRecordValue(value)
-    ? value.fields
-        .filter(({ identifier }) => identifier === "stringValue")
-        .map((field) => field.value)
-    : value.values;
+  const singles = isRecordValue(value) ? recordText(value) : value.values;
 
   return singles.map((single) => [binding.name, format(single)]);
 };
@@ -441,20 +448,17 @@ const numberFields = (text: string): readonly RecordField[] => {
   const integer = isInteger
     ? Result.getSuccess(parseLexical("integer", sign + whole))
     : Option.none<Single>();
+  const float = Result.getSuccess(parseLexical("float", trimmed));
 
-  return Array.getSomes([
-    Result.getSuccess(parseLexical("float", trimmed)).pipe(
-      Option.map((value) => ({ identifier: "floatValue", value })),
-    ),
-    integer.pipe(Option.map((value) => ({ identifier: "integerValue", value }))),
-    Option.some(integerField("leftDigits", BigInt(whole.length))),
-    Option.some(integerField("rightDigits", BigInt(fraction.length))),
-    Option.some(
-      integerField("ndp", BigInt(fraction.length) - Option.getOrElse(exponent, () => 0n)),
-    ),
-    Option.some(integerField("nsf", BigInt(significant))),
-    exponent.pipe(Option.map((value) => integerField("exponent", value))),
-  ]);
+  return [
+    ...Option.toArray(float.pipe(Option.map((value) => ({ identifier: "floatValue", value })))),
+    ...Option.toArray(integer.pipe(Option.map((value) => ({ identifier: "integerValue", value })))),
+    integerField("leftDigits", BigInt(whole.length)),
+    integerField("rightDigits", BigInt(fraction.length)),
+    integerField("ndp", BigInt(fraction.length) - Option.getOrElse(exponent, () => 0n)),
+    integerField("nsf", BigInt(significant)),
+    ...Option.toArray(exponent.pipe(Option.map((value) => integerField("exponent", value)))),
+  ];
 };
 
 /**

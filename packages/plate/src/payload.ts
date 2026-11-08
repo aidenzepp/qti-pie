@@ -28,7 +28,7 @@ import type { PrintOptions } from "#plate/engine/format.ts";
 import { integerOf } from "#plate/engine/numbers.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
-import { entryName, isPosted } from "#plate/form/encoding.ts";
+import { entryName, isPosted, recordText } from "#plate/form/encoding.ts";
 import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
@@ -658,9 +658,9 @@ export const identifyMessages = (
 /**
  * Give the values the view shows for a response.
  *
- * A record shows its `stringValue` field, the text it was typed as, which only the string control
- * a text interaction binds to a record shows: the text the candidate typed comes back as typed,
- * and a record without that field, such as the NULL record or a correct response that declares
+ * A record shows its `stringValue` field ({@link recordText}), the text it was typed as, in the
+ * string control a text interaction binds to it, so the text the candidate typed comes back as
+ * typed. A record without that field, such as the NULL record or a correct response that declares
  * none, leaves the control empty. Restored text counts toward the output budget as any other.
  *
  * @param build The build.
@@ -674,9 +674,7 @@ const shown = (build: Pick<Build, "values">, response: string): readonly Single[
     return [];
   }
 
-  return isRecordValue(value)
-    ? value.fields.flatMap((field) => (field.identifier === "stringValue" ? [field.value] : []))
-    : value.values;
+  return isRecordValue(value) ? recordText(value) : value.values;
 };
 
 /**
