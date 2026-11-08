@@ -675,9 +675,14 @@ export const submitPart = (
       ),
     );
 
-    const run = yield* outcomesProcessed(test.test, items, { ...saved, items: after }, context.now);
+    const afterRun = yield* outcomesProcessed(
+      test.test,
+      items,
+      { ...saved, items: after },
+      context.now,
+    );
 
-    return yield* partEnded(test.test, items, run, index, context.now);
+    return yield* partEnded(test.test, items, afterRun, index, context.now);
   });
 
 /**

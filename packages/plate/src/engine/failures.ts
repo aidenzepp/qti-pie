@@ -5,9 +5,9 @@
  *
  * Each is a failure the caller can cause, since the variables come from the record the host hands
  * back, and a test's template defaults from a test checked apart from its items, so the engine
- * returns it in a `Result` and never throws it. `#plate/engine/evaluate.ts`
- * re-exports all four, so the public entry and every other importer reach them there. The module
- * imports only `Data` from `effect`.
+ * returns it in a `Result` and never throws it. `#plate/engine/evaluate.ts` re-exports all four,
+ * so the public entry and every other importer reach them there. The module imports only `Data`
+ * from `effect`.
  *
  * @module
  */

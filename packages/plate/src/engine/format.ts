@@ -13,8 +13,7 @@
  * all, and {@link formatPrinted} says so, so its caller can fail rather than show a blank slot. A
  * caller may hold a text to a smaller bound, as `redactItem` holds each printed text to what
  * remains of its output budget, and the formatter stops building as soon as the text would pass
- * it.
- * Every float reaches decimal digits through {@link shortestDecimal}, the one approximated
+ * it. Every float reaches decimal digits through {@link shortestDecimal}, the one approximated
  * step, and is rounded or truncated as that decimal, never as the double's binary expansion, so a
  * page and Node print the same text. A duration prints as a float does, its seconds, `format`
  * applying (G-R3, pending).

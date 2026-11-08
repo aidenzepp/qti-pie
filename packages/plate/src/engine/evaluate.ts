@@ -292,13 +292,14 @@ export const isTrue = (value: Value): boolean => {
  * @param expression The expression.
  * @param item The declarations holder, an item or a test's outcome declarations, whose
  *   declarations give the correct responses, the mappings and the area mappings.
- * @param variables The variables of the attempt.
+ * @param variables The variables of the run.
  * @param draw The stream the expression's random kinds draw from. Without one, the call builds the
  *   default stream, `drawStream("", "")`, afresh, which stands for "no draws expected": it serves
  *   tests and isolated evaluation. Every processing entry passes its own stream instead, keyed by
  *   the record's seed under its own label (`runAttempt` its response label, `firstAttempt` its
- *   template label), because an entry left on the default would draw the same numbers for every
- *   session and attempt, and no test would fail.
+ *   template label), or by a test session's processing seed under its own (an item ref's template
+ *   defaults the item's default label), because an entry left on the default would draw the same
+ *   numbers for every session and attempt, and no test would fail.
  * @returns The expression's value; or an {@link EngineFailure}: an {@link UnknownIdentifierError}
  *   when it names a variable or response that is not held, or an {@link UnmappedResponseError} when
  *   a `map-response` names a response with no mapping or a `map-response-point` one with no area
@@ -317,7 +318,7 @@ export const evaluateExpression = (
  *
  * @param item The declarations holder.
  * @param identifier The outcome's identifier.
- * @returns The outcome's base type and cardinality, none when the item holds no outcome by that
+ * @returns The outcome's base type and cardinality, none when the holder holds no outcome by that
  *   name.
  */
 const outcomeType = (
@@ -568,9 +569,9 @@ const runSequence = (
  *   Without one, the call builds the default stream, `drawStream("", "")`, afresh, which stands for
  *   "no draws expected": it serves tests and isolated evaluation. Every processing entry passes its
  *   own stream instead, keyed by the record's seed under its own label (`runAttempt` its response
- *   label, `firstAttempt` its template label; outcome processing brings its own), because an entry
- *   left on the default would draw the same numbers for every session and attempt, and no test
- *   would fail.
+ *   label, `firstAttempt` its template label), or by a test session's processing seed under its
+ *   own (a run of the test's outcome processing its outcome label), because an entry left on the
+ *   default would draw the same numbers for every session and attempt, and no test would fail.
  * @returns The variables after the last rule run; or the first failure, after which no rule runs:
  *   an {@link UnknownIdentifierError} when a rule names an identifier the item or the variables do
  *   not hold in the role the rule reads it in, an {@link OutcomeMismatchError} when a rule sets an
