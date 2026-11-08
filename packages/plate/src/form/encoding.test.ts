@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import type * as plate from "#plate/index.ts";
 import {
   checkInstance,
   decode,
@@ -8,9 +9,21 @@ import {
   isXmlText,
   partition,
 } from "#plate/form/encoding.ts";
-import type { Binding, Entry, Malformed } from "#plate/form/encoding.ts";
+import type {
+  Binding,
+  Entry,
+  Malformed,
+  RecordBinding,
+  ValueBinding,
+} from "#plate/form/encoding.ts";
 import { format } from "#plate/model/values.ts";
-import type { Single, Value } from "#plate/model/values.ts";
+import type {
+  RecordField,
+  RecordValue,
+  ResponseValue,
+  Single,
+  Value,
+} from "#plate/model/values.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 
 /**
@@ -31,9 +44,17 @@ const otherInstance = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
  * @returns The binding, named for {@link instance}.
  */
 const binding = (
-  baseType: Binding["baseType"],
-  cardinality: Binding["cardinality"] = "single",
-): Binding => ({ baseType, cardinality, name: entryName(instance, "RESPONSE") });
+  baseType: ValueBinding["baseType"],
+  cardinality: ValueBinding["cardinality"] = "single",
+): ValueBinding => ({ baseType, cardinality, name: entryName(instance, "RESPONSE") });
+
+/**
+ * The record binding of the response `RESPONSE`, named for {@link instance}.
+ */
+const recordBinding: RecordBinding = {
+  cardinality: "record",
+  name: entryName(instance, "RESPONSE"),
+};
 
 /**
  * Construct the entries a form posts for the response `RESPONSE`.
@@ -51,7 +72,7 @@ const posted = (...values: readonly (string | Blob)[]): readonly Entry[] =>
  * @param values Its values.
  * @returns The value.
  */
-const value = (bound: Binding, ...values: readonly Single[]): Value => ({
+const value = (bound: ValueBinding, ...values: readonly Single[]): Value => ({
   baseType: bound.baseType,
   cardinality: bound.cardinality,
   values,
@@ -74,13 +95,157 @@ const identifier = (text: string): Single => ({ baseType: "identifier", value: t
 const stringOf = (text: string): Single => ({ baseType: "string", value: text });
 
 /**
+ * Construct a field of a record.
+ *
+ * @param name The field's identifier.
+ * @param single The field's value.
+ * @returns The field.
+ */
+const field = (name: string, single: Single): RecordField => ({ identifier: name, value: single });
+
+/**
+ * Construct an integer field of a record.
+ *
+ * @param name The field's identifier.
+ * @param integer The field's value.
+ * @returns The field.
+ */
+const integerField = (name: string, integer: bigint): RecordField =>
+  field(name, { baseType: "integer", value: integer });
+
+/**
+ * Construct a record for a test.
+ *
+ * @param fields Its fields, in order.
+ * @returns The record.
+ */
+const record = (...fields: readonly RecordField[]): RecordValue => ({
+  cardinality: "record",
+  fields,
+});
+
+/**
+ * Construct the record a posted number decodes to, its fields in `decode`'s order (G-R4, pending).
+ *
+ * @param text The posted text, its `stringValue`.
+ * @param counts The number's fields: `floatValue`, then the integer fields by their identifiers,
+ *   `integerValue` and `exponent` only when the number has them.
+ * @returns The record.
+ */
+const numberRecord = (
+  text: string,
+  counts: {
+    readonly floatValue: number;
+    readonly integerValue?: bigint;
+    readonly leftDigits: bigint;
+    readonly rightDigits: bigint;
+    readonly ndp: bigint;
+    readonly nsf: bigint;
+    readonly exponent?: bigint;
+  },
+): RecordValue =>
+  record(
+    field("stringValue", stringOf(text)),
+    field("floatValue", { baseType: "float", value: counts.floatValue }),
+    ...(counts.integerValue === undefined
+      ? []
+      : [integerField("integerValue", counts.integerValue)]),
+    integerField("leftDigits", counts.leftDigits),
+    integerField("rightDigits", counts.rightDigits),
+    integerField("ndp", counts.ndp),
+    integerField("nsf", counts.nsf),
+    ...(counts.exponent === undefined ? [] : [integerField("exponent", counts.exponent)]),
+  );
+
+/**
+ * Give a record's field of an identifier.
+ *
+ * @param decoded The record.
+ * @param name The field's identifier.
+ * @returns The field's value, or none when the record has no such field.
+ */
+const fieldOf = (decoded: RecordValue, name: string): Option.Option<Single> =>
+  Option.map(
+    Option.fromUndefinedOr(decoded.fields.find((each) => each.identifier === name)),
+    (found) => found.value,
+  );
+
+/**
+ * Whether two types are the same type, not merely assignable to each other: `true` only when the
+ * checker treats `A` and `B` as identical.
+ */
+type Equals<A, B> =
+  // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- each `T` must stay an unresolved type parameter inside its function type, so the conditional compares `A` and `B` by identity rather than by assignability.
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+/**
+ * The package's `ValueBinding` is this module's; `tsc` refuses this line when they part.
+ */
+const valueBindingExported: Equals<plate.ValueBinding, ValueBinding> = true;
+
+/**
+ * The package's `RecordBinding` is this module's; `tsc` refuses this line when they part.
+ */
+const recordBindingExported: Equals<plate.RecordBinding, RecordBinding> = true;
+
+/**
+ * The package's `Binding` is this module's; `tsc` refuses this line when they part.
+ */
+const bindingExported: Equals<plate.Binding, Binding> = true;
+
+/**
+ * Decode no entries under a binding of either kind, so the result's type is the one `decode` gives
+ * the union.
+ *
+ * @param bound A binding of either kind.
+ * @returns What `decode` gives.
+ */
+const decodeEither = (bound: Binding) => decode([], bound);
+
+/**
+ * Decode no entries under a record binding.
+ *
+ * @param bound A record binding.
+ * @returns What `decode` gives.
+ */
+const decodeRecord = (bound: RecordBinding) => decode([], bound);
+
+/**
+ * Decode no entries under a value binding.
+ *
+ * @param bound A value binding.
+ * @returns What `decode` gives.
+ */
+const decodeValue = (bound: ValueBinding) => decode([], bound);
+
+/**
+ * Decode posted values under the record binding of the response `RESPONSE`.
+ *
+ * @param values The posted values, in order.
+ * @returns What `decode` gives.
+ */
+const decodeRecordOf = (
+  ...values: readonly (string | Blob)[]
+): Result.Result<RecordValue, Malformed> => decode(posted(...values), recordBinding);
+
+/**
+ * `decode`'s result follows its binding: a `Value` for a `ValueBinding`, a `RecordValue` for a
+ * `RecordBinding`, and either for the union; `tsc` refuses these lines when one parts.
+ */
+const resultsFollow: readonly [
+  Equals<ReturnType<typeof decodeEither>, Result.Result<ResponseValue, Malformed>>,
+  Equals<ReturnType<typeof decodeRecord>, Result.Result<RecordValue, Malformed>>,
+  Equals<ReturnType<typeof decodeValue>, Result.Result<Value, Malformed>>,
+] = [true, true, true];
+
+/**
  * Encode a value under a binding and decode the entries back.
  *
  * @param bound The binding.
  * @param original The value to send through the form.
  * @returns The value the entries decode to.
  */
-const roundTrip = (bound: Binding, original: Value): Effect.Effect<Value, Malformed> =>
+const roundTrip = (bound: ValueBinding, original: Value): Effect.Effect<Value, Malformed> =>
   Effect.fromResult(decode(encode(original, bound), bound));
 
 /**
@@ -484,6 +649,272 @@ describe("encode and decode", () => {
         yield* Effect.fromResult(decode(posted("", "", ""), ordered)),
         value(ordered),
       );
+    }),
+  );
+});
+
+describe("a record binding", () => {
+  it("[Q-20] binding types exported: ValueBinding, RecordBinding and Binding are the package's own", () => {
+    assert.isTrue(valueBindingExported && recordBindingExported && bindingExported);
+  });
+
+  it("[Q-20] R-c fields: decode gives a Value for a value binding, a record for a record binding, either for the union", () => {
+    assert.deepStrictEqual(resultsFollow, [true, true, true]);
+    assert.deepStrictEqual(Result.getSuccess(decodeEither(recordBinding)), Option.some(record()));
+    assert.deepStrictEqual(
+      Result.getSuccess(decodeValue(binding("string"))),
+      Option.some(value(binding("string"))),
+    );
+  });
+
+  it.effect("[Q-20] R-c fields: each of the table's examples decodes to its record", () =>
+    Effect.gen(function* tableExamples() {
+      const examples: readonly (readonly [string, RecordValue])[] = [
+        [
+          "  12 ",
+          numberRecord("  12 ", {
+            floatValue: 12,
+            integerValue: 12n,
+            leftDigits: 2n,
+            ndp: 0n,
+            nsf: 2n,
+            rightDigits: 0n,
+          }),
+        ],
+        [
+          "-0.050",
+          numberRecord("-0.050", {
+            floatValue: -0.05,
+            leftDigits: 1n,
+            ndp: 3n,
+            nsf: 2n,
+            rightDigits: 3n,
+          }),
+        ],
+        [
+          "1.5e3",
+          numberRecord("1.5e3", {
+            exponent: 3n,
+            floatValue: 1500,
+            leftDigits: 1n,
+            ndp: -2n,
+            nsf: 2n,
+            rightDigits: 1n,
+          }),
+        ],
+        [
+          "5.",
+          numberRecord("5.", {
+            floatValue: 5,
+            integerValue: 5n,
+            leftDigits: 1n,
+            ndp: 0n,
+            nsf: 1n,
+            rightDigits: 0n,
+          }),
+        ],
+        ["abc", record(field("stringValue", stringOf("abc")))],
+      ];
+
+      for (const [text, expected] of examples) {
+        assert.deepStrictEqual(yield* Effect.fromResult(decodeRecordOf(text)), expected, text);
+      }
+    }),
+  );
+
+  it.effect("[Q-20] R-c fields: an empty post, or none, is a NULL record", () =>
+    Effect.gen(function* nullRecord() {
+      assert.deepStrictEqual(yield* Effect.fromResult(decodeRecordOf("")), record());
+      assert.deepStrictEqual(yield* Effect.fromResult(decodeRecordOf()), record());
+    }),
+  );
+
+  it.effect(
+    "[Q-20] R-c fields: zeros, a sign and a lone fraction count their digits as the table says",
+    () =>
+      Effect.gen(function* digitCounts() {
+        const examples: readonly (readonly [string, RecordValue])[] = [
+          [
+            "0.000",
+            numberRecord("0.000", {
+              floatValue: 0,
+              leftDigits: 1n,
+              ndp: 3n,
+              nsf: 3n,
+              rightDigits: 3n,
+            }),
+          ],
+          [
+            "0",
+            numberRecord("0", {
+              floatValue: 0,
+              integerValue: 0n,
+              leftDigits: 1n,
+              ndp: 0n,
+              nsf: 1n,
+              rightDigits: 0n,
+            }),
+          ],
+          [
+            "100",
+            numberRecord("100", {
+              floatValue: 100,
+              integerValue: 100n,
+              leftDigits: 3n,
+              ndp: 0n,
+              nsf: 3n,
+              rightDigits: 0n,
+            }),
+          ],
+          [
+            ".5",
+            numberRecord(".5", {
+              floatValue: 0.5,
+              leftDigits: 0n,
+              ndp: 1n,
+              nsf: 1n,
+              rightDigits: 1n,
+            }),
+          ],
+          [
+            "+007",
+            numberRecord("+007", {
+              floatValue: 7,
+              integerValue: 7n,
+              leftDigits: 3n,
+              ndp: 0n,
+              nsf: 1n,
+              rightDigits: 0n,
+            }),
+          ],
+          [
+            "2E-1",
+            numberRecord("2E-1", {
+              exponent: -1n,
+              floatValue: 0.2,
+              leftDigits: 1n,
+              ndp: 1n,
+              nsf: 1n,
+              rightDigits: 0n,
+            }),
+          ],
+        ];
+
+        for (const [text, expected] of examples) {
+          assert.deepStrictEqual(yield* Effect.fromResult(decodeRecordOf(text)), expected, text);
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-20] R-c fields: 1e400 gives the largest finite double, exponent 400 and ndp -400",
+    () =>
+      Effect.gen(function* beyondDouble() {
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decodeRecordOf("1e400")),
+          numberRecord("1e400", {
+            exponent: 400n,
+            floatValue: Number.MAX_VALUE,
+            leftDigits: 1n,
+            ndp: -400n,
+            nsf: 1n,
+            rightDigits: 0n,
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] R-c fields: a 10,000-digit numeral gives an exact integerValue and leftDigits 10000",
+    () =>
+      Effect.gen(function* longNumeral() {
+        const decoded = yield* Effect.fromResult(decodeRecordOf("7".repeat(10_000)));
+        const sevens = (7n * (10n ** 10_000n - 1n)) / 9n;
+
+        assert.deepStrictEqual(
+          fieldOf(decoded, "integerValue"),
+          Option.some({ baseType: "integer", value: sevens }),
+        );
+        assert.deepStrictEqual(
+          fieldOf(decoded, "leftDigits"),
+          Option.some({ baseType: "integer", value: 10_000n }),
+        );
+        assert.deepStrictEqual(
+          fieldOf(decoded, "floatValue"),
+          Option.some({ baseType: "float", value: Number.MAX_VALUE }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] R-c fields: INF, -INF, NaN, grouping, a no-break space, and ff under base 16 give stringValue alone",
+    () =>
+      Effect.gen(function* notNumbers() {
+        for (const text of ["INF", "-INF", "NaN", "1,000", "\u00A012", "1 2", "."]) {
+          assert.deepStrictEqual(
+            yield* Effect.fromResult(decodeRecordOf(text)),
+            record(field("stringValue", stringOf(text))),
+            text,
+          );
+        }
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decode(posted("ff"), recordBinding, { base: 16 })),
+          record(field("stringValue", stringOf("ff"))),
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] R-c fields: CRLF and a lone CR become LF in stringValue, and XML whitespace around a number is trimmed",
+    () =>
+      Effect.gen(function* lineBreaks() {
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(decodeRecordOf("\t3\r\n")),
+          numberRecord("\t3\n", {
+            floatValue: 3,
+            integerValue: 3n,
+            leftDigits: 1n,
+            ndp: 0n,
+            nsf: 1n,
+            rightDigits: 0n,
+          }),
+        );
+        assert.deepStrictEqual(
+          fieldOf(yield* Effect.fromResult(decodeRecordOf("a\rb")), "stringValue"),
+          Option.some(stringOf("a\nb")),
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] R-c fields: two entries are single-many, a file is file, and U+0001 is character",
+    () =>
+      Effect.gen(function* refusals() {
+        const many = yield* Effect.flip(Effect.fromResult(decodeRecordOf("1", "2")));
+        assert.deepStrictEqual([many._tag, many.reason], ["Malformed", "single-many"]);
+
+        const file = yield* Effect.flip(Effect.fromResult(decodeRecordOf(new Blob(["1"]))));
+        assert.strictEqual(file.reason, "file");
+
+        const character = yield* Effect.flip(Effect.fromResult(decodeRecordOf("1\u0001")));
+        assert.strictEqual(character.reason, "character");
+      }),
+  );
+
+  it.effect("[Q-20] R-c fields: encode posts a record's stringValue, which decode reads back", () =>
+    Effect.gen(function* recordRoundTrip() {
+      const answer = record(
+        field("stringValue", stringOf(" 4.20\n")),
+        field("floatValue", { baseType: "float", value: 4.2 }),
+      );
+
+      assert.deepStrictEqual(encode(answer, recordBinding), posted(" 4.20\n"));
+      assert.deepStrictEqual(encode(record(), recordBinding), []);
+
+      const decoded = yield* Effect.fromResult(
+        decode(encode(answer, recordBinding), recordBinding),
+      );
+      assert.deepStrictEqual(fieldOf(decoded, "stringValue"), fieldOf(answer, "stringValue"));
     }),
   );
 });

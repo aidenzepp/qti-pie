@@ -10,8 +10,14 @@
  * @module
  */
 import { Array, Data, Option, Result } from "effect";
-import { format, parseLexical } from "#plate/model/values.ts";
-import type { Single, Value } from "#plate/model/values.ts";
+import { format, isRecordValue, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
+import type {
+  RecordField,
+  RecordValue,
+  ResponseValue,
+  Single,
+  Value,
+} from "#plate/model/values.ts";
 
 /**
  * One posted form entry, as `FormData` holds it: a name and a string or file value.
@@ -39,14 +45,29 @@ export const isPosted = (baseType: string): baseType is PostedBaseType =>
   postedBaseTypes.some((name) => name === baseType);
 
 /**
- * How one response travels through the form: the entry name it posts under, from
+ * How a response of a base type travels through the form: the entry name it posts under, from
  * {@link entryName}, and the base type and cardinality of its declaration.
  */
-export interface Binding {
+export interface ValueBinding {
   readonly baseType: PostedBaseType;
   readonly cardinality: Value["cardinality"];
   readonly name: string;
 }
+
+/**
+ * How a record response travels through the form: the entry name it posts under, from
+ * {@link entryName}. A record has no base type of its own, and its one posted entry is its text.
+ */
+export interface RecordBinding {
+  readonly cardinality: "record";
+  readonly name: string;
+}
+
+/**
+ * How one response travels through the form: a {@link ValueBinding} for a response of a base type,
+ * or a {@link RecordBinding} for a record response.
+ */
+export type Binding = ValueBinding | RecordBinding;
 
 /**
  * Settings for {@link decode}.
@@ -194,13 +215,24 @@ export const entryName = (instance: string, response: string): string => `${inst
 /**
  * Encode a value as the entries a form posts for it.
  *
+ * A record posts its `stringValue` field, the text {@link decode} reads every other field from, so
+ * a record decoded from a post encodes back to that post.
+ *
  * @param value The response's value.
  * @param binding The response's binding, which names the entries.
- * @returns No entries for NULL, one for a `single`, and one for each value of a `multiple` or
- *   `ordered`, in order, all under the binding's name and in {@link format}'s lexical form.
+ * @returns No entries for NULL, one for a `single`, one for each value of a `multiple` or
+ *   `ordered`, in order, and for a record one for its `stringValue` field, none when it has none,
+ *   all under the binding's name and in {@link format}'s lexical form.
  */
-export const encode = (value: Value, binding: Binding): readonly Entry[] =>
-  value.values.map((single) => [binding.name, format(single)]);
+export const encode = (value: ResponseValue, binding: Binding): readonly Entry[] => {
+  const singles = isRecordValue(value)
+    ? value.fields
+        .filter(({ identifier }) => identifier === "stringValue")
+        .map((field) => field.value)
+    : value.values;
+
+  return singles.map((single) => [binding.name, format(single)]);
+};
 
 /**
  * The prefix `BigInt` takes to read a magnitude in each base it reads.
@@ -347,6 +379,208 @@ const readPosted = (
 };
 
 /**
+ * A number in a record's text: xs:double's lexical form, as {@link parseLexical} reads a float,
+ * without `INF`, `-INF` and `NaN`. An optional sign, the digits before the point, the point and the
+ * digits after it when written, and `e` or `E` with the exponent when written; {@link numberFields}
+ * also asks for at least one digit before or after the point. Each run of digits ends at a
+ * character the next part starts with, so a failed match backtracks in time linear in the text.
+ */
+const recordNumber =
+  /^(?<sign>[+-]?)(?<whole>[0-9]*)(?:\.(?<fraction>[0-9]*))?(?:[Ee](?<exponent>[+-]?[0-9]+))?$/u;
+
+/**
+ * A digit other than zero: where a number's significant figures start.
+ */
+const nonZeroDigit = /[1-9]/u;
+
+/**
+ * Construct an integer field of a record.
+ *
+ * @param identifier The field's identifier.
+ * @param value The field's value.
+ * @returns The field.
+ */
+const integerField = (identifier: string, value: bigint): RecordField => ({
+  identifier,
+  value: { baseType: "integer", value },
+});
+
+/**
+ * Give the fields a record's text gives when it is a number: `floatValue`, `integerValue`,
+ * `leftDigits`, `rightDigits`, `ndp`, `nsf` and `exponent`, in that order (G-R4, pending).
+ *
+ * The text is trimmed of XML whitespace only, so a no-break space keeps it from being a number.
+ * `floatValue` is the value model's reading of a float, so past the largest double it is the
+ * largest finite double of its sign. `integerValue` is the exact integer, present only when no
+ * fractional digit and no exponent is written (`5.` gives 5). `leftDigits` and `rightDigits` count
+ * the digits written before and after the point, leading and trailing zeros included, the sign
+ * not. `ndp` is `rightDigits` minus the exponent, and may be negative. `nsf` counts from the first
+ * non-zero digit to the last digit written; a zero value has the digits after the point, at least
+ * one. `exponent` is present only when written. Every integer is exact at any size, and each count
+ * is one scan of the text.
+ *
+ * @param text The posted text, as posted.
+ * @returns The fields, or none when the trimmed text is not a number.
+ */
+const numberFields = (text: string): readonly RecordField[] => {
+  const trimmed = trimXmlSpace(text);
+  const parts = recordNumber.exec(trimmed)?.groups;
+  const sign = parts?.["sign"] ?? "";
+  const whole = parts?.["whole"] ?? "";
+  const fraction = parts?.["fraction"] ?? "";
+  const written = Option.fromUndefinedOr(parts?.["exponent"]);
+  if (whole === "" && fraction === "") {
+    return [];
+  }
+
+  const exponent = written.pipe(Option.map(BigInt));
+  const digits = whole + fraction;
+  const first = digits.search(nonZeroDigit);
+  const significant = first === -1 ? Math.max(fraction.length, 1) : digits.length - first;
+  const isInteger = Option.isNone(written) && fraction === "" && whole !== "";
+  const integer = isInteger
+    ? Result.getSuccess(parseLexical("integer", sign + whole))
+    : Option.none<Single>();
+
+  return Array.getSomes([
+    Result.getSuccess(parseLexical("float", trimmed)).pipe(
+      Option.map((value) => ({ identifier: "floatValue", value })),
+    ),
+    integer.pipe(Option.map((value) => ({ identifier: "integerValue", value }))),
+    Option.some(integerField("leftDigits", BigInt(whole.length))),
+    Option.some(integerField("rightDigits", BigInt(fraction.length))),
+    Option.some(
+      integerField("ndp", BigInt(fraction.length) - Option.getOrElse(exponent, () => 0n)),
+    ),
+    Option.some(integerField("nsf", BigInt(significant))),
+    exponent.pipe(Option.map((value) => integerField("exponent", value))),
+  ]);
+};
+
+/**
+ * Read a record from the texts posted for it, at most one (G-R4, pending).
+ *
+ * Its text is read as a string binding reads one: refused when it holds a character XML cannot
+ * carry, NULL when empty, and with CRLF and a lone CR turned into LF. That text is the record's
+ * `stringValue`, and {@link numberFields} gives the rest. Text Entry's `base` is never applied.
+ *
+ * @param texts The posted texts, none or one.
+ * @returns The record, NULL (no field) when nothing or empty text was posted, or the reason the
+ *   text is refused.
+ */
+const readRecord = (texts: readonly string[]): Result.Result<RecordValue, MalformedReason> => {
+  const [text = ""] = texts;
+
+  return readPosted("string", text, 10).pipe(
+    Result.map((stringValue): RecordValue => ({
+      cardinality: "record",
+      fields: Option.match(stringValue, {
+        onNone: () => [],
+        onSome: (value) => [{ identifier: "stringValue", value }, ...numberFields(text)],
+      }),
+    })),
+  );
+};
+
+/**
+ * Read a value of a base type from the texts posted for it.
+ *
+ * @param texts The posted texts.
+ * @param binding The response's binding.
+ * @param base The number base of an integer.
+ * @returns The value, holding each text that is not empty, in order, or the first reason a text is
+ *   refused.
+ */
+const readValue = (
+  texts: readonly string[],
+  binding: ValueBinding,
+  base: number,
+): Result.Result<Value, MalformedReason> =>
+  Result.all(texts.map((text) => readPosted(binding.baseType, text, base))).pipe(
+    Result.map((values) => ({
+      baseType: binding.baseType,
+      cardinality: binding.cardinality,
+      values: Array.getSomes(values),
+    })),
+  );
+
+/**
+ * Give the texts posted under a binding's name, in order.
+ *
+ * @param entries The posted entries.
+ * @param binding The response's binding.
+ * @returns The texts, or `file` when one entry is a file, and `single-many` when a `single` or a
+ *   record has more than one.
+ */
+const postedTexts = (
+  entries: readonly Entry[],
+  binding: Binding,
+): Result.Result<readonly string[], MalformedReason> => {
+  const posted = entries.filter(([name]) => name === binding.name).map(([, value]) => value);
+  const texts = posted.filter((value): value is string => typeof value === "string");
+  if (texts.length < posted.length) {
+    return Result.fail("file");
+  }
+
+  const takesOne = binding.cardinality === "single" || binding.cardinality === "record";
+
+  return takesOne && texts.length > 1 ? Result.fail("single-many") : Result.succeed(texts);
+};
+
+/**
+ * Decode posted entries under a binding of either kind, as {@link decode} does.
+ *
+ * @param entries The posted entries.
+ * @param binding The response's binding.
+ * @param options The number base of an integer.
+ * @returns A record for a record binding, a value of the binding's base type for the other, or
+ *   {@link Malformed}.
+ */
+const decodeResponse = (
+  entries: readonly Entry[],
+  binding: Binding,
+  options: DecodeOptions = {},
+): Result.Result<ResponseValue, Malformed> =>
+  postedTexts(entries, binding).pipe(
+    Result.flatMap((texts): Result.Result<ResponseValue, MalformedReason> =>
+      binding.cardinality === "record"
+        ? readRecord(texts)
+        : readValue(texts, binding, options.base ?? 10),
+    ),
+    Result.mapError((reason) => new Malformed({ entry: binding.name, reason })),
+  );
+
+/**
+ * {@link decode}'s signatures: its result follows its binding.
+ */
+interface Decode {
+  /**
+   * A value binding's entries decode to a value of its base type and cardinality.
+   */
+  (
+    entries: readonly Entry[],
+    binding: ValueBinding,
+    options?: DecodeOptions,
+  ): Result.Result<Value, Malformed>;
+  /**
+   * A record binding's entries decode to a record.
+   */
+  (
+    entries: readonly Entry[],
+    binding: RecordBinding,
+    options?: DecodeOptions,
+  ): Result.Result<RecordValue, Malformed>;
+  /**
+   * A binding of either kind decodes to either kind of value.
+   */
+  (
+    entries: readonly Entry[],
+    binding: Binding,
+    options?: DecodeOptions,
+  ): Result.Result<ResponseValue, Malformed>;
+}
+
+/**
  * Decode the entries a form posted as a value of one binding.
  *
  * Only the entries named for the binding are read. Text holding a character outside XML 1.0's
@@ -359,41 +593,30 @@ const readPosted = (
  * model reads as non-finite, are refused. An identifier must be an NCName. A string has CRLF and a
  * lone CR turned into LF, as a textarea's value has, so a value holds LF line breaks only.
  *
+ * A record binding reads one text, kept as the record's `stringValue` field with its line breaks
+ * made LF, and, when the text trimmed of XML whitespace is a decimal number with an optional
+ * exponent, the fields `floatValue`, `integerValue` (only for a whole number with no exponent),
+ * `leftDigits`, `rightDigits`, `ndp`, `nsf` and `exponent` (only when written), every integer
+ * exact (G-R4, pending). Text that is not such a number, `INF`, `-INF` and `NaN` among it,
+ * gives `stringValue` alone; empty text gives a NULL record, with no field. `base` is not applied.
+ *
+ * @example
+ *   decode([["i.R", "1.5e3"]], { cardinality: "record", name: "i.R" });
+ *   // A record: stringValue "1.5e3", floatValue 1500, leftDigits 1, rightDigits 1, ndp -2,
+ *   // nsf 2, exponent 3.
+ *
  * @param entries The posted entries.
  * @param binding The response's binding.
- * @param options The number base of an integer.
- * @returns The value, or {@link Malformed}: `file` for a file, `single-many` for two entries of a
- *   `single`, `character` for text holding a character XML cannot carry, and `number` or
- *   `identifier` for text outside the base type's lexical space.
+ * @param options The number base of an integer, which a record binding ignores.
+ * @returns A value of the binding's base type for a {@link ValueBinding}, a record for a
+ *   {@link RecordBinding}, or {@link Malformed}: `file` for a file, `single-many` for two entries
+ *   of a `single` or a record, `character` for text holding a character XML cannot carry, and
+ *   `number` or `identifier` for text outside the base type's lexical space.
  */
-export const decode = (
-  entries: readonly Entry[],
-  binding: Binding,
-  options: DecodeOptions = {},
-): Result.Result<Value, Malformed> => {
-  const posted = entries.filter(([name]) => name === binding.name).map(([, value]) => value);
-  const texts = posted.filter((value): value is string => typeof value === "string");
-  const malformed = (reason: MalformedReason) => new Malformed({ entry: binding.name, reason });
-
-  if (texts.length < posted.length) {
-    return Result.fail(malformed("file"));
-  }
-
-  if (binding.cardinality === "single" && texts.length > 1) {
-    return Result.fail(malformed("single-many"));
-  }
-
-  return Result.all(
-    texts.map((text) => readPosted(binding.baseType, text, options.base ?? 10)),
-  ).pipe(
-    Result.mapError(malformed),
-    Result.map((values) => ({
-      baseType: binding.baseType,
-      cardinality: binding.cardinality,
-      values: Array.getSomes(values),
-    })),
-  );
-};
+export const decode =
+  // SAFETY: decodeResponse gives a record exactly when the binding's cardinality is `record`, which only a RecordBinding has, and a Value of the binding's base type otherwise, which is what each overload states.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The SAFETY note above: one body cannot state the overloads to TypeScript, which checks each overload against the body's union result.
+  decodeResponse as Decode;
 
 /**
  * Posted entries split by owner.
