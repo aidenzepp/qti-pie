@@ -5,7 +5,7 @@ import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { StoredRecord } from "#plate/codec/record.ts";
 import { Configuration, configure } from "#plate/configuration.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
-import { Malformed } from "#plate/form/encoding.ts";
+import { decode, Malformed } from "#plate/form/encoding.ts";
 import type { PostedBaseType } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
 import type {
@@ -1592,6 +1592,68 @@ describe("score over a response value two map entries match", () => {
         };
 
         assert.deepStrictEqual(yield* mappedScore(overlappingAreas, point), [2]);
+      }),
+  );
+});
+
+/**
+ * A hand-built item document whose `record` response `R`, which a Text Entry binds, sets the float
+ * `SCORE` from its field `integerValue` through `qti-field-value`. `open` accepts it: a `record`
+ * declaration types none of its fields, so the check cannot see that the field is an integer.
+ */
+const integerFieldDocument = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="field-typed" title="Field typed" time-dependent="false" adaptive="false">
+  <qti-response-declaration identifier="R" cardinality="record"/>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>
+  <qti-item-body><p>How many? <qti-text-entry-interaction response-identifier="R"/></p></qti-item-body>
+  <qti-response-processing>
+    <qti-set-outcome-value identifier="SCORE"><qti-field-value field-identifier="integerValue"><qti-variable identifier="R"/></qti-field-value></qti-set-outcome-value>
+  </qti-response-processing>
+</qti-assessment-item>
+`;
+
+/**
+ * Decode a Text Entry's posted text into the record `R` takes, as a host's `decode` does.
+ *
+ * @param text The text the candidate typed.
+ * @returns The record.
+ */
+const typedRecord = (text: string): RecordValue =>
+  Result.getOrElse(
+    decode([["field-typed.R", text]], { cardinality: "record", name: "field-typed.R" }),
+    (failure) => assert.fail(`decode refused ${text}: ${failure._tag}`),
+  );
+
+describe("score over a record field set into a variable", () => {
+  it.effect(
+    "[I-9a] returns OutcomeMismatchError for SCORE, never a throw, when a float SCORE is set from a field of another base type: integerValue of 12; abc has no integerValue and scores SCORE NULL",
+    () =>
+      Effect.gen(function* fieldOfAnotherBaseType() {
+        const verdict = yield* open(
+          "items/field-typed.xml",
+          new TextEncoder().encode(integerFieldDocument),
+        );
+        const opened = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`The item is ${verdict.verdict}, not accepted.`),
+        );
+        const mismatch = Option.getOrElse(failureOf(score(opened, { R: typedRecord("12") })), () =>
+          assert.fail("score succeeded on 12"),
+        );
+
+        assert.deepStrictEqual(
+          mismatch._tag === "OutcomeMismatchError"
+            ? [mismatch._tag, mismatch.identifier, mismatch.actual, mismatch.expected]
+            : [mismatch._tag],
+          ["OutcomeMismatchError", "SCORE", "integer single", "float single"],
+        );
+
+        const stored = yield* Effect.fromResult(score(opened, { R: typedRecord("abc") }));
+
+        assert.deepStrictEqual(stored.outcomes["SCORE"], {
+          baseType: "float",
+          cardinality: "single",
+          values: [],
+        });
       }),
   );
 });

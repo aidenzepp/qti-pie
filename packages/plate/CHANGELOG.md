@@ -49,6 +49,15 @@ and both of its entry points are unstable until M3.
   names, or NULL for a field the record lacks, a NULL record or an operand that is not a record.
   `qti-is-null` and `qti-match` read a record whole. The ledger no longer reports row I-9a
   (Response Processing: Full) as `limited`.
+- `open` accepts a rule that sets a variable from `qti-field-value`, whatever the field, and
+  `openPackage` accepts such a rule or template default in a test, because a `record` declaration
+  types none of its fields. When the field's base type is not the variable's, `score` and
+  `advance` return `OutcomeMismatchError` and do not throw. For example, a `float` `SCORE` set from
+  `integerValue` fails when the candidate types `12`. Read the field whose base type is the
+  variable's, such as `floatValue` for a `float`.
+- A `qti-multiple`, `qti-ordered` or `qti-repeat` built over a `qti-field-value` is NULL, as one
+  built over `qti-custom-operator` is, even when the field holds a value. So `qti-container-size`
+  of one is 0.
 - `EngineFailure` gains `RecordOperandError`, which plate exports, for processing that reads a
   `record` response other than through `qti-field-value`, `qti-is-null` or `qti-match`. `open`
   refuses such a read in an item (P20, P23), so only a test's processing, on a test and items you
@@ -72,6 +81,10 @@ and both of its entry points are unstable until M3.
   the `qti-correct-response` or `qti-default-value` of a `record` declaration, as pantry does
   (`RecordFieldIdentifier`). It judges each field's text against the field's own `base-type`, with
   `value-type`. No corpus document declares a record, so no corpus verdict changes.
+- `open` refuses a test's `record` outcome declaration as it refuses an item's: with
+  `missing-attribute` a `qti-value` in its `qti-default-value` that has no `field-identifier` or no
+  `base-type`, and with `value-type` one whose text is not of its own `base-type`. No corpus test
+  declares a record outcome, so no corpus verdict moved.
 - Both stored forms are version 4. A `StoredRecord` holds `records`, and a `StoredTestSession`'s
   `saved` holds `record` answers. plate refuses a version-3 record or session with `InvalidRecord`
   or `InvalidSession`, so a record or session written before this change no longer reads.
