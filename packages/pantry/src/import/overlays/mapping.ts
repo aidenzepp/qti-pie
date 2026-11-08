@@ -421,9 +421,9 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
   // and base type spell (spec readings 157 and 158): a table hangs below one, and copies it.
   const declarations = new Map(
     rows.nodes.flatMap((node) =>
-      Option.toArray(declarationOf(node.kind, (name) => valueOf(node.id, name))).map(
-        (declared): readonly [NodeId, Declared] => [node.id, declared],
-      ),
+      Option.toArray(
+        declarationOf(node.kind, (name) => Option.fromUndefinedOr(valueOf(node.id, name))),
+      ).map((declared): readonly [NodeId, Declared] => [node.id, declared]),
     ),
   );
 

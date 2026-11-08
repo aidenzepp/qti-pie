@@ -865,7 +865,8 @@ const declarationsOf = (
 ): Document["declarations"] => {
   const declarations = new Map<string, DeclarationEntry>();
   for (const node of rows.nodes.filter(({ kind }) => declarationKinds.has(kind))) {
-    const lexical = (attribute: string) => attributes.get(node.id)?.get(attribute)?.lexical;
+    const lexical = (attribute: string) =>
+      Option.fromUndefinedOr(attributes.get(node.id)?.get(attribute)?.lexical);
     const typed = typedDeclarationOf({
       baseType: lexical("base-type"),
       cardinality: lexical("cardinality"),
@@ -1217,7 +1218,7 @@ const expressionRowsOf = (
     built.Literal.set(node.id, { ...own, text });
 
     // A literal is typed where its base-type spells a code, the one its type is (7230d050).
-    const typeCode = spelledBaseTypeOf(valueOf(doc, node.id, "base-type"));
+    const typeCode = spelledBaseTypeOf(Option.fromUndefinedOr(valueOf(doc, node.id, "base-type")));
     if (type.baseType !== "unknown" && Option.isSome(typeCode)) {
       built.LiteralTyped.set(node.id, {
         baseType: type.baseType,
@@ -1900,7 +1901,7 @@ const holdsBuiltIn = (text: ReadingText, scope: Scope, itemScoped: boolean): boo
  * mapping refuses the reading's claim to it ("Variable mapping source").
  *
  * @param declared - Its declaration, where it reads one and the document declares its name.
- * @param mapped - Its mapping lookup, where it reads one.
+ * @param mapped - Whether its item ref maps it.
  * @param mappedSource - Its mapping's source declaration, where its item declares one.
  * @param builtIn - The built-in of its scope it names, where it names one.
  * @param scope - Its scope.
@@ -1908,8 +1909,8 @@ const holdsBuiltIn = (text: ReadingText, scope: Scope, itemScoped: boolean): boo
  */
 const sourceOf = (
   declared: Option.Option<Addition<typeof DeclarationIdentifier>>,
-  mapped: Addition<typeof MappingLookup> | undefined,
-  mappedSource: Addition<typeof MappingSourceDeclaration> | undefined,
+  mapped: boolean,
+  mappedSource: Option.Option<Addition<typeof MappingSourceDeclaration>>,
   builtIn: Option.Option<BuiltIn>,
   scope: Scope,
 ): Pick<
@@ -1926,22 +1927,23 @@ const sourceOf = (
     };
   }
 
-  if (mapped?.mapped === true) {
-    return mappedSource === undefined
-      ? {
-          declBaseTypes: undeclared.baseTypes,
-          declCardinalities: undeclared.cardinalities,
-          declaration: scope.itemDocument,
-          declarationKind: undeclared.declarationKind,
-          source: "mapped",
-        }
-      : {
-          declBaseTypes: mappedSource.declBaseTypes,
-          declCardinalities: mappedSource.declCardinalities,
-          declaration: mappedSource.declaration,
-          declarationKind: mappedSource.declarationKind,
-          source: "mapped",
-        };
+  if (mapped) {
+    return Option.match(mappedSource, {
+      onNone: () => ({
+        declBaseTypes: undeclared.baseTypes,
+        declCardinalities: undeclared.cardinalities,
+        declaration: scope.itemDocument,
+        declarationKind: undeclared.declarationKind,
+        source: "mapped" as const,
+      }),
+      onSome: (source) => ({
+        declBaseTypes: source.declBaseTypes,
+        declCardinalities: source.declCardinalities,
+        declaration: source.declaration,
+        declarationKind: source.declarationKind,
+        source: "mapped" as const,
+      }),
+    });
   }
 
   return Option.match(builtIn, {
@@ -2002,11 +2004,13 @@ const readingOf = (
     text.form === "unsplit" || itemHeld
       ? declarationProbe(lookups, scope.itemDocument, text.variable)
       : Option.none();
-  const mapped = itemScoped ? mappingProbe(lookups, scope.node, text.variable) : undefined;
+  const mapped = itemScoped && mappingProbe(lookups, scope.node, text.variable).mapped;
   const typed = sourceOf(
     declared,
     mapped,
-    itemScoped ? lookups.mappingSources.get(lookupKey(scope.node, text.variable)) : undefined,
+    itemScoped
+      ? Option.fromUndefinedOr(lookups.mappingSources.get(lookupKey(scope.node, text.variable)))
+      : Option.none(),
     holdsBuiltIn(text, scope, itemScoped)
       ? builtInOf(builtInRootOf(text, itemScoped), text.variable)
       : Option.none(),
@@ -2023,7 +2027,7 @@ const readingOf = (
     identifier: reference.identifier,
     kind: reference.kind,
     lookupDocument: scope.itemDocument,
-    mapped: mapped !== undefined && mapped.mapped,
+    mapped,
     named: scope.node,
     namedKind: scope.kind,
     node: reference.node,

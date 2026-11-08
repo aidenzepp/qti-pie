@@ -359,16 +359,15 @@ const tupleOf = (context: Context, node: NodeRow<Composed>) => ({
  */
 const namedOf = (context: Omit<Context, "itemMode" | "named">): Pick<Context, "named"> => ({
   named: context.rows.nodes.flatMap((node) =>
-    Option.toArray(
-      declarationOf(node.kind, (name) => Option.getOrUndefined(lexicalOf(context, node.id, name))),
-    ).flatMap((declaration) =>
-      Option.toArray(declaration.name).map(({ pieces }) => ({
-        baseType: declaration.baseType,
-        cardinality: declaration.cardinality,
-        declarationKind: declaration.declarationKind,
-        identifier: pieces.name,
-        node: node.id,
-      })),
+    Option.toArray(declarationOf(node.kind, (name) => lexicalOf(context, node.id, name))).flatMap(
+      (declaration) =>
+        Option.toArray(declaration.name).map(({ pieces }) => ({
+          baseType: declaration.baseType,
+          cardinality: declaration.cardinality,
+          declarationKind: declaration.declarationKind,
+          identifier: pieces.name,
+          node: node.id,
+        })),
     ),
   ),
 });

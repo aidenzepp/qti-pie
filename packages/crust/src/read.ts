@@ -403,14 +403,14 @@ const attributeValueOf = (
  * attribute, {@link collapsed} for any other type.
  *
  * @param pieces - The value's pieces.
- * @param entry - The attribute's declaration, when the ATTLIST table has one.
+ * @param entry - The attribute's declaration, none where the ATTLIST table has none.
  * @returns The normalized pieces.
  */
 const normalizedAs = (
   pieces: readonly ValuePiece[],
-  entry: AttlistEntry | undefined,
+  entry: Option.Option<AttlistEntry>,
 ): readonly ValuePiece[] =>
-  entry === undefined || entry.type === "CDATA" ? pieces : collapsed(pieces);
+  Option.exists(entry, ({ type }) => type !== "CDATA") ? collapsed(pieces) : pieces;
 
 /**
  * An element's attributes in the finished tree: each written one with its stand-ins restored as
@@ -422,35 +422,42 @@ const normalizedAs = (
  * the stand-ins are restored, and no character of its text is read as a reference.
  *
  * @param element - The element as `saxes` built it, its names unresolved.
- * @param table - The ATTLIST table of the element's name, if any.
+ * @param table - The ATTLIST table of the element's name, none where the prolog declares none.
  * @param names - The entity name each stand-in character stands for.
  * @returns The attributes, their names unresolved until {@link resolved} resolves them with the
  *   element's.
  */
 const attributesOf = (
   element: Element,
-  table: ReadonlyMap<string, AttlistEntry> | undefined,
+  table: Option.Option<ReadonlyMap<string, AttlistEntry>>,
   names: ReadonlyMap<string, string>,
 ): readonly Attribute[] => {
   const written = element.attributes.map((attribute): Attribute => ({
     ...attribute,
     ...attributeValueOf(
-      normalizedAs(piecesOf(attribute.value, names), table?.get(attribute.qname)),
+      normalizedAs(
+        piecesOf(attribute.value, names),
+        table.pipe(
+          Option.flatMap((entries) => Option.fromUndefinedOr(entries.get(attribute.qname))),
+        ),
+      ),
     ),
   }));
   const present = new Set(element.attributes.map((attribute) => attribute.qname));
-  const defaulted = [...(table ?? [])].flatMap(([declared, entry]): readonly Attribute[] =>
-    !present.has(declared) && Option.isSome(entry.default)
-      ? [
-          {
-            local: declared,
-            namespace: "",
-            prefix: "",
-            qname: declared,
-            ...attributeValueOf(normalizedAs(entry.default.value, entry)),
-          },
-        ]
-      : [],
+  const defaulted = Option.toArray(table).flatMap((entries) =>
+    [...entries].flatMap(([declared, entry]): readonly Attribute[] =>
+      !present.has(declared) && Option.isSome(entry.default)
+        ? [
+            {
+              local: declared,
+              namespace: "",
+              prefix: "",
+              qname: declared,
+              ...attributeValueOf(normalizedAs(entry.default.value, Option.some(entry))),
+            },
+          ]
+        : [],
+    ),
   );
 
   return [...written, ...defaulted];
@@ -542,7 +549,11 @@ const assemble = (
         resolved(
           {
             ...element,
-            attributes: attributesOf(element, prolog.attlists.get(element.qname), names),
+            attributes: attributesOf(
+              element,
+              Option.fromUndefinedOr(prolog.attlists.get(element.qname)),
+              names,
+            ),
           },
           scope,
           namespaces,
