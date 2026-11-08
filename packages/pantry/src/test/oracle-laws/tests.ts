@@ -24,7 +24,7 @@
  *   `Variable declared` for an unprefixed one that resolves nowhere (P8 on `Reading`); a braced one
  *   (a string attribute's) that resolves nowhere is a string value, with two readings still refused
  *   (reading R15-k); `Mapped response`, a prefixed map response or map response point of a response
- *   reads a mapping or an area mapping its declaration holds (reading 165, §7.22 and §7.23); and
+ *   reads a mapping or an area mapping its declaration holds (reading 166, §7.22 and §7.23); and
  *   the content references, each resolving in the test's declarations or its built-ins (A43 to A45:
  *   `Feedback reference`, `Feedback outcome type`, `Printed variable reference`, `Template
  *   reference`, `Context variable reference`), with a section document's feedback naming a built-in
@@ -1192,7 +1192,7 @@ const referenceLawsOf = (
                     source !== "linked" && !allowed.includes(declarationKind),
                 ));
 
-            // Mapped response over the prefixed readings (decisions 429 and 431, reading 165):
+            // Mapped response over the prefixed readings (decisions 429 and 431, reading 166):
             // a map response's or a map response point's resolving reading of a response variable
             // reads a mapping or an area mapping its declaration holds, which a built-in has none
             // of; one of anything but a response is Variable kind's alone, and one through an LTI

@@ -58,7 +58,7 @@
  * beyond N8, `template-derivation`, the CSM laws, and the typed values a domain derives beyond its
  * regex (G5).
  */
-import { Effect, Option, pipe, Record as Rec, Result } from "effect";
+import { Array as Arr, Effect, Option, Order, pipe, Record as Rec, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { rowOf } from "#pantry/grammar/ancestry.ts";
@@ -949,7 +949,7 @@ const cnPartsOf = (
  * `rtl`, `ltr` once the walk passes an `m:math` that writes neither. MathML 3 §2.2.1 says "the dir
  * attribute defaults to "ltr" on the math element (but inherits on all other elements which accept
  * the dir attribute)", and §3.1.5.1 sets a formula's direction by its `math` element, so an HTML
- * ancestor's `dir` above it is not read (reading 163).
+ * ancestor's `dir` above it is not read (reading 164).
  *
  * @param view - The document.
  * @param node - The element.
@@ -973,7 +973,7 @@ const inheritedDirectionOf = (view: View, node: FoldedNode<Composed>): string =>
 /**
  * Tell whether an element writes a `dir` other than the one it inherits, so `mrow dir="ltr"` in a
  * left-to-right formula changes none (operator decision 321). A `dir` that spells neither `ltr` nor
- * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 163).
+ * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 164).
  *
  * @param view - The document.
  * @param node - The element.
@@ -4697,7 +4697,7 @@ export const documentBreaches = (
 };
 
 /**
- * One document a manifest lists, read: its path, the resource that lists it, what the package laws
+ * One document a manifest lists, read: its path, the resources that list it, what the package laws
  * read of its root element, and its folded rows, or the refusal of a fold that has none.
  */
 interface Listed {
@@ -4710,7 +4710,15 @@ interface Listed {
    */
   readonly identifier: Option.Option<string>;
   readonly path: string;
+  /**
+   * The resource whose type it is read as ({@link typingResource}, reading 162).
+   */
   readonly resource: ResourceOf;
+  /**
+   * Every resource that lists it, in the manifest's order: each one's records describe it where
+   * its type is an item's or a test's, whatever type it is read as.
+   */
+  readonly resources: Arr.NonEmptyReadonlyArray<ResourceOf>;
   /**
    * The kind of its root element.
    */
@@ -4822,6 +4830,35 @@ const documentsOf = (
         }))
       : [];
   });
+
+/**
+ * Choose the resource whose type a path's document is read as, of those that name it (readings 93
+ * and 162): the first, in the manifest's order, whose type `RootOfType` pairs with the root's kind,
+ * and the first of all where none does. Every other type's href then names no document of its
+ * type, "Document entry" alone, and RootOfType breaks only where no resource that names the path
+ * bears its root out, whatever order they are listed in. The sort is stable, so the resources
+ * whose type the root bears out come first, each group in the manifest's order.
+ *
+ * @param resources - The resources that name the path, in the manifest's order.
+ * @param rootKind - The kind of the document's root.
+ * @param grammar - The composed grammar.
+ * @returns The resource.
+ */
+const typingResource = (
+  resources: Arr.NonEmptyReadonlyArray<ResourceOf>,
+  rootKind: string,
+  grammar: ComposedGrammar,
+): ResourceOf =>
+  Arr.headNonEmpty(
+    Arr.sortWith(
+      resources,
+      ({ handle }) =>
+        !Option.exists(handle, (type) =>
+          Option.isSome(grammar.package.rootOfType.lookup({ root: rootKind, type })),
+        ),
+      Order.Boolean,
+    ),
+  );
 
 /**
  * Collect the text of every descendant of a node of one kind.
@@ -5645,23 +5682,25 @@ const documentLangBreaches = (
 
   return [
     ...Map.groupBy(
-      documents.filter(({ resource }) => lomNamedTypes.has(resource.type)),
+      documents.filter(({ resources }) => resources.some(({ type }) => lomNamedTypes.has(type))),
       ({ path }) => path,
     ),
   ].flatMap(([path, listed]) => {
-    const generals = listed.flatMap(({ resource }) =>
-      manifest.members.filter((member) => {
-        const record = manifest.byId.get(member.parent);
-        const owner = record === undefined ? undefined : manifest.byId.get(record.parent);
+    const generals = listed
+      .flatMap(({ resources }) => resources.filter(({ type }) => lomNamedTypes.has(type)))
+      .flatMap((resource) =>
+        manifest.members.filter((member) => {
+          const record = manifest.byId.get(member.parent);
+          const owner = record === undefined ? undefined : manifest.byId.get(record.parent);
 
-        return (
-          member.kind === "lom:general" &&
-          record?.kind === "lom:lom" &&
-          owner?.kind === "cp:metadata.resource" &&
-          owner.parent === resource.node.id
-        );
-      }),
-    );
+          return (
+            member.kind === "lom:general" &&
+            record?.kind === "lom:lom" &&
+            owner?.kind === "cp:metadata.resource" &&
+            owner.parent === resource.node.id
+          );
+        }),
+      );
     const merged = listed.some(({ rootKind }) => rootKind === "qti-assessment-item")
       ? mergedDocumentsOf(listed, spliced)
       : listed;
@@ -5817,9 +5856,10 @@ const packageBreaches = (
       .flatMap((resource) => Option.toArray(resource.resolved))
       .filter(({ resolution }) => resolution.scope !== "entry")
       .map(({ path }) => breach("Document entry", { path })),
-    // A path two types name, the manifest's `none` among them, is one document, of the first type
-    // (readings 93 and 146), so the second's href names no document of its type: "Document entry"
-    // alone, and the document is judged once, where its sites place it.
+    // A path two types name, the manifest's `none` among them, is one document, of the type its
+    // root bears out where one does (readings 93, 146 and 162), so another's href names no document
+    // of its type: "Document entry" alone, and the document is judged once, where its sites place
+    // it.
     ...[...typesAt]
       .filter(([, types]) => types.size > 1)
       .map(([path, types]) =>
@@ -5856,20 +5896,21 @@ const packageBreaches = (
         : [];
     }),
     ...input.documents.flatMap((document): readonly Breach[] => {
-      if (!lomNamedTypes.has(document.resource.type)) {
-        return [];
-      }
-
-      // The resource's own records, each a `lom:lom` of its `cp:metadata` (spec reading 62): a
-      // `cp:file`'s record describes the file ("The scope of Metadata is the parent container class
-      // only", IMS Content Packaging 1.2 §6.7).
+      // The records of each item or test resource that lists the document, whatever type it is
+      // read as (reading 162), each a `lom:lom` of the resource's own `cp:metadata` (spec reading
+      // 62): a `cp:file`'s record describes the file ("The scope of Metadata is the parent
+      // container class only", IMS Content Packaging 1.2 §6.7).
+      const owners = new Set(
+        document.resources.flatMap(({ node, type }) => (lomNamedTypes.has(type) ? [node] : [])),
+      );
       const loms = manifest.members.filter((member) => {
         const [metadata, owner] = ancestorsOf(manifest, member);
 
         return (
           member.kind === "lom:lom" &&
           metadata?.kind === "cp:metadata.resource" &&
-          owner === document.resource.node
+          owner !== undefined &&
+          owners.has(owner)
         );
       });
       // The record's object is the document its resource names where its root is an item or a
@@ -6512,8 +6553,9 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
     const byPath = new Map(files.map((file) => [file.path, file]));
     const documents: Listed[] = [];
     const missing: string[] = [];
-    // A path is one document (reading 93), and the manifest's is the manifest, read above
-    // (reading 146), so a resource naming it reads nothing more.
+    // A path is one document (reading 93), of the type its root bears out (reading 162), and the
+    // manifest's is the manifest, read above (reading 146), so a resource naming it reads nothing
+    // more.
     const read = new Set<string>([manifestFile.path]);
     for (const [index, { path, resource }] of listing.entries()) {
       const file = byPath.get(path);
@@ -6534,11 +6576,18 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
           });
         }
 
+        const resources: Arr.NonEmptyReadonlyArray<ResourceOf> = [
+          resource,
+          ...listing
+            .slice(index + 1)
+            .flatMap((listed) => (listed.path === path ? [listed.resource] : [])),
+        ];
         documents.push({
           folded: foldedOf(path, tree, idsFor(index + 1), foldGrammar, typed),
           identifier: rootIdentifierOf(tree),
           path,
-          resource,
+          resource: typingResource(resources, tree.root.kind, grammar),
+          resources,
           rootKind: tree.root.kind,
           tree,
         });

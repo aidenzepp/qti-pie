@@ -15,11 +15,12 @@ import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
  * 2026-11-06 over the composed grammar, so a verdict names the rule the oracle predicts.
  *
  * A fixture that breaks several laws lists each one's rule, since PostgreSQL reports whichever
- * constraint it checks first: `extmeta-item-href` breaks `RootOfType`, `Href listed`,
- * `LomObjectIdentifier`, `Document lang` and, since its item and its record name one file under
- * two types, `Document entry`. A second `GUID` (`csm-two-guids`) or a second set (`csm-two-sets`)
- * breaks its particle's at-most-once, which the content automaton holds (`N5 Follow`), so its rule
- * is `ordering`.
+ * constraint it checks first: `extmeta-item-href` breaks `Href listed`, `LomObjectIdentifier`,
+ * `LomObjectTitle`, `Document lang` and, since its item and its record name one file under two
+ * types, `Document entry`; the file's `lom:lom` root is a record's, so the file is read as the
+ * record's document and `RootOfType` holds (spec reading 162; judged again on 2026-11-07). A second
+ * `GUID` (`csm-two-guids`) or a second set (`csm-two-sets`) breaks its particle's at-most-once,
+ * which the content automaton holds (`N5 Follow`), so its rule is `ordering`.
  *
  * The guards' other fixtures break no law the cutover states: the LOM and CSM capacities, which
  * the deleted unsourced caps held, and the guards' departures from the XSD (plan §2.2). The
@@ -32,7 +33,7 @@ const refused = [
   ["csm-two-sets", ["ordering"]],
   [
     "extmeta-item-href",
-    ["root-type-reverse", "href-listed", "lom-identifier", "document-lang", "entry-kind"],
+    ["href-listed", "lom-identifier", "lom-title", "document-lang", "entry-kind"],
   ],
   ["extmeta-item-root", ["root-type-reverse"]],
   ["filelom-two-metadata", ["ordering"]],

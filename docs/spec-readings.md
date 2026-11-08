@@ -3190,7 +3190,36 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      `%.1f`, so no verdict moves. This binds pantry and plate alike in what a document may write; how a renderer prints
      a second conversion is plate's own reading. This is not a case of documents in conflict. (Decided 2026-11-07 by the
      coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-PRINTFMT.)
-162. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+162. **A path two document types name is the document its root bears out: of the types its resources name, the first in
+     the manifest's order whose `RootOfType` pair holds its root's kind, and the first of all where none does.** Reading
+     93 has a resource of a type `RootOfType` maps name the document at its `href`, "read as a document of that type",
+     and a path is one document, of one type (readings 93 and 146), so two resources that name one path under two
+     document types are refused under "Document entry" (`entry-kind`): the `href` of the type the document is not read
+     as names no document of its type. IMS Content Packaging 1.2 gives the resources no order: "The order of the child
+     Resource and IPointer objects is not significant" (Information Model, Version 1.2 Public Draft v2.0, section 6.6.1,
+     the Resources class; line 744 of `imscp_infov1p2pd2.txt`). So the type the document is read as cannot turn on which
+     resource is listed first, as it did when the importer and the law oracle read it as the first type listed:
+     `simple`'s item path listed as a stimulus and then as an item was read as a stimulus, a type its item root does not
+     bear out, and broke `RootOfType` beside "Document entry", while listed the other way round it broke "Document
+     entry" alone. The document is read as a type whose `RootOfType` pair holds its root's kind, the first in the
+     manifest's order where two do (an included fragment's type holds every kind an include stands for, reading 114),
+     and as the first type of all where none does, since no reading then bears its root out (`documentTypeOf`,
+     `src/import/program.ts`; `typingResource`, `src/test/oracle.ts`). A path two types name then breaks `RootOfType`
+     only where its root bears out neither, in either order, and "Document entry" alone otherwise. The records of each
+     item or test resource that names the path still describe the document, whatever type it is read as (reading 62;
+     `resourceNamer`, `src/import/overlays/metadata.ts`), and the law oracle's `lom-identifier` and `document-lang` read
+     each such resource's records, not the first listing's alone. The database judges `RootOfType` over `Document` as a
+     CHECK on the row the import writes, at its insert, and this "Document entry" as the deferred containment of the
+     other `href` in `Document`, so under the first-type reading it refused the stimulus-first package under
+     `root-type-reverse` where the catalog's precedence, entry-kind ahead of root-type-reverse (ee28115f), names
+     entry-kind; read this way, it names entry-kind, as the law oracle does. Where the root bears out neither type both
+     laws break, and the database names the CHECK it judges first, a stated limit of naming a refusal by the laws
+     PostgreSQL reports (`src/import/package.ts`). This sets aside the first-type reading the importer and the law
+     oracle held (NS4, `src/test/gen/genetic/known.ts`). This reading moves no corpus verdict: no manifest of the
+     corpus's 29 zips names one `href` under two types, by a scan of their resources. This binds pantry and plate alike.
+     This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing
+     ruling of 2026-11-05, from seat DBLANE-1.)
+163. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 4.5, OutcomeDeclaration (https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration), says
      of SCORE "Items that declare a numeric outcome variable representing the candidate's overall performance on the item
      should use the outcome name 'SCORE' for the variable. SCORE needs to be a float." (`info.txt:11979`), and of
@@ -3205,7 +3234,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      reading 1 protects valid content. No corpus test declares a SCORE or MAXSCORE of another base type. This binds
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
      type`. Re-cited 2026-11-07 by the Mind on audit b61b8f14's D2: §4.5 for the non-normative §2.2.2.3.)
-163. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
+164. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
      HTML around it says.** MathML 3 section 2.2.1, Attributes
      (https://www.w3.org/TR/MathML3/chapter2.html#interf.toplevel.atts), says "Note that the dir attribute defaults to
      "ltr" on the math element (but inherits on all other elements which accept the dir attribute); this provides for
@@ -3222,7 +3251,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      direction (MathML 3 lists only those two; the value domain refuses another on a MathML element). This binds pantry
      and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on
      audit e8db90e1's F6, under the operator's standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
-164. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
+165. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
      first one listed.** A string mapping whose entries leave `case-sensitive` at its default writes `York` (mapped to 2)
      and `york` (mapped to 1); the document is accepted, and the response `york` matches both. The standard bans
      nothing here: no XSD carries a uniqueness constraint (no `xs:unique` or `xs:key` in `imsqti_asiv3p0_v1p0.xsd` or
@@ -3243,7 +3272,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 425,
      delegated by the operator in mail 69fd02ec; register row B11. Amended 2026-11-07 by the Mind, decision 433: a key
      written twice is a repeat whatever its matching, as reading 160 holds.)
-165. **A test's prefixed `qti-map-response` names a response variable whose declaration holds a `qti-mapping`, and a
+166. **A test's prefixed `qti-map-response` names a response variable whose declaration holds a `qti-mapping`, and a
      test's prefixed `qti-correct` names a response variable.** A test's outcome processing may name an item's variable
      through its item ref (reading 48), `I.RESPONSE`. The information model's section 7.22, MapResponse
      (https://www.imsglobal.org/spec/qti/v3p0/info#Derived_MapResponse), says "This expression looks up the value of a

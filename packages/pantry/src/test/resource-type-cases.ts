@@ -2,8 +2,9 @@
  * Reading 93's law over a resource's type, as a small exhausted box: {one type, two types, a type
  * that spells nothing} × {one path, two paths}, each an edit of `simple`'s manifest.
  *
- * A document has one type, so a path two resources name under two document types is refused under
- * "Document entry" (`entry-kind`) alone, never under RootOfType (package.ts's P3); a resource whose
+ * A document has one type, the one its root bears out among those its resources name (spec reading
+ * 162), so a path two resources name under two document types is refused under "Document entry"
+ * (`entry-kind`) alone, never under RootOfType (package.ts's P3), in either order; a resource whose
  * `type` spells no handle names no type at all, so AL1's value domain refuses its `type` alone
  * (`attribute-lexical`, spec reading 67). The law oracle (`resource-types.oracle.test.ts`) and
  * PostgreSQL (`program.oracle.db.test.ts`) are each held to the verdicts here.
@@ -64,10 +65,10 @@ export interface ResourceTypeCase {
 }
 
 /**
- * The seven cases: the box's six, and one path under two types with the stimulus listed first. In
- * that order the document is typed by its stimulus listing, so RootOfType breaks beside Document
- * entry, and the catalog's precedence names the refusal, entry-kind ahead of root-type-reverse
- * (reading 93; package.ts's P3).
+ * The seven cases: the box's six, and one path under two types with the stimulus listed first. The
+ * document is typed by the listing its item root bears out in either order (reading 162), so
+ * Document entry breaks alone, and the verdict never turns on the order the resources are listed
+ * in.
  */
 export const resourceTypeCases: readonly ResourceTypeCase[] = [
   {
@@ -107,7 +108,7 @@ export const resourceTypeCases: readonly ResourceTypeCase[] = [
     verdict: { rule: "entry-kind", verdict: "refused" },
   },
   {
-    broken: ["Document entry", "RootOfType"],
+    broken: ["Document entry"],
     edits: [
       {
         _tag: "ReplaceText",

@@ -1746,7 +1746,7 @@ const resolvingReadings = select(Reading, resolves);
 
 /**
  * A test's prefixed readings of one table reader's `identifier` that resolve to a response variable
- * (decisions 429 and 431, spec reading 165): a split or numbered reading of a `qti-map-response`'s
+ * (decisions 429 and 431, spec reading 166): a split or numbered reading of a `qti-map-response`'s
  * or a `qti-map-response-point`'s `identifier` whose variable stands as a response, declared in an
  * item or built in. Each reads its declaration's table, the mapping or the area mapping "which must
  * have been declared" (information model §7.22 and §7.23), so each is a containment into
@@ -1772,7 +1772,7 @@ const prefixedTableReaders = (kind: "qti-map-response" | "qti-map-response-point
 /**
  * The built-in response variables, each with the root it is built into: a numAttempts or duration
  * of an item, the duration of a test. None has a declaration, so none holds a mapping or an area
- * mapping (decision 431, spec reading 165).
+ * mapping (decision 431, spec reading 166).
  */
 const builtInResponses = builtIns.filter(
   ({ declaration }) => declaration === "qti-response-declaration",
@@ -3197,7 +3197,7 @@ export const expressionLawsByName = {
   ],
   "Mapped response": [
     // A test's prefixed map response or map response point of a response reads that response's
-    // mapping or area mapping (reading 165).
+    // mapping or area mapping (reading 166).
     contained(
       on(prefixedTableReaders("qti-map-response"), "declaration"),
       on(mappedDeclarations, "declaration"),
@@ -3206,7 +3206,7 @@ export const expressionLawsByName = {
       on(prefixedTableReaders("qti-map-response-point"), "declaration"),
       on(areaMappedDeclarations, "declaration"),
     ),
-    // An unprefixed one never names a built-in response, which declares no table (reading 165).
+    // An unprefixed one never names a built-in response, which declares no table (reading 166).
     check("Mapped_response", VariableRef, mapsNoBuiltIn),
     check("Mapped_response", PlacedVariableRef, mapsNoBuiltIn),
     check("Mapped_response", VariableRefDeclaration, (d) =>
