@@ -2407,6 +2407,14 @@ inside a wider key over the same field, so each is one key stated twice:
     `objectIdentifiers`, `objectTitles`, `lastUpdateds` and `usageBaseTypes` are the targets of `ObjectIdentifier`'s,
     `ObjectTitle`'s, `StatisticDate`'s and `UsageValue`'s ways back, and package.ts's `censusAttributes` of
     `Reference`'s.
+  - Two of the five came back as real targets, in the same seat's next commit. `ResourceHref` and `LomStringLanguage`,
+    the rows of two optional attributes (a resource's `href`, a `lom:string`'s `language`), had no way back to their
+    attribute, so a row planted where none is written was refused by nothing (as `ObjectLang`'s was before
+    `6e1a6269`). Each now has one, `contained(on(ResourceHref, "node"), on(resourceHrefs, "node"))` under "Manifest
+    overlay" and `contained(on(LomStringLanguage, "node"), on(stringLanguageAttributes, "node"))` under "E1 derived",
+    and no wider keyed selection holds either attribute, so each selection's key is back beside it. The three
+    required attributes' selections (`resourceTypes`, `fileHrefs`, `dependencyRefs`) stay keyless: AL3 requires each,
+    and each overlay row is its node's, so the forward copy alone fixes the row's field.
 
 ### LP-4. The Qti import's repeated domain compiles (qti, fixed in `ef7423f0`)
 

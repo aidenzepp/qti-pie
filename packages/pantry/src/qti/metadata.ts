@@ -807,8 +807,10 @@ const objectLangAttributes = attributesOf("xml:lang", objectKinds);
 
 /**
  * The `language` of each `lom:string` of a record's document: the source of
- * {@link LomStringLanguage}'s copy and no containment's target, so, like the `xml:lang` selection
- * of `attributesOf`, it states no key.
+ * {@link LomStringLanguage}'s copy, and the target of its way back, since the attribute is optional
+ * and its row stands only where it is written. grizzle admits that containment only under a key
+ * over this selection (`laws/model/plan.ts` `#targetKeyed`), so it sits beside `key(on(selection,
+ * "node"))`, which holds already, since an element holds one attribute of a closed name (AL2).
  */
 const stringLanguageAttributes = select(Attribute, (a) =>
   a.and(
@@ -854,10 +856,10 @@ const spelledUsageBaseTypes = select(Attribute, (a) =>
  *   whose three tuples are its nodes', whose pieces concatenate to its text, and whose `named` is
  *   its record's for a general category's entry, else `none`.
  * - **the titles and strings:** each `lom:title` has its {@link LomTitle} with its record's `named`;
- *   each `lom:string` its {@link LomString}, whose `languages` counts its copied `language`; and
- *   each title's string its {@link LomTitleString}, whose `text` is its string value, whose
- *   `language` is its {@link LomString}'s, and whose compared forms are those two's ("E1
- *   derived").
+ *   each `lom:string` its {@link LomString}, whose `languages` counts its `language`, copied both
+ *   ways, so no {@link LomStringLanguage} stands without its attribute; and each title's string its
+ *   {@link LomTitleString}, whose `text` is its string value, whose `language` is its
+ *   {@link LomString}'s, and whose compared forms are those two's ("E1 derived").
  * - **the objects:** each item's and test's root has its {@link AssessmentObject}, one per document,
  *   with `langs` counting its `xml:lang` and its language's compared form; and each of its
  *   `identifier` (in pieces), `title` and `xml:lang` is copied into its own row,
@@ -889,6 +891,7 @@ const spelledUsageBaseTypes = select(Attribute, (a) =>
 export const metadataLawsByName = {
   "Document entry": [contained(on(objectHrefs, "node", "type"), on(LomResource, "node", "named"))],
   "DocumentId key": [
+    key(on(stringLanguageAttributes, "node")),
     key(on(objectIdentifiers, "node")),
     key(on(objectTitles, "node")),
     key(on(lastUpdateds, "node")),
@@ -1019,6 +1022,7 @@ export const metadataLawsByName = {
       on(stringLanguageAttributes, "node", "lexical"),
       on(LomStringLanguage, "node", "language"),
     ),
+    contained(on(LomStringLanguage, "node"), on(stringLanguageAttributes, "node")),
     check("E1_derived", LomStringLanguage, (s) =>
       s.eq(s.languageTag, Compute.lowerAscii(s.language)),
     ),

@@ -499,10 +499,13 @@ export const namedHrefFamily = counted(
  * attribute's lexical form the overlay's field and its existence the overlay row's. Its reverse
  * probe reads an index over the selection's node alone: grizzle indexes the longest leading run of
  * a containment's source columns whose entry is bounded (`plannedReverse`), and no pattern bounds
- * `Attribute.lexical`. No selection states a key of its own. An element holds one attribute of a
- * closed name (AL2), and every name here is closed, so a key over `node` would state that again;
- * grizzle asks a key only of a containment's target (`laws/model/plan.ts` `#targetKeyed`), and the
- * `type`, `href` and `identifierref` selections are no containment's target. An `identifier` is an
+ * `Attribute.lexical`. An element holds one attribute of a closed name (AL2), and every name here
+ * is closed, so a key over `node` states that again, and grizzle asks one only of a containment's
+ * target (`laws/model/plan.ts` `#targetKeyed`). The `type`, the `cp:file` `href` and the
+ * `identifierref` are required (AL3), and each overlay's row is its node's, so the copy alone makes
+ * the row's field the attribute's: those selections are no target and state no key. A resource's
+ * `href` is optional, and its {@link ResourceHref} stands only where it is written, a containment
+ * back into `resourceHrefs`, which sits beside its key for it. An `identifier` is an
  * `xs:ID`, so its selection lies inside `idAttributes` (`#pantry/qti/identity.ts`), whose key holds
  * every element to one ID-typed attribute, and the copy back from its overlay, stated there under
  * "Manifest overlay", meets `idAttributes` at the selection's kind and the manifest's type, `none`.
@@ -663,9 +666,10 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  * - **the record:** the entries in listing order, one per path, and every document an entry.
  * - **the overlays:** each copies its node's {@link nodeRef} tuple, names a node of its kind and its
  *   package's `Document` row, and takes its attribute values from `Attribute` (C18); a file's and a
- *   dependency's resource is their node's parent; the manifest is one per package. A
- *   {@link ManifestId}'s and a {@link ResourceId}'s way back to its `identifier` is stated in
- *   `#pantry/qti/identity.ts`, over the ID-typed attributes.
+ *   dependency's resource is their node's parent; the manifest is one per package; and a
+ *   {@link ResourceHref} stands only where its `href` is written. A {@link ManifestId}'s and a
+ *   {@link ResourceId}'s way back to its `identifier` is stated in `#pantry/qti/identity.ts`, over
+ *   the ID-typed attributes.
  * - **P1 (spec reading 67):** a resource's type is one its version's content-packaging XSD
  *   enumerates, which the attribute's value domain states (`attribute-lexical`), and nothing here.
  * - **P2 `root-type-reverse` ("RootOfType"):** a document's (resource type, root kind) is a row of
@@ -722,7 +726,7 @@ export const packageLawsByName = {
     ),
     key(on(stimulusDocuments, "package", "path")),
   ],
-  "DocumentId key": [key(on(ResourceId, "package", "identifier"))],
+  "DocumentId key": [key(on(ResourceId, "package", "identifier")), key(on(resourceHrefs, "node"))],
   "E1 derived": [
     check("E1_derived", ResourceTyped, (r) =>
       r.eq(ResourceTypeLexical.at("lexical", r.type), r.typeLexical),
@@ -837,6 +841,7 @@ export const packageLawsByName = {
     ),
     contained(on(resourceTypes, "node", "lexical"), on(Resource, "node", "typeLexical")),
     contained(on(resourceHrefs, "node", "lexical"), on(ResourceHref, "node", "href")),
+    contained(on(ResourceHref, "node"), on(resourceHrefs, "node")),
     contained(
       on(ResourceHref, "node", "package", "typeLexical"),
       on(Resource, "node", "package", "typeLexical"),
