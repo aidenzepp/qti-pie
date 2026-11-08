@@ -1243,7 +1243,9 @@ const itemRefCases: readonly (readonly [string, ItemRefPackage, string | undefin
   [
     "a mapping under an item ref naming an LTI link",
     { defaults: [], mappings: [{ read: false, source: "SCORE", target: "M1" }], target: "lti" },
-    "variable-mapping-source",
+    // Accepted: reading 110 (decision 415) asks "Variable mapping source" of a mapping only where
+    // its item ref is not an LTI link, so a mapping under an LTI item ref goes unchecked.
+    undefined,
   ],
   [
     "a mapping whose target is another variable of its item",
@@ -1279,7 +1281,8 @@ describe.skipIf(!hasLease)(
           // the rule each case's one cause keeps, which `item-ref-declarations.oracle.test.ts` holds
           // the law oracle to over the same packages. Bound: the lawful control and one package for
           // each way a template default or a mapping fails to name its item's variable: undeclared,
-          // the wrong kind, under an LTI link, its type, and its target.
+          // the wrong kind, its type, and its target, and a template default under an LTI link; a
+          // mapping under an LTI link is accepted unchecked (reading 110).
           Effect.gen(function* itemRefPackages() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const [name, input, rule] of itemRefCases) {
