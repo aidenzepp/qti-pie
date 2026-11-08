@@ -45,9 +45,9 @@ export interface Restored {
  * response it holds is one the item scores, and each outcome one the item declares, each of its
  * declaration's base type and cardinality, and each record it holds one of a record response the
  * item declares, so another item's record, or values the item's controls cannot hold, are refused
- * rather than given back. Then, as `score` checks it, a record of an item
- * whose template processing runs must hold a value for each template variable the item declares,
- * as every record `begin` or `score` writes for it does (`templatesHeld` in `#plate/score.ts`).
+ * rather than given back. Then, as `score` checks it, a record of an item whose template processing
+ * runs must hold a value for each template variable the item declares, as every record `begin` or
+ * `score` writes for it does (`templatesHeld` in `#plate/score.ts`).
  *
  * The record alone does not say how to render the item again. Its `instance` is the one `begin`
  * started it with, or `""` for a record `score` started for an item scored without one, and need

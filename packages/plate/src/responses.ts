@@ -12,7 +12,7 @@
  */
 import { Option } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { Malformed } from "#plate/form/encoding.ts";
+import { Malformed, recordText } from "#plate/form/encoding.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { validateExtendedText } from "#plate/interactions/extended-text.ts";
 import { validateInlineChoice } from "#plate/interactions/inline-choice.ts";
@@ -69,8 +69,9 @@ const absent = (item: Item, interaction: Interaction): Value =>
  * Give the input a record gives the interaction it is posted to.
  *
  * A Text Entry or an Extended Text judges a record as the string it was typed as, as it judges a
- * string binding: its `stringValue` field, matched as typed against a `pattern-mask`, or NULL when
- * it has none, as the NULL record. A Choice or an Inline Choice binds no record, so it judges none.
+ * string binding: its `stringValue` field ({@link recordText}), matched as typed against a
+ * `pattern-mask`, or NULL when it has none, as the NULL record. A Choice or an Inline Choice binds
+ * no record, so it judges none.
  *
  * @param interaction The interaction.
  * @param record The record posted to it.
@@ -78,13 +79,7 @@ const absent = (item: Item, interaction: Interaction): Value =>
  */
 const typedInput = (interaction: Interaction, record: RecordValue): Option.Option<Value> =>
   interaction.kind === "extended-text" || interaction.kind === "text-entry"
-    ? Option.some({
-        baseType: "string",
-        cardinality: "single",
-        values: record.fields.flatMap(({ identifier, value }) =>
-          identifier === "stringValue" ? [value] : [],
-        ),
-      })
+    ? Option.some({ baseType: "string", cardinality: "single", values: recordText(record) })
     : Option.none();
 
 /**
