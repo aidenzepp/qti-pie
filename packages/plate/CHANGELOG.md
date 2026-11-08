@@ -80,6 +80,57 @@ and both of its entry points are unstable until M3.
 - `redact` holds an output budget outside 1 to 536,870,888 to that range: `NaN` becomes
   16,777,216, a fraction becomes its floor, anything above the range becomes 536,870,888 and
   anything below it becomes 1. Before, it used the number it was given.
+- `open` refuses with `misplaced-element` a `qti-mapping` in a response declaration of base type
+  `file` or `duration`, or of cardinality `record`, and a `qti-area-mapping` in one whose base type
+  is not `point`, as pantry refuses them (`mapping-base-type`, `area-mapping-point`). Before, `open`
+  refused neither. No corpus verdict changes.
+- `decodeSession` also refuses with `InvalidSession` a session in which an item of a nonlinear part
+  that has started holds template defaults that are not keyed by exactly the template variables its
+  item ref's `qti-template-default`s set, with a key missing or one extra. It does not judge an item
+  of a pending part or of a linear part. `advance` still checks the values when it shows the item.
+- `openPackage` refuses with `duplicate-identifier` a part, section or item ref identifier given
+  twice across a test and the section documents it reaches, as pantry refuses it
+  (`structure-identifier`). It refuses the second at its section document, once however many tests
+  reach that document, and keeps the first. `openPackage` also gives a verdict however long a chain
+  of section refs runs. Before, a long chain, such as 8,000 section documents each naming the next,
+  threw `RangeError`. No corpus verdict changes.
+- In a test's outcome processing, a weighted `qti-variable` that reads an item's `integer` variable
+  through its item ref is a `float` of the variable's cardinality, whether or not the item ref
+  defines the weight. `qti-outcome-minimum` and `qti-outcome-maximum` are a multiple `float`, and so
+  is a `qti-test-variables` with a `weight-identifier` and no `base-type`. `open` and `openPackage`
+  refuse with `expression-type` a set of one of these into an outcome of another type (P20). pantry
+  leaves each of these types unknown, so plate may refuse a package that pantry accepts, but only
+  one that would fail at run time. The refusal of a weighted `qti-test-variables` whose `base-type`
+  is not `float` (P29) now says that a weight is defined only for the base type `float` or none, and
+  tells you to remove the `weight-identifier` or the `base-type`. No corpus verdict changes.
+- A `qti-test-variables` with neither a `weight-identifier` nor a `base-type` is a multiple
+  `integer` when every single `integer` or `float` declaration of its variable in the test's items,
+  read through each item ref's variable mappings and whatever its filters, is `integer`, and a
+  multiple `float` otherwise. `openPackage` types it so and refuses with `expression-type` a set of
+  it into an outcome of another type (P20), and a test session decides its base type by the same
+  declarations. Before, the session decided by the values it collected, so a `float` declaration
+  whose value was NULL left the collection `integer`. `open` checks a test without its items, so it
+  still types the collection unknown. pantry types it unknown in a package too, so plate may refuse
+  a package that pantry accepts, but only one that would fail at run time. No corpus verdict
+  changes.
+- The `template-requirements` refusal of a test's dotted `qti-map-response` or
+  `qti-map-response-point` names the response as one of the item that its item ref names, and tells
+  you to give that response what it lacks in that item: a `qti-mapping`, or a `qti-area-mapping` and
+  the base type `point`. Its detail gains `prefix`, the item ref. Before, it told you to declare the
+  dotted name. `InvalidResponses` no longer lists `duration` among the base types `score` does not
+  score, since `score` scores a duration response.
+- An `undeclared-variable` refusal of a name in a test's processing, or in a section document that a
+  test reaches, carries `declarer: "test"` in its detail, and its sentence names the test as what
+  declares no such variable. For a response, such as the operand of a `qti-map-response`, it says
+  that only an item declares responses, and tells you to name an item's response through its item
+  ref, written `ITEMREF.RESPONSE`. Before, these sentences spoke of an item. An item's refusals do
+  not change.
+- `openPackage` marks a test's outcome processing, and leaves out a template default, that reads an
+  item's context variable through its item ref (`ITEM1.CTX`, the item's `qti-context-declaration`),
+  with `variable:<name>` at it. Before, the processing ran, and the first submission, or `startTest`
+  for a nonlinear part's default, failed with `UnknownIdentifierError`. The marks are on the
+  package's test. The test document's own verdict, judged without its items, does not carry them. No
+  corpus verdict changes.
 
 ### How plate reads outcome processing and durations (2026-11-07)
 
@@ -189,7 +240,7 @@ and both of its entry points are unstable until M3.
   does not decide, and the information model permits `true` and `false`. No verdict changes.
 - A value that two or more entries of a `qti-mapping` match maps by the first entry listed, as a
   point that two areas of a `qti-area-mapping` hold maps by the first area listed. pantry reads it
-  the same way, as its reading 150, which `docs/spec-readings.md` does not number yet _(pending)_.
+  the same way, as its reading 150, which `docs/spec-readings.md` does not number yet.
   plate already mapped so, and no verdict changes.
 - The refusal of a `qti-map-response`, `qti-map-response-point` or `qti-correct` that names a
   built-in, such as `numAttempts`, or a dotted name that reads anything but a response, says why
