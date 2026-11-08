@@ -456,6 +456,18 @@ const responseRules = (
 export type PrefixedTyper = (name: string) => ExpressionType;
 
 /**
+ * Give the base type an unweighted `qti-test-variables` with no `base-type` collects, from the
+ * declarations of the variable it names in the test's items (G-R3 199): `integer` when every single
+ * integer or float declaration of it is integer, or when there is none; `float` when one is a
+ * float; `unknown` when a declaration it may match is not judged. Only the test's items can give
+ * it, so a test checked alone, or a section on its own, holds none.
+ *
+ * @param variableIdentifier The `variable-identifier`.
+ * @returns The base type.
+ */
+export type CollectedTyper = (variableIdentifier: string) => "float" | "integer" | "unknown";
+
+/**
  * The document's declarations a rule resolves identifiers against, and each element's parent, as
  * the walk has met them. As a {@link VariableScope} it is the document's, with its built-ins: an
  * item's, or the processing scope of a test or a section ({@link processingRefusals}).
@@ -477,6 +489,12 @@ interface Context extends VariableScope {
    * item, which holds no default.
    */
   readonly templateDefaultType: (templateDefault: SourceElement) => Option.Option<ExpressionType>;
+  /**
+   * Type what an unweighted `qti-test-variables` with no `base-type` collects (G-R3 199): none in
+   * an item, which holds no such expression, and in a test or a section checked without its items;
+   * the items' declarations in a test a package holds, or a section a test reaches.
+   */
+  readonly typeCollected: Option.Option<CollectedTyper>;
   /**
    * Type a name that no declaration and no built-in answers: none for every name in an item, whose
    * reading of such a name is `undeclared-variable`; a prefixed read's type in a test; `unknown`
@@ -1655,12 +1673,41 @@ const weightedType = (
     : declared;
 
 /**
+ * Give the base type a `qti-test-variables` collects from the test's items, as the context's typer
+ * gives it for its `variable-identifier` (`typeCollected`; G-R3 199), for its kind's rule to read
+ * when it is unweighted and writes no `base-type`.
+ *
+ * @param expression The expression.
+ * @param context The document's declarations and typers.
+ * @returns The `collected` attribute; none for another kind, one with no `variable-identifier`, or
+ *   a context that holds no items.
+ */
+const collectedAttribute = (
+  expression: SourceElement,
+  context: Context,
+): Pick<ResultAttributes, "collected"> => {
+  if (!isQti(expression, (local) => local === "qti-test-variables")) {
+    return {};
+  }
+
+  const collected = Option.flatMap(attributeOf(expression, "variable-identifier"), (identifier) =>
+    context.typeCollected.pipe(Option.map((typeCollected) => typeCollected(identifier.value))),
+  );
+
+  return Option.match(collected, {
+    onNone: () => ({}),
+    onSome: (baseType) => ({ collected: baseType }),
+  });
+};
+
+/**
  * Give the attributes an expression's type depends on, as its kind's rule reads them
  * (`ResultAttributes` in `#plate/model/expression.ts`): the expression's own `base-type`
  * (`qti-base-value`'s and `qti-test-variables`'), operator `name` (`qti-math-operator`'s and
- * `qti-stats-operator`'s) and whether it carries a `weight-identifier`, and, for a kind whose rule
- * declares a declaration facet, the type of the declaration it names ({@link variableType}), which
- * a weighted read promotes ({@link weightedType}).
+ * `qti-stats-operator`'s) and whether it carries a `weight-identifier`; for a `qti-test-variables`,
+ * the base type it collects from the test's items ({@link collectedAttribute}); and, for a kind
+ * whose rule declares a declaration facet, the type of the declaration it names
+ * ({@link variableType}), which a weighted read promotes ({@link weightedType}).
  *
  * A `base-type` outside the vocabulary is the structural validator's refusal and is not filled
  * in, nor is the type of a declaration that is not judged, so the rule reads either as unknown.
@@ -1686,6 +1733,7 @@ const resultAttributes = (
       onNone: () => ({}),
       onSome: (name) => ({ name: name.value }),
     }),
+    ...collectedAttribute(expression, context),
     weighted,
   };
   if (rule.declaration === undefined) {
@@ -3164,6 +3212,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
     responses: declarationsOf(source, "qti-response-declaration"),
     setCorrectResponses: setCorrectResponses(source, visits),
     templateDefaultType: () => Option.none(),
+    typeCollected: Option.none(),
     typeUnanswered: itemNames.typeUnanswered,
     types: new Map(),
     variables: new Map(variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
@@ -3226,13 +3275,13 @@ const testProcessingBuiltIns: ReadonlyMap<string, NamedVariable> = new Map(
  */
 type ProcessingScope = Pick<
   Context,
-  "builtIns" | "declarer" | "outcomes" | "typeUnanswered" | "variables"
+  "builtIns" | "declarer" | "outcomes" | "typeCollected" | "typeUnanswered" | "variables"
 >;
 
 /**
  * The processing scope of a test: its outcome and context declarations, the four built-ins its
- * processing reads ({@link testProcessingBuiltIns}), and the typer of a prefixed read, a name with
- * a `.` that no declaration answers whole.
+ * processing reads ({@link testProcessingBuiltIns}), the typer of a prefixed read, a name with a
+ * `.` that no declaration answers whole, and the typer of what a `qti-test-variables` collects.
  *
  * A dotted name the test declares whole is that declaration and never a prefixed read (reading 37),
  * whatever kind of variable the reference expects: where it expects another kind
@@ -3243,11 +3292,13 @@ type ProcessingScope = Pick<
  *
  * @param test The test document.
  * @param typePrefixed The typer of its prefixed reads.
+ * @param typeCollected The typer of what its collections collect, none without its items.
  * @returns The scope.
  */
 const testProcessingScope = (
   test: SourceDocument,
   typePrefixed: PrefixedTyper,
+  typeCollected: Option.Option<CollectedTyper>,
 ): ProcessingScope => {
   const variables = new Map(
     variableDeclarations.flatMap((kind) => [...declarationsOf(test, kind)]),
@@ -3257,6 +3308,7 @@ const testProcessingScope = (
     builtIns: testProcessingBuiltIns,
     declarer: "test",
     outcomes: declarationsOf(test, "qti-outcome-declaration"),
+    typeCollected,
     typeUnanswered: (identifier) =>
       identifier.includes(".") && !variables.has(identifier)
         ? Option.some(typePrefixed(identifier))
@@ -3275,6 +3327,7 @@ const sectionProcessingScope: ProcessingScope = {
   builtIns: new Map(),
   declarer: "test",
   outcomes: new Map(),
+  typeCollected: Option.none(),
   typeUnanswered: () => Option.some(untyped),
   variables: new Map(),
 };
@@ -3292,22 +3345,25 @@ const sectionProcessingScope: ProcessingScope = {
  * @param typePrefixed The typer of a test's prefixed reads, the reaching test's for a section.
  * @param reaching The test document a section is judged under, none for a section on its own;
  *   passed over for a test.
+ * @param typeCollected The typer of what a test's collections collect, the reaching test's for a
+ *   section; none without the test's items, and passed over for a section on its own.
  * @returns The scope, none for a root that is neither a QTI test nor a QTI section.
  */
 const processingScope = (
   source: SourceDocument,
   typePrefixed: PrefixedTyper,
   reaching: Option.Option<SourceDocument>,
+  typeCollected: Option.Option<CollectedTyper>,
 ): Option.Option<ProcessingScope> => {
   if (isQti(source.root, (local) => local === "qti-assessment-test")) {
-    return Option.some(testProcessingScope(source, typePrefixed));
+    return Option.some(testProcessingScope(source, typePrefixed, typeCollected));
   }
 
   return isQti(source.root, (local) => local === "qti-assessment-section")
     ? Option.some(
         Option.match(reaching, {
           onNone: () => sectionProcessingScope,
-          onSome: (test) => testProcessingScope(test, typePrefixed),
+          onSome: (test) => testProcessingScope(test, typePrefixed, typeCollected),
         }),
       )
     : Option.none();
@@ -3333,6 +3389,13 @@ const processingScope = (
  * - A weighted `qti-test-variables` whose base type is not `float` (P29, {@link weightType}).
  * - The text of a `qti-base-value` in any of the four, against its `base-type` (`value-type`, P7,
  *   {@link literalValueType}).
+ *
+ * An unweighted `qti-test-variables` with no `base-type` is a multiple of the base type
+ * `typeCollected` gives it from the test's items, where it is given (G-R3 199,
+ * {@link collectedAttribute}), and unknown otherwise. The qti package types one with no `base-type`
+ * unknown (`attributeContainer`, `packages/pantry/src/processing/types.ts`), so a package whose
+ * test sets a float from an integer collection is refused here and accepted there: an agreement
+ * difference G-R3 199 settles, since the engine's run fails it (`OutcomeMismatchError`).
  *
  * The rules are the item's own, so the two runs cannot drift. Names resolve against the processing
  * scope ({@link processingScope}): a test's declarations and built-ins, where a name with a `.`
@@ -3364,6 +3427,10 @@ const processingScope = (
  * @param reaching For a section document, the test document it is judged under, a test that
  *   reaches it: none unless given, which judges the section on its own, every name `unknown`.
  *   Passed over for a test.
+ * @param typeCollected The base type an unweighted `qti-test-variables` with no `base-type`
+ *   collects, from the test's items ({@link CollectedTyper}): absent unless given, as for a test
+ *   checked alone, which types each such collection unknown; a package's for a test it holds, or a
+ *   section document a test reaches. Passed over for a section on its own.
  * @returns The refusals, empty when every rule holds or the document is not a test or a section.
  */
 export const processingRefusals = (
@@ -3373,8 +3440,14 @@ export const processingRefusals = (
   templateDefaultType: (templateDefault: SourceElement) => Option.Option<ExpressionType> = () =>
     Option.none(),
   reaching: Option.Option<SourceDocument> = Option.none(),
+  typeCollected?: CollectedTyper,
 ): readonly Refusal[] => {
-  const scope = processingScope(source, typePrefixed, reaching);
+  const scope = processingScope(
+    source,
+    typePrefixed,
+    reaching,
+    Option.fromUndefinedOr(typeCollected),
+  );
   if (Option.isNone(scope)) {
     return [];
   }

@@ -11,7 +11,7 @@ import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { singleOf } from "#plate/model/expression.ts";
 import type { ExpressionType, ReferenceEntry } from "#plate/model/expression.ts";
 import { checkRules, processingRefusals, referenceRefusals } from "#plate/validate/rules.ts";
-import type { PrefixedTyper } from "#plate/validate/rules.ts";
+import type { CollectedTyper, PrefixedTyper } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { check } from "#plate/validate/verdict.ts";
 
@@ -3508,6 +3508,77 @@ const floatIntoN = [
   },
 ];
 
+/**
+ * Check a {@link ruledTest} with the float multiple `ALL` and the float single `SUM` whose outcome
+ * processing sets one of them from an unweighted `qti-test-variables` of `PTS` with no
+ * `base-type`, `SUM` through `qti-sum`, every prefixed read `unknown`.
+ *
+ * @param target The outcome it sets.
+ * @param typeCollected The typer of a collection's base type, none unless given.
+ * @returns The refusals, reduced to their rule, path and detail.
+ */
+const collectedReads = (target: "ALL" | "SUM", typeCollected?: CollectedTyper) => {
+  const collection = el("qti-test-variables", [attr("variable-identifier", "PTS")]);
+
+  return processingRefusals(
+    ruledTest(
+      [
+        el("qti-outcome-declaration", [
+          attr("identifier", "ALL"),
+          attr("cardinality", "multiple"),
+          attr("base-type", "float"),
+        ]),
+        outcome("SUM"),
+      ],
+      [setOutcome(target, target === "ALL" ? collection : el("qti-sum", [], [collection]))],
+    ),
+    tables,
+    unknownTyping,
+    undefined,
+    Option.none(),
+    typeCollected,
+  ).map((refusal) => ({
+    detail: refusal.detail,
+    path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
+    rule: refusal.rule,
+  }));
+};
+
+/**
+ * A collected typer that gives every collection an integer, as items that declare it integer do.
+ *
+ * @returns The base type `integer`.
+ */
+const integerTyping: CollectedTyper = () => "integer";
+
+/**
+ * A collected typer that gives every collection a float, as an item that declares it float does.
+ *
+ * @returns The base type `float`.
+ */
+const floatTyping: CollectedTyper = () => "float";
+
+/**
+ * The refusal of a {@link collectedReads} test that sets its target from an integer collection.
+ *
+ * @param target The outcome it sets.
+ * @returns The refusal, an integer of the target's cardinality into a float.
+ */
+const integerInto = (target: "ALL" | "SUM") => [
+  {
+    detail: {
+      element: "qti-set-outcome-value",
+      expressionBaseType: "integer",
+      expressionCardinality: target === "ALL" ? "multiple" : "single",
+      identifier: target,
+      outcomeBaseType: "float",
+      outcomeCardinality: target === "ALL" ? "multiple" : "single",
+    },
+    path: outcomeRulePath("qti-set-outcome-value"),
+    rule: "expression-type",
+  },
+];
+
 describe("processingRefusals", () => {
   it("[T-9] judges a template default against the template variable it sets where the caller types it, and judges none it is not given (pantry P20, templateOf)", () => {
     assert.deepStrictEqual(
@@ -3591,6 +3662,20 @@ describe("processingRefusals", () => {
         weightedReads("N", weightedVariable("ITEM1.INT"), unknownTyping),
       ],
       [[], floatIntoN, [], [], []],
+    );
+  });
+
+  it("[T-9] collection typed from the items: an integer PTS collected with no base-type is refused setting the float multiple ALL and, summed, the float SUM, a float PTS sets both, and with no collected typer the collection is unknown and sets both (G-R3 199, pantry P20)", () => {
+    assert.deepStrictEqual(
+      [
+        collectedReads("ALL", integerTyping),
+        collectedReads("SUM", integerTyping),
+        collectedReads("ALL", floatTyping),
+        collectedReads("SUM", floatTyping),
+        collectedReads("ALL"),
+        collectedReads("SUM"),
+      ],
+      [integerInto("ALL"), integerInto("SUM"), [], [], [], []],
     );
   });
 

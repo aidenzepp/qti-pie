@@ -263,6 +263,15 @@ describe("the test family's reader specs", () => {
   );
 });
 
+/**
+ * Give the type the kind rule of `qti-test-variables` gives under attributes.
+ *
+ * @param attributes The attributes its caller fills in.
+ * @returns The type.
+ */
+const collectionTyped = (attributes: ResultAttributes) =>
+  kindRules["test-variables"].resultType([], attributes);
+
 describe("the test family's kind rules", () => {
   it("[T-9] type each count over the test scope a single integer, the collected minimum and maximum a multiple float, and qti-test-variables a multiple of its written base-type, else a float when weighted, else unknown (G-R3 199)", () => {
     const none: readonly [] = [];
@@ -301,6 +310,27 @@ describe("the test family's kind rules", () => {
         testVariablesWeightedFloat: { baseType: "float", cardinality: "multiple" },
         testVariablesWeightedString: { baseType: "string", cardinality: "multiple" },
       },
+    );
+  });
+
+  it("[T-9] collection typed from the items: qti-test-variables unweighted with no base-type is a multiple of the collected base type its caller gives, and unknown with none; a written base-type and a weight still decide first (G-R3 199)", () => {
+    assert.deepStrictEqual(
+      [
+        collectionTyped({ collected: "integer" }),
+        collectionTyped({ collected: "float" }),
+        collectionTyped({}),
+        collectionTyped({ baseType: "string", collected: "float" }),
+        collectionTyped({ baseType: "float", collected: "integer" }),
+        collectionTyped({ collected: "integer", weighted: true }),
+      ],
+      [
+        { baseType: "integer", cardinality: "multiple" },
+        { baseType: "float", cardinality: "multiple" },
+        { baseType: "unknown", cardinality: "multiple" },
+        { baseType: "string", cardinality: "multiple" },
+        { baseType: "float", cardinality: "multiple" },
+        { baseType: "float", cardinality: "multiple" },
+      ],
     );
   });
 

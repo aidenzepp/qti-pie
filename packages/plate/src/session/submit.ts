@@ -164,10 +164,13 @@ type ScoreFailure =
  * Why {@link endPart}, or the end of a part, may fail: a refusal, a stored session that does not
  * fit the test or the items passed, or an invalid `now`. An end that closes the test runs its
  * outcome processing, which fails with an `EngineFailure` over a stored session whose item record
- * lacks a value the processing reads. An end that moves on to a part gives template defaults: a
- * nonlinear part's, every item's, as it starts, and a linear part's, its first item's, as that
- * item is presented. Each fails with an `EngineFailure` when a default does not fit its item or
- * reads a value the session's records lack.
+ * lacks a value the processing reads. It fails the same way, an `UnknownIdentifierError`, on a
+ * fresh session of a package `openPackage` accepts when the processing reads an item's context
+ * variable through its item ref (`ITEMREF.VAR` naming the item's `qti-context-declaration`): the
+ * item marks that declaration and the engine holds no value of it. An end that moves on to a part
+ * gives template defaults: a nonlinear part's, every item's, as it starts, and a linear part's, its
+ * first item's, as that item is presented. Each fails with an `EngineFailure` when a default does
+ * not fit its item or reads a value the session's records lack.
  */
 export type PartEndFailure =
   | EngineFailure
@@ -179,9 +182,10 @@ export type PartEndFailure =
 
 /**
  * Why {@link submitItem} or {@link submitPart} may fail: a refusal, a part end's failures, or an
- * attempt `score` cannot run. For responses that break a tier (a) limit, {@link submitItem} passes
- * `score`'s `ResponsesRefused` through, and {@link submitPart} refuses with `responses-invalid`
- * naming the item.
+ * attempt `score` cannot run. The outcome processing {@link submitItem} runs after each submission
+ * fails as a closing part end's does. For responses that break a tier (a) limit, {@link submitItem}
+ * passes `score`'s `ResponsesRefused` through, and {@link submitPart} refuses with
+ * `responses-invalid` naming the item.
  */
 export type SubmissionFailure = PartEndFailure | ScoreFailure;
 
