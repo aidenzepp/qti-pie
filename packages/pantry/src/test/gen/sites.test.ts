@@ -27,9 +27,10 @@ import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { datumText } from "#pantry/host/predicates.ts";
+import type { Datum } from "#pantry/host/predicates.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
-import { checkOf, datumText } from "#pantry/test/key-copies.ts";
-import type { Datum } from "#pantry/test/key-copies.ts";
+import { checkOf } from "#pantry/test/key-copies.ts";
 import {
   hrefCases,
   ruleOfCase,

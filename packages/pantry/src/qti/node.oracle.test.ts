@@ -46,9 +46,9 @@ import { ElementType, EndCharacter, Node, nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import type { Datum } from "#pantry/host/predicates.ts";
+import { judgedLaws } from "#pantry/import/host-judge.ts";
 import { checkOf } from "#pantry/test/key-copies.ts";
-import type { Datum } from "#pantry/test/key-copies.ts";
 import { documentBreaches, lawNames, lawsOf, oracleRules, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 

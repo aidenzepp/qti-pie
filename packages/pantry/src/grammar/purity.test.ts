@@ -95,8 +95,16 @@ const valueSpecifiers = (source: string): readonly string[] =>
   specifiers(source.replaceAll(/^[ \t]*(?:import|export)\s+type\b[^;]*;/gmu, ""));
 
 /**
- * The modules the law oracle is made of: {@link oracleModule} and every module of `src/test/` it
- * reaches through a static or dynamic import, relative to `src`.
+ * The prefixes of the modules the law oracle is made of when it reaches them: the test support,
+ * and the host's reading of grizzle's predicates (`#pantry/host/predicates.ts`), which the oracle's
+ * key copies and the import's host judge share and which states no law and reads no schema of its
+ * own, so a statement read it gained would be the oracle's.
+ */
+const oraclePrefixes = ["#pantry/test/", "#pantry/host/"];
+
+/**
+ * The modules the law oracle is made of: {@link oracleModule} and every module under
+ * {@link oraclePrefixes} it reaches through a static or dynamic import, relative to `src`.
  *
  * @param read - Reads a module's text by its path relative to `src`.
  * @returns The modules, sorted.
@@ -108,7 +116,11 @@ const oracleModules = (read: (file: string) => string): readonly string[] => {
     const file = (unread.pop() ?? oracleModule).slice("#pantry/".length);
     if (!seen.has(file)) {
       seen.add(file);
-      unread.push(...specifiers(read(file)).filter((next) => next.startsWith("#pantry/test/")));
+      unread.push(
+        ...specifiers(read(file)).filter((next) =>
+          oraclePrefixes.some((prefix) => next.startsWith(prefix)),
+        ),
+      );
     }
   }
 
@@ -275,12 +287,20 @@ describe("the test helpers", () => {
   });
 
   it("find a law of the oracle that reads a schema statement, and no type import or data module", () => {
-    // Oracle: the rule above on a planted module graph. Live: the oracle's own module and a law
-    // module it reaches, each reading a schema statement, one of them by a dynamic import. Stale: a
-    // type-only import of a schema module, a read of the data module, and of the law catalog. Wild:
-    // a module the oracle does not reach, which reads a statement and is no part of it.
+    // Oracle: the rule above on a planted module graph. Live: the oracle's own module, a law module
+    // it reaches and the host predicates it reaches, each reading a schema statement, one of them by
+    // a dynamic import. Stale: a type-only import of a schema module and of grizzle, a read of the
+    // data module, and of the law catalog. Wild: a module the oracle does not reach, which reads a
+    // statement and is no part of it.
     const planted = new Map([
       ["test/elsewhere.ts", 'import { Qti } from "#pantry/qti/schema.ts";'],
+      [
+        "host/predicates.ts",
+        [
+          'import type { LawSide } from "@bjornpagen/grizzle";',
+          'import { Qti } from "#pantry/qti/schema.ts";',
+        ].join("\n"),
+      ],
       [
         "test/oracle-laws.ts",
         [
@@ -294,6 +314,7 @@ describe("the test helpers", () => {
         "test/oracle.ts",
         [
           'import { addedLaws } from "#pantry/test/oracle-laws.ts";',
+          'import { datumText } from "#pantry/host/predicates.ts";',
           'import { Node } from "#pantry/qti/node.ts";',
           'import { select } from "@bjornpagen/grizzle";',
         ].join("\n"),
@@ -303,6 +324,7 @@ describe("the test helpers", () => {
     assert.deepStrictEqual(
       statementReads((file) => planted.get(file) ?? ""),
       [
+        "host/predicates.ts: #pantry/qti/schema.ts",
         "test/oracle-laws.ts: #pantry/qti/tests.ts",
         "test/oracle.ts: #pantry/qti/node.ts",
         "test/oracle.ts: @bjornpagen/grizzle",

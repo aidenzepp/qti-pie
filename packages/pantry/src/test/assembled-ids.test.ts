@@ -4,9 +4,9 @@
  * carrying one ID, the three alike or apart, the section placed once or twice and the fragment
  * included once or twice. The law oracle states "DocumentId key" and "Idref target" over each
  * assembly as Q5.13's instances place it (`#pantry/test/oracle.ts` `assembliesOf`), and the
- * import's rows are judged by the schema's own laws on the host (`#pantry/test/host-judge.ts`), and
- * the two verdicts must be one. A test rubric's IDREF may name its section document's ID, since the
- * test's assembly holds it, and a section document's may not name the test's, since its own
+ * import's rows are judged by the schema's own laws on the host (`#pantry/import/host-judge.ts`),
+ * and the two verdicts must be one. A test rubric's IDREF may name its section document's ID, since
+ * the test's assembly holds it, and a section document's may not name the test's, since its own
  * assembly does not.
  *
  * The section document is placed whole, an instance of its own, and the test writes its elements
@@ -30,8 +30,7 @@ import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/import/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**

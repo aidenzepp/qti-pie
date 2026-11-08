@@ -11,7 +11,7 @@
  * set-outcome-value in processing, which names a variable its host's assembly declares or one it
  * does not, and is included once or twice. Every case is judged by the law oracle
  * (`#pantry/test/oracle-laws/tests.ts`, which reads each document a test places with the fragments
- * it splices) and by the schema's own laws over the import's rows (`#pantry/test/host-judge.ts`:
+ * it splices) and by the schema's own laws over the import's rows (`#pantry/import/host-judge.ts`:
  * `SectionScope`'s placements, `TestReference` over every document that is no item), and the laws
  * each side breaks must be one set.
  */
@@ -31,8 +31,7 @@ import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/import/host-judge.ts";
 import { judge as judgeOracle, lawsOf } from "#pantry/test/oracle.ts";
 
 /**

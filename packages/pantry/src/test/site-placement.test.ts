@@ -10,7 +10,7 @@
  * content, is such a site, and its placement's document is a fragment, whose root is any kind the
  * include may stand for (spec readings 114 and 117). Each package below is the every-relation
  * package, which the law oracle accepts, with one site placed differently, and every law the host
- * judges (`#pantry/test/host-judge.ts`) holds over its rows.
+ * judges (`#pantry/import/host-judge.ts`) holds over its rows.
  *
  * A section's include is no splice: it places its document as a section ref does (readings 86 and
  * 117, "includes in a section follow it"), so a section document a section includes twice is
@@ -34,10 +34,9 @@ import { Qti } from "#pantry/qti/schema.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import type { Datum } from "#pantry/host/predicates.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/import/host-judge.ts";
 import { checkOf } from "#pantry/test/key-copies.ts";
-import type { Datum } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**

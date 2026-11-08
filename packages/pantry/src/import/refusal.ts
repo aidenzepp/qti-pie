@@ -327,7 +327,8 @@ const relationsOf = (law: Law): readonly string[] =>
 
 /**
  * File a law by its kind and its sides' relations, so {@link lawNameOf} holds an outcome's law to
- * the few stated laws of that kind over those relations, never every law of Qti.
+ * the few stated laws of that kind over those relations, never every law of Qti, as the import's
+ * host judge holds it to the laws it judges (`#pantry/import/host-judge.ts` `rulingOf`).
  *
  * This is no identity of the law: grizzle's `sameLaw` decides whether two laws are one, comparing
  * them whole, and two laws one bucket holds may still differ in their terms or selections. The
@@ -337,7 +338,7 @@ const relationsOf = (law: Law): readonly string[] =>
  * @param law - A law as grizzle names it.
  * @returns Its bucket.
  */
-const bucketOf = (law: Law): string => [law.kind, ...relationsOf(law)].join(" ");
+export const bucketOf = (law: Law): string => [law.kind, ...relationsOf(law)].join(" ");
 
 /**
  * The law of a given kind.
@@ -936,6 +937,16 @@ const nameOfStatement: ReadonlyMap<Statement, LawName> = new Map(
 );
 
 /**
+ * Each statement of a schema beside its laws, as grizzle's `lawsOf` names them.
+ *
+ * `lawsOf` compiles the schema's law model, which takes seconds, so this is memoized by the
+ * schema's identity: the laws this module names ({@link statedIn}) and the laws the import's host
+ * judge judges (`#pantry/import/host-judge.ts`) share one compile per process, and loading either
+ * module runs none.
+ */
+export const statementLawsOf = Fn.memoize((schema: typeof Qti) => lawsOf(schema));
+
+/**
  * The laws a schema states that are no check, each with its name, and the same laws filed by
  * {@link bucketOf}.
  */
@@ -953,16 +964,16 @@ interface Stated {
  * name ({@link lawOfCheck}), so its law is left out. A statement no module groups names none of its
  * laws, which the census in `refusal.oracle.test.ts` refuses.
  *
- * `lawsOf` compiles the schema's law model, which takes seconds, so this is memoized by the
- * schema's identity: the first refusal compiles it once per process, loading this module never
- * does, and every later call returns the same laws.
+ * Memoized by the schema's identity, over {@link statementLawsOf}'s one compile: the first refusal
+ * reads the laws once per process, loading this module never does, and every later call returns
+ * the same laws.
  *
  * @param schema - The schema, `Qti`.
  * @returns Its laws, with their names.
  */
 const statedIn = Fn.memoize((schema: typeof Qti): Stated => {
   const laws = [
-    ...lawsOf(schema).flatMap(({ laws: own, statement }) =>
+    ...statementLawsOf(schema).flatMap(({ laws: own, statement }) =>
       Option.match(Option.fromUndefinedOr(nameOfStatement.get(statement)), {
         onNone: () => [],
         onSome: (name) =>

@@ -111,7 +111,8 @@ import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { Domain, WhiteSpace } from "#pantry/vocab/inventory/types.ts";
 import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantry/qti/limits.ts";
-import { datumText, keyCopies } from "#pantry/test/key-copies.ts";
+import { datumText } from "#pantry/host/predicates.ts";
+import { keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
 import {

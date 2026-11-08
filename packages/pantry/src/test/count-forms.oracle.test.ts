@@ -25,8 +25,7 @@ import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/import/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**

@@ -33,15 +33,10 @@ import { readPackage } from "#pantry/package/read.ts";
 import { keyText, keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import {
-  generatedFields,
-  identityOf,
-  judgedSideOf,
-  keyCopies,
-  keyTextFields,
-  SideSchema,
-} from "#pantry/test/key-copies.ts";
-import type { Datum } from "#pantry/test/key-copies.ts";
+import { SideSchema } from "#pantry/host/predicates.ts";
+import type { Datum } from "#pantry/host/predicates.ts";
+import { generatedFields, judgedSideOf } from "#pantry/import/host-judge.ts";
+import { identityOf, keyCopies, keyTextFields } from "#pantry/test/key-copies.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
 /**

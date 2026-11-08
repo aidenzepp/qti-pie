@@ -13,7 +13,7 @@
  * Each package is held three ways: by the specification by hand ({@link expectedOf}), by the law
  * oracle's laws, and by the import's rows: which `NormalMinimum`, `MasteryFloor` and
  * `MasteryCeiling` rows exist, and the laws they break on the host, under the refusal's rule. The
- * host reads no `Compute.when` term (`#pantry/test/host-judge.ts`), so it judges no
+ * host reads no `Compute.when` term (`#pantry/import/host-judge.ts`), so it judges no
  * `Mastery_range`; the import's verdict on it is read from its pair rows as the law's check orders
  * them ({@link rowsBreakRange}), and the database tier judges the check itself
  * (`#pantry/qti/declarations.db.test.ts`).
@@ -32,8 +32,7 @@ import type { PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge as judgeHost } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/import/host-judge.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";

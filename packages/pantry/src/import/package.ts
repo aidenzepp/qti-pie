@@ -31,6 +31,7 @@ import {
 } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
+import { hostRowsOf, rulingOf } from "#pantry/import/host-judge.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { refusalOfLaws } from "#pantry/import/refusal.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
@@ -240,24 +241,59 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
     // `0c2154c`):
     // - `every`: every law of the refused row's table that the stated row breaks, each once, in
     //   the schema's order, a domain's one per column whose value it refuses; for any other
-    //   refusal, the one law its PostgreSQL object discharges.
+    //   refusal, the one law its PostgreSQL object discharges. The refusal is ruled by them all.
     // - `first`: the laws of the first CHECK PostgreSQL tried, where grizzle's host cannot witness
     //   the row, for example a law over a family's filled counts (Choice not variable's).
     // - `some`: the laws one PostgreSQL object discharges, two or more, at least one of them broken
     //   and nothing deciding which: a family's axis foreign key and every law merged into it, or a
-    //   domain over a row the host does not judge whole. A stated limit: the import cannot yet
-    //   decide which law broke (a recorded follow-up), so its rule stays the most specific among
-    //   them, what it ruled when grizzle named these laws `every` before.
-    // The rule is the most specific among them in every arm (`ruleOfLaws`). A breach in a table
+    //   domain over a row the host does not judge whole.
+    // Neither `first` nor `some` says which law broke, so where their laws have more than one rule
+    // the import judges each over its own rows on the host and rules by the laws the rows break
+    // and the laws the host cannot judge, never by one the rows hold (`rulingOf` of
+    // `#pantry/import/host-judge.ts`). A stated limit: a law the host cannot judge (a fold, a
+    // pattern, a law over a value the host does not restore) may be broken, so it stays among
+    // them, and where it holds the most specific rule the rule falls back to the most specific of
+    // the laws not judged held, as before; the ruling's span counts such laws and says whether the
+    // rule was decided, and a fallback is logged. `first` names one CHECK's laws, so a law of
+    // another CHECK the row also breaks never reaches the rule.
+    // The rule is the most specific among the ruling's laws (`ruleOfLaws`). A breach in a table
     // written or checked later, or one the host cannot witness, never reaches the rule, however
     // specific its law; GEN-A's differential records any such divergence from the oracle.
     // The witness is grizzle's own, as the refusal carries it: the key of the first stated row
     // that breaks the law, or `unreported` for a foreign key and for a law no stated row breaks as
     // the host judges it (README "Errors and outcomes"). Laws no rule owns die as `UnownedLaws`, a
     // defect of the law table, never a verdict on the package.
-    return yield* Result.match(refusalOfLaws(outcome.refused.laws, outcome.witness, grammar), {
+    const { refused } = outcome;
+    const ruling = yield* Effect.sync(() =>
+      rulingOf(refused, () => hostRowsOf(program.inputs)),
+    ).pipe(
+      Effect.tap((ruled) =>
+        Effect.annotateCurrentSpan({
+          lawsBroken: ruled.broken.length,
+          lawsHeld: ruled.held.length,
+          lawsNamed: refused.laws.length,
+          lawsUnjudged: ruled.unjudged.length,
+          refusedKind: refused.kind,
+          ruleDecided: ruled.decided,
+        }),
+      ),
+      Effect.withSpan("import.ruleRefusal"),
+    );
+    if (!ruling.decided) {
+      yield* Effect.logDebug(
+        "refusal ruled by the most specific law the host could not judge broken or held",
+      ).pipe(
+        Effect.annotateLogs({
+          lawsHeld: ruling.held.length,
+          lawsUnjudged: ruling.unjudged.length,
+          refusedKind: refused.kind,
+        }),
+      );
+    }
+
+    return yield* Result.match(refusalOfLaws(ruling.laws, outcome.witness, grammar), {
       onFailure: (unowned) => Effect.die(unowned),
-      onSuccess: (refused) => Effect.fail(refused),
+      onSuccess: (refusal) => Effect.fail(refusal),
     });
   }
 

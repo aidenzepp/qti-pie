@@ -9,7 +9,7 @@
  * The box is an item whose response processing includes a rule fragment, and whose body or
  * processing includes one more document: none, the item itself, a paragraph or a rule, each of the
  * last two naming a declared variable or one the item does not declare. Every case is judged by the
- * law oracle and by the schema's own laws over the import's rows (`#pantry/test/host-judge.ts`),
+ * law oracle and by the schema's own laws over the import's rows (`#pantry/import/host-judge.ts`),
  * and the laws each side breaks must be one set, but for the classes {@link recorded} names.
  *
  * An item that includes itself where an item may not stand is the case GEN-A's differential found
@@ -32,8 +32,7 @@ import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/import/host-judge.ts";
 import { judge as judgeOracle, lawsOf } from "#pantry/test/oracle.ts";
 
 /**

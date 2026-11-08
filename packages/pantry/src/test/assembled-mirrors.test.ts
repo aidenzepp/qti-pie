@@ -1,9 +1,9 @@
 /**
  * Every law of the schema the host can judge, held over the rows the import writes for the
  * every-relation package: each containment and each half of a `mirrors`, each key and each check,
- * read from the statements grizzle keeps (`#pantry/test/judged-laws.ts` `judgedLaws`), over the
+ * read from the statements grizzle keeps (`#pantry/import/host-judge.ts` `judgedLaws`), over the
  * rows as the database holds them, every value grizzle fills that the statements give restored
- * (`#pantry/test/host-judge.ts`). The law oracle accepts the package, so no law may break.
+ * (`#pantry/import/host-judge.ts`). The law oracle accepts the package, so no law may break.
  *
  * Its assembled documents are a test, a section, two items with includes, a fragment of content
  * and a fragment of response rules (spec readings 5 and 117). A fragment an item's include splices
@@ -23,9 +23,8 @@ import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
-import type { HostRow, HostRows } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/import/host-judge.ts";
+import type { HostRow, HostRows } from "#pantry/import/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
 /**

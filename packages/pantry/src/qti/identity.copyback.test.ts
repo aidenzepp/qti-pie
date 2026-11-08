@@ -42,7 +42,7 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
-import type { Datum } from "#pantry/test/key-copies.ts";
+import type { Datum } from "#pantry/host/predicates.ts";
 
 /**
  * One attribute row of the box, as both laws read it: its element's version, kind, governing type
