@@ -35,7 +35,7 @@ import { composed } from "#pantry/grammar/compose.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { judge } from "#pantry/test/host-judge.ts";
 import type { HostRows } from "#pantry/test/host-judge.ts";
-import { judgedLaws } from "#pantry/test/key-copies.ts";
+import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import type { JudgedLaw } from "#pantry/test/key-copies.ts";
 import { judge as judgeByOracle, lawNames, lawsOf } from "#pantry/test/oracle.ts";
 

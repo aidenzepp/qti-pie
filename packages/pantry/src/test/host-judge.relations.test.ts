@@ -7,7 +7,7 @@
  * relation whose heading is no record, a relation of no primary key, and a member of a kind the
  * host does not know.
  *
- * And the laws it judges (`judgedLaws` of `#pantry/test/key-copies.ts`), and each containment a
+ * And the laws it judges (`judgedLaws` of `#pantry/test/judged-laws.ts`), and each containment a
  * test reads from one relation (`containmentsOf`), are named as the refusal names an outcome's
  * (`lawNameOf` of `#pantry/import/refusal.ts`, by grizzle's `sameLaw`), so a test that names the
  * laws a package's rows break names each by its law, never by its shape. A law whose sides'
@@ -19,7 +19,7 @@ import { Formatter, Option } from "effect";
 import { lawNameOf } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { modelledRelations } from "#pantry/test/host-judge.ts";
-import { containmentsOf, judgedLaws } from "#pantry/test/key-copies.ts";
+import { containmentsOf, judgedLaws } from "#pantry/test/judged-laws.ts";
 
 /**
  * The members planted beside the schema's, each one the host cannot read.

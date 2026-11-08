@@ -1,7 +1,7 @@
 /**
  * The import's rows as the database holds them, rebuilt on the host from a program's inputs by the
  * schema's own statements, and judged by every law of the schema the host can read: each
- * containment and each half of a `mirrors`, each key and each check (`#pantry/test/key-copies.ts`
+ * containment and each half of a `mirrors`, each key and each check (`#pantry/test/judged-laws.ts`
  * `judgedLaws`).
  *
  * A program writes each row without the values grizzle fills, and nests a sequence's members under
@@ -33,12 +33,12 @@ import type { Law } from "@bjornpagen/grizzle";
 import { Option, Order, Predicate, Schema } from "effect";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/qti/schema.ts";
+import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import {
   closedRows,
   datumText,
   floatDatum,
   generatedFields,
-  judgedLaws,
   judgedSideOf,
   SideSchema,
 } from "#pantry/test/key-copies.ts";
@@ -916,7 +916,7 @@ const judgedBy = (rows: HostRows, law: JudgedLaw): LawRead => {
  * and broken where a row breaks it; each other law is skipped, named with the values it lacks.
  *
  * @param rows - Every relation's rows ({@link hostRowsOf}).
- * @param laws - The laws (`#pantry/test/key-copies.ts` `judgedLaws`).
+ * @param laws - The laws (`#pantry/test/judged-laws.ts` `judgedLaws`).
  * @returns The judgment.
  */
 export const judge = (rows: HostRows, laws: readonly JudgedLaw[]): Judgment => {

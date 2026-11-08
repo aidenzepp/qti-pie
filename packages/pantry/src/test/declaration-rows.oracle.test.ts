@@ -115,9 +115,9 @@ const hanging: ReadonlySet<string> = new Set([
  * The relations whose rows read a declaration's base type, each naming it by its `declaration`.
  */
 const baseTypeReaders: ReadonlySet<string> = new Set([
-  "DeclaredValue",
   "LookupValueType",
   "MappingBaseType",
+  "TypedValue",
 ]);
 
 /**

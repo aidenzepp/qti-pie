@@ -186,6 +186,27 @@ const isNumeral = (value: string): boolean =>
   /^[\t\n\r ]*[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?[\t\n\r ]*$/u.test(value);
 
 /**
+ * Whether libxml2 2.9.13 refuses a decimal numeral, between optional XML whitespace, for its digits
+ * alone. Its `xs:decimal` copies the digits after the integer part's leading zeros into a buffer of
+ * 25 bytes and stops at the 24th (`xmlschemastypes.c`, lines 2374 to 2444), so it refuses more
+ * than 24 of them, the integer and fraction parts counted together, and a point after 24 integer
+ * digits, which the copy stops before though the same digits without the point pass; its integers'
+ * `xmlSchemaParseUInt` refuses more than 24 after the leading zeros (line 2166).
+ *
+ * @param value - The value.
+ * @returns Whether libxml2 refuses it for its digits.
+ */
+const beyondLibxml2Digits = (value: string): boolean => {
+  if (!/^[\t\n\r ]*[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)[\t\n\r ]*$/u.test(value)) {
+    return false;
+  }
+
+  const significant = value.replaceAll(/[^0-9.]/gu, "").replace(/^0+/u, "");
+
+  return significant.replace(".", "").length > 24 || significant.indexOf(".") >= 24;
+};
+
+/**
  * Whether a value is an integer numeral, collapsed as `xs:integer` collapses it, outside the
  * signed 64-bit range.
  *
@@ -386,11 +407,11 @@ export const recorded: readonly Recorded[] = [
   {
     builtin:
       /^(?:integer|decimal|nonNegativeInteger|positiveInteger|nonPositiveInteger|negativeInteger)$/u,
-    holds: (value) => isNumeral(value) && (value.match(/[0-9]/gu) ?? []).length > 24,
+    holds: beyondLibxml2Digits,
     reason: {
       _tag: "libxml2",
       proof: "digits",
-      why: "libxml2 refuses an xs:integer or xs:decimal of more than 24 digits, its integer and fraction parts counted together; XML Schema bounds neither, and reading 45 keeps integers unbounded",
+      why: "libxml2 refuses an xs:integer or xs:decimal of more than 24 digits after its leading zeros, its integer and fraction parts counted together, and an xs:decimal of 24 such integer digits and a point (825555555555555555555555., where 825555555555555555555555 passes), its digit buffer full before the point; XML Schema bounds neither, a processor's documented limit (Part 2, 3.2.3) bounds digits, which a point adds none of, reading 45 keeps integers unbounded, and MathML's number (§2.1.5.1) is a string of digits with up to one point",
     },
     xsd: "invalid",
   },
@@ -1711,8 +1732,14 @@ export const proofs = {
     type: "xs:base64Binary",
   },
   digits: {
-    refused: ["9".repeat(25), "9".repeat(400), `${"1".repeat(15)}.${"2".repeat(10)}`],
-    type: "xs:integer",
+    refused: [
+      "9".repeat(25),
+      "9".repeat(400),
+      `${"1".repeat(15)}.${"2".repeat(10)}`,
+      `${"9".repeat(24)}.`,
+      `&#13;-0${"8".repeat(24)}.&#13;`,
+    ],
+    type: "xs:decimal",
   },
   emptyLists: {
     accepted: ["", " ", "&#10; "],

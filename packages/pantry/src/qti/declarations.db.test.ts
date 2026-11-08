@@ -42,12 +42,12 @@ import {
   DeclarationIdentifier,
   declarationKinds,
   DeclarationName,
-  DeclaredValue,
   FieldValue,
   MasteryCeiling,
   MasteryFloor,
   reservedBaseTypes,
   sessionVariables,
+  TypedValue,
   ValueBaseType,
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
@@ -683,7 +683,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // engine judging the same patterns a JavaScript host checks there.
           // Bound: 8 judged base types against 13 texts, 104 cases, and each text under `string`,
           // which admits every text, 13 more; each in its declaration's base type
-          // (`DeclaredValue`), in a single set, where it is judged, and in a record's, where it is
+          // (`TypedValue`), in a single set, where it is judged, and in a record's, where it is
           // not, and in its own base type (`FieldValue`), in a record's set, where it is judged,
           // and in a single set, where it is not (§7.46.2: a value's base-type "is only used for" a
           // record's field).
@@ -701,7 +701,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                     text,
                   };
                   assertVerdict(
-                    yield* judged(client, statedInserts([{ fact, relation: DeclaredValue }])),
+                    yield* judged(client, statedInserts([{ fact, relation: TypedValue }])),
                     "typed_value",
                     cardinality !== "record" && refused,
                     `${baseType} in a ${cardinality} set ${JSON.stringify(text)}`,

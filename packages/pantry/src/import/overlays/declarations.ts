@@ -27,7 +27,6 @@ import type {
   DeclarationCardinality,
   DeclarationIdentifier,
   DeclarationName,
-  DeclaredValue,
   FieldValue,
   MasteryCeiling,
   MasteryFloor,
@@ -36,6 +35,7 @@ import type {
   NormalMinimum,
   RecordField,
   RecordFieldName,
+  TypedValue,
   Value,
   ValueBaseType,
   ValueSet,
@@ -70,7 +70,6 @@ export interface DeclarationRows {
   readonly DeclarationCardinality: ReadonlyMap<string, Addition<typeof DeclarationCardinality>>;
   readonly DeclarationIdentifier: ReadonlyMap<string, Addition<typeof DeclarationIdentifier>>;
   readonly DeclarationName: ReadonlyMap<string, Addition<typeof DeclarationName>>;
-  readonly DeclaredValue: ReadonlyMap<string, Addition<typeof DeclaredValue>>;
   readonly FieldValue: ReadonlyMap<string, Addition<typeof FieldValue>>;
   readonly MasteryCeiling: ReadonlyMap<string, Addition<typeof MasteryCeiling>>;
   readonly MasteryFloor: ReadonlyMap<string, Addition<typeof MasteryFloor>>;
@@ -79,6 +78,7 @@ export interface DeclarationRows {
   readonly NormalMinimum: ReadonlyMap<string, Addition<typeof NormalMinimum>>;
   readonly RecordField: ReadonlyMap<string, Addition<typeof RecordField>>;
   readonly RecordFieldName: ReadonlyMap<string, Addition<typeof RecordFieldName>>;
+  readonly TypedValue: ReadonlyMap<string, Addition<typeof TypedValue>>;
   readonly Value: ReadonlyMap<string, Addition<typeof Value>>;
   readonly ValueBaseType: ReadonlyMap<string, Addition<typeof ValueBaseType>>;
   readonly ValueSet: ReadonlyMap<string, Addition<typeof ValueSet>>;
@@ -688,7 +688,7 @@ const addValue = (
   for (const [baseType, cardinality] of Option.toArray(
     Option.all([typed.baseType, typed.cardinality]),
   )) {
-    reading.rows.DeclaredValue.set(node.id, { ...written, baseType, cardinality });
+    reading.rows.TypedValue.set(node.id, { ...written, baseType, cardinality });
   }
 
   const fieldIdentifier = valueOf(reading, node, "field-identifier");
@@ -769,7 +769,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
       DeclarationCardinality: new Map(),
       DeclarationIdentifier: new Map(),
       DeclarationName: new Map(),
-      DeclaredValue: new Map(),
       FieldValue: new Map(),
       MasteryCeiling: new Map(),
       MasteryFloor: new Map(),
@@ -778,6 +777,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
       NormalMinimum: new Map(),
       RecordField: new Map(),
       RecordFieldName: new Map(),
+      TypedValue: new Map(),
       Value: new Map(),
       ValueBaseType: new Map(),
       ValueSet: new Map(),

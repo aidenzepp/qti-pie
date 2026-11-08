@@ -27,7 +27,8 @@ import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { checkOf, containmentsOf, datumText } from "#pantry/test/key-copies.ts";
+import { containmentsOf } from "#pantry/test/judged-laws.ts";
+import { checkOf, datumText } from "#pantry/test/key-copies.ts";
 import type { Datum } from "#pantry/test/key-copies.ts";
 import {
   hrefCases,
@@ -367,9 +368,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (i
     (ctx) =>
       // Oracle: the specification as a checker, reading 115 and §7.5 per case (`ruleOfCase`),
       // against the schema's statements as grizzle keeps them, their selections included
-      // (`#pantry/test/key-copies.ts` `checkOf` and `containmentsOf`), evaluated over the import's
-      // rows and named by refusal.ts's rules. A section ref with no href breaks its document law,
-      // a deferred key, beside AL3, which PostgreSQL judges first as the node is inserted.
+      // (`#pantry/test/key-copies.ts` `checkOf`, `#pantry/test/judged-laws.ts` `containmentsOf`),
+      // evaluated over the import's rows and named by refusal.ts's rules. A section ref with no
+      // href breaks its document law, a deferred key, beside AL3, which PostgreSQL judges first as
+      // the node is inserted.
       // Bound: the box's 125 packages.
       searched(
         ctx,

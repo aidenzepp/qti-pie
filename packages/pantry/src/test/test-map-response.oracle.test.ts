@@ -1,5 +1,5 @@
 /**
- * A test's dotted map response and dotted correct (decisions 429 and 430; spec reading 163): a
+ * A test's dotted map response and dotted correct (decisions 429 and 430; spec reading 164): a
  * test's outcome processing that names an item's variable through its item ref, `I.RESPONSE`,
  * reads the item's declaration. A `qti-map-response` there must name a response variable whose
  * declaration holds a `qti-mapping` (information model §7.22: "This expression looks up the value

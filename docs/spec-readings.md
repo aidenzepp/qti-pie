@@ -3104,7 +3104,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      as a row of its own, `DeclarationCardinality`, beside `DeclarationBaseType` and `DeclarationIdentifier`
      (`src/qti/declarations.ts`), only where it spells a code: a missing value is a row of its own relation, never a
      sentinel. Each law over a cardinality reads that row, through a row that hangs from the declaration beside it
-     (`ValueSetCardinality`, `DeclaredValue`, `FieldValue`, `MappingCardinality`, `AreaMappingCardinality`,
+     (`ValueSetCardinality`, `TypedValue`, `FieldValue`, `MappingCardinality`, `AreaMappingCardinality`,
      `LookupTableCardinality`, `DeclarationName`), or from it (Declaration base type). This sets aside lane NIL's B11
      reading, under which such a declaration had no `Declaration` row and nothing below it, so the importer's rows broke
      "Declaration overlay"'s copy of its cardinality and "Mapping overlay"'s copy of each map key beside the value
@@ -3135,7 +3135,30 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      reference row and broke "E1 derived"'s copy of the attribute, beside the AL3 or value domain the law oracle alone
      raised. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
      coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-BINDCARD.)
-160. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+160. **A mapping's keys repeat as written whatever its declaration's base type spells, and as values of the base type
+     only where it spells one.** Reading 98 makes a mapping's keys distinct as values of its base type, since "The map
+     is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float"
+     (section 5.88.4, https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping), and reading 158 counts Map key among
+     the laws that read neither the cardinality nor the base type. Both hold, as two comparisons. Two keys written alike
+     are one form, which names one value under every base type whose lexical space holds it and none under any other,
+     so a mapping that writes a key twice maps one source twice whatever its base type spells: that comparison reads
+     neither attribute and judges every mapping. Two keys written apart are one value only under a base type whose
+     values have several forms (`1` and `01` as integers, reading 45; `A B` and `B A` as pairs, reading 98; `0` and
+     `-0` as floats, reading 154), so that comparison reads the base type and judges a mapping only where it spells a
+     code, as reading 158 has each law over a base type do. So a mapping under `base-type=" string "` that writes the
+     key `a` twice breaks Map key beside its value domain, and one under `base-type=" integer "` keyed `1` and `01`
+     breaks its value domain alone. This is also the stricter reading: no base type accepts a key written twice. The
+     schema states the two as two keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over every mapping's keys as
+     written, and `key(mapping, value)` over the typed keys, which hang from `MapKeyType`, written only where the
+     declaration has a base type; the law oracle reads a key as written where the base type spells nothing, and as
+     `mapKeyValueOf` gives it where the base type spells a code (`src/test/oracle.ts`). This sets aside lane NIL's B11
+     reading, under which neither the import's rows (no `Declaration` row, so no `MapKey`) nor the law oracle (no base
+     type to read the keys in) judged the keys of a mapping whose base type spells nothing, so a key written twice there
+     broke its value domain alone; reading 158 left it at 6fea789a, and `src/test/unspelled-declarations.oracle.test.ts`
+     expected it until this reading. The corpus holds no repeated key (reading 98), so no verdict moves. This binds
+     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under
+     the operator's standing ruling of 2026-11-05, from seat FIX-MAPKEYDUP.)
+161. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 4.5, OutcomeDeclaration (https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration), says
      of SCORE "Items that declare a numeric outcome variable representing the candidate's overall performance on the item
      should use the outcome name 'SCORE' for the variable. SCORE needs to be a float." (`info.txt:11979`), and of
@@ -3150,7 +3173,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      reading 1 protects valid content. No corpus test declares a SCORE or MAXSCORE of another base type. This binds
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
      type`. Re-cited 2026-11-07 by the Mind on audit b61b8f14's D2: §4.5 for the non-normative §2.2.2.3.)
-161. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
+162. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
      HTML around it says.** MathML 3 section 2.2.1, Attributes
      (https://www.w3.org/TR/MathML3/chapter2.html#interf.toplevel.atts), says "Note that the dir attribute defaults to
      "ltr" on the math element (but inherits on all other elements which accept the dir attribute); this provides for
@@ -3167,7 +3190,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      direction (MathML 3 lists only those two; the value domain refuses another on a MathML element). This binds pantry
      and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on
      audit e8db90e1's F6, under the operator's standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
-162. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
+163. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
      first one listed.** A string mapping whose entries leave `case-sensitive` at its default writes `York` (mapped to 2)
      and `york` (mapped to 1); the document is accepted, and the response `york` matches both. The standard bans
      nothing here: no XSD carries a uniqueness constraint (no `xs:unique` or `xs:key` in `imsqti_asiv3p0_v1p0.xsd` or
@@ -3186,7 +3209,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      entries, plate's score included, takes the lowest start (the first listed) and invents no other policy. This binds
      pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision
      425, delegated by the operator in mail 69fd02ec; register row B11.)
-163. **A test's prefixed `qti-map-response` names a response variable whose declaration holds a `qti-mapping`, and a
+164. **A test's prefixed `qti-map-response` names a response variable whose declaration holds a `qti-mapping`, and a
      test's prefixed `qti-correct` names a response variable.** A test's outcome processing may name an item's variable
      through its item ref (reading 48), `I.RESPONSE`. The information model's section 7.22, MapResponse
      (https://www.imsglobal.org/spec/qti/v3p0/info#Derived_MapResponse), says "This expression looks up the value of a
