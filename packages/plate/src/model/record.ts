@@ -79,12 +79,13 @@ export type SolutionRecord = Pick<ItemRecord, "correct">;
 
 /**
  * The part of an {@link ItemRecord} a test's outcome processing reads through the test scope
- * (`#plate/engine/scope.ts`): the responses, the outcomes and the template values, and the correct
- * responses and defaults template processing set. It holds no seed.
+ * (`#plate/engine/scope.ts`): the responses and the record responses' records, the outcomes and
+ * the template values, and the correct responses and defaults template processing set. It holds
+ * no seed.
  */
 export type ScopeRecord = Pick<
   ItemRecord,
-  "correct" | "defaults" | "outcomes" | "responses" | "templates"
+  "correct" | "defaults" | "outcomes" | "records" | "responses" | "templates"
 >;
 
 /**

@@ -3,7 +3,11 @@ import { Effect, Option, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { Declarations } from "#plate/engine/evaluate.ts";
-import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/failures.ts";
+import {
+  OutcomeMismatchError,
+  RecordOperandError,
+  UnknownIdentifierError,
+} from "#plate/engine/failures.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
 import { runOutcomes, testScopeOf } from "#plate/engine/outcome.ts";
 import { drawBelow, drawStream, outcomeLabel } from "#plate/engine/random.ts";
@@ -24,7 +28,7 @@ import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { absentControl, buildTest } from "#plate/model/test.ts";
 import type { ItemRef, OutcomeProcessing, Section, Test, TestPart } from "#plate/model/test.ts";
-import type { ModelledBaseType, Value } from "#plate/model/values.ts";
+import type { ModelledBaseType, RecordValue, Value } from "#plate/model/values.ts";
 import type { SessionItem } from "#plate/session/session.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
@@ -626,12 +630,14 @@ const session = {
  * Give the record part a scope entry holds of a session item's record: no seed.
  *
  * @param itemRecord The record.
- * @returns Its responses, outcomes, template values, correct responses and defaults.
+ * @returns Its responses, record responses' records, outcomes, template values, correct responses
+ *   and defaults.
  */
 const scopeRecord = (itemRecord: ItemRecord): ScopeItem["record"] => ({
   correct: itemRecord.correct,
   defaults: itemRecord.defaults,
   outcomes: itemRecord.outcomes,
+  records: itemRecord.records,
   responses: itemRecord.responses,
   templates: itemRecord.templates,
 });
@@ -688,6 +694,7 @@ describe("testScopeOf", () => {
           numAttempts: 3,
           presented: true,
           record: scopeRecord(first?.record ?? record("ITEM1", 0, 0)),
+          records: new Map(),
           ref: "ITEM1",
           unheld: new Map<string, DeclaredType>([
             ["UPLOAD", { baseType: "file", cardinality: "single" }],
@@ -703,6 +710,7 @@ describe("testScopeOf", () => {
           numAttempts: 2,
           presented: true,
           record: scopeRecord(second?.record ?? record("ITEM2", 0, 0)),
+          records: new Map(),
           ref: "ITEM2",
           unheld: new Map(),
           unheldResponses: new Map(),
@@ -715,6 +723,7 @@ describe("testScopeOf", () => {
           numAttempts: 0,
           presented: false,
           record: scopeRecord(third?.record ?? record("ITEM3", 0, 0)),
+          records: new Map(),
           ref: "ITEM3",
           unheld: new Map(),
           unheldResponses: new Map(),
@@ -951,7 +960,7 @@ describe("testScopeOf over built models", () => {
   );
 
   it.effect(
-    "[I-1] [T-9] testScopeOf reads a record response declaration the item model holds as NULL of cardinality record, with whether it declares a correct response",
+    "[I-1] [T-9] testScopeOf gives the record responses the item model holds as the entry's records, never as unheld, and reads a record response through its item ref as the record its item's record holds",
     () =>
       Effect.gen(function* recordResponsesScope() {
         const item = yield* buildItem(
@@ -994,33 +1003,243 @@ describe("testScopeOf over built models", () => {
           new Map(),
           Option.none(),
         );
-        const recordType: DeclaredType = { baseType: "file", cardinality: "record" };
+        const [entry] = scope.items;
 
-        // The item model holds both, so the scope reads them through the item's records.
+        // The item model holds both, so the scope reads them through the entry's records.
         assert.deepStrictEqual([...(item.records?.keys() ?? [])], ["KEYED", "OPEN"]);
         assert.isUndefined(item.unheld);
+        assert.strictEqual(entry?.records, item.records);
         assert.deepStrictEqual(
-          scope.items.map((entry) => entry.unheld),
-          [
-            new Map([
-              ["KEYED", recordType],
-              ["OPEN", recordType],
-            ]),
-          ],
-        );
-        assert.deepStrictEqual(
-          scope.items.map((entry) => entry.unheldResponses),
-          [
-            new Map([
-              ["KEYED", true],
-              ["OPEN", false],
-            ]),
-          ],
+          scope.items.map((each) => [each.unheld, each.unheldResponses]),
+          [[new Map(), new Map()]],
         );
         assert.deepStrictEqual(Result.getOrThrow(prefixedVariable(scope, "ITEM1.KEYED")).reading, {
-          kind: "unheld",
-          type: recordType,
+          kind: "record",
+          value: { cardinality: "record", fields: [] },
         });
+      }),
+  );
+});
+
+/**
+ * An item document with an empty body that declares the record response `RREC`, whose correct
+ * response is `stringValue` "12" and `floatValue` 12, a record outcome `ROUT`, a record template
+ * variable `RTPL` and a float outcome `SCORE`.
+ */
+const recordItemDocument = doc(
+  "items/ITEM1.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "ITEM1"), attr("title", "Item one")],
+    [
+      el(
+        "qti-response-declaration",
+        [attr("cardinality", "record"), attr("identifier", "RREC")],
+        [
+          el(
+            "qti-correct-response",
+            [],
+            [
+              el(
+                "qti-value",
+                [attr("base-type", "string"), attr("field-identifier", "stringValue")],
+                [text("12")],
+              ),
+              el(
+                "qti-value",
+                [attr("base-type", "float"), attr("field-identifier", "floatValue")],
+                [text("12")],
+              ),
+            ],
+          ),
+        ],
+      ),
+      el("qti-outcome-declaration", [attr("cardinality", "record"), attr("identifier", "ROUT")]),
+      el("qti-outcome-declaration", [
+        attr("base-type", "float"),
+        attr("cardinality", "single"),
+        attr("identifier", "SCORE"),
+      ]),
+      el("qti-template-declaration", [attr("cardinality", "record"), attr("identifier", "RTPL")]),
+      el("qti-item-body"),
+    ],
+  ),
+);
+
+/**
+ * The record a candidate's answer to `RREC` gives: `stringValue` "12" and `floatValue` 12, its
+ * correct response with the fields in the other order.
+ */
+const answeredRecord: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "floatValue", value: { baseType: "float", value: 12 } },
+    { identifier: "stringValue", value: { baseType: "string", value: "12" } },
+  ],
+};
+
+/**
+ * Construct the declaration of a single boolean or float outcome the record cases set.
+ *
+ * @param name The outcome's identifier.
+ * @param baseType Its base type.
+ * @returns The declaration.
+ */
+const recordCaseOutcome = (name: string, baseType: "boolean" | "float"): SourceElement =>
+  el("qti-outcome-declaration", [
+    attr("base-type", baseType),
+    attr("cardinality", "single"),
+    attr("identifier", name),
+  ]);
+
+/**
+ * Construct a `qti-field-value` of an operand.
+ *
+ * @param operand The record operand.
+ * @param fieldIdentifier The field it reads.
+ * @returns The expression.
+ */
+const fieldOf = (operand: Expression, fieldIdentifier: string): Expression => ({
+  fieldIdentifier,
+  kind: "field-value",
+  operands: [operand],
+});
+
+/**
+ * The `qti-correct` of `ITEM1.RREC`, read through its item ref.
+ */
+const correctRecord: Expression = { identifier: "ITEM1.RREC", kind: "correct", operands: [] };
+
+/**
+ * The record cases' outcome processing over `ITEM1`: `FIELD` the `floatValue` of `ITEM1.RREC`,
+ * `EMPTY` whether it is NULL, `KEY` the `floatValue` of its correct response, `MATCHED` whether
+ * it matches that correct response, and, the controls, `OUTNULL` and `TPLNULL` whether the item's
+ * record outcome and record template variable read NULL.
+ */
+const recordRules: readonly Rule[] = [
+  set("FIELD", fieldOf(variable("ITEM1.RREC"), "floatValue")),
+  set("EMPTY", { kind: "is-null", operands: [variable("ITEM1.RREC")] }),
+  set("KEY", fieldOf(correctRecord, "floatValue")),
+  set("MATCHED", { kind: "match", operands: [variable("ITEM1.RREC"), correctRecord] }),
+  set("OUTNULL", { kind: "is-null", operands: [variable("ITEM1.ROUT")] }),
+  set("TPLNULL", { kind: "is-null", operands: [variable("ITEM1.RTPL")] }),
+];
+
+/**
+ * Construct a single boolean value.
+ *
+ * @param value The boolean.
+ * @returns The value.
+ */
+const boolean = (value: boolean): Value => ({
+  baseType: "boolean",
+  cardinality: "single",
+  values: [{ baseType: "boolean", value }],
+});
+
+describe("runOutcomes over a record response through its item ref", () => {
+  it.effect(
+    "[T-9] a test's outcome processing reads a record response through its item ref: its field, whether it is NULL, its correct response's field and whether it matches, NULL before an answer",
+    () =>
+      Effect.gen(function* recordThroughItemRef() {
+        const item = yield* buildItem(recordItemDocument);
+        const test = yield* buildTest(
+          testDocument([
+            recordCaseOutcome("FIELD", "float"),
+            recordCaseOutcome("EMPTY", "boolean"),
+            recordCaseOutcome("KEY", "float"),
+            recordCaseOutcome("MATCHED", "boolean"),
+            recordCaseOutcome("OUTNULL", "boolean"),
+            recordCaseOutcome("TPLNULL", "boolean"),
+          ]),
+        );
+        const items = new Map([["ITEM1", acceptForTest(item)]]);
+        const started = fresh(item, "sitting.1");
+        const run = (records: ItemRecord["records"]): Readonly<Record<string, Value>> => {
+          const scope = testScopeOf(
+            test,
+            items,
+            { items: [sessionItem({ ...started, records }, 1, true)] },
+            new Map(),
+            Option.none(),
+          );
+
+          return outcomesOf(
+            runOutcomes(
+              { outcomeProcessing: { kind: "runs", rules: recordRules }, outcomes: test.outcomes },
+              scope,
+              drawStream("sitting", outcomeLabel("sitting", 1)),
+            ),
+          );
+        };
+
+        assert.deepStrictEqual(started.records, {});
+        assert.deepStrictEqual(run({}), {
+          EMPTY: boolean(true),
+          FIELD: { baseType: "float", cardinality: "single", values: [] },
+          KEY: float(12),
+          MATCHED: { baseType: "boolean", cardinality: "single", values: [] },
+          OUTNULL: boolean(true),
+          TOTAL: float(0),
+          TPLNULL: boolean(true),
+        });
+        assert.deepStrictEqual(run({ RREC: answeredRecord }), {
+          EMPTY: boolean(false),
+          FIELD: float(12),
+          KEY: float(12),
+          MATCHED: boolean(true),
+          OUTNULL: boolean(true),
+          TOTAL: float(0),
+          TPLNULL: boolean(true),
+        });
+      }),
+  );
+
+  it.effect(
+    "[T-9] a value read of a record response through its item ref, qti-sum over it in a test checked apart, fails RecordOperandError naming it",
+    () =>
+      Effect.gen(function* valueReadOfRecord() {
+        const item = yield* buildItem(recordItemDocument);
+        const test = yield* buildTest(testDocument([]));
+        const scope = testScopeOf(
+          test,
+          new Map([["ITEM1", acceptForTest(item)]]),
+          {
+            items: [
+              sessionItem(
+                { ...fresh(item, "sitting.1"), records: { RREC: answeredRecord } },
+                1,
+                true,
+              ),
+            ],
+          },
+          new Map(),
+          Option.none(),
+        );
+        const summing = (name: string) =>
+          runOutcomes(
+            {
+              outcomeProcessing: {
+                kind: "runs",
+                rules: [set("TOTAL", sum(variable(name), base(float(1))))],
+              },
+              outcomes: test.outcomes,
+            },
+            scope,
+            drawStream("sitting", outcomeLabel("sitting", 1)),
+          );
+        const failure = failureOf(summing("ITEM1.RREC"));
+
+        assert.instanceOf(failure, RecordOperandError);
+        assert.deepStrictEqual(
+          {
+            _tag: failure._tag,
+            identifier: failure._tag === "RecordOperandError" ? failure.identifier : "",
+          },
+          { _tag: "RecordOperandError", identifier: "ITEM1.RREC" },
+        );
+        // The control: qti-sum over the item's float outcome through the same item ref runs.
+        assert.isTrue(Result.isSuccess(summing("ITEM1.SCORE")));
       }),
   );
 });

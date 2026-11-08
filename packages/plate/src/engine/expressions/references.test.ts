@@ -12,7 +12,7 @@ import { buildItem } from "#plate/model/item.ts";
 import type { Item, OutcomeDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
 import { outcomeDefaults } from "#plate/model/record.ts";
 import { isNull, nullOf } from "#plate/model/values.ts";
-import type { ModelledBaseType, Value } from "#plate/model/values.ts";
+import type { ModelledBaseType, RecordValue, Value } from "#plate/model/values.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import {
   assertKindType,
@@ -970,6 +970,7 @@ const firstItem: ScopeItem = {
       N: integer(3n),
       SCORE: float(1.5),
     },
+    records: {},
     responses: {
       POINT: {
         baseType: "point",
@@ -1231,6 +1232,96 @@ describe("the references family's qti-default of a built-in and its reads of an 
         ["UnknownIdentifierError", "item", "ITEM1.FR", "response"],
         ["UnknownIdentifierError", "item", "ITEM1.FR", "response"],
       ],
+    );
+  });
+});
+
+/**
+ * The record `ITEM3` declares as `RREC`'s correct response and default, and holds as its answer:
+ * `stringValue` "12".
+ */
+const heldRecord: RecordValue = {
+  cardinality: "record",
+  fields: [{ identifier: "stringValue", value: { baseType: "string", value: "12" } }],
+};
+
+/**
+ * `ITEM3`, `ITEM1` with the record response `RREC`, whose declared correct response and default
+ * are {@link heldRecord} and whose record holds it.
+ */
+const recordItem: ScopeItem = {
+  ...firstItem,
+  record: { ...firstItem.record, records: { RREC: heldRecord } },
+  records: new Map([
+    [
+      "RREC",
+      {
+        correct: Option.some(heldRecord),
+        defaultValue: Option.some(heldRecord),
+        identifier: "RREC",
+      },
+    ],
+  ]),
+  ref: "ITEM3",
+};
+
+/**
+ * The variables of a test's run over `ITEM1` and `ITEM3`.
+ */
+const recordRun: Variables = {
+  ...testRun,
+  test: {
+    ...testScope,
+    items: [firstItem, recordItem],
+    parts: new Map([["P1", ["ITEM1", "ITEM3"]]]),
+  },
+};
+
+/**
+ * Give the value of an expression in the test's run over `ITEM1` and `ITEM3`, failing the case on a
+ * failure.
+ *
+ * @param expression The expression.
+ * @returns Its value.
+ */
+const readInRecordRun = (expression: Expression): Value =>
+  Result.getOrThrow(evaluateExpression(expression, testHolder, recordRun));
+
+describe("the references family's value reads of a record response through its item ref [T-9]", () => {
+  it("[T-9] qti-variable, qti-correct, qti-default and qti-map-response of a record response through its item ref, read as a value, each fail RecordOperandError naming it", () => {
+    const failures = (["variable", "correct", "default", "map-response"] as const).map((kind) => {
+      const expression: Expression =
+        kind === "variable"
+          ? variableOf("ITEM3.RREC")
+          : { identifier: "ITEM3.RREC", kind, operands: [] };
+
+      return Option.match(
+        Result.getFailure(evaluateExpression(expression, testHolder, recordRun)),
+        {
+          onNone: () => [kind, "no failure"],
+          onSome: (failure) =>
+            failure._tag === "RecordOperandError"
+              ? [kind, failure._tag, failure.identifier]
+              : [kind, failure._tag],
+        },
+      );
+    });
+
+    assert.deepStrictEqual(failures, [
+      ["variable", "RecordOperandError", "ITEM3.RREC"],
+      ["correct", "RecordOperandError", "ITEM3.RREC"],
+      ["default", "RecordOperandError", "ITEM3.RREC"],
+      ["map-response", "RecordOperandError", "ITEM3.RREC"],
+    ]);
+
+    // The control: the same item's modelled response and record outcome read through the same item
+    // ref keep their values, the correct response and NULL.
+    assert.deepStrictEqual(
+      readInRecordRun({ identifier: "ITEM3.RESPONSE", kind: "correct", operands: [] }),
+      identifier("A"),
+    );
+    assert.isTrue(
+      isNull(readInRecordRun({ identifier: "ITEM3.REC", kind: "default", operands: [] })),
     );
   });
 });

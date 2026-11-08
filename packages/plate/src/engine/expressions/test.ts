@@ -29,9 +29,16 @@ import { containerSizeBound, floatOf, integerValue } from "#plate/engine/numbers
 import { own } from "#plate/engine/refs.ts";
 import { itemName, itemVariable, keptItems, weightOf } from "#plate/engine/scope.ts";
 import type { DeclaredType, ItemFilters, ScopeItem, TestScope } from "#plate/engine/scope.ts";
-import type { ResponseDeclaration } from "#plate/model/item.ts";
-import { isModelled, isNull, match, nullOf } from "#plate/model/values.ts";
-import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import type { RecordDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
+import {
+  isModelled,
+  isNull,
+  isNullResponse,
+  match,
+  nullOf,
+  sameRecord,
+} from "#plate/model/values.ts";
+import type { ModelledBaseType, RecordValue, Single, Value } from "#plate/model/values.ts";
 import type { BaseType } from "#plate/vocabulary.ts";
 
 /**
@@ -139,8 +146,33 @@ const defaultOf = (item: ScopeItem, declaration: ResponseDeclaration): Value =>
   );
 
 /**
+ * The NULL record: a record with no field.
+ */
+const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+/**
+ * The record responses the scope reads of an item that declares none.
+ */
+const noRecords: ReadonlyMap<string, RecordDeclaration> = new Map();
+
+/**
+ * Give the record an item's record holds of one of its record responses: the NULL record when it
+ * holds none, as an unanswered record response with no declared default holds none.
+ *
+ * @param item The item.
+ * @param identifier The record response's identifier.
+ * @returns The record.
+ */
+const recordValue = (item: ScopeItem, identifier: string): RecordValue =>
+  Object.hasOwn(item.record.records, identifier)
+    ? (item.record.records[identifier] ?? nullRecord)
+    : nullRecord;
+
+/**
  * Report whether an item was responded to: some declared response holds a value that differs from
- * its default, the one its template processing set first, else its declared one, else NULL.
+ * its default, the one its template processing set first, else its declared one, else NULL; or
+ * some record response holds a record that differs from its declared default, else the NULL
+ * record, as {@link sameRecord} compares two records (a record response's default is never set).
  *
  * @param item The item.
  * @returns Whether a response differs, or the record's gap.
@@ -155,19 +187,42 @@ const respondedTo = (item: ScopeItem): Result.Result<boolean, UnknownIdentifierE
         ),
       ),
     ),
-    (differs) => differs.includes(true),
+    (differs) =>
+      differs.includes(true) ||
+      Array.from(
+        (item.records ?? noRecords).values(),
+        (declaration) =>
+          !sameRecord(
+            recordValue(item, declaration.identifier),
+            Option.getOrElse(declaration.defaultValue, () => nullRecord),
+          ),
+      ).includes(true),
   );
+
+/**
+ * Report whether a record response's record matches its correct response, as `qti-match` compares
+ * two records: neither NULL, and the same fields ({@link sameRecord}).
+ *
+ * @param held The record the item's record holds.
+ * @param key The declared correct response.
+ * @returns Whether they match.
+ */
+const recordMatches = (held: RecordValue, key: RecordValue): boolean =>
+  !isNullResponse(held) && !isNullResponse(key) && sameRecord(held, key);
 
 /**
  * Judge an item's responses against their correct responses, as `qti-number-correct` and
  * `qti-number-incorrect` read them: only an item whose every declared response has a correct
  * response is judged (info.txt:9332, "Only items for which all declared response variables have
  * correct responses defined are considered"), and an item that declares no response is not (G-R3,
- * pending). Every declared response counts, those of base type `file` or cardinality `record`
- * among them: a response the value model holds has the correct response its item's template
- * processing set first, else the declared one; an unheld response has one when it declares one
- * (`ScopeItem.unheldResponses`). In a judged item an unheld response reads NULL, as every read of
- * one does, and NULL matches no correct response, so that item is never correct.
+ * pending). Every declared response counts, those of base type `file` or cardinality `record` among
+ * them: a response the value model holds has the correct response its item's template processing
+ * set first, else the declared one; a record response (`ScopeItem.records`) its declared one, which
+ * template processing never sets; an unheld response has one when it declares one
+ * (`ScopeItem.unheldResponses`). A record response matches its correct response as `qti-match`
+ * compares two records ({@link recordMatches}), so an item whose record response declares no
+ * correct response is not judged (G-R4, pending). In a judged item an unheld response reads NULL,
+ * as every read of one does, and NULL matches no correct response, so that item is never correct.
  *
  * @param item The item.
  * @returns Whether every response matches its correct response as `qti-match` compares them, none
@@ -176,6 +231,7 @@ const respondedTo = (item: ScopeItem): Result.Result<boolean, UnknownIdentifierE
  */
 const judged = (item: ScopeItem): Result.Result<Option.Option<boolean>, UnknownIdentifierError> => {
   const responses = [...item.declarations.responses.values()];
+  const records = [...(item.records ?? noRecords).values()];
   const unheld = [...(item.unheldResponses ?? new Map<string, boolean>()).values()];
   const keys = Option.all(
     responses.map((declaration) =>
@@ -185,9 +241,23 @@ const judged = (item: ScopeItem): Result.Result<Option.Option<boolean>, UnknownI
       ),
     ),
   );
-  if (responses.length + unheld.length === 0 || Option.isNone(keys) || unheld.includes(false)) {
+  const recordKeys = Option.all(
+    records.map((declaration) =>
+      declaration.correct.pipe(Option.map((key) => [declaration.identifier, key] as const)),
+    ),
+  );
+  if (
+    responses.length + records.length + unheld.length === 0 ||
+    Option.isNone(keys) ||
+    Option.isNone(recordKeys) ||
+    unheld.includes(false)
+  ) {
     return Result.succeed(Option.none());
   }
+
+  const recordsMatch = recordKeys.value.every(([identifier, key]) =>
+    recordMatches(recordValue(item, identifier), key),
+  );
 
   return Result.map(
     Result.all(
@@ -195,7 +265,7 @@ const judged = (item: ScopeItem): Result.Result<Option.Option<boolean>, UnknownI
         Result.map(responseValue(item, identifier), (held) => match(held, key)),
       ),
     ),
-    (matches) => Option.some(unheld.length === 0 && !matches.includes(false)),
+    (matches) => Option.some(unheld.length === 0 && recordsMatch && !matches.includes(false)),
   );
 };
 
@@ -225,7 +295,8 @@ const evaluateNumberPresented: Evaluator<"number-presented"> = (expression, scop
 
 /**
  * Give the value of a `qti-number-responded`: the number of items its filters keep that were
- * presented and hold a response that differs from its default (`respondedTo`).
+ * presented and hold a response, a record response among them, that differs from its default
+ * (`respondedTo`).
  *
  * @param expression The `qti-number-responded`.
  * @param scope The holder and the variables of the run, which carry the test scope.
@@ -240,8 +311,8 @@ const evaluateNumberResponded: Evaluator<"number-responded"> = (expression, scop
 
 /**
  * Give the value of a `qti-number-correct`: the number of items its filters keep whose every
- * declared response, of a type the value model holds or not, has a correct response and matches it
- * ({@link judged}).
+ * declared response, of a type the value model holds or not, a record response among them, has a
+ * correct response and matches it ({@link judged}).
  *
  * @param expression The `qti-number-correct`.
  * @param scope The holder and the variables of the run, which carry the test scope.

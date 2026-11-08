@@ -184,23 +184,6 @@ const declaredTypeOf = (declaration: UnheldDeclaration): DeclaredType => ({
 });
 
 /**
- * Give the unheld declaration the scope reads a record response the item model holds as: one of
- * cardinality `record` that writes no base type, with whether it declares a correct response. The
- * scope holds no record, so it reads a record response as NULL, as it read one before the item
- * model held it.
- *
- * @param declaration The record response.
- * @returns It, as an unheld response declaration.
- */
-const unheldRecord = (declaration: RecordDeclaration): UnheldDeclaration => ({
-  baseType: Option.none(),
-  cardinality: "record",
-  declaresCorrect: Option.isSome(declaration.correct),
-  identifier: declaration.identifier,
-  kind: "response",
-});
-
-/**
  * What the scope reads of an item ref the test does not hold: no category, weight or mapping.
  */
 const unreferenced: Pick<ItemRef, "category" | "mappings" | "weights"> = {
@@ -217,6 +200,17 @@ const undelivered: DeliveredItem["item"] = {
   responses: noResponses,
   templates: noTemplates,
 };
+
+/**
+ * The record responses the scope reads of an item that declares none.
+ */
+const noRecords: ReadonlyMap<string, RecordDeclaration> = new Map();
+
+/**
+ * The declarations of a type the value model does not hold that the scope reads of an item that
+ * makes none.
+ */
+const noUnheld: ReadonlyMap<string, UnheldDeclaration> = new Map();
 
 /**
  * Give one session item's entry in the scope.
@@ -236,13 +230,7 @@ const entryOf = (
   const { category, mappings, weights } = Option.getOrElse(ref, () => unreferenced);
   const item = Option.match(delivered, { onNone: () => undelivered, onSome: (each) => each.item });
   const { record } = sessionItem;
-  const unheld: ReadonlyMap<string, UnheldDeclaration> = new Map([
-    ...(item.unheld ?? new Map<string, UnheldDeclaration>()),
-    ...Array.from(
-      item.records ?? new Map<string, RecordDeclaration>(),
-      ([identifier, declaration]) => [identifier, unheldRecord(declaration)] as const,
-    ),
-  ]);
+  const unheld = item.unheld ?? noUnheld;
 
   return {
     categories: category,
@@ -254,9 +242,11 @@ const entryOf = (
       correct: record.correct,
       defaults: record.defaults,
       outcomes: record.outcomes,
+      records: record.records,
       responses: record.responses,
       templates: record.templates,
     },
+    records: item.records ?? noRecords,
     ref: sessionItem.ref,
     unheld: new Map(
       Array.from(unheld, ([identifier, declaration]) => [identifier, declaredTypeOf(declaration)]),
@@ -278,11 +268,11 @@ const entryOf = (
  * The entries follow the session's items, in the order the candidate meets them, whatever order the
  * items map was built in, since an aggregate's float sum depends on the order of its operands: two
  * hosts that build the map apart get one scope. Each entry holds its item ref's categories, weights
- * and variable mappings, its item's declarations, those of a type the value model does not hold
- * among them, its record responses read as such (with whether each such response declares a
- * correct response), its record's responses, outcomes, template values, and the correct responses
- * and defaults its template processing set (no seed), whether it was presented, and the attempts it
- * has started under its item ref's limit
+ * and variable mappings, its item's declarations, its record responses (`ScopeItem.records`) and
+ * those of a type the value model does not hold among them (with whether each unheld response
+ * declares a correct response), its record's responses, record responses' records, outcomes,
+ * template values, and the correct responses and defaults its template processing set (no seed),
+ * whether it was presented, and the attempts it has started under its item ref's limit
  * (`attemptsStarted`, the count the results report writes). The scope holds every part's and every
  * section's item refs at any depth, and the names the test declares: its outcomes' identifiers and
  * every identifier its outcome and context declarations declare (`Test.declared`).
