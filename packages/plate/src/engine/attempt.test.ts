@@ -1384,9 +1384,59 @@ const recordDefaults = itemDocument(
   ),
 );
 
+/**
+ * The NULL record: a record of no field.
+ */
+const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+/**
+ * An item with the record response `BARE`, which declares no default, and response processing
+ * that sets the boolean `LACKS` to whether `BARE`'s `stringValue` is NULL and the string `TEXT` to
+ * that field.
+ */
+const readsUndefaulted = itemDocument(
+  el("qti-response-declaration", [attr("cardinality", "record"), attr("identifier", "BARE")]),
+  declaration("qti-outcome-declaration", "LACKS", "boolean"),
+  declaration("qti-outcome-declaration", "TEXT", "string"),
+  el(
+    "qti-response-processing",
+    [],
+    [
+      el(
+        "qti-set-outcome-value",
+        [attr("identifier", "LACKS")],
+        [
+          el(
+            "qti-is-null",
+            [],
+            [
+              el(
+                "qti-field-value",
+                [attr("field-identifier", "stringValue")],
+                [el("qti-variable", [attr("identifier", "BARE")])],
+              ),
+            ],
+          ),
+        ],
+      ),
+      el(
+        "qti-set-outcome-value",
+        [attr("identifier", "TEXT")],
+        [
+          el(
+            "qti-field-value",
+            [attr("field-identifier", "stringValue")],
+            [el("qti-variable", [attr("identifier", "BARE")])],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
 describe("firstAttempt with a record response", () => {
   it.effect(
-    "[I-1] record default at the first attempt: firstAttempt writes a record response's declared default into records, and nothing for one that declares none",
+    "[I-1] record default at the first attempt: firstAttempt writes a record response's declared default into records, and the NULL record for one that declares none",
     () =>
       Effect.gen(function* writesRecordDefault() {
         const item = yield* buildItem(recordDefaults);
@@ -1396,7 +1446,7 @@ describe("firstAttempt with a record response", () => {
         assert.deepStrictEqual([...(item.records?.keys() ?? [])], ["R", "BARE"]);
         assert.deepStrictEqual(record, {
           ...fresh(item, instance),
-          records: { R: declaredRecord },
+          records: { BARE: nullRecord, R: declaredRecord },
           seed: "7",
         });
       }),
@@ -1412,8 +1462,26 @@ describe("firstAttempt with a record response", () => {
         const after = yield* Effect.fromResult(decodeRecord(stored));
 
         assert.deepStrictEqual(item.unsupported, []);
-        assert.deepStrictEqual(after.records, { R: declaredRecord });
+        assert.deepStrictEqual(after.records, { BARE: nullRecord, R: declaredRecord });
         assert.deepStrictEqual(after.outcomes["SCORE"], floatValue(2.5));
+      }),
+  );
+
+  it.effect(
+    "[I-1] record default at the first attempt: an undefaulted record response starts as the NULL record, so score with no record reads its field as NULL and does not fail",
+    () =>
+      Effect.gen(function* readsUndefaultedField() {
+        const item = yield* buildItem(readsUndefaulted);
+
+        const stored = yield* Effect.fromResult(scoreItem(acceptForTest(item), {}));
+        const after = yield* Effect.fromResult(decodeRecord(stored));
+
+        assert.deepStrictEqual(item.unsupported, []);
+        assert.deepStrictEqual(after.records, { BARE: nullRecord });
+        assert.deepStrictEqual(
+          [after.outcomes["LACKS"], after.outcomes["TEXT"]],
+          [booleanValue(true), nullOf("string", "single")],
+        );
       }),
   );
 });
