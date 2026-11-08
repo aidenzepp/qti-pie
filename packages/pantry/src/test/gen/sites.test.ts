@@ -310,6 +310,14 @@ const judged = (box: SiteBox, c: Case<Situation>) =>
       byCases.size === 0 && outside.size === 0,
       `${literal}: the law oracle ${verdict.kind === "accepted" ? "accepts" : "refuses"} it`,
     );
+    if (byCases.size > 0 && verdict.kind === "refused") {
+      assert.deepStrictEqual(
+        [...verdict.rules].filter((rule) => !byCases.has(rule) && !outside.has(rule)),
+        [],
+        `${literal}: the law oracle names rules beyond its cases {${[...byCases].join(", ")}} and the outside rules {${[...outside].join(", ")}}`,
+      );
+    }
+
     if (byCases.size === 0 && verdict.kind === "refused") {
       assert.deepStrictEqual(
         verdict.rules,
