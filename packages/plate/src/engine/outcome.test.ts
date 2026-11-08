@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { attr, doc, el } from "#plate/document/source.ts";
+import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import type { Declarations } from "#plate/engine/evaluate.ts";
 import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/failures.ts";
@@ -510,9 +510,21 @@ const declarations: Declarations = {
  * The declarations `ITEM1` makes of a type the value model does not hold: a `file` response
  * `UPLOAD` and a `record` outcome `DETAIL` that writes no base type.
  */
-const unheld: ReadonlyMap<string, UnheldDeclaration> = new Map([
-  ["UPLOAD", { baseType: Option.some("file"), cardinality: "single", identifier: "UPLOAD" }],
-  ["DETAIL", { baseType: Option.none(), cardinality: "record", identifier: "DETAIL" }],
+const unheld: ReadonlyMap<string, UnheldDeclaration> = new Map<string, UnheldDeclaration>([
+  [
+    "UPLOAD",
+    {
+      baseType: Option.some("file"),
+      cardinality: "single",
+      declaresCorrect: false,
+      identifier: "UPLOAD",
+      kind: "response",
+    },
+  ],
+  [
+    "DETAIL",
+    { baseType: Option.none(), cardinality: "record", identifier: "DETAIL", kind: "outcome" },
+  ],
 ]);
 
 /**
@@ -670,6 +682,7 @@ describe("testScopeOf", () => {
             ["UPLOAD", { baseType: "file", cardinality: "single" }],
             ["DETAIL", { baseType: "file", cardinality: "record" }],
           ]),
+          unheldResponses: new Map([["UPLOAD", false]]),
           weights: new Map([["SCORE", 2]]),
         },
         {
@@ -681,6 +694,7 @@ describe("testScopeOf", () => {
           record: scopeRecord(second?.record ?? record("ITEM2", 0, 0)),
           ref: "ITEM2",
           unheld: new Map(),
+          unheldResponses: new Map(),
           weights: new Map(),
         },
         {
@@ -692,6 +706,7 @@ describe("testScopeOf", () => {
           record: scopeRecord(third?.record ?? record("ITEM3", 0, 0)),
           ref: "ITEM3",
           unheld: new Map(),
+          unheldResponses: new Map(),
           weights: new Map(),
         },
       ],
@@ -856,6 +871,54 @@ describe("testScopeOf over built models", () => {
         );
         assert.isTrue(withContext.declared.has("ITEM1.SCORE"));
         assert.isTrue(Result.isFailure(prefixedVariable(withContext, "ITEM1.SCORE")));
+      }),
+  );
+
+  it.effect(
+    "[T-9] testScopeOf holds each file or record response of an item with whether it declares a correct response, and no outcome",
+    () =>
+      Effect.gen(function* unheldResponsesScope() {
+        const item = yield* buildItem(
+          doc(
+            "items/ITEM1.xml",
+            el(
+              "qti-assessment-item",
+              [attr("identifier", "ITEM1"), attr("title", "Item one")],
+              [
+                el(
+                  "qti-response-declaration",
+                  [
+                    attr("base-type", "identifier"),
+                    attr("cardinality", "single"),
+                    attr("identifier", "RESPONSE"),
+                  ],
+                  [el("qti-correct-response", [], [el("qti-value", [], [text("A")])])],
+                ),
+                el("qti-response-declaration", [
+                  attr("base-type", "file"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "FR"),
+                ]),
+                el("qti-outcome-declaration", [
+                  attr("cardinality", "record"),
+                  attr("identifier", "R"),
+                ]),
+                el("qti-item-body"),
+              ],
+            ),
+          ),
+        );
+        const scope = testScopeOf(
+          yield* buildTest(testDocument([])),
+          new Map([["ITEM1", acceptForTest(item)]]),
+          { items: [sessionItem(fresh(item, "sitting.1"), 1, true)] },
+          Option.none(),
+        );
+
+        assert.deepStrictEqual(
+          scope.items.map((entry) => entry.unheldResponses),
+          [new Map([["FR", false]])],
+        );
       }),
   );
 });

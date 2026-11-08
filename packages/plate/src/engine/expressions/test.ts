@@ -161,8 +161,13 @@ const respondedTo = (item: ScopeItem): Result.Result<boolean, UnknownIdentifierE
 /**
  * Judge an item's responses against their correct responses, as `qti-number-correct` and
  * `qti-number-incorrect` read them: only an item whose every declared response has a correct
- * response, the one its template processing set first, else the declared one, is judged, and an
- * item that declares no response is not (G-R3, pending).
+ * response is judged (info.txt:9332, "Only items for which all declared response variables have
+ * correct responses defined are considered"), and an item that declares no response is not (G-R3,
+ * pending). Every declared response counts, those of base type `file` or cardinality `record`
+ * among them: a response the value model holds has the correct response its item's template
+ * processing set first, else the declared one; an unheld response has one when it declares one
+ * (`ScopeItem.unheldResponses`). In a judged item an unheld response reads NULL, as every read of
+ * one does, and NULL matches no correct response, so that item is never correct.
  *
  * @param item The item.
  * @returns Whether every response matches its correct response as `qti-match` compares them, none
@@ -171,6 +176,7 @@ const respondedTo = (item: ScopeItem): Result.Result<boolean, UnknownIdentifierE
  */
 const judged = (item: ScopeItem): Result.Result<Option.Option<boolean>, UnknownIdentifierError> => {
   const responses = [...item.declarations.responses.values()];
+  const unheld = [...(item.unheldResponses ?? new Map<string, boolean>()).values()];
   const keys = Option.all(
     responses.map((declaration) =>
       Option.map(
@@ -179,7 +185,7 @@ const judged = (item: ScopeItem): Result.Result<Option.Option<boolean>, UnknownI
       ),
     ),
   );
-  if (responses.length === 0 || Option.isNone(keys)) {
+  if (responses.length + unheld.length === 0 || Option.isNone(keys) || unheld.includes(false)) {
     return Result.succeed(Option.none());
   }
 
@@ -189,7 +195,7 @@ const judged = (item: ScopeItem): Result.Result<Option.Option<boolean>, UnknownI
         Result.map(responseValue(item, identifier), (held) => match(held, key)),
       ),
     ),
-    (matches) => Option.some(!matches.includes(false)),
+    (matches) => Option.some(unheld.length === 0 && !matches.includes(false)),
   );
 };
 
@@ -234,7 +240,8 @@ const evaluateNumberResponded: Evaluator<"number-responded"> = (expression, scop
 
 /**
  * Give the value of a `qti-number-correct`: the number of items its filters keep whose every
- * response has a correct response and matches it ({@link judged}).
+ * declared response, of a type the value model holds or not, has a correct response and matches it
+ * ({@link judged}).
  *
  * @param expression The `qti-number-correct`.
  * @param scope The holder and the variables of the run, which carry the test scope.
@@ -249,8 +256,9 @@ const evaluateNumberCorrect: Evaluator<"number-correct"> = (expression, scope) =
 
 /**
  * Give the value of a `qti-number-incorrect`: the number of items its filters keep that were
- * attempted, at least one attempt processed, whose every response has a correct response, and at
- * least one of which does not match it ({@link judged}).
+ * attempted, at least one attempt processed, whose every declared response, of a type the value
+ * model holds or not, has a correct response, and at least one of which does not match it
+ * ({@link judged}): an unheld response reads NULL, which matches none.
  *
  * @param expression The `qti-number-incorrect`.
  * @param scope The holder and the variables of the run, which carry the test scope.

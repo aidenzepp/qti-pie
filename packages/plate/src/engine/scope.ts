@@ -77,6 +77,14 @@ export interface ScopeItem {
    */
   readonly unheld: ReadonlyMap<string, DeclaredType>;
   /**
+   * The item's response declarations of a type the value model holds no value of, by identifier,
+   * each keyed to whether it declares a correct response; absent, as in a scope built by hand,
+   * when the item makes none. `qti-number-correct` and `qti-number-incorrect` read it: they do not
+   * judge an item one of whose responses declares no correct response, and a judged item's unheld
+   * response reads NULL, which matches no correct response.
+   */
+  readonly unheldResponses?: ReadonlyMap<string, boolean>;
+  /**
    * The item ref's weights, each `qti-weight`'s `identifier` keyed to its `value`.
    */
   readonly weights: ReadonlyMap<string, number>;

@@ -566,6 +566,31 @@ const testDocument = (expressions: readonly SourceElement[]) =>
     ),
   );
 
+/**
+ * Construct the item info.txt:9332 reads: a choice `RESPONSE` with correct response `A`, answered
+ * `A`, beside an upload response `FR` of base type `file`, which the record never holds.
+ *
+ * @param declaresCorrect Whether `FR` declares a correct response.
+ * @returns The item, presented with one attempt processed.
+ */
+const uploading = (declaresCorrect: boolean): ScopeItem =>
+  answered("UPLOADING", identifier("A"), {
+    unheld: new Map([["FR", { baseType: "file", cardinality: "single" }]]),
+    unheldResponses: new Map([["FR", declaresCorrect]]),
+  });
+
+/**
+ * Give the `qti-number-correct` and `qti-number-incorrect` of one item.
+ *
+ * @param item The item.
+ * @returns The two counts, in that order.
+ */
+const judging = (item: ScopeItem): readonly Value[] => {
+  const all = counts(scopeOf([item]));
+
+  return [all["number-correct"], all["number-incorrect"]];
+};
+
 describe("the test family's evaluators", () => {
   it("[T-9] count over the test scope: selected, presented, responded, correct and incorrect items", () => {
     assert.deepStrictEqual(counts(counting), expected(1n, 1n, 5n, 3n, 6n));
@@ -675,6 +700,19 @@ describe("the test family's evaluators", () => {
       counts(scopeOf([itemOf("NO_RESPONSE", { numAttempts: 2 })])),
       expected(0n, 0n, 1n, 0n, 1n),
     );
+  });
+
+  it("[T-9] an unheld response is considered: an item whose file response declares no correct response is neither correct nor incorrect (info.txt:9332)", () => {
+    assert.deepStrictEqual(judging(uploading(false)), [integer(0n), integer(0n)]);
+    // The control: without the upload response, the same answer is correct.
+    assert.deepStrictEqual(judging(answered("UPLOADING", identifier("A"))), [
+      integer(1n),
+      integer(0n),
+    ]);
+  });
+
+  it("[T-9] an unheld response is considered: an item whose file response declares a correct response is judged, that response NULL and so not matched, which makes it incorrect", () => {
+    assert.deepStrictEqual(judging(uploading(true)), [integer(0n), integer(1n)]);
   });
 
   it("[T-9] give qti-outcome-minimum over the test scope, weighted, an item with no declared minimum ignored", () => {

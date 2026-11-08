@@ -232,6 +232,13 @@ const entryOf = (
     unheld: new Map(
       Array.from(unheld, ([identifier, declaration]) => [identifier, declaredTypeOf(declaration)]),
     ),
+    unheldResponses: new Map(
+      [...unheld.values()].flatMap((declaration) =>
+        declaration.kind === "response"
+          ? [[declaration.identifier, declaration.declaresCorrect] as const]
+          : [],
+      ),
+    ),
     weights,
   };
 };
@@ -239,15 +246,15 @@ const entryOf = (
 /**
  * Give the test scope of a session: what the test's outcome processing reads of the test's items.
  *
- * The entries follow the session's items, in the order the candidate meets them, whatever order
- * the items map was built in, since an aggregate's float sum depends on the order of its operands:
- * two hosts that build the map apart get one scope. Each entry holds its item ref's categories,
- * weights and variable mappings, its item's declarations, those of a type the value model does not
- * hold among them, its record's responses, outcomes, template values, and the correct responses
- * and defaults its template processing set (no seed), whether it was presented, and its processed
- * attempt count. The scope holds every part's and every section's item refs at any depth, and the
- * names the test declares: its outcomes' identifiers and every identifier its outcome and context
- * declarations declare (`Test.declared`).
+ * The entries follow the session's items, in the order the candidate meets them, whatever order the
+ * items map was built in, since an aggregate's float sum depends on the order of its operands: two
+ * hosts that build the map apart get one scope. Each entry holds its item ref's categories, weights
+ * and variable mappings, its item's declarations, those of a type the value model does not hold
+ * among them (with whether each such response declares a correct response), its record's responses,
+ * outcomes, template values, and the correct responses and defaults its template processing set (no
+ * seed), whether it was presented, and its processed attempt count. The scope holds every part's
+ * and every section's item refs at any depth, and the names the test declares: its outcomes'
+ * identifiers and every identifier its outcome and context declarations declare (`Test.declared`).
  *
  * A session and items that do not fit the test meet two fallbacks: an entry whose `ref` names no
  * item ref of the test has no category, weight or mapping, and one whose item the map lacks

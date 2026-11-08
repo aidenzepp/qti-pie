@@ -2895,7 +2895,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-1] [I-2] holds each file and record declaration's identifier, base type and cardinality in unheld, and no modelled one",
+    "[I-1] [I-2] [T-9] holds each file and record declaration's identifier, base type, cardinality and kind in unheld, a response's with whether it declares a correct response, and no modelled one",
     () =>
       Effect.gen(function* holdsUnheldDeclarations() {
         const built = yield* buildItem(
@@ -2903,6 +2903,9 @@ describe("buildItem", () => {
             body: [],
             declarations: [
               declaration("qti-response-declaration", "UPLOAD", "file", "single"),
+              declaration("qti-response-declaration", "KEYED", "file", "single", [
+                values("qti-correct-response", "answer.txt"),
+              ]),
               declaration("qti-response-declaration", "RESPONSE", "string", "single"),
               el("qti-outcome-declaration", [
                 attr("cardinality", "record"),
@@ -2922,18 +2925,60 @@ describe("buildItem", () => {
           new Map([
             [
               "UPLOAD",
-              { baseType: Option.some("file"), cardinality: "single", identifier: "UPLOAD" },
+              {
+                baseType: Option.some("file"),
+                cardinality: "single",
+                declaresCorrect: false,
+                identifier: "UPLOAD",
+                kind: "response",
+              },
             ],
-            ["DETAIL", { baseType: Option.none(), cardinality: "record", identifier: "DETAIL" }],
+            [
+              "KEYED",
+              {
+                baseType: Option.some("file"),
+                cardinality: "single",
+                declaresCorrect: true,
+                identifier: "KEYED",
+                kind: "response",
+              },
+            ],
+            [
+              "DETAIL",
+              {
+                baseType: Option.none(),
+                cardinality: "record",
+                identifier: "DETAIL",
+                kind: "outcome",
+              },
+            ],
             [
               "TYPED",
-              { baseType: Option.some("integer"), cardinality: "record", identifier: "TYPED" },
+              {
+                baseType: Option.some("integer"),
+                cardinality: "record",
+                identifier: "TYPED",
+                kind: "outcome",
+              },
             ],
             [
               "FILES",
-              { baseType: Option.some("file"), cardinality: "multiple", identifier: "FILES" },
+              {
+                baseType: Option.some("file"),
+                cardinality: "multiple",
+                identifier: "FILES",
+                kind: "outcome",
+              },
             ],
-            ["ROW", { baseType: Option.none(), cardinality: "record", identifier: "ROW" }],
+            [
+              "ROW",
+              {
+                baseType: Option.none(),
+                cardinality: "record",
+                identifier: "ROW",
+                kind: "template",
+              },
+            ],
           ]),
         );
         assert.deepStrictEqual([...built.responses.keys()], ["RESPONSE"]);

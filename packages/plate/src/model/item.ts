@@ -703,9 +703,21 @@ export type BodyNode =
 /**
  * A response, outcome or template declaration of a type the value model holds no value of: base
  * type `file`, or cardinality `record`. A record's `base-type` is optional, so it is none when the
- * declaration writes none.
+ * declaration writes none. `kind` names the declaration; a response's `declaresCorrect` is whether
+ * it holds a `qti-correct-response`, which a test's `qti-number-correct` and
+ * `qti-number-incorrect` read, since they consider only an item whose every response declares one.
+ * An outcome or template declaration has no correct response.
  */
-export interface UnheldDeclaration {
+export type UnheldDeclaration = UnheldType &
+  (
+    | { readonly declaresCorrect: boolean; readonly kind: "response" }
+    | { readonly kind: "outcome" | "template" }
+  );
+
+/**
+ * The identifier, and the base type and cardinality as written, of an {@link UnheldDeclaration}.
+ */
+interface UnheldType {
   readonly baseType: Option.Option<BaseType>;
   readonly cardinality: Cardinality;
   readonly identifier: string;
@@ -1091,19 +1103,32 @@ const declared = (
  *
  * @param build The build.
  * @param declaration A response, outcome or template declaration.
- * @returns Its identifier, base type and cardinality, none when its type is neither; or a refusal
- *   when `identifier` or `cardinality` is missing or a value is outside its list.
+ * @param kind Which of the three it is.
+ * @returns Its kind, identifier, base type and cardinality, and for a response whether it holds a
+ *   `qti-correct-response`; none when its type is neither; or a refusal when `identifier` or
+ *   `cardinality` is missing or a value is outside its list.
  */
 const unheldDeclaration = (
   build: ModelWalk,
   declaration: SourceElement,
+  kind: UnheldDeclaration["kind"],
 ): Effect.Effect<Option.Option<UnheldDeclaration>, Refusal> =>
   Effect.map(writtenType(build, declaration), ({ baseType, cardinality, identifier }) =>
     cardinality.pipe(
       Option.filter(
         (read) => read === "record" || Option.exists(baseType, (type) => type === "file"),
       ),
-      Option.map((read) => ({ baseType, cardinality: read, identifier })),
+      Option.map((read): UnheldDeclaration => {
+        const type = { baseType, cardinality: read, identifier };
+
+        return kind === "response"
+          ? {
+              ...type,
+              declaresCorrect: childrenNamed(declaration, "qti-correct-response").length > 0,
+              kind,
+            }
+          : { ...type, kind };
+      }),
     ),
   );
 
@@ -3387,8 +3412,11 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     const outcomes = new Map<string, OutcomeDeclaration>();
     const templateDeclarations = new Map<string, TemplateDeclaration>();
     const unheld = new Map<string, UnheldDeclaration>();
-    const holdUnheld = (declaration: SourceElement): Effect.Effect<void, Refusal> =>
-      Effect.map(unheldDeclaration(build, declaration), (read) => {
+    const holdUnheld = (
+      declaration: SourceElement,
+      kind: UnheldDeclaration["kind"],
+    ): Effect.Effect<void, Refusal> =>
+      Effect.map(unheldDeclaration(build, declaration, kind), (read) => {
         for (const each of Option.toArray(read)) {
           unheld.set(each.identifier, each);
         }
@@ -3423,7 +3451,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
           responses.set(read.value.identifier, read.value);
         }
 
-        yield* holdUnheld(part);
+        yield* holdUnheld(part, "response");
       } else if (part.local === "qti-outcome-declaration") {
         markElement(build, part, false);
         markUnreadWithin(build, part);
@@ -3433,7 +3461,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
           outcomes.set(read.value.identifier, read.value);
         }
 
-        yield* holdUnheld(part);
+        yield* holdUnheld(part, "outcome");
       } else if (part.local === "qti-template-declaration") {
         markElement(build, part, false);
         markUnreadWithin(build, part);
@@ -3443,7 +3471,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
           templateDeclarations.set(read.value.identifier, read.value);
         }
 
-        yield* holdUnheld(part);
+        yield* holdUnheld(part, "template");
       } else if (part.local === "qti-template-processing") {
         markElement(build, part, false);
 
