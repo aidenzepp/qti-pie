@@ -1177,7 +1177,7 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   [
     "entry-kind",
     "root-type-reverse",
-    "reading 93 and package.ts's P3: a path's listing before the type of the root it lists, so a path listed under two document types is named for its listing, the cause, the root's mismatch only following from which listing typed it (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat OL (0b4d8ec9))",
+    "reading 93 and package.ts's P3: a path's listing before the type of the root it lists, so a path listed under two document types is named for its listing, the cause (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat OL (0b4d8ec9)). Since reading 162 the path is typed by the listing its root bears out, so both laws break only where its root fits neither type; there PostgreSQL's immediate RootOfType check reports root-type-reverse before the deferred Document entry key, and the import names that, a stated limit of package.ts's rule, while the law oracle names entry-kind by this order",
   ],
   [
     "root-type-reverse",
