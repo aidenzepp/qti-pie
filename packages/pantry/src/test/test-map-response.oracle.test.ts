@@ -11,6 +11,12 @@
  * of a mapped response, a dotted correct of a response, and an item's own unprefixed map response
  * of its mapped response are accepted.
  *
+ * A dotted map response point reads its point response's area mapping the same way (decision 431;
+ * information model §6.9.46: "transforms it using the associated areaMapping"), and a map response
+ * of a built-in response variable, an item's `numAttempts` or a test's `duration`, reads a mapping
+ * no declaration holds: each is refused under "Mapped response", and a dotted map response point of
+ * an area-mapped point response is accepted.
+ *
  * Each case is judged twice: by the law oracle over the package as written, and by the schema's own
  * laws over the import's rows on the host (`#pantry/test/host-judge.ts`), the first broken law's
  * rule by precedence. The two verdicts must be one, and both the case's.
@@ -49,6 +55,27 @@ const mapped = edit(
 );
 
 /**
+ * The base item with a second response, `POINT`, of base type point, bound to no interaction.
+ */
+const pointed = edit(
+  item,
+  `<qti-outcome-declaration identifier="SCORE"`,
+  `<qti-response-declaration identifier="POINT" cardinality="single" base-type="point"/>
+  <qti-outcome-declaration identifier="SCORE"`,
+);
+
+/**
+ * {@link pointed} with an area mapping of its point response.
+ */
+const areaMapped = edit(
+  pointed,
+  `base-type="point"/>`,
+  `base-type="point">
+    <qti-area-mapping default-value="0"><qti-area-map-entry shape="circle" coords="10,10,5" mapped-value="1"/></qti-area-mapping>
+  </qti-response-declaration>`,
+);
+
+/**
  * Write the base test with an outcome `TOTAL` its outcome processing sets from an expression.
  *
  * @param processing - The outcome processing's rules, as written.
@@ -77,6 +104,15 @@ const mapResponseOf = (identifier: string): string =>
   `<qti-set-outcome-value identifier="TOTAL"><qti-map-response identifier="${identifier}"/></qti-set-outcome-value>`;
 
 /**
+ * Set `TOTAL` from a map response point of a name.
+ *
+ * @param identifier - The name the map response point writes.
+ * @returns The outcome processing's rule.
+ */
+const mapResponsePointOf = (identifier: string): string =>
+  `<qti-set-outcome-value identifier="TOTAL"><qti-map-response-point identifier="${identifier}"/></qti-set-outcome-value>`;
+
+/**
  * Set `TOTAL` where the correct value of a name is null.
  *
  * @param identifier - The name the correct writes.
@@ -97,7 +133,7 @@ interface MapResponseCase {
 }
 
 /**
- * The cases: the refusals of decision 429, the one of decision 430, and their controls.
+ * The cases: the refusals of decisions 429, 430 and 431, and their controls.
  */
 const cases: readonly MapResponseCase[] = [
   {
@@ -145,6 +181,34 @@ const cases: readonly MapResponseCase[] = [
     name: "an item's unprefixed map response of its mapped response",
     rule: "accepted",
     test: Option.none(),
+  },
+  {
+    item: areaMapped,
+    name: "a dotted map response point of an area-mapped point response",
+    rule: "accepted",
+    test: Option.some(testWith(mapResponsePointOf("I.POINT"))),
+  },
+  {
+    item: pointed,
+    name: "a dotted map response point of a point response with no area mapping",
+    rule: "P27",
+    test: Option.some(testWith(mapResponsePointOf("I.POINT"))),
+  },
+  {
+    item: edit(
+      item,
+      `<qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>`,
+      `<qti-map-response identifier="numAttempts"/></qti-set-outcome-value>`,
+    ),
+    name: "an item's unprefixed map response of its built-in numAttempts, which has no mapping",
+    rule: "P27",
+    test: Option.none(),
+  },
+  {
+    item,
+    name: "a test's unprefixed map response of its built-in duration, which has no mapping",
+    rule: "P27",
+    test: Option.some(testWith(mapResponseOf("duration"))),
   },
 ];
 

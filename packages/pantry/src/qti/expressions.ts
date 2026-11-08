@@ -1745,23 +1745,37 @@ const heldMappings = select(MappingItemRefType, (m) => m.not(m.in(m.type, linkRe
 const resolvingReadings = select(Reading, resolves);
 
 /**
- * A test's prefixed map responses that resolve to a response variable (decision 429, spec reading
- * 163): a split or numbered reading of a `qti-map-response`'s `identifier` whose variable stands as
- * a response, declared in an item or built in. Each reads its declaration's mapping, "which must
- * have been declared" (information model §7.22), so each is a containment into
- * {@link mappedDeclarations}, which a built-in, having no declaration, never meets. A reading that
- * names anything but a response is `Variable kind`'s alone, and one through an LTI link resolves
- * unchecked (reading 110), its source `none`.
+ * A test's prefixed readings of one table reader's `identifier` that resolve to a response variable
+ * (decisions 429 and 431, spec reading 163): a split or numbered reading of a `qti-map-response`'s
+ * or a `qti-map-response-point`'s `identifier` whose variable stands as a response, declared in an
+ * item or built in. Each reads its declaration's table, the mapping or the area mapping "which must
+ * have been declared" (information model §7.22 and §7.23), so each is a containment into
+ * {@link mappedDeclarations} or {@link areaMappedDeclarations}, which a built-in, having no
+ * declaration, never meets. A reading that names anything but a response is `Variable kind`'s
+ * alone, and one through an LTI link resolves unchecked (reading 110), its source `none`.
+ *
+ * @param kind - The reader's kind.
+ * @returns The selection.
  */
-const prefixedMapReaders = select(Reading, (r) =>
-  r.and(
-    r.eq(r.kind, "qti-map-response"),
-    r.eq(r.attribute, "identifier"),
-    r.in(r.form, ["split", "numbered"]),
-    resolves(r),
-    r.ne(r.source, "none"),
-    r.eq(r.declarationKind, "qti-response-declaration"),
-  ),
+const prefixedTableReaders = (kind: "qti-map-response" | "qti-map-response-point") =>
+  select(Reading, (r) =>
+    r.and(
+      r.eq(r.kind, kind),
+      r.eq(r.attribute, "identifier"),
+      r.in(r.form, ["split", "numbered"]),
+      resolves(r),
+      r.ne(r.source, "none"),
+      r.eq(r.declarationKind, "qti-response-declaration"),
+    ),
+  );
+
+/**
+ * The built-in response variables, each with the root it is built into: a numAttempts or duration
+ * of an item, the duration of a test. None has a declaration, so none holds a mapping or an area
+ * mapping (decision 431, spec reading 163).
+ */
+const builtInResponses = builtIns.filter(
+  ({ declaration }) => declaration === "qti-response-declaration",
 );
 
 /**
@@ -1777,6 +1791,28 @@ const standInReadings = select(Reading, (r) =>
     r.eq(r.declCardinalities, 1n),
   ),
 );
+
+/**
+ * State that a reference by `identifier` from a map response or a map response point names no
+ * built-in response variable, whose mapping or area mapping is never declared (decision 431,
+ * information model §7.22 and §7.23). A built-in of another kind is `Variable kind`'s alone.
+ *
+ * @param v - The row, a reference or a placed one.
+ * @returns The predicate.
+ */
+const mapsNoBuiltIn = (v: VariableRefRow | PlacedVariableRefRow) =>
+  v.or(
+    v.ne(v.attribute, "identifier"),
+    v.not(v.in(v.kind, ["qti-map-response", "qti-map-response-point"])),
+    v.ne(v.resolution, "builtIn"),
+    v.not(
+      v.or(
+        ...builtInResponses.map(({ root, variable }) =>
+          v.and(v.eq(v.rootKind, root), v.eq(v.identifier, variable)),
+        ),
+      ),
+    ),
+  );
 
 /**
  * The resolving readings of a reference by `identifier`: each names one of the declaration kinds
@@ -3160,8 +3196,19 @@ export const expressionLawsByName = {
     ),
   ],
   "Mapped response": [
-    // A test's prefixed map response of a response reads that response's mapping (reading 163).
-    contained(on(prefixedMapReaders, "declaration"), on(mappedDeclarations, "declaration")),
+    // A test's prefixed map response or map response point of a response reads that response's
+    // mapping or area mapping (reading 163).
+    contained(
+      on(prefixedTableReaders("qti-map-response"), "declaration"),
+      on(mappedDeclarations, "declaration"),
+    ),
+    contained(
+      on(prefixedTableReaders("qti-map-response-point"), "declaration"),
+      on(areaMappedDeclarations, "declaration"),
+    ),
+    // An unprefixed one never names a built-in response, which declares no table (reading 163).
+    check("Mapped_response", VariableRef, mapsNoBuiltIn),
+    check("Mapped_response", PlacedVariableRef, mapsNoBuiltIn),
     check("Mapped_response", VariableRefDeclaration, (d) =>
       d.or(
         d.ne(d.attribute, "identifier"),

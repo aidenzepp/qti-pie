@@ -1007,7 +1007,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     163,
     {
       owner:
-        'the schema\'s "Mapped response" over a test\'s prefixed readings (`prefixedMapReaders` into `mappedDeclarations`, `src/qti/expressions.ts`) and its "Variable kind" over every resolving reading (`namedReadings` into `ReferenceDeclaration`); the oracle\'s Mapped response and Variable kind over each reading (`referenceLawsOf` and `mappedIn`, `src/test/oracle-laws/tests.ts`); held by `src/test/test-map-response.oracle.test.ts`',
+        'the schema\'s "Mapped response" over a test\'s prefixed readings (`prefixedTableReaders` into `mappedDeclarations` and `areaMappedDeclarations`) and over a reference to a built-in response (`mapsNoBuiltIn` on `VariableRef` and `PlacedVariableRef`, `src/qti/expressions.ts`), and its "Variable kind" over every resolving reading (`namedReadings` into `ReferenceDeclaration`); the oracle\'s Mapped response and Variable kind over each reading (`referenceLawsOf` and `tablesIn`, `src/test/oracle-laws/tests.ts`) and its Mapped response over each built-in response reference (`src/test/oracle-laws/expressions.ts`); held by `src/test/test-map-response.oracle.test.ts`',
       status: "G",
     },
   ],
