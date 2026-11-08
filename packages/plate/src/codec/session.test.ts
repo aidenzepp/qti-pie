@@ -35,8 +35,9 @@ const versionPinned: Equals<StoredTestSession["version"], 3> = true;
 
 /**
  * The test the sessions below belong to, as `decodeSession` checks them against it: its outcomes
- * `PASSED`, `SCORE` and `TOTAL`, and two parts, `part-1` holding the item ref `item-1` and
- * `part-2` holding `item-2` in a section nested in its section.
+ * `PASSED`, `SCORE` and `TOTAL`, and two parts, the linear `part-1` holding the item ref `item-1`,
+ * which gives no template default, and the nonlinear `part-2` holding `item-2`, which defaults the
+ * template variable `T`, in a section nested in its section.
  */
 const owner: SessionTest = {
   test: {
@@ -49,17 +50,35 @@ const owner: SessionTest = {
     ]),
     parts: [
       {
-        children: [{ children: [{ identifier: "item-1", kind: "item-ref" }], kind: "section" }],
+        children: [
+          {
+            children: [{ identifier: "item-1", kind: "item-ref", templateDefaults: [] }],
+            kind: "section",
+          },
+        ],
         identifier: "part-1",
+        navigation: "linear",
       },
       {
         children: [
           {
-            children: [{ children: [{ identifier: "item-2", kind: "item-ref" }], kind: "section" }],
+            children: [
+              {
+                children: [
+                  {
+                    identifier: "item-2",
+                    kind: "item-ref",
+                    templateDefaults: [{ templateIdentifier: "T" }],
+                  },
+                ],
+                kind: "section",
+              },
+            ],
             kind: "section",
           },
         ],
         identifier: "part-2",
+        navigation: "nonlinear",
       },
     ],
   },
@@ -442,10 +461,70 @@ const itemsWith = (
   changes: Readonly<Record<number, Partial<SessionItem>>>,
 ): readonly SessionItem[] => seeded.items.map((item, index) => ({ ...item, ...changes[index] }));
 
+/**
+ * {@link processed} once its nonlinear part `part-2` has started, with changes made to some of its
+ * items: once with `part-2` current and the session at its item, and once with both parts ended
+ * and the session closed.
+ *
+ * @param changes The fields that change, by the item's index among the items.
+ * @returns The two sessions.
+ */
+const startedSessions = (
+  changes: Readonly<Record<number, Partial<SessionItem>>>,
+): readonly TestSession[] => {
+  const items = processed.items.map((item, index) => ({ ...item, ...changes[index] }));
+
+  return [
+    {
+      ...processed,
+      items,
+      parts: [
+        { identifier: "part-1", status: "ended" },
+        { identifier: "part-2", status: "current" },
+      ],
+      position: 1,
+    },
+    {
+      ...processed,
+      items,
+      parts: [
+        { identifier: "part-1", status: "ended" },
+        { identifier: "part-2", status: "ended" },
+      ],
+      position: 1,
+      status: "closed",
+    },
+  ];
+};
+
+/**
+ * Whether `decodeSession` refuses a session against a test for an item's stored template defaults:
+ * its InvalidSession's issue starts with the path to them.
+ *
+ * @param session The session, which encodes.
+ * @param test The test it is decoded against, {@link owner} by default.
+ * @param index The item's index among the session's items, 1 by default.
+ * @returns Whether that is what it refuses.
+ */
+const defaultsRefused = (session: TestSession, test: SessionTest = owner, index = 1): boolean =>
+  Result.match(encodeSession(session), {
+    onFailure: () => false,
+    onSuccess: (stored) =>
+      Option.exists(
+        Result.getFailure(decodeSession(stored, test)),
+        (failure) =>
+          failure._tag === "InvalidSession" &&
+          failure.issue.startsWith(`items[${String(index)}].templateDefaults `),
+      ),
+  });
+
 describe("decodeSession checks a stored session against its test", () => {
   it("[T-14] passes a stored session against its test that meets every rule, closed and with no item included", () => {
     const empty: SessionTest = {
-      test: { ...owner.test, parts: [{ children: [], identifier: "part-1" }] },
+      test: {
+        ...owner.test,
+        parts: [{ children: [], identifier: "part-1", navigation: "linear" }],
+      },
     };
     const closed: TestSession = {
       ...seeded,
@@ -528,8 +607,8 @@ describe("decodeSession checks a stored session against its test", () => {
 
   it("[T-14] refuses a stored session against its test that is closed while a part is current", () => {
     const ended: TestSession = {
-      ...seeded,
-      parts: seeded.parts.map(({ identifier }) => ({ identifier, status: "ended" })),
+      ...processed,
+      parts: processed.parts.map(({ identifier }) => ({ identifier, status: "ended" })),
       status: "closed",
     };
 
@@ -579,7 +658,10 @@ describe("decodeSession checks a stored session against its test", () => {
 
   it("[T-14] refuses a stored session against its test whose position is past its items", () => {
     const empty: SessionTest = {
-      test: { ...owner.test, parts: [{ children: [], identifier: "part-1" }] },
+      test: {
+        ...owner.test,
+        parts: [{ children: [], identifier: "part-1", navigation: "linear" }],
+      },
     };
     const closed: TestSession = {
       ...seeded,
@@ -626,6 +708,73 @@ describe("decodeSession checks a stored session against its test", () => {
         }
       }),
   );
+
+  it("[T-14] refuses stored defaults that do not fit the item ref of a started nonlinear part: none stored, T missing, or a key U the ref does not default", () => {
+    const unfit: readonly SessionItem["templateDefaults"][] = [
+      Option.none(),
+      Option.some({}),
+      Option.some({ U: drawn }),
+      Option.some({ T: drawn, U: drawn }),
+    ];
+
+    for (const templateDefaults of unfit) {
+      const keys = Option.isNone(templateDefaults)
+        ? "none stored"
+        : `keys ${Object.keys(templateDefaults.value).join(" ")}`;
+
+      for (const session of startedSessions({ 1: { templateDefaults } })) {
+        assert.deepStrictEqual(
+          [refusalOf(session), defaultsRefused(session)],
+          [refusedAgainstTest, true],
+          `${JSON.stringify(session.parts)} ${keys}`,
+        );
+      }
+    }
+  });
+
+  it("[T-14] leaves stored defaults that do not fit unjudged in a pending or a linear part, and decodes a started nonlinear part's that fit, processed round-tripping unchanged", () => {
+    const lax: SessionItem["templateDefaults"] = Option.some({ U: drawn });
+
+    assert.deepStrictEqual(
+      [
+        refusalOf(processed),
+        refusalOf(seeded),
+        refusalOf({ ...seeded, items: itemsWith({ 1: { templateDefaults: lax } }) }),
+        refusalOf({ ...seeded, items: itemsWith({ 0: { templateDefaults: lax } }) }),
+        ...startedSessions({}).map((session) => refusalOf(session)),
+        ...startedSessions({ 0: { templateDefaults: lax } }).map((session) => refusalOf(session)),
+      ],
+      Array.from({ length: 8 }, () => Option.none()),
+    );
+    assert.deepStrictEqual(throughHost(processed), Result.succeed(processed));
+  });
+
+  it("[T-14] refuses stored defaults that do not fit an item ref with no template default in a started nonlinear part: any stored map, an empty one included", () => {
+    const nonlinear: SessionTest = {
+      test: {
+        ...owner.test,
+        parts: owner.test.parts.map((part) => ({ ...part, navigation: "nonlinear" })),
+      },
+    };
+
+    for (const session of startedSessions({})) {
+      assert.deepStrictEqual(refusalOf(session, nonlinear), Option.none());
+    }
+    const unfit: readonly SessionItem["templateDefaults"][] = [
+      Option.some({}),
+      Option.some({ T: drawn }),
+    ];
+
+    for (const templateDefaults of unfit) {
+      for (const session of startedSessions({ 0: { templateDefaults } })) {
+        assert.deepStrictEqual(
+          [refusalOf(session, nonlinear), defaultsRefused(session, nonlinear, 0)],
+          [refusedAgainstTest, true],
+          JSON.stringify(session.parts),
+        );
+      }
+    }
+  });
 });
 
 describe("encodeSession", () => {
