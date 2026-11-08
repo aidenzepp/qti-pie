@@ -44,12 +44,6 @@ import { lawNames, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 
 /**
- * The timeout, in milliseconds, of the exhaustion: a hang guard, never a budget. It compiles Qti's
- * law model once, then reads and judges the eight every-relation packages.
- */
-const testTimeoutMs = 1_800_000;
-
-/**
  * The most rows of a relation a case edits, each field of each in turn: two, so a row other than
  * its relation's first is edited too.
  */
@@ -346,6 +340,6 @@ describe("the ruling of a refusal grizzle did not decide", () => {
           ),
         );
       }),
-    testTimeoutMs,
+    1_800_000,
   );
 });
