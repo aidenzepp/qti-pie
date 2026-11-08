@@ -304,6 +304,15 @@ const paragraphsOf = (heading: string): readonly string[] =>
     .map((paragraph) => paragraph.replaceAll("\n", " "));
 
 /**
+ * Give one section as a single line: every run of whitespace read as one space, so a phrase the
+ * README wraps, inside a list item's indented lines or across table rows, still matches.
+ *
+ * @param heading The section's heading line, such as `## Outcome processing`.
+ * @returns The section's text on one line.
+ */
+const flatSectionOf = (heading: string): string => sectionOf(heading).replaceAll(/\s+/gu, " ");
+
+/**
  * Give the fenced code blocks of a Markdown text.
  *
  * @param text The Markdown.
@@ -836,6 +845,33 @@ describe("README.md", () => {
           paragraph.includes("outside 1 to 536,870,888"),
       ),
       "the paragraph of Scoring that advises a time limit names limit and redact's range",
+    );
+  });
+
+  it("[T-9] states the gate repair in the README: the marks, the NULL reads, the attempts a test reads, the new refusals and the seed itemView carries", () => {
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "the `duration` of a part, a section or an item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`",
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that does not start with a part, section or item ref of the test document itself",
+      "So do a `qti-variable`, `qti-correct` or `qti-default` of a `file` or `record` variable",
+      "A test's `qti-default` of its own `duration` gives NULL of a single duration",
+      "A test reads an item's `numAttempts` as the number of attempts started, the count `results` writes",
+      "`qti-number-correct` and `qti-number-incorrect` consider an item's `file` and `record` responses",
+      "| A `qti-lookup-outcome-value` of a dotted name whose value is not a single `integer`, `float` or `duration` | `expression-type` | P22 |",
+      "A dotted name the test declares whole, such as an outcome named `S.TOTAL`, is that declaration",
+      "| A dotted name, read or set, that two readings resolve | `ambiguous-reference` | `prefixed-ref` |",
+      '`pattern="{ITEM1.N}"`',
+      "| A dotted `qti-correct` that reads anything but a response *(pending)* | `undeclared-variable` | none |",
+      "plate and pantry differ in the last three rows",
+      "judges its expressions under each test that reaches it",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
+    assert.notInclude(outcomes, "the last two rows");
+    assert.include(
+      flatSectionOf("## Server and browser"),
+      "`itemView`'s configuration never carries the processing seed",
     );
   });
 

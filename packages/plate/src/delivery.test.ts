@@ -116,6 +116,7 @@ const fixtureLocation = "fixtures/m2";
 const corpusPackages = {
   begGuide: "QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip.d",
   case: "qtiv3-examples/packaging/CASE/CASE.zip.d",
+  externalMetadata: "qtiv3-examples/packaging/externalMetadata/externalMetadata.zip.d",
   lti: "qtiv3-examples/packaging/lti/lti.zip.d",
   minFiles: "qtiv3-examples/packaging/test_package_minfiles/test_package_minfiles.zip.d",
   pciItems: "qtiv3-examples/packaging/pci/pci_item_examples.zip.d",
@@ -1142,7 +1143,7 @@ const submitPart: Intent = { kind: "submit-part" };
 
 describe("the M2 witness: the packages a test is delivered from", { tags: ["corpus"] }, () => {
   it.effect(
-    "[P-1] [P-4] openPackage gives each package its verdict: the fixture, BegGuide_March2025 and CASE accepted, and test_package_minfiles, lti, testWithLti, sample_pci and pci_item_examples refused by their rules",
+    "[P-1] [P-4] openPackage gives each package its verdict: the fixture, BegGuide_March2025, CASE and externalMetadata accepted, and test_package_minfiles, lti, testWithLti, sample_pci and pci_item_examples refused by their rules",
     () =>
       Effect.gen(function* verdicts() {
         const fixture = yield* openFixture();
@@ -1173,6 +1174,15 @@ describe("the M2 witness: the packages a test is delivered from", { tags: ["corp
         assert.strictEqual(caseVerdict.verdict, "accepted");
         assert.isTrue(
           acceptedOf(caseVerdict).tests.has(`${corpusPackages.case}/testitems/-TX_G06SAMP_000.xml`),
+        );
+
+        const externalMetadata = yield* openCorpusPackage(corpusPackages.externalMetadata);
+
+        assert.strictEqual(externalMetadata.verdict, "accepted");
+        assert.isTrue(
+          acceptedOf(externalMetadata).tests.has(
+            `${corpusPackages.externalMetadata}/testitems/-TX_G06SAMP_000.xml`,
+          ),
         );
 
         const minFiles = yield* openCorpusPackage(corpusPackages.minFiles);

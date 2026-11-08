@@ -951,7 +951,9 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * item at all starts closed.
  *
  * @example
- *   startTest(test, items, configuration, { instance: crypto.randomUUID(), now: new Date() });
+ *   // The instance is the host's own token for the sitting, such as its key in the host's store.
+ *   // A page served over plain HTTP has no `crypto.randomUUID`.
+ *   startTest(test, items, configuration, { instance: "sitting-42", now: new Date() });
  *   // under a processing seed startTest draws; pass `seed` in the context to give your own
  *
  * @param test The test, as `check` accepted it.

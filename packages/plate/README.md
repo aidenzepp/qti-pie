@@ -659,7 +659,11 @@ The verdict marks a test's outcome processing, and the session does not run it, 
 expression plate does not run or an `xi:include`. It does the same when the processing reads or
 sets a variable plate holds no value for in a test *(pending)*: the test's own `numAttempts`,
 `completionStatus`, `QTI_CONTEXT` or a context variable, the `duration` of a part, a section or an
-item ref, or a `qti-test-variables` of `duration`. `open` accepts these, as pantry does.
+item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`, or a
+`qti-test-variables` of `duration`. In a test that holds a `qti-assessment-section-ref`, it also
+marks a dotted name that does not start with a part, section or item ref of the test document
+itself, such as `I1.SCORE` where `I1` is an item ref in a section document. `open` accepts these,
+as pantry does.
 
 Where QTI 3.0 leaves a choice open, plate makes one. A choice marked *(pending)* awaits approval
 and can change.
@@ -669,12 +673,20 @@ and can change.
   integer or float, or of a name with no item ref, reads unweighted *(pending)*.
 - A read through an item ref gives NULL of the variable's declared type and cardinality when the
   item's record holds no value for it, such as a template variable of an item not yet shown. So do
-  a read of a `file` or `record` variable, and a read of an item's second or later occurrence, such
-  as `ITEM1.2.SCORE` *(pending)*.
+  a `qti-variable`, `qti-correct` or `qti-default` of a `file` or `record` variable, and a read of
+  an item's second or later occurrence, such as `ITEM1.2.SCORE` *(pending)*.
+- A test's `qti-default` of its own `duration` gives NULL of a single duration, since a built-in
+  declares no default.
+- A test reads an item's `numAttempts` as the number of attempts started, the count `results`
+  writes. An item counts as attempted for `qti-number-incorrect` once it is shown, answered or not.
 - An item ref that shares one category with `include-category` is included, and one that shares
   one with `exclude-category` is left out *(pending)*.
 - An item that declares no response is neither correct nor incorrect to `qti-number-correct` and
   `qti-number-incorrect` *(pending)*.
+- `qti-number-correct` and `qti-number-incorrect` consider an item's `file` and `record` responses
+  as they consider its others, so an item with one that declares no correct response is neither
+  correct nor incorrect. Such a response reads NULL, which matches no correct response, so an item
+  with one that declares a correct response is never correct *(pending)*.
 - `qti-outcome-minimum` leaves out an item whose outcome declares no `normal-minimum`, and applies
   no default in its place *(pending)*.
 - `qti-test-variables`, `qti-outcome-minimum` and `qti-outcome-maximum` read an item's
@@ -689,26 +701,40 @@ and can change.
 | A name that nothing declares, other than a dotted name, in outcome processing, a pre-condition, a branch rule or a template default | `undeclared-variable` | P8 |
 | An operand of a type its expression does not take, or a reference attribute that names a variable of another kind or type | `expression-type` | P23, P24 |
 | A `qti-set-outcome-value` whose value is not of its outcome's type, or a `qti-lookup-outcome-value` whose value its outcome's table does not take | `expression-type` | P20, P22 |
+| A `qti-lookup-outcome-value` of a dotted name whose value is not a single `integer`, `float` or `duration` | `expression-type` | P22 |
 | A `qti-lookup-outcome-value` whose outcome holds no lookup table | `template-requirements` | P22 |
 | A `qti-outcome-if` or `qti-outcome-else-if` whose condition is not a single `boolean` | `expression-type` | P21 |
 | A `qti-base-value` whose text is not of its base type | `value-type` | P7 |
 | A `qti-test-variables` with a `weight-identifier` and a `base-type` other than `float` | `expression-type` | P29 |
 
+A dotted name the test declares whole, such as an outcome named `S.TOTAL`, is that declaration,
+and the table judges it as it judges an undotted name. A `qti-correct` of `S.TOTAL` is refused,
+since it names an outcome and not a response.
+
 `openPackage` also refuses the following, which need the items that a test's item refs name. It
-never splits a dotted name the test declares whole, such as an outcome named `S.TOTAL`.
+never splits a dotted name the test declares whole into an item ref and a variable.
 
 | Refused | Rule | pantry's rule |
 | --- | --- | --- |
-| A dotted name that no reading resolves to an item ref, a test part or a section and one of its variables | `undeclared-variable` | `prefixed-ref` |
+| A dotted name, read or set by `qti-set-outcome-value` or `qti-lookup-outcome-value`, that no reading resolves to an item ref, a test part or a section and one of its variables | `undeclared-variable` | `prefixed-ref` |
+| A dotted name, read or set, that two readings resolve | `ambiguous-reference` | `prefixed-ref` |
 | A dotted name that reads the built-in `duration` of an item that is not time dependent | `undeclared-variable` | `item-duration` |
-| A dotted read whose variable's type breaks a rule of the table above, or a template default whose value is not of its variable's type | `expression-type` | P20 to P24 |
+| A dotted read whose variable's type breaks a rule of the table above, a braced name in a string attribute such as `pattern="{ITEM1.N}"` among them, or a template default whose value is not of its variable's type | `expression-type` | P20 to P24 |
 | A `qti-variable-mapping` whose `source-identifier` names no outcome its item declares | `undeclared-variable` | `variable-mapping-source` |
 | A second `qti-variable-mapping` on one item ref with the same `target-identifier` | `duplicate-identifier` | `variable-mapping-target` |
 | A `qti-template-default` whose `template-identifier` names no template variable of its item | `undeclared-variable` | `template-default-target` |
+| A dotted `qti-correct` that reads anything but a response *(pending)* | `undeclared-variable` | none |
 | A dotted `qti-map-response` or `qti-map-response-point` that reads anything but a response *(pending)* | `undeclared-variable` | none |
 | A dotted `qti-map-response` or `qti-map-response-point` whose response declares no mapping or area mapping *(pending)* | `template-requirements` | none |
 
-plate and pantry differ in the last two rows until pantry follows: pantry accepts both.
+plate and pantry differ in the last three rows until pantry follows: pantry accepts all three.
+
+`openPackage` reads a section document that a test reaches through a `qti-assessment-section-ref`
+as if it were inline in that test ([reading 5](../../docs/spec-readings.md)). The test's dotted
+names resolve through the section document's item refs. `openPackage` refuses the section
+document's variable mappings and template defaults as it refuses the test's, and judges its
+expressions under each test that reaches it. A session delivers only the items of the test
+document's own item refs, so the verdict marks a dotted name that reads through a section document.
 
 ## Server and browser
 
@@ -725,7 +751,9 @@ this split. A host that sends the accepted item to the browser sends what `redac
 - A `TestSession`'s `seed` is its processing seed, which keys every value the session's processing
   draws, so it is server data, as an item's record is. Pass `startTest` a processing seed apart
   from the configuration's `seed`, never one string as both: the configuration's `seed` orders the
-  shuffles the page shows, and their order can give it away.
+  shuffles the page shows, and their order can give it away. `itemView`'s configuration never
+  carries the processing seed. Its `seed` is the session's shuffle seed, absent when the session
+  has none.
 - An item's record, `ItemView` and `Restored` are server data, as [Records](#records) says. A host
   that sends one to the page sends the seed and the item's answers.
 - `redact`'s copy holds no seed, no template rule, no hidden template content, and no correct

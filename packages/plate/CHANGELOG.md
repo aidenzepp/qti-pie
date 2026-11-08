@@ -25,6 +25,12 @@ and both of its entry points are unstable until M3.
   as `ITEM1.SCORE` reads an item's variable through its item ref, through the ref's variable
   mappings, and a weighted `qti-variable` reads it times the ref's `qti-weight`. With
   `qti-duration-lt` and `qti-duration-gte`, plate runs 63 of the 64 expressions.
+- A test reads an item's `numAttempts` as the number of attempts started, the count `results`
+  writes, so `qti-number-incorrect` counts an item as attempted once it is shown, answered or not.
+  `qti-number-correct` and `qti-number-incorrect` consider an item's `file` and `record` responses
+  as they consider its others: an item with one that declares no correct response is neither
+  correct nor incorrect. A test's `qti-default` of its own `duration` gives NULL of a single
+  duration, since a built-in declares no default.
 - `qti-template-default` sets an item's template defaults in a test: at the item's first
   presentation in a linear part, and when its part starts in a nonlinear part. `startTest`'s
   failure union gains `EngineFailure`, for a template default of the first part that does not fit
@@ -43,8 +49,9 @@ and both of its entry points are unstable until M3.
   configuration's `seed`. `TestSession` gains `shuffleSeed`, the configuration's `seed` when the
   session started, absent when it had none. It alone orders the session's shuffles, whatever `seed`
   you pass later. `itemView`'s configuration carries it, and `results` reports each shuffled order
-  under it. A session started with no configured seed shuffles by its instance alone. Pass a
-  processing seed apart from the configuration's `seed`, never one string as both.
+  under it. `itemView(...).configuration.seed` is that shuffle seed, absent when there is none, and
+  no longer the processing seed. A session started with no configured seed shuffles by its instance
+  alone. Pass a processing seed apart from the configuration's `seed`, never one string as both.
 - Both stored forms are version 3. A `StoredTestSession` holds the test's outcomes, the number of
   outcome processing runs, the shuffle seed when there is one, and the template defaults a
   nonlinear part's start computed for each item. plate refuses a version-2 record or session with
@@ -86,41 +93,58 @@ and both of its entry points are unstable until M3.
 - The verdict marks a test's outcome processing that reads or sets a variable plate holds no value
   for in a test, and that processing does not run _(pending)_: the test's own `numAttempts`,
   `completionStatus`, `QTI_CONTEXT` or a context variable, the `duration` of a part, a section or
-  an item ref, and a `qti-test-variables` of `duration`. It marks a template default that reads
-  one, and that default is not applied _(pending)_. Nothing is refused, and no corpus test holds
-  one.
+  an item ref, in the occurrence form `ITEM1.1.duration` too, and a `qti-test-variables` of
+  `duration`. In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that
+  does not start with a part, section or item ref of the test document itself _(pending)_. It
+  marks a template default that reads one, and that default is not applied _(pending)_. Nothing is
+  refused, and no corpus test holds one.
 - `open` refuses each of the following in a test's or a section's processing, as pantry does.
   Before, `open` judged only where a test's expressions stood and what its printed variables name.
   - With `undeclared-variable`: a name that nothing declares, other than a dotted name (P8).
   - With `expression-type`: an operand of a type its expression does not take (P23), a reference
     attribute that names a variable of another kind or type (P24), a set or lookup of another type
     than its outcome's (P20, P22), a `qti-outcome-if` or `qti-outcome-else-if` whose condition is
-    not a single `boolean` (P21), and a weighted `qti-test-variables` whose `base-type` is not
-    `float` (P29).
+    not a single `boolean` (P21), a weighted `qti-test-variables` whose `base-type` is not
+    `float` (P29), and a `qti-lookup-outcome-value` of a dotted name whose value is not a single
+    `integer`, `float` or `duration` (P22, reading 28).
   - With `template-requirements`: a `qti-lookup-outcome-value` whose outcome holds no lookup table
     (P22).
   - With `value-type`: a `qti-base-value` whose text is not of its base type (P7).
+  - A dotted name the test declares whole, such as an outcome named `A.B`, as its undotted form is:
+    a `qti-correct` or `qti-map-response` of such an outcome, or a `qti-set-outcome-value` of such
+    a context variable, with `undeclared-variable` (P8, P27).
 - `open` refuses with `expression-placement` a `qti-variable` with a `weight-identifier` in an item,
   as pantry does (P12, reading 23).
 - `openPackage` refuses each of the following, as pantry does.
-  - With `undeclared-variable`: a dotted name that no reading resolves (reading 48, `prefixed-ref`),
+  - With `undeclared-variable`: a dotted name that no reading resolves, the target of a
+    `qti-set-outcome-value` or `qti-lookup-outcome-value` among them (reading 48, `prefixed-ref`),
     a dotted name that reads the built-in `duration` of an item that is not time dependent
     (`item-duration`), a `qti-variable-mapping` whose `source-identifier` names no outcome its item
     declares (`variable-mapping-source`), and a `qti-template-default` that names no template
     variable of its item (`template-default-target`).
+  - With `ambiguous-reference`: the dotted target of a `qti-set-outcome-value` or
+    `qti-lookup-outcome-value` that two readings resolve, as a dotted read already was (reading 48,
+    `prefixed-ref`).
   - With `duplicate-identifier`: a second `qti-variable-mapping` on one item ref with the same
     `target-identifier` (`variable-mapping-target`).
   - With `expression-type`: a dotted read whose item variable's type breaks P20 to P24 where it
-    stands, and a template default whose value is not of its variable's type (P20).
+    stands, a braced name in a string attribute such as `pattern="{ITEM1.N}"` among them (P24),
+    and a template default whose value is not of its variable's type (P20).
+- `openPackage` reads a section document that a test reaches through a `qti-assessment-section-ref`
+  as if it were inline in that test (reading 5). The test's dotted names resolve through the
+  section document's item refs. `openPackage` refuses the section document's variable mappings and
+  template defaults as it refuses the test's, and judges its expressions under each test that
+  reaches it. A session delivers only the items of the test document's own item refs.
 - The new P8 check takes a test's own `numAttempts`, `completionStatus`, `QTI_CONTEXT` and context
   variables as declared, as pantry types them for a test, so `open` accepts a read of one in the
   test's processing. `openPackage` never splits a dotted name the test declares whole, such as an
   outcome named `S.TOTAL`, so it no longer refuses one as `ambiguous-reference` when an item ref and
   one of its variables could also spell it.
-- plate and pantry differ in two places until pantry follows. `openPackage` refuses a dotted
-  `qti-map-response` or `qti-map-response-point` that reads anything but a response, with
-  `undeclared-variable`, and one whose response declares no mapping or area mapping, with
-  `template-requirements` _(pending)_. pantry accepts both.
+- plate and pantry differ in three places until pantry follows. `openPackage` refuses a dotted
+  `qti-correct` that reads anything but a response, with `undeclared-variable` _(pending)_. It
+  refuses a dotted `qti-map-response` or `qti-map-response-point` that reads anything but a
+  response, with `undeclared-variable`, and one whose response declares no mapping or area mapping,
+  with `template-requirements` _(pending)_. pantry accepts all three.
 - These readings are not yet numbered in `docs/spec-readings.md`, and each marked _pending_ awaits
   approval and can change:
   - A duration is its seconds as an `xs:double` in `qti-value`, `qti-base-value` and a stored
@@ -138,8 +162,11 @@ and both of its entry points are unstable until M3.
     integer or float, or of a name with no item ref, is unweighted _(pending)_.
   - A read through an item ref that finds no value gives NULL of the declared type and cardinality:
     a template variable the item's record does not hold yet, a `file` or `record` variable, and an
-    occurrence other than the first _(pending)_.
-  - An item that declares no response is neither correct nor incorrect _(pending)_.
+    occurrence other than the first _(pending)_. A dotted `qti-correct` or `qti-default` of a
+    `file` or `record` variable gives the same NULL _(pending)_.
+  - An item that declares no response is neither correct nor incorrect _(pending)_. A `file` or
+    `record` response reads NULL, which matches no correct response, so an item with one that
+    declares a correct response is never correct _(pending)_.
   - `qti-outcome-minimum` leaves out an item with no `normal-minimum` and applies no default for it
     _(pending)_. An item-session built-in has no `normal-minimum` or `normal-maximum`, so the
     minimum leaves the item out and the maximum is NULL _(pending)_.
