@@ -697,15 +697,21 @@ const setting = (
 
 /**
  * Construct a test of one part `P1`, one section `S1` and one item reference `I1`, with a float
- * `SCORE`, a duration `TIME` and outcome processing of the given rules.
+ * `SCORE`, a duration `TIME`, the given further outcome declarations and outcome processing of the
+ * given rules.
  *
  * @param rules The rules its `qti-outcome-processing` holds.
+ * @param outcomes Its further outcome declarations, after `SCORE` and `TIME`, none by default.
  * @returns The document.
  */
-const processed = (rules: readonly SourceChild[]): SourceDocument =>
+const processed = (
+  rules: readonly SourceChild[],
+  outcomes: readonly SourceElement[] = [],
+): SourceDocument =>
   test([
     outcome("SCORE", "float", [defaultValue("0")]),
     outcome("TIME", "duration"),
+    ...outcomes,
     part("P1", "linear", "individual", [section("S1", [itemRef("I1", "items/one.xml")])]),
     el("qti-outcome-processing", [], rules),
   ]);
@@ -1076,22 +1082,25 @@ const sectionRefPath = `${firstPart}/qti-assessment-section-ref`;
 
 /**
  * Construct a test of one part `P1` whose section `S1` holds one item reference and which holds a
- * `qti-assessment-section-ref` `R1` after it, with a float `SCORE`, a duration `TIME` and outcome
- * processing of the given rules.
+ * `qti-assessment-section-ref` `R1` after it, with a float `SCORE`, a duration `TIME`, the given
+ * further outcome declarations and outcome processing of the given rules.
  *
  * @param own The item reference's identifier.
  * @param rules The rules its `qti-outcome-processing` holds.
  * @param defaults The item reference's template defaults, none by default.
+ * @param outcomes Its further outcome declarations, after `SCORE` and `TIME`, none by default.
  * @returns The document.
  */
 const referring = (
   own: string,
   rules: readonly SourceChild[],
   defaults: readonly SourceElement[] = [],
+  outcomes: readonly SourceElement[] = [],
 ): SourceDocument =>
   test([
     outcome("SCORE", "float", [defaultValue("0")]),
     outcome("TIME", "duration"),
+    ...outcomes,
     part("P1", "linear", "individual", [
       section("S1", [itemRef(own, "items/one.xml", [], defaults)]),
       el("qti-assessment-section-ref", [
@@ -1101,6 +1110,37 @@ const referring = (
     ]),
     el("qti-outcome-processing", [], rules),
   ]);
+
+/**
+ * The outcomes the outcome-only kinds' rules set: a float `F` and an integer `N`.
+ */
+const counters: readonly SourceElement[] = [outcome("F", "float"), outcome("N", "integer")];
+
+/**
+ * Rules that aggregate over the test's items: `F` the sum of every item's `SCORE`, and `N` the
+ * number of items selected.
+ */
+const aggregating: readonly SourceElement[] = [
+  setting(
+    "qti-set-outcome-value",
+    "F",
+    el("qti-sum", [], [el("qti-test-variables", [attr("variable-identifier", "SCORE")])]),
+  ),
+  setting("qti-set-outcome-value", "N", el("qti-number-selected", [])),
+];
+
+/**
+ * The six outcome-only kinds {@link aggregating} does not hold, each with its required attributes
+ * and the outcome a `qti-sum` of it sets.
+ */
+const otherOutcomeOnly: readonly (readonly [string, readonly SourceAttribute[], string])[] = [
+  ["qti-number-correct", [], "N"],
+  ["qti-number-incorrect", [], "N"],
+  ["qti-number-presented", [], "N"],
+  ["qti-number-responded", [], "N"],
+  ["qti-outcome-minimum", [attr("outcome-identifier", "SCORE")], "F"],
+  ["qti-outcome-maximum", [attr("outcome-identifier", "SCORE")], "F"],
+];
 
 describe("buildTest's template defaults", () => {
   it.effect(
@@ -1245,6 +1285,89 @@ describe("buildTest's template defaults", () => {
         ]);
         assert.strictEqual(unreferred.outcomeProcessing.kind, "runs");
         assert.deepStrictEqual(unreferred.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[T-9] an outcome-only kind beside a section ref marks the outcome processing: qti-test-variables and qti-number-selected each at its own path",
+    () =>
+      Effect.gen(function* marksBesideSectionRef() {
+        const document = referring("I0", aggregating, [], counters);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-assessment-section-ref", sectionRefPath),
+          mark(
+            "qti-test-variables",
+            `${processingPath}/qti-set-outcome-value[1]/qti-sum/qti-test-variables`,
+          ),
+          mark(
+            "qti-number-selected",
+            `${processingPath}/qti-set-outcome-value[2]/qti-number-selected`,
+          ),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[T-9] each other outcome-only kind beside a section ref marks the outcome processing alone, at its own path",
+    () =>
+      Effect.gen(function* marksEachBesideSectionRef() {
+        for (const [local, attributes, target] of otherOutcomeOnly) {
+          const document = referring(
+            "I0",
+            [setting("qti-set-outcome-value", target, el("qti-sum", [], [el(local, attributes)]))],
+            [],
+            counters,
+          );
+          const built = yield* buildTest(document);
+
+          assert.deepStrictEqual(checkStructure(document, tables), [], local);
+          assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" }, local);
+          assert.deepStrictEqual(
+            built.unsupported,
+            [
+              mark("qti-assessment-section-ref", sectionRefPath),
+              mark(local, `${processingPath}/qti-set-outcome-value/qti-sum/${local}`),
+            ],
+            local,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "[T-9] with no outcome-only kind beside a section ref, the same rules in a test with no section ref run, unmarked",
+    () =>
+      Effect.gen(function* runsWithoutSectionRef() {
+        const document = processed(aggregating, counters);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.strictEqual(built.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[T-9] with no outcome-only kind beside a section ref, a read of the test's own item ref runs, with only the section ref's mark",
+    () =>
+      Effect.gen(function* runsOwnReadBesideSectionRef() {
+        const document = referring(
+          "I0",
+          [setting("qti-set-outcome-value", "F", variable("I0.SCORE"))],
+          [],
+          counters,
+        );
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.strictEqual(built.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-assessment-section-ref", sectionRefPath),
+        ]);
       }),
   );
 });
