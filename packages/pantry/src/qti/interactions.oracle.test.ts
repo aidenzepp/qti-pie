@@ -7,7 +7,7 @@
  * The database tests (`interactions.db.test.ts`) judge the laws through PostgreSQL; the builder's
  * tests (`#pantry/import/overlays/interactions.oracle.test.ts`) check its rows.
  */
-import type { Statement } from "@bjornpagen/grizzle";
+import type { Law, Statement } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
@@ -34,6 +34,12 @@ import {
 } from "#pantry/qti/interactions.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { readPackage } from "#pantry/package/read.ts";
+import type { PackageFile } from "#pantry/package/read.ts";
+import { lawNameOf } from "#pantry/import/refusal.ts";
+import { readProgram } from "#pantry/import/program.ts";
+import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { hostRowsOf, judge as judgeRows } from "#pantry/test/host-judge.ts";
+import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import { contentLawOf, judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import {
   base,
@@ -119,6 +125,7 @@ describe("qti/interactions.ts, declared", () => {
       "Binding declared",
       "BindingFit",
       "Choice bounds",
+      "Choice identifier key",
       "Choice not variable",
       "Context variable reference",
       "Custom interaction version",
@@ -247,6 +254,28 @@ const secondDeclaration =
   '<qti-response-declaration identifier="RESPONSE2" cardinality="single" base-type="identifier"/>';
 
 /**
+ * A declaration of a single response of a base type, named as given, for a case's added
+ * interaction.
+ *
+ * @param identifier - The response's identifier.
+ * @param baseType - Its base type.
+ * @returns The declaration's markup.
+ */
+const responseDeclaration = (identifier: string, baseType: string): string =>
+  `<qti-response-declaration identifier="${identifier}" cardinality="single" base-type="${baseType}"/>`;
+
+/**
+ * A gap match interaction bound to `RESPONSE2`, its one gap text and its one gap named as given:
+ * reading 104's gap and gap text of one interaction, and their control.
+ *
+ * @param text - The gap text's identifier.
+ * @param gap - The gap's identifier.
+ * @returns The interaction's markup.
+ */
+const gapMatch = (text: string, gap: string): string =>
+  `<qti-gap-match-interaction response-identifier="RESPONSE2" max-associations="1"><qti-gap-text identifier="${text}" match-max="1">x</qti-gap-text><p>Fill <qti-gap identifier="${gap}"/>.</p></qti-gap-match-interaction>`;
+
+/**
  * The reading-104 cases over the `simple` fixture's item: each edit, written as search and
  * replacement pairs applied in order, and the laws of the two it must break.
  */
@@ -293,7 +322,7 @@ const choiceNameCases: readonly {
     name: "choices of two interactions named apart",
   },
   {
-    breaks: [],
+    breaks: ["Choice identifier key"],
     edits: [
       [
         "</qti-choice-interaction>",
@@ -303,35 +332,120 @@ const choiceNameCases: readonly {
     ],
     name: "a hottext and a simple choice named ChoiceA, two classes",
   },
+  {
+    breaks: ["Choice identifier key"],
+    edits: [
+      [
+        "</qti-choice-interaction>",
+        '</qti-choice-interaction><p>Pick <qti-inline-choice-interaction response-identifier="RESPONSE2"><qti-inline-choice identifier="ChoiceA">x</qti-inline-choice></qti-inline-choice-interaction>.</p>',
+      ],
+      ["<qti-item-body>", `${secondDeclaration}<qti-item-body>`],
+    ],
+    name: "an inline choice and a simple choice named ChoiceA, two classes",
+  },
+  {
+    breaks: ["Choice identifier key"],
+    edits: [
+      ["</qti-choice-interaction>", `</qti-choice-interaction>${gapMatch("G", "G")}`],
+      ["<qti-item-body>", `${responseDeclaration("RESPONSE2", "directedPair")}<qti-item-body>`],
+    ],
+    name: "a gap and a gap text of one gap match named G, two classes",
+  },
+  {
+    breaks: [],
+    edits: [
+      ["</qti-choice-interaction>", `</qti-choice-interaction>${gapMatch("T", "G")}`],
+      ["<qti-item-body>", `${responseDeclaration("RESPONSE2", "directedPair")}<qti-item-body>`],
+    ],
+    name: "a gap and a gap text of one gap match named apart",
+  },
+  {
+    breaks: ["Choice identifier key"],
+    edits: [
+      [
+        "</qti-choice-interaction>",
+        '</qti-choice-interaction><qti-hotspot-interaction response-identifier="RESPONSE2" max-choices="1"><img src="images/sign.png" alt="Sign" width="100" height="100"/><qti-hotspot-choice identifier="H" shape="circle" coords="50,50,10"/></qti-hotspot-interaction><qti-hottext-interaction response-identifier="RESPONSE3" max-choices="1"><p><qti-hottext identifier="H">x</qti-hottext></p></qti-hottext-interaction>',
+      ],
+      [
+        "<qti-item-body>",
+        `${secondDeclaration}${responseDeclaration("RESPONSE3", "identifier")}<qti-item-body>`,
+      ],
+    ],
+    name: "a hotspot choice and a hottext named H, two classes",
+  },
+];
+
+/**
+ * Apply a reading-104 case's edits to the `simple` fixture's item, each search the item must hold.
+ *
+ * @param files - The fixture's files.
+ * @param edits - The case's search and replacement pairs, in order.
+ * @param name - The case's name, for the failure message.
+ * @returns The files with the item edited.
+ */
+const editedItem = (
+  files: readonly PackageFile[],
+  edits: readonly (readonly [string, string])[],
+  name: string,
+): readonly PackageFile[] =>
+  files.map((file) => {
+    if (file.path !== simpleItem) {
+      return file;
+    }
+
+    let text = new TextDecoder().decode(file.bytes);
+    for (const [search, replacement] of edits) {
+      assert.include(text, search, `${name}: the item holds ${search}`);
+      text = text.replace(search, replacement);
+    }
+
+    return { ...file, bytes: new TextEncoder().encode(text) };
+  });
+
+/**
+ * The two laws of reading 104.
+ */
+const choiceNameLaws: ReadonlySet<string> = new Set([
+  "Choice identifier key",
+  "Choice not variable",
+]);
+
+/**
+ * Every law the host judges, read once.
+ */
+const hostLaws = judgedLaws(Qti);
+
+/**
+ * Name the reading-104 laws a host judgment lists, each by its law's name.
+ *
+ * @param laws - The broken or skipped laws.
+ * @returns Their names among reading 104's two.
+ */
+const choiceNameLawsOf = (laws: readonly { readonly law: Law }[]): readonly string[] => [
+  ...new Set(
+    laws
+      .flatMap(({ law }) => Option.toArray(lawNameOf(law)))
+      .filter((law) => choiceNameLaws.has(law)),
+  ),
 ];
 
 describe("qti/interactions.ts, reading 104 by the law oracle", () => {
   it.effect(
     "breaks Choice not variable and Choice identifier key exactly where reading 104 says, over edits of simple's item",
     () =>
-      // Oracle: the specification as a checker, reading 104 (§5.132.1, §5.65.1, §7.16, §2.2.2): a
-      // choice's identifier names one choice of its class in its document and no item variable,
-      // declared or built in; each case's expected laws are read off its edit.
-      // Bound: the `simple` fixture as it is and 7 edits of its item: a choice named as a declared
+      // Oracle: the specification as a checker, reading 104 as amended (§5.132.1, §5.55.1, §5.58.1,
+      // §5.65.1, §5.67.1, §5.73.1, §7.16, §2.2.2): the nine choice classes share one space of
+      // identifiers, so a choice's identifier names one choice of any class in its document, and
+      // no item variable, declared or built in; each case's expected laws are read off its edit.
+      // Bound: the `simple` fixture as it is and 11 edits of its item: a choice named as a declared
       // outcome, a declared response padded and a built-in, two choices of one interaction and of
-      // two named alike, two interactions' choices named apart, and a hottext beside a simple
-      // choice of one name.
+      // two named alike, two interactions' choices named apart, a hottext, an inline choice beside
+      // a simple choice of one name, a gap and a gap text of one gap match named alike and apart,
+      // and a hotspot choice beside a hottext of one name.
       Effect.gen(function* choiceNames() {
         const files = yield* readPackage(fixtures.simple);
         for (const { breaks, edits, name } of choiceNameCases) {
-          const edited = files.map((file) => {
-            if (file.path !== simpleItem) {
-              return file;
-            }
-
-            let text = new TextDecoder().decode(file.bytes);
-            for (const [search, replacement] of edits) {
-              assert.include(text, search, `${name}: the item holds ${search}`);
-              text = text.replace(search, replacement);
-            }
-
-            return { ...file, bytes: new TextEncoder().encode(text) };
-          });
+          const edited = editedItem(files, edits, name);
           const judgment = yield* judge(edited, grammar, oracleLaws);
           assert.strictEqual(judgment._tag, "Judged", name);
 
@@ -349,6 +463,39 @@ describe("qti/interactions.ts, reading 104 by the law oracle", () => {
           );
         }
       }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect(
+    "breaks the same reading-104 laws by the schema's laws over the import's rows as by the law oracle",
+    () =>
+      // Oracle: two implementations side by side, the law oracle's choice names, which group the
+      // document's choices by class and by identifier alone, and the schema's laws over the
+      // import's rows (`#pantry/test/host-judge.ts`): the per-class keys and
+      // `Choice_identifier_key` over `ChoiceVariableName`'s counts; each must break exactly the
+      // case's laws among reading 104's two, and judge both.
+      // Bound: the same 12 packages as the oracle's own test above.
+      Effect.gen(function* choiceNamesByRows() {
+        const files = yield* readPackage(fixtures.simple);
+        for (const { breaks, edits, name } of choiceNameCases) {
+          const edited = editedItem(files, edits, name);
+          const judgment = yield* judge(edited, grammar, oracleLaws);
+          assert.strictEqual(judgment._tag, "Judged", name);
+
+          const oracle = [
+            ...new Set(
+              (judgment._tag === "Judged" ? judgment.breaches : [])
+                .map(({ law }) => law)
+                .filter((law) => choiceNameLaws.has(law)),
+            ),
+          ];
+          const dir = yield* scopedPackage(new Map(edited.map((file) => [file.path, file.bytes])));
+          const program = yield* readProgram(dir);
+          const host = judgeRows(hostRowsOf(program.inputs), hostLaws);
+          assert.deepStrictEqual(choiceNameLawsOf(host.skipped), [], `${name}: judged`);
+          assert.sameMembers(oracle, [...breaks], `${name}: the oracle`);
+          assert.sameMembers([...choiceNameLawsOf(host.broken)], [...breaks], `${name}: the rows`);
+        }
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
 
