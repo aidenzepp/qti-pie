@@ -887,6 +887,36 @@ const twoReachingFiles = (itemRef: string) => ({
 });
 
 /**
+ * The files of a package whose test `T`, at `test.xml`, reaches the section document `S2` at
+ * `sections/s2.xml`, and whose test `T2`, at `test2.xml`, reaches the section document `S3` at
+ * `sections/s3.xml`, each through one section ref, each section document's one item ref `I1` naming
+ * `items/a.xml` from its own path.
+ *
+ * @param inS2 What `S2`'s item ref `I1` holds, as written.
+ * @param inS3 What `S3`'s item ref `I1` holds, as written.
+ * @returns The package's files, by path.
+ */
+const twoSectionFiles = (inS2: string, inS3: string) => ({
+  ...twoReachingFiles(inS2),
+  [manifestFile]: manifestXml(
+    resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+    resourceXml("T2", "imsqti_test_xmlv3p0", "test2.xml"),
+    resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+    resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+    resourceXml("S", "imsqti_section_xmlv3p0", "sections/s2.xml"),
+    resourceXml("S3", "imsqti_section_xmlv3p0", "sections/s3.xml"),
+  ),
+  "sections/s3.xml": sectionXml(inS3).replace(
+    'identifier="S2" title="S2"',
+    'identifier="S3" title="S3"',
+  ),
+  "test2.xml": referringTestXml(
+    settingTotal(oneFloat),
+    sectionRefXml("R", "sections/s3.xml"),
+  ).replace('identifier="T" title="T"', 'identifier="T2" title="T2"'),
+});
+
+/**
  * The template default of the section document's integer template variable `T` to the float 1,
  * whose type is not its target's.
  */
@@ -2401,6 +2431,39 @@ describe("package/open.ts", () => {
               yield* openReferring(settingTotal(oneFloat), preConditionXml(greaterXml(reference))),
             );
           }
+        }),
+    );
+
+    it.effect(
+      "[T-9] gives the refusal at a second section document that a second test reaches, though the first gave one with the same rule, path and detail at its own",
+      () =>
+        Effect.gen(function* secondSectionRefusal() {
+          const nope = preConditionXml(variableXml("NOPE"));
+          const verdict = yield* openPackage(location, packageOf(twoSectionFiles(nope, nope)));
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            undeclaredNope,
+            { ...undeclaredNope, document: fileLocation(location, "sections/s3.xml") },
+          ]);
+        }),
+    );
+
+    it.effect(
+      "[T-9] controls for the refusal at a second section document: one section document two tests reach gives its refusal once, and a second section document with no error gives none",
+      () =>
+        Effect.gen(function* secondSectionControls() {
+          const nope = preConditionXml(variableXml("NOPE"));
+
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, packageOf(twoReachingFiles(nope)))),
+            [undeclaredNope],
+            "one section document two tests reach",
+          );
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, packageOf(twoSectionFiles(nope, "")))),
+            [undeclaredNope],
+            "only the first section document in error",
+          );
         }),
     );
 
