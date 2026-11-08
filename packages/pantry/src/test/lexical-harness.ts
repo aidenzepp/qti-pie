@@ -456,6 +456,16 @@ export const recorded: readonly Recorded[] = [
     xsd: "valid",
   },
   {
+    builtin: /^(?:double|float)$/u,
+    reason: {
+      _tag: "libxml2",
+      proof: "specialTrailing",
+      why: "libxml2 refuses INF, -INF and NaN followed by whitespace (it skips whitespace before them, and after a numeral), though whiteSpace is collapse, fixed, for xs:double and xs:float (Part 2, 4.3.6), so the value collapses to a literal of 3.2.5.1",
+    },
+    value: /^[\t\n\r ]*-?(?:INF|NaN)[\t\n\r ]+$/u,
+    xsd: "invalid",
+  },
+  {
     domain: /\(reading [^)]*\b17\b/u,
     reason: {
       _tag: "reading",
@@ -527,6 +537,16 @@ export const recorded: readonly Recorded[] = [
       why: "xs:anyURI is XML Schema 1.0's, RFC 2396 as RFC 2732 amends it after XLink's escaping; libxml2 judges by RFC 3986 with departures of its own and accepts %zz, a second #, and, once escaped, a space or tab before a second #, which RFC 2396's URI-reference refuses",
     },
     xsd: "valid",
+  },
+  {
+    primitive: "anyURI",
+    reason: {
+      _tag: "reading",
+      reading: 71,
+      says: "An authority that is a registry name holding a `:` or `@` beyond a host and a port (`http://h:abc/`, `http://a@b@c/`), and an empty port (`http://h:/`): RFC 2396 admits them, and libxml2 refuses them.",
+      why: "xs:anyURI is XML Schema 1.0's, RFC 2396 as RFC 2732 amends it; libxml2 judges by RFC 3986 and refuses what RFC 2396 admits: a registry-name authority with : or @ beyond a host and a port, an empty port, a port above 2147483647, and [ or ] in a query or after an opaque part's first character",
+    },
+    xsd: "invalid",
   },
   {
     domain: /\(reading [^)]*\b2\b/u,
@@ -630,6 +650,7 @@ export const families = {
     "http://[::1]/",
     "a#b#c",
     ":",
+    "http://h:abc/",
   ],
   boolean: ["true", "false", "1", "0", "TRUE", "yes"],
   date: [
@@ -678,6 +699,7 @@ export const families = {
     "1E-3",
     "1e",
     "INF",
+    "INF ",
     "-INF",
     "+INF",
     "NaN",
@@ -1765,6 +1787,10 @@ export const proofs = {
   signAlone: {
     accepted: ["-&#10;", "- ", "+ ", " -&#9;"],
     type: "xs:decimal",
+  },
+  specialTrailing: {
+    refused: ["INF ", "-INF&#10;", "NaN&#9;"],
+    type: "xs:double",
   },
   whitespace: {
     refused: [" 0 ", "&#9;0"],
