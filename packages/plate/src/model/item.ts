@@ -2998,9 +2998,8 @@ const namesHeldRecord = (operand: Expression, heldRecords: ReadonlySet<string>):
  * rule `5b8ee08b`): a response, an outcome or a template variable the engine does not hold (base
  * type `file`, cardinality `record`, a record response the model holds in `records` read other
  * than as such an operand among them, or no base type), a template variable beside template
- * processing that does not run, the built-in
- * variable `duration`, read or set, which the engine holds no value for, and the built-in
- * `completionStatus` where a declaration names it.
+ * processing that does not run, the built-in variable `duration`, read or set, which the engine
+ * holds no value for, and the built-in `completionStatus` where a declaration names it.
  * Reading 29 makes an item's `duration` a single float, so it is a valid name in an item's rules.
  * In template processing it also finds `QTI_CONTEXT` and each variable a `qti-context-declaration`
  * declares: template processing may read them (`info.txt:22601`, and a reference to `QTI_CONTEXT`
@@ -3048,7 +3047,8 @@ const unheldIdentifiers = (
   /**
    * Add each identifier an expression and its operands read that the engine does not hold: the
    * declaration its kind's declaration facet names, then each variable its attributes name, then
-   * those of its operands, each but a held record response a kind that reads a record whole takes.
+   * those of its operands, but for an operand that names a held record response under a kind that
+   * reads a record whole ({@link namesHeldRecord}).
    *
    * @param operand The expression.
    */
@@ -3854,7 +3854,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
 
     // `records` is absent when the item makes no record response declaration it holds, and `unheld`
     // when it makes no declaration it holds no value of, as a model built by hand leaves them out.
-    const recorded: Item = records.size === 0 ? built : { ...built, records };
+    const withRecords: Item = records.size === 0 ? built : { ...built, records };
 
-    return unheld.size === 0 ? recorded : { ...recorded, unheld };
+    return unheld.size === 0 ? withRecords : { ...withRecords, unheld };
   });

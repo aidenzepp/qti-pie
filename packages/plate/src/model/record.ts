@@ -21,11 +21,11 @@ import type { RecordValue, Value } from "#plate/model/values.ts";
  * refused post is no state of the record: `score` returns no record for it, and a host that counts
  * refused posts keeps that count itself.
  * `responses` and `outcomes` hold every modelled variable by identifier, NULL included, and
- * `records` each record response's value beside `responses`; template processing never sets one.
- * `outcomes` holds the built-in `completionStatus` too where the item holds it
- * ({@link holdsCompletionStatus}). A record written before the built-in was held lacks it, and an
- * attempt starts it at `unknown`. `notices` names the unsupported features the item shows as
- * notices.
+ * `records` holds each record response's value beside `responses`, by the response's identifier;
+ * template processing never sets one. `outcomes` holds the built-in `completionStatus` too where
+ * the item holds it ({@link holdsCompletionStatus}). A record written before the built-in was held
+ * lacks it, and an attempt starts it at `unknown`. `notices` names the unsupported features the
+ * item shows as notices.
  *
  * `seed` is the seed the record started under: the host's string, used as given, or the one
  * `begin`, `startTest` or `score` drew when the host gave none. `templates` holds the template
@@ -49,10 +49,6 @@ export interface ItemRecord {
   readonly notices: readonly string[];
   readonly numAttempts: number;
   readonly outcomes: { readonly [identifier: string]: Value };
-  /**
-   * A record response's value, beside `responses`, by the response's identifier; template
-   * processing never sets one.
-   */
   readonly records: { readonly [identifier: string]: RecordValue };
   readonly responses: { readonly [identifier: string]: Value };
   readonly seed: string;
