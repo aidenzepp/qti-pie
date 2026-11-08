@@ -2034,7 +2034,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] refuses a dotted point without an area mapping, ITEM1.MAPPED_POINT, a point response that declares a qti-mapping only, once as template-requirements, as an item's, and accepts ITEM1.AREA_POINT (info.txt:9314; pantry's reading 163)",
+      '[T-9] refuses a dotted point without an area mapping, ITEM1.MAPPED_POINT, a point response that declares a qti-mapping only, once as template-requirements, as an item\'s, and accepts ITEM1.AREA_POINT (info.txt:9314; reading 111 ("a processing element\'s `identifier` names a variable of the kind the element reads or sets"), with G-R3 194, pending, for the mapping ("a prefixed map-response or map-response-point of a response with no mapping is refused"))',
       () =>
         Effect.gen(function* dottedPointWithoutAreaMapping() {
           const verdict = yield* openSettingThroughPoints(
@@ -2068,7 +2068,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] built-in maps nothing: a dotted map-response-point of ITEM1.numAttempts, and a dotted map-response of a timed ITEM1.duration, of ITEM1.1.numAttempts and of P.duration and SEC.duration, are refused once as undeclared-variable expecting a response (info.txt:9306, info.txt:9314; pantry's reading 163)",
+      '[T-9] built-in maps nothing: a dotted map-response-point of ITEM1.numAttempts, and a dotted map-response of a timed ITEM1.duration, of ITEM1.1.numAttempts and of P.duration and SEC.duration, are refused once as undeclared-variable expecting a response (info.txt:9306, info.txt:9314; reading 111 ("a processing element\'s `identifier` names a variable of the kind the element reads or sets"), with G-R3 194, pending, for the mapping ("a prefixed map-response or map-response-point of a response with no mapping is refused"))',
       () =>
         Effect.gen(function* builtInMapsNothing() {
           const cases = [
@@ -2102,7 +2102,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] built-in maps nothing: a dotted map-response of an untimed item's ITEM1.duration is refused twice as undeclared-variable, the untimed duration and then the response it does not read (info.txt:9306; pantry's reading 163)",
+      '[T-9] built-in maps nothing: a dotted map-response of an untimed item\'s ITEM1.duration is refused twice as undeclared-variable, the untimed duration and then the response it does not read (info.txt:9306; reading 111 ("a processing element\'s `identifier` names a variable of the kind the element reads or sets"), with G-R3 194, pending, for the mapping ("a prefixed map-response or map-response-point of a response with no mapping is refused"))',
       () =>
         Effect.gen(function* untimedBuiltInMapsNothing() {
           const verdict = yield* openSettingThroughPoints(
@@ -2139,7 +2139,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "built-in maps nothing in an item: a qti-map-response of numAttempts, and a qti-map-response-point of a timed item's duration, are refused as undeclared-variable expecting a response at the item's own document, and AREA_POINT is accepted (info.txt:9306, info.txt:9314; pantry's reading 163)",
+      'built-in maps nothing in an item: a qti-map-response of numAttempts, and a qti-map-response-point of a timed item\'s duration, are refused as undeclared-variable expecting a response at the item\'s own document, and AREA_POINT is accepted (info.txt:9306, info.txt:9314; reading 111 ("a processing element\'s `identifier` names a variable of the kind the element reads or sets"), with G-R3 194, pending, for the mapping ("a prefixed map-response or map-response-point of a response with no mapping is refused"))',
       () =>
         Effect.gen(function* itemBuiltInMapsNothing() {
           const cases = [

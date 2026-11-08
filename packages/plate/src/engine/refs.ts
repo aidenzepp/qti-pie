@@ -194,9 +194,11 @@ export interface PrefixedName {
 
 /**
  * Read a prefixed name of a test's processing through its item ref, as a value: the one reading of
- * the name that resolves, by reading 48, as `prefixedVariable` in `#plate/engine/scope.ts`
- * resolves it (a name the test declares whole never split, a mapping target before the item's own
- * declaration), with what it names in the item and whether it reads the item's one occurrence.
+ * the name that resolves, by reading 48 ("a dotted reference is accepted when exactly one reading
+ * names a real item ref, test part or section and its variable"), as `prefixedVariable` in
+ * `#plate/engine/scope.ts` resolves it (a name the test declares whole never split, a mapping
+ * target before the item's own declaration), with what it names in the item and whether it reads
+ * the item's one occurrence.
  *
  * A name that resolves to an item's record response reads a record, which is no value: it fails,
  * as a value read of the run's own record response does ({@link variableRead}); `qti-field-value`,

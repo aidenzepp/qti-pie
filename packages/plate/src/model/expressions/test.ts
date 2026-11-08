@@ -12,9 +12,9 @@
  * and `qti-test-variables` a multiple of its written `base-type`, a float when it is weighted and
  * has none, and unknown otherwise (G-R3 199). So the validator refuses a multiple set straight into
  * a single outcome (P20), as the qti package does, and a minimum, a maximum or a weighted
- * `qti-test-variables` set into an integer, which the qti package's rows (`attributeContainer` in
- * `packages/pantry/src/processing/types.ts`, typed by the written `base-type` alone) accept: an
- * agreement difference G-R3 199 settles.
+ * `qti-test-variables` set into an integer, which the qti package's rows (the `qti-test-variables`
+ * typing in `packages/pantry/src/grammar/expression.ts`, typed by the written `base-type` alone)
+ * accept: an agreement difference G-R3 199 settles.
  *
  * It value-imports only `effect`, `#plate/model/expression.ts`, the leaf
  * `#plate/model/attributes.ts`, `#plate/model/values.ts` and `#plate/vocabulary.ts`, and names the

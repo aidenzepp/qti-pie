@@ -230,8 +230,9 @@ export interface PrefixedRead {
 }
 
 /**
- * The type of each item-session built-in, as pantry types it through an item ref
- * (`builtInsOf("item")`, `processing/env.ts`): `duration` is a float in an item.
+ * The type of each item-session built-in, as pantry types it through an item ref (the table
+ * `builtInTypes` in `packages/pantry/src/grammar/expression.ts`, over `builtIns` in
+ * `packages/pantry/src/grammar/references.ts`): `duration` is a float in an item.
  */
 const itemBuiltIns: Readonly<Record<ItemBuiltIn, DeclaredType>> = {
   completionStatus: { baseType: "identifier", cardinality: "single" },
@@ -352,7 +353,8 @@ const declarationOf = (item: ScopeItem, identifier: string): Option.Option<ItemN
 };
 
 /**
- * Resolve a name an item is read by, in pantry's order (`resolveReading`, `processing/env.ts`): a
+ * Resolve a name an item is read by, in pantry's order (the relation `Reading` in
+ * `packages/pantry/src/qti/expressions.ts`, its source declared, mapped or built in): a
  * target of the item ref's variable mappings names the variable its source names, else the item's
  * own declaration of the name, else an item-session built-in.
  *

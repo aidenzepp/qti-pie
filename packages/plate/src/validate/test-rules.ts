@@ -22,11 +22,12 @@
  *
  * Two things a test may hold are valid here and are never refused. A dotted reference
  * (`ITEMREF.VAR`, `ITEMREF.N.VAR`, a part's or a section's `duration`) is valid in pre-conditions,
- * branch rules and outcome processing (readings 4, 5 and 37), and is typed `unknown` here
- * ({@link unknownPrefix}); reading 48 refuses one only when two readings of it each name a real
- * item ref, part or section and a variable it has, which needs the items' declared variables, so
- * only a package can judge it. A `min-time` above a `max-time` is valid, each limit enforced on its
- * own (T-O8).
+ * branch rules and outcome processing (readings 4, 5 and 37), and is typed `unknown` here ({@link
+ * unknownPrefix}); reading 48 ("a dotted reference is accepted when exactly one reading names a
+ * real item ref, test part or section and its variable") refuses one only when two readings of it
+ * each name a real item ref, part or section and a variable it has, which needs the items' declared
+ * variables, so only a package can judge it. A `min-time` above a `max-time` is valid, each limit
+ * enforced on its own (T-O8).
  *
  * @module
  */

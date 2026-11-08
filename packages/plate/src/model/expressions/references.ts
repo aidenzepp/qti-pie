@@ -89,7 +89,8 @@ const defaultRule: KindRule = {
 /**
  * The rule of `qti-null`: a NULL "treated as if it is of any desired base-type", so any base type
  * of a cardinality unknown, which every operand rule and every check of a type accepts. The qti
- * package types it the same (`resultTypes` in `packages/pantry/src/processing/types.ts`).
+ * package types it the same (its typing in `expressionTypings`,
+ * `packages/pantry/src/grammar/expression.ts`: `any`, `unknown`).
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AbstractAttribute_ExpressionGroup_qti-null
  */
