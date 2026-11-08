@@ -34,7 +34,7 @@ import {
   renderStatus,
   score,
 } from "#plate/index.ts";
-import type { Entry, Options, StatusInput, StoredRecord, ValidationMessage, Value } from "#plate/index.ts";
+import type { Entry, Options, ResponseValue, StatusInput, StoredRecord, ValidationMessage } from "#plate/index.ts";
 
 /**
  * Render the page on each request, never at build time: it reads the corpus and takes posts.
@@ -229,7 +229,7 @@ const program = Effect.gen(function* astroPage() {
     return refused(messages);
   }
 
-  const values: Readonly<Record<string, Value>> = Object.fromEntries(
+  const values: Readonly<Record<string, ResponseValue>> = Object.fromEntries(
     decoded.flatMap(({ identifier, result }) =>
       result._tag === "Success" ? [[identifier, result.success] as const] : [],
     ),
