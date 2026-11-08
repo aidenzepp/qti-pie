@@ -525,10 +525,9 @@ describe("ledger/view.ts", () => {
       `I-19 QTI Shared Interaction Vocabulary Subset: ${claim.source}`,
     );
     assert.isAtLeast(limitedAt, 0);
-    assert.include(
-      lines.slice(limitedAt + 1, lines.indexOf("", limitedAt)),
+    assert.deepStrictEqual(lines.slice(limitedAt + 1, lines.indexOf("", limitedAt)), [
       `I-19 QTI Shared Interaction Vocabulary Subset: ${claim.source}`,
-    );
+    ]);
   });
 
   it("links each proof to its test file and its fixture documents", () => {
@@ -1034,18 +1033,17 @@ describe("ledger/view.ts verdict report", () => {
   });
 
   it("lists the marks of an accepted test, section and stimulus in the lines and the table", () => {
-    const outcomeProcessing = "qti-assessment-test/qti-outcome-processing";
+    const preCondition = "qti-assessment-test/qti-test-part/qti-pre-condition";
     const accepting: readonly Verdict[] = [
       {
         accepted: acceptTestForTest({
           document: "tests/test.xml",
           identifier: "T",
+          outcomeProcessing: { kind: "absent" },
           outcomes: new Map(),
           parts: [],
           title: "Test",
-          unsupported: [
-            { feature: "qti-outcome-processing", path: outcomeProcessing, shown: "mark" },
-          ],
+          unsupported: [{ feature: "qti-pre-condition", path: preCondition, shown: "mark" }],
         }),
         document: "tests/test.xml",
         kind: "test",
@@ -1087,7 +1085,7 @@ describe("ledger/view.ts verdict report", () => {
       },
     ];
     const marks = [
-      `qti-outcome-processing at ${outcomeProcessing}`,
+      `qti-pre-condition at ${preCondition}`,
       "root:qti-assessment-section at qti-assessment-section",
       "root:qti-assessment-stimulus at qti-assessment-stimulus",
     ];

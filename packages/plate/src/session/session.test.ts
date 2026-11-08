@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import type { Option } from "effect";
 import type { ItemRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { ResponseValue, Value } from "#plate/model/values.ts";
 import * as session from "#plate/session/session.ts";
 import type { Intent, Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import { readImports, sourceModules } from "#plate/test/imports.ts";
@@ -42,13 +42,44 @@ const firstOutcomes: Equals<
 const seed: Equals<TestSession["seed"], string> = true;
 
 /**
- * Responses map an identifier to a value.
+ * The shuffle seed is optional, the configuration's when it had one.
  */
-const responses: Equals<Responses, Readonly<Record<string, Value>>> = true;
+const shuffleSeed: Equals<TestSession["shuffleSeed"], Option.Option<string>> = true;
+
+/**
+ * The test's outcomes map an identifier to a value, as an item's do, and the runs that set them
+ * are counted.
+ */
+const testOutcomes: Equals<
+  Pick<TestSession, "outcomeRuns" | "outcomes">,
+  { readonly outcomeRuns: number; readonly outcomes: Readonly<Record<string, Value>> }
+> = true;
+
+/**
+ * An item's template defaults are optional and map an identifier to a value.
+ */
+const templateDefaults: Equals<
+  SessionItem["templateDefaults"],
+  Option.Option<Readonly<Record<string, Value>>>
+> = true;
+
+/**
+ * Responses map an identifier to a value, or, for a record response, a record.
+ */
+const responses: Equals<Responses, Readonly<Record<string, ResponseValue>>> = true;
 
 describe("the test session's types", () => {
   it("are the shapes the session codec and the transitions rely on", () => {
-    assert.isTrue(intentKinds && stepResponses && firstOutcomes && seed && responses);
+    assert.isTrue(
+      intentKinds &&
+        stepResponses &&
+        firstOutcomes &&
+        seed &&
+        shuffleSeed &&
+        testOutcomes &&
+        templateDefaults &&
+        responses,
+    );
   });
 
   it("are plain types: the module exports no value and imports only types", () => {

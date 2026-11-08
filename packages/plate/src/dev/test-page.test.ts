@@ -21,6 +21,7 @@ import { message } from "#plate/messages.ts";
 import type { Value } from "#plate/model/values.ts";
 import { navigationState, renderNavigation } from "#plate/navigation.ts";
 import { openPackage } from "#plate/package/open.ts";
+import { resultValues } from "#plate/results/values.ts";
 import type { Intent } from "#plate/session/session.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 
@@ -201,13 +202,66 @@ const templatedOpener: PackageOpener = (source) =>
     : openDirectory(source);
 
 /**
+ * Write a patched copy of the M2 fixture's test with outcome processing the engine runs: before
+ * part `P1` it declares `PRESENTED`, `SCORES` and `NOTE`, and after part `P2` its processing sets
+ * `PRESENTED` to the number of items presented and `SCORES` to every item's `SCORE`, so `NOTE`,
+ * which no rule sets, stays NULL.
+ *
+ * @param bytes `test.xml` as the fixture holds it.
+ * @returns The patched document.
+ */
+const outcomeTest = (bytes: Uint8Array): Uint8Array => {
+  const written = new TextDecoder().decode(bytes);
+  const firstPart = '<qti-test-part identifier="P1"';
+  const end = "</qti-assessment-test>";
+  assert.include(written, firstPart, "The fixture test's first part does not read as expected.");
+  assert.include(written, end, "The fixture test does not end as expected.");
+
+  return new TextEncoder().encode(
+    written
+      .replace(
+        firstPart,
+        [
+          '<qti-outcome-declaration identifier="PRESENTED" cardinality="single" base-type="integer"/>',
+          '<qti-outcome-declaration identifier="SCORES" cardinality="multiple" base-type="float"/>',
+          '<qti-outcome-declaration identifier="NOTE" cardinality="single" base-type="identifier"/>',
+          firstPart,
+        ].join(""),
+      )
+      .replace(
+        end,
+        [
+          "<qti-outcome-processing>",
+          '<qti-set-outcome-value identifier="PRESENTED"><qti-number-presented/></qti-set-outcome-value>',
+          '<qti-set-outcome-value identifier="SCORES"><qti-test-variables variable-identifier="SCORE"/></qti-set-outcome-value>',
+          "</qti-outcome-processing>",
+          end,
+        ].join(""),
+      ),
+  );
+};
+
+/**
+ * Open a package as `openDirectory` does, with the M2 fixture's test patched by
+ * {@link outcomeTest}.
+ *
+ * @param source The package.
+ * @returns Its verdict.
+ */
+const outcomeOpener: PackageOpener = (source) =>
+  source.id === fixture.id
+    ? openReplacing(source, fixture.test, outcomeTest)
+    : openDirectory(source);
+
+/**
  * The package caches the tests share, so each package is opened once for the file: the fixture's
- * over the fixtures directory, as it is and with item 1 templated, and the corpus's as it is and
- * with the patched test.
+ * over the fixtures directory, as it is, with its test given outcome processing and with item 1
+ * templated, and the corpus's as it is and with the patched test.
  */
 const caches = {
   fixture: Effect.runSync(packageCache()),
   guide: Effect.runSync(packageCache()),
+  outcomes: Effect.runSync(packageCache(outcomeOpener)),
   templated: Effect.runSync(packageCache(templatedOpener)),
   validating: Effect.runSync(packageCache(validatingOpener)),
 } as const;
@@ -241,7 +295,8 @@ interface Bench {
 }
 
 /**
- * Construct a bench with an empty store over a package cache, configured with a seed.
+ * Construct a bench with an empty store over a package cache, configured with a shuffle seed and
+ * with no processing seed, so `startTest` draws one for each session.
  *
  * @param packages The packages.
  * @param sitting The sitting it starts.
@@ -250,7 +305,7 @@ interface Bench {
  */
 const benchOf = (packages: PackageCache, sitting: Sitting, root?: string) =>
   Effect.map(configure({ seed: "7" }), (configuration): Bench => ({
-    playground: { configuration, packages, sessions: sessionStore() },
+    playground: { configuration, packages, seed: Option.none(), sessions: sessionStore() },
     provide: (effect) =>
       root === undefined
         ? effect
@@ -1082,6 +1137,58 @@ describe("routeSessions", () => {
         assert.deepStrictEqual(autofocused(summary), [statusOf(summary, id)]);
         assert.strictEqual(redirected(yield* send(bench, `/sessions/${id}/confirm`)), id);
         assert.strictEqual(redirected(yield* postIntent(bench, id, { kind: "next" })), id);
+      }),
+  );
+
+  it.effect(
+    "[T-9] summary lists the test's outcomes as the closed session holds them once both parts are submitted through their confirm pages",
+    () =>
+      Effect.gen(function* outcomesListed() {
+        const bench = yield* benchOf(caches.outcomes, fixture, fixturesRoot);
+        const id = yield* start(bench);
+        const fourth = yield* follow(bench, yield* confirmed(bench, id, yield* open(bench, id)));
+
+        redirected(yield* press(bench, id, buttonFor(fourth, { kind: "next" })));
+        assert.strictEqual(yield* confirmed(bench, id, yield* open(bench, id)), `/sessions/${id}`);
+
+        const summary = yield* open(bench, id);
+        const { session, test } = yield* storedSession(bench, id);
+        const list =
+          summary.elements.find((element) => element.tag === "dl") ??
+          assert.fail("The summary lists no outcomes.");
+        const listed = list.children.flatMap((child) =>
+          child.kind === "element" ? [[child.tag, textOf(child)] as const] : [],
+        );
+        const expected = [...test.test.test.outcomes.keys()].flatMap((identifier) => {
+          const written = resultValues(
+            session.outcomes[identifier] ?? assert.fail(`The session holds no ${identifier}.`),
+          );
+
+          return [
+            ["dt", identifier] as const,
+            ...(written.length === 0 ? [message("en", "nullValue")] : written).map(
+              (each) => ["dd", each] as const,
+            ),
+          ];
+        });
+
+        assert.strictEqual(session.status, "closed");
+        assert.isAbove(session.outcomeRuns, 0);
+        assert.deepStrictEqual(session.outcomes["PRESENTED"], {
+          baseType: "integer",
+          cardinality: "single",
+          values: [{ baseType: "integer", value: 3n }],
+        });
+        assert.deepStrictEqual(listed.slice(0, 3), [
+          ["dt", "PRESENTED"],
+          ["dd", "3"],
+          ["dt", "SCORES"],
+        ]);
+        assert.deepStrictEqual(listed.slice(-2), [
+          ["dt", "NOTE"],
+          ["dd", message("en", "nullValue")],
+        ]);
+        assert.deepStrictEqual(listed, expected);
       }),
   );
 

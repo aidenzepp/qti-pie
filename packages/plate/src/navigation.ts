@@ -20,7 +20,7 @@ import { toHtml } from "#plate/emit/serialise.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { refIdentifiersIn } from "#plate/model/item-refs.ts";
 import type { Test, TestPart } from "#plate/model/test.ts";
-import { isNull } from "#plate/model/values.ts";
+import { isNullResponse } from "#plate/model/values.ts";
 import type { Options } from "#plate/render.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { allowedIntents } from "#plate/session/intents.ts";
@@ -134,7 +134,9 @@ const stateOf = (item: SessionItem, closed: boolean): NavigationItemState => {
     return "submitted";
   }
 
-  return Option.exists(item.saved, (saved) => Object.values(saved).some((value) => !isNull(value)))
+  return Option.exists(item.saved, (saved) =>
+    Object.values(saved).some((value) => !isNullResponse(value)),
+  )
     ? "answered"
     : "not-answered";
 };

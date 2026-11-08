@@ -165,6 +165,7 @@ const year: TextEntryInteraction = {
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "integer",
+  cardinality: "single",
   class: "",
   expectedLength: Option.some(4n),
   kind: "text-entry",
@@ -362,6 +363,36 @@ const noticeItem = itemOf(
 );
 
 /**
+ * The Text Entry item with a second Text Entry, for a string, bound to the record response
+ * `ANSWER`, built by hand: the model builds no interaction bound to a record yet.
+ */
+const answerItem: Item = {
+  ...itemOf(
+    "landing-answer",
+    Option.none(),
+    [
+      {
+        attributes: [],
+        children: [
+          words("The first Moon landing was in "),
+          year,
+          words(". Its crew numbered "),
+          { ...year, baseType: "string", patternMask: Option.none(), response: "ANSWER" },
+          words("."),
+        ],
+        kind: "element",
+        path: "qti-assessment-item/qti-item-body/p",
+        tag: "p",
+      },
+    ],
+    [declaration("YEAR", "integer", "single")],
+  ),
+  records: new Map([
+    ["ANSWER", { correct: Option.none(), defaultValue: Option.none(), identifier: "ANSWER" }],
+  ]),
+};
+
+/**
  * The items the round trip covers, by name.
  */
 const items: readonly (readonly [string, Item])[] = [
@@ -451,6 +482,7 @@ const jsonOf = (item: Item): RedactedJson =>
 const yearJson: BodyNodeJson = {
   base: 10,
   baseType: "integer",
+  cardinality: "single",
   class: "",
   kind: "text-entry",
   response: "YEAR",
@@ -713,6 +745,29 @@ describe("encodeRedacted and decodeRedacted", () => {
         const configuration = yield* defaults;
 
         assert.deepStrictEqual(decoded.body, withoutPaths(colourItem.body));
+        assert.deepStrictEqual(decoded, pathless(redacted));
+        assert.strictEqual(
+          Result.getOrThrow(render(decoded, configuration, { instance })).html,
+          Result.getOrThrow(render(redacted, configuration, { instance })).html,
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] record binding in the page: a redacted item with a record binding round-trips its JSON form, which writes the binding with no base type",
+    () =>
+      Effect.gen(function* recordBindingRoundTrip() {
+        const redacted = redact(acceptForTest(answerItem));
+        const json = Result.getOrThrow(encodeRedacted(redacted));
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+        const handedOver: unknown = JSON.parse(JSON.stringify(json));
+        const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+        const configuration = yield* defaults;
+
+        assert.deepStrictEqual(json.responses, [
+          { baseType: "integer", cardinality: "single", identifier: "YEAR" },
+          { cardinality: "record", identifier: "ANSWER" },
+        ]);
         assert.deepStrictEqual(decoded, pathless(redacted));
         assert.strictEqual(
           Result.getOrThrow(render(decoded, configuration, { instance })).html,
@@ -1257,14 +1312,19 @@ describe("the codec on a printed text past its bound", () => {
           Option.some({
             bound: 1_000_000,
             identifier: "S",
+            limit: "text",
             path: "qti-assessment-item/qti-item-body/p/qti-printed-variable",
           }),
         );
-        assert.deepStrictEqual(json.unprinted, { bound: 1_000_000, identifier: "S" });
+        assert.deepStrictEqual(json.unprinted, {
+          bound: 1_000_000,
+          identifier: "S",
+          limit: "text",
+        });
         assert.deepStrictEqual(decoded, pathless(redacted));
         assert.deepStrictEqual(
           decoded.unprinted,
-          Option.some({ bound: 1_000_000, identifier: "S", path: "" }),
+          Option.some({ bound: 1_000_000, identifier: "S", limit: "text", path: "" }),
         );
         assert.deepStrictEqual(
           Result.getFailure(failed).pipe(
@@ -1272,7 +1332,7 @@ describe("the codec on a printed text past its bound", () => {
               failure._tag === "OutputTooLarge" ? failure.printed : failure._tag,
             ),
           ),
-          Option.some(Option.some({ bound: 1_000_000, identifier: "S" })),
+          Option.some(Option.some({ bound: 1_000_000, identifier: "S", limit: "text" })),
         );
       }),
   );
@@ -1295,7 +1355,7 @@ describe("the codec on a printed text past its bound", () => {
 
         for (const bound of [0, 1.5, "1000000"]) {
           const error = yield* failureOf(
-            decodeRedacted({ ...json, unprinted: { bound, identifier: "S" } }),
+            decodeRedacted({ ...json, unprinted: { bound, identifier: "S", limit: "text" } }),
           );
 
           assert.strictEqual(error.stage, "decode", String(bound));
@@ -1303,9 +1363,43 @@ describe("the codec on a printed text past its bound", () => {
 
         assert.isTrue(
           Result.isSuccess(
-            decodeRedacted({ ...json, unprinted: { bound: 1_000_000, identifier: "S" } }),
+            decodeRedacted({
+              ...json,
+              unprinted: { bound: 1_000_000, identifier: "S", limit: "text" },
+            }),
           ),
         );
+      }),
+  );
+
+  it.effect(
+    "[I-5] round-trips which limit an unprinted text passed, the budget or the text, and refuses an unprinted without it or with another value: InvalidRedacted at stage decode",
+    () =>
+      Effect.gen(function* roundTripsWhichLimit() {
+        const json = Result.getOrThrow(encodeRedacted(redact(acceptForTest(choiceItem))));
+
+        for (const limit of ["budget", "text"] as const) {
+          const unprinted = { bound: 1_000_000, identifier: "S", limit };
+          const decoded = Result.getOrThrow(decodeRedacted({ ...json, unprinted }));
+
+          assert.deepStrictEqual(decoded.unprinted, Option.some({ ...unprinted, path: "" }), limit);
+          assert.deepStrictEqual(
+            Result.getOrThrow(encodeRedacted(decoded)).unprinted,
+            unprinted,
+            limit,
+          );
+        }
+
+        for (const unprinted of [
+          { bound: 1_000_000, identifier: "S" },
+          { bound: 1_000_000, identifier: "S", limit: "length" },
+          { bound: 1_000_000, identifier: "S", limit: "Budget" },
+          { bound: 1_000_000, identifier: "S", limit: 1 },
+        ]) {
+          const error = yield* failureOf(decodeRedacted({ ...json, unprinted }));
+
+          assert.strictEqual(error.stage, "decode", JSON.stringify(unprinted));
+        }
       }),
   );
 });

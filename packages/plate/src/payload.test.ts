@@ -6,6 +6,7 @@ import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/docu
 import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
+import type { ValueBinding } from "#plate/form/encoding.ts";
 import { encodeRedacted } from "#plate/codec/redacted.ts";
 import { interactionsIn as bodyInteractions } from "#plate/model/interactions.ts";
 import type {
@@ -120,6 +121,7 @@ const textEntry = (response: string): TextEntryInteraction => ({
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "string",
+  cardinality: "single",
   class: "",
   expectedLength: Option.none(),
   kind: "text-entry",
@@ -2841,7 +2843,7 @@ describe("choiceOrder", () => {
  */
 const postingOf = (
   identifier: string,
-  baseType: Posting["binding"]["baseType"],
+  baseType: ValueBinding["baseType"],
   base: number,
 ): Posting => ({
   binding: { baseType, cardinality: "single", name: entryName(instance, identifier) },
@@ -2968,6 +2970,35 @@ describe("postings", () => {
       ),
       Option.some(["Malformed", "single-many"]),
     );
+  });
+
+  it("[Q-20] record binding in the page: postings gives a record response a Text Entry binds its RecordBinding, after the responses of a base type, and none to a record response no interaction binds", () => {
+    const answer = { correct: Option.none(), defaultValue: Option.none(), identifier: "ANSWER" };
+    const recorded: Item = {
+      ...item,
+      body: [choice, textEntry("ANSWER")],
+      records: new Map([
+        ["ANSWER", answer],
+        ["UNBOUND", { ...answer, identifier: "UNBOUND" }],
+      ]),
+    };
+    const shown = redactItem(recorded);
+
+    assert.deepStrictEqual(
+      shown.responses.filter((binding) => binding.cardinality === "record"),
+      [
+        { cardinality: "record", identifier: "ANSWER" },
+        { cardinality: "record", identifier: "UNBOUND" },
+      ],
+    );
+    assert.deepStrictEqual(postings(shown, instance), [
+      postingOf("CAPITAL", "identifier", 10),
+      {
+        binding: { cardinality: "record", name: entryName(instance, "ANSWER") },
+        identifier: "ANSWER",
+        options: { base: 10 },
+      },
+    ]);
   });
 
   it("gives no posting to a declared response no interaction binds, so a post carries nothing over its record value", () => {
@@ -3523,7 +3554,7 @@ describe("redactItem on a printed variable whose text passes 1,000,000 character
           assert.deepStrictEqual(emptied.notices, []);
           assert.deepStrictEqual(
             emptied.unprinted,
-            Option.some({ bound: 1_000_000, identifier: "S", path: repeatedPath }),
+            Option.some({ bound: 1_000_000, identifier: "S", limit: "text", path: repeatedPath }),
           );
         }
       }),
@@ -3540,7 +3571,7 @@ describe("redactItem on a printed variable whose text passes 1,000,000 character
         assert.deepStrictEqual(paragraphOf(emptied), [text("Value: ")]);
         assert.deepStrictEqual(
           emptied.unprinted,
-          Option.some({ bound: 1_000_000, identifier: "S", path: repeatedPath }),
+          Option.some({ bound: 1_000_000, identifier: "S", limit: "text", path: repeatedPath }),
         );
       }),
   );
@@ -3719,7 +3750,12 @@ describe("redactItem records the first text past its bound on content the page s
 
     assert.deepStrictEqual(
       emptied.unprinted,
-      Option.some({ bound: 1_000_000, identifier: "ROUND", path: printedPaths[1] }),
+      Option.some({
+        bound: 1_000_000,
+        identifier: "ROUND",
+        limit: "text",
+        path: printedPaths[1],
+      }),
     );
     assert.deepStrictEqual(paragraphOf(emptied), texts("Score: ", "1.5"));
   });
@@ -3742,6 +3778,7 @@ describe("redactItem records the first text past its bound on content the page s
       Option.some({
         bound: 1_000_000,
         identifier: "SET",
+        limit: "text",
         path:
           setParameter?.kind === "element"
             ? setParameter.path
@@ -3774,7 +3811,12 @@ describe("redactItem records the first text past its bound on content the page s
     assert.strictEqual(lengthy.reads(), 0);
     assert.deepStrictEqual(
       redactItem(hidden, holding({ S: lengthy.value, VISIBLE: identifierValue("X") })).unprinted,
-      Option.some({ bound: 1_000_000, identifier: "S", path: `${blockPath}/qti-printed-variable` }),
+      Option.some({
+        bound: 1_000_000,
+        identifier: "S",
+        limit: "text",
+        path: `${blockPath}/qti-printed-variable`,
+      }),
       "shown",
     );
   });
@@ -3830,7 +3872,7 @@ describe("redactItem under an output budget", () => {
     );
     assert.deepStrictEqual(
       redaction.unprinted,
-      Option.some({ bound: 10_000, identifier: "S", path: slotPath(101) }),
+      Option.some({ bound: 10_000, identifier: "S", limit: "budget", path: slotPath(101) }),
     );
   });
 
@@ -3845,7 +3887,7 @@ describe("redactItem under an output budget", () => {
     assert.strictEqual(paragraphOf(under).length, 4499);
     assert.deepStrictEqual(
       under.unprinted,
-      Option.some({ bound: whole - 1, identifier: "S", path: slotPath(4500) }),
+      Option.some({ bound: whole - 1, identifier: "S", limit: "budget", path: slotPath(4500) }),
     );
   });
 
@@ -3877,7 +3919,7 @@ describe("redactItem under an output budget", () => {
     assert.strictEqual(paragraphOf(redaction).length, 16);
     assert.deepStrictEqual(
       redaction.unprinted,
-      Option.some({ bound: 16_777_216, identifier: "S", path: slotPath(17) }),
+      Option.some({ bound: 16_777_216, identifier: "S", limit: "budget", path: slotPath(17) }),
     );
   });
 
@@ -3897,6 +3939,7 @@ describe("redactItem under an output budget", () => {
       Option.some({
         bound: 7,
         identifier: "SET",
+        limit: "budget",
         path:
           setParameter?.kind === "element"
             ? setParameter.path
@@ -3909,5 +3952,155 @@ describe("redactItem under an output budget", () => {
       ["none", ""],
     ]);
     assert.isTrue(Option.isNone(fits.unprinted));
+  });
+});
+
+describe("redactItem clamps the output budget it is given", () => {
+  it("[I-5] clamps a budget of 0 to 1: one slot of 100 characters prints nothing and is recorded with the bound 1 and the limit budget", () => {
+    const redaction = redactItem(
+      slotted(1),
+      holding({ S: one({ baseType: "string", value: slotText }) }),
+      { outputBudget: 0 },
+    );
+
+    assert.deepStrictEqual(paragraphOf(redaction), []);
+    assert.deepStrictEqual(
+      redaction.unprinted,
+      Option.some({ bound: 1, identifier: "S", limit: "budget", path: slotPath(1) }),
+    );
+  });
+
+  it("[I-5] clamps a budget of NaN to the default, 16,777,216: 17 slots of 1,000,000 characters print 16 and record the 17th with that bound, as the default does", () => {
+    const value = counted(one({ baseType: "string", value: "y".repeat(1_000_000) }));
+    const redaction = redactItem(slotted(17), holding({ S: value.value }), {
+      outputBudget: Number.NaN,
+    });
+
+    assert.strictEqual(value.reads(), 17);
+    assert.strictEqual(paragraphOf(redaction).length, 16);
+    assert.deepStrictEqual(
+      redaction.unprinted,
+      Option.some({ bound: 16_777_216, identifier: "S", limit: "budget", path: slotPath(17) }),
+    );
+  });
+});
+
+describe("redactItem names which limit a text passed", () => {
+  it("[I-5] records which limit, the budget, when a budget of exactly 1,000,000 runs out across several variables: three slots of 300,000 characters print and the fourth is recorded with the bound 1,000,000 and the limit budget", () => {
+    const redaction = redactItem(
+      slotted(4),
+      holding({ S: one({ baseType: "string", value: "y".repeat(300_000) }) }),
+      { outputBudget: 1_000_000 },
+    );
+
+    assert.strictEqual(paragraphOf(redaction).length, 3);
+    assert.deepStrictEqual(
+      redaction.unprinted,
+      Option.some({ bound: 1_000_000, identifier: "S", limit: "budget", path: slotPath(4) }),
+    );
+  });
+
+  it("[I-5] records which limit, the text, under the default budget for a conversion wider than 1,000,000 characters", () => {
+    const widened: Item = {
+      ...templated,
+      body: [
+        {
+          attributes: [],
+          children: [{ ...printed("N", slotPath(1)), format: Option.some("%1000001i") }],
+          kind: "element",
+          path: `${bodyPath}/p`,
+          tag: "p",
+        },
+      ],
+    };
+
+    assert.deepStrictEqual(
+      redactItem(widened, holding({ N: integerValue(5n) })).unprinted,
+      Option.some({ bound: 1_000_000, identifier: "N", limit: "text", path: slotPath(1) }),
+    );
+  });
+
+  it("[I-5] records which limit, the text, under the default budget for a whole text longer than 1,000,000 characters", () => {
+    const redaction = redactItem(
+      slotted(1),
+      holding({ S: one({ baseType: "string", value: "y".repeat(1_000_001) }) }),
+    );
+
+    assert.deepStrictEqual(paragraphOf(redaction), []);
+    assert.deepStrictEqual(
+      redaction.unprinted,
+      Option.some({ bound: 1_000_000, identifier: "S", limit: "text", path: slotPath(1) }),
+    );
+  });
+});
+
+/**
+ * An item whose paragraph holds a Text Entry bound to the record response `NUMBER` and whose body
+ * then holds an Extended Text bound to the record response `WORKING`, with a `max-strings` and a
+ * `min-strings` a record binding does not count.
+ */
+const recordBound: SourceDocument = doc(
+  "items/record-bound.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "record-bound"), attr("time-dependent", "false"), attr("title", "Number")],
+    [
+      el("qti-response-declaration", [attr("cardinality", "record"), attr("identifier", "NUMBER")]),
+      el("qti-response-declaration", [
+        attr("cardinality", "record"),
+        attr("identifier", "WORKING"),
+      ]),
+      el(
+        "qti-item-body",
+        [],
+        [
+          el(
+            "p",
+            [],
+            [
+              sourceText("Your number: "),
+              el("qti-text-entry-interaction", [attr("response-identifier", "NUMBER")]),
+            ],
+          ),
+          el("qti-extended-text-interaction", [
+            attr("max-strings", "4"),
+            attr("min-strings", "2"),
+            attr("response-identifier", "WORKING"),
+          ]),
+        ],
+      ),
+    ],
+  ),
+);
+
+describe("a record-bound control", () => {
+  it("[Q-20] [Q-5] gives a record-bound control the string control's payload with no notice, each posting under its response's one name, and postings a RecordBinding for each", () => {
+    const shown = redactItem(acceptedFrom(recordBound));
+    const built = payload(shown, answering);
+    const entry = textEntryFor(built, "NUMBER");
+    const working = extendedTextFor(built, "WORKING");
+
+    assert.deepStrictEqual(shown.notices, []);
+    assert.deepStrictEqual(built.notices, []);
+    assert.deepStrictEqual(
+      [entry.baseType, entry.formName, entry.restore],
+      ["string", entryName(instance, "NUMBER"), ""],
+    );
+    assert.deepStrictEqual(
+      [working.baseType, working.cardinality, working.formName, working.n, working.notice],
+      ["string", "record", entryName(instance, "WORKING"), 1, Option.none()],
+    );
+    assert.deepStrictEqual(postings(shown, instance), [
+      {
+        binding: { cardinality: "record", name: entryName(instance, "NUMBER") },
+        identifier: "NUMBER",
+        options: { base: 10 },
+      },
+      {
+        binding: { cardinality: "record", name: entryName(instance, "WORKING") },
+        identifier: "WORKING",
+        options: { base: 10 },
+      },
+    ]);
   });
 });

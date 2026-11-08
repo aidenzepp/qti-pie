@@ -43,6 +43,23 @@ const integerType: ExpressionType = { baseType: "integer", cardinality: "single"
 const floatType: ExpressionType = { baseType: "float", cardinality: "single" };
 
 /**
+ * The single duration type.
+ */
+const durationType: ExpressionType = { baseType: "duration", cardinality: "single" };
+
+/**
+ * Construct the single duration value of a number of seconds.
+ *
+ * @param seconds The seconds, a double.
+ * @returns The value.
+ */
+const duration = (seconds: number): Value => ({
+  baseType: "duration",
+  cardinality: "single",
+  values: [{ baseType: "duration", value: seconds }],
+});
+
+/**
  * Construct an item whose processing sets the boolean outcome `SAME` to one expression, beside a
  * single identifier response `RESPONSE`.
  *
@@ -293,7 +310,7 @@ describe("the comparison family's reader specs and kind rules", () => {
           expressionElement(
             "match",
             [],
-            [baseValueElement("duration", "PT1S"), baseValueElement("duration", "PT1S")],
+            [baseValueElement("duration", "1"), baseValueElement("duration", "1")],
           ),
         ),
       ),
@@ -407,9 +424,9 @@ describe("the comparison family's reader specs and kind rules", () => {
   );
 
   it.effect(
-    "[I-9a] mark only the unlanded kind among an absolute qti-equal's operands, and no tolerance mode",
+    "[I-9a] keep an absolute qti-equal over the floatValue of a record response, marking no tolerance mode",
     () =>
-      Effect.gen(function* marksOperandOnly() {
+      Effect.gen(function* keepsFieldOperand() {
         const built = yield* buildItem(
           sameItem(
             expressionElement(
@@ -417,24 +434,24 @@ describe("the comparison family's reader specs and kind rules", () => {
               [attr("tolerance-mode", "absolute"), attr("tolerance", "0.1")],
               [
                 expressionElement(
-                  "duration-lt",
-                  [],
-                  [baseValueElement("duration", "PT1S"), baseValueElement("duration", "PT2S")],
+                  "field-value",
+                  [attr("field-identifier", "floatValue")],
+                  [variableElement("ANSWER")],
                 ),
                 baseValueElement("float", "1.0"),
               ],
             ),
+            [
+              el("qti-response-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "ANSWER"),
+              ]),
+            ],
           ),
         );
 
-        assert.deepStrictEqual(built.processing, Option.none());
-        assert.deepStrictEqual(built.unsupported, [
-          {
-            feature: "qti-duration-lt",
-            path: `${setSame}/qti-equal/qti-duration-lt`,
-            shown: "mark",
-          },
-        ]);
+        assert.isTrue(Option.isSome(built.processing), "the processing runs");
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
@@ -609,6 +626,102 @@ describe("the comparison family's reader specs and kind rules", () => {
             rule: "expression-type",
           },
         ],
+        kind,
+      );
+    }
+  });
+
+  it.effect(
+    "[I-9a] read qti-duration-lt and qti-duration-gte into their two operands, with no mark",
+    () =>
+      Effect.gen(function* readsDurations() {
+        for (const kind of ["duration-lt", "duration-gte"] as const) {
+          const document = sameItem(
+            expressionElement(
+              kind,
+              [],
+              [baseValueElement("duration", "89.9"), baseValueElement("duration", "90")],
+            ),
+          );
+          const built = yield* buildItem(document);
+
+          assert.deepStrictEqual(refusalsOf(document), [], kind);
+          assert.deepStrictEqual(
+            built.processing,
+            Option.some([
+              setsSame({
+                kind,
+                operands: [
+                  { kind: "base-value", operands: [], value: duration(89.9) },
+                  { kind: "base-value", operands: [], value: duration(90) },
+                ],
+              }),
+            ]),
+            kind,
+          );
+          assert.deepStrictEqual(built.unsupported, [], kind);
+        }
+      }),
+  );
+
+  it.effect(
+    "[I-9a] run qti-duration-lt and qti-duration-gte of a duration variable and a duration to the boolean each gives, of the type their rule gives",
+    () =>
+      Effect.gen(function* runsDurations() {
+        const declarations = [outcomeWithDefault("TAKEN", "duration", "89.9")];
+        const cases = [
+          ["duration-lt", "90", true],
+          ["duration-gte", "90", false],
+          ["duration-lt", "89.9", false],
+          ["duration-gte", "89.9", true],
+          ["duration-lt", "INF", true],
+          ["duration-gte", "NaN", false],
+        ] as const;
+
+        for (const [kind, written, expected] of cases) {
+          const expression = expressionElement(
+            kind,
+            [],
+            [variableElement("TAKEN"), baseValueElement("duration", written)],
+          );
+
+          assert.deepStrictEqual(refusalsOf(sameItem(expression, declarations)), [], kind);
+
+          const same = yield* sameAfter(expression, declarations);
+
+          assert.deepStrictEqual(same, truth(expected), `${kind} ${written}`);
+          assertKindType(same, kind, [durationType, durationType]);
+        }
+      }),
+  );
+
+  it("[I-9a] refuse an integer operand of qti-duration-lt and qti-duration-gte, which take single durations (expression-type, P23)", () => {
+    for (const kind of ["duration-lt", "duration-gte"] as const) {
+      const operand = (position: string): ReturnType<typeof refusalsOf>[number] => ({
+        detail: {
+          acceptsBaseTypes: "duration",
+          acceptsCardinalities: "single",
+          check: "operand",
+          element: `qti-${kind}`,
+          expressionBaseType: "integer",
+          expressionCardinality: "single",
+          operand: position,
+        },
+        path: `${setSame}/qti-${kind}`,
+        rule: "expression-type",
+      });
+
+      assert.deepStrictEqual(
+        refusalsOf(
+          sameItem(
+            expressionElement(
+              kind,
+              [],
+              [baseValueElement("integer", "89"), baseValueElement("integer", "90")],
+            ),
+          ),
+        ),
+        [operand("1"), operand("2")],
         kind,
       );
     }

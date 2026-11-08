@@ -7,6 +7,8 @@ import type { DefaultTreeAdapterTypes } from "parse5";
 import { groupVerdicts, openMember, verdictCache, verdictOrder } from "#plate/dev/listing.ts";
 import { testField } from "#plate/dev/packages.ts";
 import { createHandler } from "#plate/dev/page.ts";
+import { postOf, valuesOf } from "#plate/dev/post.ts";
+import { sessionStore } from "#plate/dev/store.ts";
 import type { Handler, PlaygroundSettings } from "#plate/dev/page.ts";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
 import { h } from "#plate/emit/node.ts";
@@ -19,12 +21,13 @@ import type { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
 import type { MessageKey } from "#plate/messages.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { Item } from "#plate/model/item.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { checkTree, nameOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
-import { acceptedItem } from "#plate/validate/verdict.ts";
+import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -2037,6 +2040,31 @@ describe("dev/page.ts: M2's routes", { tags: ["corpus"] }, () => {
   );
 
   it.effect(
+    "starts a test session through the playground's Start route under the playground's fixed seed as its processing seed, kept apart from the configuration's shuffle seed, and draws one with no fixed seed",
+    () =>
+      Effect.gen(function* processingSeedRoute() {
+        const provider = ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: fixturesRoot });
+        const storedUnder = Effect.fnUntraced(function* storedUnder(seed?: string) {
+          const tests = sessionStore();
+          const settings: PlaygroundSettings = { configuration: { seed: "7" }, provider, tests };
+          const location = yield* startFixture(
+            createHandler(seed === undefined ? settings : { ...settings, seed }),
+          );
+
+          return Option.getOrElse(tests.get(location.slice("/sessions/".length)), () =>
+            assert.fail("the playground stored no session"),
+          ).session;
+        });
+        const fixed = yield* storedUnder("playground-seed");
+        const drawn = yield* storedUnder();
+
+        assert.deepStrictEqual([fixed.seed, fixed.shuffleSeed], ["playground-seed", "7"]);
+        assert.match(drawn.seed, /^[0-9a-f]{32}$/u);
+        assert.strictEqual(drawn.shuffleSeed, "7");
+      }),
+  );
+
+  it.effect(
     "[Q-2] /hosts/html serves BG007 through the plain-HTML host with its prefix stripped, and a POST of the true choice scores 1",
     () =>
       Effect.gen(function* host() {
@@ -2291,4 +2319,60 @@ describe("dev/page.ts: template processing", { tags: ["corpus"] }, () => {
       }),
     corpusTimeoutMs,
   );
+});
+
+/**
+ * An item built by hand, as the model builds no interaction bound to a record yet: one Text Entry,
+ * for a string, bound to the record response `ANSWER`.
+ */
+const answerItem: Item = {
+  body: [
+    {
+      ariaLabel: Option.none(),
+      ariaLabelledby: Option.none(),
+      base: 10,
+      baseType: "string",
+      cardinality: "single",
+      class: "",
+      expectedLength: Option.none(),
+      kind: "text-entry",
+      path: "qti-assessment-item/qti-item-body/qti-text-entry-interaction",
+      patternMask: Option.none(),
+      patternMaskMessage: Option.none(),
+      placeholder: Option.none(),
+      response: "ANSWER",
+    },
+  ],
+  document: "items/answer.xml",
+  identifier: "answer",
+  lang: Option.none(),
+  outcomes: new Map(),
+  processing: Option.none(),
+  records: new Map([
+    ["ANSWER", { correct: Option.none(), defaultValue: Option.none(), identifier: "ANSWER" }],
+  ]),
+  responses: new Map(),
+  templateProcessing: Option.none(),
+  templates: new Map(),
+  title: "Answer",
+  unsupported: [],
+};
+
+describe("dev/post.ts", () => {
+  it("[Q-20] record binding in the page: a post for a record-bound Text Entry decodes to its record, which valuesOf gives", () => {
+    const name = entryName("q1", "ANSWER");
+    const read = postOf(acceptForTest(answerItem), "q1", [
+      [name, "abc"],
+      ["host-field", "kept apart"],
+    ]);
+    const answer: RecordValue = {
+      cardinality: "record",
+      fields: [{ identifier: "stringValue", value: { baseType: "string", value: "abc" } }],
+    };
+
+    assert.deepStrictEqual(read.decoded, { ANSWER: answer });
+    assert.deepStrictEqual(read.posted, { ANSWER: ["abc"] });
+    assert.deepStrictEqual([...read.malformed], []);
+    assert.deepStrictEqual(valuesOf(read), { ANSWER: answer });
+  });
 });

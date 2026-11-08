@@ -14,13 +14,19 @@ const processing = "qti-assessment-item/qti-template-processing";
 
 /**
  * Construct an item whose template processing holds some rules, beside the template variables `T`
- * and `U` (single integers), the response `RESPONSE` (a single integer) and the outcome `SCORE` (a
- * single float).
+ * and `U` (single integers), the response `RESPONSE` (a single integer), the outcome `SCORE` (a
+ * single float) and any further declarations.
  *
  * @param rules The children of the `qti-template-processing`.
+ * @param declarations The declarations after `U`'s, in document order; none by default.
+ * @param after What follows the item body, such as a `qti-response-processing`; nothing by default.
  * @returns The document at `items/test.xml`.
  */
-const templated = (rules: readonly SourceElement[]): SourceDocument =>
+const templated = (
+  rules: readonly SourceElement[],
+  declarations: readonly SourceElement[] = [],
+  after: readonly SourceElement[] = [],
+): SourceDocument =>
   doc(
     "items/test.xml",
     el(
@@ -44,8 +50,10 @@ const templated = (rules: readonly SourceElement[]): SourceDocument =>
             attr("identifier", identifier),
           ]),
         ),
+        ...declarations,
         el("qti-template-processing", [], rules),
         el("qti-item-body"),
+        ...after,
       ],
     ),
   );
@@ -91,6 +99,15 @@ const setting = (
   identifier: string,
   ...operands: readonly SourceElement[]
 ): SourceElement => el(local, [attr("identifier", identifier)], operands);
+
+/**
+ * Construct a `qti-field-value` of a field of `QTI_CONTEXT`, the built-in context variable, a
+ * fresh element at each call, since a document's paths are keyed by element.
+ *
+ * @returns The expression element.
+ */
+const contextField = (): SourceElement =>
+  el("qti-field-value", [attr("field-identifier", "f")], [variableElement("QTI_CONTEXT")]);
 
 /**
  * A single boolean.
@@ -339,41 +356,60 @@ describe("templateRules", () => {
   );
 
   it.effect(
-    "[I-5] reads template processing as none when an expression in it is a kind the registry has not landed, marking the kind at its path",
+    "[I-5] marks record-set at a qti-set-default-value and a qti-set-correct-response of a record response, in place of variable:<identifier>, and runs no template processing",
     () =>
-      Effect.gen(function* marksUnlandedKind() {
+      Effect.gen(function* marksRecordSet() {
         const built = yield* buildItem(
-          templated([
-            el(
-              "qti-template-condition",
-              [],
-              [
-                el(
-                  "qti-template-if",
-                  [],
-                  [
-                    booleanElement("true"),
-                    setting(
-                      "qti-set-template-value",
-                      "T",
-                      el(
-                        "qti-field-value",
-                        [attr("field-identifier", "f")],
-                        [variableElement("U")],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ]),
+          templated(
+            [
+              setting("qti-set-default-value", "ANSWER", el("qti-null")),
+              setting("qti-set-template-value", "T", integerElement("1")),
+              setting("qti-set-correct-response", "ANSWER", el("qti-null")),
+            ],
+            [
+              el("qti-response-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "ANSWER"),
+              ]),
+            ],
+          ),
         );
 
         assert.deepStrictEqual(built.templateProcessing, Option.none());
         assert.deepStrictEqual(built.unsupported, [
+          { feature: "record-set", path: `${processing}/qti-set-default-value`, shown: "mark" },
+          { feature: "record-set", path: `${processing}/qti-set-correct-response`, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-5] leaves a read of QTI_CONTEXT through qti-field-value marked variable:QTI_CONTEXT, never record-set, in template and in response processing",
+    () =>
+      Effect.gen(function* marksContextField() {
+        const built = yield* buildItem(
+          templated(
+            [setting("qti-set-template-value", "T", contextField())],
+            [],
+            [
+              el(
+                "qti-response-processing",
+                [],
+                [setting("qti-set-outcome-value", "SCORE", contextField())],
+              ),
+            ],
+          ),
+        );
+
+        assert.deepStrictEqual(
+          [built.templateProcessing, built.processing],
+          [Option.none(), Option.none()],
+        );
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "variable:QTI_CONTEXT", path: processing, shown: "mark" },
           {
-            feature: "qti-field-value",
-            path: `${processing}/qti-template-condition/qti-template-if/qti-set-template-value/qti-field-value`,
+            feature: "variable:QTI_CONTEXT",
+            path: "qti-assessment-item/qti-response-processing",
             shown: "mark",
           },
         ]);

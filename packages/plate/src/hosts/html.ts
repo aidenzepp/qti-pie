@@ -35,10 +35,10 @@ import type {
   Configuration,
   Entry,
   Options,
+  ResponseValue,
   StatusInput,
   StoredRecord,
   ValidationMessage,
-  Value,
 } from "#plate/index.ts";
 
 /**
@@ -168,7 +168,8 @@ const floatOf = (stored: number | "-0" | "-INF" | "INF" | "NaN"): number => {
 };
 
 /**
- * Write the score a stored record holds, as the candidate reads it in the locale.
+ * Write the score a stored record holds, as the candidate reads it in the locale. A duration is
+ * written as its seconds, as a float is.
  *
  * @param accepted The accepted item.
  * @param stored The record `score` returned.
@@ -187,6 +188,7 @@ const scoreText = (
   }
 
   switch (single.baseType) {
+    case "duration":
     case "float": {
       return new Intl.NumberFormat(locale).format(floatOf(single.value));
     }
@@ -211,14 +213,16 @@ const scoreText = (
 };
 
 /**
- * Construct the host's handler for one accepted item.
+ * Construct the host's handler for one accepted item: {@link htmlHost}'s handler once `open` has
+ * accepted the item. Exported for its test, which hands it an item built by hand; the package's
+ * `src/index.ts` does not export it.
  *
  * @param accepted The item `open` accepted.
  * @param configuration The configuration every render and check reads.
  * @returns The handler: `GET /` answers the page, `POST /` scores the form's post, any other path
  *   is a 404 and any other method a 405.
  */
-const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost => {
+export const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost => {
   const redacted = redact(accepted, undefined, configuration);
   const bindings = postings(redacted, instance);
 
@@ -306,7 +310,7 @@ const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost =>
       return refused(messages);
     }
 
-    const values: Readonly<Record<string, Value>> = Object.fromEntries(
+    const values: Readonly<Record<string, ResponseValue>> = Object.fromEntries(
       decoded.flatMap(({ identifier, result }) =>
         result._tag === "Success" ? [[identifier, result.success] as const] : [],
       ),

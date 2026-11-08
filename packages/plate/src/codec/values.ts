@@ -1,7 +1,8 @@
 /**
- * The Schema codecs of the value model, for the server and the boundaries: {@link SingleSchema}
- * and {@link ValueSchema} check, encode and decode the plain {@link Single} and {@link Value} types
- * of `#plate/model/values.ts`.
+ * The Schema codecs of the value model, for the server and the boundaries: {@link SingleSchema},
+ * {@link ValueSchema} and {@link RecordValueSchema} check, encode and decode the plain
+ * {@link Single}, {@link Value} and {@link RecordValue} types of `#plate/model/values.ts`, and
+ * {@link ResponseValueSchema} a response's value of either kind.
  *
  * No browser module imports this file, so Schema stays out of the browser bundle.
  *
@@ -10,7 +11,7 @@
 import { Array as Arr, Option, Schema, SchemaTransformation } from "effect";
 import { isXmlText } from "#plate/form/encoding.ts";
 import { isNcName, modelledBaseTypes, modelledCardinalities } from "#plate/model/values.ts";
-import type { Single, Value } from "#plate/model/values.ts";
+import type { RecordValue, Single, Value } from "#plate/model/values.ts";
 
 /**
  * An identifier as a Schema: a string that is an NCName.
@@ -111,6 +112,7 @@ export const SingleSchema = Schema.Union([
     baseType: Schema.Literal("directedPair"),
     value: Schema.Tuple([IdentifierText, IdentifierText]),
   }),
+  Schema.Struct({ baseType: Schema.Literal("duration"), value: FloatFromJson }),
   Schema.Struct({ baseType: Schema.Literal("uri"), value: XmlText }),
 ]);
 
@@ -167,3 +169,73 @@ export const ValueSchema = Schema.Struct({
       : misfits;
   }),
 );
+
+/**
+ * One field of a record as a Schema; its type is `RecordField`. Its identifier's rules are the
+ * record's ({@link recordMisfits}), since one of them, that no identifier repeats, reads every
+ * field.
+ */
+const RecordFieldSchema = Schema.Struct({ identifier: Schema.String, value: SingleSchema });
+
+/**
+ * Report what is wrong with each field of a record: an identifier that is not an NCName, an
+ * identifier an earlier field names, or a value that is the empty string, which is NULL, and a NULL
+ * field is no field. It reads each field once, keeping the identifiers seen, so the time is linear
+ * in the number of fields.
+ *
+ * @param record The record.
+ * @returns Each problem in words that say what to change, with the path to its field.
+ */
+const recordMisfits = (record: RecordValue): Schema.FilterIssue[] => {
+  const seen = new Set<string>();
+  const misfits: Schema.FilterIssue[] = [];
+  for (const [index, field] of record.fields.entries()) {
+    const named = JSON.stringify(field.identifier);
+    if (!isNcName(field.identifier)) {
+      misfits.push({
+        issue: `the field identifier ${named} is not an NCName; start it with a letter or _, then use letters, digits, -, _ or .`,
+        path: ["fields", index, "identifier"],
+      });
+    }
+
+    if (seen.has(field.identifier)) {
+      misfits.push({
+        issue: `the field identifier ${named} is named by an earlier field too; keep one field of each identifier`,
+        path: ["fields", index, "identifier"],
+      });
+    }
+
+    if (field.value.baseType === "string" && field.value.value === "") {
+      misfits.push({
+        issue: `the field ${named} holds an empty string, which is NULL, and a NULL field is no field; remove the field`,
+        path: ["fields", index, "value"],
+      });
+    }
+
+    seen.add(field.identifier);
+  }
+
+  return misfits;
+};
+
+/**
+ * The Schema of a record value, as a record response holds it; its type is {@link RecordValue}.
+ *
+ * Each field is an identifier and a single of a modelled base type, encoded as {@link SingleSchema}
+ * encodes a single, so an integer of any size stays exact and a float JSON has no number for is
+ * written by name. The record's rules are checks on its type, so decoding and encoding refuse the
+ * same records: each identifier is an NCName, no identifier is named twice, and no field holds the
+ * empty string, since a NULL field is no field. A record with no field is NULL.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Variables
+ */
+export const RecordValueSchema = Schema.Struct({
+  cardinality: Schema.Literal("record"),
+  fields: Schema.Array(RecordFieldSchema),
+}).check(Schema.makeFilter(recordMisfits));
+
+/**
+ * The Schema of a response's value, a {@link Value} or a {@link RecordValue}, told apart by the
+ * cardinality; its type is `ResponseValue`.
+ */
+export const ResponseValueSchema = Schema.Union([ValueSchema, RecordValueSchema]);

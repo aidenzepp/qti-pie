@@ -1,7 +1,11 @@
 /**
  * The containers family of the engine: the evaluators of `qti-is-null`, `qti-multiple`,
  * `qti-ordered`, `qti-repeat`, `qti-container-size`, `qti-index`, `qti-random`, `qti-member`,
- * `qti-delete` and `qti-contains`, and the stub marker of `qti-field-value`.
+ * `qti-delete`, `qti-contains` and `qti-field-value`.
+ *
+ * `qti-field-value` reads one field of a record response, and `qti-is-null` reads a record whole,
+ * each through `recordOrValue` (`#plate/engine/refs.ts`), which gives the record an operand names
+ * before any value read.
  *
  * A container's values are compared one single at a time as `qti-match` compares two single
  * values (`match` in `#plate/model/values.ts`): of one base type, a `pair` in either order. A
@@ -9,10 +13,11 @@
  * cardinality.
  *
  * A container `qti-multiple`, `qti-ordered` or `qti-repeat` builds over an untyped operand, one the
- * item model types with no base type because a `qti-custom-operator` gives it ({@link untyped}),
- * is NULL: the model types such a container unknown, as the qti package does, so a rule that takes
- * it may need any type, and NULL is the one value of every type. `qti-index`, `qti-random` and
- * `qti-delete` of such a container, or of the operator itself, get a NULL and give one.
+ * item model types with no base type because a `qti-custom-operator` or a `qti-field-value` gives
+ * it ({@link untyped}), is NULL: the model types such a container unknown, as the qti package does,
+ * so a rule that takes it may need any type, and NULL is the one value of every type. `qti-index`,
+ * `qti-random` and `qti-delete` of such a container, or of the operator itself, get a NULL and give
+ * one.
  *
  * A container `qti-multiple`, `qti-ordered` or `qti-repeat` builds is held to `containerSizeBound`
  * (`#plate/engine/numbers.ts`, the principle of the operator's ruling `afb7e648`): one of more than
@@ -25,9 +30,9 @@
  * operand is evaluated and found not NULL, so a NULL operand draws nothing. A `qti-repeat` whose
  * operands hold a random kind evaluates them once per pass, so each pass draws anew.
  *
- * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option` and
- * `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
- * dispatcher's table may import it without a cycle.
+ * It value-imports only engine leaves, `#plate/engine/refs.ts` among them, `#plate/model/values.ts`
+ * and `effect`'s `Option` and `Result`, and reads the evaluator's types from
+ * `#plate/engine/evaluate.ts` as types, so the dispatcher's table may import it without a cycle.
  *
  * @module
  */
@@ -44,13 +49,22 @@ import {
 import { operandValues } from "#plate/engine/operands.ts";
 import { drawBelow } from "#plate/engine/random.ts";
 import type { Draw } from "#plate/engine/random.ts";
-import { referenceInteger } from "#plate/engine/refs.ts";
+import { recordOrValue, referenceInteger } from "#plate/engine/refs.ts";
 import type { Expression, ExpressionKind } from "#plate/model/expression.ts";
-import { isNull, match, nullOf, sameSingle } from "#plate/model/values.ts";
-import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import {
+  isNull,
+  isNullResponse,
+  isRecordValue,
+  match,
+  nullOf,
+  sameSingle,
+} from "#plate/model/values.ts";
+import type { ModelledBaseType, RecordValue, Single, Value } from "#plate/model/values.ts";
 
 /**
- * Give the value of a `qti-is-null`: a single boolean, whether the operand is NULL.
+ * Give the value of a `qti-is-null`: a single boolean, whether the operand is NULL, a record with
+ * no field among them, which the operand gives when it names a record response (`recordOrValue` in
+ * `#plate/engine/refs.ts`).
  *
  * @param expression The `qti-is-null`.
  * @param scope The item and the variables of the attempt.
@@ -61,7 +75,58 @@ import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 const evaluateIsNull: Evaluator<"is-null"> = (expression, scope, evaluate) => {
   const [operand] = expression.operands;
 
-  return Result.map(evaluate(operand, scope), (value) => booleanOf(isNull(value)));
+  return Result.map(recordOrValue(operand, scope, evaluate), (value) =>
+    booleanOf(isNullResponse(value)),
+  );
+};
+
+/**
+ * The NULL `qti-field-value` gives where no field is read, `qti-null`'s, a single string's
+ * (`evaluateNull` in `#plate/engine/expressions/references.ts`): the kind's rule types it unknown,
+ * so its base type says nothing.
+ */
+const noField: Value = nullOf("string", "single");
+
+/**
+ * Give the single value of a record's field: its first field of that identifier, as a record keeps
+ * the first written; none when it has no such field, a NULL record among them.
+ *
+ * @param record The record.
+ * @param identifier The field's identifier.
+ * @returns The field's value as a single, or none.
+ */
+const fieldOf = (record: RecordValue, identifier: string): Option.Option<Value> =>
+  Option.map(
+    Option.fromUndefinedOr(record.fields.find((field) => field.identifier === identifier)),
+    (field) => singleValue(field.value),
+  );
+
+/**
+ * Give the value of a `qti-field-value`: the field of its record operand that `field-identifier`
+ * names, a single of the field's base type.
+ *
+ * It is NULL, `qti-null`'s ({@link noField}), when the record has no field of that identifier, as
+ * the information model says ("If there is no field with that identifier then the result of the
+ * operator is NULL"), when the record is NULL, and when the operand gives a value that is not a
+ * record, which on a checked item only `qti-null` and `qti-custom-operator` can, each a NULL of no
+ * known cardinality, since the kind's rule refuses an operand of any other known cardinality (P23;
+ * G-R4, pending: a lacking field, a NULL record and an operand that is not a record each give
+ * NULL).
+ *
+ * @param expression The `qti-field-value`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives the operand's value when it names no record.
+ * @returns The field's value or the NULL, or the operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpFieldValue
+ */
+const evaluateFieldValue: Evaluator<"field-value"> = (expression, scope, evaluate) => {
+  const [operand] = expression.operands;
+
+  return Result.map(recordOrValue(operand, scope, evaluate), (value) =>
+    isRecordValue(value)
+      ? Option.getOrElse(fieldOf(value, expression.fieldIdentifier), () => noField)
+      : noField,
+  );
 };
 
 /**
@@ -103,25 +168,28 @@ const typeSourcesOf = (expression: Expression): readonly Expression[] => {
  * its kind's rule gives over its operands' types (`kindRules` in
  * `#plate/model/expressions/read.ts`; the qti package types them alike, `resultType` in
  * `packages/pantry/src/processing/types.ts`). On a checked item whose processing runs, that is a
- * `qti-custom-operator`, whose value plate never knows (9.21), and the kinds whose rule passes an
- * unknown operand's base type up: `qti-multiple`, `qti-ordered` and `qti-repeat` (`sharedBase`),
- * `qti-index` and `qti-random` (their operand's), `qti-delete` (its second operand's) and the
- * numerical aggregates `qti-sum`, `qti-product`, `qti-subtract`, `qti-min` and `qti-max`
- * (`numericalAggregate` in `#plate/model/expressions/arithmetic.ts`). A variable of a `record`
- * declaration is typed unknown too, but no kind this reads takes a record operand (P23 refuses
- * one), and a kind that names a variable the engine does not hold, or a kind its family has not
- * landed, is marked, so its processing never runs.
+ * `qti-custom-operator`, whose value plate never knows (9.21), a `qti-field-value`, whose value is
+ * of its field's base type, and the kinds whose rule passes an unknown operand's base type up:
+ * `qti-multiple`, `qti-ordered` and `qti-repeat` (`sharedBase`), `qti-index` and `qti-random`
+ * (their operand's), `qti-delete` (its second operand's) and the numerical aggregates `qti-sum`,
+ * `qti-product`, `qti-subtract`, `qti-min` and `qti-max` (`numericalAggregate` in
+ * `#plate/model/expressions/arithmetic.ts`). A variable of a `record` declaration is typed unknown
+ * too, but no kind this reads takes a record operand (P23 refuses one), and a kind that names a
+ * variable the engine does not hold is marked, so its processing never runs.
  *
- * Every such expression gives NULL: the operator always does, an aggregate does when an operand is
- * NULL, the three constructors do by this rule, and `qti-index`, `qti-random` and `qti-delete` do
- * when their container is NULL. So an untyped operand never holds a value, and its NULL's base type
- * says nothing. The containers family's tests hold this list to the kind rules.
+ * A container built over such an expression is NULL ({@link containerOf}, {@link evaluateRepeat}),
+ * though a `qti-field-value` holds a value: the model types the container unknown, so a rule that
+ * takes it may need any base type, and the field's may be another. The operator always gives NULL,
+ * an aggregate does when an operand is NULL, and `qti-index`, `qti-random` and `qti-delete` do when
+ * their container is NULL, so the NULL's base type says nothing. The containers family's tests
+ * hold this list to the kind rules.
  *
  * @param expression The expression.
  * @returns Whether the model types it unknown.
  */
 const untyped = (expression: Expression): boolean =>
   expression.kind === "custom-operator" ||
+  expression.kind === "field-value" ||
   typeSourcesOf(expression).some((operand) => untyped(operand));
 
 /**
@@ -469,11 +537,7 @@ const evaluateIndex: Evaluator<"index"> = (expression, scope, evaluate) =>
 
     return Option.match(picked, {
       onNone: () => nullOf(container.baseType, "single"),
-      onSome: (single): Value => ({
-        baseType: container.baseType,
-        cardinality: "single",
-        values: [single],
-      }),
+      onSome: singleValue,
     });
   });
 
@@ -503,11 +567,7 @@ const evaluateRandom: Evaluator<"random"> = (expression, scope, evaluate) => {
 
     const picked = container.values[Number(drawBelow(scope.draw, BigInt(container.values.length)))];
 
-    return {
-      baseType: container.baseType,
-      cardinality: "single",
-      values: picked === undefined ? [] : [picked],
-    };
+    return picked === undefined ? nullOf(container.baseType, "single") : singleValue(picked);
   });
 };
 
@@ -643,8 +703,7 @@ const evaluateContains: Evaluator<"contains"> = (expression, scope, evaluate) =>
   });
 
 /**
- * The containers family's evaluators by kind, and the stub marker for `field-value` (ruling R2),
- * which the dispatcher in `#plate/engine/evaluate.ts` never reaches on a checked item.
+ * The containers family's evaluators by kind.
  */
 export const containersEvaluators: FamilyTable<
   | "container-size"
@@ -662,7 +721,7 @@ export const containersEvaluators: FamilyTable<
   "container-size": evaluateContainerSize,
   contains: evaluateContains,
   delete: evaluateDelete,
-  "field-value": "unlanded",
+  "field-value": evaluateFieldValue,
   index: evaluateIndex,
   "is-null": evaluateIsNull,
   member: evaluateMember,

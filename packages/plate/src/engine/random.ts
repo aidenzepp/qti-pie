@@ -160,8 +160,8 @@ const tagLength = 32;
  * reaching the wrap takes hours.
  *
  * @param seed The record's seed, the HMAC key: the caller's, used as given.
- * @param label What the stream draws for, such as {@link templateLabel}'s or
- *   {@link responseLabel}'s.
+ * @param label What the stream draws for, such as {@link templateLabel}'s,
+ *   {@link responseLabel}'s, {@link outcomeLabel}'s or {@link defaultLabel}'s.
  * @returns The stream's draws.
  * @see https://www.rfc-editor.org/rfc/rfc2104
  */
@@ -295,3 +295,37 @@ export const templateLabel = (instance: string, item: string): string =>
  */
 export const responseLabel = (instance: string, numAttempts: number): string =>
   [instance, "response", String(numAttempts)].join(labelSeparator);
+
+/**
+ * Construct the label one run of a test's outcome processing draws under:
+ * `<instance>\u001Foutcome\u001F<run>`, the run's number written with `String`.
+ *
+ * The seed is no field: it is the stream's key ({@link drawStream}), the session's processing
+ * seed, so a run never draws under the default key. The label is injective: every field after the
+ * instance is free of U+001F (a fixed word and decimal digits), so a label splits from the right
+ * into its fields, and two runs of one session draw apart.
+ *
+ * @param instance The test session's instance.
+ * @param run The run's number, counted from 1: the session's run count before the run, plus 1.
+ * @returns The label, for {@link drawStream}.
+ */
+export const outcomeLabel = (instance: string, run: number): string =>
+  [instance, "outcome", String(run)].join(labelSeparator);
+
+/**
+ * Construct the label an item ref's template defaults draw under:
+ * `<instance>\u001Fdefault\u001F<sequenceIndex>`, the index written with `String`.
+ *
+ * The seed is no field: it is the stream's key ({@link drawStream}), the session's processing
+ * seed, so the defaults never draw under the default key. The label is injective: every field
+ * after the instance is free of U+001F (a fixed word and decimal digits), so a label splits from
+ * the right into its fields, and two items of one session draw apart. One stream serves all of an
+ * item ref's defaults, in document order.
+ *
+ * @param instance The test session's instance.
+ * @param sequenceIndex The item's place in the session's sequence, counted from 1
+ *   (`SessionItem.sequenceIndex`).
+ * @returns The label, for {@link drawStream}.
+ */
+export const defaultLabel = (instance: string, sequenceIndex: number): string =>
+  [instance, "default", String(sequenceIndex)].join(labelSeparator);

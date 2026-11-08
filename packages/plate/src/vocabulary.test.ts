@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { landedKinds } from "#plate/model/expressions/read.ts";
+import { expressionKinds } from "#plate/model/expression.ts";
 import { packageTables } from "#plate/package/tables.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { tables } from "#plate/validate/tables.ts";
@@ -232,7 +232,7 @@ describe("the closed value sets", () => {
       [
         "notices",
         renders.notices.map((notice) => notice.feature),
-        ["pattern-mask", 'cardinality="record"', "qti-inline-choice-interaction"],
+        ["pattern-mask", "qti-inline-choice-interaction"],
       ],
       [
         "controlNotices",
@@ -245,7 +245,6 @@ describe("the closed value sets", () => {
         [
           "string-identifier",
           'adaptive="true"',
-          'base-type="duration"',
           'base-type="file"',
           'cardinality="record"',
           'base-type=""',
@@ -382,10 +381,39 @@ describe("the closed value sets", () => {
     ]);
   });
 
+  it("[Q-20] [Q-5] shows no notice in place of a record-bound control: no notice rule names a cardinality, so a text interaction bound to a record response renders", () => {
+    assert.notInclude(
+      [...renders.notices, ...renders.controlNotices].map((notice) => notice.feature),
+      'cardinality="record"',
+    );
+    assert.deepStrictEqual(
+      [...renders.notices, ...renders.controlNotices].flatMap((notice) =>
+        "cardinality" in notice.when ? [notice.feature] : [],
+      ),
+      [],
+    );
+  });
+
   it("puts every notice on a rendered interaction", () => {
     for (const notice of [...renders.notices, ...renders.controlNotices]) {
       assert.includeMembers([...interactionNames], [...notice.on], notice.feature);
     }
+  });
+
+  it("[I-1] puts the record mark on outcome and template declarations, never on a record response declaration, which the item model holds", () => {
+    assert.deepStrictEqual(
+      renders.marks.find((mark) => mark.feature === 'cardinality="record"'),
+      {
+        feature: 'cardinality="record"',
+        on: ["qti-outcome-declaration", "qti-template-declaration"],
+        when: { kind: "attribute-value", name: "cardinality", value: "record" },
+      },
+    );
+    // The control: a file declaration is marked whatever its kind.
+    assert.include(
+      renders.marks.find((mark) => mark.feature === 'base-type="file"')?.on ?? [],
+      "qti-response-declaration",
+    );
   });
 
   it("has every engine name in elements", () => {
@@ -415,9 +443,9 @@ describe("the closed value sets", () => {
     assert.sameMembers([...renders.templateRules], [...new Set(admitted)]);
   });
 
-  it("reads, with the registry's landed kinds, every response-processing element the engine read before the registry", () => {
+  it("reads, with every expression kind's element, every response-processing element the engine read before the registry", () => {
     assert.includeMembers(
-      [...renders.elements, ...landedKinds.map((kind) => `qti-${kind}`)],
+      [...renders.elements, ...expressionKinds.map((kind) => `qti-${kind}`)],
       [
         ...renders.engine,
         "qti-match",
@@ -693,15 +721,11 @@ describe("M2's closed sets", () => {
         "qti-time-limits",
         "qti-pre-condition",
         "qti-branch-rule",
-        "qti-outcome-processing",
         "qti-rubric-block",
         "qti-test-feedback",
         "qti-assessment-section-ref",
         "qti-stylesheet",
         "qti-context-declaration",
-        "qti-template-default",
-        "qti-variable-mapping",
-        "qti-weight",
         "xi:include",
         'allow-comment="true"',
         "max-attempts:negative",
@@ -709,5 +733,17 @@ describe("M2's closed sets", () => {
         "root:qti-assessment-stimulus",
       ],
     );
+  });
+
+  it("[T-9] keys neither outcome processing nor a weight, a variable mapping or a template default, which the test model reads and the session applies", () => {
+    const marks: readonly string[] = testMarks;
+    for (const read of [
+      "qti-outcome-processing",
+      "qti-template-default",
+      "qti-variable-mapping",
+      "qti-weight",
+    ]) {
+      assert.notInclude([...marks], read);
+    }
   });
 });

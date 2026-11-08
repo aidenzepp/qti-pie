@@ -1426,7 +1426,7 @@ describe("map-response", () => {
     assert.deepStrictEqual(mapped("CITY", []), floatValue(0));
   });
 
-  it("a value two entries match maps by the first in document order (placeholder while spec §12 Q5 is open)", () => {
+  it("a value two entries match maps by the first in document order", () => {
     assert.deepStrictEqual(mapped("TIED", [stringOf("York")]), floatValue(0.5));
   });
 
@@ -1625,12 +1625,10 @@ describe("map-response-point", () => {
 });
 
 describe("evaluators", () => {
-  it("holds one entry for each of the 64 kinds, each an evaluator or the stub marker", () => {
+  it("holds one entry for each of the 64 kinds, each an evaluator", () => {
     const entries = Object.entries(evaluators);
     for (const [kind, entry] of entries) {
-      if (entry !== "unlanded") {
-        assert.isFunction(entry, kind);
-      }
+      assert.isFunction(entry, kind);
     }
 
     assert.deepStrictEqual(entries.map(([kind]) => kind).toSorted(), expressionKinds.toSorted());

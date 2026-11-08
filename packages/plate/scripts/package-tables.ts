@@ -1,7 +1,8 @@
 /**
  * Regenerates the package tables file, `src/package/tables.generated.json`, from the two QTI 3.0
  * content packaging profiles and every schema they import, cached under
- * `$HOME/.cache/gr8des/qti3/xsd/`.
+ * `$HOME/.cache/gr8des/qti3/xsd/` at the paths `src/test/xsd-layout.ts` gives them, the layout
+ * pantry's `fetch-xsds` writes.
  *
  * From the repository root:
  *
@@ -11,8 +12,10 @@
  *
  * For each profile the script reads the closure of its `xs:import`s, hashing every file, and runs
  * `generateTables` and `generateOccurrences` once per namespace the profile's tables reach, since
- * each reads one schema and records a reference into another namespace by name only. A schema the
- * closure holds but nothing reaches, such as `w3/xlink.xsd`, is read and hashed and gives no table.
+ * each reads one schema and records a reference into another namespace by name only. An import's
+ * purl location is followed only to the path `src/test/xsd-layout.ts` gives it. A schema the
+ * closure holds but nothing reaches, such as `xlink/xlink.xsd`, is read and hashed and gives no
+ * table.
  * A `TableGenerationError` names an XSD construct the generator has no table form for; map it in
  * `src/validate/xsd.ts` before committing tables from that XSD.
  */
@@ -25,6 +28,7 @@ import { Config, Console, Effect, Schema } from "effect";
 import { readSource } from "#plate/document/read.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { xsdNamespace } from "#plate/document/source.ts";
+import { xsdPathByUrl } from "#plate/test/xsd-layout.ts";
 import type { ContentTable, TableGenerationError } from "#plate/validate/xsd.ts";
 import { generateOccurrences, generateTables, Occurrences, Tables } from "#plate/validate/xsd.ts";
 
@@ -50,18 +54,6 @@ export const cacheDirectory = Config.String("HOME").pipe(
 );
 
 /**
- * Where an import's purl location is cached, by its prefix: the folder under
- * {@link cacheDirectory} that holds the files the prefix names, as the XSD oracle's catalog maps
- * them.
- */
-const locationFolders: readonly (readonly [prefix: string, folder: string])[] = [
-  ["https://purl.imsglobal.org/spec/w3/1999/schema/xsd/", "w3/"],
-  ["https://purl.imsglobal.org/spec/w3/2001/schema/xsd/", "w3/"],
-  ["https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/", ""],
-  ["https://purl.imsglobal.org/spec/md/v1p3/schema/xsd/", "md/"],
-];
-
-/**
  * An XSD could not be read.
  */
 class XsdUnreadable extends Schema.TaggedError<XsdUnreadable>()("XsdUnreadable", {
@@ -71,7 +63,7 @@ class XsdUnreadable extends Schema.TaggedError<XsdUnreadable>()("XsdUnreadable",
    * What failed and what to do about it.
    */
   override get message(): string {
-    return `Cannot read ${this.path}. Fetch the 1EdTech QTI 3.0 XSD whose SHA-256 src/package/tables.test.ts lists for it, or set HOME to the home folder that holds .cache/gr8des.`;
+    return `Cannot read ${this.path}. Put there the 1EdTech XSD that src/test/xsd-layout.ts lists at that path, from the URL it gives and with the SHA-256 it pins, or set HOME to the home folder that holds .cache/gr8des.`;
   }
 }
 
@@ -86,7 +78,7 @@ class XsdRefused extends Schema.TaggedError<XsdRefused>()("XsdRefused", {
    * What failed and what to do about it.
    */
   override get message(): string {
-    return `The reader refused ${this.path} under ${this.rule}. Replace it with the 1EdTech QTI 3.0 XSD whose SHA-256 src/package/tables.test.ts lists for it.`;
+    return `The reader refused ${this.path} under ${this.rule}. Replace it with the 1EdTech XSD that src/test/xsd-layout.ts lists at that path, with the SHA-256 it pins.`;
   }
 }
 
@@ -212,10 +204,10 @@ const locationOf = (element: SourceElement): string | undefined =>
 /**
  * List the files an XSD imports, each by its path under the cache folder.
  *
- * An import's purl location maps through {@link locationFolders}; a relative location resolves
- * against the importing file's folder. An import without a `schemaLocation` names no file to
- * follow. `xs:include` and `xs:redefine` join another file into the importer's namespace, which
- * one run of the generator per namespace cannot table, so they fail.
+ * An import's purl location maps to the path `src/test/xsd-layout.ts` gives that URL; a relative
+ * location resolves against the importing file's folder. An import without a `schemaLocation` names
+ * no file to follow. `xs:include` and `xs:redefine` join another file into the importer's
+ * namespace, which one run of the generator per namespace cannot table, so they fail.
  *
  * @param xsd The XSD.
  * @returns The imported files' paths, or {@link ClosureUnresolved} naming the location or
@@ -247,12 +239,12 @@ const importsOf = (xsd: ReadXsd): Effect.Effect<readonly string[], ClosureUnreso
       continue;
     }
 
-    const mapped = locationFolders.find(([prefix]) => location.startsWith(prefix));
+    const mapped = xsdPathByUrl.get(location);
     if (mapped !== undefined) {
-      files.push(`${mapped[1]}${location.slice(mapped[0].length)}`);
+      files.push(mapped);
     } else if (location.includes("://")) {
       return unresolved(
-        `the import location ${location} is not under a prefix locationFolders (scripts/package-tables.ts) maps; add its prefix and the cache folder that holds it`,
+        `the import location ${location} is not a URL src/test/xsd-layout.ts lists; add the file there with its path under the cache, its URL and its SHA-256`,
       );
     } else {
       const resolved = path.posix.normalize(

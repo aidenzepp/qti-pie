@@ -6,6 +6,7 @@ import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { authoredId, partForSlot, resolveOverrides, rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
+import { toHtml } from "#plate/emit/serialise.ts";
 import { Malformed, decode, entryName } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
 import { renderExtendedText } from "#plate/interactions/extended-text.ts";
@@ -61,6 +62,7 @@ const city: TextEntryInteraction = {
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "string",
+  cardinality: "single",
   class: "short-answer",
   expectedLength: Option.some(12n),
   kind: "text-entry",
@@ -189,11 +191,15 @@ const rivers: ExtendedTextInteraction = {
  * Construct an item whose body is an Extended Text, then the paragraph of {@link itemOf} holding
  * {@link city}.
  *
- * @param group The Extended Text.
+ * @param group The Extended Text, bound to a value, never a record.
  * @returns The item.
  */
 const besideGroup = (group: ExtendedTextInteraction): Item => {
   const alone = itemOf([city]);
+  const cardinality =
+    group.cardinality === "record"
+      ? assert.fail(`The Extended Text for ${group.response} binds a record.`)
+      : group.cardinality;
 
   return {
     ...alone,
@@ -205,7 +211,7 @@ const besideGroup = (group: ExtendedTextInteraction): Item => {
         {
           areaMapping: Option.none(),
           baseType: group.baseType,
-          cardinality: group.cardinality,
+          cardinality,
           correct: Option.none(),
           defaultValue: Option.none(),
           identifier: group.response,
@@ -928,6 +934,65 @@ describe("validateTextEntry", () => {
           validateTextEntry(hex, yield* decoded(hex, [[name, "fg"]]), yield* configure({})),
           [{ response, text: message("en", "malformedNumber") }],
         );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] judges no expected-length on any binding: a text longer than it gives no message, whatever validateResponses says, and it sets the Control's size only",
+    () =>
+      Effect.gen(function* expectedLengthUnjudged() {
+        const short: TextEntryInteraction = { ...city, expectedLength: Option.some(2n) };
+        const counted: TextEntryInteraction = { ...length, expectedLength: Option.some(2n) };
+
+        for (const validateResponses of [false, true]) {
+          const configuration = yield* configure({ validateResponses });
+
+          for (const [interaction, posted] of [
+            [short, "Constantinople"],
+            [counted, "12345.678"],
+          ] as const) {
+            const value = yield* decoded(interaction, [[name, posted]]);
+
+            assert.notInstanceOf(value, Malformed);
+            assert.deepStrictEqual(validateTextEntry(interaction, value, configuration), []);
+          }
+        }
+
+        assert.deepStrictEqual(
+          partsIn(yield* page(payloadOf([short])), "control").map(
+            (control) => control.attrs["size"],
+          ),
+          ["2"],
+        );
+      }),
+  );
+});
+
+describe("a Text Entry bound to a record response", () => {
+  it.effect(
+    "[Q-20] renders a record-bound control: the string input, byte-equal to the single string one's, posting under the response's one name",
+    () =>
+      Effect.gen(function* rendersRecordBoundControl() {
+        const answer: TextEntryInteraction = { ...masked, cardinality: "record" };
+        const single = itemOf([masked]);
+        const recorded: Item = {
+          ...single,
+          body: itemOf([answer]).body,
+          records: new Map([
+            [
+              response,
+              { correct: Option.none(), defaultValue: Option.none(), identifier: response },
+            ],
+          ]),
+          responses: new Map(),
+        };
+        const tree = yield* page(payload(redactItem(recorded), answering));
+
+        assert.deepStrictEqual(
+          partsIn(tree, "control").map((control) => [control.tag, control.attrs["name"]]),
+          [["input", name]],
+        );
+        assert.strictEqual(toHtml(tree), toHtml(yield* page(payloadOf([masked]))));
       }),
   );
 });

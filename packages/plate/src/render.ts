@@ -8,7 +8,7 @@
  * arguments is the instance a render draws when the author passes none. `render` prints everything
  * or nothing: it writes at most the configuration's `outputBudget` characters of HTML, and an item
  * with a printed variable or a parameter whose text passed its bound, or whose printed text passed
- * the budget `redact` was given, prints nothing; either way it returns {@link OutputTooLarge} and
+ * the budget `redact` ran under, prints nothing; either way it returns {@link OutputTooLarge} and
  * none of the page, never a part of it. This is a browser module: it value-imports from `effect`
  * only `Option`, `Array`, `pipe`, `Data` and `Result`.
  *
@@ -24,7 +24,6 @@ import { resolveOverrides } from "#plate/emit/parts.ts";
 import type { PartOverrides, Resolved, UnknownPart } from "#plate/emit/parts.ts";
 import { toHtml, toHtmlWithin } from "#plate/emit/serialise.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
-import { textBound } from "#plate/engine/format.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
 import { renderChoice } from "#plate/interactions/choice.ts";
@@ -32,7 +31,7 @@ import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { renderTextEntry } from "#plate/interactions/text-entry.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { ResponseValue } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
 import type {
   EmitState,
@@ -42,6 +41,7 @@ import type {
   ValidationMessage,
   View,
 } from "#plate/payload.ts";
+import { drawInstance } from "#plate/seed.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
@@ -52,12 +52,14 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * configuration's. `names`, `values` and `posted` are keyed by response identifier: the name a
  * response's controls post under (`entryName(instance, response)` when absent), the value they show
  * (NULL when absent), and the strings a refused post sent, which the controls show instead of
- * `values` when `messages` is not empty. `messages` are a refused post's validation messages: each
- * marks its response's controls invalid, and the first invalid Control takes `autofocus`.
- * `disabled` disables every control. `mode` is the state the item is shown in, `answering` when
- * absent, which the Root's `data-mode` names: `review` and `solution` mark every interaction not
- * editable, and `solution` shows the correct responses only when the author passes them as
- * `values`.
+ * `values` when `messages` is not empty. A record value restores its `stringValue`, the text it was
+ * typed as, into the string control bound to it, and a record without one leaves that control
+ * empty; restored text counts toward the output budget as any other. `messages` are a refused
+ * post's validation messages: each marks its response's controls invalid, and the first invalid
+ * Control takes `autofocus`. `disabled` disables every control. `mode` is the state the item is
+ * shown in, `answering` when absent, which the Root's `data-mode` names: `review` and `solution`
+ * mark every interaction not editable, and `solution` shows the correct responses only when the
+ * author passes them as `values`.
  */
 export interface Options {
   readonly assetBase?: string;
@@ -68,7 +70,7 @@ export interface Options {
   readonly names?: Readonly<Record<string, string>>;
   readonly parts?: PartOverrides;
   readonly posted?: Readonly<Record<string, readonly string[]>>;
-  readonly values?: Readonly<Record<string, Value>>;
+  readonly values?: Readonly<Record<string, ResponseValue>>;
 }
 
 /**
@@ -139,30 +141,36 @@ export class InvalidInstance extends Data.TaggedError("InvalidInstance")<{
  * {@link render} counts the characters it writes as it writes them, as a string's `length` counts
  * them, and stops at the first chunk that would pass the budget, so it never builds the oversized
  * page and returns none of it. `budget` is the configuration's `outputBudget` and `item` the
- * redacted item's `identifier`. `printed` is none for the budget, and names the bound in characters
- * and the variable when a printed variable's text, or a `param-variable` parameter's, passed it
- * (the redacted item's `unprinted`), which `redact` does not print: 1,000,000 for a conversion
- * wider than that or a whole text longer, or the output budget `redact` was given, when the item's
- * printed text passed it at that variable, where `redact` stopped printing. A parameter is named
- * by its template variable.
+ * redacted item's `identifier`. `printed` is none for the budget, and names the bound in
+ * characters, which limit it is and the variable when a printed variable's text, or a
+ * `param-variable` parameter's, passed it (the redacted item's `unprinted`), which `redact` does
+ * not print: `limit` `"text"` with the bound 1,000,000, the most one text may hold, for a
+ * conversion wider than that or a whole text longer; or `limit` `"budget"` with the output budget
+ * `redact` ran under, when the item's printed text passed it at that variable, where `redact`
+ * stopped printing. `limit` names the limit, not the cause, and tells the two apart when both are
+ * 1,000,000. A parameter is named by its template variable.
  */
 export class OutputTooLarge extends Data.TaggedError("OutputTooLarge")<{
   readonly budget: number;
   readonly item: string;
-  readonly printed: Option.Option<{ readonly bound: number; readonly identifier: string }>;
+  readonly printed: Option.Option<{
+    readonly bound: number;
+    readonly identifier: string;
+    readonly limit: "budget" | "text";
+  }>;
 }> {
   /**
-   * The item, the limit it passed (the budget, or the bound and the variable), that nothing was
-   * written, and what to change.
+   * The item, the limit it passed (the budget, or the bound and the variable, as `limit` names
+   * it), that nothing was written, and what to change.
    */
   override get message(): string {
     return Option.match(this.printed, {
       onNone: () =>
         `Item ${JSON.stringify(this.item)} renders to more than ${String(this.budget)} characters of HTML, the configuration's outputBudget, so render wrote none of it. Raise outputBudget, up to 536,870,888, if the host can hold a page that large.`,
-      onSome: ({ bound, identifier }) =>
-        bound === textBound
+      onSome: ({ bound, identifier, limit }) =>
+        limit === "text"
           ? `Item ${JSON.stringify(this.item)} would print more than ${String(bound)} characters for the variable ${JSON.stringify(identifier)}, so render wrote none of it. Shorten that variable's value, or the width or precision in its printed variable's format, so its text fits.`
-          : `Item ${JSON.stringify(this.item)} prints more than ${String(bound)} characters of variables, the outputBudget redact was given, by the variable ${JSON.stringify(identifier)}, so redact stopped printing there and render wrote none of it. Raise outputBudget, up to 536,870,888, in the configuration you pass to both redact and render, if the host can hold that much text.`,
+          : `Item ${JSON.stringify(this.item)} prints more than ${String(bound)} characters of variables, the output budget redact ran under, by the variable ${JSON.stringify(identifier)}, so redact stopped printing there and render wrote none of it. Raise outputBudget, up to 536,870,888, in the configuration you pass to both redact and render, if the host can hold that much text.`,
     });
   }
 }
@@ -199,18 +207,22 @@ const checkedInstance = (
  *
  * A printed variable or a parameter on content the page sees whose text would pass 1,000,000
  * characters (a conversion wider than that, or a whole text longer) prints nothing, and the
- * redacted item's `unprinted` names the first, with that bound, so {@link render} fails
- * {@link OutputTooLarge} rather than show the slot blank. Content the page does not see is never
- * printed, so it never fails a render.
+ * redacted item's `unprinted` names the first, with that bound and the limit `"text"`, so
+ * {@link render} fails {@link OutputTooLarge} rather than show the slot blank. Content the page
+ * does not see is never printed, so it never fails a render.
  *
  * The printed text is held to `limits.outputBudget`, the budget `render` holds its HTML to:
  * `redact` counts the characters each printed variable and parameter on content the page sees
  * prints, in document order, and stops printing at the first whose text would pass what remains.
- * That one and every later one print nothing, and `unprinted` names it with the budget as its
- * bound, so `render` fails {@link OutputTooLarge} naming the variable. So `redact` never builds
- * more printed text than the budget, however much the item would print. Pass the configuration
- * you pass to `render`; with none, the configuration's default, 16,777,216, applies. The number is
- * used as given, so pass one `configure` decoded, which holds it between 1 and 536,870,888.
+ * That one and every later one print nothing, and `unprinted` names it with the budget as its bound
+ * and the limit `"budget"`, so `render` fails {@link OutputTooLarge} naming the variable. So
+ * `redact` never builds more printed text than the budget, however much the item would print. Pass
+ * the configuration you pass to `render`; with none, the configuration's default, 16,777,216,
+ * applies. `redact` holds the budget to 1 to 536,870,888, as `configure` does, but clamps rather
+ * than refuses: `NaN` runs under the default, 16,777,216, a fraction under its floor, anything
+ * above 536,870,888 (`Infinity` included) under 536,870,888, and anything below 1 (0 and
+ * `-Infinity` included) under 1. When the budget runs out, `unprinted`'s bound is the budget it ran
+ * under.
  *
  * With no record, an item whose template processing does not run reads as the record its first
  * attempt starts with (its declared template defaults and its outcomes' starting values), and an
@@ -218,6 +230,11 @@ const checkedInstance = (
  * inline, `param-variable` parameter and choice with a template visibility. It never copies a
  * template value or an outcome value it does not print or pass, the record's seed or an override
  * template processing set. `redactItem` in `#plate/payload.ts` lists what it copies.
+ *
+ * The redacted item's notices can name more than the record's, which `fresh` lists from the
+ * features the item marks: under a template processing the engine does not run, no template value
+ * is computed, so a printed variable that names a template variable shows the notice
+ * `qti-printed-variable`, which the redacted item's notices name and the record's do not.
  *
  * It takes only `check`'s `Accepted` (rule `723e580c`), so a hand-built item, which may hold a
  * `javascript:` href or an `onclick` that `check` would strip, never reaches {@link render}. It
@@ -230,8 +247,9 @@ const checkedInstance = (
  * @param document The document `check` accepted.
  * @param record The attempt's template values and outcome values, such as its record, whose type
  *   is `Restored["record"]`; none to show the item as it reads with no record.
- * @param limits The output budget its printed text is held to: the configuration passed to
- *   `render`, or `{ outputBudget }`; none for the configuration's default, 16,777,216.
+ * @param limits The output budget its printed text is held to, clamped to 1 to 536,870,888: the
+ *   configuration passed to `render`, or `{ outputBudget }`; none for the configuration's default,
+ *   16,777,216.
  * @returns The redacted item, the one input {@link render} takes.
  */
 export const redact = (
@@ -321,20 +339,22 @@ const interactionRenderer =
 /**
  * Render an item: the item Root around its body, as HTML.
  *
- * It resolves the overrides once, takes the instance from `options.instance` or draws a lowercase
- * UUID (`crypto.randomUUID()`, never derived from the seed), builds the payload from the redacted
- * item and the options, and emits the body and the Root. A shuffled Choice is presented in the
- * order the configuration's `seed`, the instance and its response key give. The Root's `data-mode`
- * names `options.mode`. It writes no form, submit control, title or record. Given the same
- * instance, configuration and inputs, it gives the same HTML, and it returns the instance it used.
+ * It resolves the overrides once, takes the instance from `options.instance` as given or draws a
+ * lowercase UUID v4 (`drawInstance`, from `crypto.getRandomValues`, never derived from the seed;
+ * not `crypto.randomUUID`, which a browser gives only in a secure context, so a page served over
+ * plain HTTP lacks it), builds the payload from the redacted item and the options, and emits the
+ * body and the Root. A shuffled Choice is presented in the order the configuration's `seed`, the
+ * instance and its response key give. The Root's `data-mode` names `options.mode`. It writes no
+ * form, submit control, title or record. Given the same instance, configuration and inputs, it
+ * gives the same HTML, and it returns the instance it used.
  *
  * It prints everything or nothing. First, an item whose `unprinted` names a printed variable or a
- * parameter whose text passed its bound, 1,000,000 or the budget `redact` was given, fails
- * {@link OutputTooLarge} naming the bound and the variable, before anything is built. Then it counts
- * the characters of HTML as it writes them, as a string's `length` counts them, and stops at the
- * first chunk that would pass the configuration's `outputBudget`: HTML of exactly `outputBudget`
- * characters is returned, and one more fails {@link OutputTooLarge} with none of the page built or
- * returned.
+ * parameter whose text passed its bound, 1,000,000 or the budget `redact` ran under, fails
+ * {@link OutputTooLarge} naming the bound, which limit it is and the variable, before anything is
+ * built. Then it counts the characters of HTML as it writes them, as a string's `length` counts
+ * them, and stops at the first chunk that would pass the configuration's `outputBudget`: HTML of
+ * exactly `outputBudget` characters is returned, and one more fails {@link OutputTooLarge} with
+ * none of the page built or returned.
  *
  * @example
  *   const rendered = render(redact(accepted, undefined, configuration), configuration, {
@@ -359,20 +379,20 @@ export const render = (
 ): Result.Result<Rendered, InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart> =>
   Result.gen(function* renderItem() {
     if (Option.isSome(item.unprinted)) {
-      const { bound, identifier } = item.unprinted.value;
+      const { bound, identifier, limit } = item.unprinted.value;
 
       return yield* Result.fail(
         new OutputTooLarge({
           budget: configuration.outputBudget,
           item: item.identifier,
-          printed: Option.some({ bound, identifier }),
+          printed: Option.some({ bound, identifier, limit }),
         }),
       );
     }
 
     const parts = yield* resolveOverrides(options.parts);
     const instance = yield* options.instance === undefined
-      ? Result.succeed(crypto.randomUUID())
+      ? Result.succeed(drawInstance())
       : checkedInstance(options.instance, "options.instance");
     const state = stateOf(configuration, parts, options.assetBase);
     const built = payload(item, viewOf(instance, configuration, options));

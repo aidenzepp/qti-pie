@@ -28,7 +28,7 @@ import type { PrintOptions } from "#plate/engine/format.ts";
 import { integerOf } from "#plate/engine/numbers.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
-import { entryName, isPosted } from "#plate/form/encoding.ts";
+import { entryName, isPosted, recordText } from "#plate/form/encoding.ts";
 import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
@@ -52,9 +52,9 @@ import type {
 } from "#plate/model/item.ts";
 import { outcomeDefaults, unrunTemplateProcessing } from "#plate/model/record.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
-import { format, nullOf } from "#plate/model/values.ts";
-import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
-import { defaultOutputBudget } from "#plate/output-budget.ts";
+import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
+import type { ModelledBaseType, ResponseValue, Single, Value } from "#plate/model/values.ts";
+import { clampOutputBudget, defaultOutputBudget } from "#plate/output-budget.ts";
 
 /**
  * A message response validation gives one response, in the locale's text or the author's.
@@ -114,9 +114,10 @@ export interface View {
   readonly seed?: string;
   /**
    * The value each response's controls show, such as its `defaultValue` or a value the author's
-   * flow recorded; NULL when absent.
+   * flow recorded; NULL when absent. A record shows its `stringValue`, the text it was typed as,
+   * and a record without one shows an empty control.
    */
-  readonly values: ReadonlyMap<string, Value>;
+  readonly values: ReadonlyMap<string, ResponseValue>;
 }
 
 /**
@@ -379,11 +380,11 @@ export interface ExtendedTextPayload extends TextControlPayload {
   readonly format: ExtendedTextInteraction["format"];
   readonly kind: "extended-text";
   /**
-   * The number of Controls (Q9): 1 for a `single` binding; for a container, `max-strings` when it
-   * is from 1 to 10, else the greater of 10 and `min-strings`, so `max-strings="0"` and an absent
-   * one give at least 10 (reading 53). It also covers every member of the value or post it
-   * restores, up to a nonzero `max-strings`. At most 100 (Q23), and 0 when `min-strings` exceeds
-   * 100.
+   * The number of Controls (Q9): 1 for a `single` or a `record` binding; for a container,
+   * `max-strings` when it is from 1 to 10, else the greater of 10 and `min-strings`, so
+   * `max-strings="0"` and an absent one give at least 10 (reading 53). It also covers every member
+   * of the value or post it restores, up to a nonzero `max-strings`. At most 100 (Q23), and 0 when
+   * `min-strings` exceeds 100.
    */
   readonly n: number;
   /**
@@ -437,22 +438,26 @@ export interface Payload {
 }
 
 /**
- * A response's binding as the page may know it: its identifier, base type and cardinality, with no
- * correct response, mapping or default.
+ * A response's binding as the page may know it, with no correct response, mapping or default: for
+ * a response of a base type its identifier, base type and cardinality, and for a record response
+ * its identifier and the cardinality `record`, since a record has no base type of its own.
  */
-export interface ResponseBinding {
-  readonly baseType: ModelledBaseType;
-  readonly cardinality: Value["cardinality"];
-  readonly identifier: string;
-}
+export type ResponseBinding =
+  | {
+      readonly baseType: ModelledBaseType;
+      readonly cardinality: Value["cardinality"];
+      readonly identifier: string;
+    }
+  | { readonly cardinality: "record"; readonly identifier: string };
 
 /**
  * The fields of an item the page may know, which {@link redactItem} copies by name.
  *
- * `responses` lists the response bindings in document order, every response but those only content
- * the page does not see binds ({@link hiddenOnlyResponses}), and `notices` the features the body
- * shows as notices. Exported for the codec of {@link Redacted}'s JSON form, whose Schema's type it
- * is; `src/index.ts` does not export it.
+ * `responses` lists the response bindings, every response but those only content the page does not
+ * see binds ({@link hiddenOnlyResponses}): those of a base type in document order, then the record
+ * responses in document order. `notices` lists the features the body shows as notices. Exported for
+ * the codec of {@link Redacted}'s JSON form, whose Schema's type it is; `src/index.ts` does not
+ * export it.
  */
 export interface RedactedFields {
   readonly body: readonly BodyNode[];
@@ -471,14 +476,16 @@ export interface RedactedFields {
   /**
    * The first printed variable, or `param-variable` parameter, on content the page sees whose text
    * passed a bound and so printed nothing: the bound in characters, the variable's identifier (a
-   * parameter's template variable) and its path. The bound is 1,000,000, the most one text may
-   * hold, or the output budget the redaction ran under, when the item's printed text passed it at
-   * that variable. None when every text fits. `render` fails `OutputTooLarge` naming it, so no
-   * page shows the slot blank.
+   * parameter's template variable), which limit the bound is, and its path. `limit` is `"text"`
+   * with the bound 1,000,000, the most one text may hold, or `"budget"` with the output budget the
+   * redaction ran under, when the item's printed text passed it at that variable. It names the
+   * limit, not the cause, so it tells the two apart when the budget is 1,000,000 too. None when
+   * every text fits. `render` fails `OutputTooLarge` naming it, so no page shows the slot blank.
    */
   readonly unprinted: Option.Option<{
     readonly bound: number;
     readonly identifier: string;
+    readonly limit: "budget" | "text";
     readonly path: string;
   }>;
 }
@@ -651,12 +658,24 @@ export const identifyMessages = (
 /**
  * Give the values the view shows for a response.
  *
+ * A record shows its `stringValue` field ({@link recordText}), the text it was typed as, in the
+ * string control a text interaction binds to it, so the text the candidate typed comes back as
+ * typed. A record without that field, such as the NULL record or a correct response that declares
+ * none, leaves the control empty. Restored text counts toward the output budget as any other.
+ *
  * @param build The build.
  * @param response The response identifier.
- * @returns Its values, none when it is NULL or the view gives none.
+ * @returns Its values, a record's `stringValue` alone; none when it is NULL, a record without a
+ *   `stringValue`, or the view gives none.
  */
-const shown = (build: Pick<Build, "values">, response: string): readonly Single[] =>
-  build.values.get(response)?.values ?? [];
+const shown = (build: Pick<Build, "values">, response: string): readonly Single[] => {
+  const value = build.values.get(response);
+  if (value === undefined) {
+    return [];
+  }
+
+  return isRecordValue(value) ? recordText(value) : value.values;
+};
 
 /**
  * Give the name a response's controls post under.
@@ -943,11 +962,13 @@ interface Controls {
 /**
  * Count the Controls an Extended Text renders.
  *
- * Q9 gives a container `max-strings` Controls when it is from 1 to 10, else the greater of 10 and
- * `min-strings`; `max-strings="0"` restricts nothing (reading 53). So restoring drops no answer
- * silently, `n` also covers each member the restored or posted value holds, up to `max-strings`
- * when it restricts and up to the cap of 100 (Q23). Over the cap, the first 100 show beside the
- * cap's notice; a `min-strings` above 100 leaves no Control, the notice in their place.
+ * A `single` binding and a record one have one Control, the string control a record's text is
+ * typed in. Q9 gives a container `max-strings` Controls when it is from 1 to 10, else the greater
+ * of 10 and `min-strings`; `max-strings="0"` restricts nothing (reading 53). So restoring drops no
+ * answer silently, `n` also covers each member the restored or posted value holds, up to
+ * `max-strings` when it restricts and up to the cap of 100 (Q23). Over the cap, the first 100 show
+ * beside the cap's notice; a `min-strings` above 100 leaves no Control, the notice in their place,
+ * for any binding.
  *
  * @param interaction The Extended Text.
  * @param members How many members the value or post to restore holds.
@@ -958,7 +979,7 @@ const controlsOf = (interaction: ExtendedTextInteraction, members: number): Cont
     return { n: 0, overCap: true };
   }
 
-  if (interaction.cardinality === "single") {
+  if (interaction.cardinality === "single" || interaction.cardinality === "record") {
     return { n: 1, overCap: false };
   }
 
@@ -1523,19 +1544,20 @@ const expandedParameter = (
  * text passed `formatPrinted`'s bound ({@link textBound}) leaves its slot empty, as NULL's does:
  * the printed variable writes nothing and the parameter passes the empty value. The walk records
  * the first such one it meets, a printed variable by its identifier and a parameter by its template
- * variable's, with the bound and its path, so `render` fails rather than show the blank. Content
- * the page does not see is walked as under `"structure"`, so it formats nothing and records
- * nothing.
+ * variable's, with the bound, the limit `"text"` and its path, so `render` fails rather than show
+ * the blank. Content the page does not see is walked as under `"structure"`, so it formats nothing
+ * and records nothing.
  *
  * Under `"text"` the walk also counts, in walk order, the characters each printed variable and
  * `param-variable` parameter on content the page sees writes, against the budget, and gives the
- * formatter what remains as its bound, so it stops building a text as soon as it would pass it.
- * The first text that would pass what remains, when less than {@link textBound} remains, leaves
- * its slot empty and is recorded as above with the budget as its bound; from there the walk
- * formats nothing more and records nothing more, every later printed variable writing nothing and
- * every later parameter passing the empty value. A text past {@link textBound} with at least that
- * much budget left is recorded with {@link textBound}, spends nothing, and the walk goes on. So the
- * walk builds at most the budget's characters of printed text, and one member more.
+ * formatter what remains as its bound, so it stops building a text as soon as it would pass it. The
+ * first text that would pass what remains, when less than {@link textBound} remains, leaves its
+ * slot empty and is recorded as above with the budget as its bound and the limit `"budget"`; from
+ * there the walk formats nothing more and records nothing more, every later printed variable
+ * writing nothing and every later parameter passing the empty value. A text past {@link textBound}
+ * with at least that much budget left is recorded with {@link textBound}, spends nothing, and the
+ * walk goes on. So the walk builds at most the budget's characters of printed text, and one member
+ * more.
  *
  * Under `"structure"` the walk writes no text: a printed variable the values cover leaves nothing
  * in its place, and a `param-variable` parameter they expand keeps its `value` as written. Every
@@ -1590,10 +1612,11 @@ const printBody = (
   /**
    * Give the text a printed variable or a parameter writes, formatted within what remains of the
    * budget and spent from it, or the empty text when it passed its bound, recording the first that
-   * did: with the budget as the bound when less than {@link textBound} remained, which ends the
-   * printing, and with {@link textBound} otherwise. The walk asks for text only on content the page
-   * sees, so nothing is formatted, spent or recorded for content it does not see; under
-   * `"structure"`, and once the budget is spent, it gives the empty text without formatting.
+   * did: with the budget as the bound and the limit `"budget"` when less than {@link textBound}
+   * remained, which ends the printing, and with {@link textBound} and the limit `"text"` otherwise.
+   * The walk asks for text only on content the page sees, so nothing is formatted, spent or
+   * recorded for content it does not see; under `"structure"`, and once the budget is spent, it
+   * gives the empty text without formatting.
    *
    * @param print The printer of the text.
    * @param identifier The printed variable's identifier, or the parameter's template variable's.
@@ -1615,7 +1638,12 @@ const printBody = (
 
     exhausted = remaining < textBound;
     if (Option.isNone(unprinted)) {
-      unprinted = Option.some({ bound: exhausted ? writing.budget : textBound, identifier, path });
+      unprinted = Option.some({
+        bound: exhausted ? writing.budget : textBound,
+        identifier,
+        limit: exhausted ? "budget" : "text",
+        path,
+      });
     }
 
     return "";
@@ -1885,18 +1913,23 @@ const printBody = (
 };
 
 /**
- * Give the response bindings a redaction lists: each response the item declares, in document
- * order, but the hidden-only ones.
+ * Give the response bindings a redaction lists: each response the item declares but the
+ * hidden-only ones, those of a base type in document order, then the record responses in document
+ * order. The item keeps the two kinds in two maps, so their order across the two is not kept.
  *
  * @param item The item.
  * @param hiddenOnly The responses only content the page does not see binds.
  * @returns The bindings.
  */
-const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly ResponseBinding[] =>
-  [...item.responses.values()].flatMap(
+const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly ResponseBinding[] => [
+  ...[...item.responses.values()].flatMap(
     ({ baseType, cardinality, identifier }): readonly ResponseBinding[] =>
       hiddenOnly.has(identifier) ? [] : [{ baseType, cardinality, identifier }],
-  );
+  ),
+  ...[...(item.records?.values() ?? [])].flatMap(({ identifier }): readonly ResponseBinding[] =>
+    hiddenOnly.has(identifier) ? [] : [{ cardinality: "record", identifier }],
+  ),
+];
 
 /**
  * Copy the parts of an item the page may know: the allowlist, and the only way to make a
@@ -1937,19 +1970,24 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  * A printed variable, or a `param-variable` parameter, on content the page sees whose text would
  * pass `formatPrinted`'s bound of 1,000,000 characters (a conversion wider than that, or a whole
  * text longer) prints nothing, and `unprinted` names the first the walk meets: the bound, the
- * printed variable's identifier (a parameter's template variable's) and its path. `render` fails
- * `OutputTooLarge` on such an item rather than show the slot blank. Content the page does not see
- * formats nothing and is never named there. `unprinted` is none when every text fits.
+ * printed variable's identifier (a parameter's template variable's), the limit `"text"` and its
+ * path. `render` fails `OutputTooLarge` on such an item rather than show the slot blank. Content
+ * the page does not see formats nothing and is never named there. `unprinted` is none when every
+ * text fits.
  *
  * The printed text is held to an output budget: `limits.outputBudget`, else the configuration's
- * default, 16,777,216 characters, counted as a string's `length` counts them. It counts the text
- * each printed variable and `param-variable` parameter on content the page sees writes, in
+ * default, 16,777,216 characters, counted as a string's `length` counts them, and held to 1 to
+ * 536,870,888 by `clampOutputBudget`, so the bound holds whatever number a host passes. It counts
+ * the text each printed variable and `param-variable` parameter on content the page sees writes, in
  * document order, and stops printing at the first whose text would pass what remains: that one and
- * every one after it print nothing, and `unprinted` names it with the budget as its bound, so
- * `render` fails `OutputTooLarge` rather than show the page with its slots blank. So a redaction
- * never builds more printed text than the budget, and one member more, however much the item
- * would print. Pass the configuration `render` takes, which `configure` holds between 1 and
- * 536,870,888; the number is used as given.
+ * every one after it print nothing, and `unprinted` names it with the budget as its bound and the
+ * limit `"budget"`, so `render` fails `OutputTooLarge` rather than show the page with its slots
+ * blank. So a redaction never builds more printed text than the budget, and one member more,
+ * however much the item would print. Pass the configuration `render` takes, which `configure` holds
+ * between 1 and 536,870,888. A budget outside that range is clamped, not refused: `NaN` runs under
+ * the default, a fraction under its floor, anything above 536,870,888 (`Infinity` included) under
+ * 536,870,888, and anything below 1 (0 and `-Infinity` included) under 1, which is the bound
+ * `unprinted` then names.
  *
  * With no record, an item whose template processing does not run reads as the record its first
  * attempt starts with: each template variable at its declared default, else NULL (none where the
@@ -1968,8 +2006,8 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  * @param record The template values and outcome values of the attempt shown, which its printed
  *   variables print, its `param-variable` parameters pass, and which show or hide its template
  *   blocks, inlines and choices; none to show the item as it reads with no record.
- * @param limits The output budget its printed text is held to, such as the configuration `render`
- *   takes; none for the configuration's default, 16,777,216.
+ * @param limits The output budget its printed text is held to, clamped to 1 to 536,870,888, such
+ *   as the configuration `render` takes; none for the configuration's default, 16,777,216.
  * @returns The redacted item.
  */
 export const redactItem = (
@@ -1978,7 +2016,7 @@ export const redactItem = (
   limits?: Pick<Configuration, "outputBudget">,
 ): Redacted => {
   const { body, hiddenOnly, notices, unprinted } = printBody(item, printingOf(item, record), {
-    budget: limits?.outputBudget ?? defaultOutputBudget,
+    budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget),
     kind: "text",
   });
 
@@ -2085,10 +2123,29 @@ export interface Posting {
   /**
    * The number base its integer is written in: the `base` of the first Text Entry or Extended
    * Text, in document order, that binds the response, and 10 when only a Choice or an Inline
-   * Choice binds it.
+   * Choice binds it. `decode` does not apply it to a record.
    */
   readonly options: DecodeOptions;
 }
+
+/**
+ * Give the binding a response travels through the form under: a `RecordBinding` for a record
+ * response, a `ValueBinding` for a response of a base type a phase-1 interaction posts, and
+ * none for a response of any other base type, which no Control posts.
+ *
+ * @param response The response's binding as the page knows it.
+ * @param name The entry name its Controls post under.
+ * @returns Its form binding, or none.
+ */
+const formBinding = (response: ResponseBinding, name: string): Option.Option<Binding> => {
+  if (response.cardinality === "record") {
+    return Option.some({ cardinality: "record", name });
+  }
+
+  const { baseType, cardinality } = response;
+
+  return isPosted(baseType) ? Option.some({ baseType, cardinality, name }) : Option.none();
+};
 
 /**
  * Give the number base an interaction's posted text is read in: a Text Entry's or an Extended
@@ -2136,28 +2193,30 @@ export const postingsIn = (
     }
   }
 
-  return redaction.responses.flatMap(
-    ({ baseType, cardinality, identifier }): readonly Posting[] => {
-      const bound = byResponse.get(identifier) ?? [];
-      if (!isPosted(baseType) || bound.length === 0) {
-        return [];
-      }
+  return redaction.responses.flatMap((response): readonly Posting[] => {
+    const { identifier } = response;
+    const bound = byResponse.get(identifier) ?? [];
+    const binding = formBinding(response, entryName(instance, identifier));
+    if (Option.isNone(binding) || bound.length === 0) {
+      return [];
+    }
 
-      return [
-        {
-          binding: { baseType, cardinality, name: entryName(instance, identifier) },
-          identifier,
-          options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
-        },
-      ];
-    },
-  );
+    return [
+      {
+        binding: binding.value,
+        identifier,
+        options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
+      },
+    ];
+  });
 };
 
 /**
- * Give the postings of a redacted item in one instance: one for each response of a posted base
- * type that an interaction in the body binds, in the order of the item's `responses`, so a host
- * decodes each from its form with the base its interaction declares instead of assuming base 10.
+ * Give the postings of a redacted item in one instance: one for each record response, and each
+ * response of a posted base type, that an interaction in the body binds, in the order of the
+ * item's `responses`, so a host decodes each from its form with the base its interaction declares
+ * instead of assuming base 10. A record response's binding is a `RecordBinding`, which
+ * `decode` reads as a record.
  *
  * A declared response that no interaction binds has no posting. The form has no Control for it,
  * so a post never carries it, and decoding it would give NULL. A host that saved that NULL would

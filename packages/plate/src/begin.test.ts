@@ -177,9 +177,9 @@ const isNullVariable = (identifier: string): SourceElement =>
  * name the engine does not hold while template processing runs (review `079e8c44` P1-1), each
  * beside {@link answered} and {@link scored}: a read of `QTI_CONTEXT`; a read of a context
  * variable through `qti-variable`, then through `qti-default`; a read of a template variable of
- * cardinality `record`; a set of one of base type `duration`; a `qti-set-correct-response` of a
- * `duration` response; and a `qti-set-default-value` of a `file` outcome. `check` marks each, so
- * its template processing does not run.
+ * cardinality `record`; a set of one of base type `file`; a `qti-set-correct-response` of a `file`
+ * response; and a `qti-set-default-value` of a `file` outcome. `check` marks each, so its template
+ * processing does not run.
  */
 const unheldTemplating: readonly Accepted[] = [
   accepted(
@@ -218,18 +218,18 @@ const unheldTemplating: readonly Accepted[] = [
     processingOf(setFrom("qti-set-template-value", "B", isNullVariable("R"))),
   ),
   accepted(
-    "sets-duration-template",
+    "sets-file-template",
     answered,
     scored,
-    declaration("qti-template-declaration", "D", "duration"),
-    processingOf(setFrom("qti-set-template-value", "D", el("qti-null"))),
+    declaration("qti-template-declaration", "F", "file"),
+    processingOf(setFrom("qti-set-template-value", "F", el("qti-null"))),
   ),
   accepted(
-    "sets-duration-correct",
+    "sets-file-correct",
     answered,
-    declaration("qti-response-declaration", "RD", "duration"),
+    declaration("qti-response-declaration", "RF", "file"),
     scored,
-    processingOf(setFrom("qti-set-correct-response", "RD", el("qti-null"))),
+    processingOf(setFrom("qti-set-correct-response", "RF", el("qti-null"))),
   ),
   accepted(
     "sets-file-default",

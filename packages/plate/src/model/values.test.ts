@@ -1,16 +1,27 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import type * as plate from "#plate/index.ts";
 import {
   format,
   isModelled,
   isNcName,
   isNull,
+  isNullResponse,
+  isRecordValue,
   match,
   nullOf,
   parseElementText,
   parseLexical,
+  sameRecord,
 } from "#plate/model/values.ts";
-import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import type {
+  ModelledBaseType,
+  RecordField,
+  RecordValue,
+  ResponseValue,
+  Single,
+  Value,
+} from "#plate/model/values.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 
 /**
@@ -46,6 +57,103 @@ const identifiers = (...names: readonly string[]): readonly Single[] =>
  */
 const pair = (baseType: "pair" | "directedPair", source: string, destination: string): Value =>
   value(baseType, "single", [{ baseType, value: [source, destination] }]);
+
+/**
+ * Whether two types are the same type, not merely assignable to each other: `true` only when the
+ * checker treats `A` and `B` as identical.
+ */
+type Equals<A, B> =
+  // oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- each `T` must stay an unresolved type parameter inside its function type, so the conditional compares `A` and `B` by identity rather than by assignability.
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+/**
+ * The package's `RecordValue` is this module's; `tsc` refuses this line when they part.
+ */
+const recordExported: Equals<plate.RecordValue, RecordValue> = true;
+
+/**
+ * The package's `ResponseValue` is this module's; `tsc` refuses this line when they part.
+ */
+const responseExported: Equals<plate.ResponseValue, ResponseValue> = true;
+
+/**
+ * Construct a record for a test.
+ *
+ * @param fields Its fields, in written order.
+ * @returns The record.
+ */
+const record = (...fields: readonly RecordField[]): RecordValue => ({
+  cardinality: "record",
+  fields,
+});
+
+/**
+ * Construct a field of a record for a test.
+ *
+ * @param identifier The field's identifier.
+ * @param single Its value.
+ * @returns The field.
+ */
+const field = (identifier: string, single: Single): RecordField => ({ identifier, value: single });
+
+describe("the record types", () => {
+  it("[T-14] record types exported: RecordValue and ResponseValue are the package's own", () => {
+    assert.isTrue(recordExported && responseExported);
+  });
+});
+
+describe("sameRecord", () => {
+  const stringValue = field("stringValue", { baseType: "string", value: "1.5" });
+  const floatValue = field("floatValue", { baseType: "float", value: 1.5 });
+
+  it("is true for the same fields written in another order", () => {
+    assert.isTrue(sameRecord(record(stringValue, floatValue), record(floatValue, stringValue)));
+    assert.isTrue(
+      sameRecord(
+        record(field("pair", { baseType: "pair", value: ["A", "B"] })),
+        record(field("pair", { baseType: "pair", value: ["B", "A"] })),
+      ),
+    );
+  });
+
+  it("is false for a field of another base type, a missing field, or another value", () => {
+    assert.isFalse(
+      sameRecord(
+        record(field("integerValue", { baseType: "integer", value: 2n })),
+        record(field("integerValue", { baseType: "float", value: 2 })),
+      ),
+    );
+    assert.isFalse(sameRecord(record(stringValue, floatValue), record(stringValue)));
+    assert.isFalse(sameRecord(record(stringValue), record(stringValue, floatValue)));
+    assert.isFalse(
+      sameRecord(
+        record(stringValue),
+        record(field("stringValue", { baseType: "string", value: "1.50" })),
+      ),
+    );
+    assert.isFalse(sameRecord(record(stringValue), record(floatValue)));
+  });
+
+  it("is false for NULL against a record that holds a field, either way round", () => {
+    assert.isFalse(sameRecord(record(), record(stringValue)));
+    assert.isFalse(sameRecord(record(stringValue), record()));
+  });
+});
+
+describe("isNullResponse and isRecordValue", () => {
+  it("[T-14] take a record with no field as NULL and a record with a field as not", () => {
+    const filled = record(field("stringValue", { baseType: "string", value: "a" }));
+
+    assert.isTrue(isNullResponse(record()));
+    assert.isFalse(isNullResponse(filled));
+    assert.isTrue(isNullResponse(nullOf("integer", "single")));
+    assert.isFalse(isNullResponse(value("identifier", "single", identifiers("A"))));
+    assert.deepStrictEqual(
+      [isRecordValue(filled), isRecordValue(record()), isRecordValue(nullOf("string", "single"))],
+      [true, true, false],
+    );
+  });
+});
 
 describe("parseElementText", () => {
   it.effect("[I-1] trims an identifier's outer whitespace and keeps a string's", () =>
@@ -275,6 +383,34 @@ describe("parseLexical", () => {
     }),
   );
 
+  it.effect(
+    "[I-9a] reads a duration as its seconds in an xs:double, never truncated, and refuses an ISO 8601 duration",
+    () =>
+      Effect.gen(function* durationLexicalSpace() {
+        const cases: readonly (readonly [string, number, string])[] = [
+          ["90.5", 90.5, "90.5"],
+          ["89.95", 89.95, "89.95"],
+          ["-1.5", -1.5, "-1.5"],
+          ["1E3", 1000, "1000"],
+          ["INF", Number.POSITIVE_INFINITY, "INF"],
+          ["-INF", Number.NEGATIVE_INFINITY, "-INF"],
+          ["NaN", Number.NaN, "NaN"],
+        ];
+        for (const [lexical, seconds, written] of cases) {
+          const single = yield* Effect.fromResult(parseLexical("duration", lexical));
+          assert.strictEqual(single.baseType, "duration", lexical);
+          assert.isTrue(Object.is(single.value, seconds), lexical);
+          assert.strictEqual(format(single), written, lexical);
+        }
+        for (const lexical of ["PT1M30.5S", "P1D", "PT90S", "90s", ""]) {
+          const error = yield* Effect.flip(Effect.fromResult(parseLexical("duration", lexical)));
+          assert.strictEqual(error._tag, "InvalidValue", lexical);
+          assert.strictEqual(error.baseType, "duration", lexical);
+          assert.strictEqual(error.lexical, lexical);
+        }
+      }),
+  );
+
   it.effect("reads a pair as written and refuses one with outer whitespace", () =>
     Effect.gen(function* pairsAsWritten() {
       const directed = yield* Effect.fromResult(parseLexical("directedPair", "A B"));
@@ -368,6 +504,7 @@ describe("format", () => {
         ["pair", "A B", "A B"],
         ["directedPair", "B A", "B A"],
         ["point", "-3 +07", "-3 7"],
+        ["duration", "90.50", "90.5"],
         ["uri", "https://example.org/a b", "https://example.org/a b"],
       ];
       for (const [baseType, lexical, written] of cases) {
@@ -394,7 +531,7 @@ describe("isNcName", () => {
 });
 
 describe("isModelled", () => {
-  it("holds every base type but duration and file", () => {
+  it("holds every base type but file", () => {
     const modelled = [
       "identifier",
       "boolean",
@@ -404,12 +541,13 @@ describe("isModelled", () => {
       "point",
       "pair",
       "directedPair",
+      "duration",
       "uri",
     ];
     for (const baseType of modelled) {
       assert.isTrue(isModelled(baseType), baseType);
     }
-    for (const baseType of ["duration", "file", "record"]) {
+    for (const baseType of ["file", "record"]) {
       assert.isFalse(isModelled(baseType), baseType);
     }
   });

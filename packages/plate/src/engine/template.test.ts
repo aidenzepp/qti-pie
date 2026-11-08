@@ -2,9 +2,14 @@ import { assert, describe, it } from "@effect/vitest";
 import { Option, Result } from "effect";
 import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
-import { drawBelow, drawStream } from "#plate/engine/random.ts";
+import { defaultLabel, drawBelow, drawStream } from "#plate/engine/random.ts";
 import type { Draw } from "#plate/engine/random.ts";
-import { runTemplates } from "#plate/engine/template.ts";
+import type { TestScope } from "#plate/engine/scope.ts";
+import {
+  checkTemplateDefaults,
+  evaluateTemplateDefaults,
+  runTemplates,
+} from "#plate/engine/template.ts";
 import type { TemplateValues } from "#plate/engine/template.ts";
 import type { TemplateBranch, TemplateRule } from "#plate/model/expression.ts";
 import type {
@@ -14,6 +19,7 @@ import type {
   ResponseDeclaration,
   TemplateDeclaration,
 } from "#plate/model/item.ts";
+import type { TemplateDefault, Test } from "#plate/model/test.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
@@ -644,5 +650,244 @@ describe("runTemplates", () => {
       failure(run([setDefault("T", base(integer(1n)))])),
       new UnknownIdentifierError({ holder: "item", identifier: "T", role: "variable" }),
     );
+  });
+});
+
+/**
+ * Construct a single string value.
+ *
+ * @param value The string.
+ * @returns The value.
+ */
+const string = (value: string): Value => ({
+  baseType: "string",
+  cardinality: "single",
+  values: [{ baseType: "string", value }],
+});
+
+/**
+ * Construct an item ref's `qti-template-default`.
+ *
+ * @param templateIdentifier The template variable it sets.
+ * @param expression The expression the test evaluates for it.
+ * @returns The default.
+ */
+const templateDefault = (templateIdentifier: string, expression: Expression): TemplateDefault => ({
+  expression,
+  templateIdentifier,
+});
+
+/**
+ * The test's one outcome, `TOTAL`, a single integer with no declared default.
+ */
+const totalDeclaration: OutcomeDeclaration = {
+  ...scoreDeclaration,
+  baseType: "integer",
+  defaultValue: Option.none(),
+  identifier: "TOTAL",
+};
+
+/**
+ * The test holder a template default reads: the outcome `TOTAL`.
+ */
+const defaultsTest: Pick<Test, "outcomes"> = { outcomes: new Map([["TOTAL", totalDeclaration]]) };
+
+/**
+ * A test scope with no item, no part and no time, as a template default's scope holds none.
+ */
+const defaultsScope: TestScope = {
+  declared: new Set(["TOTAL"]),
+  duration: Option.none(),
+  items: [],
+  parts: new Map(),
+  sections: new Map(),
+};
+
+/**
+ * The instance whose template defaults the cases draw.
+ */
+const defaultsInstance = "t1";
+
+/**
+ * Evaluate an item ref's template defaults over {@link defaultsTest} and {@link defaultsScope},
+ * with `TOTAL` at 5.
+ *
+ * @param defaults The item ref's template defaults.
+ * @param draw The stream; the default label's for the sequence index 2, under the seed `"s"`, when
+ *   none is given.
+ * @returns The defaults' values, or the first failure.
+ */
+const evaluated = (
+  defaults: readonly TemplateDefault[],
+  draw: Draw = drawStream("s", defaultLabel(defaultsInstance, 2)),
+): Result.Result<Readonly<Record<string, Value>>, EngineFailure> =>
+  evaluateTemplateDefaults(defaults, defaultsTest, { TOTAL: integer(5n) }, defaultsScope, draw);
+
+/**
+ * The range of {@link wideDraw}: a million integers, so two draws almost never agree.
+ */
+const wideCount = 1_000_000n;
+
+/**
+ * A `qti-random-integer` over {@link wideCount} integers, from 0.
+ */
+const wideDraw: Expression = randomInteger(0n, wideCount - 1n);
+
+/**
+ * Give the defaults' values, after checking that their evaluation succeeded.
+ *
+ * @param result The evaluation's result.
+ * @returns The values.
+ */
+const defaultsOf = (
+  result: Result.Result<Readonly<Record<string, Value>>, EngineFailure>,
+): Readonly<Record<string, Value>> => {
+  assert.isTrue(Result.isSuccess(result));
+
+  return Result.getOrThrow(result);
+};
+
+/**
+ * Give the failure an evaluation or a check returns, after checking that it failed.
+ *
+ * @param result The result.
+ * @returns The failure.
+ */
+const failed = <A>(result: Result.Result<A, EngineFailure>): EngineFailure => {
+  assert.isTrue(Result.isFailure(result));
+
+  return Result.getOrThrow(Result.flip(result));
+};
+
+describe("template defaults in template processing", () => {
+  it("[T-9] starts a template variable at the declared state the test sets, before the item's template processing reads it", () => {
+    const rules = [setTemplate("U", sum(variable("T"), base(integer(1n))))];
+    const left = values(
+      runTemplates(itemOf(rules), rules, drawStream("", "template test"), { T: integer(10n) }),
+    );
+
+    assert.deepStrictEqual(left.templates["T"], integer(10n));
+    assert.deepStrictEqual(left.templates["U"], integer(11n));
+  });
+
+  it("[T-9] returns a constraint's restart, and a spent budget, to the declared state the test sets, not the declaration's default", () => {
+    const key = "constraint 11";
+    const restarting = [
+      setTemplate("U", variable("T")),
+      setTemplate("T", randomInteger(0n, 7n)),
+      constraint(match(variable("T"), base(integer(7n)))),
+    ];
+    const restarted = values(
+      runTemplates(itemOf(restarting), restarting, drawStream("", key), { T: integer(10n) }),
+    );
+    const spending = [
+      setTemplate("T", randomInteger(0n, 7n)),
+      constraint(base(boolean(false))),
+      setTemplate("U", variable("T")),
+    ];
+    const stream = counting(drawStream("", "never"));
+    const spent = values(
+      runTemplates(itemOf(spending), spending, stream.draw, { T: integer(10n) }),
+    );
+
+    // The stream draws 0, 2 and 7, so the run restarts twice; each pass reads `T` before it draws.
+    assert.deepStrictEqual(restarted.templates["T"], integer(7n));
+    assert.deepStrictEqual(restarted.templates["U"], integer(10n));
+    assert.strictEqual(stream.count(), 101);
+    assert.deepStrictEqual(spent.templates["T"], integer(10n));
+    assert.deepStrictEqual(spent.templates["U"], integer(10n));
+  });
+
+  it("[T-9] keeps a NULL default as the variable's own NULL in the declared state the test sets", () => {
+    const left = values(
+      runTemplates(itemOf([]), [], drawStream("", "template test"), {
+        T: nullOf("string", "single"),
+      }),
+    );
+
+    assert.deepStrictEqual(left.templates["T"], nullOf("integer", "single"));
+  });
+
+  it("[T-9] fails a default that does not fit the declared state the test sets: a key that names no template variable, a value of another type", () => {
+    const item = itemOf([]);
+    const unknown = new UnknownIdentifierError({
+      holder: "item",
+      identifier: "NOWHERE",
+      role: "variable",
+    });
+    const response = new UnknownIdentifierError({
+      holder: "item",
+      identifier: "RESPONSE",
+      role: "variable",
+    });
+    const mismatch = new OutcomeMismatchError({
+      actual: "string single",
+      expected: "integer single",
+      identifier: "T",
+    });
+
+    assert.deepStrictEqual(failed(checkTemplateDefaults(item, { NOWHERE: integer(1n) })), unknown);
+    assert.deepStrictEqual(
+      failed(checkTemplateDefaults(item, { RESPONSE: identifier("A") })),
+      response,
+    );
+    assert.deepStrictEqual(failed(checkTemplateDefaults(item, { T: string("seven") })), mismatch);
+    assert.deepStrictEqual(
+      failure(runTemplates(item, [], drawStream("", "template test"), { NOWHERE: integer(1n) })),
+      unknown,
+    );
+    assert.deepStrictEqual(
+      failure(runTemplates(item, [], drawStream("", "template test"), { T: string("seven") })),
+      mismatch,
+    );
+    assert.deepStrictEqual(
+      defaultsOf(checkTemplateDefaults(item, { T: integer(10n), U: nullOf("float", "single") })),
+      { T: integer(10n), U: nullOf("integer", "single") },
+    );
+  });
+
+  it("[T-9] evaluates the declared state the test sets in document order from one stream, the first and second draws", () => {
+    const replay = drawStream("s", defaultLabel(defaultsInstance, 2));
+    const first = drawBelow(replay, wideCount);
+    const second = drawBelow(replay, wideCount);
+    const left = defaultsOf(
+      evaluated([templateDefault("T", wideDraw), templateDefault("U", wideDraw)]),
+    );
+
+    assert.notStrictEqual(first, second);
+    assert.deepStrictEqual(left, { T: integer(first), U: integer(second) });
+  });
+
+  it("[T-9] draws the declared state the test sets from the label's stream under the seed, not from the default key's", () => {
+    const keyed = drawBelow(drawStream("s", defaultLabel(defaultsInstance, 2)), wideCount);
+    const unkeyed = drawBelow(drawStream("", ""), wideCount);
+    const left = defaultsOf(evaluated([templateDefault("T", wideDraw)]));
+
+    assert.notStrictEqual(keyed, unkeyed);
+    assert.deepStrictEqual(left, { T: integer(keyed) });
+  });
+
+  it("[T-9] reads a test outcome's current value, unprefixed, into the declared state the test sets", () => {
+    const left = defaultsOf(
+      evaluated([templateDefault("T", sum(variable("TOTAL"), base(integer(1n))))]),
+    );
+
+    assert.deepStrictEqual(left, { T: integer(6n) });
+  });
+
+  it("[T-9] fails a name the test's processing does not hold as the record's gap, ending the declared state the test sets", () => {
+    const stream = counting(drawStream("s", defaultLabel(defaultsInstance, 2)));
+    const left = failed(
+      evaluated(
+        [templateDefault("T", variable("NOWHERE")), templateDefault("U", wideDraw)],
+        stream.draw,
+      ),
+    );
+
+    assert.deepStrictEqual(
+      left,
+      new UnknownIdentifierError({ holder: "record", identifier: "NOWHERE", role: "variable" }),
+    );
+    assert.strictEqual(stream.count(), 0);
   });
 });

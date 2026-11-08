@@ -10,7 +10,7 @@
 import { Option } from "effect";
 import type { Item, OutcomeDeclaration } from "#plate/model/item.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 
 /**
  * One item's session as the renderer holds it, each value of base type integer an exact `bigint`.
@@ -21,10 +21,11 @@ import type { Value } from "#plate/model/values.ts";
  * refused post is no state of the record: `score` returns no record for it, and a host that counts
  * refused posts keeps that count itself.
  * `responses` and `outcomes` hold every modelled variable by identifier, NULL included, and
- * `outcomes` the built-in `completionStatus` too where the item holds it
- * ({@link holdsCompletionStatus}). A record written before the built-in was held lacks it, and an
- * attempt starts it at `unknown`. `notices` names the unsupported features the item shows as
- * notices.
+ * `records` holds each record response's value beside `responses`, by the response's identifier;
+ * template processing never sets one. `outcomes` holds the built-in `completionStatus` too where
+ * the item holds it ({@link holdsCompletionStatus}). A record written before the built-in was held
+ * lacks it, and an attempt starts it at `unknown`. `notices` names the unsupported features the
+ * item shows as notices.
  *
  * `seed` is the seed the record started under: the host's string, used as given, or the one
  * `begin`, `startTest` or `score` drew when the host gave none. `templates` holds the template
@@ -48,6 +49,7 @@ export interface ItemRecord {
   readonly notices: readonly string[];
   readonly numAttempts: number;
   readonly outcomes: { readonly [identifier: string]: Value };
+  readonly records: { readonly [identifier: string]: RecordValue };
   readonly responses: { readonly [identifier: string]: Value };
   readonly seed: string;
   readonly templates: { readonly [identifier: string]: Value };
@@ -70,6 +72,17 @@ export type ResponsesRecord = Pick<ItemRecord, "templates">;
  * set. It holds no seed.
  */
 export type SolutionRecord = Pick<ItemRecord, "correct">;
+
+/**
+ * The part of an {@link ItemRecord} a test's outcome processing reads through the test scope
+ * (`#plate/engine/scope.ts`): the responses and the record responses' records, the outcomes and
+ * the template values, and the correct responses and defaults template processing set. It holds
+ * no seed.
+ */
+export type ScopeRecord = Pick<
+  ItemRecord,
+  "correct" | "defaults" | "outcomes" | "records" | "responses" | "templates"
+>;
 
 /**
  * Give the value an outcome holds before any processing sets it: its declared default, else 0 for
@@ -145,10 +158,14 @@ export const completionValue = (status: CompletionStart): Value => ({
  * `#plate/model/item.ts`), so a rule that reads or sets `completionStatus` past such a declaration
  * never runs; the record then holds the built-in beside it, which only a result reports.
  *
- * @param item The item.
+ * It reads only the item's response and outcome declarations, so the evaluator's declarations
+ * holder (`Declarations` in `#plate/engine/evaluate.ts`), a test's outcome declarations included,
+ * may be passed for the item.
+ *
+ * @param item The item, or a declarations holder.
  * @returns Whether its record's outcomes hold the built-in.
  */
-export const holdsCompletionStatus = (item: Item): boolean =>
+export const holdsCompletionStatus = (item: Pick<Item, "outcomes" | "responses">): boolean =>
   !item.responses.has(completionStatus) && !item.outcomes.has(completionStatus);
 
 /**
@@ -195,12 +212,19 @@ export const outcomeDefaults = (item: Item): ItemRecord["outcomes"] => {
 /**
  * Start the session of an item that has not been attempted.
  *
+ * The record's notices are the features `item.unsupported` shows as notices, so they can name less
+ * than a redaction of the item does. Under a `qti-template-processing` the engine does not run
+ * ({@link unrunTemplateProcessing}), no template value is computed, so a printed variable that
+ * names a template variable has nothing to print and `redact` shows it as the notice
+ * `qti-printed-variable`: the redacted item's notices name it, and the record's do not, since the
+ * item marks no such feature.
+ *
  * @param item The item.
  * @param instance The host's name for this use of the item, which scopes its ids.
  * @returns The record: every response NULL, the outcomes at {@link outcomeDefaults}, the
  *   built-in `completionStatus` `not_attempted` among them, no attempts, the features of
- *   `item.unsupported` shown as notices, the seed `""`, and no template value, correct response
- *   or default.
+ *   `item.unsupported` shown as notices, the seed `""`, and no record response's value, template
+ *   value, correct response or default.
  */
 export const fresh = (item: Item, instance: string): ItemRecord => ({
   attempt: "none",
@@ -213,6 +237,7 @@ export const fresh = (item: Item, instance: string): ItemRecord => ({
   notices: item.unsupported.flatMap((entry) => (entry.shown === "notice" ? [entry.feature] : [])),
   numAttempts: 0,
   outcomes: outcomeDefaults(item),
+  records: {},
   responses: Object.fromEntries(
     Array.from(item.responses, ([identifier, response]) => [
       identifier,

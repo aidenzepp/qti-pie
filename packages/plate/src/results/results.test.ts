@@ -16,14 +16,22 @@ import { firstAttempt } from "#plate/engine/attempt.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type { InlineChoiceInteraction } from "#plate/model/item.ts";
-import { fresh } from "#plate/model/record.ts";
+import { fresh, startingValue } from "#plate/model/record.ts";
 import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { redact, render } from "#plate/render.ts";
 import { results } from "#plate/results/results.ts";
 import type { ResultContext, ResultsInput } from "#plate/results/results.ts";
 import { score } from "#plate/score.ts";
-import type { Responses, SessionItem, SessionPart } from "#plate/session/session.ts";
+import { advance } from "#plate/session/advance.ts";
+import type {
+  Responses,
+  SessionItem,
+  SessionPart,
+  Step,
+  TestSession,
+} from "#plate/session/session.ts";
+import { startTest } from "#plate/session/start.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { validateAgainst } from "#plate/test/xsd.ts";
 import { open } from "#plate/validate/open.ts";
@@ -65,9 +73,16 @@ const context: ResultContext = {
 const instance = "sit-1";
 
 /**
- * The hand-built sessions' seed, which keys a shuffled Choice's order.
+ * The hand-built sessions' shuffle seed, which keys a shuffled Choice's order, and the seed their
+ * items' records start under.
  */
 const seed = "7";
+
+/**
+ * The hand-built sessions' processing seed, apart from their shuffle seed, so a `choiceSequence`
+ * keyed by it would show another order.
+ */
+const processingSeed = "processing-7";
 
 /**
  * When the hand-built sessions started and last changed: 123.45 seconds apart.
@@ -107,14 +122,16 @@ const acceptItem = Effect.fnUntraced(function* acceptItem(location: string, byte
  * Open one of the M2 fixture package's items.
  *
  * @param name The item's file name under `items/`.
- * @returns The accepted item, located at `items/<name>`.
+ * @param location Where to locate it, `items/<name>` by default; `startTest` delivers it for an
+ *   item ref only at the document the ref names from its test.
+ * @returns The accepted item, located at `location`.
  */
-const fixtureItem = Effect.fnUntraced(function* fixtureItem(name: string) {
+const fixtureItem = Effect.fnUntraced(function* fixtureItem(name: string, location?: string) {
   const bytes = yield* Effect.tryPromise(() =>
     readFile(path.join(fixtureDirectory, "items", name)),
   );
 
-  return yield* acceptItem(`items/${name}`, bytes);
+  return yield* acceptItem(location ?? `items/${name}`, bytes);
 });
 
 /**
@@ -237,11 +254,53 @@ const totalDeclaration = [
 ].join("");
 
 /**
- * Outcome processing that sets `TOTAL`, which M2 marks and does not run.
+ * Outcome processing that sets `TOTAL` to 3, which the engine runs: a result writes `TOTAL` as the
+ * stored session holds it, never as running this would set it.
  */
 const totalProcessing = [
   '<qti-outcome-processing><qti-set-outcome-value identifier="TOTAL">',
   '<qti-base-value base-type="float">3</qti-base-value>',
+  "</qti-set-outcome-value></qti-outcome-processing>",
+].join("");
+
+/**
+ * A test's float `SCORE` with a default, which a test with no outcome processing reports.
+ */
+const scoreDeclaration = [
+  '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">',
+  "<qti-default-value><qti-value>0.5</qti-value></qti-default-value>",
+  "</qti-outcome-declaration>",
+].join("");
+
+/**
+ * Outcome processing that reads the built-in `numAttempts`, which the engine does not hold in a
+ * test, so the test model marks it.
+ */
+const attemptsProcessing = [
+  "<qti-outcome-processing><qti-outcome-condition><qti-outcome-if>",
+  '<qti-gte><qti-variable identifier="numAttempts"/><qti-base-value base-type="integer">1</qti-base-value></qti-gte>',
+  '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>',
+  "</qti-outcome-if></qti-outcome-condition></qti-outcome-processing>",
+].join("");
+
+/**
+ * A test's integer `CORRECT`, declared after {@link scoreDeclaration}, which
+ * {@link summingProcessing} sets.
+ */
+const correctDeclaration =
+  '<qti-outcome-declaration identifier="CORRECT" cardinality="single" base-type="integer"/>';
+
+/**
+ * Outcome processing in the corpus's pattern: `SCORE` the sum of every item's `SCORE`, through a
+ * `qti-sum` over `qti-test-variables`, and `CORRECT` the count of items answered correctly. It
+ * sets `CORRECT` first, so a result that wrote the outcomes in the order the rules set them would
+ * not follow the declarations.
+ */
+const summingProcessing = [
+  "<qti-outcome-processing>",
+  '<qti-set-outcome-value identifier="CORRECT"><qti-number-correct/></qti-set-outcome-value>',
+  '<qti-set-outcome-value identifier="SCORE">',
+  '<qti-sum><qti-test-variables variable-identifier="SCORE"/></qti-sum>',
   "</qti-set-outcome-value></qti-outcome-processing>",
 ].join("");
 
@@ -314,6 +373,96 @@ const defaultingXml = [
   '<qti-simple-choice identifier="B">No</qti-simple-choice>',
   "</qti-choice-interaction></qti-item-body></qti-assessment-item>",
 ].join("");
+
+/**
+ * An item written for this test with a single identifier response `RESPONSE`, bound to a Choice,
+ * and a record response `NUMBER`, bound to no interaction, whose declared default holds the fields
+ * `stringValue` "0" and `integerValue` 0.
+ */
+const recordedXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="recorded"',
+  ' title="Recorded" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>',
+  '<qti-response-declaration identifier="NUMBER" cardinality="record">',
+  "<qti-default-value>",
+  '<qti-value field-identifier="stringValue" base-type="string">0</qti-value>',
+  '<qti-value field-identifier="integerValue" base-type="integer">0</qti-value>',
+  "</qti-default-value>",
+  "</qti-response-declaration>",
+  '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+  '<qti-simple-choice identifier="A">Yes</qti-simple-choice>',
+  '<qti-simple-choice identifier="B">No</qti-simple-choice>',
+  "</qti-choice-interaction></qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
+ * The record a candidate's "2.5" gives: its text and the fields read from it as a number.
+ */
+const twoAndAHalf: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "stringValue", value: { baseType: "string", value: "2.5" } },
+    { identifier: "floatValue", value: { baseType: "float", value: 2.5 } },
+    { identifier: "leftDigits", value: { baseType: "integer", value: 1n } },
+    { identifier: "rightDigits", value: { baseType: "integer", value: 1n } },
+    { identifier: "ndp", value: { baseType: "integer", value: 1n } },
+    { identifier: "nsf", value: { baseType: "integer", value: 2n } },
+  ],
+};
+
+/**
+ * The `value` elements a result writes for {@link twoAndAHalf}, each its attributes and its text.
+ */
+const twoAndAHalfWritten: (readonly [Readonly<Record<string, string>>, string])[] = [
+  [{ baseType: "string", fieldIdentifier: "stringValue" }, "2.5"],
+  [{ baseType: "float", fieldIdentifier: "floatValue" }, "2.5"],
+  [{ baseType: "integer", fieldIdentifier: "leftDigits" }, "1"],
+  [{ baseType: "integer", fieldIdentifier: "rightDigits" }, "1"],
+  [{ baseType: "integer", fieldIdentifier: "ndp" }, "1"],
+  [{ baseType: "integer", fieldIdentifier: "nsf" }, "2"],
+];
+
+/**
+ * {@link recordedXml}'s declared default, its fields in another order than declared, which a record
+ * does not count.
+ */
+const recordedDefault: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "integerValue", value: { baseType: "integer", value: 0n } },
+    { identifier: "stringValue", value: { baseType: "string", value: "0" } },
+  ],
+};
+
+/**
+ * The NULL record: no field.
+ */
+const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+/**
+ * An item written for this test whose one response, the record response `NUMBER`, is bound to a
+ * Text Entry with `pattern-mask="[0-9]+"`.
+ */
+const maskedXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="masked"',
+  ' title="Masked" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="NUMBER" cardinality="record"/>',
+  "<qti-item-body><p>Your number: ",
+  '<qti-text-entry-interaction response-identifier="NUMBER" pattern-mask="[0-9]+"/>',
+  "</p></qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
+ * Construct the record a candidate's text gives, holding only its `stringValue`, as a host may
+ * build it.
+ *
+ * @param text The text as typed, not empty.
+ * @returns The record.
+ */
+const typedRecord = (text: string): RecordValue => ({
+  cardinality: "record",
+  fields: [{ identifier: "stringValue", value: { baseType: "string", value: text } }],
+});
 
 /**
  * An item written for this test whose template processing sets `HIDDEN` to `B` and `BLOCK` to `Y`.
@@ -476,6 +625,7 @@ const sessionItem = (
   ref: refId,
   saved: Option.none(),
   sequenceIndex,
+  templateDefaults: Option.none(),
   ...changes,
 });
 
@@ -498,12 +648,15 @@ const processedRecord = (item: SessionItem, processed: number): ItemRecord => ({
 });
 
 /**
- * Write a test session in the form the host stores.
+ * Write a test session in the form the host stores, its test's outcomes at their starting values,
+ * with no outcome processing run, under the processing seed {@link processingSeed}.
  *
  * @param test The test it is a session of.
- * @param items Its items.
+ * @param items Its items: one per item ref of the test, in document order, as `decodeSession`
+ *   requires.
  * @param parts Its parts, each ended by default.
- * @returns The stored session, closed.
+ * @param shuffleSeed Its shuffle seed, {@link seed} by default.
+ * @returns The stored session: closed when every part has ended, interacting otherwise.
  */
 const storedSession = (
   test: AcceptedTest,
@@ -512,6 +665,7 @@ const storedSession = (
     identifier,
     status: "ended",
   })),
+  shuffleSeed: Option.Option<string> = Option.some(seed),
 ): StoredTestSession =>
   Result.getOrElse(
     encodeSession({
@@ -519,11 +673,19 @@ const storedSession = (
       instance,
       items,
       kind: "test",
+      outcomeRuns: 0,
+      outcomes: Object.fromEntries(
+        Array.from(test.test.outcomes, ([identifier, outcome]) => [
+          identifier,
+          startingValue(outcome),
+        ]),
+      ),
       parts,
       position: 0,
-      seed,
+      seed: processingSeed,
+      shuffleSeed,
       started,
-      status: "closed",
+      status: parts.every((entry) => entry.status === "ended") ? "closed" : "interacting",
       test: test.test.identifier,
       updated,
     }),
@@ -677,6 +839,41 @@ const assertValid = Effect.fnUntraced(function* assertValid(xml: string) {
 });
 
 /**
+ * Give the `value` elements of one response variable's candidate response, as written.
+ *
+ * @param xml The result's text.
+ * @param item The identifier of the item result that holds the variable.
+ * @param identifier The response variable's identifier.
+ * @returns Each value's attributes in no namespace and its text, in order; the result holds
+ *   exactly one candidate response for the variable.
+ */
+const candidateOf = Effect.fnUntraced(function* candidateOf(
+  xml: string,
+  item: string,
+  identifier: string,
+) {
+  const { root } = yield* readSource("result.xml", new TextEncoder().encode(xml));
+  const variable =
+    childrenNamed(root, "itemResult")
+      .filter((result) => attributesOf(result)["identifier"] === item)
+      .flatMap((result) => childrenNamed(result, "responseVariable"))
+      .find((entry) => attributesOf(entry)["identifier"] === identifier) ??
+    assert.fail(`The item result ${item} has no responseVariable ${identifier}.`);
+  const candidates = childrenNamed(variable, "candidateResponse");
+  assert.lengthOf(candidates, 1);
+
+  return candidates.flatMap((candidate) =>
+    childrenNamed(candidate, "value").map(
+      (value) =>
+        [
+          attributesOf(value),
+          value.children.map((child) => (child.kind === "text" ? child.text : "")).join(""),
+        ] as const,
+    ),
+  );
+});
+
+/**
  * Give every element of a rendered tree, each before its descendants.
  *
  * @param nodes The nodes.
@@ -692,6 +889,7 @@ const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
  * @param response The Choice's response.
  * @param token The instance it is rendered under.
  * @param record The record the item is redacted under, none for none.
+ * @param shuffleSeed The configuration's seed it is rendered under, {@link seed} by default.
  * @returns Each Control's value, in emitted order.
  */
 const renderedOrder = Effect.fnUntraced(function* renderedOrder(
@@ -699,9 +897,13 @@ const renderedOrder = Effect.fnUntraced(function* renderedOrder(
   response: string,
   token: string,
   record?: RedactRecord,
+  shuffleSeed: Option.Option<string> = Option.some(seed),
 ) {
+  const configuration = yield* configure(
+    Option.match(shuffleSeed, { onNone: () => ({}), onSome: (shuffle) => ({ seed: shuffle }) }),
+  );
   const rendered = yield* Effect.fromResult(
-    render(redact(accepted, record), yield* configure({ seed }), { instance: token }),
+    render(redact(accepted, record), configuration, { instance: token }),
   );
 
   return elementsOf(parseHtml(rendered.html))
@@ -754,6 +956,21 @@ const renderedOptions = Effect.fnUntraced(function* renderedOptions(
  */
 const failureTag = (input: ResultsInput): Option.Option<string> =>
   Option.map(Result.getFailure(results(input)), (failure) => failure._tag);
+
+/**
+ * The input of an item's result under the tests' context, written at {@link updated}.
+ *
+ * @param document The item.
+ * @param record Its stored record.
+ * @returns The input.
+ */
+const itemInputOf = (document: Accepted, record: StoredRecord): ResultsInput => ({
+  context,
+  datestamp: new Date(updated),
+  document,
+  kind: "item",
+  record,
+});
 
 /**
  * The fields of a result's {@link InvalidResultContext}.
@@ -826,7 +1043,7 @@ describe("results", () => {
           [{ identifier: `s-${uuid}`, sourceID: "http://localhost:5190/" }],
         );
       }),
-    { tags: ["corpus", "qti-xsd"] },
+    { tags: ["corpus", "results-xsd"] },
   );
 
   it.effect(
@@ -874,7 +1091,7 @@ describe("results", () => {
         assert.deepStrictEqual((yield* written(unattempted))?.values, ["not_attempted"]);
         assert.deepStrictEqual((yield* written(lacking))?.values, ["unknown"]);
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -896,7 +1113,7 @@ describe("results", () => {
         yield* assertValid(xml);
         assert.notInclude(xml, "choiceSequence");
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -989,7 +1206,54 @@ describe("results", () => {
           itemOf(report, "one").responses["RESPONSE"]?.attributes["choiceSequence"],
         );
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "writes a session's choiceSequence keyed by its shuffle seed, never its processing seed, and with no shuffle seed in the order the instance alone gives",
+    () =>
+      Effect.gen(function* shuffleSeedSequence() {
+        const shuffled = yield* fixtureItem("p1-multiple-choice.xml");
+        const test = yield* acceptTest("shuffled", [
+          part("P1", individual, [ref("two", "p1-multiple-choice.xml")]),
+        ]);
+        const items: readonly SessionItem[] = [
+          sessionItem(shuffled, "two", 1, { duration: 4, presented: true }),
+        ];
+        const token = `${instance}.1`;
+        const sequenceUnder = Effect.fnUntraced(function* sequenceUnder(
+          shuffleSeed: Option.Option<string>,
+        ) {
+          const { report, xml } = yield* reported({
+            context,
+            items: new Map([["two", shuffled]]),
+            kind: "test",
+            session: storedSession(test, items, undefined, shuffleSeed),
+            test,
+          });
+          yield* assertValid(xml);
+
+          return itemOf(report, "two").responses["RESPONSE"]?.attributes["choiceSequence"];
+        });
+        const seeded = yield* sequenceUnder(Option.some(seed));
+        const unseeded = yield* sequenceUnder(Option.none());
+        const underProcessingSeed = (yield* renderedOrder(
+          shuffled,
+          "RESPONSE",
+          token,
+          undefined,
+          Option.some(processingSeed),
+        )).join(" ");
+
+        assert.strictEqual(seeded, (yield* renderedOrder(shuffled, "RESPONSE", token)).join(" "));
+        assert.strictEqual(
+          unseeded,
+          (yield* renderedOrder(shuffled, "RESPONSE", token, undefined, Option.none())).join(" "),
+        );
+        assert.notStrictEqual(seeded, underProcessingSeed);
+        assert.notStrictEqual(unseeded, underProcessingSeed);
+      }),
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1021,7 +1285,7 @@ describe("results", () => {
           order.join(" "),
         );
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1073,7 +1337,7 @@ describe("results", () => {
           ["outcomeVariable", "SCORE"],
         ]);
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1106,7 +1370,7 @@ describe("results", () => {
           HIDDEN: { attributes: hidingTemplate("HIDDEN"), values: [] },
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1129,7 +1393,7 @@ describe("results", () => {
           HIDDEN: { attributes: hidingTemplate("HIDDEN"), values: ["B"] },
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1205,7 +1469,7 @@ describe("results", () => {
           ["presented", "answered"],
         );
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1247,13 +1511,160 @@ describe("results", () => {
           ],
         );
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
-    "writes no test outcome for a test with outcome processing",
+    "[T-9] writes no test outcome of its own for a test whose outcome processing is marked",
     () =>
-      Effect.gen(function* processedTest() {
+      Effect.gen(function* markedTest() {
+        const single = yield* fixtureItem("p1-single-choice.xml");
+        const test = yield* acceptTest("marked", [
+          scoreDeclaration,
+          part("P1", individual, [ref("one", "p1-single-choice.xml")]),
+          attemptsProcessing,
+        ]);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["one", single]]),
+          kind: "test",
+          session: storedSession(test, [sessionItem(single, "one", 1)]),
+          test,
+        });
+
+        yield* assertValid(xml);
+        assert.strictEqual(test.test.outcomeProcessing.kind, "marked");
+
+        const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
+        assert.deepStrictEqual(Object.keys(written.outcomes), []);
+      }),
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "[T-9] writes SCORE at its default for a test with no outcome processing",
+    () =>
+      Effect.gen(function* unprocessedTest() {
+        const single = yield* fixtureItem("p1-single-choice.xml");
+        const test = yield* acceptTest("unprocessed", [
+          scoreDeclaration,
+          part("P1", individual, [ref("one", "p1-single-choice.xml")]),
+        ]);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["one", single]]),
+          kind: "test",
+          session: storedSession(test, [sessionItem(single, "one", 1)]),
+          test,
+        });
+
+        yield* assertValid(xml);
+        assert.strictEqual(test.test.outcomeProcessing.kind, "absent");
+
+        const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
+        assert.deepStrictEqual(written.outcomes["SCORE"], {
+          attributes: { baseType: "float", cardinality: "single", identifier: "SCORE" },
+          values: ["0.5"],
+        });
+      }),
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "[T-9] writes each test outcome once, in declaration order, as the last run left them: SCORE the sum of the items' SCORE after the session closes",
+    () =>
+      Effect.gen(function* lastRunLeft() {
+        const single = yield* fixtureItem(
+          "p1-single-choice.xml",
+          "tests/items/p1-single-choice.xml",
+        );
+        const test = yield* acceptTest("summed", [
+          scoreDeclaration,
+          correctDeclaration,
+          part("P1", individual, [
+            ref("one", "p1-single-choice.xml"),
+            ref("two", "p1-single-choice.xml"),
+          ]),
+          summingProcessing,
+        ]);
+        const items = new Map([
+          ["one", single],
+          ["two", single],
+        ]);
+        const configuration = yield* configure({});
+        const step = (session: TestSession, taken: Step, now: string) =>
+          Effect.fromResult(
+            advance(test, items, session, taken, configuration, { now: new Date(now) }),
+          );
+        const answer: Step = {
+          intent: { kind: "submit-item" },
+          responses: { RESPONSE: identifiers("B") },
+        };
+
+        const begun = yield* Effect.fromResult(
+          startTest(test, items, configuration, {
+            instance,
+            now: new Date(started),
+            seed: processingSeed,
+          }),
+        );
+        const first = yield* step(begun, answer, "2026-11-05T10:00:30.000Z");
+        const moved = yield* step(
+          first,
+          { intent: { kind: "go", sequenceIndex: 2 } },
+          "2026-11-05T10:01:00.000Z",
+        );
+        const second = yield* step(moved, answer, "2026-11-05T10:01:30.000Z");
+        const closed = yield* step(second, { intent: { kind: "end-part" } }, updated);
+        assert.strictEqual(test.test.outcomeProcessing.kind, "runs");
+        assert.strictEqual(closed.status, "closed");
+        assert.deepStrictEqual(closed.outcomes, {
+          CORRECT: {
+            baseType: "integer",
+            cardinality: "single",
+            values: [{ baseType: "integer", value: 2n }],
+          },
+          SCORE: {
+            baseType: "float",
+            cardinality: "single",
+            values: [{ baseType: "float", value: 2 }],
+          },
+        });
+
+        const { report, xml } = yield* reported({
+          context,
+          items,
+          kind: "test",
+          session: yield* Effect.fromResult(encodeSession(closed)),
+          test,
+        });
+
+        yield* assertValid(xml);
+
+        const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
+        assert.deepStrictEqual(written.order, [
+          ["responseVariable", "duration"],
+          ["outcomeVariable", "SCORE"],
+          ["outcomeVariable", "CORRECT"],
+        ]);
+        assert.deepStrictEqual(written.outcomes, {
+          CORRECT: {
+            attributes: { baseType: "integer", cardinality: "single", identifier: "CORRECT" },
+            values: ["2"],
+          },
+          SCORE: {
+            attributes: { baseType: "float", cardinality: "single", identifier: "SCORE" },
+            values: ["2"],
+          },
+        });
+      }),
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "[T-9] writes a test outcome as the stored session holds it and never runs the outcome processing itself: TOTAL at its default before any run",
+    () =>
+      Effect.gen(function* storedOutcomes() {
         const single = yield* fixtureItem("p1-single-choice.xml");
         const test = yield* acceptTest("processed", [
           totalDeclaration,
@@ -1269,12 +1680,18 @@ describe("results", () => {
         });
 
         yield* assertValid(xml);
+        assert.strictEqual(test.test.outcomeProcessing.kind, "runs");
 
         const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
-        assert.deepStrictEqual(Object.keys(written.outcomes), []);
+        assert.deepStrictEqual(written.outcomes, {
+          TOTAL: {
+            attributes: { baseType: "float", cardinality: "single", identifier: "TOTAL" },
+            values: ["0.5"],
+          },
+        });
         assert.deepStrictEqual(Object.keys(written.responses), ["duration"]);
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1312,7 +1729,7 @@ describe("results", () => {
           identifier: "MAXSCORE",
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1345,7 +1762,7 @@ describe("results", () => {
           values: ["0.5"],
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1391,7 +1808,7 @@ describe("results", () => {
           },
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect("counts the attempts started, and gives each sessionStatus and completionStatus", () =>
@@ -1502,13 +1919,20 @@ describe("results", () => {
       ];
 
       for (const entry of cases) {
-        const base = sessionItem(accepted, entry.ref, 1, entry.changes);
-        const item = { ...base, record: processedRecord(base, entry.processed) };
+        const sessionItems = [...items.keys()].map((refId, index) => {
+          if (refId !== entry.ref) {
+            return sessionItem(accepted, refId, index + 1);
+          }
+
+          const base = sessionItem(accepted, refId, index + 1, entry.changes);
+
+          return { ...base, record: processedRecord(base, entry.processed) };
+        });
         const { report } = yield* reported({
           context,
           items,
           kind: "test",
-          session: storedSession(test, [item], entry.parts),
+          session: storedSession(test, sessionItems, entry.parts),
           test,
         });
         const written = itemOf(report, entry.ref);
@@ -1616,7 +2040,7 @@ describe("results", () => {
           "C",
         ]);
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1719,6 +2143,169 @@ describe("results", () => {
         assert.deepStrictEqual(failureTag(input(twoValues)), Option.some("InvalidRecord"));
         assert.deepStrictEqual(failureTag(input(fullScore)), Option.some("InvalidRecord"));
       }),
+  );
+
+  it.effect(
+    "[T-14] reports an item's record holding a record under its record response, and refuses one holding it under a response that is not a record response, or under an item that declares no record response: InvalidRecord",
+    () =>
+      Effect.gen(function* recordUnderItsDeclaration() {
+        const plain = yield* fixtureItem("p2-choice.xml");
+        const recorded = acceptForTest({
+          ...plain.item,
+          records: new Map([
+            ["RREC", { correct: Option.none(), defaultValue: Option.none(), identifier: "RREC" }],
+          ]),
+        });
+        const answer: RecordValue = {
+          cardinality: "record",
+          fields: [{ identifier: "stringValue", value: { baseType: "string", value: "12" } }],
+        };
+        const good = yield* Effect.fromResult(
+          score(recorded, { RESPONSE: identifiers("A"), RREC: answer }),
+        );
+        const decoded = yield* Effect.fromResult(decodeRecord(good));
+        const misplaced = yield* Effect.fromResult(
+          encodeRecord({ ...decoded, records: { RESPONSE: answer } }),
+        );
+
+        assert.deepStrictEqual(decoded.records, { RREC: answer });
+        assert.deepStrictEqual(failureTag(itemInputOf(recorded, good)), Option.none());
+        assert.deepStrictEqual(
+          failureTag(itemInputOf(recorded, misplaced)),
+          Option.some("InvalidRecord"),
+        );
+        assert.deepStrictEqual(failureTag(itemInputOf(plain, good)), Option.some("InvalidRecord"));
+      }),
+  );
+
+  it.effect(
+    "[I-1] writes a record response in results after the other responses: cardinality record, no baseType, a value per field with its fieldIdentifier and baseType, valid against the Results XSD",
+    () =>
+      Effect.gen(function* recordResponseWritten() {
+        const recorded = yield* acceptItem(
+          "items/recorded.xml",
+          new TextEncoder().encode(recordedXml),
+        );
+        const record = yield* Effect.fromResult(
+          score(recorded, { NUMBER: twoAndAHalf, RESPONSE: identifiers("A") }),
+        );
+        const { report, xml } = yield* reported(itemInputOf(recorded, record));
+        const item = itemOf(report, "recorded");
+
+        yield* assertValid(xml);
+        assert.deepStrictEqual(item.responses["NUMBER"]?.attributes, {
+          answeredStatus: "answered",
+          cardinality: "record",
+          identifier: "NUMBER",
+        });
+        assert.deepStrictEqual(yield* candidateOf(xml, "recorded", "NUMBER"), twoAndAHalfWritten);
+        assert.deepStrictEqual(
+          item.order.filter(([local]) => local === "responseVariable").map(([, name]) => name),
+          ["numAttempts", "RESPONSE", "NUMBER"],
+        );
+        assert.notInclude(xml, "correctResponse");
+      }),
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "[I-1] writes a NULL record response in results as an empty candidateResponse, and gives answered for a record that differs from its declared default and presented for one equal to it in any field order",
+    () =>
+      Effect.gen(function* recordResponseStatus() {
+        const recorded = yield* acceptItem(
+          "items/recorded.xml",
+          new TextEncoder().encode(recordedXml),
+        );
+        const written = Effect.fnUntraced(function* written(answer: RecordValue) {
+          const record = yield* Effect.fromResult(score(recorded, { NUMBER: answer }));
+          const { report, xml } = yield* reported(itemInputOf(recorded, record));
+          yield* assertValid(xml);
+
+          return [
+            itemOf(report, "recorded").responses["NUMBER"]?.attributes["answeredStatus"],
+            (yield* candidateOf(xml, "recorded", "NUMBER")).length,
+          ] as const;
+        });
+
+        assert.deepStrictEqual(yield* written(nullRecord), ["presented", 0]);
+        assert.deepStrictEqual(yield* written(recordedDefault), ["presented", 2]);
+        assert.deepStrictEqual(yield* written(twoAndAHalf), ["answered", 6]);
+      }),
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "[I-1] [Q-20] gives attempted for a record response whose Text Entry's pattern-mask refuses its text as typed, and answered for one it accepts",
+    () =>
+      Effect.gen(function* maskedRecordStatus() {
+        const masked = yield* acceptItem("items/masked.xml", new TextEncoder().encode(maskedXml));
+        const status = Effect.fnUntraced(function* status(text: string) {
+          const record = yield* Effect.fromResult(score(masked, { NUMBER: typedRecord(text) }));
+          const { report, xml } = yield* reported(itemInputOf(masked, record));
+          yield* assertValid(xml);
+
+          return itemOf(report, "masked").responses["NUMBER"]?.attributes["answeredStatus"];
+        });
+
+        assert.strictEqual(yield* status("12.0"), "attempted");
+        assert.strictEqual(yield* status(" 12"), "attempted");
+        assert.strictEqual(yield* status("12"), "answered");
+      }),
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "[I-1] writes a test session's record response in results from its saved responses over its record's, and a NULL record for an item never presented, valid against the Results XSD",
+    () =>
+      Effect.gen(function* sessionRecordResponse() {
+        const recorded = yield* acceptItem(
+          "items/recorded.xml",
+          new TextEncoder().encode(recordedXml),
+        );
+        const test = yield* acceptTest("recording", [
+          part("P1", individual, [
+            ref("saved", "recorded.xml"),
+            ref("kept", "recorded.xml"),
+            ref("unseen", "recorded.xml"),
+          ]),
+        ]);
+        const savedItem = sessionItem(recorded, "saved", 1);
+        const keptItem = sessionItem(recorded, "kept", 2);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([
+            ["saved", recorded],
+            ["kept", recorded],
+            ["unseen", recorded],
+          ]),
+          kind: "test",
+          session: storedSession(test, [
+            sessionItem(recorded, "saved", 1, {
+              ...saving({ NUMBER: twoAndAHalf }),
+              record: yield* scored(recorded, savedItem.record, { NUMBER: recordedDefault }),
+            }),
+            sessionItem(recorded, "kept", 2, {
+              presented: true,
+              record: yield* scored(recorded, keptItem.record, { NUMBER: twoAndAHalf }),
+            }),
+            sessionItem(recorded, "unseen", 3),
+          ]),
+          test,
+        });
+
+        yield* assertValid(xml);
+        assert.deepStrictEqual(
+          ["saved", "kept", "unseen"].map(
+            (identifier) =>
+              itemOf(report, identifier).responses["NUMBER"]?.attributes["answeredStatus"],
+          ),
+          ["answered", "answered", "notpresented"],
+        );
+        assert.deepStrictEqual(yield* candidateOf(xml, "saved", "NUMBER"), twoAndAHalfWritten);
+        assert.deepStrictEqual(yield* candidateOf(xml, "kept", "NUMBER"), twoAndAHalfWritten);
+        assert.deepStrictEqual(yield* candidateOf(xml, "unseen", "NUMBER"), []);
+      }),
+    { tags: ["results-xsd"] },
   );
 
   it.effect("refuses a session whose item record does not fit the item's declarations", () =>

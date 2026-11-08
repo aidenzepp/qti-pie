@@ -2,9 +2,9 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import type { Expression, TemplateRule } from "#plate/model/expression.ts";
-import type { Item, ResponseDeclaration } from "#plate/model/item.ts";
+import type { Item, RecordDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { redact } from "#plate/render.ts";
 import type { Responses } from "#plate/session/session.ts";
 import { solution } from "#plate/solution.ts";
@@ -126,6 +126,48 @@ const templated: Item = {
 };
 
 /**
+ * The record a post of `12.5` gives: its text, and the float it reads as.
+ */
+const twelveAndAHalf: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "stringValue", value: { baseType: "string", value: "12.5" } },
+    { identifier: "floatValue", value: { baseType: "float", value: 12.5 } },
+  ],
+};
+
+/**
+ * The record response `R`, which declares {@link twelveAndAHalf} as its correct response and
+ * no default.
+ */
+const recordResponse: RecordDeclaration = {
+  correct: Option.some(twelveAndAHalf),
+  defaultValue: Option.none(),
+  identifier: "R",
+};
+
+/**
+ * The record response `BARE`, which declares neither a correct response nor a default.
+ */
+const bareRecord: RecordDeclaration = {
+  correct: Option.none(),
+  defaultValue: Option.none(),
+  identifier: "BARE",
+};
+
+/**
+ * The hand-built BG007 with the record responses {@link recordResponse} and {@link bareRecord}
+ * beside `RESPONSE`.
+ */
+const withRecords: Item = {
+  ...bg007Item,
+  records: new Map([
+    [recordResponse.identifier, recordResponse],
+    [bareRecord.identifier, bareRecord],
+  ]),
+};
+
+/**
  * Hand `solution` a redacted item, which its type refuses: the type test is the
  * `@ts-expect-error` below, which `tsc` fails on if the call ever type-checks. No test calls it.
  *
@@ -208,6 +250,18 @@ describe("solution", () => {
     const declared = {
       KEPT: identifierValue("kept"),
       OTHER: nullOf("identifier", "multiple"),
+      RESPONSE: identifierValue("true"),
+    };
+
+    assert.deepStrictEqual(solution(accepted), declared);
+    assert.deepStrictEqual(solution(accepted, { correct: {} }), declared);
+  });
+
+  it("[I-1] gives a record response its declared correct response, and the NULL record where it declares none, with or without a record", () => {
+    const accepted = acceptForTest(withRecords);
+    const declared: Responses = {
+      BARE: { cardinality: "record", fields: [] },
+      R: twelveAndAHalf,
       RESPONSE: identifierValue("true"),
     };
 

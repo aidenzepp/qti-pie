@@ -700,6 +700,7 @@ const textEntry: TextEntryInteraction = {
   ariaLabelledby: Option.some("intro"),
   base: 10,
   baseType: "integer",
+  cardinality: "single",
   class: "short-answer",
   expectedLength: Option.some(4n),
   kind: "text-entry",
@@ -835,7 +836,8 @@ const placed = (interaction: Interaction): BodyNode => {
 /**
  * Give the binding an interaction's response declares: a Choice's is an identifier of its own
  * cardinality, an Inline Choice's a single identifier, a Text Entry's a single value of its base
- * type, and an Extended Text's its own base type and cardinality.
+ * type, and an Extended Text's its own base type and cardinality. Every fixture here binds a
+ * value, never a record.
  *
  * @param interaction The interaction.
  * @returns The response's base type and cardinality.
@@ -854,7 +856,9 @@ const bindingOf = (
       return { baseType: interaction.baseType, cardinality: "single" };
     }
     case "extended-text": {
-      return { baseType: interaction.baseType, cardinality: interaction.cardinality };
+      return interaction.cardinality === "record"
+        ? assert.fail(`The Extended Text for ${interaction.response} binds a record.`)
+        : { baseType: interaction.baseType, cardinality: interaction.cardinality };
     }
     default: {
       return interaction satisfies never;

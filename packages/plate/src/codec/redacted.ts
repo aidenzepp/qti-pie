@@ -113,6 +113,7 @@ interface TextEntryInteractionJson {
   readonly ariaLabelledby?: string;
   readonly base: number;
   readonly baseType: TextEntryInteraction["baseType"];
+  readonly cardinality: TextEntryInteraction["cardinality"];
   readonly class: string;
   readonly expectedLength?: string;
   readonly kind: "text-entry";
@@ -126,7 +127,10 @@ interface TextEntryInteractionJson {
  * An Extended Text in the JSON form: a Text Entry's fields, with `expectedLines`, `maxStrings` and
  * `minStrings` as decimal digits, and `expectedLines`, `maxStrings` and its Prompt optional keys.
  */
-interface ExtendedTextInteractionJson extends Omit<TextEntryInteractionJson, "kind"> {
+interface ExtendedTextInteractionJson extends Omit<
+  TextEntryInteractionJson,
+  "cardinality" | "kind"
+> {
   readonly cardinality: ExtendedTextInteraction["cardinality"];
   readonly expectedLines?: string;
   readonly format: ExtendedTextInteraction["format"];
@@ -387,10 +391,14 @@ const BodyNodeSchema = Schema.Union([
     response: Schema.String,
     shuffle: Schema.Boolean,
   }),
-  Schema.Struct({ ...textControlFields, kind: Schema.Literal("text-entry") }),
   Schema.Struct({
     ...textControlFields,
-    cardinality: Schema.Literals(["multiple", "ordered", "single"]),
+    cardinality: Schema.Literals(["record", "single"]),
+    kind: Schema.Literal("text-entry"),
+  }),
+  Schema.Struct({
+    ...textControlFields,
+    cardinality: Schema.Literals(["multiple", "ordered", "record", "single"]),
     expectedLines: OptionalCount,
     format: Schema.Literals(["plain", "preformatted", "xhtml"]),
     kind: Schema.Literal("extended-text"),
@@ -418,17 +426,37 @@ export type SchemaBodyNode = typeof BodyNodeSchema.Type;
 /**
  * The first printed variable, or `param-variable` parameter, whose text passed its bound, as the
  * JSON form holds it: an optional key, absent when every text fits. Its `bound` is a whole number
- * of characters, at least 1, and its `identifier` the variable `render`'s `OutputTooLarge` names.
- * Like a body node it holds no path ({@link NoPath}): the path of a printed variable inside a
- * shown template block would tell a page where hidden template content sits.
+ * of characters, at least 1, its `identifier` the variable `render`'s `OutputTooLarge` names, and
+ * its `limit` which limit the bound is, `"text"` (the 1,000,000 one text may hold) or `"budget"`
+ * (the output budget `redact` ran under); a form without `limit`, or with another value, is
+ * refused. Like a body node it holds no path ({@link NoPath}): the path of a printed variable
+ * inside a shown template block would tell a page where hidden template content sits.
  */
 const Unprinted = Schema.OptionFromOptionalKey(
   Schema.Struct({
     bound: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
     identifier: Schema.String,
+    limit: Schema.Literals(["budget", "text"]),
     path: NoPath,
   }),
 );
+
+/**
+ * A response's binding in the JSON form: a response of a base type writes its identifier, base type
+ * and cardinality, and a record response its identifier and the cardinality `record`, with no base
+ * type, since a record has none of its own.
+ */
+const ResponseBindingSchema = Schema.Union([
+  Schema.Struct({
+    baseType: Schema.Literals(modelledBaseTypes),
+    cardinality: Schema.Literals(modelledCardinalities),
+    identifier: Schema.String,
+  }),
+  Schema.Struct({
+    cardinality: Schema.Literal("record"),
+    identifier: Schema.String,
+  }),
+]);
 
 /**
  * The Schema of a redacted item's fields; its type is {@link RedactedFields}, and its encoded form
@@ -440,13 +468,7 @@ export const RedactedSchema = Schema.Struct({
   identifier: Schema.String,
   lang: OptionalText,
   notices: Schema.Array(Schema.String),
-  responses: Schema.Array(
-    Schema.Struct({
-      baseType: Schema.Literals(modelledBaseTypes),
-      cardinality: Schema.Literals(modelledCardinalities),
-      identifier: Schema.String,
-    }),
-  ),
+  responses: Schema.Array(ResponseBindingSchema),
   title: Schema.String,
   unprinted: Unprinted,
 });

@@ -5,7 +5,8 @@
  * {@link sessionControl} reads the attributes the test model holds as written and resolves them for
  * one ref, and {@link sessionControls} for every ref in one walk; {@link itemConfiguration} writes
  * the result into the host's configuration, turning `max-attempts` into the attempt limit the
- * session counts against. All three are pure.
+ * session counts against, and {@link attemptLimits} gives that limit for every ref. All four are
+ * pure.
  *
  * @module
  */
@@ -240,6 +241,31 @@ const attemptLimit = (control: SessionControl): number => {
 
   return Math.max(control.maxAttempts, 0);
 };
+
+/**
+ * Give the effective attempt limit of every item ref of a test, keyed by the ref's identifier,
+ * where 0 is no limit: the `maxAttempts` {@link itemConfiguration} writes for the ref's resolved
+ * control ({@link sessionControls}).
+ *
+ * A test's outcome processing counts each item's attempts started under this limit
+ * (`testScopeOf` in `#plate/engine/outcome.ts`, which imports no session value and so takes the
+ * limits from its caller), as the results report does: an item that reached its limit has started
+ * no attempt past it.
+ *
+ * @example
+ *   attemptLimits(test).get("I1"); // 1 in a simultaneous part, else max-attempts, 0 for none
+ *
+ * @param test The test, as `buildTest` read it.
+ * @returns Each item ref's attempt limit, a non-negative integer, by identifier; an identifier the
+ *   test does not hold has no entry.
+ */
+export const attemptLimits = (test: Test): ReadonlyMap<string, number> =>
+  new Map(
+    Array.from(sessionControls(test), ([identifier, control]) => [
+      identifier,
+      attemptLimit(control),
+    ]),
+  );
 
 /**
  * Write an item's session control over a configuration: the configuration the item is rendered

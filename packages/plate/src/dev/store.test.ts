@@ -18,9 +18,29 @@ import { tables } from "#plate/validate/tables.ts";
 import { acceptedItem, check } from "#plate/validate/verdict.ts";
 
 /**
- * The test the sessions below belong to, as `decodeSession` checks them against it.
+ * The test the sessions below belong to, as `decodeSession` checks them against it: one linear
+ * part, `part-1`, whose section holds the one item ref `item-1`, which gives no template default,
+ * and no outcome declaration.
  */
-const owner: SessionTest = { test: { document: "tests/m2.xml", identifier: "m2" } };
+const owner: SessionTest = {
+  test: {
+    document: "tests/m2.xml",
+    identifier: "m2",
+    outcomes: new Map(),
+    parts: [
+      {
+        children: [
+          {
+            children: [{ identifier: "item-1", kind: "item-ref", templateDefaults: [] }],
+            kind: "section",
+          },
+        ],
+        identifier: "part-1",
+        navigation: "linear",
+      },
+    ],
+  },
+};
 
 /**
  * A one-item session of {@link owner} under an id: the item presented, processed once and holding
@@ -45,12 +65,16 @@ const sessionOf = (id: string): TestSession => ({
         RESPONSE: nullOf("identifier", "single"),
       }),
       sequenceIndex: 1,
+      templateDefaults: Option.none(),
     },
   ],
   kind: "test",
+  outcomeRuns: 0,
+  outcomes: {},
   parts: [{ identifier: "part-1", status: "current" }],
   position: 0,
   seed: "7",
+  shuffleSeed: Option.none(),
   started: "2026-11-05T10:00:00.000Z",
   status: "interacting",
   test: owner.test.identifier,

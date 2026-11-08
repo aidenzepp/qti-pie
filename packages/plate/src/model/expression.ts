@@ -319,8 +319,7 @@ interface TestFilters {
  * mode (`exact`), tolerance (none) and bounds (both included) do, and one with no default as an
  * `Option`, as `variable`'s `weightIdentifier` is, which an item reads and never evaluates. An
  * attribute that may name a variable holds a literal or a reference ({@link IntegerOrRef},
- * {@link FloatOrRef}, {@link StringOrRef}, {@link IntOrIdentifier}). The reader builds no variant
- * of a kind whose family has not landed: it marks the element instead.
+ * {@link FloatOrRef}, {@link StringOrRef}, {@link IntOrIdentifier}).
  */
 export type Expression =
   | { readonly kind: "match"; readonly operands: readonly [Expression, Expression] }
@@ -639,11 +638,22 @@ export interface ExpressionType {
  * - `baseType` and `cardinality`: the type of the declaration the kind's declaration facet names, or
  *   `qti-base-value`'s or `qti-test-variables`' `base-type`.
  * - `name`: the operator name of `qti-math-operator` or `qti-stats-operator`.
+ * - `weighted`: true when the expression carries a `weight-identifier`, as a `qti-variable` or a
+ *   `qti-test-variables` of a test's outcome processing may. A weighted `qti-test-variables` with
+ *   no `base-type` is a float (G-R3 199). A weighted `qti-variable` is typed by its caller, which
+ *   alone knows whether the name is a prefixed read of an item variable (G-R3 198).
+ * - `collected`: the base type an unweighted `qti-test-variables` with no `base-type` takes from the
+ *   test's items (G-R3 199): `integer` when every single integer or float declaration of the
+ *   variable it names, in every item of the test, is integer, else `float`. Only a caller that
+ *   holds the test's items can fill it in; a test checked alone leaves it absent, so the kind is
+ *   unknown there.
  */
 export interface ResultAttributes {
   readonly baseType?: ExpressionType["baseType"];
   readonly cardinality?: ExpressionType["cardinality"];
+  readonly collected?: ExpressionType["baseType"];
   readonly name?: string;
+  readonly weighted?: boolean;
 }
 
 /**
@@ -718,8 +728,6 @@ export interface DeclarationFacet {
  *   type.
  * - `references`: the reference facet, one entry per attribute that may name a variable.
  * - `declaration`: the declaration facet, absent for a kind whose `identifier` names no declaration.
- *
- * A kind its family has not landed has {@link unlandedRule}, which {@link isUnlanded} tells apart.
  */
 export interface KindRule {
   readonly declaration?: DeclarationFacet;
@@ -794,25 +802,3 @@ export const everyOperand =
  * @returns No mismatch.
  */
 export const acceptsAnyOperands: KindRule["operandsAccept"] = () => [];
-
-/**
- * The rule of every kind its family has not landed: it accepts every operand, declares no
- * reference and no declaration, and types every expression unknown. The validator holds such a
- * kind untyped and never reads this `resultType` (ruling R3); the model reads it as not judged,
- * and the reader marks such a kind, so no processing that holds one runs. A family replaces it
- * with the kind's rule when it lands the kind.
- */
-export const unlandedRule: KindRule = {
-  operandsAccept: acceptsAnyOperands,
-  references: [],
-  resultType: () => ({ baseType: "unknown", cardinality: "unknown" }),
-};
-
-/**
- * Report whether a kind rule is {@link unlandedRule}, the rule of a kind its family has not
- * landed.
- *
- * @param rule A kind's rule.
- * @returns Whether it is the unlanded rule.
- */
-export const isUnlanded = (rule: KindRule): boolean => rule === unlandedRule;

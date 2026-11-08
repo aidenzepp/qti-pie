@@ -2,6 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
+import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
+import type { SourceDocument } from "#plate/document/source.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -18,14 +20,16 @@ import type {
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
 import { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
 import type { Options, Rendered } from "#plate/render.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
+import { solution } from "#plate/solution.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
-import { acceptForTest } from "#plate/validate/verdict.ts";
+import { tables } from "#plate/validate/tables.ts";
+import { acceptForTest, acceptedItem, check } from "#plate/validate/verdict.ts";
 
 /**
  * The strings only the hidden parts of {@link item} hold: its correct responses, a mapping key, a
@@ -112,6 +116,7 @@ const city: TextEntryInteraction = {
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "string",
+  cardinality: "single",
   class: "",
   expectedLength: Option.none(),
   kind: "text-entry",
@@ -505,6 +510,38 @@ const failureOf = <E>(result: Result.Result<Rendered, E>): Option.Option<E> => {
 
   return Result.getFailure(result);
 };
+
+/**
+ * A lowercase UUID v4: 32 hex digits in the 8-4-4-4-12 form, the version nibble 4 and the variant
+ * nibble 8 to b.
+ */
+const uuidV4 = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/u;
+
+/**
+ * Run an effect with `crypto.randomUUID` unreachable, as a page on plain HTTP has it (a browser
+ * gives it only in a secure context), and make it reachable again afterwards.
+ *
+ * In Node `randomUUID` lives on `Crypto.prototype`, so deleting it from `globalThis.crypto` would
+ * leave it reachable: this defines an own property, `undefined` and configurable, that shadows it,
+ * and deletes that property when the effect ends, however it ends.
+ *
+ * @param effect The effect to run without `randomUUID`.
+ * @returns The effect's result.
+ */
+const withoutRandomUuid = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      Object.defineProperty(globalThis.crypto, "randomUUID", {
+        configurable: true,
+        value: undefined,
+      });
+    }),
+    () => effect,
+    () =>
+      Effect.sync(() => {
+        Reflect.deleteProperty(globalThis.crypto, "randomUUID");
+      }),
+  );
 
 /**
  * Give the fields of an {@link InvalidInstance} a render failed with.
@@ -1046,6 +1083,27 @@ describe("render, the instance token", () => {
     }),
   );
 
+  it.effect("draws a lowercase UUID v4 with crypto.randomUUID unreachable, as on plain HTTP", () =>
+    withoutRandomUuid(
+      Effect.gen(function* drawnWithoutRandomUuid() {
+        assert.throws(() => {
+          globalThis.crypto.randomUUID();
+        }, TypeError);
+
+        const configuration = yield* defaults;
+        const drawn = yield* Effect.fromResult(render(redacted, configuration));
+        assert.match(drawn.instance, uuidV4);
+        assert.deepStrictEqual(checkInstance(drawn.instance), Option.none());
+      }),
+    ).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          assert.match(globalThis.crypto.randomUUID(), uuidV4);
+        }),
+      ),
+    ),
+  );
+
   it.effect("returns the instance it used, which validates and partitions its entries", () =>
     Effect.gen(function* returnedToken() {
       const configuration = yield* defaults;
@@ -1245,7 +1303,11 @@ const sprawling: Item = {
 interface TooLarge {
   readonly budget: number;
   readonly item: string;
-  readonly printed: Option.Option<{ readonly bound: number; readonly identifier: string }>;
+  readonly printed: Option.Option<{
+    readonly bound: number;
+    readonly identifier: string;
+    readonly limit: "budget" | "text";
+  }>;
 }
 
 /**
@@ -1286,7 +1348,7 @@ describe("render, the output budget", () => {
           Option.some({
             budget: 16_777_216,
             item: "sprawling",
-            printed: Option.some({ bound: 16_777_216, identifier: "S" }),
+            printed: Option.some({ bound: 16_777_216, identifier: "S", limit: "budget" }),
           }),
         );
       }),
@@ -1327,7 +1389,7 @@ describe("render, the output budget", () => {
           Option.some({
             budget: 10_000,
             item: "slotted",
-            printed: Option.some({ bound: 10_000, identifier: "S" }),
+            printed: Option.some({ bound: 10_000, identifier: "S", limit: "budget" }),
           }),
         );
       }),
@@ -1530,7 +1592,7 @@ describe("render, a printed text past its bound", () => {
           Option.some({
             budget: 16_777_216,
             item: "widened",
-            printed: Option.some({ bound: 1_000_000, identifier: "N" }),
+            printed: Option.some({ bound: 1_000_000, identifier: "N", limit: "text" }),
           }),
         );
       }),
@@ -1548,7 +1610,7 @@ describe("render, a printed text past its bound", () => {
           Option.some({
             budget: 16_777_216,
             item: "lengthy",
-            printed: Option.some({ bound: 1_000_000, identifier: "S" }),
+            printed: Option.some({ bound: 1_000_000, identifier: "S", limit: "text" }),
           }),
         );
       }),
@@ -1566,7 +1628,7 @@ describe("render, a printed text past its bound", () => {
           Option.some({
             budget: 16_777_216,
             item: "passing",
-            printed: Option.some({ bound: 1_000_000, identifier: "P" }),
+            printed: Option.some({ bound: 1_000_000, identifier: "P", limit: "text" }),
           }),
         );
       }),
@@ -1600,6 +1662,42 @@ describe("render, a printed text past its bound", () => {
 
         assert.include(textOf(rootOf(longest)), `Value: ${"y".repeat(1_000_000)}`);
         assert.notInclude(hidden.html, "yyy");
+      }),
+  );
+
+  it.effect(
+    "[I-5] fails OutputTooLarge naming which limit S passed when both are 1,000,000: the budget when an outputBudget of 1,000,000 runs out across four slots of 300,000 characters, the text for one slot of 1,000,001 under the same budget",
+    () =>
+      Effect.gen(function* namesWhichLimit() {
+        const configuration = yield* configure({ outputBudget: 1_000_000 });
+        const quartered = acceptForTest({
+          ...sprawling,
+          body: [slotsOfS(4)],
+          identifier: "quartered",
+        });
+        const spent = redact(quartered, strings({ S: "y".repeat(300_000) }), configuration);
+        const long = redact(
+          acceptForTest(lengthy),
+          strings({ S: "y".repeat(1_000_001) }),
+          configuration,
+        );
+
+        assert.deepStrictEqual(
+          budgetFailure(render(spent, configuration, { instance })),
+          Option.some({
+            budget: 1_000_000,
+            item: "quartered",
+            printed: Option.some({ bound: 1_000_000, identifier: "S", limit: "budget" }),
+          }),
+        );
+        assert.deepStrictEqual(
+          budgetFailure(render(long, configuration, { instance })),
+          Option.some({
+            budget: 1_000_000,
+            item: "lengthy",
+            printed: Option.some({ bound: 1_000_000, identifier: "S", limit: "text" }),
+          }),
+        );
       }),
   );
 });
@@ -1675,5 +1773,271 @@ describe("renderStatus", () => {
         Option.some("UnknownPart"),
       );
     }),
+  );
+});
+
+/**
+ * An item whose paragraph holds a Text Entry with a `pattern-mask` and an `expected-length`, bound
+ * to `NUMBER`, and whose body then holds an Extended Text with a Prompt, a `max-strings` and a
+ * `min-strings`, bound to `WORKING`: each response declared a record, or a single string.
+ *
+ * @param binding How both responses are declared.
+ * @returns The document.
+ */
+const boundTo = (binding: "record" | "string"): SourceDocument =>
+  doc(
+    "items/bound.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "bound"), attr("time-dependent", "false"), attr("title", "Bound")],
+      [
+        ...["NUMBER", "WORKING"].map((identifier) =>
+          el(
+            "qti-response-declaration",
+            binding === "record"
+              ? [attr("cardinality", "record"), attr("identifier", identifier)]
+              : [
+                  attr("base-type", "string"),
+                  attr("cardinality", "single"),
+                  attr("identifier", identifier),
+                ],
+          ),
+        ),
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "p",
+              [],
+              [
+                sourceText("Your number: "),
+                el("qti-text-entry-interaction", [
+                  attr("expected-length", "8"),
+                  attr("pattern-mask", "[0-9]+"),
+                  attr("response-identifier", "NUMBER"),
+                ]),
+              ],
+            ),
+            el(
+              "qti-extended-text-interaction",
+              [
+                attr("max-strings", "4"),
+                attr("min-strings", "2"),
+                attr("response-identifier", "WORKING"),
+              ],
+              [el("qti-prompt", [], [sourceText("Show your working.")])],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+describe("render, a record-bound control", () => {
+  it.effect(
+    "[Q-20] [Q-5] renders each record-bound control as the string control, byte-equal to the item whose responses are single strings, with no notice, one Control for each response under its one name",
+    () =>
+      Effect.gen(function* rendersRecordBoundControls() {
+        const configuration = yield* defaults;
+        const recorded = yield* Effect.fromOption(acceptedItem(check(boundTo("record"), tables)));
+        const stringBound = yield* Effect.fromOption(
+          acceptedItem(check(boundTo("string"), tables)),
+        );
+        const shown = redact(recorded);
+        const rendered = yield* Effect.fromResult(render(shown, configuration, { instance }));
+        const elements = elementsIn(rendered);
+
+        assert.deepStrictEqual(recorded.item.unsupported, []);
+        assert.deepStrictEqual(shown.notices, []);
+        assert.deepStrictEqual(
+          ["NUMBER", "WORKING"].map((response) =>
+            controlsOf(elements, instance, response).map((control) => control.tag),
+          ),
+          [["input"], ["textarea"]],
+        );
+        assert.strictEqual(
+          rendered.html,
+          (yield* Effect.fromResult(render(redact(stringBound), configuration, { instance }))).html,
+        );
+      }),
+  );
+});
+
+/**
+ * Construct the record the text a candidate typed gives, holding only its `stringValue`, as a host
+ * may build it; the NULL record for empty text.
+ *
+ * @param typed The text.
+ * @returns The record.
+ */
+const typedRecord = (typed: string): RecordValue => ({
+  cardinality: "record",
+  fields:
+    typed === ""
+      ? []
+      : [{ identifier: "stringValue", value: { baseType: "string", value: typed } }],
+});
+
+/**
+ * An item whose paragraph holds a Text Entry bound to the record response `NUMBER`, whose
+ * declaration holds a correct response of some fields, or none.
+ *
+ * @param fields The correct response's fields, each its `field-identifier`, its `base-type` and its
+ *   text; none for no correct response.
+ * @returns The document.
+ */
+const solvedBy = (fields: readonly (readonly [string, string, string])[]): SourceDocument =>
+  doc(
+    "items/solved.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "solved"), attr("time-dependent", "false"), attr("title", "Solved")],
+      [
+        el(
+          "qti-response-declaration",
+          [attr("cardinality", "record"), attr("identifier", "NUMBER")],
+          fields.length === 0
+            ? []
+            : [
+                el(
+                  "qti-correct-response",
+                  [],
+                  fields.map(([identifier, baseType, lexical]) =>
+                    el(
+                      "qti-value",
+                      [attr("base-type", baseType), attr("field-identifier", identifier)],
+                      [sourceText(lexical)],
+                    ),
+                  ),
+                ),
+              ],
+        ),
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "p",
+              [],
+              [
+                sourceText("Your number: "),
+                el("qti-text-entry-interaction", [attr("response-identifier", "NUMBER")]),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+/**
+ * Give the text a Control holds as written, its line breaks kept: a `textarea`'s text children.
+ *
+ * @param control The Control.
+ * @returns Its text nodes' text, joined.
+ */
+const typedText = (control: Element): string =>
+  control.children.map((child) => (child.kind === "text" ? child.text : "")).join("");
+
+describe("render, a record value", () => {
+  it.effect(
+    "[Q-20] [Q-5] restores the record: each text control bound to a record shows its stringValue as typed, and the NULL record an empty control",
+    () =>
+      Effect.gen(function* restoresStringValue() {
+        const configuration = yield* defaults;
+        const recorded = redact(
+          yield* Effect.fromOption(acceptedItem(check(boundTo("record"), tables))),
+        );
+        const shownFor = (values: NonNullable<Options["values"]>) =>
+          Effect.map(
+            Effect.fromResult(render(recorded, configuration, { instance, values })),
+            elementsIn,
+          );
+        const typed = yield* shownFor({
+          NUMBER: typedRecord("12.0"),
+          WORKING: typedRecord("First line\nSecond line"),
+        });
+        const empty = yield* shownFor({ NUMBER: typedRecord(""), WORKING: typedRecord("") });
+
+        assert.deepStrictEqual(
+          controlsOf(typed, instance, "NUMBER").map((control) => control.attrs["value"]),
+          ["12.0"],
+        );
+        assert.deepStrictEqual(controlsOf(typed, instance, "WORKING").map(typedText), [
+          "First line\nSecond line",
+        ]);
+        assert.deepStrictEqual(
+          controlsOf(empty, instance, "NUMBER").map((control) => control.attrs["value"]),
+          [""],
+        );
+        assert.deepStrictEqual(controlsOf(empty, instance, "WORKING").map(typedText), [""]);
+      }),
+  );
+
+  it.effect(
+    "[Q-20] restores the record in a solution: the declared correct response's stringValue, and an empty control when it declares none",
+    () =>
+      Effect.gen(function* solvedRecord() {
+        const configuration = yield* defaults;
+        const shownIn = (fields: readonly (readonly [string, string, string])[]) =>
+          Effect.gen(function* solvedControl() {
+            const accepted = yield* Effect.fromOption(
+              acceptedItem(check(solvedBy(fields), tables)),
+            );
+            const rendered = yield* Effect.fromResult(
+              render(redact(accepted), configuration, {
+                instance,
+                mode: "solution",
+                values: solution(accepted),
+              }),
+            );
+
+            return controlsOf(elementsIn(rendered), instance, "NUMBER").map(
+              (control) => control.attrs["value"],
+            );
+          });
+
+        assert.deepStrictEqual(
+          yield* shownIn([
+            ["stringValue", "string", "12"],
+            ["floatValue", "float", "12"],
+          ]),
+          ["12"],
+        );
+        assert.deepStrictEqual(yield* shownIn([["floatValue", "float", "12"]]), [""]);
+        assert.deepStrictEqual(yield* shownIn([]), [""]);
+      }),
+  );
+
+  it.effect(
+    "[Q-20] restores the record within the output budget: its stringValue counts as any restored text",
+    () =>
+      Effect.gen(function* recordWithinBudget() {
+        const accepted = yield* Effect.fromOption(acceptedItem(check(solvedBy([]), tables)));
+        const values = { NUMBER: typedRecord("y".repeat(500)) };
+        const bare = yield* Effect.fromResult(
+          render(redact(accepted), yield* defaults, { instance }),
+        );
+        const restored = yield* Effect.fromResult(
+          render(redact(accepted), yield* defaults, { instance, values }),
+        );
+        const exact = yield* configure({ outputBudget: restored.html.length });
+        const short = yield* configure({ outputBudget: restored.html.length - 1 });
+
+        assert.isAbove(restored.html.length, bare.html.length + 499);
+        assert.strictEqual(
+          Result.getOrUndefined(render(redact(accepted), exact, { instance, values }))?.html,
+          restored.html,
+        );
+        assert.deepStrictEqual(
+          budgetFailure(render(redact(accepted), short, { instance, values })),
+          Option.some({
+            budget: restored.html.length - 1,
+            item: "solved",
+            printed: Option.none(),
+          }),
+        );
+      }),
   );
 });

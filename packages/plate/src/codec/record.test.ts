@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
+import { decodeRecord, encodeRecord, versionIssue } from "#plate/codec/record.ts";
 import type { InvalidRecord, ItemRecordSchema } from "#plate/codec/record.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
@@ -57,6 +57,24 @@ const templated: ItemRecord = {
     HUGE: integer(2n ** 53n + 1n),
     MISSING: nullOf("integer", "single"),
     ZERO: float(-0),
+  },
+};
+
+/**
+ * BG007's fresh record holding a record response's value beside its responses: the fields a Text
+ * Entry's post gives, an integer of 400 digits and an infinite float among them.
+ */
+const recorded: ItemRecord = {
+  ...fresh(bg007Item, "i1"),
+  records: {
+    DETAIL: {
+      cardinality: "record",
+      fields: [
+        { identifier: "stringValue", value: { baseType: "string", value: "1e400" } },
+        { identifier: "integerValue", value: { baseType: "integer", value: 10n ** 399n } },
+        { identifier: "floatValue", value: { baseType: "float", value: Number.POSITIVE_INFINITY } },
+      ],
+    },
   },
 };
 
@@ -218,16 +236,23 @@ describe("decodeRecord", () => {
 });
 
 describe("the stored record's version", () => {
-  it.effect("[T-14] [I-5] is written as version 2 and read back", () =>
-    Effect.gen(function* writesVersion() {
-      const stored = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
+  it.effect(
+    "[T-14] [I-5] stored at version 4: written as version 4 with its records, and read back exactly",
+    () =>
+      Effect.gen(function* writesVersion() {
+        const stored = yield* Effect.fromResult(encodeRecord(recorded));
 
-      assert.strictEqual(stored.version, 2);
-      assert.deepStrictEqual(
-        yield* Effect.fromResult(throughHost(fresh(bg007Item, "i1"))),
-        fresh(bg007Item, "i1"),
-      );
-    }),
+        assert.strictEqual(stored.version, 4);
+        assert.deepStrictEqual(
+          stored.records["DETAIL"]?.fields.map((field) => field.value.value),
+          ["1e400", String(10n ** 399n), "INF"],
+        );
+        assert.deepStrictEqual(yield* Effect.fromResult(throughHost(recorded)), recorded);
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(throughHost(fresh(bg007Item, "i1"))),
+          fresh(bg007Item, "i1"),
+        );
+      }),
   );
 
   it.effect(
@@ -245,26 +270,84 @@ describe("the stored record's version", () => {
   );
 
   it.effect(
-    "[T-14] [I-5] must be 2: a stored record of version 1, with or without the fields version 2 adds, is InvalidRecord at stage decode",
+    "[T-1] [T-14] [I-5] reads only a record stored at version 4: one stored at version 3 or 2, without records, or at version 1, without the template fields too, is InvalidRecord at stage decode, naming the version found",
     () =>
       Effect.gen(function* refusesOtherVersion() {
-        const stored = yield* Effect.fromResult(encodeRecord(templated));
+        const { records: _records, ...third } = yield* Effect.fromResult(encodeRecord(templated));
         const {
           correct: _correct,
           defaults: _defaults,
           seed: _seed,
           templates: _templates,
           ...earlier
-        } = stored;
+        } = third;
 
-        for (const versionOne of [
+        for (const other of [
+          { ...third, version: 3 },
+          { ...third, version: 2 },
           { ...earlier, version: 1 },
-          { ...stored, version: 1 },
         ]) {
-          const error = yield* Effect.flip(Effect.fromResult(decodeRecord(versionOne)));
+          const error = yield* Effect.flip(Effect.fromResult(decodeRecord(other)));
 
-          assert.strictEqual(error._tag, "InvalidRecord");
-          assert.strictEqual(error.stage, "decode");
+          assert.deepStrictEqual(
+            [error._tag, error.stage, Option.some(error.issue)],
+            ["InvalidRecord", "decode", versionIssue(other)],
+          );
+          assert.isTrue(Option.isSome(versionIssue(other)));
+        }
+      }),
+  );
+});
+
+/**
+ * Record responses' values the record codec refuses, by what is wrong with each: an identifier that
+ * is not an NCName, an identifier written twice and a field of base type `file`.
+ */
+const malformedRecords = {
+  "a field of base type file": {
+    cardinality: "record",
+    fields: [{ identifier: "upload", value: { baseType: "file", value: "a.txt" } }],
+  },
+  "an identifier that is not an NCName": {
+    cardinality: "record",
+    fields: [{ identifier: "1st", value: { baseType: "string", value: "a" } }],
+  },
+  "an identifier written twice": {
+    cardinality: "record",
+    fields: [
+      { identifier: "stringValue", value: { baseType: "string", value: "a" } },
+      { identifier: "stringValue", value: { baseType: "string", value: "b" } },
+    ],
+  },
+};
+
+describe("a record response's value in the record", () => {
+  it.effect(
+    "[T-14] is refused, on the way in at stage decode and on the way out at stage encode, for a non-NCName identifier, a repeated identifier or a field of base type file",
+    () =>
+      Effect.gen(function* refusesMalformedRecords() {
+        const stored = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
+        for (const [problem, malformed] of Object.entries(malformedRecords)) {
+          // oxlint-disable-next-line unicorn/prefer-structured-clone -- The record reaches decodeRecord as JSON text, the form a host stores.
+          const handedBack: unknown = JSON.parse(
+            JSON.stringify({ ...stored, records: { DETAIL: malformed } }),
+          );
+          const decoded = yield* Effect.flip(Effect.fromResult(decodeRecord(handedBack)));
+          const encoded = yield* Effect.flip(
+            Effect.fromResult(
+              encodeRecord({
+                ...fresh(bg007Item, "i1"),
+                // @ts-expect-error -- each record breaks a rule of RecordValue that encode must refuse.
+                records: { DETAIL: malformed },
+              }),
+            ),
+          );
+
+          assert.deepStrictEqual(
+            [decoded._tag, decoded.stage, encoded._tag, encoded.stage],
+            ["InvalidRecord", "decode", "InvalidRecord", "encode"],
+            problem,
+          );
         }
       }),
   );

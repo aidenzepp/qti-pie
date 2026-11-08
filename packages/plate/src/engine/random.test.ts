@@ -1,10 +1,12 @@
 import { createHmac } from "node:crypto";
 import { assert, describe, it } from "@effect/vitest";
 import {
+  defaultLabel,
   drawBelow,
   drawFloat,
   drawStream,
   fnv1a32,
+  outcomeLabel,
   responseLabel,
   shuffleOrder,
   splitMix32,
@@ -233,6 +235,29 @@ describe("templateLabel and responseLabel", () => {
   it("[I-9a] join the instance, a fixed word and the item or count with U+001F, and no seed", () => {
     assert.strictEqual(templateLabel("i", "item"), "i\u001Ftemplate\u001Fitem");
     assert.strictEqual(responseLabel("i", 2), "i\u001Fresponse\u001F2");
+  });
+});
+
+describe("outcomeLabel", () => {
+  it("[T-9] joins the instance, the word outcome and the decimal run number with U+001F, and no seed", () => {
+    assert.strictEqual(outcomeLabel("i", 2), "i\u001Foutcome\u001F2");
+    assert.strictEqual(outcomeLabel("i", 12), "i\u001Foutcome\u001F12");
+  });
+});
+
+describe("defaultLabel", () => {
+  it("[T-9] joins the instance, the word default and the decimal sequence index with U+001F, and no seed, so the declared state the test sets draws apart from the other labels", () => {
+    assert.strictEqual(defaultLabel("i", 2), "i\u001Fdefault\u001F2");
+    assert.strictEqual(defaultLabel("i", 12), "i\u001Fdefault\u001F12");
+    assert.strictEqual(
+      new Set([
+        defaultLabel("i", 2),
+        templateLabel("i", "2"),
+        responseLabel("i", 2),
+        outcomeLabel("i", 2),
+      ]).size,
+      4,
+    );
   });
 });
 

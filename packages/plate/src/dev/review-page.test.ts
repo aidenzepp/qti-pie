@@ -8,7 +8,7 @@ import type { Configuration } from "#plate/configuration.ts";
 import { pageHtml } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
 import { openDirectory, packageCache } from "#plate/dev/packages.ts";
-import type { PackageCache, PackageOpener } from "#plate/dev/packages.ts";
+import type { PackageCache, PackageOpener, PackageSource } from "#plate/dev/packages.ts";
 import { reviewPath, routeReview, summaryPage } from "#plate/dev/review-page.ts";
 import type { ReviewPlayground } from "#plate/dev/review-page.ts";
 import { newSessionId, sessionStore } from "#plate/dev/store.ts";
@@ -105,6 +105,34 @@ const templatedItem = [
 ].join("");
 
 /**
+ * Open a package as `openDirectory` does, with one of its files replaced in memory.
+ *
+ * @param source The package.
+ * @param replaced The replaced file's path from the package's root.
+ * @param replace The replacement, given the bytes the directory holds.
+ * @returns Its verdict.
+ */
+const openReplacing = (
+  source: PackageSource,
+  replaced: string,
+  replace: (bytes: Uint8Array) => Uint8Array,
+) =>
+  Effect.gen(function* replacingPackage() {
+    const entries = yield* Effect.promise(() =>
+      readdir(source.root, { recursive: true, withFileTypes: true }),
+    );
+    const files = new Map<string, Uint8Array>();
+    for (const entry of entries.filter((each) => each.isFile())) {
+      const full = path.join(entry.parentPath, entry.name);
+      const file = path.relative(source.root, full).split(path.sep).join("/");
+      const bytes = yield* Effect.promise(() => readFile(full));
+      files.set(file, file === replaced ? replace(bytes) : bytes);
+    }
+
+    return yield* openPackage(source.location, files);
+  });
+
+/**
  * Open a package as `openDirectory` does, with the M2 fixture's item 1 replaced by
  * {@link templatedItem} in memory.
  *
@@ -113,29 +141,105 @@ const templatedItem = [
  */
 const templatedOpener: PackageOpener = (source) =>
   source.location === fixture.location
-    ? Effect.gen(function* templatedPackage() {
-        const entries = yield* Effect.promise(() =>
-          readdir(source.root, { recursive: true, withFileTypes: true }),
-        );
-        const files = new Map<string, Uint8Array>();
-        for (const entry of entries.filter((each) => each.isFile())) {
-          const full = path.join(entry.parentPath, entry.name);
-          const file = path.relative(source.root, full).split(path.sep).join("/");
-          const bytes = yield* Effect.promise(() => readFile(full));
-          files.set(
-            file,
-            file === "items/p1-single-choice.xml" ? new TextEncoder().encode(templatedItem) : bytes,
-          );
-        }
-
-        return yield* openPackage(source.location, files);
-      })
+    ? openReplacing(source, "items/p1-single-choice.xml", () =>
+        new TextEncoder().encode(templatedItem),
+      )
     : openDirectory(source);
 
 /**
  * The package cache of the fixture package with item 1 templated, opened once for the file.
  */
 const templatedCache = Effect.runSync(packageCache(templatedOpener));
+
+/**
+ * A test's own outcomes as text: its outcome declarations, written before its first part, and the
+ * rules of its outcome processing, written after its last.
+ */
+interface TestOutcomes {
+  readonly declarations: string;
+  readonly rules: string;
+}
+
+/**
+ * Outcomes the engine runs, declared out of alphabetical order so the summary's order is the
+ * declarations': `TOTAL` sums every item's `SCORE`, `SCORES` holds them, `PRESENTED` counts the
+ * items presented and `PASSED` says whether `TOTAL` reached 3, in that order, and `NOTE`, which no
+ * rule sets, stays NULL.
+ */
+const runningOutcomes: TestOutcomes = {
+  declarations: [
+    '<qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/>',
+    '<qti-outcome-declaration identifier="SCORES" cardinality="multiple" base-type="float"/>',
+    '<qti-outcome-declaration identifier="PRESENTED" cardinality="single" base-type="integer"/>',
+    '<qti-outcome-declaration identifier="PASSED" cardinality="single" base-type="boolean"/>',
+    '<qti-outcome-declaration identifier="NOTE" cardinality="single" base-type="identifier"/>',
+  ].join(""),
+  rules: [
+    '<qti-set-outcome-value identifier="TOTAL"><qti-sum><qti-test-variables variable-identifier="SCORE"/></qti-sum></qti-set-outcome-value>',
+    '<qti-set-outcome-value identifier="SCORES"><qti-test-variables variable-identifier="SCORE"/></qti-set-outcome-value>',
+    '<qti-set-outcome-value identifier="PRESENTED"><qti-number-presented/></qti-set-outcome-value>',
+    '<qti-set-outcome-value identifier="PASSED"><qti-gte><qti-variable identifier="TOTAL"/><qti-base-value base-type="float">3</qti-base-value></qti-gte></qti-set-outcome-value>',
+  ].join(""),
+};
+
+/**
+ * Outcomes the engine cannot run: the processing reads `numAttempts`, which the engine does not
+ * hold in a test, so the test's outcome processing is marked and `ATTEMPTS` is never set.
+ */
+const markedOutcomes: TestOutcomes = {
+  declarations:
+    '<qti-outcome-declaration identifier="ATTEMPTS" cardinality="single" base-type="integer"/>',
+  rules:
+    '<qti-set-outcome-value identifier="ATTEMPTS"><qti-variable identifier="numAttempts"/></qti-set-outcome-value>',
+};
+
+/**
+ * Write a copy of the M2 fixture's test with its own outcomes: the declarations before part `P1`,
+ * the outcome processing after part `P2`.
+ *
+ * @param outcomes The outcomes.
+ * @returns The copy, from the test as the fixture holds it.
+ */
+const withOutcomes =
+  (outcomes: TestOutcomes) =>
+  (bytes: Uint8Array): Uint8Array => {
+    const written = new TextDecoder().decode(bytes);
+    const firstPart = '<qti-test-part identifier="P1"';
+    const end = "</qti-assessment-test>";
+    assert.include(written, firstPart, "The fixture test's first part does not read as expected.");
+    assert.include(written, end, "The fixture test does not end as expected.");
+
+    return new TextEncoder().encode(
+      written
+        .replace(firstPart, `${outcomes.declarations}${firstPart}`)
+        .replace(end, `<qti-outcome-processing>${outcomes.rules}</qti-outcome-processing>${end}`),
+    );
+  };
+
+/**
+ * Construct the package cache of the fixture package with its test given outcomes, opened once for
+ * the file.
+ *
+ * @param outcomes The test's outcomes.
+ * @returns The cache.
+ */
+const outcomeCache = (outcomes: TestOutcomes): PackageCache =>
+  Effect.runSync(
+    packageCache((source) =>
+      source.location === fixture.location
+        ? openReplacing(source, fixture.test, withOutcomes(outcomes))
+        : openDirectory(source),
+    ),
+  );
+
+/**
+ * The package caches of the fixture package whose test has outcome processing the engine runs, and
+ * one it cannot run.
+ */
+const outcomeCaches = {
+  marked: outcomeCache(markedOutcomes),
+  running: outcomeCache(runningOutcomes),
+} as const;
 
 /**
  * Give the text a single integer value prints in its default form.
@@ -215,6 +319,19 @@ const sitting: readonly { readonly intent: Intent; readonly responses: Responses
 ];
 
 /**
+ * A sitting of the fixture test that answers every item it scores correctly: item 1 `B`, item 2
+ * `seven`, item 3 `A` and `C`, item 4 in words and item 5 `A`, so the four scored items score 1,
+ * 1, 2 and 1.
+ */
+const correctSitting: typeof sitting = [
+  { intent: { kind: "next" }, responses: { RESPONSE: chosen("B") } },
+  { intent: { kind: "next" }, responses: { RESPONSE: written("seven") } },
+  { intent: { kind: "submit-part" }, responses: { RESPONSE: chosenMany("A", "C") } },
+  { intent: { kind: "next" }, responses: { RESPONSE: written("I checked each sum.") } },
+  { intent: { kind: "submit-part" }, responses: { RESPONSE: chosen("A") } },
+];
+
+/**
  * The fixture test delivered in a playground: one session closed through {@link sitting}, one
  * still open on its first item, and item 3's choice order as the candidate saw it when answering.
  */
@@ -267,14 +384,15 @@ const checkedValues = (controls: readonly Element[]): readonly string[] =>
   );
 
 /**
- * Deliver the fixture test from a package cache: start a session, take it through {@link sitting}
- * to its close, start a second session and leave it open, and store both as the playground's
- * session pages do.
+ * Deliver the fixture test from a package cache: start a session, take it through its steps to its
+ * close, start a second session and leave it open, and store both as the playground's session
+ * pages do.
  *
  * @param packages The packages, the fixture package among them.
+ * @param steps The steps the closed session takes, {@link sitting} when absent.
  * @returns The delivered test.
  */
-const deliver = (packages: PackageCache) =>
+const deliver = (packages: PackageCache, steps: typeof sitting = sitting) =>
   Effect.gen(function* delivered() {
     const configuration = yield* configure({ seed: "7" });
     const found = yield* provided(packages.packageOf("m2"));
@@ -294,7 +412,7 @@ const deliver = (packages: PackageCache) =>
       );
     let session = start(closedId);
     let order: readonly string[] = [];
-    for (const [index, step] of sitting.entries()) {
+    for (const [index, step] of steps.entries()) {
       if (session.position === 2) {
         const view = Result.getOrElse(itemView(test.test, session, configuration, 3), (failure) =>
           assert.fail(failure.message),
@@ -604,7 +722,7 @@ describe("routeReview", () => {
         assert.deepStrictEqual(identifiers, [closed.id]);
         assert.isTrue(verdict.valid, verdict.messages.join("\n"));
       }),
-    { tags: ["qti-xsd"], timeout: oracleTimeoutMs },
+    { tags: ["results-xsd"], timeout: oracleTimeoutMs },
   );
 
   it.effect(
@@ -656,6 +774,39 @@ describe("routeReview", () => {
       }),
   );
 });
+
+/**
+ * Show a delivered test's closed session on its summary page, as the session page writes it.
+ *
+ * @param given The delivered test.
+ * @returns The page, its written HTML and its elements.
+ */
+const summaryShown = (given: Delivered) => {
+  const { closed, configuration, test } = given;
+  const now = Result.getOrElse(current(test.test, closed.session, configuration), (failure) =>
+    assert.fail(failure.message),
+  );
+  const summary =
+    now.kind === "summary"
+      ? now
+      : assert.fail("The closed session shows an item, not the summary.");
+
+  return shown(
+    summaryPage(closed.id, test.test, closed.session, summary, configuration),
+    `/sessions/${closed.id}`,
+  );
+};
+
+/**
+ * Give the texts of an element's element children, each with its tag, in document order.
+ *
+ * @param element The element.
+ * @returns Each child's tag and text.
+ */
+const childTexts = (element: Element): readonly (readonly [string, string])[] =>
+  element.children.flatMap((child) =>
+    child.kind === "element" ? [[child.tag, textOf(child)] as const] : [],
+  );
 
 describe("summaryPage", () => {
   it.effect(
@@ -724,6 +875,12 @@ describe("summaryPage", () => {
         }
         assert.strictEqual(download.attrs["href"], `${target}/results.xml`);
         assert.isDefined(download.attrs["download"]);
+        assert.deepStrictEqual(test.test.test.outcomeProcessing, { kind: "absent" });
+        assert.notInclude(
+          elements.filter((element) => element.tag === "h2").map(textOf),
+          message("en", "testOutcomes"),
+        );
+        assert.isUndefined(elements.find((element) => element.tag === "dl"));
 
         for (const link of links) {
           const href = String(link.attrs["href"]);
@@ -731,6 +888,74 @@ describe("summaryPage", () => {
             assert.strictEqual(shown(yield* ask(playground, href), href).page.status, 200, href);
           }
         }
+      }),
+  );
+
+  it.effect(
+    "[T-9] summary lists the test's outcomes after the items, in declaration order, each identifier with its values as results write them and NULL in words",
+    () =>
+      Effect.gen(function* listsOutcomes() {
+        const given = yield* deliver(outcomeCaches.running, correctSitting);
+        const { elements } = summaryShown(given);
+        const tags = elements.map((element) => element.tag);
+        const heading =
+          elements.find(
+            (element) => element.tag === "h2" && textOf(element) === message("en", "testOutcomes"),
+          ) ?? assert.fail("The summary has no heading for the test's outcomes.");
+        const list =
+          elements.find((element) => element.tag === "dl") ??
+          assert.fail("The summary lists no outcomes.");
+        const download =
+          elements.find(
+            (element) =>
+              element.tag === "a" && textOf(element) === message("en", "downloadResults"),
+          ) ?? assert.fail("No results link.");
+
+        assert.deepStrictEqual(given.test.test.test.outcomeProcessing.kind, "runs");
+        assert.isAbove(given.closed.session.outcomeRuns, 0);
+        assert.isBelow(tags.indexOf("ol"), elements.indexOf(heading));
+        assert.isBelow(elements.indexOf(heading), elements.indexOf(list));
+        assert.isBelow(elements.indexOf(list), elements.indexOf(download));
+        assert.deepStrictEqual(childTexts(list), [
+          ["dt", "TOTAL"],
+          ["dd", "5"],
+          ["dt", "SCORES"],
+          ["dd", "1"],
+          ["dd", "1"],
+          ["dd", "2"],
+          ["dd", "1"],
+          ["dt", "PRESENTED"],
+          ["dd", "5"],
+          ["dt", "PASSED"],
+          ["dd", "true"],
+          ["dt", "NOTE"],
+          ["dd", message("en", "nullValue")],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[T-9] summary lists the test's outcomes as none when its outcome processing is marked, and says the processing did not run",
+    () =>
+      Effect.gen(function* listsNone() {
+        const given = yield* deliver(outcomeCaches.marked, correctSitting);
+        const { elements, html } = summaryShown(given);
+        const heading =
+          elements.find(
+            (element) => element.tag === "h2" && textOf(element) === message("en", "testOutcomes"),
+          ) ?? assert.fail("The summary has no heading for the test's outcomes.");
+        const saying = elements.filter(
+          (element) => element.tag === "p" && textOf(element) === message("en", "outcomesNotRun"),
+        );
+        const said =
+          saying[0] ?? assert.fail("The summary does not say the processing did not run.");
+
+        assert.deepStrictEqual(given.test.test.test.outcomeProcessing, { kind: "marked" });
+        assert.strictEqual(given.closed.session.outcomeRuns, 0);
+        assert.lengthOf(saying, 1);
+        assert.isBelow(elements.indexOf(heading), elements.indexOf(said));
+        assert.isUndefined(elements.find((element) => element.tag === "dl"));
+        assert.notInclude(html, "ATTEMPTS");
       }),
   );
 });

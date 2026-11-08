@@ -15,7 +15,6 @@ import {
   floatOrRefOf,
   intOrIdentifierOf,
   integerOrRefOf,
-  isUnlanded,
   stringOrRefOf,
 } from "#plate/model/expression.ts";
 import type { DeclarationFacet, ExpressionKind, ReferenceEntry } from "#plate/model/expression.ts";
@@ -25,7 +24,7 @@ import { containersReaders, containersRules } from "#plate/model/expressions/con
 import { functionsReaders, functionsRules } from "#plate/model/expressions/functions.ts";
 import { integersReaders, integersRules } from "#plate/model/expressions/integers.ts";
 import { logicReaders, logicRules } from "#plate/model/expressions/logic.ts";
-import { kindReaders, kindRules, landedKinds } from "#plate/model/expressions/read.ts";
+import { kindReaders, kindRules } from "#plate/model/expressions/read.ts";
 import { referencesReaders, referencesRules } from "#plate/model/expressions/references.ts";
 import { roundingReaders, roundingRules } from "#plate/model/expressions/rounding.ts";
 import { testReaders, testRules } from "#plate/model/expressions/test.ts";
@@ -116,18 +115,6 @@ const kindCounts = (families: readonly object[]): ReadonlyMap<string, number> =>
 const once = Object.fromEntries(expressionKinds.map((kind) => [kind, 1]));
 
 /**
- * Report whether a kind is landed in all three of its tables: its rule is not the unlanded rule,
- * its reader spec is not the stub, and its evaluator is not the stub marker.
- *
- * @param kind The kind.
- * @returns Whether every table holds a landed entry for the kind.
- */
-const landedEverywhere = (kind: ExpressionKind): boolean =>
-  !isUnlanded(kindRules[kind]) &&
-  kindReaders[kind]._tag !== "unlanded" &&
-  evaluators[kind] !== "unlanded";
-
-/**
  * The declaration facet of each kind whose `identifier` names a declaration, by kind: a variable
  * for `qti-variable` and `qti-default`, a response for the three that read a response. Every
  * other kind declares none.
@@ -192,44 +179,6 @@ const referenceFacets: Partial<Record<ExpressionKind, readonly ReferenceEntry[]>
  */
 const byAttribute = (entries: readonly ReferenceEntry[]): readonly ReferenceEntry[] =>
   entries.toSorted((left, right) => left.attribute.localeCompare(right.attribute));
-
-/**
- * The kinds a later stage of this plan owns, by the unit that lands each (M3.b-2's P7T-01 has
- * landed its three random kinds with template processing): the two duration comparisons M3.b-3's
- * P7O-02 lands with duration values, the eight outcome-only kinds M3.b-3's P7O-04 lands for a
- * test's outcome processing (reading 23 refuses them in an item's processing, as
- * `expression-placement`), and `field-value`, which M3.b-4's P7R-03 lands with record values. Each
- * stays unlanded in all three tables, so an item that holds one is marked and its processing runs
- * none. The ledger's claim on I-9a names this roster, and a unit that lands a kind removes it
- * here.
- */
-const laterKinds = {
-  "P7O-02": ["duration-gte", "duration-lt"],
-  "P7O-04": [
-    "number-correct",
-    "number-incorrect",
-    "number-presented",
-    "number-responded",
-    "number-selected",
-    "outcome-maximum",
-    "outcome-minimum",
-    "test-variables",
-  ],
-  "P7R-03": ["field-value"],
-} as const satisfies Readonly<Record<string, readonly ExpressionKind[]>>;
-
-/**
- * Every kind of {@link laterKinds}, whatever its owner.
- */
-const laterKindSet: ReadonlySet<ExpressionKind> = new Set(Object.values(laterKinds).flat());
-
-/**
- * The kinds that run: each of the 64 the roster does not list, M3.b-1's 50 and any kind a later
- * stage has landed and removed from {@link laterKinds}.
- */
-const runningKinds: readonly ExpressionKind[] = expressionKinds.filter(
-  (kind) => !laterKindSet.has(kind),
-);
 
 describe("expressionKinds", () => {
   it("holds 64 kinds, none repeated", () => {
@@ -349,19 +298,7 @@ describe("the expression families", () => {
 });
 
 describe("kindRules", () => {
-  it("holds the unlanded rule for exactly the kinds whose reader spec is the stub and whose evaluator is the stub marker", () => {
-    const unlanded = expressionKinds.filter((kind) => isUnlanded(kindRules[kind]));
-
-    assert.deepStrictEqual(
-      {
-        evaluators: expressionKinds.filter((kind) => evaluators[kind] === "unlanded"),
-        readers: expressionKinds.filter((kind) => kindReaders[kind]._tag === "unlanded"),
-      },
-      { evaluators: unlanded, readers: unlanded },
-    );
-  });
-
-  it("declares the declaration facet of each kind landed in all three tables that names a declaration, and none on any other kind", () => {
+  it("declares the declaration facet of each kind that names a declaration, and none on any other kind", () => {
     assert.deepStrictEqual(
       Object.fromEntries(
         expressionKinds.flatMap((kind) => {
@@ -370,27 +307,16 @@ describe("kindRules", () => {
           return facet === undefined ? [] : [[kind, facet]];
         }),
       ),
-      Object.fromEntries(
-        expressionKinds.flatMap((kind) => {
-          const facet = declarationFacets[kind];
-
-          return facet === undefined || !landedEverywhere(kind) ? [] : [[kind, facet]];
-        }),
-      ),
+      declarationFacets,
     );
   });
 
-  it("declares a reference facet only on a kind landed in all three tables, with the entries its attributes give", () => {
+  it("declares a reference facet only on a kind with an attribute that admits a variable's name, with the entries its attributes give", () => {
     const declaring = expressionKinds.filter((kind) => kindRules[kind].references.length > 0);
 
     assert.deepStrictEqual(
       Object.fromEntries(declaring.map((kind) => [kind, byAttribute(kindRules[kind].references)])),
-      Object.fromEntries(
-        declaring.map((kind) => [
-          kind,
-          landedEverywhere(kind) ? byAttribute(referenceFacets[kind] ?? []) : [],
-        ]),
-      ),
+      Object.fromEntries(declaring.map((kind) => [kind, byAttribute(referenceFacets[kind] ?? [])])),
     );
   });
 
@@ -448,33 +374,17 @@ describe("kindRules", () => {
 });
 
 describe("kindReaders", () => {
-  it("lists as landed exactly the kinds whose rule is landed, in the order of the kinds", () => {
-    assert.deepStrictEqual(
-      landedKinds,
-      expressionKinds.filter((kind) => !isUnlanded(kindRules[kind])),
-    );
+  it("holds a reader spec for each of the 64 kinds and for nothing else", () => {
+    assert.sameMembers(Object.keys(kindReaders), [...expressionKinds]);
   });
 });
 
-describe("the roster", () => {
-  it("[I-9a] runs each kind the roster does not list, M3.b-1's 50 among them: its reader spec, its kind rule and its evaluator are landed, none a stub", () => {
-    assert.isAtLeast(runningKinds.length, 50);
-    assert.deepStrictEqual(
-      runningKinds.filter((kind) => !landedEverywhere(kind)),
-      [],
-    );
-  });
-
-  it("holds unlanded exactly the kinds a later stage owns, listed by owner, each a stub in all three tables", () => {
-    assert.deepStrictEqual(
-      expressionKinds.filter((kind) => isUnlanded(kindRules[kind])),
-      expressionKinds.filter((kind) => laterKindSet.has(kind)),
-    );
-    assert.deepStrictEqual(
-      [...laterKindSet].filter(
-        (kind) => kindReaders[kind]._tag !== "unlanded" || evaluators[kind] !== "unlanded",
-      ),
-      [],
-    );
+describe("the registry", () => {
+  it("[I-9a] holds every kind landed: each of the 64 kinds has a kind rule, a reader spec and an evaluator function", () => {
+    for (const kind of expressionKinds) {
+      assert.isFunction(kindRules[kind].resultType, `qti-${kind}'s kind rule`);
+      assert.include(["custom", "generic"], kindReaders[kind]._tag, `qti-${kind}'s reader spec`);
+      assert.isFunction(evaluators[kind], `qti-${kind}'s evaluator`);
+    }
   });
 });

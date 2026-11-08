@@ -23,6 +23,7 @@ import type {
 } from "#plate/document/source.ts";
 import type { BodyElement, BodyNode, InlineChoiceInteraction, Item } from "#plate/model/item.ts";
 import type { Test } from "#plate/model/test.ts";
+import { InvalidValue } from "#plate/model/values.ts";
 import type { Redacted } from "#plate/payload.ts";
 import { redact } from "#plate/render.ts";
 import { open } from "#plate/validate/open.ts";
@@ -927,28 +928,101 @@ describe("check, the URL pass", () => {
   });
 });
 
-describe("check, processing the model does not hold", () => {
-  it("accepts a duration response's match_correct with a variable mark, not a refusal", () => {
-    const accepted = acceptedOf(
-      verdictOf(
-        item([
-          response("duration", "single", [correct("PT1M")]),
-          score(),
-          body([el("p", [], [text("Click the city.")])]),
-          el("qti-response-processing", [
-            attr("template", "https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct"),
-          ]),
-        ]),
-      ),
-      "accepted-with-unsupported",
+/**
+ * Construct an item whose duration `RESPONSE` has the correct response written, scored by
+ * `match_correct`.
+ *
+ * @param written The correct response's text.
+ * @returns The document.
+ */
+const matchedDuration = (written: string): SourceDocument =>
+  item([
+    response("duration", "single", [correct(written)]),
+    score(),
+    body([el("p", [], [text("How long did it take?")])]),
+    el("qti-response-processing", [
+      attr("template", "https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct"),
+    ]),
+  ]);
+
+describe("check, a duration value (G-R1, pending: a duration is not numerical)", () => {
+  it("[I-9a] holds a duration response's correct response written as seconds, and runs its match_correct, whose qti-match compares the two durations (a template's content is P13's, deferred)", () => {
+    const accepted = acceptedOf(verdictOf(matchedDuration("60")), "accepted");
+    const declared = accepted.item.responses.get("RESPONSE");
+
+    assert.deepStrictEqual(accepted.unsupported, []);
+    assert.deepStrictEqual(
+      declared?.correct,
+      Option.some({
+        baseType: "duration",
+        cardinality: "single",
+        values: [{ baseType: "duration", value: 60 }],
+      }),
     );
 
-    assert.deepInclude(accepted.unsupported, {
-      feature: "variable:RESPONSE",
-      path: `${root}/qti-response-processing`,
-      shown: "mark",
-    });
-    assert.isTrue(Option.isNone(accepted.item.processing));
+    const conditions = accepted.item.processing.pipe(
+      Option.map((rules) =>
+        rules.map((rule) =>
+          rule.kind === "condition"
+            ? rule.branches.map((branch) => [
+                branch.when.kind,
+                branch.when.operands.map((operand) => operand.kind),
+              ])
+            : rule.kind,
+        ),
+      ),
+    );
+
+    assert.deepStrictEqual(conditions, Option.some([[["match", ["variable", "correct"]]]]));
+  });
+
+  it("[I-9a] refuses a duration response's correct response written as an ISO 8601 duration, as value-type", () => {
+    assert.deepStrictEqual(refusalsOf(verdictOf(matchedDuration("PT1M"))), [
+      {
+        location: {
+          kind: "path",
+          path: `${root}/qti-response-declaration/qti-correct-response/qti-value`,
+        },
+        rule: "value-type",
+      },
+    ]);
+  });
+
+  it("[I-9a] refuses a qti-sum over a duration outcome as expression-type (pantry P23)", () => {
+    const refusals = refusalsOf(
+      verdictOf(
+        item([
+          el("qti-outcome-declaration", [
+            attr("base-type", "duration"),
+            attr("cardinality", "single"),
+            attr("identifier", "TIME"),
+          ]),
+          score(),
+          body([el("p", [], [text("How long?")])]),
+          el(
+            "qti-response-processing",
+            [],
+            [
+              el(
+                "qti-set-outcome-value",
+                [attr("identifier", "SCORE")],
+                [el("qti-sum", [], [el("qti-variable", [attr("identifier", "TIME")])])],
+              ),
+            ],
+          ),
+        ]),
+      ),
+    );
+
+    assert.deepStrictEqual(refusals, [
+      {
+        location: {
+          kind: "path",
+          path: `${root}/qti-response-processing/qti-set-outcome-value/qti-sum`,
+        },
+        rule: "expression-type",
+      },
+    ]);
   });
 });
 
@@ -1262,6 +1336,138 @@ describe("check, the base types of a test's SCORE, MAXSCORE and PASSED", () => {
   });
 });
 
+/**
+ * Construct a test whose outcome processing looks `I1.SCORE`, which it reads through its item ref
+ * `I1`, up with an operand.
+ *
+ * @param operand The lookup's operand.
+ * @returns The test.
+ */
+const lookingUp = (operand: SourceElement): SourceDocument =>
+  assessmentTest(
+    [itemRef("I1")],
+    [
+      outcome("SCORE", "float"),
+      el(
+        "qti-outcome-processing",
+        [],
+        [el("qti-lookup-outcome-value", [attr("identifier", "I1.SCORE")], [operand])],
+      ),
+    ],
+  );
+
+describe("check, a test's lookup of an outcome it reads through an item ref (reading 28; pantry P22)", () => {
+  it("[T-9] refuses, in the test's own verdict, the lookup operand of a dotted target that is a string, as expression-type with reading 28 and no table, and accepts an integer one, its processing marked", () => {
+    const refused = verdictOf(
+      lookingUp(el("qti-base-value", [attr("base-type", "string")], [text("x")])),
+    );
+    const accepted = verdictOf(
+      lookingUp(el("qti-base-value", [attr("base-type", "integer")], [text("1")])),
+    );
+
+    assert.strictEqual(refused.verdict, "refused");
+    assert.deepStrictEqual(
+      refused.verdict === "refused"
+        ? refused.refusals.map((refusal) => ({
+            detail: refusal.detail,
+            location: refusal.location,
+            rule: refusal.rule,
+          }))
+        : [],
+      [
+        {
+          detail: {
+            element: "qti-lookup-outcome-value",
+            expressionBaseType: "string",
+            expressionCardinality: "single",
+            identifier: "I1.SCORE",
+            reading: "28",
+          },
+          location: {
+            kind: "path",
+            path: "qti-assessment-test/qti-outcome-processing/qti-lookup-outcome-value",
+          },
+          rule: "expression-type",
+        },
+      ],
+    );
+    // The engine holds no item's outcome to set, so the accepted test's processing is marked.
+    acceptedTestOf(accepted, "accepted-with-unsupported");
+  });
+});
+
+/**
+ * Construct a test whose record outcome `R` holds a `qti-default-value` of one field.
+ *
+ * @param attributes The field's attributes, as `[local, value]` pairs.
+ * @param written The field's text, as written.
+ * @returns The test.
+ */
+const recordFieldTest = (
+  attributes: readonly (readonly [string, string])[],
+  written: string,
+): SourceDocument =>
+  assessmentTest(
+    [itemRef("I1")],
+    [
+      el(
+        "qti-outcome-declaration",
+        [attr("cardinality", "record"), attr("identifier", "R")],
+        [
+          el(
+            "qti-default-value",
+            [],
+            [
+              el(
+                "qti-value",
+                attributes.map(([local, value]) => attr(local, value)),
+                [text(written)],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
+
+describe("check, a record outcome's field in a test (info.txt:73046; pantry's test import runs semanticRows)", () => {
+  const field = "qti-assessment-test/qti-outcome-declaration/qti-default-value/qti-value";
+  const named = ["field-identifier", "n"] as const;
+  const integer = ["base-type", "integer"] as const;
+
+  it("[I-1] refuses, in the test's own verdict, a record field in a test declaration that lacks field-identifier, lacks base-type, or is outside its base-type", () => {
+    assert.deepStrictEqual(
+      [
+        refusalsOf(verdictOf(recordFieldTest([integer], "1"))),
+        refusalsOf(verdictOf(recordFieldTest([named], "1"))),
+        refusalsOf(verdictOf(recordFieldTest([named, integer], "abc"))),
+      ],
+      [
+        [
+          {
+            location: { kind: "path", path: `${field}/@field-identifier` },
+            rule: "missing-attribute",
+          },
+        ],
+        [{ location: { kind: "path", path: `${field}/@base-type` }, rule: "missing-attribute" }],
+        [{ location: { kind: "path", path: field }, rule: "value-type" }],
+      ],
+    );
+  });
+
+  it("[I-1] accepts a record field in a test declaration that names its field and fits its base-type, marked cardinality=record as before (G-R4, pending)", () => {
+    assert.deepStrictEqual(
+      featuresOf(
+        acceptedTestOf(
+          verdictOf(recordFieldTest([named, integer], "1")),
+          "accepted-with-unsupported",
+        ).unsupported,
+      ),
+      ['cardinality="record"@qti-assessment-test/qti-outcome-declaration'],
+    );
+  });
+});
+
 describe("check, every QTI 3 root", () => {
   it.effect(
     "[T-4] [S-0] accepts BGtest.xml as a test it delivers in full",
@@ -1283,21 +1489,30 @@ describe("check, every QTI 3 root", () => {
   );
 
   it.effect(
-    "[T-4] [S-0] accepts -TX_G06SAMP_000.xml as a test with unsupported features, its outcome processing marked",
+    "[T-4] [S-0] accepts rtest08.xml as a test with unsupported features, its rubric blocks marked",
     () =>
-      Effect.gen(function* weightedTest() {
-        const location = "qtiv3-examples/packaging/CASE/testitems/-TX_G06SAMP_000.xml";
+      Effect.gen(function* rubricTest() {
+        const location = "qtiv3-examples/tests/rtest08.xml";
         const accepted = acceptedTestOf(
           yield* corpusVerdict(location),
           "accepted-with-unsupported",
         );
+        const nonlinear = "qti-assessment-test/qti-test-part[2]";
 
-        assert.deepInclude(accepted.unsupported, {
-          feature: "qti-outcome-processing",
-          path: "qti-assessment-test/qti-outcome-processing",
-          shown: "mark",
-        });
+        assert.deepStrictEqual(accepted.unsupported, [
+          {
+            feature: "qti-rubric-block",
+            path: `${nonlinear}/qti-assessment-section[1]/qti-rubric-block`,
+            shown: "mark",
+          },
+          {
+            feature: "qti-rubric-block",
+            path: `${nonlinear}/qti-assessment-section[2]/qti-rubric-block`,
+            shown: "mark",
+          },
+        ]);
         assert.deepStrictEqual(accepted.unsupported, accepted.test.unsupported);
+        assert.deepStrictEqual(accepted.test.outcomeProcessing, { kind: "absent" });
       }),
     { tags: ["corpus"] },
   );
@@ -1556,13 +1771,14 @@ describe("acceptForTest", () => {
 const handTest: Test = {
   document: "tests/hand.xml",
   identifier: "hand",
+  outcomeProcessing: { kind: "absent" },
   outcomes: new Map(),
   parts: [],
   title: "Hand",
   unsupported: [
     {
-      feature: "qti-outcome-processing",
-      path: "qti-assessment-test/qti-outcome-processing",
+      feature: "qti-pre-condition",
+      path: "qti-assessment-test/qti-test-part/qti-pre-condition",
       shown: "mark",
     },
   ],
@@ -2038,6 +2254,22 @@ const m2Wordings: readonly {
     name: "lom-title",
     spans: ["choice.xml", "choice", "Unattended Luggage", "Metadata Example Item #1", "title"],
   },
+  {
+    args: [
+      "expression-type",
+      "tests/test.xml",
+      { kind: "path", path: "qti-assessment-test/qti-outcome-processing/qti-lookup-outcome-value" },
+      {
+        element: "qti-lookup-outcome-value",
+        expressionBaseType: "string",
+        expressionCardinality: "single",
+        identifier: "I1.SCORE",
+        reading: "28",
+      },
+    ],
+    name: "expression-type of a dotted lookup",
+    spans: ["qti-lookup-outcome-value", "I1.SCORE", "string", "integer", "float", "duration"],
+  },
 ];
 
 describe("describeRefusal", () => {
@@ -2116,6 +2348,24 @@ describe("describeRefusal", () => {
 
     assert.notMatch(sentence, /[\n\r]/u);
     assert.notInclude(codeSpans(sentence).outside, "![");
+  });
+
+  it("[I-9a] gives a duration's value-type the seconds remedy a parse failure gives, and keeps an integer's sentence", () => {
+    const sentence = describeRefusal(
+      refusalOf("value-type", { baseType: "duration", lexical: "PT1M" }),
+    );
+    const { spans } = codeSpans(sentence);
+    const parse = new InvalidValue({ baseType: "duration", lexical: "PT1M" }).message;
+    const remedy = parse.slice(parse.indexOf("; write ") + "; ".length);
+
+    assert.include(spans, "PT1M");
+    assert.include(spans, "90.5");
+    assert.include(spans, "PT1M30.5S");
+    assert.include(sentence.replaceAll("`", ""), `To make it valid: ${remedy}.`);
+    assert.include(
+      describeRefusal(refusalOf("value-type", { baseType: "integer", lexical: "1.5" })),
+      "`1.5` is not a value of base type `integer`. Rule `value-type`. To make it valid: write a value of base type `integer`.",
+    );
   });
 
   it("cites the reading that refuses a child, and names QTI 3.0's schema only when none does", () => {
@@ -2628,7 +2878,189 @@ describe("describeRefusal", () => {
     );
   });
 
-  it("names the base type of a weighted qti-test-variables that is not float", () => {
+  it("[T-9] names the test as the declarer of a variable a test's qti-variable reads and nothing declares, and keeps the fix to declare it, which a test may", () => {
+    const sentence = describeRefusal(
+      refusalOf("undeclared-variable", {
+        declarer: "test",
+        element: "qti-variable",
+        expected: "variable",
+        identifier: "NOPE",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-variable` names `NOPE`, and the test declares no variable `NOPE`.",
+    );
+    assert.include(sentence, "To make it valid: declare `NOPE`, or name a declared variable.");
+    assert.notInclude(sentence, "the item declares");
+  });
+
+  it("[T-9] tells a test's qti-map-response or qti-correct, with the test as the declarer, to name an item's response through its item ref, since a test declares no response", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      for (const identifier of ["SCORE", "A.B"]) {
+        const sentence = describeRefusal(
+          refusalOf("undeclared-variable", {
+            declarer: "test",
+            element,
+            expected: "response",
+            identifier,
+          }),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` names \`${identifier}\`, and the test declares no response \`${identifier}\`; only an item declares responses.`,
+          `${element} ${identifier}`,
+        );
+        assert.include(
+          sentence,
+          "To make it valid: name a response an item declares, through its item ref, written `ITEMREF.RESPONSE`.",
+          `${element} ${identifier}`,
+        );
+        assert.notInclude(sentence, "the item declares", `${element} ${identifier}`);
+        assert.notInclude(sentence, `declare \`${identifier}\``, `${element} ${identifier}`);
+      }
+    }
+  });
+
+  it("[T-9] names the built-in a test's qti-correct reads, with the test as the declarer, as the built-in, and gives the item-ref fix", () => {
+    for (const identifier of ["numAttempts", "duration"]) {
+      const sentence = describeRefusal(
+        refusalOf("undeclared-variable", {
+          declarer: "test",
+          element: "qti-correct",
+          expected: "response",
+          identifier,
+        }),
+      );
+
+      assert.include(
+        sentence,
+        `\`qti-correct\` names the built-in \`${identifier}\`, which has no declaration, so no mapping or correct response.`,
+        identifier,
+      );
+      assert.include(
+        sentence,
+        "To make it valid: name a response an item declares, through its item ref, written `ITEMREF.RESPONSE`.",
+        identifier,
+      );
+      assert.notInclude(sentence, "declares no", identifier);
+      assert.notInclude(sentence, `declare \`${identifier}\``, identifier);
+    }
+  });
+
+  it("names a built-in a mapping or correct response reads as the built-in, which has no declaration (built-in or dotted response wording)", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      for (const identifier of ["numAttempts", "duration"]) {
+        const sentence = describeRefusal(
+          refusalOf("undeclared-variable", { element, expected: "response", identifier }),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` names the built-in \`${identifier}\`, which has no declaration, so no mapping or correct response.`,
+        );
+        assert.include(sentence, "To make it valid: name a declared response.");
+        assert.notInclude(sentence, `declare \`${identifier}\``);
+      }
+    }
+  });
+
+  it("names a dotted name a mapping or correct response reads as a read through an item ref, test part or section (built-in or dotted response wording)", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      for (const identifier of ["I1.numAttempts", "I1.SCORE"]) {
+        const sentence = describeRefusal(
+          refusalOf("undeclared-variable", {
+            element,
+            expected: "response",
+            identifier,
+            prefix: "I1",
+          }),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` names \`${identifier}\`, which reads, through an item ref, test part or section, a variable that is not a response its item declares.`,
+        );
+        assert.include(
+          sentence,
+          "To make it valid: name a response the item declares, written `ITEMREF.RESPONSE`.",
+        );
+        assert.notInclude(sentence, `declare \`${identifier}\``);
+      }
+    }
+  });
+
+  it("keeps the declaration fix for an undotted name that is no built-in (built-in or dotted response wording, control)", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      const sentence = describeRefusal(
+        refusalOf("undeclared-variable", { element, expected: "response", identifier: "SCORE" }),
+      );
+
+      assert.include(sentence, "the item declares no response `SCORE`.");
+      assert.include(sentence, "To make it valid: declare `SCORE`, or name a declared response.");
+    }
+  });
+
+  it("gives a dotted name no ref is read through, one an item declares whole, the sentence that names no item ref (dotted wording through a ref only)", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      for (const identifier of ["X.Y", "A.B"]) {
+        const sentence = describeRefusal(
+          refusalOf("undeclared-variable", { element, expected: "response", identifier }),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` names \`${identifier}\`, and the item declares no response \`${identifier}\`.`,
+          `${element} ${identifier}`,
+        );
+        assert.notInclude(sentence, "item ref", `${element} ${identifier}`);
+        assert.notInclude(sentence, "ITEMREF.RESPONSE", `${element} ${identifier}`);
+      }
+    }
+  });
+
+  it("keeps the item-ref sentence for a dotted name read through a ref, the built-in sentence and the declaration fix (dotted wording through a ref only, control)", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      for (const [identifier, prefix] of [
+        ["I1.SCORE", "I1"],
+        ["I1.numAttempts", "I1"],
+        ["X.Y", "X"],
+      ] as const) {
+        const sentence = describeRefusal(
+          refusalOf("undeclared-variable", { element, expected: "response", identifier, prefix }),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` names \`${identifier}\`, which reads, through an item ref, test part or section, a variable that is not a response its item declares.`,
+          `${element} ${identifier}`,
+        );
+        assert.include(
+          sentence,
+          "To make it valid: name a response the item declares, written `ITEMREF.RESPONSE`.",
+          `${element} ${identifier}`,
+        );
+      }
+
+      const builtIn = describeRefusal(
+        refusalOf("undeclared-variable", {
+          element,
+          expected: "response",
+          identifier: "numAttempts",
+        }),
+      );
+      const undotted = describeRefusal(
+        refusalOf("undeclared-variable", { element, expected: "response", identifier: "SCORE" }),
+      );
+
+      assert.include(builtIn, `names the built-in \`numAttempts\`, which has no declaration`);
+      assert.include(undotted, "To make it valid: declare `SCORE`, or name a declared response.");
+    }
+  });
+
+  it("names the base type of a weighted qti-test-variables that is not float, says a weight is defined only for float or none, and gives the fix: drop the weight or the base-type (G-R3 199)", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {
         baseType: "integer",
@@ -2639,7 +3071,11 @@ describe("describeRefusal", () => {
 
     assert.include(
       sentence,
-      "`qti-test-variables` is weighted and has the base type `integer`, not `float`",
+      "`qti-test-variables` is weighted and has the base type `integer`, but a weight is defined only for the base type `float` or none (info.txt:71457).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: remove `weight-identifier` from `qti-test-variables`, or remove its `base-type`.",
     );
     assert.notInclude(sentence, "outcome, to a");
   });
@@ -2689,6 +3125,29 @@ describe("describeRefusal", () => {
       sentence,
       "To make it valid: set `completionStatus` with a `qti-set-outcome-value`, or name a declared outcome.",
     );
+  });
+
+  it("[T-9] words the lookup operand of a dotted target by what every lookup reads, and names no table (reading 28)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        element: "qti-lookup-outcome-value",
+        expressionBaseType: "string",
+        expressionCardinality: "single",
+        identifier: "I1.SCORE",
+        reading: "28",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-lookup-outcome-value` looks `I1.SCORE` up with a single `string` value, but a lookup reads only a single `integer`, `float` or `duration` value (reading 28).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: look `I1.SCORE` up with a single `integer`, `float` or `duration` value.",
+    );
+    assert.notInclude(sentence, "table");
+    assert.notInclude(sentence, "sets");
   });
 
   it("names a dotted name that resolves to no item ref, test part or section variable (reading 48)", () => {
@@ -2772,6 +3231,64 @@ describe("describeRefusal", () => {
     assert.include(sentence, matchCorrectUri);
   });
 
+  it("words a dotted map-response or map-response-point whose response lacks what it needs as a response of the item an item ref names, fixed in that item, never asking to declare the dotted name (dotted mapping remedy)", () => {
+    const cases = [
+      ["qti-map-response", { child: "qti-mapping" }, "with a `qti-mapping`", "a `qti-mapping`"],
+      [
+        "qti-map-response-point",
+        { baseType: "point", child: "qti-area-mapping" },
+        "of base type `point` with a `qti-area-mapping`",
+        "a `qti-area-mapping` and the base type `point`",
+      ],
+    ] as const;
+
+    for (const [element, needs, lacks, gives] of cases) {
+      const sentence = describeRefusal(
+        refusalOf("template-requirements", {
+          ...needs,
+          declaration: "qti-response-declaration",
+          element,
+          identifier: "ITEM1.UNMAPPED",
+          prefix: "ITEM1",
+        }),
+      );
+
+      assert.include(
+        sentence,
+        `\`${element}\` reads \`ITEM1.UNMAPPED\`, a response of the item that item ref \`ITEM1\` names, and that item does not declare it ${lacks}.`,
+        element,
+      );
+      assert.include(
+        sentence,
+        `To make it valid: give that response ${gives} in the item that item ref \`ITEM1\` names.`,
+        element,
+      );
+      assert.notInclude(sentence, "declare `ITEM1.UNMAPPED`", element);
+      assert.notInclude(sentence, "the item has none", element);
+    }
+  });
+
+  it("keeps the declaration fix for an item's own map-response, whose refusal has no prefix (dotted mapping remedy, control)", () => {
+    const sentence = describeRefusal(
+      refusalOf("template-requirements", {
+        child: "qti-mapping",
+        declaration: "qti-response-declaration",
+        element: "qti-map-response",
+        identifier: "RESPONSE",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-map-response` needs `RESPONSE` in a `qti-response-declaration` with a `qti-mapping`, and the item has none.",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: declare `RESPONSE` in a `qti-response-declaration` with a `qti-mapping`.",
+    );
+    assert.notInclude(sentence, "item ref");
+  });
+
   it.each(m2Wordings)("writes the author facts of $name in code spans", ({ args, spans }) => {
     const [rule] = args;
     const sentence = describeRefusal(refusalAt(...args));
@@ -2783,6 +3300,26 @@ describe("describeRefusal", () => {
     for (const span of spans) {
       assert.include(written.spans, span);
     }
+  });
+
+  it("[I-9a] gives an item's weighted qti-variable the weight remedy in an item: remove the attribute, never move it into outcome processing", () => {
+    const sentence = describeRefusal(
+      refusalAt(
+        "expression-placement",
+        "item.xml",
+        {
+          kind: "path",
+          path: `${root}/qti-response-processing/qti-set-outcome-value/qti-variable/@weight-identifier`,
+        },
+        { attribute: "weight-identifier", element: "qti-variable", reading: "23" },
+      ),
+    );
+    const { spans } = codeSpans(sentence);
+
+    assert.include(spans, "qti-variable");
+    assert.include(spans, "weight-identifier");
+    assert.notInclude(spans, "qti-outcome-processing");
+    assert.include(sentence, "To make it valid: remove `weight-identifier` from `qti-variable`.");
   });
 
   it("names both readings of an ambiguous reference, each its prefix and its variable", () => {

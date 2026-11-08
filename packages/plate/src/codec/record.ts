@@ -11,14 +11,15 @@
  * @module
  */
 import { Data, Formatter, Option, Result, Schema, SchemaTransformation } from "effect";
-import { ValueSchema } from "#plate/codec/values.ts";
+import { RecordValueSchema, ValueSchema } from "#plate/codec/values.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 
 /**
  * The version of every stored form this renderer writes, the session record's and the test
- * session's, and the only version it reads.
+ * session's, and the only version it reads. The two forms share it, so a change to either form
+ * moves both, and a form whose fields did not change still names the new version.
  */
-export const storedVersion = 2;
+export const storedVersion = 4;
 
 /**
  * The fields of one item's session, as {@link ItemRecord} has them.
@@ -34,6 +35,7 @@ const recordFields = {
   notices: Schema.Array(Schema.String),
   numAttempts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   outcomes: Schema.Record(Schema.String, ValueSchema),
+  records: Schema.Record(Schema.String, RecordValueSchema),
   responses: Schema.Record(Schema.String, ValueSchema),
   seed: Schema.String,
   templates: Schema.Record(Schema.String, ValueSchema),
@@ -58,10 +60,11 @@ export const ItemRecordSchema = Schema.Struct({
 );
 
 /**
- * One item's session in the form the host stores: JSON-safe data that names its version, `2`,
+ * One item's session in the form the host stores: JSON-safe data that names its version, `4`,
  * with every integer written as its decimal digits, so no integer is rounded on the way through
  * the host, and the floats JSON has no number for written by name: the infinities as `"INF"` and
- * `"-INF"`, NaN as `"NaN"` and negative zero as `"-0"`. Version 2 adds the seed, the template
+ * `"-INF"`, NaN as `"NaN"` and negative zero as `"-0"`. A record response's value sits in
+ * `records`, beside `responses`, each field written as a value is. It holds the seed, the template
  * values, and the correct responses and defaults template processing set, so it is server data:
  * keep it where only the server reads it, never in the page.
  */
@@ -177,8 +180,8 @@ export const encodeRecord = (record: ItemRecord): Result.Result<StoredRecord, In
  * @param input The stored record, as the host returned it: the {@link StoredRecord}
  *   {@link encodeRecord} wrote, after any JSON round trip. An integer written as a JSON number is
  *   refused, and so is a record that names no version or another version than
- *   {@link storedVersion}, 2: a version-1 record, written before the record held its seed and
- *   template values, among them.
+ *   {@link storedVersion}, 4: a version-3 record among them, refused for its version before its
+ *   fields are read, though it lacks only `records`.
  * @returns The record, or {@link InvalidRecord} at stage `decode` naming what does not fit, the
  *   version found when that is what does not fit.
  */

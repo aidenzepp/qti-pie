@@ -16,8 +16,25 @@
  *
  * {@link observe} drives a record through the browser entries only (`redactItem`, `render`,
  * `runAttempt`), and {@link startRecord} starts one with `firstAttempt`, so a page runs the same
- * steps as Node. Test support only, loadable in a page: it value-imports only browser modules and,
- * from `effect`, only `Option` and `Result`.
+ * steps as Node.
+ *
+ * {@link determinismTest} is a hand-built test that delivers the item as `ITEM1`, and
+ * {@link determinismScope} its test scope after the item's pinned attempt, both literals a page
+ * loads. Its outcome processing draws an integer, then draws in the second branch of a condition
+ * whose first branch, not taken, holds a draw, and reads the item's `SCORE` through its item ref.
+ * {@link observeOutcomes} runs it as runs 1 and 2 of a session through `runOutcomes`, each from the
+ * stream `outcomeLabel` keys by the seed, and {@link pinnedOutcomeDraws} pins what it gives under
+ * {@link determinismSeed}.
+ *
+ * {@link pickerRef} is an item ref with two drawing template defaults, `LOW` and `HIGH`, over
+ * {@link pickerItem}, a templated item whose template processing reads them: it draws `PICK`
+ * between them and sets `SPAN` to their difference. {@link observeDefaults} evaluates the defaults
+ * through `evaluateTemplateDefaults` from the stream `defaultLabel` keys by the seed for the
+ * session's first item, then starts the item with them through `firstAttempt`, and
+ * {@link pinnedDefaultDraws} pins what it gives under {@link determinismSeed}.
+ *
+ * Test support only, loadable in a page: it value-imports only browser modules and, from `effect`,
+ * only `Option` and `Result`.
  *
  * @module
  */
@@ -27,7 +44,11 @@ import type { UnknownPart } from "#plate/emit/parts.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
-import type { Expression, TemplateRule } from "#plate/model/expression.ts";
+import { runOutcomes } from "#plate/engine/outcome.ts";
+import { defaultLabel, drawStream, outcomeLabel } from "#plate/engine/random.ts";
+import type { TestScope } from "#plate/engine/scope.ts";
+import { evaluateTemplateDefaults } from "#plate/engine/template.ts";
+import type { Expression, Rule, TemplateRule } from "#plate/model/expression.ts";
 import type {
   BodyNode,
   Item,
@@ -37,7 +58,9 @@ import type {
   TemplateDeclaration,
   TemplateVisibility,
 } from "#plate/model/item.ts";
+import { startingValue } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
+import type { ItemRef, Test } from "#plate/model/test.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
 import { redactItem } from "#plate/payload.ts";
 import { render } from "#plate/render.ts";
@@ -615,4 +638,309 @@ export const observe = (
     const after = yield* runAttempt(determinismItem, record, determinismResponses);
 
     return { html: rendered.html, outcomes: after.outcomes, templates: record.templates };
+  });
+
+/**
+ * The item ref through which {@link determinismTest} delivers {@link determinismItem}.
+ */
+const itemRef = "ITEM1";
+
+/**
+ * Construct a `qti-variable` that reads one of the fixture item's variables through its item ref.
+ *
+ * @param name The item's variable.
+ * @returns The expression.
+ */
+const itemVariable = (name: string): Expression => variable(`${itemRef}.${name}`);
+
+/**
+ * Construct a `qti-set-outcome-value`.
+ *
+ * @param name The outcome it sets.
+ * @param expression Its expression.
+ * @returns The rule.
+ */
+const setOutcome = (name: string, expression: Expression): Rule => ({
+  expression,
+  identifier: name,
+  kind: "set-outcome",
+});
+
+/**
+ * The fixture test, as much of it as `runOutcomes` reads: its outcomes `DRAWN` and `BONUS`, single
+ * integers, and `TOTAL`, a single float, none with a default, and its outcome processing. That
+ * draws `DRAWN` from 1 to 100; then runs a condition whose first branch, `ITEM1.SCORE` below 0, is
+ * not taken and holds a draw, and whose second, `ITEM1.SCORE` at least 0.25, is taken and draws
+ * `BONUS` from 100 to 199; then sets `TOTAL` to `ITEM1.SCORE` plus `BONUS`. So the values pin the
+ * order of a run's draws: its rules in order, a condition's branches until the first true one.
+ * Written by hand (rule `3ad87993`) as a literal, so a page loads it.
+ */
+export const determinismTest: Pick<Test, "outcomeProcessing" | "outcomes"> = {
+  outcomeProcessing: {
+    kind: "runs",
+    rules: [
+      setOutcome("DRAWN", randomInteger(1n, 100n)),
+      {
+        branches: [
+          {
+            // oxlint-disable-next-line unicorn/no-thenable -- `then` is the branch's rule list, the name the item model fixes; it is an array, never a function.
+            then: [setOutcome("BONUS", randomInteger(0n, 99n))],
+            when: { kind: "lt", operands: [itemVariable("SCORE"), baseValue(float(0))] },
+          },
+          {
+            // oxlint-disable-next-line unicorn/no-thenable -- `then` is the branch's rule list, the name the item model fixes; it is an array, never a function.
+            then: [setOutcome("BONUS", randomInteger(100n, 199n))],
+            when: { kind: "gte", operands: [itemVariable("SCORE"), baseValue(float(0.25))] },
+          },
+        ],
+        kind: "condition",
+        otherwise: Option.none(),
+      },
+      setOutcome("TOTAL", { kind: "sum", operands: [itemVariable("SCORE"), variable("BONUS")] }),
+    ],
+  },
+  outcomes: new Map([
+    ["DRAWN", outcomeDeclaration("DRAWN", "integer")],
+    ["BONUS", outcomeDeclaration("BONUS", "integer")],
+    ["TOTAL", outcomeDeclaration("TOTAL", "float")],
+  ]),
+};
+
+/**
+ * The test scope of {@link determinismTest} after its item's pinned attempt: one part `P1` and one
+ * section `S1`, each holding `ITEM1`, which delivers {@link determinismItem}, presented and with one
+ * attempt processed. Its record holds {@link pinned}'s template values and outcomes, the responses
+ * {@link determinismResponses} and the correct response the item's template processing set, so
+ * `ITEM1.SCORE` reads {@link pinned}'s `SCORE`. The scope declares the test's outcomes and holds no
+ * time, which the test's processing does not read.
+ */
+export const determinismScope: TestScope = {
+  declared: new Set(determinismTest.outcomes.keys()),
+  duration: Option.none(),
+  items: [
+    {
+      categories: [],
+      declarations: {
+        outcomes: determinismItem.outcomes,
+        responses: determinismItem.responses,
+        templates: determinismItem.templates,
+      },
+      mappings: new Map(),
+      numAttempts: 1,
+      presented: true,
+      record: {
+        correct: { RESPONSE: identifier("B") },
+        defaults: {},
+        outcomes: pinned.outcomes,
+        records: {},
+        responses: determinismResponses,
+        templates: pinned.templates,
+      },
+      ref: itemRef,
+      unheld: new Map(),
+      weights: new Map(),
+    },
+  ],
+  parts: new Map([["P1", [itemRef]]]),
+  sections: new Map([["S1", [itemRef]]]),
+};
+
+/**
+ * What {@link determinismTest}'s outcome processing gives as runs 1 and 2 of a session: the test's
+ * outcomes after each run, in run order.
+ */
+export type OutcomeDraws = readonly [
+  Readonly<Record<string, Value>>,
+  Readonly<Record<string, Value>>,
+];
+
+/**
+ * What {@link observeOutcomes} gives under {@link determinismSeed} and {@link determinismInstance},
+ * pinned. Each run starts from the outcomes' starting values and draws from its own stream, so run
+ * 2 differs from run 1 only in its draws. `TOTAL` is {@link pinned}'s `SCORE` plus `BONUS`.
+ */
+export const pinnedOutcomeDraws: OutcomeDraws = [
+  { BONUS: integer(129n), DRAWN: integer(22n), TOTAL: float(129.27261476873917) },
+  { BONUS: integer(128n), DRAWN: integer(56n), TOTAL: float(128.27261476873917) },
+];
+
+/**
+ * Run {@link determinismTest}'s outcome processing as runs 1 and 2 of a session under
+ * {@link determinismInstance}, through `runOutcomes` over {@link determinismScope}: run `n` draws
+ * from a fresh `drawStream(seed, outcomeLabel(determinismInstance, n))`, the stream a session's run
+ * `n` draws from.
+ *
+ * @param seed The processing seed the runs' streams are keyed by, {@link determinismSeed} by
+ *   default.
+ * @returns The outcomes after each run, or the first failure.
+ */
+export const observeOutcomes = (
+  seed: string = determinismSeed,
+): Result.Result<OutcomeDraws, EngineFailure> =>
+  Result.gen(function* observeOutcomeDraws() {
+    const first = yield* runOutcomes(
+      determinismTest,
+      determinismScope,
+      drawStream(seed, outcomeLabel(determinismInstance, 1)),
+    );
+    const second = yield* runOutcomes(
+      determinismTest,
+      determinismScope,
+      drawStream(seed, outcomeLabel(determinismInstance, 2)),
+    );
+
+    return [first, second] as const;
+  });
+
+/**
+ * The instance of the record a session starts for its first item: the session's instance
+ * {@link determinismInstance}, a `.` and the item's sequence index, 1.
+ */
+export const pickerInstance = `${determinismInstance}.1`;
+
+/**
+ * The templated item {@link pickerRef} delivers, hand-built (rule `3ad87993`) as a literal so a page
+ * loads it. Its single integers `LOW` and `HIGH` declare defaults 1 and 2, which the item ref's
+ * template defaults replace; `PICK` and `SPAN` declare none. Its template processing reads `LOW`
+ * and `HIGH` before any rule sets them: it draws `PICK` from `LOW` to `HIGH`, the bounds named by
+ * reference, then sets `SPAN` to `HIGH` minus `LOW`. It declares no response or outcome and has no
+ * body or response processing.
+ */
+export const pickerItem: Item = {
+  body: [],
+  document: "items/picker.xml",
+  identifier: "picker",
+  lang: Option.some("en"),
+  outcomes: new Map(),
+  processing: Option.none(),
+  responses: new Map(),
+  templateProcessing: Option.some([
+    setTemplate("PICK", {
+      kind: "random-integer",
+      max: { _tag: "ref", identifier: "HIGH" },
+      min: { _tag: "ref", identifier: "LOW" },
+      operands: [],
+      step: { _tag: "literal", value: 1n },
+    }),
+    setTemplate("SPAN", { kind: "subtract", operands: [variable("HIGH"), variable("LOW")] }),
+  ]),
+  templates: new Map([
+    ["LOW", templateDeclaration("LOW", "integer", Option.some(integer(1n)))],
+    ["HIGH", templateDeclaration("HIGH", "integer", Option.some(integer(2n)))],
+    ["PICK", templateDeclaration("PICK", "integer")],
+    ["SPAN", templateDeclaration("SPAN", "integer")],
+  ]),
+  title: "Picker",
+  unsupported: [],
+};
+
+/**
+ * The item ref through which a test delivers {@link pickerItem} first in its sequence, as much of
+ * it as the template defaults need: its identifier and two drawing template defaults, in document
+ * order, `LOW` from 1 to 9 and then `HIGH` from 10 to 99. Both draw from the one stream an item
+ * ref's defaults share, so `LOW` takes its first draw and `HIGH` its second.
+ */
+export const pickerRef: Pick<ItemRef, "identifier" | "templateDefaults"> = {
+  identifier: "PICKER",
+  templateDefaults: [
+    { expression: randomInteger(1n, 9n), templateIdentifier: "LOW" },
+    { expression: randomInteger(10n, 99n), templateIdentifier: "HIGH" },
+  ],
+};
+
+/**
+ * The test scope {@link pickerRef}'s defaults are evaluated over, as a session presents its first
+ * item: one part `P1` and one section `S1`, each holding `PICKER`, whose item
+ * {@link pickerItem} is not yet presented, has no attempt processed, and holds the record
+ * `fresh` starts. It declares {@link determinismTest}'s outcomes and holds no time, as a template
+ * default's scope holds none.
+ */
+export const pickerScope: TestScope = {
+  declared: new Set(determinismTest.outcomes.keys()),
+  duration: Option.none(),
+  items: [
+    {
+      categories: [],
+      declarations: {
+        outcomes: pickerItem.outcomes,
+        responses: pickerItem.responses,
+        templates: pickerItem.templates,
+      },
+      mappings: new Map(),
+      numAttempts: 0,
+      presented: false,
+      record: {
+        correct: {},
+        defaults: {},
+        outcomes: { completionStatus: identifier("not_attempted") },
+        records: {},
+        responses: {},
+        templates: {},
+      },
+      ref: pickerRef.identifier,
+      unheld: new Map(),
+      weights: new Map(),
+    },
+  ],
+  parts: new Map([["P1", [pickerRef.identifier]]]),
+  sections: new Map([["S1", [pickerRef.identifier]]]),
+};
+
+/**
+ * {@link determinismTest}'s outcomes as a session holds them before any outcome processing runs:
+ * each at its starting value. {@link pickerRef}'s defaults are evaluated over them.
+ */
+const startingOutcomes: Readonly<Record<string, Value>> = Object.fromEntries(
+  Array.from(determinismTest.outcomes, ([name, outcome]) => [name, startingValue(outcome)]),
+);
+
+/**
+ * What {@link pickerRef}'s template defaults give as a session presents {@link pickerItem}: the
+ * defaults `evaluateTemplateDefaults` gives, and the template values `firstAttempt` starts from
+ * them.
+ */
+export interface DefaultDraws {
+  readonly defaults: Readonly<Record<string, Value>>;
+  readonly templates: ItemRecord["templates"];
+}
+
+/**
+ * What {@link observeDefaults} gives under {@link determinismSeed}, pinned. `LOW` and `HIGH` are the
+ * defaults' draws, which the template values hold in place of the declared 1 and 2; `PICK` is drawn
+ * between them and `SPAN` is their difference.
+ */
+export const pinnedDefaultDraws: DefaultDraws = {
+  defaults: { HIGH: integer(54n), LOW: integer(4n) },
+  templates: { HIGH: integer(54n), LOW: integer(4n), PICK: integer(23n), SPAN: integer(50n) },
+};
+
+/**
+ * Evaluate {@link pickerRef}'s template defaults and start {@link pickerItem} with them, as a
+ * session does for the first item of its sequence under {@link determinismInstance}: the defaults
+ * through `evaluateTemplateDefaults`, over {@link determinismTest}'s outcomes at their starting
+ * values and {@link pickerScope}, from a fresh `drawStream(seed, defaultLabel(determinismInstance,
+ * 1))`; then the item through `firstAttempt` under {@link pickerInstance}, from those defaults.
+ *
+ * @param seed The processing seed the defaults' stream and the item's template processing are
+ *   keyed by, {@link determinismSeed} by default.
+ * @returns The defaults and the template values, or the first failure.
+ */
+export const observeDefaults = (
+  seed: string = determinismSeed,
+): Result.Result<DefaultDraws, EngineFailure> =>
+  Result.gen(function* observeDefaultDraws() {
+    const defaults = yield* evaluateTemplateDefaults(
+      pickerRef.templateDefaults,
+      determinismTest,
+      startingOutcomes,
+      pickerScope,
+      drawStream(seed, defaultLabel(determinismInstance, 1)),
+    );
+    const record = yield* firstAttempt(pickerItem, {
+      instance: pickerInstance,
+      seed,
+      templateDefaults: defaults,
+    });
+
+    return { defaults, templates: record.templates };
   });

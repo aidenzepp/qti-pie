@@ -20,8 +20,10 @@ export type Locale = (typeof locales)[number];
  * `solution`, `finished`), so the closed test's summary is titled "Finished: {test}" through
  * `title` and `finished`. An item's state in words (`itemAnswered`, `itemNotAnswered`,
  * `itemSubmitted`, `itemClosed`) follows its name (`itemOf` on a navigation button, `item` on the
- * confirm page's list) through `itemState`, so the punctuation between them is the locale's.
- * `atLeastStrings` and `atMostStrings` read in the plural, so at a count of 1 an Extended Text
+ * confirm page's list) through `itemState`, so the punctuation between them is the locale's. The
+ * closed test's summary heads the test's outcomes with `testOutcomes`, writes a NULL outcome as
+ * `nullValue`, and says with `outcomesNotRun` that outcome processing the engine cannot run did not
+ * run. `atLeastStrings` and `atMostStrings` read in the plural, so at a count of 1 an Extended Text
  * writes `atLeastOneString` or `atMostOneString`, their singular. This catalog is the source of the
  * keys and of each key's placeholders; any other locale's catalog has the same keys and
  * placeholders.
@@ -57,6 +59,8 @@ const en = {
   nextItem: "Next item",
   notAccepted: "Not accepted",
   notice: "Not supported here: {feature}",
+  nullValue: "NULL",
+  outcomesNotRun: "The test's outcome processing did not run.",
   partSubmitted: "Part submitted",
   patternMismatch: "Enter an answer in the form this question asks for.",
   previousItem: "Previous item",
@@ -78,6 +82,7 @@ const en = {
   submitPart: "Submit part",
   testFinished: "Test finished",
   testNavigation: "Test navigation",
+  testOutcomes: "Test outcomes",
   title: "{state}: {title}",
   unknownChoice: "Choose one of the listed options.",
 } as const;
@@ -99,9 +104,9 @@ type Placeholders<Text extends string> = Text extends `${string}{${infer Name}}$
  * The values {@link message} fills a key's placeholders with, one per placeholder.
  *
  * Each value is text as the candidate reads it: a number arrives already formatted for the locale,
- * `notice`'s `feature` is the feature key in QTI's own spelling (an element name,
- * `pattern-mask`, `cardinality="record"`), a `test` is the test's title, and `confirmTitle`'s
- * `intent` is the navigation label of the intent it confirms (`submitPart`'s or `endPart`'s text).
+ * `notice`'s `feature` is the feature key in QTI's own spelling (an element name, `pattern-mask`,
+ * `cardinality="record"`), a `test` is the test's title, and `confirmTitle`'s `intent` is the
+ * navigation label of the intent it confirms (`submitPart`'s or `endPart`'s text).
  */
 export type MessageParams<Key extends MessageKey> = Readonly<
   Record<Placeholders<(typeof en)[Key]>, string>

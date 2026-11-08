@@ -44,7 +44,7 @@ import type {
 import { buildTest } from "#plate/model/test.ts";
 import type { MarkedFeature, Test } from "#plate/model/test.ts";
 import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
-import { trimXmlSpace } from "#plate/model/values.ts";
+import { durationForm, trimXmlSpace } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { checkRules } from "#plate/validate/rules.ts";
@@ -108,7 +108,8 @@ export type Accepted = Brand.Branded<AcceptedFields, "Accepted">;
 const accept = Brand.nominal<Accepted>();
 
 /**
- * The fields of an accepted test, which only {@link check} and {@link acceptTestForTest} brand.
+ * The fields of an accepted test, which only {@link check}, {@link acceptMarkedTest} and
+ * {@link acceptTestForTest} brand.
  */
 interface AcceptedTestFields {
   /**
@@ -139,6 +140,21 @@ export type AcceptedTest = Brand.Branded<AcceptedTestFields, "AcceptedTest">;
  * The brand's constructor, kept to this module.
  */
 const acceptTest = Brand.nominal<AcceptedTest>();
+
+/**
+ * Construct the {@link AcceptedTest} `openPackage` delivers for a test {@link check} accepted whose
+ * model the package marked: `openPackage`'s constructor, which nothing else calls. A package reads
+ * the test's items, so it may mark processing the test document's own verdict cannot, such as a
+ * read of an item's context variable through its item ref (`withUnheldReads` in
+ * `#plate/model/test.ts`). The test document's own verdict keeps `accepted` as {@link check} gave
+ * it.
+ *
+ * @param accepted The test as {@link check} accepted it.
+ * @param test Its model, as the package marked it.
+ * @returns The test accepted with the marked model, its `unsupported` the model's.
+ */
+export const acceptMarkedTest = (accepted: AcceptedTest, test: Test): AcceptedTest =>
+  acceptTest({ document: accepted.document, test, unsupported: test.unsupported });
 
 /**
  * What M2 holds of a section or a stimulus document it accepts: valid, and delivered alone by no
@@ -1360,7 +1376,12 @@ const valuesSet: ReadonlyMap<string, string> = new Map([
 
 /**
  * Word an `expression-type` refusal whose detail names no `check`: a lookup operand against its
- * table (reading 28), or an expression against the variable it sets (pantry's P20).
+ * table (reading 28), a lookup operand no lookup reads, or an expression against the variable it
+ * sets (pantry's P20).
+ *
+ * A lookup's refusal with no `table` is a `qti-lookup-outcome-value` whose outcome a test reads
+ * through an item ref (`I1.SCORE`), whose table is its item's: the sentence names what every
+ * lookup reads, a single `integer`, `float` or `duration` (pantry's P22).
  *
  * The variable's type is the detail's `outcomeCardinality` and `outcomeBaseType` whatever its
  * kind, and its kind is the `targetKind` a template rule's refusal carries (`template`,
@@ -1376,6 +1397,16 @@ const uncheckedType = (refusal: Refusal, element: string, expression: string): s
 
   return Option.match(optionalFact(refusal, "table"), {
     onNone: () => {
+      if (element === "qti-lookup-outcome-value") {
+        const read = `a single ${alternatives("integer float duration", code)} value`;
+
+        return sentence(
+          refusal,
+          `${code(element)} looks ${code(identifier)} up with ${withArticle(expression)} value, but a lookup reads only ${read}${citation(refusal)}.`,
+          `look ${code(identifier)} up with ${read}`,
+        );
+      }
+
       const variable = withArticle(
         `${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))} ${variableKind(fact(refusal, "targetKind", "outcome"))}`,
       );
@@ -1475,6 +1506,13 @@ const referenceType = (refusal: Refusal, element: string, identifier: string): s
 const templateReadSource = "info.txt:65111";
 
 /**
+ * The line of QTI's information model a weighted `qti-test-variables` refusal cites: a weight's
+ * behaviour "is only defined if the base-type attribute is float or omitted", and the line rules
+ * out `base-type` integer.
+ */
+const weightSource = "info.txt:71457";
+
+/**
  * Word an `expression-type` refusal, by the `check` its detail names.
  *
  * - `condition` (pantry's P21): the condition of a rule's branch is not a single `boolean`.
@@ -1487,9 +1525,12 @@ const templateReadSource = "info.txt:65111";
  *   attribute an `attribute` fact names. It cites the information model's line, which allows only
  *   template variables (`info.txt:65111`), unless the detail names a reading; the remedy offers a
  *   template variable, never `qti-correct` or `qti-default`, which read the refused variable too.
- * - `weight` (P29): a weighted `qti-test-variables` whose base type is not `float`.
- * - None: an expression against the variable it sets (P20), or a lookup operand against its table
- *   (see {@link uncheckedType}).
+ * - `weight` (P29): a weighted `qti-test-variables` whose base type is not `float`. A weight is
+ *   defined only for a `base-type` of `float` or none (`info.txt:71457`; G-R3 199), so the remedy
+ *   drops the weight or the `base-type`.
+ * - None: an expression against the variable it sets (P20), or a lookup operand against its table or,
+ *   for an outcome a test reads through an item ref, against what every lookup reads (P22; see
+ *   {@link uncheckedType}).
  *
  * An `expressionBaseType` of `""`, a type with no base type of its own, is worded `untyped`.
  *
@@ -1543,8 +1584,8 @@ const expressionType = (refusal: Refusal): string => {
 
       return sentence(
         refusal,
-        `${code(element)} is weighted and has the base type ${baseType}, not ${code("float")}${cite}.`,
-        `give ${code(element)} the base type ${code("float")}, remove its ${code("base-type")}, or remove its ${code("weight-identifier")}`,
+        `${code(element)} is weighted and has the base type ${baseType}, but a weight is defined only for the base type ${code("float")} or none${cite === "" ? ` (${weightSource})` : cite}.`,
+        `remove ${code("weight-identifier")} from ${code(element)}, or remove its ${code("base-type")}`,
       );
     }
     default: {
@@ -1613,6 +1654,94 @@ const attributeType = (refusal: Refusal): string => {
 };
 
 /**
+ * The built-in variables' identifiers, which "are reserved" (`info.txt:12006`), so no declaration
+ * may take one: the names of `reservedIdentifiers` in `#plate/validate/structure.ts`, which refuses
+ * such a declaration `attribute-type` (pantry's `DeclarationNotReserved`).
+ */
+const builtInIdentifiers: ReadonlySet<string> = new Set([
+  "completionStatus",
+  "duration",
+  "numAttempts",
+]);
+
+/**
+ * The fix of a response a test names with no item ref: a test declares no response, so it reads an
+ * item's through that item's ref.
+ */
+const itemRefResponse = `name a response an item declares, through its item ref, written ${code("ITEMREF.RESPONSE")}`;
+
+/**
+ * Word an `undeclared-variable` refusal with no `check` whose `expected` is exactly `response`,
+ * when no declaration can give its name, so the sentence does not ask for a declaration that would
+ * itself be wrong. `qti-map-response`, `qti-map-response-point` and `qti-correct` read a declared
+ * response's mapping, area mapping or correct response, so a name that is not one is refused
+ * there: by the rules (P8), in an item and in a test, and by `openPackage` for a test's dotted name
+ * read through a ref.
+ *
+ * - A dotted name a test reads through an item ref, test part or section: "Identifiers containing the
+ *   period character are reserved for use in prefixing" (`info.txt:10122`, reading 48).
+ *   `openPackage` refuses it with the `prefix` its reading reads through, since what it reads is
+ *   not a response its item declares, but an outcome, a template variable or a built-in. The fix is
+ *   a response the item declares, written `ITEMREF.RESPONSE`.
+ * - A built-in ({@link builtInIdentifiers}): no declaration may take its name, so it has no mapping
+ *   and no correct response. `numAttempts` and `duration` are "built-in response variables"
+ *   (`info.txt:8466`), so the sentence calls each the built-in and never says it is no response. In
+ *   an item the fix is a declared response; with `declarer: "test"` it is an item's response read
+ *   through its item ref ({@link itemRefResponse}).
+ * - Any other name with `declarer: "test"`: a test declares outcomes and context variables, and only
+ *   its items declare responses, so the sentence says the test declares none and the fix is an
+ *   item's response read through its item ref, never a declaration. A dotted name the test declares
+ *   whole (reading 37), an outcome, takes it too.
+ *
+ * An item's dotted name with no `prefix`, one it declares whole, and every other name an item does
+ * not declare take the sentence that asks for a declared response.
+ *
+ * @param refusal The refusal.
+ * @param subject The element, or the element's attribute, as the sentence names it.
+ * @returns The sentence, or none for a name an item's declaration can give, whose sentence asks for
+ *   a declared response.
+ */
+const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<string> => {
+  if (fact(refusal, "expected", "") !== "response") {
+    return Option.none();
+  }
+
+  const name = fact(refusal, "identifier", "");
+  const identifier = code(name);
+  const test = fact(refusal, "declarer", "item") === "test";
+
+  if (Option.isSome(optionalFact(refusal, "prefix"))) {
+    return Option.some(
+      sentence(
+        refusal,
+        `${subject} names ${identifier}, which reads, through an item ref, test part or section, a variable that is not a response its item declares.`,
+        `name a response the item declares, written ${code("ITEMREF.RESPONSE")}`,
+      ),
+    );
+  }
+
+  if (builtInIdentifiers.has(name)) {
+    return Option.some(
+      sentence(
+        refusal,
+        `${subject} names the built-in ${identifier}, which has no declaration, so no mapping or correct response.`,
+        test ? itemRefResponse : "name a declared response",
+      ),
+    );
+  }
+
+  return test
+    ? Option.some(
+        sentence(
+          refusal,
+          `${subject} names ${identifier}, and the test declares no response ${identifier}; only an item declares responses.`,
+          itemRefResponse,
+        ),
+      )
+    : Option.none();
+};
+
+/**
  * Word an `undeclared-variable` refusal, by the `check` its detail names.
  *
  * - `untimed-duration` (pantry's `item-duration`): the built-in `duration`, read where the item is
@@ -1623,9 +1752,13 @@ const attributeType = (refusal: Refusal): string => {
  *   citing the information model's line its `source` names.
  * - None (P8): a name the item declares no variable of the `expected` kind for. A template rule's
  *   target lists every kind the rule may set, space-separated, and the sentence offers them as
- *   alternatives (pantry's `DeclaredRefKind`). A test's printed variable carries `declarer:
- *   "test"`, and the sentence names the test as what declares no such variable (pantry's
- *   `binding-declared` for a test).
+ *   alternatives (pantry's `DeclaredRefKind`). A test's printed variable, and a name in a test's
+ *   processing or a section document a test reaches, carries `declarer: "test"`, and the sentence
+ *   names the test as what declares no such variable (pantry's `binding-declared` for a test); a
+ *   test may declare an outcome or a context variable, so the fix to declare it stands. A response
+ *   that no declaration can give, a dotted name read through an item ref, test part or section, a
+ *   built-in, or any response a test names, is worded by {@link undeclarableResponse}, so the
+ *   sentence never asks for it to be declared.
  *
  * Each names the element, or the element's attribute when a reference attribute names the
  * variable.
@@ -1670,10 +1803,12 @@ const undeclaredVariable = (refusal: Refusal): string => {
       const kind = alternatives(fact(refusal, "expected", "variable"), variableKind);
       const declarer = fact(refusal, "declarer", "item") === "test" ? "test" : "item";
 
-      return sentence(
-        refusal,
-        `${subject} names ${identifier}, and the ${declarer} declares no ${kind} ${identifier}.`,
-        `declare ${identifier}, or name a declared ${kind}`,
+      return Option.getOrElse(undeclarableResponse(refusal, subject), () =>
+        sentence(
+          refusal,
+          `${subject} names ${identifier}, and the ${declarer} declares no ${kind} ${identifier}.`,
+          `declare ${identifier}, or name a declared ${kind}`,
+        ),
       );
     }
   }
@@ -1685,19 +1820,32 @@ const undeclaredVariable = (refusal: Refusal): string => {
  * the detail has one, and otherwise the element that needs the declaration, so it never blames a
  * template the item may not have.
  *
+ * A test's `qti-map-response` or `qti-map-response-point` of a dotted name carries the `prefix`
+ * its reading reads through (`openPackage`, reading 48): the name reads a response the item that
+ * item ref names declares without the `qti-mapping`, or the `point` base type and the
+ * `qti-area-mapping`, the expression needs. The sentence names the response as that item's, and
+ * the fix gives it what it lacks in that item; it never asks for the dotted name to be declared,
+ * since that item already declares the response. With no `prefix`, the item lacks the
+ * declaration, and the fix is to declare it.
+ *
  * @param refusal The refusal.
  * @returns The sentence.
  */
 const templateRequirements = (refusal: Refusal): string => {
+  const baseType = optionalFact(refusal, "baseType");
+  const child = optionalFact(refusal, "child");
   const needs = [
-    ...Option.toArray(
-      Option.map(optionalFact(refusal, "baseType"), (type) => `of base type ${code(type)}`),
+    ...baseType.pipe(
+      Option.map((type) => `of base type ${code(type)}`),
+      Option.toArray,
     ),
-    ...Option.toArray(
-      Option.map(optionalFact(refusal, "child"), (child) => `with a ${code(child)}`),
+    ...child.pipe(
+      Option.map((name) => `with a ${code(name)}`),
+      Option.toArray,
     ),
   ].join(" ");
-  const declared = `${code(fact(refusal, "identifier", ""))} in a ${code(fact(refusal, "declaration", "declaration"))}${needs === "" ? "" : ` ${needs}`}`;
+  const lacking = needs === "" ? "" : ` ${needs}`;
+  const identifier = code(fact(refusal, "identifier", ""));
   const needer = Option.match(optionalFact(refusal, "template"), {
     onNone: () =>
       Option.match(optionalFact(refusal, "element"), {
@@ -1707,11 +1855,36 @@ const templateRequirements = (refusal: Refusal): string => {
     onSome: (uri) => `The response processing template ${code(uri)}`,
   });
 
-  return sentence(
-    refusal,
-    `${needer} needs ${declared}, and the item has none.`,
-    `declare ${declared}`,
-  );
+  return Option.match(optionalFact(refusal, "prefix"), {
+    onNone: () => {
+      const declared = `${identifier} in a ${code(fact(refusal, "declaration", "declaration"))}${lacking}`;
+
+      return sentence(
+        refusal,
+        `${needer} needs ${declared}, and the item has none.`,
+        `declare ${declared}`,
+      );
+    },
+    onSome: (prefix) => {
+      const item = `the item that item ref ${code(prefix)} names`;
+      const gives = [
+        ...child.pipe(
+          Option.map((name) => `a ${code(name)}`),
+          Option.toArray,
+        ),
+        ...baseType.pipe(
+          Option.map((type) => `the base type ${code(type)}`),
+          Option.toArray,
+        ),
+      ].join(" and ");
+
+      return sentence(
+        refusal,
+        `${needer} reads ${identifier}, a response of ${item}, and that item does not declare it${lacking}.`,
+        `give that response ${gives === "" ? "what it needs" : gives} in ${item}`,
+      );
+    },
+  });
 };
 
 /**
@@ -1811,12 +1984,19 @@ const wordings = {
       `give each one its own identifier in place of ${code(identifier)}`,
     );
   },
+  /**
+   * An attribute refused with no `context` is an item's weighted `qti-variable` (P12): weights are
+   * "defined only in the test context (and hence only in outcomes processing)" (`info.txt:72139`),
+   * so the one change an item can make is to remove the attribute. A test's refusal names its
+   * `context`, and moving the expression into outcome processing is offered there.
+   */
   "expression-placement": (refusal) => {
     const { cite, element } = named(refusal);
     const outcomeProcessing = code("qti-outcome-processing");
-    const where = Option.match(optionalFact(refusal, "context"), {
+    const context = optionalFact(refusal, "context");
+    const where = Option.match(context, {
       onNone: () => "",
-      onSome: (context) => `, and it is in ${code(context)}`,
+      onSome: (container) => `, and it is in ${code(container)}`,
     });
 
     return Option.match(optionalFact(refusal, "attribute"), {
@@ -1827,11 +2007,17 @@ const wordings = {
           `move ${code(element)} into ${outcomeProcessing}, or remove it`,
         ),
       onSome: (attribute) =>
-        sentence(
-          refusal,
-          `${code(element)}'s attribute ${code(attribute)} is allowed only in outcome processing${where}${cite}.`,
-          `remove ${code(attribute)} from ${code(element)}, or move the expression into ${outcomeProcessing}`,
-        ),
+        Option.isNone(context)
+          ? sentence(
+              refusal,
+              `${code(element)}'s attribute ${code(attribute)} is allowed only in a test's outcome processing${cite}.`,
+              `remove ${code(attribute)} from ${code(element)}`,
+            )
+          : sentence(
+              refusal,
+              `${code(element)}'s attribute ${code(attribute)} is allowed only in outcome processing${where}${cite}.`,
+              `remove ${code(attribute)} from ${code(element)}, or move the expression into ${outcomeProcessing}`,
+            ),
     });
   },
   "expression-type": expressionType,
@@ -2086,13 +2272,20 @@ const wordings = {
             ),
     });
   },
+  /**
+   * A duration's remedy names its seconds in the words a parse failure uses ({@link durationForm});
+   * every other base type's names the base type.
+   */
   "value-type": (refusal) => {
-    const baseType = baseTypeText(fact(refusal, "baseType", ""));
+    const written = fact(refusal, "baseType", "");
+    const baseType = baseTypeText(written);
 
     return sentence(
       refusal,
       `${code(fact(refusal, "lexical", ""))} is not a value of base type ${baseType}.`,
-      `write a value of base type ${baseType}`,
+      written === "duration"
+        ? `write ${durationForm(code)}`
+        : `write a value of base type ${baseType}`,
     );
   },
 } satisfies { readonly [R in RefusalRule]: (refusal: Refusal) => string };

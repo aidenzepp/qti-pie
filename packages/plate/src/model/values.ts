@@ -1,16 +1,18 @@
 /**
  * QTI values and NULL as the value model holds them: a base type, a cardinality and the values,
- * with the lexical parse and format of each base type and the equality `qti-match` uses.
+ * with the lexical parse and format of each base type and the equality `qti-match` uses. A record
+ * is its own type, {@link RecordValue}: named fields, each a single, with no base type of its own.
  *
- * The session record, the engine and the form encoding all carry a {@link Value}, so this module
- * owns the one value representation, and the one NCName rule the validator reuses.
+ * The session record, the engine and the form encoding all carry a {@link Value}, and a record
+ * response's {@link RecordValue} beside it, so this module owns the one value representation, and
+ * the one NCName rule the validator reuses.
  *
  * @module
  */
 import { Data, Option, Result } from "effect";
 
 /**
- * The base types the value model holds values of: every QTI base type but `duration` and `file`.
+ * The base types the value model holds values of: every QTI base type but `file`.
  */
 export const modelledBaseTypes = [
   "identifier",
@@ -21,6 +23,7 @@ export const modelledBaseTypes = [
   "point",
   "pair",
   "directedPair",
+  "duration",
   "uri",
 ] as const;
 
@@ -30,15 +33,16 @@ export const modelledBaseTypes = [
 export type ModelledBaseType = (typeof modelledBaseTypes)[number];
 
 /**
- * The cardinalities the value model holds values of. Records are not modelled.
+ * The cardinalities a {@link Value} holds. A record is its own type, {@link RecordValue}, since its
+ * fields each carry their own base type.
  */
 export const modelledCardinalities = ["single", "multiple", "ordered"] as const;
 
 /**
  * Report whether the value model holds values of a base type.
  *
- * `duration` and `file` are valid QTI base types the value model does not hold, so their
- * declarations are marked unsupported rather than refused.
+ * `file` is a valid QTI base type the value model does not hold, so its declarations are marked
+ * unsupported rather than refused.
  *
  * @param baseType A `base-type` attribute value.
  * @returns Whether `baseType` is a {@link ModelledBaseType}.
@@ -172,11 +176,14 @@ export const doubleLexical =
 /**
  * One QTI value, tagged by its base type: a string for `identifier`, `string` and `uri`; a
  * `bigint` for `integer`; a number for `float`; a boolean for `boolean`; two `bigint`s for `point`,
- * the horizontal coordinate first; and two identifiers for `pair` and `directedPair`, the source
- * first.
+ * the horizontal coordinate first; two identifiers for `pair` and `directedPair`, the source
+ * first; and a number of seconds for `duration`.
  *
- * An integer, and each coordinate of a point, is exact at any size. A float is an xs:double.
- * `SingleSchema` in `#plate/codec/values.ts` checks and encodes this type at the boundaries.
+ * An integer, and each coordinate of a point, is exact at any size. A float is an xs:double. A
+ * duration is its seconds in an xs:double, never truncated (readings 29 and 68; G-R3, pending: a
+ * duration is a number of seconds, written as a float is). It is not numerical (G-R1, pending): no
+ * arithmetic takes one. `SingleSchema` in `#plate/codec/values.ts` checks and encodes this type at
+ * the boundaries.
  */
 export type Single =
   | { readonly baseType: "identifier"; readonly value: string }
@@ -187,6 +194,7 @@ export type Single =
   | { readonly baseType: "point"; readonly value: readonly [bigint, bigint] }
   | { readonly baseType: "pair"; readonly value: readonly [string, string] }
   | { readonly baseType: "directedPair"; readonly value: readonly [string, string] }
+  | { readonly baseType: "duration"; readonly value: number }
   | { readonly baseType: "uri"; readonly value: string };
 
 /**
@@ -207,6 +215,45 @@ export interface Value {
 }
 
 /**
+ * One field of a {@link RecordValue}: its identifier, an NCName, and its value, a single of a
+ * modelled base type. A NULL field is no field, so a field always holds a value.
+ */
+export interface RecordField {
+  readonly identifier: string;
+  readonly value: Single;
+}
+
+/**
+ * A QTI value of cardinality `record`, as a record response holds it: its fields, each named once.
+ *
+ * A record has no base type of its own; each field carries its own. A NULL field is no field, and a
+ * record with no field is NULL, so there is one spelling of NULL here too. The order of the fields
+ * means nothing ({@link sameRecord}). `RecordValueSchema` in `#plate/codec/values.ts` checks these
+ * rules at the boundaries.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Variables
+ */
+export interface RecordValue {
+  readonly cardinality: "record";
+  readonly fields: readonly RecordField[];
+}
+
+/**
+ * The value a response holds: a {@link Value} of a modelled base type and cardinality, or a
+ * {@link RecordValue}.
+ */
+export type ResponseValue = Value | RecordValue;
+
+/**
+ * Report whether a response's value is a record.
+ *
+ * @param value The value to test.
+ * @returns Whether `value` is a {@link RecordValue}.
+ */
+export const isRecordValue = (value: ResponseValue): value is RecordValue =>
+  value.cardinality === "record";
+
+/**
  * Construct the NULL value of a base type and cardinality.
  *
  * @param baseType The value's base type.
@@ -220,6 +267,11 @@ export const nullOf = (baseType: ModelledBaseType, cardinality: Value["cardinali
 });
 
 /**
+ * The NULL record: a record with no field, since a NULL field is no field.
+ */
+export const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+/**
  * Report whether a value is NULL.
  *
  * @param value The value to test.
@@ -228,11 +280,34 @@ export const nullOf = (baseType: ModelledBaseType, cardinality: Value["cardinali
 export const isNull = (value: Value): boolean => value.values.length === 0;
 
 /**
+ * Report whether a response's value is NULL: a {@link Value} with no values, or a record with no
+ * field.
+ *
+ * @param value The value to test.
+ * @returns Whether `value` holds nothing.
+ */
+export const isNullResponse = (value: ResponseValue): boolean =>
+  isRecordValue(value) ? value.fields.length === 0 : isNull(value);
+
+/**
+ * Say what to write for a duration: its seconds as an xs:double, never an ISO 8601 duration. A
+ * parse failure ({@link InvalidValue}) and a `value-type` refusal's wording say it in these words,
+ * so the two say one thing.
+ *
+ * @param literal How to write each literal the words name, such as `90.5`: as given in a plain
+ *   message, or in a code span in Markdown.
+ * @returns The words, which follow "write".
+ */
+export const durationForm = (literal: (text: string) => string): string =>
+  `its seconds as a decimal or exponent number such as ${literal("90.5")}, or ${literal("INF")}, ${literal("-INF")} or ${literal("NaN")}, never an ISO 8601 duration such as ${literal("PT1M30.5S")}`;
+
+/**
  * The lexical form each base type takes, in the words a parse failure uses to say what to write.
  */
 const expected = {
   boolean: "true or false",
   directedPair: "two NCNames separated by whitespace, such as A B",
+  duration: durationForm((text) => text),
   float: "a decimal or exponent number such as 2.5 or 1E3, or INF, -INF or NaN",
   identifier: "an NCName: a letter or _ first, then letters, digits, -, _ or .",
   integer: "decimal digits with an optional sign, such as -12",
@@ -352,6 +427,10 @@ const readPair = (baseType: "pair" | "directedPair", lexical: string): Option.Op
 /**
  * How each base type reads its lexical form: the value it names, or none when the text is outside
  * the lexical space.
+ *
+ * A duration reads as a float does, its seconds in xs:double's lexical space: `90.5`, `INF`,
+ * `-INF`, `NaN` and a negative are durations, and an ISO 8601 duration such as `PT1M30.5S` is
+ * outside it (reading 68).
  */
 const readers = {
   boolean: (lexical: string) =>
@@ -360,6 +439,8 @@ const readers = {
       value: lexical === "true",
     }),
   directedPair: (lexical: string) => readPair("directedPair", lexical),
+  duration: (lexical: string) =>
+    valueIf(doubleLexical.test(lexical), { baseType: "duration", value: readDouble(lexical) }),
   float: (lexical: string) =>
     valueIf(doubleLexical.test(lexical), { baseType: "float", value: readDouble(lexical) }),
   identifier: (lexical: string) =>
@@ -375,7 +456,14 @@ const readers = {
  * Read text as a value of a base type, exactly as written.
  *
  * No whitespace is removed, so a padded attribute value is refused, as spec reading 7 rules for
- * typed values in attributes. A boolean is `true` or `false` only; `1` and `0` are refused.
+ * typed values in attributes.
+ *
+ * A boolean is `true` or `false` only; `1` and `0` are refused (reading 34). The QTI XSD does not
+ * decide: it types `qti-value` as `xs:normalizedString` and `qti-base-value` as `xs:string`. The
+ * information model does: its boolean base type is "the same as the set of values defined by the
+ * boolean primitiveType" (`info.txt:72950`), the primitive "with permitted values of "true" and
+ * "false"" (`info.txt:74908`). XML Schema's `1` and `0` belong only to the attributes the XSD types
+ * `xs:boolean`, which `xsBooleanOf` in `#plate/model/attributes.ts` reads.
  *
  * @param baseType The base type to read.
  * @param lexical The text, as written.
@@ -438,7 +526,8 @@ const formatFloat = (number: number): string => {
  * Write a value in its base type's lexical form.
  *
  * `String` writes the exact decimal digits of an integer of any size, never an exponent: no `+`,
- * no leading zeros, and `0` for a written `-0`. A point's coordinates are written the same way.
+ * no leading zeros, and `0` for a written `-0`. A point's coordinates are written the same way. A
+ * duration is written as its seconds, as a float is.
  *
  * @param single The value to write.
  * @returns The lexical form, which {@link parseLexical} reads back to the same value; a pair is its
@@ -453,7 +542,7 @@ export const format = (single: Single): string => {
     return String(single.value);
   }
 
-  if (single.baseType === "float") {
+  if (single.baseType === "float" || single.baseType === "duration") {
     return formatFloat(single.value);
   }
 
@@ -474,8 +563,8 @@ export const format = (single: Single): string => {
  * @param left One single.
  * @param right The other single.
  * @returns Whether they share a base type and are equal: a `pair` in either order, a
- *   `directedPair` in order, a `point` when both coordinates are equal, integers and floats by
- *   value (`===` compares two bigints by value) and strings by code point.
+ *   `directedPair` in order, a `point` when both coordinates are equal, integers, floats and
+ *   durations by value (`===` compares two bigints by value) and strings by code point.
  */
 export const sameSingle = (left: Single, right: Single): boolean => {
   if (left.baseType === "pair" && right.baseType === "pair") {
@@ -494,6 +583,48 @@ export const sameSingle = (left: Single, right: Single): boolean => {
   }
 
   return left.baseType === right.baseType && left.value === right.value;
+};
+
+/**
+ * Give a record's fields by identifier, in linear time. A record names each identifier once
+ * (`RecordValueSchema` refuses one that does not); where one built by hand names an identifier
+ * twice, its first field is the one kept, as a record keeps the first written.
+ *
+ * @param record The record.
+ * @returns Each field's value by its identifier.
+ */
+const fieldsOf = (record: RecordValue): ReadonlyMap<string, Single> => {
+  const fields = new Map<string, Single>();
+  for (const field of record.fields) {
+    if (!fields.has(field.identifier)) {
+      fields.set(field.identifier, field.value);
+    }
+  }
+
+  return fields;
+};
+
+/**
+ * Report whether two records hold the same fields, in any order.
+ *
+ * @param left One record.
+ * @param right The other record.
+ * @returns Whether they name the same set of identifiers and, for each, fields of one base type
+ *   that are equal as {@link sameSingle} compares them. Two NULL records name no identifier, so
+ *   they are the same; `qti-match`'s NULL rule is its caller's.
+ */
+export const sameRecord = (left: RecordValue, right: RecordValue): boolean => {
+  const leftFields = fieldsOf(left);
+  const rightFields = fieldsOf(right);
+
+  return (
+    leftFields.size === rightFields.size &&
+    [...leftFields].every(([identifier, single]) => {
+      const other = rightFields.get(identifier);
+
+      return other !== undefined && sameSingle(single, other);
+    })
+  );
 };
 
 /**
@@ -549,3 +680,17 @@ export const match = (left: Value, right: Value): boolean => {
         return other !== undefined && sameSingle(single, other);
       });
 };
+
+/**
+ * Report whether a response's value is its default, as skipping and Results Reporting's answered
+ * status read it: a value that matches it ({@link match}), or a record that holds the same fields
+ * in any order ({@link sameRecord}). A value is never a record's default, nor a record a value's.
+ *
+ * @param value The value given, not NULL.
+ * @param fallback The response's default.
+ * @returns Whether `value` is `fallback`.
+ */
+export const atDefault = (value: ResponseValue, fallback: ResponseValue): boolean =>
+  isRecordValue(value)
+    ? isRecordValue(fallback) && sameRecord(value, fallback)
+    : !isRecordValue(fallback) && match(value, fallback);

@@ -5,6 +5,9 @@ import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
 import { ConfigProvider, Console, Effect } from "effect";
 import type { CacheTag } from "#plate/test/caches.ts";
 import { cacheTags, caches } from "#plate/test/caches.ts";
+import { xsdDirectory } from "#plate/test/xsd.ts";
+import type { XsdPath } from "#plate/test/xsd-layout.ts";
+import { xsdPaths } from "#plate/test/xsd-layout.ts";
 
 /**
  * The scratch folder this run owns, under the package's git-ignored `work/`. Its name is new for
@@ -34,9 +37,21 @@ const fullHome = path.join(scratch, "full-home");
 const corpusFolder = path.join(scratch, "corpus");
 
 /**
- * The tags whose cache is one file; every other cache is a directory.
+ * The tags whose cache is one file. A cache that lists its files is those files under its
+ * directory, and every other cache is a directory.
  */
 const fileTags = new Set(["conformance-text", "xsd-datatypes", "web-features"]);
+
+/**
+ * The Results Reporting XSD's path under the XSD cache.
+ */
+const resultsXsd: XsdPath = "imsqti_resultv3p0_v1p0.xsd";
+
+/**
+ * A table file that is neither the Results XSD nor a file it imports, and the table's last, so a
+ * cache whose probe stopped at its first file would not see it missing.
+ */
+const lastXsd: XsdPath = "xlink/xlink.xsd";
 
 /**
  * The tags in the order {@link caches} declares them.
@@ -44,6 +59,7 @@ const fileTags = new Set(["conformance-text", "xsd-datatypes", "web-features"]);
 const tagOrder = [
   "corpus",
   "qti-xsd",
+  "results-xsd",
   "rptemplates",
   "conformance-text",
   "xsd-datatypes",
@@ -63,7 +79,18 @@ const under =
     effect.pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env))));
 
 /**
- * Make every cache's path exist under `home`, as an empty directory or an empty file.
+ * Make an empty file at a path, and the folders above it.
+ *
+ * @param at The file's path.
+ */
+const touch = (at: string): void => {
+  mkdirSync(path.dirname(at), { recursive: true });
+  writeFileSync(at, "");
+};
+
+/**
+ * Make every cache's path exist under `home`: each file a cache lists, as an empty file under its
+ * directory, and otherwise its path, as an empty directory or an empty file.
  *
  * @param home The home folder.
  * @returns An effect that creates the paths; running it again changes nothing.
@@ -74,14 +101,43 @@ const fill = (home: string) =>
 
     yield* Effect.sync(() => {
       for (const [index, at] of paths.entries()) {
-        if (fileTags.has(caches[index]?.tag ?? "")) {
-          mkdirSync(path.dirname(at), { recursive: true });
-          writeFileSync(at, "");
+        const cache = caches[index];
+
+        if (cache?.files !== undefined) {
+          for (const file of cache.files) {
+            touch(path.join(at, file));
+          }
+        } else if (fileTags.has(cache?.tag ?? "")) {
+          touch(at);
         } else {
           mkdirSync(at, { recursive: true });
         }
       }
     });
+  });
+
+/**
+ * Make a home folder under the scratch folder whose XSD cache holds the given table files, each
+ * as an empty file at its path, and which holds no other cache.
+ *
+ * @param name The home folder's name under the scratch folder.
+ * @param files The table files to make.
+ * @returns The home folder, and its XSD cache.
+ */
+const xsdHome = (name: string, files: readonly XsdPath[]) =>
+  Effect.gen(function* makeXsdHome() {
+    const home = path.join(scratch, name);
+    const directory = yield* xsdDirectory.pipe(under({ HOME: home }));
+
+    yield* Effect.sync(() => {
+      mkdirSync(directory, { recursive: true });
+
+      for (const file of files) {
+        touch(path.join(directory, file));
+      }
+    });
+
+    return { directory, home };
   });
 
 /**
@@ -93,6 +149,29 @@ const fill = (home: string) =>
  */
 const skipOf = (tag: CacheTag): CacheTag["skip"] | "absent" =>
   Object.hasOwn(tag, "skip") ? tag.skip : "absent";
+
+/**
+ * The `skip` of the `qti-xsd` and `results-xsd` tags, as {@link skipOf} gives it.
+ *
+ * @param tags The unit run's tags.
+ * @returns Each of the two tags' `skip`, by name.
+ */
+const xsdSkips = (tags: readonly CacheTag[]) =>
+  Object.fromEntries(
+    tags
+      .filter((tag) => tag.name === "qti-xsd" || tag.name === "results-xsd")
+      .map((tag) => [tag.name, skipOf(tag)] as const),
+  );
+
+/**
+ * The notices printed for one tag.
+ *
+ * @param lines Every line {@link cacheTags} printed.
+ * @param tag The tag's name.
+ * @returns The lines that name the tests carrying that tag.
+ */
+const noticesOf = (lines: readonly string[], tag: string): readonly string[] =>
+  lines.filter((line) => line.includes(`tagged ${tag} `));
 
 /**
  * Run {@link cacheTags} with a provider over `env` and a console that keeps its error lines.
@@ -235,6 +314,59 @@ describe("test/caches.ts", () => {
       // over the last (Object.assign, dist/chunks/run.C5UmxDPh.js:2611-2620).
       assert.strictEqual({ ...corpus, ...xsd }.skip, true);
       assert.strictEqual({ ...xsd, ...corpus }.skip, true);
+    }),
+  );
+
+  it.effect(
+    "the Results XSD tag skips when every table file but the Results XSD is present, with one notice naming it, and PLATE_REQUIRE_CACHES=1 skips neither tag",
+    () =>
+      Effect.gen(function* resultsMissing() {
+        const { directory, home } = yield* xsdHome(
+          "no-results-home",
+          xsdPaths.filter((file) => file !== resultsXsd),
+        );
+        const { lines, tags } = yield* tagsUnder({ HOME: home });
+        const required = yield* tagsUnder({ HOME: home, PLATE_REQUIRE_CACHES: "1" });
+        const notices = noticesOf(lines, "results-xsd");
+
+        assert.deepStrictEqual(xsdSkips(tags), { "qti-xsd": "absent", "results-xsd": true });
+        assert.deepStrictEqual(noticesOf(lines, "qti-xsd"), []);
+        assert.lengthOf(notices, 1);
+        assert.isTrue(notices[0]?.startsWith("plate: "), notices[0]);
+        assert.include(notices[0], `${path.join(directory, resultsXsd)} is missing`);
+        assert.deepStrictEqual(xsdSkips(required.tags), {
+          "qti-xsd": "absent",
+          "results-xsd": "absent",
+        });
+      }),
+  );
+
+  it.effect(
+    "the Results XSD tag runs while a missing table file that is not the Results XSD skips qti-xsd, whose notice names that file",
+    () =>
+      Effect.gen(function* tableFileMissing() {
+        const { directory, home } = yield* xsdHome(
+          "no-xlink-home",
+          xsdPaths.filter((file) => file !== lastXsd),
+        );
+        const { lines, tags } = yield* tagsUnder({ HOME: home });
+        const notices = noticesOf(lines, "qti-xsd");
+
+        assert.deepStrictEqual(xsdSkips(tags), { "qti-xsd": true, "results-xsd": "absent" });
+        assert.lengthOf(notices, 1);
+        assert.include(notices[0], `${path.join(directory, lastXsd)} is missing`);
+        assert.deepStrictEqual(noticesOf(lines, "results-xsd"), []);
+      }),
+  );
+
+  it.effect("the Results XSD tag and qti-xsd run when every table file is present", () =>
+    Effect.gen(function* everyFile() {
+      const { home } = yield* xsdHome("every-xsd-home", xsdPaths);
+      const { lines, tags } = yield* tagsUnder({ HOME: home });
+
+      assert.deepStrictEqual(xsdSkips(tags), { "qti-xsd": "absent", "results-xsd": "absent" });
+      assert.deepStrictEqual(noticesOf(lines, "qti-xsd"), []);
+      assert.deepStrictEqual(noticesOf(lines, "results-xsd"), []);
     }),
   );
 

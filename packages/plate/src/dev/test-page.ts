@@ -83,16 +83,19 @@ import { current, startTest } from "#plate/session/start.ts";
 import type { ItemNotInSession, ItemView } from "#plate/session/start.ts";
 
 /**
- * What the session pages read and write: the playground's configuration, its packages and its
- * sessions.
+ * What the session pages read and write: the playground's configuration, its packages, its
+ * sessions and its seed.
  *
  * `configuration` is the playground's decoded configuration: every session starts and advances
  * with it, and `current` writes each item's session control into it. It is the configuration the
- * review routes read, so one object serves both.
+ * review routes read, so one object serves both, and its own `seed` is each session's shuffle
+ * seed. `seed` is the playground's seed, which every sitting's record begins under: each session
+ * is started with it as its processing seed, and with none `startTest` draws one for each session.
  */
 export interface SessionPlayground {
   readonly configuration: Configuration;
   readonly packages: PackageCache;
+  readonly seed: Option.Option<string>;
   readonly sessions: SessionStore;
 }
 
@@ -579,8 +582,9 @@ const partIntentNow = (
 
 /**
  * Start a session from a package page's Start post: `startTest` with the playground's
- * configuration, a new store id as the instance and the time now, stored with the package's
- * location and the test's path, then a 303 to the session's page.
+ * configuration, a new store id as the instance, the time now and the playground's seed as the
+ * processing seed (none for one `startTest` draws), stored with the package's location and the
+ * test's path, then a 303 to the session's page.
  *
  * An id no package has, and a test path the accepted package does not hold, are 404s; a post that
  * is not a form, or names no test, is a 400. A test `startTest` cannot deliver is a developer
@@ -626,7 +630,15 @@ const startSession = Effect.fn("playground.session.start")(function* startSessio
   const id = newSessionId();
   const now = DateTime.toDateUtc(yield* DateTime.now);
   const stored = Result.flatMap(
-    startTest(test.value.test, test.value.items, playground.configuration, { instance: id, now }),
+    startTest(
+      test.value.test,
+      test.value.items,
+      playground.configuration,
+      Option.match(playground.seed, {
+        onNone: () => ({ instance: id, now }),
+        onSome: (seed) => ({ instance: id, now, seed }),
+      }),
+    ),
     encodeSession,
   );
   if (Result.isFailure(stored)) {
