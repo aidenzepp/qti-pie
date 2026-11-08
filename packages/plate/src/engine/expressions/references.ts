@@ -277,10 +277,12 @@ const keyMatches = (entry: MapEntry, single: Single): boolean =>
  * Give the value a mapping maps one response value to: the value of the first entry in document
  * order that matches it, else the mapping's default.
  *
- * Overlapping entries are valid, so a value two or more entries match takes the first of them in
- * document order. That rule is a placeholder while spec §12 Q5 is open: the operator's answer
- * changes this one expression and its test. BG010 lists its case-sensitive `York` before its
- * `york`, so its `York` maps by the first and `YORK` by the second.
+ * Overlapping entries are valid, so a value two or more entries match maps by the first of them
+ * listed. That is the order QTI gives an area mapping ("each area is tested in turn, with those
+ * listed first taking priority in the case where areas overlap"), and pantry's reading 150
+ * (decision 425), which this renderer follows: a mapping that lists `York` then `york`, both
+ * compared with case folded, maps `york` by `York`. BG010 lists its case-sensitive `York` before
+ * its `york`, so its `York` maps by the first and `YORK` by the second.
  *
  * @param mapping The response's mapping.
  * @param single The response value.

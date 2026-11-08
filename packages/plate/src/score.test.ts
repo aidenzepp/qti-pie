@@ -1280,6 +1280,143 @@ describe("score on an item whose printed variable's text passes 1,000,000 charac
   }
 });
 
+/**
+ * Write a hand-built item document whose single string response `RESPONSE`, bound to a Text Entry,
+ * has a `qti-mapping` of default 0 over the given entries, and whose response processing sets the
+ * float `SCORE` as the given element says.
+ *
+ * @param entries The mapping's `qti-map-entry` elements, in document order.
+ * @param processing The item's `qti-response-processing` element.
+ * @returns The item document.
+ */
+const mappedDocument = (
+  entries: string,
+  processing: string,
+): string => `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="mapped" title="Mapped" time-dependent="false" adaptive="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string">
+    <qti-mapping default-value="0">${entries}</qti-mapping>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>
+  <qti-item-body><p>Which city? <qti-text-entry-interaction response-identifier="RESPONSE"/></p></qti-item-body>
+  ${processing}
+</qti-assessment-item>
+`;
+
+/**
+ * Two map entries that both match `york` under `case-sensitive="false"`: `York` mapped to 2,
+ * listed first, then `york` mapped to 1.
+ */
+const yorkFirst =
+  '<qti-map-entry map-key="York" mapped-value="2" case-sensitive="false"/><qti-map-entry map-key="york" mapped-value="1" case-sensitive="false"/>';
+
+/**
+ * {@link yorkFirst}'s entries listed the other way round: `york` mapped to 1 first, then `York`
+ * mapped to 2.
+ */
+const yorkSecond =
+  '<qti-map-entry map-key="york" mapped-value="1" case-sensitive="false"/><qti-map-entry map-key="York" mapped-value="2" case-sensitive="false"/>';
+
+/**
+ * Response processing written inline that sets `SCORE` to `qti-map-response` of `RESPONSE`.
+ */
+const inlineMapping =
+  '<qti-response-processing><qti-set-outcome-value identifier="SCORE"><qti-map-response identifier="RESPONSE"/></qti-set-outcome-value></qti-response-processing>';
+
+/**
+ * A hand-built item document whose single point response `RESPONSE` has a `qti-area-mapping` of
+ * default 0 that lists a `rect` from (0, 0) to (10, 10) mapped to 2 before a `circle` of radius 3
+ * about (5, 5) mapped to 1, so both hold (5, 5). Its response processing sets the float `SCORE` to
+ * `qti-map-response-point` of `RESPONSE`.
+ */
+const overlappingAreas = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="areas" title="Areas" time-dependent="false" adaptive="false">
+  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="point">
+    <qti-area-mapping default-value="0">
+      <qti-area-map-entry shape="rect" coords="0,0,10,10" mapped-value="2"/>
+      <qti-area-map-entry shape="circle" coords="5,5,3" mapped-value="1"/>
+    </qti-area-mapping>
+  </qti-response-declaration>
+  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>
+  <qti-item-body><p>Mark the point.</p></qti-item-body>
+  <qti-response-processing>
+    <qti-set-outcome-value identifier="SCORE"><qti-map-response-point identifier="RESPONSE"/></qti-set-outcome-value>
+  </qti-response-processing>
+</qti-assessment-item>
+`;
+
+/**
+ * Construct a single string value.
+ *
+ * @param text The string.
+ * @returns The value.
+ */
+const stringOf = (text: string): Value => ({
+  baseType: "string",
+  cardinality: "single",
+  values: [{ baseType: "string", value: text }],
+});
+
+/**
+ * Open a hand-built item document, which `check` must accept, and give the `SCORE` one attempt
+ * that posts `RESPONSE` scores from a fresh record.
+ *
+ * @param document The item document.
+ * @param posted The value posted for `RESPONSE`.
+ * @returns `SCORE`'s stored values.
+ */
+const mappedScore = Effect.fnUntraced(function* mappedScore(document: string, posted: Value) {
+  const verdict = yield* open("items/mapped.xml", new TextEncoder().encode(document));
+  const opened = Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`The item is ${verdict.verdict}, not accepted.`),
+  );
+  const stored = yield* Effect.fromResult(score(opened, { RESPONSE: posted }));
+
+  return outcomeOf(stored, "SCORE");
+});
+
+describe("score over a response value two map entries match", () => {
+  it.effect(
+    "maps york and YORK by the first listed map entry, York=2 before york=1 with case folded, and the entries reversed by york=1",
+    () =>
+      Effect.gen(function* mapsByFirstListed() {
+        const listedFirst = mappedDocument(yorkFirst, inlineMapping);
+
+        assert.deepStrictEqual(yield* mappedScore(listedFirst, stringOf("york")), [2]);
+        assert.deepStrictEqual(yield* mappedScore(listedFirst, stringOf("YORK")), [2]);
+        assert.deepStrictEqual(
+          yield* mappedScore(mappedDocument(yorkSecond, inlineMapping), stringOf("york")),
+          [1],
+        );
+      }),
+  );
+
+  it.effect("maps york by the first listed map entry under the map_response template too", () =>
+    Effect.gen(function* mapsByTemplate() {
+      const underTemplate = mappedDocument(
+        yorkFirst,
+        '<qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/map_response.xml"/>',
+      );
+
+      assert.deepStrictEqual(yield* mappedScore(underTemplate, stringOf("york")), [2]);
+    }),
+  );
+
+  it.effect(
+    "maps a point two areas hold by the first listed map entry of a qti-area-mapping, the rect before the circle",
+    () =>
+      Effect.gen(function* mapsByFirstArea() {
+        const point: Value = {
+          baseType: "point",
+          cardinality: "single",
+          values: [{ baseType: "point", value: [5n, 5n] }],
+        };
+
+        assert.deepStrictEqual(yield* mappedScore(overlappingAreas, point), [2]);
+      }),
+  );
+});
+
 describe("fitting", () => {
   it("[I-9a] accepts a record that holds the built-in completionStatus and one that lacks it, and refuses one of another type", () => {
     const record = fresh(item, "");
