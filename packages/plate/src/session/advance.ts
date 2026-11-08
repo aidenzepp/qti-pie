@@ -33,7 +33,7 @@ import type { UnknownItemRef } from "#plate/session/control.ts";
 import { move, requestOf } from "#plate/session/navigate.ts";
 import type { MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
 import type { Intent, Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
-import { ItemNotInSession, current } from "#plate/session/start.ts";
+import { ItemNotInSession, current, valuesOf } from "#plate/session/start.ts";
 import type { InvalidTime, TestNotDeliverable } from "#plate/session/start.ts";
 import { deliveredItem, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
 import type { SubmissionFailure, SubmissionRefused } from "#plate/session/submit.ts";
@@ -325,12 +325,7 @@ const leftScoreable = (
         new ItemNotInSession({ count: moved.items.length, sequenceIndex: session.position + 1 }),
     );
     const accepted = yield* deliveredItem(advancing.items, moved, left);
-    const held: Responses = { ...left.record.responses, ...left.record.records };
-    const values = Option.match(left.saved, {
-      onNone: () => held,
-      onSome: (saved) => ({ ...held, ...saved }),
-    });
-    const attempt = score(accepted, values, yield* encodeRecord(left.record));
+    const attempt = score(accepted, valuesOf(left), yield* encodeRecord(left.record));
     if (Result.isFailure(attempt) && attempt.failure._tag === "ResponsesRefused") {
       return yield* Result.fail(
         new IntentRefused({

@@ -318,9 +318,56 @@ const declaresRecord = (item: Item, identifier: string): boolean =>
   item.records?.has(identifier) === true;
 
 /**
+ * Find the first value a record holds under the identifier of a record response, where only a
+ * record may sit.
+ *
+ * @param item The item.
+ * @param record The decoded record, which belongs to the item.
+ * @returns The issue, or none when no value sits under a record response's identifier.
+ */
+const misplacedValue = (item: Item, record: ItemRecord): Option.Option<string> =>
+  Option.map(
+    Option.fromUndefinedOr(
+      Object.keys(record.responses).find((identifier) => declaresRecord(item, identifier)),
+    ),
+    (identifier) => {
+      const name = JSON.stringify(identifier);
+
+      return `its response ${name} is not a record, but the item declares ${name} a record response`;
+    },
+  );
+
+/**
+ * Find the first record a record holds under an identifier the item declares no record response
+ * by: one the item scores no response by, or one of a response it scores as a value.
+ *
+ * @param item The item.
+ * @param record The decoded record, which belongs to the item.
+ * @returns The issue, naming the base type and cardinality the item declares for the identifier,
+ *   if any, or none when every record sits under a record response's identifier.
+ */
+const misplacedRecord = (item: Item, record: ItemRecord): Option.Option<string> =>
+  Option.map(
+    Option.fromUndefinedOr(
+      Object.keys(record.records).find((identifier) => !declaresRecord(item, identifier)),
+    ),
+    (identifier) => {
+      const name = JSON.stringify(identifier);
+
+      return Option.match(Option.fromUndefinedOr(item.responses.get(identifier)), {
+        onNone: () =>
+          `it holds the record ${name}, but the item declares no record response by that identifier`,
+        onSome: ({ baseType, cardinality }) =>
+          `its response ${name} is a record, but the item declares ${name} with base type ${baseType} and cardinality ${cardinality}`,
+      });
+    },
+  );
+
+/**
  * Find the first response a record holds that does not fit: a value under a record response's
- * identifier, one the item does not score, one of another base type or cardinality than its
- * declaration, or a record under an identifier the item declares no record response by.
+ * identifier ({@link misplacedValue}), one the item does not score, one of another base type or
+ * cardinality than its declaration, or a record under an identifier the item declares no record
+ * response by ({@link misplacedRecord}).
  *
  * The record's codec has already checked each record is a record (`RecordValueSchema`), so only
  * where it sits is left to check.
@@ -330,13 +377,7 @@ const declaresRecord = (item: Item, identifier: string): boolean =>
  * @returns The first issue, a value's before a record's, or none when every response fits.
  */
 const responseMisfit = (item: Item, record: ItemRecord): Option.Option<string> =>
-  Option.fromUndefinedOr(
-    Object.keys(record.responses).find((identifier) => declaresRecord(item, identifier)),
-  ).pipe(
-    Option.map(
-      (identifier) =>
-        `its response ${JSON.stringify(identifier)} is not a record, but the item declares ${JSON.stringify(identifier)} a record response`,
-    ),
+  misplacedValue(item, record).pipe(
     Option.orElse(() =>
       firstMisfit(
         "response",
@@ -344,23 +385,7 @@ const responseMisfit = (item: Item, record: ItemRecord): Option.Option<string> =
         record.responses,
       ),
     ),
-    Option.orElse(() =>
-      Option.map(
-        Option.fromUndefinedOr(
-          Object.keys(record.records).find((identifier) => !declaresRecord(item, identifier)),
-        ),
-        (identifier) => {
-          const name = JSON.stringify(identifier);
-
-          return Option.match(Option.fromUndefinedOr(item.responses.get(identifier)), {
-            onNone: () =>
-              `it holds the record ${name}, but the item declares no record response by that identifier`,
-            onSome: ({ baseType, cardinality }) =>
-              `its response ${name} is a record, but the item declares ${name} with base type ${baseType} and cardinality ${cardinality}`,
-          });
-        },
-      ),
-    ),
+    Option.orElse(() => misplacedRecord(item, record)),
   );
 
 /**
@@ -469,11 +494,12 @@ export const templatesHeld = (
 
 /**
  * Check what an attempt carries from a decoded record into the rules: each response the record
- * holds is one the item scores, of its declaration's base type and cardinality; the built-in
- * `completionStatus`, where the item holds it, is a single identifier; the template values,
- * correct responses and defaults fit as {@link templateMisfit} checks them; and, where the item's
- * template processing runs, it holds a value for each declared template variable
- * ({@link templatesHeld}). It is the check {@link score} runs on the record it is handed.
+ * holds is one the item scores, of its declaration's base type and cardinality, and each record a
+ * record response's ({@link responseMisfit}); the built-in `completionStatus`, where the item holds
+ * it, is a single identifier; the template values, correct responses and defaults fit as
+ * {@link templateMisfit} checks them; and, where the item's template processing runs, it holds a
+ * value for each declared template variable ({@link templatesHeld}). It is the check {@link score}
+ * runs on the record it is handed.
  *
  * A declared response the record lacks is left to the engine, which fails `UnknownIdentifierError`
  * if the processing reads it, and the attempt starts the built-in at `unknown` for a record that
@@ -518,10 +544,10 @@ const outcomeType = (item: Item, identifier: string): Option.Option<Expected> =>
 
 /**
  * Check that a decoded record is one {@link score} could have written for the item: each response
- * it holds is one the item scores, each outcome one the item declares or the built-in
- * `completionStatus` ({@link outcomeType}), and its template values, correct responses and
- * defaults fit as {@link templateMisfit} checks them, each of its declaration's base type and
- * cardinality.
+ * it holds is one the item scores and each record a record response's ({@link responseMisfit}),
+ * each outcome one the item declares or the built-in `completionStatus` ({@link outcomeType}), and
+ * its template values, correct responses and defaults fit as {@link templateMisfit} checks them,
+ * each of its declaration's base type and cardinality.
  *
  * `restore` and `results` run it, so a record that does not fit is refused rather than given back
  * or written into a result. It checks what `score` checks on the record it is handed, and the
@@ -735,10 +761,11 @@ const shownOnly = (item: Item, record: ItemRecord, responses: Responses): Respon
  *
  * 1. Decodes the record the host handed back and checks that it belongs to the item and, as
  *    {@link carriedFitting} checks it, that each response it holds is one the item scores, of its
- *    declaration's base type and cardinality, that the built-in `completionStatus`, which the
- *    attempt carries over, is a single identifier, that its template values, correct responses and
- *    defaults are each of its variable's declared type, and, where the item's template processing
- *    runs, that it holds a value for each declared template variable ({@link templatesHeld}).
+ *    declaration's base type and cardinality, and each record a record response's, that the
+ *    built-in `completionStatus`, which the attempt carries over, is a single identifier, that its
+ *    template values, correct responses and defaults are each of its variable's declared type, and,
+ *    where the item's template processing runs, that it holds a value for each declared template
+ *    variable ({@link templatesHeld}).
  * 2. Checks each response as a value of its declaration, and a record response as a record, its shape
  *    only: a host that builds a record by hand is its own scorer.
  * 3. Refuses responses that break a tier (a) limit, under the default configuration, judging the item
@@ -786,7 +813,7 @@ const shownOnly = (item: Item, record: ItemRecord, responses: Responses): Respon
  */
 export const score = (
   document: Accepted,
-  responses: Readonly<Record<string, ResponseValue>>,
+  responses: Responses,
   record?: StoredRecord,
 ): Result.Result<
   StoredRecord,

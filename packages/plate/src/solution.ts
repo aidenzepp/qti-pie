@@ -129,7 +129,7 @@ export const solution = (document: Accepted, record?: SolutionRecord): Responses
       ]),
     ),
     ...Object.fromEntries(
-      [...(document.item.records?.values() ?? [])].map((declaration) => [
+      Array.from(document.item.records?.values() ?? [], (declaration) => [
         declaration.identifier,
         recordCorrectOf(declaration),
       ]),
