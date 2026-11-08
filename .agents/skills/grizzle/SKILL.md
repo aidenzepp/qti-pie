@@ -181,8 +181,10 @@ breaking change may briefly break older application instances that are still run
   holds no data, so a changed world needs no marker; a role the migration creates gets its views, policies and
   functions here, after the role.
 
-`-- grizzle: no-transaction` as a file's first line runs each statement alone, so each statement must be safe to
-rerun: a rerun after a failure starts the file again from its first statement.
+`-- grizzle: no-transaction` as a file's first line runs each statement alone, each ending at a semicolon where psql
+would end it: outside quotes, dollar quotes, comments, parentheses and the `BEGIN ATOMIC … END` body of a function or
+procedure. Each statement must be safe to rerun: a rerun after a failure starts the file again from its first
+statement.
 
 ## Renames and drops
 
@@ -216,6 +218,12 @@ What a declaration drafts:
   constant, refuses every row still holding it, naming its table and column. Change or delete those rows in a data
   step first. Handles reordered are refused before anything is drafted, by `generate` at the stage codes and by
   `check`: a stored code never changes meaning, so append new handles; a roster's order is its codes' order.
+- **A roster continues one roster at most:** the one its `--rename` names, or else the one of its own name or an alike
+  spelling, unless a rename of another takes that name; any other roster is new, its codes from 0. A closed id or a
+  set keeps its codes only on the roster its own continues. Moved to another roster, to or from an integer, renamed
+  without `--rename` (a drop and a new roster), or left on a name another roster takes, it is converted at a
+  placeholder: there its codes would name other handles, so write each row's new value from what its old one means,
+  never a cast.
 - **A login renamed** (`--rename @web=@site`) is its PostgreSQL role renamed in place, `ALTER ROLE ... RENAME TO`, so
   its OID, password, memberships and grants survive. A login dropped (`--drop @web`) drops its role, and a new login
   needs its password again. A role is never renamed: it holds no data and no password, so its role, schema, views,
@@ -310,6 +318,7 @@ Applied files, which only `migrate` can check against the ledger:
 | Stage | Fix |
 | --- | --- |
 | connect | check the configuration's connection: its host, port, database, role, password and CA |
+| server | have a superuser raise the server's max_stack_depth to at least 2MB, its default |
 | owner | connect as the role that owns the schema |
 | input | run grizzle check and fix what it reports |
 | busy | wait for the other grizzle migrate to finish, then run it again |
@@ -425,13 +434,18 @@ The command line's own refusals, by stage:
 - A broken rule is an outcome of `db.apply`, never an error. `invariant-rejected` carries `refused`,
   `{ kind: "every" | "first" | "some", laws }`, whose `laws` are the laws as the schema states them, never empty, such
   as `[{ kind: "check", relation: "Grant", name: "WithinGrant" }]`: match on them directly, never on a constraint's
-  name. A pattern's law names its field, `{ kind: "pattern", relation, field, source, flags }`, so two fields of one
-  pattern are two laws. `every` names every law grizzle decides the write broke. `first` names the laws of the CHECK
+  name. A pattern's law names its field, `{ kind: "pattern", relation, field, source, flags }`, spelled as that field
+  spells its pattern, so two fields of one pattern are two laws. `patternLawsOf(schema)` lists every pattern law a
+  schema states, one per stored field, and none for a pattern every text matches, which grizzle drops, or for a
+  contract's pattern, whose law is the contract's: compare refusals against it with `sameLaw`, never keep that list
+  by hand. `every` names every law grizzle decides the write broke. `first` names the laws of the CHECK
   PostgreSQL tried first, where grizzle cannot decide a row's checks on the host (a row only PostgreSQL computes, such
   as a query's, or a check that reads a value grizzle does not hold, such as a count or an end a put keeps from the
   stored row): the row may break other checks too, and another version of grizzle may name another of them. `some`
   names two laws or more of one PostgreSQL object, a family's merged foreign key or a domain several fields share,
-  where nothing decides which of them the row broke: at least one did.
+  where nothing decides which of them the row broke: at least one did. Its `witness` is the key of a row you stated
+  that breaks them, or `unreported` where grizzle cannot tell which row did, such as two family owners the write
+  inserts without reading them, either of which may be a stored one inserted again: never assume a key is there.
 - No read raises an arithmetic error on a row: never catch 22003, 22012 or 2201F around a query. Integer arithmetic is
   exact and delivers `bigint`, money arithmetic exact `Money`, and floats are IEEE 754 (`x / 0.0` is ±Infinity). A
   partial operation needs its precondition proved, by a literal's type (`Compute.div(x, 7n)`), by a contract that
@@ -478,12 +492,21 @@ The command line's own refusals, by stage:
   `Compute.difference`, `Compute.cardinality`, `Compute.subset`, `Compute.disjoint` and `Compute.singleton`, and no
   complement. Test a closed id's membership in a set as `Compute.subset(Compute.singleton(id), set)`:
   `Compute.singleton(id)` is the set of the id's one handle, and a NULL id gives a NULL set.
-- A closed relation read at a key no row holds: `C.at(field, k…)` is NULL there, which a check refuses, and
+- A closed relation read at a key no row holds: `C.at(field, k…)` is NULL there, which a check refuses, as does a
+  generated field's NOT NULL, on `{ kind: "generated", relation, field }` (23502 on its column to a direct writer;
+  grizzle refuses a nested write or a family fill that reads the field before any SQL, with the same outcome), and
   `C.has(k…)` is false there, so say what holds where the key is absent with `has`, never with a null-object row:
   `Compute.or(Compute.not(C.has(k…)), φ(C.at(field, k…)))`, or a value there,
   `Compute.cond(C.has(k…), C.at(field, k…), d)`. Every closed read is NULL where a key value is NULL.
 - A `bytes` field, a `Uint8Array`, is written and read back whole and nothing more: never in a key, a rule's side, a
-  filter, a parameter, a `Compute` call, a contract, or a generated or accumulated field.
+  filter, a parameter, a `Compute` call, a contract, or a generated or accumulated field. A value holds at most
+  1,073,741,819 bytes (`bytesMaxLength`), PostgreSQL's longest bytea, and is read back in chunks, one round trip
+  still; a write reads back only its SHA-256 digest. grizzle copies a value once, as the call is sent; one changed
+  before then is `bytesChanged`. An attachment whose rows hold one is a statement of its own, so under rows that read
+  `.approximateNearest` attach in a second query instead.
+- A call's flight, every byte the driver writes for its one round trip, is at most 1,908,342,784 bytes
+  (`flightMaxBytes`), the most one write over TLS carries. A longer one is `InputTooLarge` (`flight`) before anything is
+  sent, nothing ran, and grizzle never splits it into more round trips: split the input across calls.
 - Every numeric field declares its precision and scale, `pg.numeric(p, s)`; there is no bare `pg.numeric`. A sum,
   a mean or an operation's numeric result carries the digits its computation proves, and one past 131,072 integer
   digits is `ResourceBound`. Convert an integer, money or a float to numeric with `Compute.numeric(x)`, never a cast to
@@ -496,6 +519,10 @@ The command line's own refusals, by stage:
   the login's roles only with SET FALSE and no ADMIN, and only while the login's effective privileges on the
   installation stay exactly those three: `rds_iam` holds nothing there, so it is admitted, and a membership handing
   the login any privilege or ownership is refused. This has not been run against RDS.
+- A role is over a schema and is no schema itself: `role`, `login`, `schema.extend`, `wholeEntriesOf`,
+  `writableNamesOf` and `lawsOf` take a schema, and a role passed to one is a type error; `query`, `ChangeSet.empty`
+  and `workload` take either. A role's `write` names each entry once: a name listed twice is a type error, and
+  `RoleRefused` (`writeTwice`) for a JavaScript caller.
 - A role's `write` lists a query entry only when the entry is writable (README's Writing through a role); otherwise
   `role(...)` is refused as `RoleRefused`, its rule `writeUnwritable` naming the `entry` and the `why`. An entry over a
   family's owner writes the owner as a write of its table does: grizzle draws the owner's counts and ends, so no row
@@ -511,13 +538,16 @@ The command line's own refusals, by stage:
   field's advance function, `SELECT <schema>.<advance function>(<largest value inserted>)`, in the same transaction.
 - Every installed object is named from what it is. Declared names are snake_case: the schema, tables, derived
   relations, rosters, contracts, columns, row checks and a role's views keep their converted names, a contract's CHECK
-  is `check`, and a role's schema is its role's name. Two declared names that convert alike are one name (two fields
-  of a relation, two head fields of a derived relation or a role's query, two relations of a role, two logins or roles
-  of a schema, a contract a context names beside a relation, roster or contract of the schema), a name may not start
-  with `_`, a conversion (a login's or role's with its schema's) must fit 63 bytes, and a schema's must not start with
-  `pg_`. Everything else is `__<readable part>_<digest>` and carries a COMMENT saying what it is: `grizzle names`
-  prints that mapping from the committed snapshot. Write direct SQL against those names. A direct writer of a family's
-  member fills its hidden columns as grizzle does (its index, its copy of the owner's count, each fold's running
-  values) and the owner's count and ends; PostgreSQL refuses every value that breaks the family.
+  is `check`, and a role's schema is its role's name. `constraintNameOf(law)` gives a row check's installed name from
+  its law, `constraintNameOf({ kind: "check", relation: "Grant", name: "WithinGrant" })` is `"within_grant"`: a direct
+  writer or a test that matches a refusal's constraint takes it from there, never spelling it. Two declared names that
+  convert alike are one name (two fields of a relation, two head fields of a derived relation or a role's query, two
+  relations of a role, two logins or roles of a schema, a contract a context names beside a relation, roster or
+  contract of the schema), a name may not start with `_`, a conversion (a login's or role's with its schema's) must
+  fit 63 bytes, and a schema's must not start with `pg_`. Everything else is `__<readable part>_<digest>` and carries
+  a COMMENT saying what it is: `grizzle names` prints that mapping from the committed snapshot. Write direct SQL
+  against those names. A direct writer of a family's member fills its hidden columns as grizzle does (its index, its
+  copy of the owner's count, each fold's running values) and the owner's count and ends; PostgreSQL refuses every
+  value that breaks the family.
 - This file ships in the package as `skills/grizzle/SKILL.md`: copy it to where your agent reads skills, and again
   after upgrading grizzle.

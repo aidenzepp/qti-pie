@@ -1847,7 +1847,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "CREATE TABLE \"qti\".\"entry\" (\n  \"at\" \"qti\".\"__domain_gfw43vigph\" NOT NULL,\n  \"content\" \"pg_catalog\".\"bytea\" NOT NULL,\n  \"package\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"path\" \"qti\".\"__text_ca4i7j77gp\" NOT NULL,\n  CONSTRAINT \"__entry_pk_pft7stbhq7\" PRIMARY KEY (\"package\", \"at\"),\n  CONSTRAINT \"__entry_key_package_path_axr6pzomhu\" UNIQUE NULLS DISTINCT (\"package\", \"path\"),\n  CONSTRAINT \"__entry_length_content_sa6yji74c2\" CHECK ((\"pg_catalog\".\"octet_length\"(\"content\") <= 268435443) IS TRUE)\n)"
+						"statement": "CREATE TABLE \"qti\".\"entry\" (\n  \"at\" \"qti\".\"__domain_gfw43vigph\" NOT NULL,\n  \"content\" \"pg_catalog\".\"bytea\" NOT NULL,\n  \"package\" \"pg_catalog\".\"uuid\" NOT NULL,\n  \"path\" \"qti\".\"__text_ca4i7j77gp\" NOT NULL,\n  CONSTRAINT \"__entry_pk_pft7stbhq7\" PRIMARY KEY (\"package\", \"at\"),\n  CONSTRAINT \"__entry_key_package_path_axr6pzomhu\" UNIQUE NULLS DISTINCT (\"package\", \"path\")\n)"
 					},
 					{
 						"kind": "statement",
@@ -17677,10 +17677,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__entry_length_content_sa6yji74c2\" ON \"qti\".\"entry\" IS 'bytes length check of Entry.content'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__expression_pk_djkytcc7ot\" ON \"qti\".\"expression\" IS 'primary key of Expression'"
 					},
 					{
@@ -30530,7 +30526,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "f9ad291b6fb76264456bfb9f9a7ac9ab3581ddbfc7f2181a3b6e22961ea38b1b",
-		"target": "012abc95e64cb45baeaf8e8e6087e5e2828f91c5432f98a9e24256669c0fd93b"
+		"target": "060fe5c7c363e80855dd857113ff364dbb27a2c91b039f0baa04179ca76b0494"
 	},
-	"seal": "80fbbe1fc833c92a7e3dccf940a0504d41b9a0e9926dd002d7cd3978967fa7d1"
+	"seal": "7e4c9afe51217e8ece295a31e690c811d0b385a74f32bb9fb06495d5c0d2c559"
 }

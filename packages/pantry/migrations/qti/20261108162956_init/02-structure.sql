@@ -692,8 +692,7 @@ CREATE TABLE "qti"."entry" (
   "package" "pg_catalog"."uuid" NOT NULL,
   "path" "qti"."__text_ca4i7j77gp" NOT NULL,
   CONSTRAINT "__entry_pk_pft7stbhq7" PRIMARY KEY ("package", "at"),
-  CONSTRAINT "__entry_key_package_path_axr6pzomhu" UNIQUE NULLS DISTINCT ("package", "path"),
-  CONSTRAINT "__entry_length_content_sa6yji74c2" CHECK (("pg_catalog"."octet_length"("content") <= 268435443) IS TRUE)
+  CONSTRAINT "__entry_key_package_path_axr6pzomhu" UNIQUE NULLS DISTINCT ("package", "path")
 );
 
 CREATE TABLE "qti"."expression" (

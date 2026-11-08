@@ -2135,8 +2135,6 @@ COMMENT ON CONSTRAINT "__entry_pk_pft7stbhq7" ON "qti"."entry" IS 'primary key o
 
 COMMENT ON CONSTRAINT "__entry_key_package_path_axr6pzomhu" ON "qti"."entry" IS 'key Entry(package, path)';
 
-COMMENT ON CONSTRAINT "__entry_length_content_sa6yji74c2" ON "qti"."entry" IS 'bytes length check of Entry.content';
-
 COMMENT ON CONSTRAINT "__expression_pk_djkytcc7ot" ON "qti"."expression" IS 'primary key of Expression';
 
 COMMENT ON CONSTRAINT "__expression_check_expression_operands_or_fold_rbz3colnk2" ON "qti"."expression" IS 'check of Expression for law or fold over fin(Expression, operands) of Operand(operator, cardinalityBit) where {"kind":"compare","left":{"field":"rank","kind":"field"},"op":"eq","right":{"kind":"literal","value":"~n:1"}} into Expression(node, leadCardinalities)';
