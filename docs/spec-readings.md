@@ -3342,6 +3342,14 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      the uniform case of the second), with per-assembly copies of every law that reads an expression's type. Until
      then each is accepted wherever `unknown` is, and a renderer evaluating real values may judge more. Between the two
      packages the stricter normative reading wins. This binds pantry and plate alike, and pairs with plate's readings
-     198 and 199. This is not a case of documents in conflict. (Decided 2026-11-08 by the Mind, decisions 434 and 435,
-     on research ba1a2d84, relay 4da02d14 of plate readings 198 and 199, under the operator's delegation; FYI to the
-     operator.)
+     198 and 199. This is not a case of documents in conflict.
+
+     Plate types both cases when it checks a whole package: a prefixed `qti-variable` takes the type of the declaration
+     of the item the item ref names, weighted as its reading 198 says, and an unweighted `qti-test-variables` with no
+     `base-type` is integer only when every item variable it can match is integer, and float otherwise. A test checked
+     alone keeps `unknown`, as pantry does. So in a package where those types decide a type check, plate refuses what
+     would fail at run time and pantry accepts it. This is a known acceptance difference between the packages,
+     recorded under decision 436, not a different reading of the text. What would lift it is the per-assembly typing
+     above. (Decided 2026-11-08 by the Mind, decisions 434 and 435, on research ba1a2d84, relay 4da02d14 of plate
+     readings 198 and 199, under the operator's delegation; FYI to the operator. Decision 436 (2026-11-08) records
+     plate's package-level typing.)
