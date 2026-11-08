@@ -11,6 +11,7 @@ import type {
 } from "#plate/codec/session.ts";
 import { fresh } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
+import type { RecordValue } from "#plate/model/values.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
 import { bg007Item, float, integer } from "#plate/test/fixtures.ts";
 
@@ -247,6 +248,64 @@ describe("the plain type", () => {
 
 describe("encodeSession and decodeSession", () => {
   it.effect(
+    "[T-14] round-trip a session whose item saved a record response's record beside its values, an integer field beyond 2^53 exact, and refuse a saved record with a repeated field identifier at decode",
+    () =>
+      Effect.gen(function* roundTripsSavedRecord() {
+        const answer: RecordValue = {
+          cardinality: "record",
+          fields: [
+            { identifier: "stringValue", value: { baseType: "string", value: "9007199254740993" } },
+            { identifier: "integerValue", value: { baseType: "integer", value: 2n ** 53n + 1n } },
+          ],
+        };
+        const session: TestSession = {
+          ...seeded,
+          items: [
+            {
+              ...answered,
+              saved: Option.some({
+                ...Option.getOrElse(answered.saved, () => ({})),
+                RREC: answer,
+              }),
+            },
+            unpresented,
+          ],
+        };
+        const stored = yield* Effect.fromResult(encodeSession(session));
+        const [first] = stored.items;
+        const repeated = {
+          ...stored,
+          items: stored.items.map((item, index) =>
+            index === 0
+              ? {
+                  ...item,
+                  saved: {
+                    ...item.saved,
+                    RREC: {
+                      cardinality: "record",
+                      fields: [
+                        { identifier: "stringValue", value: { baseType: "string", value: "a" } },
+                        { identifier: "stringValue", value: { baseType: "string", value: "b" } },
+                      ],
+                    },
+                  },
+                }
+              : item,
+          ),
+        };
+
+        assert.strictEqual(first?.saved?.["RREC"]?.cardinality, "record");
+        assert.deepStrictEqual(yield* Effect.fromResult(throughHost(session)), session);
+        assert.deepStrictEqual(
+          Option.map(failureOf(repeated), (failure) =>
+            failure._tag === "InvalidSession" ? [failure._tag, failure.stage] : [failure._tag],
+          ),
+          Option.some(["InvalidSession", "decode"]),
+        );
+      }),
+  );
+
+  it.effect(
     '[T-14] round-trip a session through JSON: saved responses, an integer beyond 2^53, a NULL, seed "7", first outcomes kept for one item and none for another',
     () =>
       Effect.gen(function* roundTripsSeeded() {
@@ -255,7 +314,12 @@ describe("encodeSession and decodeSession", () => {
 
         assert.strictEqual(stored.version, 4);
         assert.strictEqual(stored.seed, "7");
-        assert.strictEqual(first?.saved?.["COUNT"]?.values[0]?.value, "9007199254740993");
+
+        const count = first?.saved?.["COUNT"];
+        assert.strictEqual(
+          count !== undefined && "values" in count ? count.values[0]?.value : undefined,
+          "9007199254740993",
+        );
         assert.isTrue(first !== undefined && "firstOutcomes" in first);
         assert.isFalse(second !== undefined && "firstOutcomes" in second);
         assert.isFalse(second !== undefined && "saved" in second);

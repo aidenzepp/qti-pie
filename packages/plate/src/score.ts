@@ -14,7 +14,7 @@
 import { Data, Option, Result, Schema } from "effect";
 import { InvalidRecord, decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { StoredRecord } from "#plate/codec/record.ts";
-import { ValueSchema } from "#plate/codec/values.ts";
+import { ResponseValueSchema } from "#plate/codec/values.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
@@ -25,12 +25,14 @@ import {
   holdsCompletionStatus,
 } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import { isRecordValue } from "#plate/model/values.ts";
+import type { ResponseValue, Value } from "#plate/model/values.ts";
 import { defaultOutputBudget } from "#plate/output-budget.ts";
 import { hiddenOnlyResponses } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { drawSeed } from "#plate/seed.ts";
+import type { Responses } from "#plate/session/session.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
@@ -78,11 +80,14 @@ export class RecordRequired extends Data.TaggedError("RecordRequired")<{
  * Why a response is not one {@link score} takes.
  *
  * - `undeclared`: the item scores no response by that identifier. It declares none, or declares one
- *   the renderer does not score: base type `file`, cardinality `record`, or no base type.
- * - `not-a-value`: it is not a value at all (an integer as a number rather than a `bigint`, an empty
- *   string, two values in a single, …).
+ *   the renderer does not score: base type `file`, or a record response the item model does not
+ *   hold (`Item.unheld` lists it).
+ * - `not-a-value`: it is not a value or a record at all (an integer as a number rather than a
+ *   `bigint`, an empty string, two values in a single, a record field identifier that is not an
+ *   NCName or that two fields name, a record field of base type `file`, …).
  * - `base-type`: a value of another base type than its declaration's.
- * - `cardinality`: a value of another cardinality than its declaration's.
+ * - `cardinality`: a value of another cardinality than its declaration's: a record for a response
+ *   that is not a record response, or a value that is not a record for one that is.
  */
 export type ResponseProblem = "base-type" | "cardinality" | "not-a-value" | "undeclared";
 
@@ -97,13 +102,22 @@ const problemWords: Readonly<Record<ResponseProblem, string>> = {
 };
 
 /**
+ * The type a response's declaration gives the value {@link score} takes for it: a base type and a
+ * cardinality, or, for a record response, which has no base type of its own, cardinality `record`.
+ */
+type DeclaredResponse =
+  | Pick<ResponseDeclaration, "baseType" | "cardinality">
+  | { readonly cardinality: "record" };
+
+/**
  * A response {@link score} cannot run: a developer error, returned through a `Result`.
  *
  * `response` is its identifier, `problem` what is wrong with it, and `expected` its declaration's
- * base type and cardinality, none when the item scores no such response (`undeclared`).
+ * base type and cardinality, `{ cardinality: "record" }` for a record response, or none when the
+ * item scores no such response (`undeclared`).
  */
 export class InvalidResponses extends Data.TaggedError("InvalidResponses")<{
-  readonly expected: Option.Option<Pick<ResponseDeclaration, "baseType" | "cardinality">>;
+  readonly expected: Option.Option<DeclaredResponse>;
   readonly problem: ResponseProblem;
   readonly response: string;
 }> {
@@ -115,9 +129,11 @@ export class InvalidResponses extends Data.TaggedError("InvalidResponses")<{
 
     return Option.match(this.expected, {
       onNone: () =>
-        `The responses hold ${name}, but the item scores no response by that identifier: it declares none, or declares one the renderer does not score (base type file, cardinality record, or no base type). Leave ${name} out of the responses.`,
-      onSome: ({ baseType, cardinality }) =>
-        `The response ${name} ${problemWords[this.problem]}. Pass a value of base type ${baseType} and cardinality ${cardinality}, an integer as a bigint and NULL as no values, as decode gives it.`,
+        `The responses hold ${name}, but the item scores no response by that identifier: it declares none, or declares one the renderer does not score (base type file, or a record response the item model does not hold, such as one with a file field). Leave ${name} out of the responses.`,
+      onSome: (expected) =>
+        expected.cardinality === "record"
+          ? `The response ${name} ${problemWords[this.problem]}. Pass a record, { cardinality: "record", fields }, each field an NCName identifier no other field names and a single value of a modelled base type other than file, an integer as a bigint and NULL as no fields.`
+          : `The response ${name} ${problemWords[this.problem]}. Pass a value of base type ${expected.baseType} and cardinality ${expected.cardinality}, an integer as a bigint and NULL as no values, as decode gives it.`,
     });
   }
 }
@@ -291,18 +307,60 @@ const firstMisfit = (
   );
 
 /**
- * Find the first response a record holds that does not fit: one the item does not score, or one of
- * another base type or cardinality than its declaration.
+ * Report whether an item declares a record response by an identifier, one its item model holds
+ * (`Item.records`).
+ *
+ * @param item The item.
+ * @param identifier The response's identifier.
+ * @returns Whether the item holds a record response by that identifier.
+ */
+const declaresRecord = (item: Item, identifier: string): boolean =>
+  item.records?.has(identifier) === true;
+
+/**
+ * Find the first response a record holds that does not fit: a value under a record response's
+ * identifier, one the item does not score, one of another base type or cardinality than its
+ * declaration, or a record under an identifier the item declares no record response by.
+ *
+ * The record's codec has already checked each record is a record (`RecordValueSchema`), so only
+ * where it sits is left to check.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
- * @returns The first issue, or none when every response fits.
+ * @returns The first issue, a value's before a record's, or none when every response fits.
  */
 const responseMisfit = (item: Item, record: ItemRecord): Option.Option<string> =>
-  firstMisfit(
-    "response",
-    (identifier) => declared(item.responses.get(identifier)),
-    record.responses,
+  Option.fromUndefinedOr(
+    Object.keys(record.responses).find((identifier) => declaresRecord(item, identifier)),
+  ).pipe(
+    Option.map(
+      (identifier) =>
+        `its response ${JSON.stringify(identifier)} is not a record, but the item declares ${JSON.stringify(identifier)} a record response`,
+    ),
+    Option.orElse(() =>
+      firstMisfit(
+        "response",
+        (identifier) => declared(item.responses.get(identifier)),
+        record.responses,
+      ),
+    ),
+    Option.orElse(() =>
+      Option.map(
+        Option.fromUndefinedOr(
+          Object.keys(record.records).find((identifier) => !declaresRecord(item, identifier)),
+        ),
+        (identifier) => {
+          const name = JSON.stringify(identifier);
+
+          return Option.match(Option.fromUndefinedOr(item.responses.get(identifier)), {
+            onNone: () =>
+              `it holds the record ${name}, but the item declares no record response by that identifier`,
+            onSome: ({ baseType, cardinality }) =>
+              `its response ${name} is a record, but the item declares ${name} with base type ${baseType} and cardinality ${cardinality}`,
+          });
+        },
+      ),
+    ),
   );
 
 /**
@@ -494,35 +552,69 @@ export const fitting = (item: Item, record: ItemRecord): Result.Result<ItemRecor
   );
 
 /**
+ * Give the type an item's declaration gives a response: `{ cardinality: "record" }` for a record
+ * response its item model holds, else the base type and cardinality of a response it scores.
+ *
+ * @param item The item.
+ * @param response The response's identifier.
+ * @returns The declared type, or none when the item scores no response by that identifier.
+ */
+const declaredResponse = (item: Item, response: string): Option.Option<DeclaredResponse> =>
+  declaresRecord(item, response)
+    ? Option.some({ cardinality: "record" })
+    : Option.map(
+        Option.fromUndefinedOr(item.responses.get(response)),
+        ({ baseType, cardinality }) => ({
+          baseType,
+          cardinality,
+        }),
+      );
+
+/**
  * Find what is wrong with one response, as a value of its declaration's type.
  *
- * It checks the type-side value (`Schema.is`), so an integer is a `bigint`, as `decode` gives it.
+ * It checks the type-side value (`Schema.is`), so an integer is a `bigint`, as `decode` gives it,
+ * and a record holds each field identifier once, as an NCName, each field a single of a modelled
+ * base type. It judges the record's shape only, never its fields' values: a host that builds a
+ * record by hand is its own scorer (rule `a9d04969`). Being a value or a record at all comes first,
+ * then the kind: a record for a response that is not a record response, or a value for one that
+ * is, is `cardinality`.
  *
- * @param declaration The response's declaration, none when the item declares none.
+ * @param expected The type the response's declaration gives it, none when the item scores no such
+ *   response.
  * @param value The response.
  * @returns The problem, or none when the response fits its declaration.
  */
 const problemOf = (
-  declaration: Option.Option<ResponseDeclaration>,
-  value: Value,
+  expected: Option.Option<DeclaredResponse>,
+  value: ResponseValue,
 ): Option.Option<ResponseProblem> =>
-  Option.match(declaration, {
+  Option.match(expected, {
     onNone: () => Option.some("undeclared"),
-    onSome: ({ baseType, cardinality }) => {
-      if (!Schema.is(ValueSchema)(value)) {
+    onSome: (declaration) => {
+      if (!Schema.is(ResponseValueSchema)(value)) {
         return Option.some("not-a-value");
       }
 
-      if (value.baseType !== baseType) {
+      if (declaration.cardinality === "record" || isRecordValue(value)) {
+        return declaration.cardinality === value.cardinality
+          ? Option.none()
+          : Option.some("cardinality");
+      }
+
+      if (value.baseType !== declaration.baseType) {
         return Option.some("base-type");
       }
 
-      return value.cardinality === cardinality ? Option.none() : Option.some("cardinality");
+      return value.cardinality === declaration.cardinality
+        ? Option.none()
+        : Option.some("cardinality");
     },
   });
 
 /**
- * Check each response as a value of its declaration's base type and cardinality.
+ * Check each response as a value of its declaration's base type and cardinality, or, for a record
+ * response, as a record ({@link problemOf}).
  *
  * @param item The item.
  * @param responses The responses by identifier.
@@ -530,23 +622,16 @@ const problemOf = (
  */
 const checkedResponses = (
   item: Item,
-  responses: Readonly<Record<string, Value>>,
-): Result.Result<Readonly<Record<string, Value>>, InvalidResponses> =>
+  responses: Responses,
+): Result.Result<Responses, InvalidResponses> =>
   Option.match(
     Option.firstSomeOf(
       Object.entries(responses).map(([response, value]) => {
-        const declaration = Option.fromUndefinedOr(item.responses.get(response));
+        const expected = declaredResponse(item, response);
 
         return Option.map(
-          problemOf(declaration, value),
-          (problem) =>
-            new InvalidResponses({
-              expected: declaration.pipe(
-                Option.map(({ baseType, cardinality }) => ({ baseType, cardinality })),
-              ),
-              problem,
-              response,
-            }),
+          problemOf(expected, value),
+          (problem) => new InvalidResponses({ expected, problem, response }),
         );
       }),
     ),
@@ -555,6 +640,40 @@ const checkedResponses = (
       onSome: (invalid) => Result.fail(invalid),
     },
   );
+
+/**
+ * Give a responses map's values and records apart, as an item record holds them: each
+ * {@link Value} under `responses` and each `RecordValue` under `records`, by the identifier it was
+ * posted under.
+ *
+ * It splits by what each value is, never by the item's declarations, so nothing is lost: a record
+ * posted for a response the item does not declare a record response lands under `records`, and a
+ * value posted for a record response under `responses`, where the check of the record that holds
+ * them refuses it ({@link fitting}, and {@link score}'s check of its responses).
+ *
+ * @example
+ *   const { records, responses } = splitResponses(saved);
+ *   // overlay the record's: { ...record.responses, ...responses } and { ...record.records, ...records }
+ *
+ * @param responses The responses by identifier.
+ * @returns The values and the records, each by identifier.
+ */
+export const splitResponses = (responses: Responses): Pick<ItemRecord, "records" | "responses"> => {
+  const entries = Object.entries(responses);
+
+  return {
+    records: Object.fromEntries(
+      entries.flatMap(([identifier, value]) =>
+        isRecordValue(value) ? [[identifier, value] as const] : [],
+      ),
+    ),
+    responses: Object.fromEntries(
+      entries.flatMap(([identifier, value]) =>
+        isRecordValue(value) ? [] : [[identifier, value] as const],
+      ),
+    ),
+  };
+};
 
 /**
  * Give the record an attempt with no record starts from.
@@ -600,11 +719,7 @@ const unrecorded = (item: Item): Result.Result<ItemRecord, EngineFailure | Recor
  * @param responses The responses, each checked against its declaration.
  * @returns The responses, but those only content the record hides or withholds binds.
  */
-const shownOnly = (
-  item: Item,
-  record: ItemRecord,
-  responses: Readonly<Record<string, Value>>,
-): Readonly<Record<string, Value>> => {
+const shownOnly = (item: Item, record: ItemRecord, responses: Responses): Responses => {
   const hidden = hiddenOnlyResponses(item, record);
 
   return Object.fromEntries(
@@ -624,7 +739,8 @@ const shownOnly = (
  *    attempt carries over, is a single identifier, that its template values, correct responses and
  *    defaults are each of its variable's declared type, and, where the item's template processing
  *    runs, that it holds a value for each declared template variable ({@link templatesHeld}).
- * 2. Checks each response as a value of its declaration.
+ * 2. Checks each response as a value of its declaration, and a record response as a record, its shape
+ *    only: a host that builds a record by hand is its own scorer.
  * 3. Refuses responses that break a tier (a) limit, under the default configuration, judging the item
  *    as the record it scores from shows it (`checkResponses` with that record), so a choice the
  *    record's template values hide is refused `unknownChoice` and one they show is judged as any
@@ -632,7 +748,8 @@ const shownOnly = (
  * 4. Leaves out the posted value of a response only content the record hides or withholds binds,
  *    whether the renderer shows the interaction there or a notice in its place
  *    ({@link shownOnly}).
- * 5. Runs the attempt and writes the record.
+ * 5. Runs the attempt and writes the record, each record response's record under its `records` and
+ *    every other response under its `responses`.
  *
  * The record's seed, template values, correct responses and defaults come back unchanged, and the
  * rules read the template values, and the correct responses and defaults template processing set,
@@ -651,8 +768,9 @@ const shownOnly = (
  *
  * @param document The document `check` accepted.
  * @param responses The candidate's responses by identifier, each a value of its declaration's base
- *   type and cardinality, an integer as a `bigint`. A response left out keeps the record's value,
- *   as does one only content the record hides binds, whatever is posted for it.
+ *   type and cardinality, an integer as a `bigint`, and a record response's a record. A response
+ *   left out keeps the record's value, as does one only content the record hides binds, whatever is
+ *   posted for it.
  * @param record The record `begin` or the last `score` of this item returned, passed back
  *   unchanged. It may be left out for an item whose template processing does not run.
  * @returns The record after the attempt, in the form the host stores, or {@link InvalidRecord} for
@@ -668,7 +786,7 @@ const shownOnly = (
  */
 export const score = (
   document: Accepted,
-  responses: Readonly<Record<string, Value>>,
+  responses: Readonly<Record<string, ResponseValue>>,
   record?: StoredRecord,
 ): Result.Result<
   StoredRecord,
@@ -686,10 +804,18 @@ export const score = (
         ? yield* unrecorded(item)
         : yield* carriedFitting(item, yield* belonging(item, yield* decodeRecord(record)));
     const checked = yield* checkedResponses(item, responses);
-    const messages = checkResponses(document, checked, tierA, before);
+    const messages = checkResponses(document, splitResponses(checked).responses, tierA, before);
     if (messages.length > 0) {
       return yield* Result.fail(new ResponsesRefused({ messages }));
     }
 
-    return yield* encodeRecord(yield* runAttempt(item, before, shownOnly(item, before, checked)));
+    const shown = splitResponses(shownOnly(item, before, checked));
+
+    return yield* encodeRecord(
+      yield* runAttempt(
+        item,
+        { ...before, records: { ...before.records, ...shown.records } },
+        shown.responses,
+      ),
+    );
   });

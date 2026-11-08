@@ -47,7 +47,7 @@ import { choiceOrder, hiddenOnlyResponses, redactStructure } from "#plate/payloa
 import { checkResponses } from "#plate/responses.ts";
 import { resultValue, resultValues } from "#plate/results/values.ts";
 import type { ResultSingle } from "#plate/results/values.ts";
-import { belonging, fitting } from "#plate/score.ts";
+import { belonging, fitting, splitResponses } from "#plate/score.ts";
 import type { RecordMismatch } from "#plate/score.ts";
 import { itemConfiguration, sessionControls } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
@@ -820,7 +820,9 @@ const choiceSequences = (
  *
  * The values reported for a response are the saved ones over the record's, so both must be
  * values the item declares, as `fitting` checks a record: a response the item scores, of its
- * declaration's base type and cardinality.
+ * declaration's base type and cardinality, and a record under a record response's identifier and
+ * nowhere else. The saved map is split as the record holds it (`splitResponses`), its records
+ * under `records`, so a saved record under its declaration fits.
  *
  * @param items The items the session was started with, by item ref identifier.
  * @param entry The session item.
@@ -852,7 +854,7 @@ const deliveredItem = (
     );
     if (Option.isSome(entry.saved)) {
       yield* Result.mapError(
-        fitting(document.item, { ...record, responses: entry.saved.value }),
+        fitting(document.item, { ...record, ...splitResponses(entry.saved.value) }),
         ({ issue }) =>
           new InvalidSession({
             issue: `the responses saved on ${place} do not fit the item: ${issue}`,
@@ -906,7 +908,10 @@ const sessionItemReport = (
     );
     const document = yield* deliveredItem(items, entry);
     const limit = itemConfiguration(judging, control).maxAttempts;
-    const saved = Option.getOrElse(entry.saved, () => ({}));
+    const saved = Option.match(entry.saved, {
+      onNone: () => ({}),
+      onSome: (responses) => splitResponses(responses).responses,
+    });
     const hidden = hiddenOnlyResponses(document.item, entry.record);
     const answers = Object.fromEntries(
       [...document.item.responses.keys()].flatMap((identifier) =>

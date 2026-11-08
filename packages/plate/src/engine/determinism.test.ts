@@ -29,6 +29,7 @@ import { nullOf } from "#plate/model/values.ts";
 import { redact, render } from "#plate/render.ts";
 import { restore } from "#plate/restore.ts";
 import { score } from "#plate/score.ts";
+import type { Responses } from "#plate/session/session.ts";
 import {
   determinismConfiguration,
   determinismInstance,
@@ -82,11 +83,7 @@ const opened = Effect.fnUntraced(function* opened() {
  * @param values The values the controls show, none by default.
  * @returns The HTML.
  */
-const renderedFrom = (
-  accepted: Accepted,
-  record: ItemRecord,
-  values: ItemRecord["responses"] = {},
-): string =>
+const renderedFrom = (accepted: Accepted, record: ItemRecord, values: Responses = {}): string =>
   Result.getOrThrow(
     render(redact(accepted, record), determinismConfiguration, {
       instance: determinismInstance,

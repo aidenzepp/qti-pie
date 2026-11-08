@@ -43,7 +43,7 @@ import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
-import { isNull } from "#plate/model/values.ts";
+import { isNullResponse } from "#plate/model/values.ts";
 import { redact, render, renderStatus } from "#plate/render.ts";
 import { results } from "#plate/results/results.ts";
 import { resultValues } from "#plate/results/values.ts";
@@ -353,7 +353,7 @@ const summaryState = (
   const saved = session.items[summary.sequenceIndex - 1]?.saved ?? Option.none();
 
   return Option.exists(saved, (responses) =>
-    Object.values(responses).some((value) => !isNull(value)),
+    Object.values(responses).some((value) => !isNullResponse(value)),
   )
     ? "itemAnswered"
     : "itemNotAnswered";

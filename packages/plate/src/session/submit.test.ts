@@ -14,7 +14,7 @@ import { drawBelow, drawStream, outcomeLabel } from "#plate/engine/random.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { results } from "#plate/results/results.ts";
 import { ResponsesRefused, score as scoreResponses } from "#plate/score.ts";
 import { attemptLimits } from "#plate/session/control.ts";
@@ -23,7 +23,7 @@ import { itemView, present, recordStep, startTest } from "#plate/session/start.t
 import { SubmissionRefused, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
 import type { SubmissionRule } from "#plate/session/submit.ts";
 import { open } from "#plate/validate/open.ts";
-import { acceptedItem } from "#plate/validate/verdict.ts";
+import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -1264,6 +1264,68 @@ describe("submitItem", () => {
 
         assert.strictEqual(itemAt(answered, 1).record.numAttempts, 1);
         assert.deepStrictEqual(scoreOf(itemAt(answered, 1).record), scored(1));
+      }),
+  );
+
+  it.effect(
+    "[T-14] saves a step's record on an item with a record response, and submit-item scores it into the item record's records, apart from its responses",
+    () =>
+      Effect.gen(function* savesAndScoresRecord() {
+        const built = yield* builtDelivery(
+          "recorded",
+          [partOf("part", ["recorded"])],
+          [["recorded", choiceItemXml("recorded")]],
+        );
+        const plain = built.items.get("recorded") ?? assert.fail("recorded is not delivered");
+        const delivery: Delivery = {
+          items: new Map([
+            [
+              "recorded",
+              acceptForTest({
+                ...plain.item,
+                records: new Map([
+                  [
+                    "RREC",
+                    { correct: Option.none(), defaultValue: Option.none(), identifier: "RREC" },
+                  ],
+                ]),
+              }),
+            ],
+          ]),
+          test: built.test,
+        };
+        const answer: RecordValue = {
+          cardinality: "record",
+          fields: [
+            { identifier: "stringValue", value: { baseType: "string", value: "-0.050" } },
+            { identifier: "floatValue", value: { baseType: "float", value: -0.05 } },
+          ],
+        };
+        const configuration = yield* configure({});
+        const saved = accepted(
+          recordStep(
+            started(delivery, configuration),
+            stepOf("submit-item", { RESPONSE: chosen("A"), RREC: answer }),
+            after(2),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          itemAt(saved, 1).saved,
+          Option.some({ RESPONSE: chosen("A"), RREC: answer }),
+        );
+
+        const submitted = accepted(
+          submitItem(delivery.test, delivery.items, saved, stepOf("submit-item"), configuration, {
+            now: after(5),
+          }),
+        );
+        const { record } = itemAt(submitted, 1);
+
+        assert.deepStrictEqual(record.records, { RREC: answer });
+        assert.isFalse(Object.hasOwn(record.responses, "RREC"));
+        assert.deepStrictEqual(scoreOf(record), scored(1));
+        assert.deepStrictEqual(itemAt(submitted, 1).saved, Option.none());
       }),
   );
 });

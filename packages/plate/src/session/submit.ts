@@ -27,11 +27,11 @@ import type { Item } from "#plate/model/item.ts";
 import { refIdentifiersIn } from "#plate/model/item-refs.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import type { Test, TestPart } from "#plate/model/test.ts";
-import { isNull, match } from "#plate/model/values.ts";
+import { isNullResponse, isRecordValue, match } from "#plate/model/values.ts";
 import { postingsIn, redactStructure } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
-import { score } from "#plate/score.ts";
+import { score, splitResponses } from "#plate/score.ts";
 import type {
   InvalidResponses,
   RecordMismatch,
@@ -299,16 +299,20 @@ export const deliveredItem = (
 /**
  * Give the responses an item's attempt is processed with: each saved response, else its record's,
  * which holds NULL or, once the item is presented, its default (D4-11): the one its template
- * processing set, else its declared one.
+ * processing set, else its declared one. A record response's comes from the record's `records`,
+ * the rest from its `responses`.
  *
  * @param item The session item.
  * @returns The responses, by identifier.
  */
-const valuesOf = (item: SessionItem): Responses =>
-  Option.match(item.saved, {
-    onNone: () => item.record.responses,
-    onSome: (saved) => ({ ...item.record.responses, ...saved }),
+const valuesOf = (item: SessionItem): Responses => {
+  const held: Responses = { ...item.record.responses, ...item.record.records };
+
+  return Option.match(item.saved, {
+    onNone: () => held,
+    onSome: (saved) => ({ ...held, ...saved }),
   });
+};
 
 /**
  * Say whether an item's responses skip it.
@@ -363,14 +367,15 @@ const skipped = (
 
       return (
         value === undefined ||
-        isNull(value) ||
-        Option.exists(
-          Option.orElse(
-            own(record.defaults, declaration.identifier),
-            () => declaration.defaultValue,
-          ),
-          (fallback) => match(value, fallback),
-        )
+        isNullResponse(value) ||
+        (!isRecordValue(value) &&
+          Option.exists(
+            Option.orElse(
+              own(record.defaults, declaration.identifier),
+              () => declaration.defaultValue,
+            ),
+            (fallback) => match(value, fallback),
+          ))
       );
     })
   );
@@ -613,7 +618,7 @@ export const submitItem = (
     }
 
     const messages = view.configuration.validateResponses
-      ? checkResponses(accepted, values, view.configuration, item.record)
+      ? checkResponses(accepted, splitResponses(values).responses, view.configuration, item.record)
       : [];
     if (messages.length > 0) {
       return yield* refuse("responses-invalid", messages);
