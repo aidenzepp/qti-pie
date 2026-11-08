@@ -3540,7 +3540,8 @@ export const typedTextHolds = (baseType: string, text: string): boolean => {
 /**
  * The choice classes whose identifier "must not be used by any other choice or item variable"
  * (information model §5.132.1, and §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1
- * and §5.131.1), each class's element, which spec reading 104 reads one class at a time.
+ * and §5.131.1), each class's element, which spec reading 104 as amended reads as one space of
+ * identifiers: no two elements of the nine, of one class or of two, share an identifier.
  */
 const choiceClasses: ReadonlySet<string> = new Set([
   "qti-associable-hotspot",
@@ -4559,9 +4560,9 @@ const overlayBreaches = (
         string,
         readonly { readonly identifier: string; readonly node: FoldedNode<Composed> }[]
       >();
-  // Reading 104: a choice's identifier names one choice of its class in its document, whichever
-  // interactions hold them, and no item variable: no declaration of its document and, in an item,
-  // no built-in variable.
+  // Reading 104 as amended: a choice's identifier names one choice of the nine classes in its
+  // document, whichever interactions hold them and whichever classes they are, and no item
+  // variable: no declaration of its document and, in an item, no built-in variable.
   const choices = view.members.flatMap((node) =>
     choiceClasses.has(node.kind)
       ? Option.toArray(typedValueOf(overlay.view, node.id, "identifier")).map((identifier) => ({
@@ -4571,6 +4572,10 @@ const overlayBreaches = (
       : [],
   );
   const choiceNames = Map.groupBy(choices, ({ identifier, node }) => `${node.kind} ${identifier}`);
+  const classFound = new Set(
+    [...choiceNames.values()].flatMap((held) => held.slice(1).map(({ node }) => node.id)),
+  );
+  const sharedNames = Map.groupBy(choices, ({ identifier }) => identifier);
   const variableOf = (identifier: string): string | undefined => {
     if (declared.has(identifier)) {
       return "declared";
@@ -4637,6 +4642,19 @@ const overlayBreaches = (
           law: "Choice identifier key",
         }),
       ),
+    ),
+    // The nine classes share one space of identifiers: a choice of one class beside one of another
+    // breaks the key too, at each member after the first the per-class grouping has not found.
+    ...[...sharedNames.values()].flatMap((held) =>
+      held
+        .slice(1)
+        .filter(({ node }) => !classFound.has(node.id))
+        .map(({ identifier, node }) =>
+          at(node.id, {
+            keys: { first: pathOf(view, held[0]?.node.id ?? node.id), identifier },
+            law: "Choice identifier key",
+          }),
+        ),
     ),
     ...choices.flatMap(({ identifier, node }) =>
       Option.toArray(Option.fromUndefinedOr(variableOf(identifier))).map((variable) =>
@@ -6976,7 +6994,7 @@ const ownLaws = {
   },
   "Choice identifier key": {
     explain: (keys) =>
-      `${field(keys, "kind")}'s identifier ${field(keys, "identifier")} is the identifier of the ${field(keys, "kind")} at ${field(keys, "first")}; a choice's identifier names one choice of its class in its document`,
+      `${field(keys, "kind")}'s identifier ${field(keys, "identifier")} is the identifier of the choice at ${field(keys, "first")}; no two choices of a document share an identifier, of one class or of two`,
   },
   "Choice not variable": {
     explain: (keys) =>
