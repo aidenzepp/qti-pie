@@ -280,7 +280,7 @@ export const recorded: readonly Recorded[] = [
       says: "all included fragments must be treated as parsed xml",
       why: "an xi:include's parse is xml: every included fragment is treated as parsed XML (information model §2.12)",
     },
-    value: /^text$/u,
+    value: /^[\t\n\r ]*text[\t\n\r ]*$/u,
     xsd: "valid",
   },
   {
