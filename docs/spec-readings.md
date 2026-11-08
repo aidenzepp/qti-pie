@@ -597,6 +597,11 @@ against it. A reading that is not an information-model-over-XSD case says which 
     grizzle's bounded lexical form of `double precision` was distinct from every other key by its text alone, is
     lifted by reading 154, which compares every float key by the double reading 144 maps it to.
 
+    In pantry, reading 144 sets this reading aside where the two differ: a double's value is the one XML Schema 1.1's
+    doubleLexicalMap gives (Part 2 §3.3.5.2), so `1e400` is `+INF`, not the largest finite double. This reading's
+    first sentence holds in plate alone, whose double reading follows it until the renderer team moves it to 144 (a
+    follow-up of PR #46).
+
 57. **In lax wildcard content, every prose rule judges the QTI elements the structural walk checks there, as it judges
     them anywhere else.** Under a `lax` element wildcard, such as the content of `qti-custom-interaction`, XML Schema
     assesses an element against its declaration when one is found, and only then (XML Schema Part 1, section 3.10.1,
