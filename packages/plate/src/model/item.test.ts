@@ -2996,16 +2996,15 @@ describe("buildItem", () => {
         assert.deepStrictEqual(built.records, expected);
         assert.deepStrictEqual([...built.responses.keys()], []);
         assert.isUndefined(built.unheld);
-        // The Text Entry keeps its notice and the processing that reads ANSWER its mark, since the
-        // engine holds no record yet; the declaration itself carries no mark.
-        assert.deepStrictEqual(built.processing, Option.none());
+        // The Text Entry keeps its notice, and the processing that reads ANSWER through qti-is-null
+        // runs, since the engine holds its record there; the declaration itself carries no mark.
+        assert.isTrue(Option.isSome(built.processing), "the processing runs");
         assert.deepStrictEqual(built.unsupported, [
           {
             feature: 'cardinality="record"',
             path: `${body}/qti-text-entry-interaction`,
             shown: "notice",
           },
-          { feature: "variable:ANSWER", path: `${root}/qti-response-processing`, shown: "mark" },
         ]);
       }),
   );
@@ -3288,20 +3287,14 @@ describe("buildItem", () => {
               [],
               [
                 el(
-                  "qti-set-outcome-value",
-                  [attr("identifier", "SCORE")],
-                  [
-                    el(
-                      "qti-field-value",
-                      [attr("field-identifier", "field")],
-                      [el("qti-variable", [attr("identifier", "RESPONSE")])],
-                    ),
-                  ],
+                  "qti-set-template-value",
+                  [attr("identifier", "T")],
+                  [el("qti-variable", [attr("identifier", "RESPONSE")])],
                 ),
               ],
             ),
-            feature: "qti-field-value",
-            path: `${processing}/qti-set-outcome-value/qti-field-value`,
+            feature: "qti-set-template-value",
+            path: `${processing}/qti-set-template-value`,
           },
         ];
 

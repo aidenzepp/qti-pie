@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Result } from "effect";
 import type { Declarations, Variables } from "#plate/engine/evaluate.ts";
-import { UnknownIdentifierError } from "#plate/engine/failures.ts";
+import { RecordOperandError, UnknownIdentifierError } from "#plate/engine/failures.ts";
 import {
   builtInType,
   builtInValue,
@@ -145,6 +145,37 @@ describe("variableValue", () => {
       { _tag: failure._tag, holder: failure.holder, role: failure.role },
       { _tag: "UnknownIdentifierError", holder: "record", role: "variable" },
     );
+  });
+
+  it("[I-9a] fails a value read of a record response with RecordOperandError, naming it, at a qti-variable and at a reference attribute alike", () => {
+    const recorded: Variables = {
+      ...referenced,
+      records: {
+        ANSWER: {
+          cardinality: "record",
+          fields: [{ identifier: "stringValue", value: { baseType: "string", value: "12" } }],
+        },
+      },
+    };
+    const failures = [
+      failureOf(variableValue(recorded, "ANSWER")),
+      failureOf(
+        referenceValue(recorded, {
+          baseType: "integer",
+          checked: true,
+          reference: { _tag: "ref", identifier: "ANSWER" },
+        }),
+      ),
+    ];
+
+    for (const failure of failures) {
+      assert.instanceOf(failure, RecordOperandError);
+      assert.deepStrictEqual(
+        { _tag: failure._tag, identifier: failure.identifier },
+        { _tag: "RecordOperandError", identifier: "ANSWER" },
+      );
+    }
+    assert.deepStrictEqual(Result.getOrThrow(variableValue(recorded, "SCORE")), score);
   });
 
   for (const identifier of ["MISSING", "numAttempts", "completionStatus", "constructor"]) {
@@ -531,6 +562,7 @@ describe("a test's run reads a prefixed name through its item ref [T-9]", () => 
   it("[T-9] variableValue without a test scope makes no read through its item ref: ITEM1.SCORE is the record's gap", () => {
     const failure = failureOf(variableValue(variables, "ITEM1.SCORE"));
 
+    assert.instanceOf(failure, UnknownIdentifierError);
     assert.deepStrictEqual(
       {
         _tag: failure._tag,

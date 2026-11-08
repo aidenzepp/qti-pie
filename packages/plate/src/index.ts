@@ -65,6 +65,7 @@ export type { EngineFailure } from "#plate/engine/evaluate.ts";
 
 export {
   OutcomeMismatchError,
+  RecordOperandError,
   UnknownIdentifierError,
   UnmappedResponseError,
 } from "#plate/engine/evaluate.ts";

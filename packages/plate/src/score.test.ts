@@ -1782,6 +1782,7 @@ describe("the public surface", () => {
         "OutputTooLarge",
         "PartSwapRefused",
         "RecordMismatch",
+        "RecordOperandError",
         "RecordRequired",
         "ResponsesRefused",
         "ResultItemMissing",

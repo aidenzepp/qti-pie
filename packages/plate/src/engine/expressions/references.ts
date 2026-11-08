@@ -21,6 +21,7 @@ import { Array as Arr, Option, Result } from "effect";
 import type { Declarations, Evaluator, FamilyTable, Variables } from "#plate/engine/evaluate.ts";
 import { areaHolds } from "#plate/engine/expressions/shapes.ts";
 import { UnknownIdentifierError, UnmappedResponseError } from "#plate/engine/failures.ts";
+import type { RecordOperandError } from "#plate/engine/failures.ts";
 import { foldCase } from "#plate/engine/math.ts";
 import {
   bitLengthOf,
@@ -811,13 +812,14 @@ const evaluateRandomInteger: Evaluator<"random-integer"> = (expression, scope) =
  * @param variables The variables of the attempt.
  * @param reference The attribute's value.
  * @returns The float; none when the named variable holds NULL or a value that is not a single
- *   float, which the validator refuses (P24) on a checked item; or an
+ *   float, which the validator refuses (P24) on a checked item; or the failure `referenceValue`
+ *   gives: a `RecordOperandError` for a record response, which P24 refuses on a checked item, or an
  *   {@link UnknownIdentifierError} when it names a variable the variables hold no value of.
  */
 const referenceFloat = (
   variables: Variables,
   reference: FloatOrRef,
-): Result.Result<Option.Option<number>, UnknownIdentifierError> =>
+): Result.Result<Option.Option<number>, RecordOperandError | UnknownIdentifierError> =>
   Result.map(referenceValue(variables, { baseType: "float", checked: true, reference }), (value) =>
     Option.flatMap(numberOf(value), (single) =>
       single.baseType === "float" ? Option.some(single.value) : Option.none(),
