@@ -104,9 +104,9 @@ type Placeholders<Text extends string> = Text extends `${string}{${infer Name}}$
  * The values {@link message} fills a key's placeholders with, one per placeholder.
  *
  * Each value is text as the candidate reads it: a number arrives already formatted for the locale,
- * `notice`'s `feature` is the feature key in QTI's own spelling (an element name,
- * `pattern-mask`), a `test` is the test's title, and `confirmTitle`'s
- * `intent` is the navigation label of the intent it confirms (`submitPart`'s or `endPart`'s text).
+ * `notice`'s `feature` is the feature key in QTI's own spelling (an element name, `pattern-mask`,
+ * `cardinality="record"`), a `test` is the test's title, and `confirmTitle`'s `intent` is the
+ * navigation label of the intent it confirms (`submitPart`'s or `endPart`'s text).
  */
 export type MessageParams<Key extends MessageKey> = Readonly<
   Record<Placeholders<(typeof en)[Key]>, string>

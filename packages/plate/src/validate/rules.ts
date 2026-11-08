@@ -1040,33 +1040,29 @@ const attributeValueType = (
   });
 
 /**
- * Find the record declaration a `qti-value` is a field of: one in a `qti-correct-response` or a
- * `qti-default-value` of a declaration whose `cardinality` is `record`: any of an item's four
- * kinds, or a test's outcome or context declaration.
+ * The steps from a `qti-value` up to the declaration whose `qti-correct-response` or
+ * `qti-default-value` holds it.
+ */
+const valueToDeclaration = [named("qti-correct-response", "qti-default-value"), isDeclaration];
+
+/**
+ * Report whether an element is a field of a record declaration's value: a `qti-value` in the
+ * `qti-correct-response` or the `qti-default-value` of a declaration whose `cardinality` is
+ * `record`, any of an item's four kinds or a test's outcome or context declaration.
  *
  * @param visit The element's visit.
  * @param parents Each element's parent, as the walk has met them.
- * @returns The record declaration, none for any other element.
+ * @returns Whether it is such a field.
  */
-const recordOfField = (
-  visit: Visit,
-  parents: ReadonlyMap<SourceElement, SourceElement>,
-): Option.Option<SourceElement> =>
-  isQti(visit.element, (local) => local === "qti-value")
-    ? Option.filter(
-        enclosing(parents, visit.element, [
-          named("qti-correct-response", "qti-default-value"),
-          isDeclaration,
-        ]),
-        isRecordDeclaration,
-      )
-    : Option.none();
+const isRecordField = (visit: Visit, parents: ReadonlyMap<SourceElement, SourceElement>): boolean =>
+  isQti(visit.element, (local) => local === "qti-value") &&
+  Option.exists(enclosing(parents, visit.element, valueToDeclaration), isRecordDeclaration);
 
 /**
  * Give the base type an element's text is read in, when its text is a typed value this rule
  * judges: a `qti-base-value`'s own `base-type`; for a `qti-value` in a declaration's
  * `qti-correct-response` or `qti-default-value`, the declaration's, or, when the declaration is a
- * record, the field's own `base-type` ({@link recordOfField}).
+ * record, the field's own `base-type` ({@link isRecordField}).
  *
  * @param visit The element's visit.
  * @param context The parents the walk has met.
@@ -1081,16 +1077,10 @@ const textBaseType = (visit: Visit, context: Context): Option.Option<ModelledBas
     return Option.none();
   }
 
-  if (Option.isSome(recordOfField(visit, context.parents))) {
-    return modelledBaseType(visit.element);
-  }
-
   return Option.flatMap(
-    enclosing(context.parents, visit.element, [
-      named("qti-correct-response", "qti-default-value"),
-      isDeclaration,
-    ]),
-    declaredBaseType,
+    enclosing(context.parents, visit.element, valueToDeclaration),
+    (declaration) =>
+      modelledBaseType(isRecordDeclaration(declaration) ? visit.element : declaration),
   );
 };
 
@@ -1122,13 +1112,12 @@ const textUnder = (
  * declaration's `qti-correct-response` or `qti-default-value` parses under the declaration's base
  * type, a field of a record declaration's value under its own `base-type` (as pantry's import reads
  * it, `valueRows` in `packages/pantry/src/import/item.ts`), and a `qti-base-value` under its own
- * `base-type`, after reading 7's trim of element text,
- * which the value model's `parseElementText` applies. A boolean is `true` or `false`, never `1` or
- * `0` (reading 34). The XSD does not decide, typing `qti-value` as `xs:normalizedString` and
- * `qti-base-value` as `xs:string`; the information model's boolean base type is the boolean
- * primitive's set (`info.txt:72950`), "with permitted values of "true" and "false""
- * (`info.txt:74908`). XML Schema's `1` and `0` belong only to the attributes the XSD types
- * `xs:boolean`.
+ * `base-type`, after reading 7's trim of element text, which the value model's `parseElementText`
+ * applies. A boolean is `true` or `false`, never `1` or `0` (reading 34). The XSD does not decide,
+ * typing `qti-value` as `xs:normalizedString` and `qti-base-value` as `xs:string`; the information
+ * model's boolean base type is the boolean primitive's set (`info.txt:72950`), "with permitted
+ * values of "true" and "false"" (`info.txt:74908`). XML Schema's `1` and `0` belong only to the
+ * attributes the XSD types `xs:boolean`.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1172,7 +1161,7 @@ const missingFieldAttributes = (source: SourceDocument, visit: Visit): readonly 
 /**
  * Apply `missing-attribute` to a field of a record declaration's value: a `qti-value` in the
  * `qti-correct-response` or `qti-default-value` of a declaration whose `cardinality` is `record`
- * ({@link recordOfField}) carries both `field-identifier` and `base-type`.
+ * ({@link isRecordField}) carries both `field-identifier` and `base-type`.
  *
  * The XSD makes both optional on every `qti-value`; the information model requires them of a
  * record's: a record "contains a set of independent values each identified by its own identifier
@@ -1193,7 +1182,7 @@ const recordFieldAttributes = (
   visit: Visit,
   context: Context,
 ): readonly Refusal[] =>
-  Option.isSome(recordOfField(visit, context.parents)) ? missingFieldAttributes(source, visit) : [];
+  isRecordField(visit, context.parents) ? missingFieldAttributes(source, visit) : [];
 
 /**
  * Apply an item's rules for a field of a record declaration's value to one visit of a test or a
@@ -1221,7 +1210,7 @@ export const recordFieldRefusals = (
   visit: Visit,
   parents: ReadonlyMap<SourceElement, SourceElement>,
 ): readonly Refusal[] =>
-  Option.isSome(recordOfField(visit, parents))
+  isRecordField(visit, parents)
     ? [
         ...missingFieldAttributes(source, visit),
         ...textUnder(source, visit, modelledBaseType(visit.element)),
@@ -1491,8 +1480,8 @@ const kindOf = (element: SourceElement): Option.Option<ExpressionKind> =>
  * Give the attribute through which an element names a variable, and the kind of variable it must
  * name: a rule of {@link referencing}, or an expression whose kind's rule declares a declaration
  * facet (`qti-variable` and `qti-default` name any variable; `qti-correct`, `qti-map-response` and
- * `qti-map-response-point` a response). So a family that lands a kind with the facet has its
- * identifier checked here with no edit to this module.
+ * `qti-map-response-point` a response). So a kind whose rule declares the facet has its identifier
+ * checked here with no edit to this module.
  *
  * "This expression looks up the value of an item variable that has been declared in a
  * corresponding variable declaration or is one of the built-in variables" (`qti-variable`,
