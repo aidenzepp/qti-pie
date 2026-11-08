@@ -31,7 +31,8 @@
  *   the base would govern;
  * - **the test** has a linear part, a branch rule, a variable mapping, a template default, a
  *   selection and an ordering, a section ref placing the section document, and outcome processing
- *   that reads an item's variable by its item ref and a section by its identifier;
+ *   that reads an item's variable by its item ref, as a variable and in place of a literal, and a
+ *   section by its identifier;
  * - **the section document** holds a printed variable whose index names a test variable, a feedback
  *   element, and a precondition, each resolved under its placement;
  * - **the usage data** holds a dated statistic with a typed value;
@@ -469,7 +470,8 @@ const section = [
  * branch rule forward to a sibling item ref, one back from that sibling, which the shuffle orders
  * (reading 87's `BranchShuffle`), a variable mapping and a template default, the second selecting
  * one of an item ref and the section document's placement; and outcome processing that reads
- * `ref1.SCORE` and the first section's item scores.
+ * `ref1.SCORE` and the first section's item scores, and indexes by `ref1.DIGITS` in place of a
+ * literal.
  */
 const test = [
   declaration,
@@ -508,6 +510,11 @@ const test = [
   '        <qti-variable identifier="ref1.SCORE"/>',
   '        <qti-test-variables variable-identifier="SCORE" base-type="float" section-identifier="first"/>',
   "      </qti-sum>",
+  "    </qti-set-outcome-value>",
+  // A reading of the item's single integer DIGITS that stands for a literal, `qti-index`'s `n`
+  // (P24, reading 120), so its declaration's cardinality is a row of its own (reading 159).
+  '    <qti-set-outcome-value identifier="PLACE">',
+  '      <qti-index n="ref1.DIGITS"><qti-ordered><qti-variable identifier="PLACE"/></qti-ordered></qti-index>',
   "    </qti-set-outcome-value>",
   "  </qti-outcome-processing>",
   "</qti-assessment-test>",
