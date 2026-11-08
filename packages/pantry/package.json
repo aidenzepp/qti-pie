@@ -7,7 +7,15 @@
     "#pantry/*": "./src/*",
     "#migrations/*": "./migrations/*"
   },
-  "exports": {},
+  "exports": {
+    "./db/connection.ts": "./src/db/connection.ts",
+    "./db/install.ts": "./src/db/install.ts",
+    "./export/render.ts": "./src/export/render.ts",
+    "./export/scan.ts": "./src/export/scan.ts",
+    "./qti/logins.ts": "./src/qti/logins.ts",
+    "./qti/roles.ts": "./src/qti/roles.ts",
+    "./qti/schema.ts": "./src/qti/schema.ts"
+  },
   "scripts": {
     "db": "scripts/db.sh",
     "fetch-xsds": "node src/vocab/derive/fetch-xsds.ts",

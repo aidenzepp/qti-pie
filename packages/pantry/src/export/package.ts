@@ -14,25 +14,17 @@ import { Array as Arr, Effect, FileSystem, Option, Path, Schema, Stream } from "
 import type { PlatformError } from "effect";
 import { compareRecord } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
-import { addRow, assembleScan, emptyScan, scannedRows } from "#pantry/export/pages.ts";
+import { addRow, emptyScan, scannedRows } from "#pantry/export/pages.ts";
 import type { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
-import { grammar } from "#pantry/grammar/install.ts";
+import { scanXml } from "#pantry/export/render.ts";
 import type { AssembleError } from "#pantry/model/assemble.ts";
-import { namesOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { unshred } from "#pantry/model/unshred.ts";
 import { writeZip } from "#pantry/package/zip.ts";
 import type { ZipEntry } from "#pantry/package/zip.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
 import type { Author } from "#pantry/qti/roles.ts";
 import type { EncodeError } from "@qti-pie/crust/errors.ts";
-
-/**
- * The names every document is written under: the composed grammar's, the one `install.ts` loads
- * for the schema, so the export computes no grammar of its own.
- */
-const names = namesOf(grammar);
 
 /**
  * The rows each page of a document's scan asks for.
@@ -125,9 +117,7 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
       emptyScan<Composed>,
       addRow,
     ).pipe(Effect.withSpan("export.scanDocument", { attributes: { document: node, path } }));
-    const document = yield* Effect.fromResult(assembleScan(node, scan));
-
-    rendered.set(path, yield* unshred(document, names));
+    rendered.set(path, yield* scanXml(node, scan));
   }
 
   const entries: readonly ZipEntry[] = record.map(({ content, path }) => ({
