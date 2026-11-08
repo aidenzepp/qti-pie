@@ -1660,6 +1660,26 @@ const heldMappings = select(MappingItemRefType, (m) => m.not(m.in(m.type, linkRe
 const resolvingReadings = select(Reading, resolves);
 
 /**
+ * A test's prefixed map responses that resolve to a response variable (decision 429, spec reading
+ * 163): a split or numbered reading of a `qti-map-response`'s `identifier` whose variable stands as
+ * a response, declared in an item or built in. Each reads its declaration's mapping, "which must
+ * have been declared" (information model §7.22), so each is a containment into
+ * {@link mappedDeclarations}, which a built-in, having no declaration, never meets. A reading that
+ * names anything but a response is `Variable kind`'s alone, and one through an LTI link resolves
+ * unchecked (reading 110), its source `none`.
+ */
+const prefixedMapReaders = select(Reading, (r) =>
+  r.and(
+    r.eq(r.kind, "qti-map-response"),
+    r.eq(r.attribute, "identifier"),
+    r.in(r.form, ["split", "numbered"]),
+    resolves(r),
+    r.ne(r.source, "none"),
+    r.eq(r.declarationKind, "qti-response-declaration"),
+  ),
+);
+
+/**
  * The resolving readings of a reference by `identifier`: each names one of the declaration kinds
  * its element reads or sets.
  */
@@ -2981,6 +3001,8 @@ export const expressionLawsByName = {
     ),
   ],
   "Mapped response": [
+    // A test's prefixed map response of a response reads that response's mapping (reading 163).
+    contained(on(prefixedMapReaders, "declaration"), on(mappedDeclarations, "declaration")),
     check("Mapped_response", VariableRefDeclaration, (d) =>
       d.or(
         d.ne(d.attribute, "identifier"),

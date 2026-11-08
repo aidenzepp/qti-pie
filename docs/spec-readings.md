@@ -3186,3 +3186,22 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      entries, plate's score included, takes the lowest start (the first listed) and invents no other policy. This binds
      pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision
      425, delegated by the operator in mail 69fd02ec; register row B11.)
+163. **A test's prefixed `qti-map-response` names a response variable whose declaration holds a `qti-mapping`, and a
+     test's prefixed `qti-correct` names a response variable.** A test's outcome processing may name an item's variable
+     through its item ref (reading 48), `I.RESPONSE`. The information model's section 7.22, MapResponse
+     (https://www.imsglobal.org/spec/qti/v3p0/info#Derived_MapResponse), says "This expression looks up the value of a
+     response variable and then transforms it using the associated mapping, which must have been declared."
+     (`info.txt:69185`), and section 7.10, Correct (https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Correct), says
+     "This expression looks up the declaration of a response variable and returns the associated correctResponse or
+     NULL if no correct value was declared. When used in outcomes processing item identifier prefixing (see variable)
+     may be used to obtain the correct response from an individual item." (`info.txt:67866`). Neither sentence is
+     limited to an item's own processing. So a test's `<qti-map-response identifier="I.RESPONSE"/>` is refused where
+     the item's `RESPONSE` declares no `qti-mapping` ("Mapped response"), and so is one that reads a built-in response
+     variable, such as `I.numAttempts`, which has no declaration and so no mapping. A prefixed `qti-map-response` or
+     `qti-correct` that names anything but a response variable, such as the item's outcome `I.SCORE`, is refused by
+     "Variable kind", which already judged every resolving reading by the declaration kinds its element may name
+     (sections 7.10.1 and 7.22.1); this reading records that it binds a prefixed name as it binds an unprefixed one. A
+     dotted map response of a mapped response, a dotted correct of a response, and a name read through an LTI link
+     (reading 110) are accepted. Between the two packages the stricter normative reading wins. This binds pantry and
+     plate alike, as plate's readings 194, 195 and 196 hold. This is not a case of documents in conflict. (Decided
+     2026-11-07 by the Mind, decisions 429 and 430 (1), on operator mails b4df4b29 and 526fbbd9.)
