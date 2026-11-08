@@ -2,6 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
+import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
+import type { SourceDocument } from "#plate/document/source.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -25,7 +27,8 @@ import type { Options, Rendered } from "#plate/render.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
-import { acceptForTest } from "#plate/validate/verdict.ts";
+import { tables } from "#plate/validate/tables.ts";
+import { acceptForTest, acceptedItem, check } from "#plate/validate/verdict.ts";
 
 /**
  * The strings only the hidden parts of {@link item} hold: its correct responses, a mapping key, a
@@ -1769,5 +1772,93 @@ describe("renderStatus", () => {
         Option.some("UnknownPart"),
       );
     }),
+  );
+});
+
+/**
+ * An item whose paragraph holds a Text Entry with a `pattern-mask` and an `expected-length`, bound
+ * to `NUMBER`, and whose body then holds an Extended Text with a Prompt, a `max-strings` and a
+ * `min-strings`, bound to `WORKING`: each response declared a record, or a single string.
+ *
+ * @param binding How both responses are declared.
+ * @returns The document.
+ */
+const boundTo = (binding: "record" | "string"): SourceDocument =>
+  doc(
+    "items/bound.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "bound"), attr("time-dependent", "false"), attr("title", "Bound")],
+      [
+        ...["NUMBER", "WORKING"].map((identifier) =>
+          el(
+            "qti-response-declaration",
+            binding === "record"
+              ? [attr("cardinality", "record"), attr("identifier", identifier)]
+              : [
+                  attr("base-type", "string"),
+                  attr("cardinality", "single"),
+                  attr("identifier", identifier),
+                ],
+          ),
+        ),
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "p",
+              [],
+              [
+                sourceText("Your number: "),
+                el("qti-text-entry-interaction", [
+                  attr("expected-length", "8"),
+                  attr("pattern-mask", "[0-9]+"),
+                  attr("response-identifier", "NUMBER"),
+                ]),
+              ],
+            ),
+            el(
+              "qti-extended-text-interaction",
+              [
+                attr("max-strings", "4"),
+                attr("min-strings", "2"),
+                attr("response-identifier", "WORKING"),
+              ],
+              [el("qti-prompt", [], [sourceText("Show your working.")])],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+describe("render, a record-bound control", () => {
+  it.effect(
+    "[Q-20] [Q-5] renders each record-bound control as the string control, byte-equal to the item whose responses are single strings, with no notice, one Control for each response under its one name",
+    () =>
+      Effect.gen(function* rendersRecordBoundControls() {
+        const configuration = yield* defaults;
+        const recorded = yield* Effect.fromOption(acceptedItem(check(boundTo("record"), tables)));
+        const stringBound = yield* Effect.fromOption(
+          acceptedItem(check(boundTo("string"), tables)),
+        );
+        const shown = redact(recorded);
+        const rendered = yield* Effect.fromResult(render(shown, configuration, { instance }));
+        const elements = elementsIn(rendered);
+
+        assert.deepStrictEqual(recorded.item.unsupported, []);
+        assert.deepStrictEqual(shown.notices, []);
+        assert.deepStrictEqual(
+          ["NUMBER", "WORKING"].map((response) =>
+            controlsOf(elements, instance, response).map((control) => control.tag),
+          ),
+          [["input"], ["textarea"]],
+        );
+        assert.strictEqual(
+          rendered.html,
+          (yield* Effect.fromResult(render(redact(stringBound), configuration, { instance }))).html,
+        );
+      }),
   );
 });

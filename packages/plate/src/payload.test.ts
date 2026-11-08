@@ -4033,3 +4033,74 @@ describe("redactItem names which limit a text passed", () => {
     );
   });
 });
+
+/**
+ * An item whose paragraph holds a Text Entry bound to the record response `NUMBER` and whose body
+ * then holds an Extended Text bound to the record response `WORKING`, with a `max-strings` and a
+ * `min-strings` a record binding does not count.
+ */
+const recordBound: SourceDocument = doc(
+  "items/record-bound.xml",
+  el(
+    "qti-assessment-item",
+    [attr("identifier", "record-bound"), attr("time-dependent", "false"), attr("title", "Number")],
+    [
+      el("qti-response-declaration", [attr("cardinality", "record"), attr("identifier", "NUMBER")]),
+      el("qti-response-declaration", [
+        attr("cardinality", "record"),
+        attr("identifier", "WORKING"),
+      ]),
+      el(
+        "qti-item-body",
+        [],
+        [
+          el(
+            "p",
+            [],
+            [
+              sourceText("Your number: "),
+              el("qti-text-entry-interaction", [attr("response-identifier", "NUMBER")]),
+            ],
+          ),
+          el("qti-extended-text-interaction", [
+            attr("max-strings", "4"),
+            attr("min-strings", "2"),
+            attr("response-identifier", "WORKING"),
+          ]),
+        ],
+      ),
+    ],
+  ),
+);
+
+describe("a record-bound control", () => {
+  it("[Q-20] [Q-5] gives a record-bound control the string control's payload with no notice, each posting under its response's one name, and postings a RecordBinding for each", () => {
+    const shown = redactItem(acceptedFrom(recordBound));
+    const built = payload(shown, answering);
+    const entry = textEntryFor(built, "NUMBER");
+    const working = extendedTextFor(built, "WORKING");
+
+    assert.deepStrictEqual(shown.notices, []);
+    assert.deepStrictEqual(built.notices, []);
+    assert.deepStrictEqual(
+      [entry.baseType, entry.formName, entry.restore],
+      ["string", entryName(instance, "NUMBER"), ""],
+    );
+    assert.deepStrictEqual(
+      [working.baseType, working.cardinality, working.formName, working.n, working.notice],
+      ["string", "record", entryName(instance, "WORKING"), 1, Option.none()],
+    );
+    assert.deepStrictEqual(postings(shown, instance), [
+      {
+        binding: { cardinality: "record", name: entryName(instance, "NUMBER") },
+        identifier: "NUMBER",
+        options: { base: 10 },
+      },
+      {
+        binding: { cardinality: "record", name: entryName(instance, "WORKING") },
+        identifier: "WORKING",
+        options: { base: 10 },
+      },
+    ]);
+  });
+});
