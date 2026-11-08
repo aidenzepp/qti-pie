@@ -341,6 +341,18 @@ const languageFrom = (rows: ExpressionRows, row: Folded["row"]): string | undefi
 };
 
 /**
+ * `E1_derived`'s Delete arm (`baseOfTail`, `cardinalityOfTail`): its later operands' one base type,
+ * `any` for none, `unknown` for several, and their one cardinality, `unknown` for none or several.
+ *
+ * @param e - The expression and its folds.
+ * @returns Whether its type is its later operands'.
+ */
+const tailHolds = (e: Folded): boolean =>
+  e.row.baseType === (e.tail.size > 1 ? "unknown" : oneOf(e.tail)) &&
+  e.row.cardinality ===
+    (e.tailCardinalities.size === 1 ? ([...e.tailCardinalities][0] ?? "unknown") : "unknown");
+
+/**
  * `E1_derived`'s result type: the kind's sets, and each dependent typing's rule.
  *
  * @param e - The expression and its folds.
@@ -348,8 +360,6 @@ const languageFrom = (rows: ExpressionRows, row: Folded["row"]): string | undefi
  */
 const resultHolds = (e: Folded): boolean => {
   const { kind } = e.row;
-  const second =
-    e.tailCardinalities.size === 0 ? "unknown" : ([...e.tailCardinalities][0] ?? "unknown");
 
   return (
     ((attributeTyped.has(kind) && e.row.baseType === "unknown") ||
@@ -359,8 +369,7 @@ const resultHolds = (e: Folded): boolean => {
     (!new Set(containerKinds).has(kind) ||
       e.row.baseType === (e.all.size > 1 ? "unknown" : oneOf(e.all))) &&
     (!new Set(firstKinds).has(kind) || e.row.baseType === oneOf(e.all)) &&
-    (!new Set(secondKinds).has(kind) ||
-      (e.row.baseType === oneOf(e.tail) && e.row.cardinality === second))
+    (!new Set(secondKinds).has(kind) || tailHolds(e))
   );
 };
 

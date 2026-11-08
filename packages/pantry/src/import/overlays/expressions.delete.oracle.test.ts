@@ -1,6 +1,6 @@
 /**
  * A Delete's type, as the import writes it beside the law oracle's: the type of its second operand,
- * and NULL's where it has none.
+ * NULL's where it has none, and its later operands' one type where it writes more.
  *
  * QTI types a Delete by its second operand alone: "The result is a new container derived from the
  * second sub-expression ... If either sub-expression is NULL the result of the operator is NULL"
@@ -13,6 +13,13 @@
  * `unknown`, the type of a value no declaration types (reading 4), which no Delete's is, so its
  * rows broke the schema's `E1_derived` beside the oracle's `Arity`.
  *
+ * A Delete that writes three operands or more, which `Arity` refuses too, is typed by one rule on
+ * each side: its later operands' one base type, NULL's `any` set aside, and their one cardinality,
+ * NULL's none set aside; NULL's type where they hold none, and `unknown` where they hold several,
+ * as a container is typed by its operands (the schema's `baseOfTail` and `cardinalityOfTail`, the
+ * oracle's `second` typing). The import read its second operand alone, so a NULL second operand
+ * before a multiple typed the Delete `any` where the oracle reads the multiple's type.
+ *
  * The genetic differential's judge (`judgeOne`) cannot see this: its host leaves every check that
  * reads a fold's end unknown, since the database draws the folds, and `E1_derived` reads
  * `tailBaseTypes`. So the import's `Expression` rows are held to the law oracle's typing itself.
@@ -20,19 +27,22 @@
  * Oracle: a second implementation, the law oracle's typing (`typedOf` of
  * `#pantry/test/oracle-laws/expressions.ts`) over the document as the oracle folds it, against the
  * `Expression` rows the import's overlay writes (`rowsOf`) over the same tree: each expression's
- * base type and cardinality agree; and Table 6.9.20 as stated above for the Delete itself.
+ * base type and cardinality agree; and Table 6.9.20 and the later operands' rule as stated above
+ * for the Delete itself.
  *
  * Bound: a Delete in a response condition, under `qti-is-null`, which takes any type, so no other
  * rule reads it, with one operand (a single base value of each of QTI's eleven base types, a
  * multiple of each, or a NULL) or two (a single of each base type with a multiple of it, an ordered
- * of it, or a NULL, and a NULL with a multiple): 57 documents, exhausted.
+ * of it, or a NULL, and a NULL with a multiple) or three (an integer single with a NULL and an
+ * integer multiple, two integer multiples, an integer multiple and ordered, an integer and a string
+ * multiple, or two NULLs): 62 documents, exhausted.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Effect, Option, Result } from "effect";
+import { Array as Arr, Effect, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { ownContext } from "#pantry/import/fold.ts";
@@ -135,7 +145,17 @@ const cases: readonly (readonly Operand[])[] = [
     [singleOf(base), nullOperand],
   ]),
   [nullOperand, containerOf("integer", "multiple")],
+  [singleOf("integer"), nullOperand, containerOf("integer", "multiple")],
+  [singleOf("integer"), containerOf("integer", "multiple"), containerOf("integer", "multiple")],
+  [singleOf("integer"), containerOf("integer", "multiple"), containerOf("integer", "ordered")],
+  [singleOf("integer"), containerOf("integer", "multiple"), containerOf("string", "multiple")],
+  [singleOf("integer"), nullOperand, nullOperand],
 ];
+
+/**
+ * The note of a case by its operand count, one to three.
+ */
+const countNotes = ["one operand", "two operands", "three operands"] as const;
 
 /**
  * Write a case's item: a Delete under `qti-is-null` in a response condition.
@@ -147,31 +167,53 @@ const itemOf = (operands: readonly Operand[]): string =>
   `<qti-assessment-item xmlns="${asiNamespace}" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string"/><qti-item-body><p>x</p></qti-item-body><qti-response-processing><qti-response-condition><qti-response-if><qti-is-null><qti-delete>${operands.map(({ xml }) => xml).join("")}</qti-delete></qti-is-null></qti-response-if></qti-response-condition></qti-response-processing></qti-assessment-item>`;
 
 /**
- * The type Table 6.9.20 gives a Delete: its second operand's, NULL's where it has none.
+ * Read the one value of some operands' values, NULL's set aside: NULL's where they hold none, and
+ * `unknown` where they hold several.
+ *
+ * @param values - The values.
+ * @param none - NULL's value.
+ * @returns The one value.
+ */
+const oneValueOf = (values: readonly string[], none: string): string =>
+  Arr.match([...new Set(values.filter((value) => value !== none))], {
+    onEmpty: () => none,
+    onNonEmpty: ([only, ...rest]) => (rest.length === 0 ? only : "unknown"),
+  });
+
+/**
+ * The type a Delete takes from its later operands: Table 6.9.20's, its second operand's, where it
+ * writes two, NULL's where it writes one, and their one base type and one cardinality where it
+ * writes more.
  *
  * @param operands - Its operands.
  * @returns The type.
  */
-const deleteTypeOf = (operands: readonly Operand[]): Type =>
-  Option.match(Arr.get(operands, 1), {
-    onNone: () => nullType,
-    onSome: ({ type }) => type,
-  });
+const deleteTypeOf = (operands: readonly Operand[]): Type => {
+  const later = operands.slice(1).map(({ type }) => type);
+
+  return {
+    base: oneValueOf(
+      later.map(({ base }) => base),
+      nullType.base,
+    ),
+    cardinality: oneValueOf(
+      later.map(({ cardinality }) => cardinality),
+      nullType.cardinality,
+    ),
+  };
+};
 
 describe("import/overlays/expressions.ts, a Delete's type", () => {
   it.effect(
-    "types a Delete as its second operand, and as NULL where it has one operand, as the law oracle does",
+    "types a Delete as its second operand, as NULL where it has one operand, and as its later operands' one type where it has more, as the law oracle does",
     (ctx) =>
       searched(
         ctx,
         exhaust(
           {
-            box: "a Delete of one operand of each base type, a container of it or a NULL, or of two, a single of each base type with a container of it or a NULL",
+            box: "a Delete of one operand of each base type, a container of it or a NULL, of two, a single of each base type with a container of it or a NULL, or of three over integer and string containers and NULLs",
             caseHang,
-            coverage: requiredInSpace<"one operand" | "two operands">([
-              "one operand",
-              "two operands",
-            ]),
+            coverage: requiredInSpace<(typeof countNotes)[number]>(countNotes),
             generator: int(0, cases.length - 1),
             limit: cases.length,
             literal: (at) => itemOf(Arr.getUnsafe(cases, at)),
@@ -184,8 +226,8 @@ describe("import/overlays/expressions.ts, a Delete's type", () => {
           (at, c) =>
             Effect.gen(function* deleteCase() {
               const operands = Arr.getUnsafe(cases, at);
-              c.note(operands.length === 1 ? "one operand" : "two operands");
-              assert.strictEqual(cases.length, 57);
+              c.note(Arr.getUnsafe(countNotes, operands.length - 1));
+              assert.strictEqual(cases.length, 62);
 
               const item = itemOf(operands);
               const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(item)));

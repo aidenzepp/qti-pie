@@ -1115,8 +1115,11 @@ const baseOfOperands = (e: ExpressionRow) =>
   );
 
 /**
- * State that an expression's base type is the one member of its later operands' base-type bits, or
- * `any` for none: Delete's, its second operand's.
+ * State that an expression's base type is the one member of its later operands' base-type bits,
+ * `any` for none and `unknown` for several, as a container's is of its operands': Delete's, typed
+ * by its second sub-expression (information model, Table 6.9.20: "The result is a new container
+ * derived from the second sub-expression ... If either sub-expression is NULL the result of the
+ * operator is NULL"), and by its later ones alike where it writes more, which `Arity` refuses.
  *
  * @param e - The row.
  * @returns The predicate.
@@ -1124,14 +1127,28 @@ const baseOfOperands = (e: ExpressionRow) =>
 const baseOfTail = (e: ExpressionRow) =>
   e.or(
     e.and(e.eq(Compute.cardinality(e.tailBaseTypes), 0n), e.eq(e.baseType, "any")),
+    e.and(e.gt(Compute.cardinality(e.tailBaseTypes), 1n), e.eq(e.baseType, "unknown")),
     e.eq(ValueBaseBit.row(e.baseType), e.tailBaseTypes),
+  );
+
+/**
+ * State that an expression's cardinality is the one member of its later operands' cardinality
+ * bits, `unknown` for none or several: Delete's, as {@link baseOfTail} is its base type.
+ *
+ * @param e - The row.
+ * @returns The predicate.
+ */
+const cardinalityOfTail = (e: ExpressionRow) =>
+  e.or(
+    e.and(e.ne(Compute.cardinality(e.tailCardinalities), 1n), e.eq(e.cardinality, "unknown")),
+    e.eq(ValueCardinalityBit.row(e.cardinality), e.tailCardinalities),
   );
 
 /**
  * State the result type each dependent typing derives: the numeric aggregates' from their operands'
  * base types, the containers' from their one base type, Index's and Random's from their operand's,
- * and Delete's from its second operand's. The fixed and declared typings and the attribute ones
- * are `ResultBase`'s, `VariableRef`'s and `ExpressionAttribute`'s.
+ * and Delete's from its later operands' one type. The fixed and declared typings and the attribute
+ * ones are `ResultBase`'s, `VariableRef`'s and `ExpressionAttribute`'s.
  *
  * @param e - The row.
  * @returns The predicate.
@@ -1161,16 +1178,7 @@ const resultDerived = (e: ExpressionRow) =>
       e.and(e.le(Compute.cardinality(e.operandBaseTypes), 1n), baseOfOperands(e)),
     ),
     e.or(e.not(e.in(e.kind, firstKinds)), baseOfOperands(e)),
-    e.or(
-      e.not(e.in(e.kind, secondKinds)),
-      e.and(
-        baseOfTail(e),
-        e.or(
-          e.and(e.eq(Compute.cardinality(e.tailCardinalities), 0n), e.eq(e.cardinality, "unknown")),
-          e.eq(ValueCardinalityBit.row(e.cardinality), e.tailCardinalities),
-        ),
-      ),
-    ),
+    e.or(e.not(e.in(e.kind, secondKinds)), e.and(baseOfTail(e), cardinalityOfTail(e))),
   );
 
 /**

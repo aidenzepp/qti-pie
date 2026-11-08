@@ -428,17 +428,8 @@ const basesOf = (types: readonly Typed[]): ReadonlySet<ValueBase> =>
 const noOperandBase = "any" satisfies ValueBase;
 
 /**
- * NULL's type, `qti-null`'s: {@link noOperandBase}, of no cardinality. A Delete that has no second
- * operand derives no container, so its result is NULL (information model, Table 6.9.20: "The result
- * is a new container derived from the second sub-expression ... If either sub-expression is NULL
- * the result of the operator is NULL"), as `resultDerived` of `#pantry/qti/expressions.ts` states
- * over an empty `tailBaseTypes`.
- */
-const nullType: Typed = { baseType: noOperandBase, cardinality: unknownType.cardinality };
-
-/**
- * The base type a set of operand bits gives a container or an index: {@link noOperandBase} for
- * none, the one for one, `unknown` for several (`resultDerived`'s container arm).
+ * The base type a set of operand bits gives a container or a Delete: {@link noOperandBase} for
+ * none, the one for one, `unknown` for several (`resultDerived`'s container arm, and `baseOfTail`).
  *
  * @param bases - The bits.
  * @returns The base type.
@@ -448,6 +439,29 @@ const oneOf = (bases: ReadonlySet<ValueBase>): ValueBase =>
     onEmpty: () => noOperandBase,
     onNonEmpty: ([only, ...rest]) => (rest.length === 0 ? only : unknownType.baseType),
   });
+
+/**
+ * The cardinality a Delete's later operands give it: their one cardinality, `unknown` set aside
+ * (no operand's bit, `ValueCardinalityBit`), and `unknown` for none or several (`cardinalityOfTail`
+ * of `#pantry/qti/expressions.ts`).
+ *
+ * @param types - The later operands' types.
+ * @returns The cardinality.
+ */
+const oneCardinalityOf = (types: readonly Typed[]): ValueCardinality =>
+  Arr.match(
+    [
+      ...new Set(
+        types.flatMap(({ cardinality }) =>
+          cardinality === unknownType.cardinality ? [] : [cardinality],
+        ),
+      ),
+    ],
+    {
+      onEmpty: () => unknownType.cardinality,
+      onNonEmpty: ([only, ...rest]) => (rest.length === 0 ? only : unknownType.cardinality),
+    },
+  );
 
 /**
  * The tables each kind of reference reads, in the order it reads them (`tableReaders` of
@@ -684,7 +698,9 @@ const typeOf = (kind: string, inputs: TypeInputs): Typed => {
       };
     }
     case "second": {
-      return Option.getOrElse(Arr.get(inputs.operands, 1), () => nullType);
+      const later = Arr.drop(inputs.operands, 1);
+
+      return { baseType: oneOf(basesOf(later)), cardinality: oneCardinalityOf(later) };
     }
     case "declared": {
       return typeIn(inputs.reference);
