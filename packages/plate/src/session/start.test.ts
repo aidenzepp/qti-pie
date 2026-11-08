@@ -2534,3 +2534,88 @@ describe("a package whose test reads an integer item variable weighted", () => {
       }),
   );
 });
+
+/**
+ * A hand-built item `I1` whose single outcome `PTS` is declared of a base type and defaults to a
+ * value, with no response processing, so `PTS` holds that value whatever its attempts.
+ *
+ * @param baseType The base type `PTS` is declared with.
+ * @param value The text of its default value.
+ * @returns The item's text.
+ */
+const pointsItemXml = (baseType: "float" | "integer", value: string): string =>
+  [
+    `<qti-assessment-item xmlns="${qtiNamespace}" identifier="I1" title="I1" adaptive="false" time-dependent="false">`,
+    '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+    "<qti-correct-response><qti-value>A</qti-value></qti-correct-response></qti-response-declaration>",
+    `<qti-outcome-declaration identifier="PTS" cardinality="single" base-type="${baseType}">`,
+    `<qti-default-value><qti-value>${value}</qti-value></qti-default-value></qti-outcome-declaration>`,
+    '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+    '<qti-simple-choice identifier="A">Choice A</qti-simple-choice>',
+    '<qti-simple-choice identifier="B">Choice B</qti-simple-choice></qti-choice-interaction>',
+    "</qti-item-body></qti-assessment-item>",
+  ].join("");
+
+/**
+ * What a test of {@link pointsItemXml} writes that sets one float outcome from an unweighted
+ * `qti-test-variables` of `PTS` with no `base-type`: the multiple `ALL` from the collection itself,
+ * or the single `SUM` from its `qti-sum`. `I1`'s `PTS` is 2 when integer and 2.5 when float.
+ *
+ * @param points The base type `I1` declares `PTS` with.
+ * @param target The outcome it sets.
+ * @returns What the test writes.
+ */
+const collectingTest = (points: "float" | "integer", target: "ALL" | "SUM"): UnheldTest => {
+  const collection = '<qti-test-variables variable-identifier="PTS"/>';
+
+  return {
+    declarations: [
+      '<qti-outcome-declaration identifier="ALL" cardinality="multiple" base-type="float"/>',
+      '<qti-outcome-declaration identifier="SUM" cardinality="single" base-type="float"/>',
+    ].join(""),
+    defaults: "",
+    item: pointsItemXml(points, points === "integer" ? "2" : "2.5"),
+    rules: `<qti-set-outcome-value identifier="${target}">${target === "ALL" ? collection : `<qti-sum>${collection}</qti-sum>`}</qti-set-outcome-value>`,
+  };
+};
+
+describe("a package whose test collects an item variable with no base-type", () => {
+  it.effect(
+    "[T-9] collection typed from the items: a package whose test sets the float multiple ALL from qti-test-variables of an integer PTS, or the float SUM from its qti-sum, is refused at open as expression-type, an integer into a float (G-R3 199, pantry P20)",
+    () =>
+      Effect.gen(function* integerCollection() {
+        assert.deepStrictEqual(
+          [
+            typeRefusals(yield* unheldVerdict(collectingTest("integer", "ALL"))),
+            typeRefusals(yield* unheldVerdict(collectingTest("integer", "SUM"))),
+          ],
+          [[["expression-type", "integer", "float"]], [["expression-type", "integer", "float"]]],
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-9] collection typed from the items: a package whose test sets ALL and SUM from qti-test-variables of a float PTS is accepted and ends its part with ALL holding PTS's 2.5 and SUM 2.5 (G-R3 199)",
+    () =>
+      Effect.gen(function* floatCollection() {
+        const all = yield* closedOutcomes(yield* unheldPackage(collectingTest("float", "ALL")));
+        const sum = yield* closedOutcomes(yield* unheldPackage(collectingTest("float", "SUM")));
+
+        assert.deepStrictEqual(
+          [all["ALL"], sum["SUM"]],
+          [
+            {
+              baseType: "float",
+              cardinality: "multiple",
+              values: [{ baseType: "float", value: 2.5 }],
+            },
+            {
+              baseType: "float",
+              cardinality: "single",
+              values: [{ baseType: "float", value: 2.5 }],
+            },
+          ],
+        );
+      }),
+  );
+});

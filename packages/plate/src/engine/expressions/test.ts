@@ -421,27 +421,50 @@ interface Collected {
 }
 
 /**
- * Give the base type of what `qti-test-variables` collected: a written base type that is not
- * numerical; else float when a weight is given, a float was collected, or float is written; else
- * integer, every value an integer and unweighted (`info.txt` 2.11.2.8).
+ * Report whether an item of the test declares, as a single float, the variable a
+ * `qti-test-variables` with no `base-type` names: any item of the test scope, whatever the kind's
+ * filters, read through its item ref's mappings ({@link itemName}), its built-ins among what it
+ * declares (`numAttempts` an integer).
+ *
+ * G-R3 199 decides an unweighted collection's base type by these declarations, not by the values
+ * collected (`info.txt:71484` words it by "all matching values"), so the validator, which knows the
+ * declarations alone, types it as the run does (`resultAttributes` in `#plate/validate/rules.ts`),
+ * even when every float value collected is NULL.
+ *
+ * @param test The test scope.
+ * @param name The `variable-identifier`.
+ * @returns Whether some item declares it a single float.
+ */
+const declaresFloat = (test: TestScope, name: string): boolean =>
+  test.items.some((item) =>
+    Option.exists(
+      itemName(item, name),
+      ({ type }) => type.cardinality === "single" && type.baseType === "float",
+    ),
+  );
+
+/**
+ * Give the base type of what `qti-test-variables` collects: a written base type that is not
+ * numerical; else float when a weight is given, float is written, or, with none written, an item
+ * of the test declares the variable a single float ({@link declaresFloat}; G-R3 199); else
+ * integer, every declaration it may match an integer and unweighted (`info.txt:71484`).
  *
  * @param written The `base-type`, none when absent or not one the value model holds.
  * @param isWeighted Whether a `weight-identifier` is given.
- * @param collected The values collected.
+ * @param floatDeclared Whether no `base-type` is written and an item declares the variable a
+ *   single float.
  * @returns The base type.
  */
 const collectedBaseType = (
   written: Option.Option<ModelledBaseType>,
   isWeighted: boolean,
-  collected: readonly Collected[],
+  floatDeclared: boolean,
 ): ModelledBaseType => {
   if (Option.isSome(written) && written.value !== "integer" && written.value !== "float") {
     return written.value;
   }
 
-  return isWeighted ||
-    Option.exists(written, (baseType) => baseType === "float") ||
-    collected.some(({ single }) => single.baseType !== "integer")
+  return isWeighted || Option.exists(written, (baseType) => baseType === "float") || floatDeclared
     ? "float"
     : "integer";
 };
@@ -469,9 +492,11 @@ const collectedSingle = (
  * variable, read through its item ref's mappings as a prefixed reference reads it (`numAttempts`
  * the started attempt count, `completionStatus` the record's), NULLs ignored. It collects a
  * variable of the written `base-type`, or, with none written, one declared integer or float
- * (Admission A7). It is a multiple integer when every value is an integer and unweighted, else a
- * multiple float, integers promoted, each number weighted when a `weight-identifier` is given; of
- * a written base type that is not numerical, a multiple of it, unweighted.
+ * (Admission A7), from the items its filters keep. With none written it is a multiple integer
+ * when it is unweighted and no item of the test, kept or not, declares the variable a single float
+ * (G-R3 199, {@link collectedBaseType}), else a multiple float, integers promoted, each number
+ * weighted when a `weight-identifier` is given; of a written base type that is not numerical, a
+ * multiple of it, unweighted.
  *
  * @param expression The `qti-test-variables`.
  * @param scope The holder and the variables of the run, which carry the test scope.
@@ -484,6 +509,8 @@ const evaluateTestVariables: Evaluator<"test-variables"> = (expression, scope) =
     const test = yield* heldScope(scope.variables, expression.kind);
     const written = expression.baseType.pipe(Option.filter(isModelled));
     const isWeighted = Option.isSome(expression.weightIdentifier);
+    const floatDeclared =
+      Option.isNone(expression.baseType) && declaresFloat(test, expression.variableIdentifier);
     const collected: Collected[] = [];
     for (const item of keptItems(test, expression)) {
       const named = itemName(item, expression.variableIdentifier);
@@ -499,12 +526,12 @@ const evaluateTestVariables: Evaluator<"test-variables"> = (expression, scope) =
         }
 
         if (collected.length > containerSizeBound) {
-          return nullOf(collectedBaseType(written, isWeighted, collected), "multiple");
+          return nullOf(collectedBaseType(written, isWeighted, floatDeclared), "multiple");
         }
       }
     }
 
-    const baseType = collectedBaseType(written, isWeighted, collected);
+    const baseType = collectedBaseType(written, isWeighted, floatDeclared);
 
     return {
       baseType,

@@ -95,7 +95,7 @@ import {
   mappingRequirement,
   processingRefusals,
 } from "#plate/validate/rules.ts";
-import type { PrefixedTyper } from "#plate/validate/rules.ts";
+import type { CollectedTyper, PrefixedTyper } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptedItem, check } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedStimulus, AcceptedTest, Verdict } from "#plate/validate/verdict.ts";
@@ -992,6 +992,62 @@ const readingsOf = (scope: ReferenceScope, reference: string): readonly Reading[
 };
 
 /**
+ * Give the type of the variable a `qti-test-variables` reads by a name through one item ref, as
+ * the engine resolves it (`itemName` in `#plate/engine/scope.ts`): a target of the item ref's
+ * variable mappings names its source's declaration, else the item's own declaration of the name,
+ * else one of the built-ins every item has. An item's context variable is passed over, since the
+ * engine holds none and so never collects one.
+ *
+ * @param item What the name may name through the item ref.
+ * @param name The `variable-identifier`.
+ * @returns The variable's type, unknown where its declaration is not judged; none when the name
+ *   names nothing of the item.
+ */
+const collectedDeclaration = (
+  item: ItemRefVariables,
+  name: string,
+): Option.Option<ExpressionType> => {
+  const source = item.mapped.get(name);
+  if (source !== undefined) {
+    return Option.some(declaredType(source));
+  }
+
+  const declaration = item.declarations.get(name);
+
+  return declaration === undefined || declaresAs(item, name, "qti-context-declaration")
+    ? Option.fromUndefinedOr(itemBuiltIns.get(name))
+    : Option.some(declaredType(declaration));
+};
+
+/**
+ * Give the base type an unweighted `qti-test-variables` with no `base-type` collects of a variable,
+ * from its declarations in every item of the test's reach, whatever the kind's filters (G-R3 199):
+ * `float` when one of them declares it a single float, else `integer`, none declaring it included,
+ * as the engine decides it (`collectedBaseType` in `#plate/engine/expressions/test.ts`). A
+ * declaration of another base type, or of another cardinality, is not matched. A declaration whose
+ * type is not judged, the item's own verdict's refusal, makes it `unknown`.
+ *
+ * @param items What a name may name through each resolved item ref.
+ * @param name The `variable-identifier`.
+ * @returns The base type.
+ */
+const collectedBaseType = (
+  items: ReadonlyMap<string, ItemRefVariables>,
+  name: string,
+): ReturnType<CollectedTyper> => {
+  const matched = [...items.values()]
+    .flatMap((item) => Option.toArray(collectedDeclaration(item, name)))
+    .filter(({ cardinality }) => cardinality === "single" || cardinality === "unknown");
+  if (
+    matched.some(({ baseType, cardinality }) => baseType === "unknown" || cardinality === "unknown")
+  ) {
+    return "unknown";
+  }
+
+  return matched.some(({ baseType }) => baseType === "float") ? "float" : "integer";
+};
+
+/**
  * Give the variable mappings an item ref holds, each its `source-identifier` and its
  * `target-identifier`, in document order. One that lacks either names nothing here, and is its
  * test's own verdict's refusal.
@@ -1749,11 +1805,13 @@ interface TestJudgement {
  * The test's expressions are then judged by the item's processing rules (`processingRefusals` in
  * `#plate/validate/rules.ts`: P20 to P24), with each prefixed read typed by the variable its one
  * resolving reading reads, as pantry's `typePrefixed` types it, and a name no reading or two
- * readings resolve typed unknown, so it keeps its reading's refusal alone; and with each template
- * default judged against the template variable it sets. Only what that typed run adds is reported
- * (Admission A5): the same rules over the test alone, every prefixed read unknown, are the test
- * document's own verdict's, and a refusal the references already gave is not given again. A
- * reached section document's item refs are judged once for the package ({@link judgeReached}).
+ * readings resolve typed unknown, so it keeps its reading's refusal alone; with each unweighted
+ * `qti-test-variables` with no `base-type` typed from the declarations of the reach's items
+ * ({@link collectedBaseType}; G-R3 199); and with each template default judged against the
+ * template variable it sets. Only what that typed run adds is reported (Admission A5): the same
+ * rules over the test alone, every prefixed read unknown, are the test document's own verdict's,
+ * and a refusal the references already gave is not given again. A reached section document's item
+ * refs are judged once for the package ({@link judgeReached}).
  *
  * Each section document the test reaches is then judged under the test, as pantry judges one once
  * under each test that reaches it (`testProcessingRows` in
@@ -1761,8 +1819,9 @@ interface TestJudgement {
  * that includes the section, not once for the section on its own" (reading 5): its dotted
  * references by {@link judgeReference} against the test's reach, a name the test declares whole or
  * holds as a built-in never split, and its expressions by the item's processing rules under the
- * test's processing scope, its declarations and built-ins, with the test's typed reach and each of
- * the section document's template defaults judged against the template variable it sets. Each
+ * test's processing scope, its declarations and built-ins, with the test's typed reach, its
+ * collections typed from the reach's items, and each of the section document's template defaults
+ * judged against the template variable it sets. Each
  * refusal is at the section document. As for the test, only what that run adds is reported: the
  * same rules over the section alone, every name unknown, are the section document's own verdict's.
  *
@@ -1871,9 +1930,22 @@ const judgeTest = (
 
     return only === undefined || others.length > 0 ? unknownType : only.variable.type;
   };
+  /**
+   * Type what an unweighted `qti-test-variables` with no `base-type` collects, from the reach's
+   * items (G-R3 199).
+   *
+   * @param name The `variable-identifier`.
+   * @returns The base type.
+   */
+  const collected: CollectedTyper = (name) => collectedBaseType(items, name);
   const processing = notHeld(
-    processingRefusals(source, tables, typed, (templateDefault) =>
-      Option.fromUndefinedOr(defaults.targets.get(templateDefault)),
+    processingRefusals(
+      source,
+      tables,
+      typed,
+      (templateDefault) => Option.fromUndefinedOr(defaults.targets.get(templateDefault)),
+      Option.none(),
+      collected,
     ),
     [...processingRefusals(source, tables, () => unknownType), ...references],
   );
@@ -1898,6 +1970,7 @@ const judgeTest = (
           typed,
           (templateDefault) => Option.fromUndefinedOr(targets.get(templateDefault)),
           Option.some(source),
+          collected,
         ),
         [...processingRefusals(section, tables, () => unknownType), ...sectionReferences],
       ),

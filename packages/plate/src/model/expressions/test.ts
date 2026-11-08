@@ -90,8 +90,15 @@ const extremesRule: KindRule = {
  * The rule of `qti-test-variables`: a multiple of the base type the caller passes in its
  * attributes, the expression's own `base-type`, which "also becomes the base-type of the result"
  * (`info.txt:71484`); with none, a float when it is weighted, since "when a weighting is specified
- * the result of the expression always has base-type float" (`info.txt:71457`; G-R3 199), and
- * unknown when it is not, since the result is then an integer or a float by what it collects.
+ * the result of the expression always has base-type float" (`info.txt:71457`; G-R3 199), and when
+ * it is not, the base type the caller collected from the test's items (`collected`: integer when
+ * every single integer or float declaration of the variable is integer, else float; G-R3 199),
+ * unknown when the caller holds no items, as for a test checked alone.
+ *
+ * The information model words the unweighted case by the values the expression collects
+ * (`info.txt:71484`); G-R3 199 decides it by the declarations, so a package the validator accepts
+ * agrees with the engine's run (`collectedBaseType` in `#plate/engine/expressions/test.ts`) even
+ * where every float value collected is NULL.
  *
  * A weighted one with a written `base-type` keeps that base type, the weight ignored, as a
  * `qti-variable` ignores a weight on a variable that is not numeric. A weight is defined only for a
@@ -104,7 +111,9 @@ const testVariablesRule: KindRule = {
   operandsAccept: acceptsAnyOperands,
   references: [],
   resultType: (_operands, attributes) => ({
-    baseType: attributes.baseType ?? (attributes.weighted === true ? "float" : "unknown"),
+    baseType:
+      attributes.baseType ??
+      (attributes.weighted === true ? "float" : (attributes.collected ?? "unknown")),
     cardinality: "multiple",
   }),
 };

@@ -519,6 +519,31 @@ const mappingScope = (mapped: boolean): TestScope =>
   ]);
 
 /**
+ * Construct an item that declares the single outcome `PTS` of a base type and holds a value of it.
+ *
+ * @param ref Its item ref's identifier.
+ * @param baseType The base type `PTS` is declared with.
+ * @param held The value its record holds of `PTS`.
+ * @param fields The other fields that differ.
+ * @returns The item.
+ */
+const pointsItem = (
+  ref: string,
+  baseType: "float" | "integer",
+  held: Value,
+  fields: Partial<ScopeItem> = {},
+): ScopeItem =>
+  itemOf(ref, {
+    declarations: {
+      outcomes: new Map([["PTS", outcome("PTS", baseType)]]),
+      responses: new Map(),
+      templates: new Map(),
+    },
+    record: { correct: {}, defaults: {}, outcomes: { PTS: held }, responses: {}, templates: {} },
+    ...fields,
+  });
+
+/**
  * Construct a test document whose outcome processing sets the float outcome `OUT` to each
  * expression, in order, beside the test structure of {@link counting}'s refs.
  *
@@ -767,7 +792,7 @@ describe("the test family's evaluators", () => {
     );
   });
 
-  it("[T-9] collect qti-test-variables over the test scope: integers alone and unweighted a multiple integer, else a multiple float, NULLs ignored", () => {
+  it("[T-9] collect qti-test-variables over the test scope: every declaration it matches an integer and unweighted a multiple integer, else a multiple float, NULLs ignored", () => {
     const integersOnly = scopeOf([aggregates.items[1] ?? itemOf("MISSING")]);
 
     assert.deepStrictEqual(
@@ -804,6 +829,87 @@ describe("the test family's evaluators", () => {
 
   it("[T-9] collect qti-test-variables over the test scope of numAttempts as each item's count of attempts started", () => {
     assert.deepStrictEqual(valueOf(testVariables("numAttempts"), aggregates), integers(3n, 1n, 2n));
+  });
+
+  it("[T-9] collection typed from the items: a float PTS declared beside an integer one makes qti-test-variables with no base-type a multiple float, the integer promoted, though the float's value is NULL (G-R3 199)", () => {
+    assert.deepStrictEqual(
+      valueOf(
+        testVariables("PTS"),
+        scopeOf([
+          pointsItem("INT", "integer", integer(4n)),
+          pointsItem("FLT", "float", { baseType: "float", cardinality: "single", values: [] }),
+        ]),
+      ),
+      floats(4),
+    );
+  });
+
+  it("[T-9] collection typed from the items: every PTS declared integer makes qti-test-variables with no base-type a multiple integer (G-R3 199)", () => {
+    assert.deepStrictEqual(
+      valueOf(
+        testVariables("PTS"),
+        scopeOf([
+          pointsItem("FIRST", "integer", integer(4n)),
+          pointsItem("SECOND", "integer", integer(2n)),
+        ]),
+      ),
+      integers(4n, 2n),
+    );
+  });
+
+  it("[T-9] collection typed from the items: a filter that keeps only the integer PTS still gives a multiple float when an item it drops declares PTS float, whatever the filters (G-R3 199)", () => {
+    const scope = scopeOf(
+      [
+        pointsItem("INT", "integer", integer(4n), { categories: ["kept"] }),
+        pointsItem("FLT", "float", float(1.5)),
+      ],
+      new Map([["S1", ["INT"]]]),
+    );
+
+    assert.deepStrictEqual(
+      [
+        valueOf({ ...testVariables("PTS"), ...filtersOf({ include: ["kept"] }) }, scope),
+        valueOf({ ...testVariables("PTS"), ...filtersOf({ section: "S1" }) }, scope),
+      ],
+      [floats(4), floats(4)],
+    );
+  });
+
+  it("[T-9] collection typed from the items: a declaration read through an item ref's mappings counts, so B's float NOTA, which B maps to PTS, makes the collection float (G-R3 199)", () => {
+    const nota = itemOf("B", {
+      declarations: {
+        outcomes: new Map([
+          ["NOTA", outcome("NOTA", "float")],
+          ["PTS", outcome("PTS", "integer")],
+        ]),
+        responses: new Map(),
+        templates: new Map(),
+      },
+      record: {
+        correct: {},
+        defaults: {},
+        outcomes: {
+          NOTA: { baseType: "float", cardinality: "single", values: [] },
+          PTS: integer(1n),
+        },
+        responses: {},
+        templates: {},
+      },
+    });
+
+    assert.deepStrictEqual(
+      [
+        valueOf(
+          testVariables("PTS"),
+          scopeOf([
+            pointsItem("A", "integer", integer(4n)),
+            { ...nota, mappings: new Map([["PTS", "NOTA"]]) },
+          ]),
+        ),
+        valueOf(testVariables("PTS"), scopeOf([pointsItem("A", "integer", integer(4n)), nota])),
+      ],
+      [floats(4), integers(4n, 1n)],
+    );
   });
 
   it("[T-9] variable mapping: qti-test-variables and qti-outcome-maximum read item ref B's NOTA where B maps it to SCORE", () => {
