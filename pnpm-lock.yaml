@@ -163,7 +163,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@bjornpagen/grizzle-engine': file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz
+  '@bjornpagen/grizzle-engine': file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.1.tgz
   typescript: 7.0.2
   vite: npm:@voidzero-dev/vite-plus-core@1.5.0
   vitest>@vitest/browser-playwright: '-'
@@ -219,8 +219,8 @@ importers:
   packages/pantry:
     dependencies:
       '@bjornpagen/grizzle':
-        specifier: file:../../vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz
-        version: file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(redis@6.3.0)
+        specifier: file:../../vendor/bjornpagen-grizzle-1.0.0-beta.1.tgz
+        version: file:vendor/bjornpagen-grizzle-1.0.0-beta.1.tgz(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(redis@6.3.0)
       '@effect/platform-node':
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(redis@6.3.0)
@@ -404,16 +404,16 @@ packages:
     resolution: {integrity: sha512-WCsemW40Cpc6gouC1SrY6PBaZ+oLRlEVY9XBvZBI7il/HyUrb2nJ505wE1MHEFyDZNnrWDEuy4jL50WVHfTTSQ==}
     engines: {node: '>=6.9.0'}
 
-  '@bjornpagen/grizzle-engine@file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz':
-    resolution: {integrity: sha512-fUNekKiXkpVIg492jMYtIwSZ+j7sv97PDLSboovXNIjU+JpjlhTrh4CiiZTtAurQFKVsnSCHxPQIAJxbmlZ2Vg==, tarball: file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz}
-    version: 1.0.0-beta.0
+  '@bjornpagen/grizzle-engine@file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.1.tgz':
+    resolution: {integrity: sha512-u0YgyYyciOJbWv9FxvE0+13heMW8Vzm9heJ9cYN7rdMKtQGdU0PujwHNQ53qVcJp0DYOjlpIEUcxSmWMt32Ahg==, tarball: file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.1.tgz}
+    version: 1.0.0-beta.1
     engines: {node: '>=26'}
     peerDependencies:
       effect: ^4.1.2
 
-  '@bjornpagen/grizzle@file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz':
-    resolution: {integrity: sha512-Xl5N0+Jw2KQatT9P5jUxuQeUvWiGJgyqwWq/8C/RFnjXFtXhiALICafaC8e/s9cuKZJKspru+1YEVoSIBYcKeQ==, tarball: file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz}
-    version: 1.0.0-beta.0
+  '@bjornpagen/grizzle@file:vendor/bjornpagen-grizzle-1.0.0-beta.1.tgz':
+    resolution: {integrity: sha512-2zXF98fE7GMWlPj/yh5SFrnrARzpeprkhEVBxjTj0drWo639rOhTPlH+cmSQ7yW8dkLoWR+RZeuDB1eofPWqZg==, tarball: file:vendor/bjornpagen-grizzle-1.0.0-beta.1.tgz}
+    version: 1.0.0-beta.1
     engines: {node: '>=26'}
     hasBin: true
     peerDependencies:
@@ -3403,14 +3403,14 @@ snapshots:
       '@babel/helper-string-parser': 7.29.11
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@bjornpagen/grizzle-engine@file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz(effect@4.1.2)':
+  '@bjornpagen/grizzle-engine@file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.1.tgz(effect@4.1.2)':
     dependencies:
       arkregex: 0.0.14
       effect: 4.1.2
 
-  '@bjornpagen/grizzle@file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(redis@6.3.0)':
+  '@bjornpagen/grizzle@file:vendor/bjornpagen-grizzle-1.0.0-beta.1.tgz(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(redis@6.3.0)':
     dependencies:
-      '@bjornpagen/grizzle-engine': file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz(effect@4.1.2)
+      '@bjornpagen/grizzle-engine': file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.1.tgz(effect@4.1.2)
       '@effect/platform-node': 4.1.2(effect@4.1.2)(redis@6.3.0)
       effect: 4.1.2
       pg: 8.23.1

@@ -15,7 +15,7 @@
     "test": "mkdir -p work/.vp-tmp && TMPDIR=\"$PWD/work/.vp-tmp\" NODE_OPTIONS=\"$NODE_OPTIONS --disable-proto=delete --disable-sigusr1\" vp test run"
   },
   "dependencies": {
-    "@bjornpagen/grizzle": "file:../../vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz",
+    "@bjornpagen/grizzle": "file:../../vendor/bjornpagen-grizzle-1.0.0-beta.1.tgz",
     "@effect/platform-node": "4.1.2",
     "@qti-pie/crust": "workspace:*",
     "effect": "4.1.2",
