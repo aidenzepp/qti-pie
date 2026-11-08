@@ -237,7 +237,7 @@ const negativeAttemptsMark: TestMark = "max-attempts:negative";
 
 /**
  * The item model's marks, which `renders` lists, that sit on an outcome declaration, such as
- * `base-type="duration"`.
+ * `base-type="file"`.
  */
 const declarationMarks: readonly FeatureRule[] = renders.marks.filter(
   (mark: FeatureRule) => mark.on !== "body" && mark.on.includes("qti-outcome-declaration"),
@@ -449,8 +449,8 @@ const mappingOf = (
 
 /**
  * Read a `qti-template-default` into the default the engine applies, none when the engine cannot
- * apply it. It records its own marks, so the reader that builds the item references stays
- * unaware of the test's processing names.
+ * apply it. It records its own marks, so the reader that builds the item references stays unaware
+ * of the test's processing names.
  *
  * @param element The template default.
  * @returns The default, none when it is marked, or a refusal at an attribute outside its type.
@@ -821,9 +821,9 @@ const structureOf = (root: SourceElement): Structure => {
       }
     }
   };
-  for (const read of childrenNamed(root, "qti-test-part")) {
-    add(read);
-    addChildren(read);
+  for (const part of childrenNamed(root, "qti-test-part")) {
+    add(part);
+    addChildren(part);
   }
 
   return { identifiers, referencesSection };
@@ -906,9 +906,9 @@ const isPrefixedHeld = (names: ProcessingNames, name: string): boolean => {
 };
 
 /**
- * Report whether the engine holds a variable a test's processing reads by a name. A name
- * the test declares whole is held when the model holds it as an outcome, so a context variable and
- * an outcome the model does not hold are not. A dotted name the test does not declare whole is a
+ * Report whether the engine holds a variable a test's processing reads by a name. A name the test
+ * declares whole is held when the model holds it as an outcome, so a context variable and an
+ * outcome the model does not hold are not. A dotted name the test does not declare whole is a
  * prefixed read, which the test scope resolves, held as {@link isPrefixedHeld} judges it: not when
  * it reads a part's, a section's or an item reference's `duration`, directly or in the occurrence
  * form, nor, in a test that references a section document, when it names none of the test's own
@@ -1070,7 +1070,7 @@ const collectsDurations = (element: SourceElement): boolean =>
 /**
  * The local names of the eight outcome-only expressions, `qti-<kind>` for each kind of the test
  * family's rules ({@link testRules}), the list `outcomeOnly` in `#plate/validate/test-rules.ts`
- * holds: each looks up a sub-set of the items the test refers to (info.txt:9332-9360).
+ * holds: each looks up a sub-set of the items the test refers to (`info.txt:9332-9360`).
  */
 const outcomeOnlyKinds: ReadonlySet<string> = new Set(
   Object.keys(testRules).map((kind) => `qti-${kind}`),
@@ -1100,6 +1100,15 @@ const outcomeOnlyMarks = (build: ModelWalk, element: SourceElement): readonly Ma
   ]);
 
 /**
+ * Give the key a mark is recorded once under: its feature and its path.
+ *
+ * @param mark The mark.
+ * @returns The key.
+ */
+const markKey = (mark: Pick<MarkedFeature, "feature" | "path">): string =>
+  JSON.stringify([mark.feature, mark.path]);
+
+/**
  * Give the generic expression reader its context for a test's outcome processing: the walk, the
  * names a braced string attribute reads as a reference, and the two ways to record a mark, each
  * recorded once per feature and path, in the order they are read.
@@ -1117,7 +1126,7 @@ const processingReading = (
   const recorded = new Set<string>();
   const record = (element: SourceElement, feature: string): void => {
     const path = pathOf(build, element);
-    const key = JSON.stringify([feature, path]);
+    const key = markKey({ feature, path });
     if (!recorded.has(key)) {
       recorded.add(key);
       marks.push({ feature, path, shown: "mark" });
@@ -1388,12 +1397,10 @@ const outcomeProcessingOf = (
     }
 
     const besideReference = names.referencesSection ? outcomeOnlyMarks(build, element) : [];
-    const placed = new Set(
-      besideReference.map((mark) => JSON.stringify([mark.feature, mark.path])),
-    );
+    const besideKeys = new Set(besideReference.map(markKey));
     const marks = processingMarks(build, element, unheld, [
       ...besideReference,
-      ...recorded.filter((mark) => !placed.has(JSON.stringify([mark.feature, mark.path]))),
+      ...recorded.filter((mark) => !besideKeys.has(markKey(mark))),
     ]);
 
     return {
@@ -1479,12 +1486,12 @@ const templateDefaultOf = (
  * absent, and each item reference's weights, variable mappings and template defaults are read, a
  * template default the engine cannot apply marked and left out ({@link templateDefaultOf}). The
  * test's outcome declarations are held and marked as the item model holds and marks an item's. Its
- * outcome processing is `absent` when it has none, `marked` when the engine cannot run it ({@link
- * outcomeProcessingOf}), as when it holds an outcome-only expression in a test that references a
- * section document (the engine delivers no section document's item, so the expression would count
- * the test document's own items alone), and `runs` with its rules otherwise; nothing in it or in a
- * template default is refused but an attribute outside its type. `declared` holds every identifier
- * the test's outcome and context declarations declare.
+ * outcome processing is `absent` when it has none, `marked` when the engine cannot run it
+ * ({@link outcomeProcessingOf}), as when it holds an outcome-only expression in a test that
+ * references a section document (the engine delivers no section document's item, so the
+ * expression would count the test document's own items alone), and `runs` with its rules
+ * otherwise; nothing in it or in a template default is refused but an attribute outside its type.
+ * `declared` holds every identifier the test's outcome and context declarations declare.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The test, or the refusal `value-type` at the first typed value outside its lexical
