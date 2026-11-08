@@ -163,11 +163,14 @@ describe.skipIf(!cached)("OperatorArity against the ASI XSDs", () => {
 });
 
 /**
- * One interaction's binding as the information model states it (section 2.4,
- * https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4): the section, the base types and
- * cardinalities a typed response variable it is bound to may take, and whether it may be bound to
- * a record. Every interaction section with a binding sentence is here; the custom and portable
- * custom interactions (sections 2.4.4.5 and 2.4.4.6) state none, so they bind nothing.
+ * One interaction's binding as the information model states it, in its class description (section
+ * 5, as https://www.imsglobal.org/spec/qti/v3p0/info#Data_ChoiceInteraction): the section, the base
+ * types and cardinalities a typed response variable it is bound to may take, and whether it may be
+ * bound to a record. Every interaction class with a binding sentence is here; the custom and
+ * portable custom interactions (sections 5.36 and 5.106) state none, so they bind nothing. The
+ * order interaction's class description (section 5.97) states none either: its row's one carrier
+ * is section 2.4.1.2, which the information model marks not normative, and it stands until the
+ * schema change that drops it (`#pantry/import/refusal.sources.test.ts` knows it).
  */
 interface StatedBinding {
   readonly baseTypes: readonly string[];
@@ -179,7 +182,7 @@ interface StatedBinding {
 
 /**
  * The information model's binding sentences, read off its text, independently of the facets that
- * state `BindingFit`'s rows. Each comment quotes the sentence.
+ * state `BindingFit`'s rows. Each comment quotes the sentence of the section it names.
  */
 const statedBindings: readonly StatedBinding[] = [
   // "must be bound to a response variable with a base-type of identifier and single or multiple cardinality"
@@ -188,9 +191,9 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single", "multiple"],
     kind: "qti-choice-interaction",
     record: false,
-    section: "2.4.1.1",
+    section: "5.30",
   },
-  // "with a base-type of identifier and ordered cardinality only"
+  // Section 2.4.1.2, not normative: "with a base-type of identifier and ordered cardinality only"
   {
     baseTypes: ["identifier"],
     cardinalities: ["ordered"],
@@ -204,7 +207,7 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single", "multiple"],
     kind: "qti-associate-interaction",
     record: false,
-    section: "2.4.1.3",
+    section: "5.8",
   },
   // "with base-type 'directedPair' and either single or multiple cardinality"
   {
@@ -212,15 +215,15 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single", "multiple"],
     kind: "qti-match-interaction",
     record: false,
-    section: "2.4.1.4",
+    section: "5.89",
   },
-  // "with base-type 'directedPair' and either single or multiple cardinality, depending on the number of gaps"
+  // "with base-type directedPair and either single or multiple cardinality, depending on the number of gaps"
   {
     baseTypes: ["directedPair"],
     cardinalities: ["single", "multiple"],
     kind: "qti-gap-match-interaction",
     record: false,
-    section: "2.4.1.5",
+    section: "5.57",
   },
   // "with a base-type of identifier and single cardinality only"
   {
@@ -228,25 +231,25 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single"],
     kind: "qti-inline-choice-interaction",
     record: false,
-    section: "2.4.2.1",
+    section: "5.74",
   },
-  // "with either single or record cardinality only. For single cardinality the base-type must be
-  // one of string, integer or float"
+  // "with single or record cardinality only. If the response variable has single cardinality the
+  // base-type must be one of string, integer or float"
   {
     baseTypes: ["string", "integer", "float"],
     cardinalities: ["single"],
     kind: "qti-text-entry-interaction",
     record: true,
-    section: "2.4.2.2",
+    section: "5.162",
   },
-  // "of single, multipe, ordered or record cardinality ... Otherwise it must have a base-type of
-  // string, integer or float"
+  // "of single, multiple, ordered or record cardinality ... Otherwise it ust [sic] have a
+  // base-type of string, integer or float"
   {
     baseTypes: ["string", "integer", "float"],
     cardinalities: ["single", "multiple", "ordered"],
     kind: "qti-extended-text-interaction",
     record: true,
-    section: "2.4.2.3",
+    section: "5.48",
   },
   // "with a base-type of identifier and single or multiple cardinality"
   {
@@ -254,7 +257,7 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single", "multiple"],
     kind: "qti-hottext-interaction",
     record: false,
-    section: "2.4.2.4",
+    section: "5.66",
   },
   // "with a base-type of identifier and single or multiple cardinality"
   {
@@ -262,7 +265,7 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single", "multiple"],
     kind: "qti-hotspot-interaction",
     record: false,
-    section: "2.4.3.1",
+    section: "5.68",
   },
   // "with a base-type of identifier and ordered cardinality"
   {
@@ -270,7 +273,7 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["ordered"],
     kind: "qti-graphic-order-interaction",
     record: false,
-    section: "2.4.3.2",
+    section: "5.61",
   },
   // "with base-type pair and either single or multiple cardinality"
   {
@@ -278,15 +281,15 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single", "multiple"],
     kind: "qti-graphic-associate-interaction",
     record: false,
-    section: "2.4.3.3",
+    section: "5.59",
   },
-  // "with base-type 'directedPair' and multiple cardinality"
+  // "with base-type directedPair and multiple cardinality"
   {
     baseTypes: ["directedPair"],
     cardinalities: ["multiple"],
     kind: "qti-graphic-gap-match-interaction",
     record: false,
-    section: "2.4.3.4",
+    section: "5.60",
   },
   // "with a base-type of point and single or multiple cardinality"
   {
@@ -294,7 +297,7 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single", "multiple"],
     kind: "qti-select-point-interaction",
     record: false,
-    section: "2.4.3.5",
+    section: "5.128",
   },
   // "with a base-type of point and single or multiple cardinality"
   {
@@ -302,7 +305,7 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single", "multiple"],
     kind: "qti-position-object-interaction",
     record: false,
-    section: "2.4.3.6",
+    section: "5.107",
   },
   // "with single cardinality with a base-type of either integer or float"
   {
@@ -310,7 +313,7 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single"],
     kind: "qti-slider-interaction",
     record: false,
-    section: "2.4.4.1",
+    section: "5.134",
   },
   // "which must be of base-type integer and single cardinality"
   {
@@ -318,7 +321,7 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single"],
     kind: "qti-media-interaction",
     record: false,
-    section: "2.4.4.2",
+    section: "5.92",
   },
   // "with base-type file and single cardinality"
   {
@@ -326,7 +329,7 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single"],
     kind: "qti-drawing-interaction",
     record: false,
-    section: "2.4.4.3",
+    section: "5.44",
   },
   // "with base-type file and single cardinality"
   {
@@ -334,7 +337,7 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single"],
     kind: "qti-upload-interaction",
     record: false,
-    section: "2.4.4.4",
+    section: "5.165",
   },
   // "with base-type boolean and single cardinality"
   {
@@ -342,7 +345,7 @@ const statedBindings: readonly StatedBinding[] = [
     cardinalities: ["single"],
     kind: "qti-end-attempt-interaction",
     record: false,
-    section: "2.4.5",
+    section: "5.45",
   },
 ];
 
@@ -359,10 +362,10 @@ const triple = (baseType: string, cardinality: string, kind: string): string =>
 
 describe("BindingFit and RecordBindingFit against the information model", () => {
   it.effect(
-    "hold exactly the (base type, cardinality, kind) triples and the record kinds section 2.4's binding sentences state",
+    "hold exactly the (base type, cardinality, kind) triples and the record kinds the binding sentences state",
     () =>
-      // Oracle: the specification as a checker, each interaction's binding sentence of the
-      // information model's section 2.4, stated above from its text. Set equality: a row the
+      // Oracle: the specification as a checker, each interaction class's binding sentence in the
+      // information model, stated above from its text. Set equality: a row the
       // sentences do not state, and one they state that the relation lacks, both fail.
       Effect.gen(function* bindings() {
         const { bindingFit, recordBindingFit } = yield* grammar;

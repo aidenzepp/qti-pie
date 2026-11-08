@@ -149,14 +149,12 @@ const known: ReadonlyMap<string, Known> = new Map([
   [
     "BindingFit",
     {
-      fix: "A1 drops the qti-order-interaction row, whose one carrier is §2.4.1.2, and re-cites the law to the class descriptions' binding sentences",
+      fix: "the schema change that drops the qti-order-interaction row, whose one carrier is §2.4.1.2 (§5.97 states no binding); every other row cites its class description's binding sentence",
       offences: [
-        "BindingFit: #Main2p4 stands in §2.4 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-        "BindingFit: §2.4 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-        "BindingFit: §2.4.1.1 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-        "BindingFit: #ChoiceInt stands in §2.4.1.1 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
+        "BindingFit: #OrderInt stands in §2.4.1.2 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
+        "BindingFit: §2.4.1.2 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
       ],
-      owner: "OL A1, schema slot 10",
+      owner: "the coordinator",
     },
   ],
 ]);
