@@ -20,14 +20,15 @@
  *   ARIA range and an IDREFS, an SSML fragment with a mark, a MathML formula that applies `log` to
  *   a `logbase` and an argument, a table whose cell's `headers` names its header, a printed
  *   variable whose base names a variable, a `q` with no quotation mark beside or inside it,
- *   template and feedback content, choice, hottext, hotspot, slider and portable custom
- *   interactions (the item's holds a foreign element in its markup's `template` and names its
- *   module by the `module` attribute, the included fragment's by both forms, so the package writes
- *   each form of "PCI module source"; it holds no custom interaction, which a 3.0.0 package may
- *   not), a catalog whose keyword-translation card holds two entries (the first its default, in
- *   `es`, the second in `de`, languages the item's LOM does not list, since a catalog sits outside
- *   the body) and whose sign-language card names the image as its file, a span in the body whose
- *   `data-catalog-idref` names the catalog, and response processing that holds a
+ *   template and feedback content, choice, hottext, hotspot, slider, gap match (one gap text and
+ *   one gap, bound to a multiple directed pair response, so a gap writes its `GapInteraction`) and
+ *   portable custom interactions (the item's holds a foreign element in its markup's `template` and
+ *   names its module by the `module` attribute, the included fragment's by both forms, so the
+ *   package writes each form of "PCI module source"; it holds no custom interaction, which a 3.0.0
+ *   package may not), a catalog whose keyword-translation card holds two entries (the first its
+ *   default, in `es`, the second in `de`, languages the item's LOM does not list, since a catalog
+ *   sits outside the body) and whose sign-language card names the image as its file, a span in the
+ *   body whose `data-catalog-idref` names the catalog, and response processing that holds a
  *   `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a `tolerance`;
  * - **a second item** whose response processing is a published template, which the test places three
  *   times, and which holds a catalog `cat2` that the included fragment's `data-catalog-idref`
@@ -194,6 +195,7 @@ const itemOf = (members: MemberCounts): string =>
     '  <qti-response-declaration identifier="LINKS" cardinality="multiple" base-type="directedPair">',
     '    <qti-mapping default-value="0"><qti-map-entry map-key="A B" mapped-value="1"/></qti-mapping>',
     "  </qti-response-declaration>",
+    '  <qti-response-declaration identifier="BLANKS" cardinality="multiple" base-type="directedPair"/>',
     '  <qti-response-declaration identifier="SPOT" cardinality="single" base-type="point">',
     '    <qti-mapping default-value="0"><qti-map-entry map-key="10 20" mapped-value="1"/></qti-mapping>',
     '    <qti-area-mapping default-value="0">',
@@ -278,6 +280,10 @@ const itemOf = (members: MemberCounts): string =>
     '      <qti-interaction-markup><div>A portable interaction.</div><template><w:widget xmlns:w="urn:example:widget">A widget.</w:widget></template></qti-interaction-markup>',
     '      <qti-context-variable identifier="CTX"/>',
     "    </qti-portable-custom-interaction>",
+    '    <qti-gap-match-interaction response-identifier="BLANKS">',
+    '      <qti-gap-text identifier="FILL1" match-max="1">here</qti-gap-text>',
+    '      <p>Put it <qti-gap identifier="BLANK1"/>.</p>',
+    "    </qti-gap-match-interaction>",
     "  </qti-item-body>",
     "  <qti-catalog-info>",
     '    <qti-catalog id="cat1">',

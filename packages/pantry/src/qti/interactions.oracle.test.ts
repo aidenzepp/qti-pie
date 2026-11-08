@@ -122,6 +122,7 @@ describe("qti/interactions.ts, declared", () => {
 
     assert.deepStrictEqual([...new Set(named)].toSorted(), [
       "Aria value range",
+      "Binding cardinality",
       "Binding declared",
       "BindingFit",
       "Choice bounds",

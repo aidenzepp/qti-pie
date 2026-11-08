@@ -211,6 +211,7 @@ const cardinalityRow = (at: number, fields: Partial<Fact<typeof BindingCardinali
     baseTypes: 1n,
     cardinality: "single",
     declaration: stray,
+    gaps: 0n,
     kind,
     mosts: boundKinds.includes(kind) ? 1n : 0n,
     node: strayNode(at),
