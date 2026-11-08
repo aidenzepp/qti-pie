@@ -394,8 +394,10 @@ const fragmentValue = (
  *
  * @param node - Its element's number.
  * @param fragment - Its fragment's `speak`, by number.
- * @param read - The attribute: its element kind, its name, the kind it names, and its value.
+ * @param read - The attribute: its element kind, its name, the kind it names, its value and, where it
+ *   differs, its lexical form.
  * @param read.kind - The element kind.
+ * @param read.lexical - The lexical form; the value where none is given.
  * @param read.name - The attribute's name.
  * @param read.refers - The kind its value names.
  * @param read.value - The value.
@@ -406,6 +408,7 @@ const ssmlAttribute = (
   fragment: number,
   read: {
     readonly kind: string;
+    readonly lexical?: string;
     readonly name: string;
     readonly refers: string;
     readonly value: string;
@@ -414,7 +417,7 @@ const ssmlAttribute = (
   fact: {
     fragment: uuidOf(fragment),
     kind: read.kind,
-    lexical: read.value,
+    lexical: read.lexical ?? read.value,
     name: read.name,
     node: uuidOf(node),
     refers: read.refers,
@@ -900,6 +903,47 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
             refused,
             label,
             "23503",
+          );
+        }
+      }).pipe(Effect.scoped),
+    leaseTestTimeoutMs,
+  );
+
+  it.effect(
+    "refuses an attribute whose value is not its lexical form collapsed, by E1_derived, and accepts one that is",
+    () =>
+      // Oracle: PostgreSQL, `SsmlAttribute`'s `E1_derived` CHECK (`s.value = collapse(s.lexical)`),
+      // against SSML 1.1 §3.3.2 (a mark's name is an `xs:token`, whose whiteSpace is `collapse`)
+      // under spec reading 3.
+      // The fragment holds its mark once under each value, so the trim's foreign key is met and the
+      // check is the one verdict left.
+      // Bound: an inner run of two spaces and a leading space left in the value, and a lexical form
+      // whose tab and outer spaces collapse away.
+      Effect.gen(function* ssmlAttributeCollapse() {
+        const client = yield* loginSession;
+        for (const [label, lexical, value, refused] of [
+          ["an inner run of spaces left in the value", "a  b", "a  b", true],
+          ["a leading space left in the value", " a b", " a b", true],
+          ["a tab and outer spaces collapsed away", " a\t b ", "a b", false],
+        ] as const) {
+          assertVerdict(
+            yield* judged(
+              client,
+              statedInserts([
+                fragmentValue(3, "ssml:speak", value, 1n),
+                fragmentValue(3, "ssml:mark", value, 1n),
+                ssmlAttribute(3, 3, {
+                  kind: "ssml:speak",
+                  lexical,
+                  name: "startmark",
+                  refers: "ssml:mark",
+                  value,
+                }),
+              ]),
+            ),
+            derivedCheck,
+            refused,
+            label,
           );
         }
       }).pipe(Effect.scoped),

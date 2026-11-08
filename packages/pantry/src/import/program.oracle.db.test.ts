@@ -1092,6 +1092,44 @@ describe.skipIf(!hasLease)(
         },
         {
           apply: () =>
+            Effect.flatMap(
+              editedSimple("ssml-trim-mark-collapsed", [
+                {
+                  _tag: "InsertAfterLine",
+                  file: "imsmanifest.xml",
+                  line: 66,
+                  text: "                        <imsmd:language>en</imsmd:language>",
+                },
+                inBody(
+                  `<p><ssml:speak xmlns:ssml="http://www.w3.org/2001/10/synthesis" version="1.1" xml:lang="en" startmark="a b"><ssml:mark name="a b"/><ssml:mark name="a  b"/>x</ssml:speak></p>`,
+                ),
+              ]),
+              (dir) => applyEdited(dir),
+            ),
+          laws: [containedIn("SsmlAttribute", "FragmentValue")],
+          name: "a startmark naming two marks that collapse to one name (SSML trim mark, reading 3)",
+        },
+        {
+          apply: () =>
+            Effect.flatMap(
+              editedSimple("ssml-voice-und", [
+                {
+                  _tag: "InsertAfterLine",
+                  file: "imsmanifest.xml",
+                  line: 66,
+                  text: "                        <imsmd:language>en</imsmd:language>",
+                },
+                inBody(
+                  `<p><ssml:speak xmlns:ssml="http://www.w3.org/2001/10/synthesis" version="1.1" xml:lang="en"><ssml:voice languages="und">hi</ssml:voice></ssml:speak></p>`,
+                ),
+              ]),
+              (dir) => applyEdited(dir),
+            ),
+          laws: [checkNamed("Attribute", "value_domain")],
+          name: "a voice whose languages is und (value domain, reading 42)",
+        },
+        {
+          apply: () =>
             applyEdited(fixtures.simple, (inputs) => {
               const node = valueNodeOf(inputs, correctChoice);
 
