@@ -1,7 +1,8 @@
 /**
  * The XSD oracle: libxml2's `xmllint` validates a document against one of the XSDs cached under
- * `~/.cache/gr8des/qti3/xsd/`, offline, through an XML catalog that maps the XSDs' purl locations
- * to that cache.
+ * `~/.cache/gr8des/qti3/xsd/`, offline, through an XML catalog that maps the purl URL of each XSD
+ * `src/test/xsd-layout.ts` lists to its path in that cache, the layout pantry's `fetch-xsds`
+ * writes.
  *
  * Tests use it to show that what plate writes, and the fixtures it reads, are valid against
  * 1EdTech's own schema, which plate's generated tables only approximate. The XSDs are 1EdTech's
@@ -17,6 +18,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Config, Effect, Schema } from "effect";
 import type { Scope } from "effect";
+import { cachedXsds, xsdPaths } from "#plate/test/xsd-layout.ts";
 
 /**
  * The verdict of one validation.
@@ -60,7 +62,8 @@ export class XmllintMissing extends Schema.TaggedError<XmllintMissing>()("Xmllin
  * document.
  *
  * It covers an XSD that does not exist or does not compile, an import or include the catalog does
- * not reach, and any other exit xmllint documents as not being about the document. `xsd` is the
+ * not reach (a file `src/test/xsd-layout.ts` does not list, or one missing from its path in the
+ * cache), and any other exit xmllint documents as not being about the document. `xsd` is the
  * schema's resolved path, `exit` how xmllint ended, and `messages` its lines.
  */
 // oxlint-disable-next-line unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown.
@@ -76,7 +79,7 @@ export class XsdUnusable extends Schema.TaggedError<XsdUnusable>()("XsdUnusable"
     return [
       `xmllint could not use the XSD ${this.xsd} (${this.exit}), so it judged nothing:`,
       ...this.messages,
-      "Name an XSD cached under ~/.cache/gr8des/qti3/xsd/ whose imports the oracle's catalog maps.",
+      "Name an XSD that src/test/xsd-layout.ts lists, cached at its path under ~/.cache/gr8des/qti3/xsd/; the oracle's catalog reaches only the files that table lists, each at its path there.",
     ].join("\n");
   }
 }
@@ -116,8 +119,9 @@ const xmllintValue = Config.String(xmllintSetting).pipe(Config.withDefault("xmll
 const searchPath = Config.String("PATH").pipe(Config.withDefault(""));
 
 /**
- * Where the XSDs are cached, `.cache/gr8des/qti3/xsd` under `HOME`. A relative `xsdPath` given to
- * {@link validateAgainst} names a file here, and the catalog maps every purl location into it.
+ * Where the XSDs are cached, `.cache/gr8des/qti3/xsd` under `HOME`, each at the path
+ * `src/test/xsd-layout.ts` gives it. A relative `xsdPath` given to {@link validateAgainst} names a
+ * file here, and the catalog maps every purl URL that table lists into it.
  */
 export const xsdDirectory: Config.Config<string> = Config.String("HOME").pipe(
   Config.map((home) => path.join(home, ".cache", "gr8des", "qti3", "xsd")),
@@ -130,37 +134,6 @@ export const xsdDirectory: Config.Config<string> = Config.String("HOME").pipe(
 const scratchDirectory = Config.NonEmptyString("TMPDIR");
 
 /**
- * The purl prefixes the cached XSDs import from, each with the folder under {@link xsdDirectory}
- * that holds the files it names.
- *
- * MathML's and SSML's entry files, `mathml3.xsd` and `ssmlv1p1-core.xsd`, sit at the cache's top
- * beside the QTI XSDs, while the files they include sit in `mathml/` and `ssml/`; {@link
- * cacheLayoutRewrites} sends those includes on.
- */
-const purlRewrites: readonly (readonly [prefix: string, folder: string])[] = [
-  ["https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/", ""],
-  ["https://purl.imsglobal.org/spec/md/v1p3/schema/xsd/", "md/"],
-  ["https://purl.imsglobal.org/spec/w3/1999/schema/xsd/", "w3/"],
-  ["https://purl.imsglobal.org/spec/w3/2001/schema/xsd/", "w3/"],
-  ["https://purl.imsglobal.org/spec/mathml/v3p0/schema/xsd/", ""],
-  ["https://purl.imsglobal.org/spec/ssml/v1p1/schema/xsd/", ""],
-];
-
-/**
- * File-name prefixes, relative to the cache's top, that the catalog moves into a subfolder.
- *
- * An `xs:include` or `xs:redefine` resolves, in libxml2, against the including file's rewritten
- * location, not its purl, so `mathml3.xsd`'s `mathml3-content.xsd` and `ssmlv1p1-core.xsd`'s
- * `synthesis-nonamespace.xsd` are asked for at the cache's top as `file:` URLs. These rewrites,
- * which libxml2 applies to `file:` URLs as to any other, send them to `mathml/` and `ssml/`, where
- * the cache holds them. Without them the ASI XSD does not compile.
- */
-const cacheLayoutRewrites: readonly (readonly [prefix: string, folder: string])[] = [
-  ["mathml3-", "mathml/"],
-  ["synthesis-", "ssml/"],
-];
-
-/**
  * Escape a value for a double-quoted XML attribute.
  *
  * @param value The text.
@@ -170,20 +143,20 @@ const attribute = (value: string): string =>
   value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
 
 /**
- * Write the oracle's catalog: each prefix as a `rewriteURI` and a `rewriteSystem`, since libxml2
- * looks up a schema location through either.
+ * Write the oracle's catalog: one rewrite per file `src/test/xsd-layout.ts` lists, from its whole
+ * purl URL to the `file:` URL of its path under the cache, each as a `rewriteURI` and a
+ * `rewriteSystem`, since libxml2 looks up a schema location through either.
+ *
+ * An `xs:include` resolves, in libxml2, against the including file's rewritten location, so
+ * MathML's and SSML's relative includes resolve in `mathml/` and `ssml/`, beside their entry files.
  *
  * @param directory The XSD cache, {@link xsdDirectory}.
  * @returns The catalog's text.
  */
 const catalogText = (directory: string): string => {
-  const base = pathToFileURL(path.join(directory, path.sep)).href;
-  const rewrites = [
-    ...purlRewrites.map(([prefix, folder]) => [prefix, `${base}${folder}`] as const),
-    ...cacheLayoutRewrites.map(
-      ([prefix, folder]) => [`${base}${prefix}`, `${base}${folder}${prefix}`] as const,
-    ),
-  ];
+  const rewrites = xsdPaths.map(
+    (file) => [cachedXsds[file].url, pathToFileURL(path.join(directory, file)).href] as const,
+  );
 
   return [
     '<?xml version="1.0"?>',

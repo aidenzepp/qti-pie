@@ -1,64 +1,43 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { ConfigProvider, Effect } from "effect";
 import { xmlNamespace } from "#plate/document/source.ts";
 import { packageOccurrences, packageTables } from "#plate/package/tables.ts";
+import { cachedXsds, isXsdPath, linkedHome, xsdPaths } from "#plate/test/xsd-layout.ts";
+import type { XsdPath } from "#plate/test/xsd-layout.ts";
 import type { ChildOccurrence, Tables } from "#plate/validate/xsd.ts";
 import type { NamespaceTables, PackageGeneration } from "#scripts/package-tables.ts";
-import { generatePackageTables } from "#scripts/package-tables.ts";
+import { cacheDirectory, generatePackageTables } from "#scripts/package-tables.ts";
 
 /**
- * The SHA-256 of every XSD the package tables and the Results oracle read, by path under the
- * cache folder: the two CP profiles, everything they import, transitively, and the Results XSD.
- * A file the generator reads must be one of these, with this hash.
+ * The two CP profiles' closure: every XSD the generator reads, transitively, by path under the XSD
+ * cache, in the order the generator lists them.
  */
-const xsdHashes: ReadonlyMap<string, string> = new Map([
-  [
-    "imsqti_metadatav3p0_v1p0.xsd",
-    "448c18d65607695d2a60ce96c42003df98f28630fb044ca14ccc609bad384c8b",
-  ],
-  [
-    "imsqti_resultv3p0_v1p0.xsd",
-    "8cf1d3c89cbb1f198691410598ac4f8755a3b3ee6c1459747c3548fa6ccdc509",
-  ],
-  [
-    "imsqtiv3p0_afa3p0drd_v1p0.xsd",
-    "dd3822a3fe0f42af9a25b33be56d11d1a1f3c54ea791bcc355965ceb8f41b064",
-  ],
-  [
-    "imsqtiv3p0_cpextv1p2_v1p0.xsd",
-    "3f8deb01dd5ac3ad4b81522e159650c01b3dfe199cae6a6be7e87487e790ad85",
-  ],
-  [
-    "imsqtiv3p0_csmv1p1_v1p0.xsd",
-    "caa7ddf900afa66fd5efb212a8834b42480f675de092ae927ce0c95b74443d2e",
-  ],
-  [
-    "imsqtiv3p0_imscpv1p2_v1p0.xsd",
-    "30be3dad4fe0ee103295268317ee0ff2b1826b8b55023db974a993edf3ce9101",
-  ],
-  [
-    "imsqtiv3p0p1_afa3p0drd_v1p0.xsd",
-    "5057bc38307c4a182cf6b2ccc1297474f6001470d7d4342567eab59b19ed2906",
-  ],
-  [
-    "imsqtiv3p0p1_cpextv1p2_v1p0.xsd",
-    "e2f7511da9d99152a88e255cc89ea7f65150a3ab0232c6d69aa4c2194245866f",
-  ],
-  [
-    "imsqtiv3p0p1_csmv1p1_v1p0.xsd",
-    "2d7d76a165a13065f9c3b3e5fa63ae0a6c31132ac32f1c1402a5f34f59c26f98",
-  ],
-  [
-    "imsqtiv3p0p1_imscpv1p2_v1p0.xsd",
-    "cc59960859c6c84b85b9a8611cca8b6149c8758976fce21f3d346fc3acbd4a90",
-  ],
-  ["md/imsmd_loose_v1p3p2.xsd", "1ae9e77aba63b6789574631213c97fd00a3d43aeffb58050ac7befb665fba9f6"],
-  ["w3/xlink.xsd", "e49074eafa608cbf3bc01c2de3406781d466f6ae6adbb90f26cc450d5bf02a1c"],
-  ["w3/xml.xsd", "4c637d0381d988dbf24b680becde6e1c8301b4c4ceef8bfa45a1ee130e77a682"],
-]);
+const closure: readonly XsdPath[] = [
+  "cpext/imsqtiv3p0_cpextv1p2_v1p0.xsd",
+  "cpext/imsqtiv3p0p1_cpextv1p2_v1p0.xsd",
+  "csm/imsqtiv3p0_csmv1p1_v1p0.xsd",
+  "csm/imsqtiv3p0p1_csmv1p1_v1p0.xsd",
+  "drd/imsqtiv3p0_afa3p0drd_v1p0.xsd",
+  "drd/imsqtiv3p0p1_afa3p0drd_v1p0.xsd",
+  "imsqti_metadatav3p0_v1p0.xsd",
+  "imsqtiv3p0_imscpv1p2_v1p0.xsd",
+  "imsqtiv3p0p1_imscpv1p2_v1p0.xsd",
+  "lom/imsmd_loose_v1p3p2.xsd",
+  "w3/xml.xsd",
+  "xlink/xlink.xsd",
+];
 
 /**
- * The Results XSD, which the oracle reads and the package tables do not.
+ * The SHA-256 of every file of the {@link closure}, in its order, as `src/test/xsd-layout.ts` pins
+ * it. A file the generator reads must be one of these, with this hash.
+ */
+const xsdHashes: ReadonlyMap<string, string> = new Map(
+  closure.map((file) => [file, cachedXsds[file].sha256] as const),
+);
+
+/**
+ * The Results XSD, which the oracle reads and the package tables do not. `fetch-xsds` does not
+ * fetch it, so a home in that layout alone lacks it.
  */
 const resultsXsd = "imsqti_resultv3p0_v1p0.xsd";
 
@@ -212,10 +191,35 @@ describe("package/tables.ts", () => {
       Effect.gen(function* readClosure() {
         const { read } = yield* generated;
 
-        assert.deepStrictEqual(
-          [...read.keys()],
-          [...xsdHashes.keys()].filter((path) => path !== resultsXsd),
+        assert.deepStrictEqual([...read.keys()], [...xsdHashes.keys()]);
+      }),
+    { tags: ["qti-xsd"], timeout: regenerateTimeoutMs },
+  );
+
+  it.effect(
+    "under the fetch-xsds layout, the generator reads exactly the two CP profiles' closure, every path a table path",
+    () =>
+      Effect.gen(function* fetchXsdsLayout() {
+        const cache = yield* cacheDirectory;
+        const home = yield* linkedHome(
+          cache,
+          xsdPaths.filter((file) => file !== resultsXsd),
         );
+        const { read } = yield* generatePackageTables.pipe(
+          Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ HOME: home }))),
+        );
+
+        assert.deepStrictEqual([...read.keys()], [...xsdHashes.keys()]);
+        for (const [file, sha256] of read) {
+          assert.isTrue(
+            isXsdPath(file),
+            `${file} is read but src/test/xsd-layout.ts lists no such path`,
+          );
+
+          if (isXsdPath(file)) {
+            assert.strictEqual(sha256, cachedXsds[file].sha256, `the SHA-256 of ${file}`);
+          }
+        }
       }),
     { tags: ["qti-xsd"], timeout: regenerateTimeoutMs },
   );

@@ -1,8 +1,10 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
-import { ConfigProvider, Effect } from "effect";
+import { Config, ConfigProvider, Effect, Option } from "effect";
 import { readCorpusFile } from "#plate/document/corpus.ts";
-import { validateAgainst } from "#plate/test/xsd.ts";
+import { validateAgainst, xsdDirectory } from "#plate/test/xsd.ts";
+import { linkedHome, xsdPaths } from "#plate/test/xsd-layout.ts";
 
 /**
  * The cached Results Reporting XSD, named relative to the XSD cache.
@@ -13,6 +15,23 @@ const resultsXsd = "imsqti_resultv3p0_v1p0.xsd";
  * The cached QTI 3.0.1 ASI XSD, which imports MathML and SSML through their purl locations.
  */
 const asiXsd = "imsqti_asiv3p0p1_v1p0.xsd";
+
+/**
+ * The cached QTI 3.0.1 profile of IMS Content Packaging 1.2, which governs a package's manifest.
+ */
+const manifestXsd = "imsqtiv3p0p1_imscpv1p2_v1p0.xsd";
+
+/**
+ * The manifest of the hand-built package `fixtures/m2`.
+ */
+const m2Manifest = path.resolve(
+  import.meta.dirname,
+  "..",
+  "..",
+  "fixtures",
+  "m2",
+  "imsmanifest.xml",
+);
 
 /**
  * The corpus folder that holds 1EdTech's Results Reporting examples.
@@ -119,6 +138,43 @@ describe("test/xsd.ts", () => {
           refused.messages.some((line) => line.includes("mbogus")),
           refused.messages.join("\n"),
         );
+      }),
+    { tags: ["qti-xsd"], timeout: asiTimeoutMs },
+  );
+
+  it.effect(
+    "under the fetch-xsds layout, the 3.0.1 ASI XSD validates an item that holds MathML and the 3.0.1 CP profile validates fixtures/m2's manifest",
+    () =>
+      Effect.gen(function* fetchXsdsLayout() {
+        const cache = yield* xsdDirectory;
+        const scratch = yield* Config.NonEmptyString("TMPDIR");
+        const searchPath = yield* Config.String("PATH").pipe(Config.withDefault(""));
+        const xmllint = yield* Config.option(Config.String("PLATE_XMLLINT"));
+        const home = yield* linkedHome(
+          cache,
+          xsdPaths.filter((file) => file !== resultsXsd),
+        );
+        const settings = ConfigProvider.layer(
+          ConfigProvider.fromUnknown({
+            HOME: home,
+            PATH: searchPath,
+            TMPDIR: scratch,
+            ...Option.match(xmllint, {
+              onNone: () => ({}),
+              onSome: (value) => ({ PLATE_XMLLINT: value }),
+            }),
+          }),
+        );
+        const manifest = yield* Effect.tryPromise(() => readFile(m2Manifest, "utf-8"));
+        const item = yield* validateAgainst(asiXsd, itemWithMath("mi")).pipe(
+          Effect.provide(settings),
+        );
+        const packaged = yield* validateAgainst(manifestXsd, manifest).pipe(
+          Effect.provide(settings),
+        );
+
+        assert.isTrue(item.valid, item.messages.join("\n"));
+        assert.isTrue(packaged.valid, packaged.messages.join("\n"));
       }),
     { tags: ["qti-xsd"], timeout: asiTimeoutMs },
   );
