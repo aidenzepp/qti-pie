@@ -14,17 +14,18 @@
  *   documents of the three types M3 checks: outcome declarations, response processing and its
  *   templates;
  * - Each test's item refs resolve against the test's own path to an item resource the manifest lists
- *   (`item-ref-unresolved`), and each dotted reference in it that the test does not declare whole
- *   is judged by reading 48 against the items they resolve to, their variable mappings and its
- *   parts and sections: one no reading resolves, or one that reads the `duration` of an item that
- *   is not time dependent, is `undeclared-variable`, and one two readings resolve is
- *   `ambiguous-reference`; each item ref's variable mappings name an outcome its item declares as
- *   their source (`undeclared-variable`) and each its own target (`duplicate-identifier`), and its
- *   template defaults a template variable its item declares (`undeclared-variable`); a reference
- *   attribute reads through an item ref only a template or outcome variable, and a mapping
- *   expression only a response with the mapping it needs; and the test's expressions are typed
- *   through its item refs, so the item's processing rules judge what it reads there and what each
- *   template default sets (`expression-type`);
+ *   (`item-ref-unresolved`), and each dotted reference in it that the test does not declare whole,
+ *   a name an expression reads or an outcome rule sets, is judged by reading 48 against the items
+ *   they resolve to, their variable mappings and its parts and sections: one no reading resolves,
+ *   or one that an expression reads as the `duration` of an item that is not time dependent, is
+ *   `undeclared-variable`, and one two readings resolve is `ambiguous-reference`; each item ref's
+ *   variable mappings name an outcome its item declares as their source (`undeclared-variable`) and
+ *   each its own target (`duplicate-identifier`), and its template defaults a template variable its
+ *   item declares (`undeclared-variable`); a reference attribute reads through an item ref only a
+ *   template or outcome variable, a `qti-correct` only a response, and a mapping expression only a
+ *   response with the mapping it needs; and the test's expressions are typed through its item refs,
+ *   so the item's processing rules judge what it reads there and what each template default sets
+ *   (`expression-type`);
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
  *   62).
@@ -323,9 +324,9 @@ const itemDeclarations: ReadonlySet<string> = new Set([
 
 /**
  * The expressions whose `identifier` a test may prefix with an item ref, a part or a section, by
- * local name in QTI's namespace: a variable's value, its correct response and its default, and a
- * response mapped through its mapping or its area mapping (pantry's `checkMapping` reads both
- * through `reference`).
+ * local name in QTI's namespace: a variable's value, its default, a response's correct response,
+ * and a response mapped through its mapping or its area mapping (pantry's `checkMapping` reads both
+ * through `reference`). The outcome rules a test may prefix are {@link targetElements}.
  */
 const referenceElements: ReadonlySet<string> = new Set([
   "qti-correct",
@@ -333,6 +334,17 @@ const referenceElements: ReadonlySet<string> = new Set([
   "qti-map-response",
   "qti-map-response-point",
   "qti-variable",
+]);
+
+/**
+ * The outcome rules whose `identifier`, the variable they set, a test may prefix with an item ref,
+ * a part or a section, by local name in QTI's namespace, as pantry's `target` types a prefixed
+ * name through its reach (`packages/pantry/src/processing/check.ts`): a set and a lookup of an
+ * outcome's value.
+ */
+const targetElements: ReadonlySet<string> = new Set([
+  "qti-lookup-outcome-value",
+  "qti-set-outcome-value",
 ]);
 
 /**
@@ -347,6 +359,13 @@ const mappingExpressions: ReadonlySet<string> = new Set([
   "qti-map-response",
   "qti-map-response-point",
 ]);
+
+/**
+ * The expressions whose `identifier` names a response, by local name in QTI's namespace: its
+ * correct response, which "looks up the declaration of a response variable" (`info.txt:9302`), and
+ * each mapping of it ({@link mappingExpressions}).
+ */
+const responseExpressions: ReadonlySet<string> = new Set(["qti-correct", ...mappingExpressions]);
 
 /**
  * The child of an item ref that gives one of its item's template variables a value before its
@@ -987,10 +1006,11 @@ interface NamedReference {
 /**
  * Give each variable an element of a test names, in the element's attribute order: the
  * `identifier` of a `qti-variable`, `qti-correct`, `qti-default`, `qti-map-response` or
- * `qti-map-response-point`, and each value of a reference attribute its expression kind's reference
- * facet checks, as pantry's `referenceAttributes` lists them (`figures`, `max`, `min`, `n`,
- * `number-repeats`, `pattern` and `step`; `packages/pantry/src/processing/check.ts`), with the base
- * type its entry names.
+ * `qti-map-response-point` ({@link referenceElements}), the `identifier` a
+ * `qti-set-outcome-value` or `qti-lookup-outcome-value` sets ({@link targetElements}), and each
+ * value of a reference attribute its expression kind's reference facet checks, as pantry's
+ * `referenceAttributes` lists them (`figures`, `max`, `min`, `n`, `number-repeats`, `pattern` and
+ * `step`; `packages/pantry/src/processing/check.ts`), with the base type its entry names.
  *
  * A literal names no variable, and a `pattern` names one only as a braced name of a variable the
  * test holds (ruling R1). A name that is no NCName is the structure check's refusal, so it is
@@ -1017,7 +1037,10 @@ const referencesOf = (
       return [];
     }
 
-    if (attribute.local === "identifier" && referenceElements.has(element.local)) {
+    if (
+      attribute.local === "identifier" &&
+      (referenceElements.has(element.local) || targetElements.has(element.local))
+    ) {
       const identifier = trimXmlSpace(attribute.value);
 
       return isNcName(identifier) ? [{ attribute, baseType: Option.none(), identifier }] : [];
@@ -1047,30 +1070,34 @@ const referencesOf = (
 
 /**
  * Judge one dotted reference of a test, which the test does not hold whole, by reading 48, as
- * pantry's `reference` judges a prefixed name (`packages/pantry/src/processing/check.ts`).
+ * pantry's `reference` judges a prefixed name an expression reads, and its `target` one an outcome
+ * rule sets (`packages/pantry/src/processing/check.ts`).
  *
  * A reference no reading resolves is `undeclared-variable` with `check: "reading"` and the
  * `reading`, pantry's `prefixed-ref` with no reading. One two readings resolve is
  * `ambiguous-reference`, its detail the `reference` and its first two resolving readings, prefix
- * and variable each, pantry's `prefixed-ref` with its readings. One whose one reading reads the
- * built-in `duration` of an item that is not time dependent is `undeclared-variable` with `check:
- * "untimed-duration"`, pantry's `item-duration`. Each is at the attribute; an
- * `undeclared-variable` names the `element`, the `identifier` as written and, for an attribute
- * other than `identifier`, the `attribute`.
+ * and variable each, pantry's `prefixed-ref` with its readings. A rule's target
+ * ({@link targetElements}) earns only these two, as pantry's `target` judges no more of it: what a
+ * target whose one reading resolves sets is the typed reach's to judge (P20). An expression's
+ * reference whose one reading reads the built-in `duration` of an item that is not time dependent
+ * is `undeclared-variable` with `check: "untimed-duration"`, pantry's `item-duration`. Each is at
+ * the attribute; an `undeclared-variable` names the `element`, the `identifier` as written and,
+ * for an attribute other than `identifier`, the `attribute`.
  *
- * A reference whose one reading resolves is judged by what it reads, at the element, as the rules
- * judge a name the test declares (`#plate/validate/rules.ts`):
+ * An expression's reference whose one reading resolves is judged by what it reads, at the element,
+ * as the rules judge a name the test declares (`#plate/validate/rules.ts`):
  *
  * - In a reference attribute, a variable that is not a template or outcome variable (a response, a
  *   context variable or a built-in) is `expression-type` with `check: "reference"`, its detail the
  *   rules' P24 detail, as pantry's `checkAttributeReference` judges a resolved prefixed name. One
  *   of another type is the rules' own P24, which they judge through the typed reach.
- * - In a `qti-map-response` or `qti-map-response-point`, a variable that is not a response (an
- *   outcome, a template or context variable, a mapping target, which reads an outcome, or a
- *   built-in) is `undeclared-variable` at the attribute with `expected: "response"`, the detail the
- *   rules give an item's map-response of a name that is no response: each "looks up the value of a
- *   response variable" (`info.txt:9306`, `:9314`). Pantry does not judge what a prefixed name reads
- *   there, so this is an agreement difference (G-R3, pending).
+ * - In a `qti-correct`, `qti-map-response` or `qti-map-response-point`, a variable that is not a
+ *   response (an outcome, a template or context variable, a mapping target, which reads an outcome,
+ *   or a built-in) is `undeclared-variable` at the attribute with `expected: "response"`, the
+ *   detail the rules give an item's expression of a name that is no response: a `qti-correct`
+ *   "looks up the declaration of a response variable" (`info.txt:9302`), and each mapping "looks up
+ *   the value of a response variable" (`:9306`, `:9314`). Pantry does not judge what a prefixed
+ *   name reads there, so this is an agreement difference (G-R3, pending).
  * - In a `qti-map-response` or `qti-map-response-point`, a response its item declares without the
  *   mapping or the area mapping the expression needs is `template-requirements`, as an item's
  *   inline expression is, the `identifier` as written: the information model's "transforms it using
@@ -1093,10 +1120,10 @@ const judgeReference = (
   const { attribute, identifier } = reference;
   const path = attributePath(visit.path, attribute);
   const element = visit.element.local;
-  const named =
-    attribute.local === "identifier"
-      ? { element, identifier }
-      : { attribute: attribute.local, element, identifier };
+  const byIdentifier = attribute.local === "identifier";
+  const named = byIdentifier
+    ? { element, identifier }
+    : { attribute: attribute.local, element, identifier };
   const [first, second] = readingsOf(scope, identifier);
   if (first === undefined) {
     return [
@@ -1117,8 +1144,12 @@ const judgeReference = (
     ];
   }
 
+  if (byIdentifier && isQti(visit.element, targetElements)) {
+    return [];
+  }
+
   const { variable } = first;
-  const mapped = attribute.local === "identifier" && isQti(visit.element, mappingExpressions);
+  const mapped = byIdentifier && isQti(visit.element, mappingExpressions);
   const response = Option.exists(variable.declaration, (declaration) =>
     isQti(declaration, responseDeclarations),
   );
@@ -1127,7 +1158,7 @@ const judgeReference = (
     ...(first.untimed
       ? [refuse(document, "undeclared-variable", path, { ...named, check: "untimed-duration" })]
       : []),
-    ...(mapped && !response
+    ...(byIdentifier && isQti(visit.element, responseExpressions) && !response
       ? [refuse(document, "undeclared-variable", path, { ...named, expected: "response" })]
       : []),
     ...(variable.namable
