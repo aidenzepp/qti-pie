@@ -83,6 +83,7 @@ const number: TextEntryInteraction = {
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "integer",
+  cardinality: "single",
   class: "",
   expectedLength: Option.none(),
   kind: "text-entry",

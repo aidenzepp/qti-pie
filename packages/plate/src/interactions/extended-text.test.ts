@@ -121,6 +121,20 @@ const rivers: ExtendedTextInteraction = {
 };
 
 /**
+ * Give the cardinality of the value an Extended Text here binds: every fixture binds a value, never
+ * a record.
+ *
+ * @param interaction The Extended Text.
+ * @returns Its cardinality.
+ */
+const valueCardinality = (
+  interaction: ExtendedTextInteraction,
+): Exclude<ExtendedTextInteraction["cardinality"], "record"> =>
+  interaction.cardinality === "record"
+    ? assert.fail(`The Extended Text for ${interaction.response} binds a record.`)
+    : interaction.cardinality;
+
+/**
  * Construct an item whose body is the given Extended Texts, each bound to a response of its base
  * type and cardinality, with no response processing.
  *
@@ -140,7 +154,7 @@ const itemOf = (...interactions: readonly ExtendedTextInteraction[]): Item => ({
       {
         areaMapping: Option.none(),
         baseType: interaction.baseType,
-        cardinality: interaction.cardinality,
+        cardinality: valueCardinality(interaction),
         correct: Option.none(),
         defaultValue: Option.none(),
         identifier: interaction.response,
@@ -357,7 +371,7 @@ const decoded = (
     Result.merge(
       decode(entries, {
         baseType: interaction.baseType,
-        cardinality: interaction.cardinality,
+        cardinality: valueCardinality(interaction),
         name: entryName(instance, interaction.response),
       }),
     ),
@@ -894,6 +908,7 @@ const city: TextEntryInteraction = {
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "string",
+  cardinality: "single",
   class: "",
   expectedLength: Option.none(),
   kind: "text-entry",
