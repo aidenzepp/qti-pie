@@ -256,9 +256,14 @@ const evaluateNumberCorrect: Evaluator<"number-correct"> = (expression, scope) =
 
 /**
  * Give the value of a `qti-number-incorrect`: the number of items its filters keep that were
- * attempted, at least one attempt processed, whose every declared response, of a type the value
+ * attempted at least once (`info.txt:9336`), whose every declared response, of a type the value
  * model holds or not, has a correct response, and at least one of which does not match it
  * ({@link judged}): an unheld response reads NULL, which matches none.
+ *
+ * An item is attempted once an attempt has started, which is once it is presented ("items with
+ * which the user has interacted, whether or not they provided a response", `info.txt:9340`): its
+ * started attempt count (`ScopeItem.numAttempts`) is above 0. So a presented item left unanswered
+ * counts when its NULL response does not match its correct response.
  *
  * @param expression The `qti-number-incorrect`.
  * @param scope The holder and the variables of the run, which carry the test scope.
@@ -465,7 +470,7 @@ const collectedSingle = (
 /**
  * Give the value of a `qti-test-variables`: a multiple of each item's value of the named single
  * variable, read through its item ref's mappings as a prefixed reference reads it (`numAttempts`
- * the processed attempt count, `completionStatus` the record's), NULLs ignored. It collects a
+ * the started attempt count, `completionStatus` the record's), NULLs ignored. It collects a
  * variable of the written `base-type`, or, with none written, one declared integer or float
  * (Admission A7). It is a multiple integer when every value is an integer and unweighted, else a
  * multiple float, integers promoted, each number weighted when a `weight-identifier` is given; of

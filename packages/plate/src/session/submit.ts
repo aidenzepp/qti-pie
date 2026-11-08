@@ -38,7 +38,7 @@ import type {
   RecordRequired,
   ResponsesRefused,
 } from "#plate/score.ts";
-import { UnknownItemRef } from "#plate/session/control.ts";
+import { attemptLimits, UnknownItemRef } from "#plate/session/control.ts";
 import { elapsedSeconds } from "#plate/session/elapsed.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import {
@@ -430,7 +430,8 @@ const processedInPart = (
  *
  * Run `n` is `outcomeRuns + 1`. It starts every test outcome from its declared default, else its
  * starting value (`info.txt:9236`), reads the test's items through the session's test scope, whose
- * `duration` is the seconds from the session's start to `now`, and draws from
+ * `duration` is the seconds from the session's start to `now` and whose items count the attempts
+ * they have started under their item refs' limits, as the results report does, and draws from
  * `drawStream(session.seed, outcomeLabel(session.instance, n))`, the processing seed under its own
  * label, never the default key. The session then holds the outcomes it left and `outcomeRuns` `n`.
  * A test whose outcome processing is `absent`, or `marked` because the engine cannot run it, runs
@@ -455,7 +456,7 @@ const outcomesProcessed = (
 
   const run = session.outcomeRuns + 1;
   const elapsed = elapsedSeconds(Date.parse(session.started), now.getTime());
-  const scope = testScopeOf(test, items, session, Option.some(elapsed));
+  const scope = testScopeOf(test, items, session, attemptLimits(test), Option.some(elapsed));
 
   return Result.map(
     runOutcomes(test, scope, drawStream(session.seed, outcomeLabel(session.instance, run))),

@@ -6,7 +6,12 @@ import { attr, doc, el } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceChild, SourceElement } from "#plate/document/source.ts";
 import { buildTest } from "#plate/model/test.ts";
 import type { Test } from "#plate/model/test.ts";
-import { itemConfiguration, sessionControl, sessionControls } from "#plate/session/control.ts";
+import {
+  attemptLimits,
+  itemConfiguration,
+  sessionControl,
+  sessionControls,
+} from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 
 /**
@@ -255,6 +260,48 @@ describe("sessionControls", () => {
 
       assert.isFalse(sessionControls(test).has("sectionB"));
     }),
+  );
+});
+
+describe("attemptLimits", () => {
+  it.effect(
+    "[T-9] gives every item ref the limit its started attempt count is under: 1 in a simultaneous part, 0 for a max-attempts of 0 or a negative one, else max-attempts",
+    () =>
+      Effect.gen(function* limits() {
+        const test = yield* testOf(
+          part("first", "individual", [
+            section("outer", [
+              control(attr("max-attempts", "3")),
+              itemRef("three"),
+              itemRef("none", [control(attr("max-attempts", "0"))]),
+              itemRef("negative", [control(attr("max-attempts", "-1"))]),
+            ]),
+          ]),
+          part("second", "simultaneous", [
+            section("together", [control(attr("max-attempts", "3")), itemRef("simultaneous")]),
+          ]),
+        );
+        const configuration = yield* hostConfiguration;
+
+        assert.deepStrictEqual(
+          [...attemptLimits(test).entries()],
+          [
+            ["three", 3],
+            ["none", 0],
+            ["negative", 0],
+            ["simultaneous", 1],
+          ],
+        );
+        // Each equals the limit itemConfiguration writes for the ref's control.
+        assert.deepStrictEqual(
+          [...attemptLimits(test).entries()],
+          [...sessionControls(test).entries()].map(([ref, each]) => [
+            ref,
+            itemConfiguration(configuration, each).maxAttempts,
+          ]),
+        );
+        assert.isFalse(attemptLimits(test).has("together"));
+      }),
   );
 });
 

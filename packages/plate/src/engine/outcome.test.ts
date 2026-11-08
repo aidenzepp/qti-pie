@@ -652,6 +652,16 @@ const scoreSum = (scope: TestScope): number => {
   return total;
 };
 
+/**
+ * The attempt limits of {@link structured}'s item refs: `ITEM1` closes at its third attempt,
+ * `ITEM2` has no limit, and `ITEM3` allows one.
+ */
+const limits = new Map([
+  ["ITEM1", 3],
+  ["ITEM2", 0],
+  ["ITEM3", 1],
+]);
+
 describe("testScopeOf", () => {
   /**
    * The items `ITEM1` and `ITEM2` deliver, keyed by item ref in session order: `ITEM1` with its
@@ -662,9 +672,9 @@ describe("testScopeOf", () => {
     ["ITEM2", { item: declarations }],
   ]);
 
-  it("[T-9] the outcome interpreter's scope of a session holds the test's parts and sections, and one entry per session item with its ref's, item's and record's fields", () => {
+  it("[T-9] the outcome interpreter's scope of a session holds the test's parts and sections, and one entry per session item with its ref's, item's and record's fields and its count of attempts started", () => {
     const [first, second, third] = session.items;
-    const scope = testScopeOf(structured, items, session, Option.some(90.5));
+    const scope = testScopeOf(structured, items, session, limits, Option.some(90.5));
 
     assert.deepStrictEqual(scope, {
       declared: new Set(["ITEM1.SCORE", "TOTAL"]),
@@ -689,7 +699,7 @@ describe("testScopeOf", () => {
           categories: [],
           declarations,
           mappings: new Map([["TOTAL", "SCORE"]]),
-          numAttempts: 1,
+          numAttempts: 2,
           presented: true,
           record: scopeRecord(second?.record ?? record("ITEM2", 0, 0)),
           ref: "ITEM2",
@@ -720,7 +730,16 @@ describe("testScopeOf", () => {
         ["S3", ["ITEM3"]],
       ]),
     });
-    assert.isTrue(Option.isNone(testScopeOf(structured, items, session, Option.none()).duration));
+    assert.isTrue(
+      Option.isNone(testScopeOf(structured, items, session, limits, Option.none()).duration),
+    );
+    // The control: ITEM1 under no limit has started one attempt past its three processed.
+    assert.deepStrictEqual(
+      testScopeOf(structured, items, session, new Map(), Option.none()).items.map(
+        (entry) => entry.numAttempts,
+      ),
+      [4, 2, 0],
+    );
   });
 
   it("[T-9] the outcome interpreter's scope follows the session's item order, whatever order the items map was built in, so a float sum over it is one sum", () => {
@@ -735,12 +754,19 @@ describe("testScopeOf", () => {
       ["ITEM2", { item: declarations }],
       ["ITEM1", { item: { ...declarations, unheld } }],
     ]);
-    const fromSessionOrder = testScopeOf(structured, inSessionOrder, session, Option.none());
-    const fromReordered = testScopeOf(structured, reordered, session, Option.none());
+    const fromSessionOrder = testScopeOf(
+      structured,
+      inSessionOrder,
+      session,
+      limits,
+      Option.none(),
+    );
+    const fromReordered = testScopeOf(structured, reordered, session, limits, Option.none());
     const metApart = testScopeOf(
       structured,
       reordered,
       { items: [first, third, second].flatMap((each) => (each === undefined ? [] : [each])) },
+      limits,
       Option.none(),
     );
 
@@ -853,8 +879,8 @@ describe("testScopeOf over built models", () => {
             ),
           ],
         };
-        const scope = testScopeOf(plain, items, sitting, Option.none());
-        const withContext = testScopeOf(contextual, items, sitting, Option.none());
+        const scope = testScopeOf(plain, items, sitting, new Map(), Option.none());
+        const withContext = testScopeOf(contextual, items, sitting, new Map(), Option.none());
 
         assert.deepStrictEqual(Result.getOrThrow(prefixedVariable(scope, "ITEM1.F")).reading, {
           kind: "unheld",
@@ -912,6 +938,7 @@ describe("testScopeOf over built models", () => {
           yield* buildTest(testDocument([])),
           new Map([["ITEM1", acceptForTest(item)]]),
           { items: [sessionItem(fresh(item, "sitting.1"), 1, true)] },
+          new Map(),
           Option.none(),
         );
 

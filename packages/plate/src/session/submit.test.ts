@@ -2,9 +2,12 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { begin } from "#plate/begin.ts";
 import { decodeRecord } from "#plate/codec/record.ts";
+import { encodeSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
+import { readSource } from "#plate/document/read.ts";
+import type { SourceElement } from "#plate/document/source.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
 import { runOutcomes, testScopeOf } from "#plate/engine/outcome.ts";
 import { drawBelow, drawStream, outcomeLabel } from "#plate/engine/random.ts";
@@ -12,7 +15,9 @@ import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
+import { results } from "#plate/results/results.ts";
 import { ResponsesRefused, score as scoreResponses } from "#plate/score.ts";
+import { attemptLimits } from "#plate/session/control.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import { itemView, present, recordStep, startTest } from "#plate/session/start.ts";
 import { SubmissionRefused, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
@@ -1730,7 +1735,13 @@ describe("outcome processing in a session", () => {
         const before = Result.getOrElse(
           runOutcomes(
             delivery.test.test,
-            testScopeOf(delivery.test.test, delivery.items, closed, Option.some(8)),
+            testScopeOf(
+              delivery.test.test,
+              delivery.items,
+              closed,
+              attemptLimits(delivery.test.test),
+              Option.some(8),
+            ),
             drawStream(processingSeed, outcomeLabel(instance, 1)),
           ),
           (failure) => assert.fail(`the first run failed: ${failure.message}`),
@@ -1903,6 +1914,203 @@ describe("outcome processing in a session", () => {
             : [],
           ["record", "SCORE", "outcome"],
         );
+      }),
+  );
+});
+
+/**
+ * The outcomes of a test of item refs `I1` and `I2` whose outcome processing reads, in order,
+ * `I1`'s built-in `numAttempts` into `ATTEMPTS`, `qti-number-incorrect` over the test into
+ * `INCORRECT`, and `I2`'s `numAttempts` into `UNSEEN`.
+ */
+const attemptOutcomes: BuiltOutcomes = {
+  declarations: [
+    '<qti-outcome-declaration identifier="ATTEMPTS" cardinality="single" base-type="integer"/>',
+    '<qti-outcome-declaration identifier="INCORRECT" cardinality="single" base-type="integer"/>',
+    '<qti-outcome-declaration identifier="UNSEEN" cardinality="single" base-type="integer"/>',
+  ].join(""),
+  rules: [
+    '<qti-set-outcome-value identifier="ATTEMPTS"><qti-variable identifier="I1.numAttempts"/></qti-set-outcome-value>',
+    '<qti-set-outcome-value identifier="INCORRECT"><qti-number-incorrect/></qti-set-outcome-value>',
+    '<qti-set-outcome-value identifier="UNSEEN"><qti-variable identifier="I2.numAttempts"/></qti-set-outcome-value>',
+  ].join(""),
+};
+
+/**
+ * Open the test of {@link attemptOutcomes}: one nonlinear, individual part holding `I1` and `I2`,
+ * each a Choice whose correct response is `A`, under an item session control.
+ *
+ * @param control The attributes of the part's `qti-item-session-control`, none when empty.
+ * @returns The test and its items.
+ */
+const attemptsDelivery = (control: string) =>
+  builtDelivery(
+    "attempts",
+    [partOf("part", ["I1", "I2"], { control })],
+    [
+      ["I1", choiceItemXml("I1")],
+      ["I2", choiceItemXml("I2")],
+    ],
+    attemptOutcomes,
+  );
+
+/**
+ * Give an element's child elements of one local name.
+ *
+ * @param element The element.
+ * @param local The local name.
+ * @returns The children, in document order.
+ */
+const childElements = (element: SourceElement, local: string): readonly SourceElement[] =>
+  element.children.flatMap((child) =>
+    child.kind === "element" && child.local === local ? [child] : [],
+  );
+
+/**
+ * Give an element's unprefixed attribute of one name.
+ *
+ * @param element The element.
+ * @param local The attribute's name.
+ * @returns Its value, empty when the element has none.
+ */
+const attributeOf = (element: SourceElement, local: string): string =>
+  element.attributes.find((entry) => entry.local === local && entry.namespace === "")?.value ?? "";
+
+/**
+ * Give an element's text.
+ *
+ * @param element The element.
+ * @returns Its text children, joined.
+ */
+const textOf = (element: SourceElement): string =>
+  element.children.map((child) => (child.kind === "text" ? child.text : "")).join("");
+
+/**
+ * Give each item's `numAttempts` as the results report writes it for a session, by item ref.
+ *
+ * @param delivery The test and its items.
+ * @param session The session.
+ * @returns Each `itemResult`'s identifier keyed to its `numAttempts` value's text.
+ */
+const writtenAttempts = Effect.fnUntraced(function* writtenAttempts(
+  delivery: Delivery,
+  session: TestSession,
+) {
+  const stored = Result.getOrElse(encodeSession(session), (failure) =>
+    assert.fail(`encodeSession failed: ${failure.message}`),
+  );
+  const xml = Result.getOrElse(
+    results({
+      context: { sessions: [{ identifier: "s-attempts", sourceId: "https://example.org/" }] },
+      items: delivery.items,
+      kind: "test",
+      session: stored,
+      test: delivery.test,
+    }),
+    (failure) => assert.fail(`results failed: ${failure.message}`),
+  );
+  const { root } = yield* readSource("result.xml", new TextEncoder().encode(xml));
+
+  return Object.fromEntries(
+    childElements(root, "itemResult").map((item) => [
+      attributeOf(item, "identifier"),
+      childElements(item, "responseVariable")
+        .filter((variable) => attributeOf(variable, "identifier") === "numAttempts")
+        .flatMap((variable) => childElements(variable, "candidateResponse"))
+        .flatMap((response) => childElements(response, "value"))
+        .map(textOf)
+        .join(" "),
+    ]),
+  );
+});
+
+/**
+ * Give what {@link attemptOutcomes} leaves as text: `I1`'s attempts, the incorrect count and
+ * `I2`'s attempts, each a single integer's decimal, or a note when it is not one.
+ *
+ * @param session The session.
+ * @returns The three, in that order.
+ */
+const attemptsRead = (session: TestSession): readonly string[] =>
+  ["ATTEMPTS", "INCORRECT", "UNSEEN"].map((identifier) => {
+    const [single] = session.outcomes[identifier]?.values ?? [];
+
+    return single?.baseType === "integer" ? String(single.value) : `${identifier} is no integer`;
+  });
+
+describe("a test reads an item's numAttempts as the attempts started", () => {
+  it.effect(
+    "[T-9] the started attempt count: an item presented and left unanswered when its part ends reads 1, and qti-number-incorrect counts it, as results writes it",
+    () =>
+      Effect.gen(function* unanswered() {
+        const delivery = yield* attemptsDelivery("");
+        assert.strictEqual(delivery.test.test.outcomeProcessing.kind, "runs");
+
+        const session = seeded(delivery, defaults);
+        assert.isTrue(itemAt(session, 1).presented);
+
+        const closed = accepted(
+          endPart(delivery.test, delivery.items, session, stepOf("end-part"), { now: after(4) }),
+        );
+
+        assert.strictEqual(closed.status, "closed");
+        assert.strictEqual(itemAt(closed, 1).record.numAttempts, 0);
+        assert.deepStrictEqual(attemptsRead(closed), ["1", "1", "0"]);
+        assert.deepStrictEqual(yield* writtenAttempts(delivery, closed), { I1: "1", I2: "0" });
+      }),
+  );
+
+  it.effect(
+    "[T-9] the started attempt count: an item of max-attempts 2 left open after one wrong submission reads 2, as results writes it",
+    () =>
+      Effect.gen(function* leftOpen() {
+        const delivery = yield* attemptsDelivery('max-attempts="2"');
+        const configuration = yield* configure({});
+
+        const wrong = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            seeded(delivery, configuration),
+            stepOf("submit-item", { RESPONSE: chosen("B") }),
+            configuration,
+            { now: after(5) },
+          ),
+        );
+
+        assert.strictEqual(wrong.outcomeRuns, 1);
+        assert.strictEqual(itemAt(wrong, 1).record.numAttempts, 1);
+        assert.isFalse(closedAt(delivery, wrong, 1));
+        assert.deepStrictEqual(attemptsRead(wrong), ["2", "1", "0"]);
+        assert.deepStrictEqual(yield* writtenAttempts(delivery, wrong), { I1: "2", I2: "0" });
+      }),
+  );
+
+  it.effect(
+    "[T-9] the started attempt count: an item of max-attempts 2 closed by its second submission reads 2, no attempt past its limit, as results writes it",
+    () =>
+      Effect.gen(function* limitReached() {
+        const delivery = yield* attemptsDelivery('max-attempts="2"');
+        const configuration = yield* configure({});
+        let session = seeded(delivery, configuration);
+        for (const seconds of [5, 9]) {
+          session = accepted(
+            submitItem(
+              delivery.test,
+              delivery.items,
+              session,
+              stepOf("submit-item", { RESPONSE: chosen("B") }),
+              configuration,
+              { now: after(seconds) },
+            ),
+          );
+        }
+
+        assert.strictEqual(session.outcomeRuns, 2);
+        assert.strictEqual(itemAt(session, 1).record.numAttempts, 2);
+        assert.isTrue(closedAt(delivery, session, 1));
+        assert.deepStrictEqual(attemptsRead(session), ["2", "1", "0"]);
+        assert.deepStrictEqual(yield* writtenAttempts(delivery, session), { I1: "2", I2: "0" });
       }),
   );
 });

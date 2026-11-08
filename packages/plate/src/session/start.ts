@@ -31,7 +31,12 @@ import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
 import type { Value } from "#plate/model/values.ts";
 import { defaultOutputBudget } from "#plate/output-budget.ts";
 import { drawSeed } from "#plate/seed.ts";
-import { itemConfiguration, sessionControls, UnknownItemRef } from "#plate/session/control.ts";
+import {
+  attemptLimits,
+  itemConfiguration,
+  sessionControls,
+  UnknownItemRef,
+} from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -664,7 +669,7 @@ const templateDefaultsOf = (
           ? evaluatedDefaults(
               test,
               session,
-              testScopeOf(test, items, session, Option.none()),
+              testScopeOf(test, items, session, attemptLimits(test), Option.none()),
               ref,
               item,
               accepted,
@@ -720,7 +725,7 @@ export const partStarted = (
     }
   }
 
-  const scope = testScopeOf(test, items, session, Option.none());
+  const scope = testScopeOf(test, items, session, attemptLimits(test), Option.none());
 
   return Result.map(
     Result.all(

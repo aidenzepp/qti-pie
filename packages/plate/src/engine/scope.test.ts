@@ -3,6 +3,7 @@ import { Option, Result } from "effect";
 import type { Declarations } from "#plate/engine/evaluate.ts";
 import type { UnknownIdentifierError } from "#plate/engine/failures.ts";
 import {
+  attemptsStarted,
   durationOf,
   itemName,
   itemVariable,
@@ -114,10 +115,10 @@ const declarations: Declarations = {
 };
 
 /**
- * A presented item, `ITEM1`, with one processed attempt: its record holds `RESPONSE`, `SCORE` 1.5,
- * `NOTA` 0.5, the built-in `completionStatus`, the template value `T` and a template-set default
- * of `SCORE`. It is in the categories `alpha` and `beta`, weights `SCORE` by 2, maps nothing and
- * declares a `file` response `UPLOAD` and a `record` outcome `REC`.
+ * A presented item, `ITEM1`, that has started three attempts: its record holds `RESPONSE`, `SCORE`
+ * 1.5, `NOTA` 0.5, the built-in `completionStatus`, the template value `T` and a template-set
+ * default of `SCORE`. It is in the categories `alpha` and `beta`, weights `SCORE` by 2, maps
+ * nothing and declares a `file` response `UPLOAD` and a `record` outcome `REC`.
  */
 const item1: ScopeItem = {
   categories: ["alpha", "beta"],
@@ -145,8 +146,8 @@ const item1: ScopeItem = {
 };
 
 /**
- * An item not yet presented, `ITEM2`, whose record is fresh: no template value. It is in the
- * category `gamma` and maps its `NOTA` to `SCORE`.
+ * An item not yet presented, `ITEM2`, whose record is fresh: no template value and no attempt
+ * started. It is in the category `gamma` and maps its `NOTA` to `SCORE`.
  */
 const item2: ScopeItem = {
   ...item1,
@@ -267,6 +268,21 @@ const prefixed = (name: string) => {
 const section = (identifier: string): readonly string[] =>
   refsOf(keptItems(scope, { ...unfiltered, sectionIdentifier: Option.some(identifier) }));
 
+describe("attemptsStarted", () => {
+  it("[T-9] counts no attempt before the presentation, one past the processed ones while the item is open, and the processed ones once its limit closes it (info.txt:8468)", () => {
+    assert.deepStrictEqual(
+      [
+        attemptsStarted(false, 0, 1),
+        attemptsStarted(true, 0, 1),
+        attemptsStarted(true, 1, 2),
+        attemptsStarted(true, 2, 2),
+        attemptsStarted(true, 3, 0),
+      ],
+      [0, 1, 2, 2, 4],
+    );
+  });
+});
+
 describe("keptItems", () => {
   it("[T-9] test scope lookup: keeps every item with no filter", () => {
     assert.deepStrictEqual(refsOf(keptItems(scope, unfiltered)), ["ITEM1", "ITEM2", "ITEM3"]);
@@ -352,7 +368,7 @@ describe("itemVariable", () => {
     );
   });
 
-  it("[T-9] test scope lookup: numAttempts reads the processed attempt count as a single integer", () => {
+  it("[T-9] test scope lookup: numAttempts reads the count of attempts started as a single integer", () => {
     assert.deepStrictEqual(heldValue(itemVariable(item1, "numAttempts")), integerValue(3n));
     assert.deepStrictEqual(heldValue(itemVariable(item2, "numAttempts")), integerValue(0n));
   });

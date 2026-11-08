@@ -85,7 +85,7 @@ const response = (correct?: string): ResponseDeclaration => ({
 });
 
 /**
- * Construct one session item of a hand-built test scope: presented, with one processed attempt, in
+ * Construct one session item of a hand-built test scope: presented, with one attempt started, in
  * no category, weighting and mapping nothing, declaring and holding nothing but what is given.
  *
  * @param ref Its item ref's identifier.
@@ -155,8 +155,10 @@ const scopeOf = (
  *
  * - `CORRECT` (category `easy`): answered `A`, the correct response.
  * - `WRONG` (category `hard`): answered `B`.
- * - `SEEN` (categories `easy` and `hard`): presented, never attempted, unanswered.
- * - `UNSEEN` (no category): neither presented nor attempted, unanswered.
+ * - `SEEN` (categories `easy` and `hard`): presented, its one attempt started and not submitted,
+ *   unanswered, so attempted and incorrect (info.txt:9340: "whether or not they provided a
+ *   response").
+ * - `UNSEEN` (no category): neither presented nor attempted, no attempt started, unanswered.
  * - `NO_RESPONSE`: declares no response.
  * - `NO_KEY`: answered `A`, its response declaring no correct response.
  */
@@ -164,7 +166,7 @@ const counting = scopeOf(
   [
     answered("CORRECT", identifier("A"), { categories: ["easy"] }),
     answered("WRONG", identifier("B"), { categories: ["hard"] }),
-    answered("SEEN", unanswered, { categories: ["easy", "hard"], numAttempts: 0 }),
+    answered("SEEN", unanswered, { categories: ["easy", "hard"] }),
     answered("UNSEEN", unanswered, { numAttempts: 0, presented: false }),
     itemOf("NO_RESPONSE"),
     itemOf("NO_KEY", {
@@ -409,7 +411,7 @@ const testVariables = (
 /**
  * The aggregate scope. Each item declares the single outcome `SCORE` and weights it by `W`:
  *
- * - `FIRST`: `SCORE` 1.5 of minimum 1 and maximum 10, weight 2, three attempts processed.
+ * - `FIRST`: `SCORE` 1.5 of minimum 1 and maximum 10, weight 2, three attempts started.
  * - `SECOND`: integer `SCORE` 4 of minimum -1 and maximum 5, no weight (so 1.0), one attempt.
  * - `THIRD`: `SCORE` NULL of maximum 8 and no minimum, weight 0.5, two attempts; a string `LABEL`.
  */
@@ -571,7 +573,7 @@ const testDocument = (expressions: readonly SourceElement[]) =>
  * `A`, beside an upload response `FR` of base type `file`, which the record never holds.
  *
  * @param declaresCorrect Whether `FR` declares a correct response.
- * @returns The item, presented with one attempt processed.
+ * @returns The item, presented with one attempt started.
  */
 const uploading = (declaresCorrect: boolean): ScopeItem =>
   answered("UPLOADING", identifier("A"), {
@@ -592,8 +594,8 @@ const judging = (item: ScopeItem): readonly Value[] => {
 };
 
 describe("the test family's evaluators", () => {
-  it("[T-9] count over the test scope: selected, presented, responded, correct and incorrect items", () => {
-    assert.deepStrictEqual(counts(counting), expected(1n, 1n, 5n, 3n, 6n));
+  it("[T-9] count over the test scope: selected, presented, responded, correct and incorrect items, an item presented and unanswered incorrect and one never presented not", () => {
+    assert.deepStrictEqual(counts(counting), expected(1n, 2n, 5n, 3n, 6n));
   });
 
   it("[T-9] count over the test scope the items a section-identifier holds, a nested section's counted", () => {
@@ -614,7 +616,7 @@ describe("the test family's evaluators", () => {
   it("[T-9] count over the test scope the items include-category keeps and exclude-category drops, one shared category each", () => {
     assert.deepStrictEqual(
       counts(counting, filtersOf({ include: ["easy"] })),
-      expected(1n, 0n, 2n, 1n, 2n),
+      expected(1n, 1n, 2n, 1n, 2n),
     );
     assert.deepStrictEqual(
       counts(counting, filtersOf({ exclude: ["hard"] })),
@@ -800,7 +802,7 @@ describe("the test family's evaluators", () => {
     );
   });
 
-  it("[T-9] collect qti-test-variables over the test scope of numAttempts as each item's processed count", () => {
+  it("[T-9] collect qti-test-variables over the test scope of numAttempts as each item's count of attempts started", () => {
     assert.deepStrictEqual(valueOf(testVariables("numAttempts"), aggregates), integers(3n, 1n, 2n));
   });
 
@@ -931,7 +933,7 @@ describe("the test family's evaluators", () => {
 
         assert.deepStrictEqual(values, [
           ["number-correct", integer(1n)],
-          ["number-incorrect", integer(1n)],
+          ["number-incorrect", integer(2n)],
           ["number-presented", integer(2n)],
           ["number-responded", integer(1n)],
           ["number-selected", integer(4n)],
