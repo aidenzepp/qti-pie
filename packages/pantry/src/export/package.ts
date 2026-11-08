@@ -10,7 +10,7 @@
  */
 import { Db } from "@bjornpagen/grizzle";
 import type { CursorError, DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
-import { Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Array as Arr, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import type { PlatformError } from "effect";
 import { compareRecord } from "#pantry/export/compare.ts";
 import type { Report } from "#pantry/export/compare.ts";
@@ -78,9 +78,9 @@ type EntriesError =
  *
  * Each document of the package is scanned in pages of `size` rows, assembled, and written by
  * `unshred` in its export charset; a document that cannot be written in that charset fails here,
- * and nothing falls back to another. Every other entry is the record's bytes. A document whose
- * path the record lacks, which `Entry`'s laws refuse, is written after the record's entries, so a
- * comparison reports it rather than losing it.
+ * and nothing falls back to another. Every other entry is the record's bytes. Every document's
+ * path is an entry's, as the law "Document entry" holds (`#pantry/qti/package.ts`), so a document
+ * whose path the record lacks is a defect: the export dies naming it, before any scan.
  *
  * The documents, the record and each page are separate reads, each in a snapshot of its own. They
  * agree because a package is written once, in one transaction, and never changed: no relation of
@@ -107,6 +107,18 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
 
   const documents = yield* (yield* db.workload.documentsOf.execute({ package: packageId })).collect;
   const record = yield* (yield* db.workload.entriesOf.execute({ package: packageId })).collect;
+  const recorded = new Set(record.map(({ path }) => path));
+  const unrecorded = Arr.findFirst(documents, ({ path }) => !recorded.has(path));
+  if (Option.isSome(unrecorded)) {
+    const { node, path } = unrecorded.value;
+
+    return yield* Effect.die(
+      new Error(
+        `Document ${node} of package ${packageId} stands at ${path}, but the package records no entry at that path, and the law "Document entry" (src/qti/package.ts) holds every document's path as an entry's. The database holds a row its laws refuse: check that it runs this checkout's migrations.`,
+      ),
+    );
+  }
+
   const rendered = new Map<string, Uint8Array>();
   for (const { node, path } of documents) {
     const scan = yield* Stream.runFold(
@@ -119,14 +131,10 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
     rendered.set(path, yield* unshred(document, names));
   }
 
-  const recorded = new Set(record.map(({ path }) => path));
-  const entries: readonly ZipEntry[] = [
-    ...record.map(({ content, path }) => ({
-      bytes: rendered.get(path) ?? content,
-      path,
-    })),
-    ...[...rendered].flatMap(([path, bytes]) => (recorded.has(path) ? [] : [{ bytes, path }])),
-  ];
+  const entries: readonly ZipEntry[] = record.map(({ content, path }) => ({
+    bytes: rendered.get(path) ?? content,
+    path,
+  }));
   yield* Effect.annotateCurrentSpan({ documents: documents.length, entries: entries.length });
 
   return entries;
