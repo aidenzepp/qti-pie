@@ -1102,8 +1102,9 @@ const heldReferences = select(VariableRef, (v) =>
 );
 
 /**
- * State that an expression's base type is the one member of its operands' base-type bits, or `any`
- * for none: a container's or an index's.
+ * State that an expression's base type is the one member of its operands' base-type bits, `any` for
+ * none and `unknown` for several: a container's, and an Index's or a Random's, typed by its one
+ * operand and by all of them alike where it writes more, which `Arity` refuses.
  *
  * @param e - The row.
  * @returns The predicate.
@@ -1111,6 +1112,7 @@ const heldReferences = select(VariableRef, (v) =>
 const baseOfOperands = (e: ExpressionRow) =>
   e.or(
     e.and(e.eq(Compute.cardinality(e.operandBaseTypes), 0n), e.eq(e.baseType, "any")),
+    e.and(e.gt(Compute.cardinality(e.operandBaseTypes), 1n), e.eq(e.baseType, "unknown")),
     e.eq(ValueBaseBit.row(e.baseType), e.operandBaseTypes),
   );
 
@@ -1172,12 +1174,7 @@ const resultDerived = (e: ExpressionRow) =>
         e.eq(e.baseType, "float"),
       ),
     ),
-    e.or(
-      e.not(e.in(e.kind, containerKinds)),
-      e.and(e.gt(Compute.cardinality(e.operandBaseTypes), 1n), e.eq(e.baseType, "unknown")),
-      e.and(e.le(Compute.cardinality(e.operandBaseTypes), 1n), baseOfOperands(e)),
-    ),
-    e.or(e.not(e.in(e.kind, firstKinds)), baseOfOperands(e)),
+    e.or(e.not(e.in(e.kind, [...containerKinds, ...firstKinds])), baseOfOperands(e)),
     e.or(e.not(e.in(e.kind, secondKinds)), e.and(baseOfTail(e), cardinalityOfTail(e))),
   );
 

@@ -428,8 +428,9 @@ const basesOf = (types: readonly Typed[]): ReadonlySet<ValueBase> =>
 const noOperandBase = "any" satisfies ValueBase;
 
 /**
- * The base type a set of operand bits gives a container or a Delete: {@link noOperandBase} for
- * none, the one for one, `unknown` for several (`resultDerived`'s container arm, and `baseOfTail`).
+ * The base type a set of operand bits gives a container, an Index or a Random, and a Delete's later
+ * operands give it: {@link noOperandBase} for none, the one for one, `unknown` for several
+ * (`baseOfOperands` and `baseOfTail` of `#pantry/qti/expressions.ts`).
  *
  * @param bases - The bits.
  * @returns The base type.
@@ -685,17 +686,9 @@ const typeOf = (kind: string, inputs: TypeInputs): Typed => {
     case "numeric": {
       return { baseType: numericOf(inputs.operands), cardinality: rule.cardinality };
     }
-    case "container": {
-      return { baseType: oneOf(basesOf(inputs.operands)), cardinality: rule.cardinality };
-    }
+    case "container":
     case "first": {
-      return {
-        baseType: Option.match(Arr.head(inputs.operands), {
-          onNone: () => noOperandBase,
-          onSome: ({ baseType }) => baseType,
-        }),
-        cardinality: rule.cardinality,
-      };
+      return { baseType: oneOf(basesOf(inputs.operands)), cardinality: rule.cardinality };
     }
     case "second": {
       const later = Arr.drop(inputs.operands, 1);

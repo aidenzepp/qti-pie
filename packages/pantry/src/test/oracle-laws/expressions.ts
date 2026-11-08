@@ -297,6 +297,18 @@ const resultCardinalityOf = (typing: ExpressionTyping): string =>
     : "unknown";
 
 /**
+ * Type an expression by its operands' one base type and its kind's one result cardinality: a
+ * container's, an Index's and a Random's (the schema's `baseOfOperands`).
+ *
+ * @param input - What its type is derived from.
+ * @returns The type.
+ */
+const oneBaseTyped = ({ operands, typing }: TypingInput): Type => ({
+  base: oneBaseOf(basesOf(operands)),
+  cardinality: resultCardinalityOf(typing),
+});
+
+/**
  * Each typing's derivation of an expression's type (the schema's `resultDerived` and the fixed,
  * declared and attribute typings `ResultBase`, `VariableRef` and `ExpressionAttribute` give):
  *
@@ -305,7 +317,7 @@ const resultCardinalityOf = (typing: ExpressionTyping): string =>
  * - `attribute`: its own attribute's base type, single, or a test variables' multiple;
  * - `numeric`: `unknown` when an operand is, `integer` when every operand is, `float` otherwise;
  * - `container`: its operands' one base type, `any` for none, `unknown` for several;
- * - `first`: its operand's base type;
+ * - `first`: its operands' one base type, as `container`'s;
  * - `second`: its later operands' one base type and one cardinality.
  */
 const typers: Readonly<Record<ExpressionTyping["typing"], (input: TypingInput) => Type>> = {
@@ -313,19 +325,9 @@ const typers: Readonly<Record<ExpressionTyping["typing"], (input: TypingInput) =
     base: attributeBaseOf(rows, node),
     cardinality: resultCardinalityOf(typing),
   }),
-  container: ({ operands, typing }) => {
-    const bases = basesOf(operands);
-
-    return {
-      base: bases.size > 1 ? "unknown" : oneBaseOf(bases),
-      cardinality: resultCardinalityOf(typing),
-    };
-  },
+  container: oneBaseTyped,
   declared: ({ declared }) => declared,
-  first: ({ operands, typing }) => ({
-    base: oneBaseOf(basesOf(operands)),
-    cardinality: resultCardinalityOf(typing),
-  }),
+  first: oneBaseTyped,
   fixed: ({ typing }) => ({
     base: typing.resultBases[0] ?? "unknown",
     cardinality: resultCardinalityOf(typing),

@@ -366,9 +366,8 @@ const resultHolds = (e: Folded): boolean => {
       (resultBases.get(kind)?.has(e.row.baseType) ?? false)) &&
     (resultCardinalities.get(kind)?.has(e.row.cardinality) ?? false) &&
     (!new Set(numericKinds).has(kind) || e.row.baseType === numericOf(e.all)) &&
-    (!new Set(containerKinds).has(kind) ||
+    (!new Set([...containerKinds, ...firstKinds]).has(kind) ||
       e.row.baseType === (e.all.size > 1 ? "unknown" : oneOf(e.all))) &&
-    (!new Set(firstKinds).has(kind) || e.row.baseType === oneOf(e.all)) &&
     (!new Set(secondKinds).has(kind) || tailHolds(e))
   );
 };

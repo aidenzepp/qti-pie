@@ -1,6 +1,7 @@
 /**
- * A Delete's type, as the import writes it beside the law oracle's: the type of its second operand,
- * NULL's where it has none, and its later operands' one type where it writes more.
+ * The types the import writes for the expressions typed by their operands' one type, beside the law
+ * oracle's: a Delete by its later operands', an Index and a Random by all of theirs, each one rule
+ * on the import, in the schema and in the oracle.
  *
  * QTI types a Delete by its second operand alone: "The result is a new container derived from the
  * second sub-expression ... If either sub-expression is NULL the result of the operator is NULL"
@@ -20,6 +21,13 @@
  * oracle's `second` typing). The import read its second operand alone, so a NULL second operand
  * before a multiple typed the Delete `any` where the oracle reads the multiple's type.
  *
+ * An Index and a Random are typed by their one operand ("The result has the same base-type as the
+ * sub-expression but single cardinality", information model, Tables 6.9.22 and 6.9.16), and by all
+ * of them alike where they write more or none, which `Arity` refuses: the operands' one base type,
+ * NULL's `any` set aside, `any` for none and `unknown` for several, as a container is typed (the
+ * schema's `baseOfOperands`, the oracle's `oneBaseTyped`). The import read the first operand
+ * alone, so a NULL before an integer container typed it `any` where the oracle reads `integer`.
+ *
  * The genetic differential's judge (`judgeOne`) cannot see this: its host leaves every check that
  * reads a fold's end unknown, since the database draws the folds, and `E1_derived` reads
  * `tailBaseTypes`. So the import's `Expression` rows are held to the law oracle's typing itself.
@@ -27,15 +35,17 @@
  * Oracle: a second implementation, the law oracle's typing (`typedOf` of
  * `#pantry/test/oracle-laws/expressions.ts`) over the document as the oracle folds it, against the
  * `Expression` rows the import's overlay writes (`rowsOf`) over the same tree: each expression's
- * base type and cardinality agree; and Table 6.9.20 and the later operands' rule as stated above
- * for the Delete itself.
+ * base type and cardinality agree; and the rules stated above for the Delete, the Index and the
+ * Random themselves.
  *
- * Bound: a Delete in a response condition, under `qti-is-null`, which takes any type, so no other
- * rule reads it, with one operand (a single base value of each of QTI's eleven base types, a
- * multiple of each, or a NULL) or two (a single of each base type with a multiple of it, an ordered
- * of it, or a NULL, and a NULL with a multiple) or three (an integer single with a NULL and an
- * integer multiple, two integer multiples, an integer multiple and ordered, an integer and a string
- * multiple, or two NULLs): 62 documents, exhausted.
+ * Bound: an expression in a response condition, under `qti-is-null`, which takes any type, so no
+ * other rule reads it: a Delete with one operand (a single base value of each of QTI's eleven base
+ * types, a multiple of each, or a NULL) or two (a single of each base type with a multiple of it,
+ * an ordered of it, or a NULL, and a NULL with a multiple) or three (an integer single with a NULL
+ * and an integer multiple, two integer multiples, an integer multiple and ordered, an integer and a
+ * string multiple, or two NULLs); and an Index and a Random each with none, an integer container, a
+ * NULL, a NULL then an integer container, two integer containers, or an integer and a string
+ * container: 74 documents, exhausted.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -133,9 +143,22 @@ const containerOf = (base: Base, cardinality: "multiple" | "ordered"): Operand =
 });
 
 /**
- * Every case: a Delete's operands, one or two.
+ * The kinds the box types: Delete, and Index and Random.
  */
-const cases: readonly (readonly Operand[])[] = [
+type Kind = "qti-delete" | "qti-index" | "qti-random";
+
+/**
+ * One case: an expression's kind and its operands.
+ */
+interface Case {
+  readonly kind: Kind;
+  readonly operands: readonly Operand[];
+}
+
+/**
+ * A Delete's operands: one, two or three.
+ */
+const deleteOperands: readonly (readonly Operand[])[] = [
   ...bases.map((base) => [singleOf(base)]),
   ...bases.map((base) => [containerOf(base, "multiple")]),
   [nullOperand],
@@ -153,18 +176,49 @@ const cases: readonly (readonly Operand[])[] = [
 ];
 
 /**
- * The note of a case by its operand count, one to three.
+ * An Index's or a Random's operands: none, its one container, a NULL, or two.
  */
-const countNotes = ["one operand", "two operands", "three operands"] as const;
+const firstOperands: readonly (readonly Operand[])[] = [
+  [],
+  [containerOf("integer", "ordered")],
+  [nullOperand],
+  [nullOperand, containerOf("integer", "ordered")],
+  [containerOf("integer", "ordered"), containerOf("integer", "multiple")],
+  [containerOf("integer", "ordered"), containerOf("string", "ordered")],
+];
 
 /**
- * Write a case's item: a Delete under `qti-is-null` in a response condition.
+ * Every case of the box.
+ */
+const cases: readonly Case[] = [
+  ...deleteOperands.map((operands): Case => ({ kind: "qti-delete", operands })),
+  ...(["qti-index", "qti-random"] as const).flatMap((kind) =>
+    firstOperands.map((operands): Case => ({ kind, operands })),
+  ),
+];
+
+/**
+ * The note of a case by its operand count, none to three.
+ */
+const countNotes = ["no operand", "one operand", "two operands", "three operands"] as const;
+
+/**
+ * The start tag each kind is written with: an Index's `n`, which it requires, a literal.
+ */
+const startTags: Readonly<Record<Kind, string>> = {
+  "qti-delete": "<qti-delete>",
+  "qti-index": '<qti-index n="1">',
+  "qti-random": "<qti-random>",
+};
+
+/**
+ * Write a case's item: its expression under `qti-is-null` in a response condition.
  *
- * @param operands - The Delete's operands.
+ * @param of - The case.
  * @returns The item's text.
  */
-const itemOf = (operands: readonly Operand[]): string =>
-  `<qti-assessment-item xmlns="${asiNamespace}" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string"/><qti-item-body><p>x</p></qti-item-body><qti-response-processing><qti-response-condition><qti-response-if><qti-is-null><qti-delete>${operands.map(({ xml }) => xml).join("")}</qti-delete></qti-is-null></qti-response-if></qti-response-condition></qti-response-processing></qti-assessment-item>`;
+const itemOf = (of: Case): string =>
+  `<qti-assessment-item xmlns="${asiNamespace}" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string"/><qti-item-body><p>x</p></qti-item-body><qti-response-processing><qti-response-condition><qti-response-if><qti-is-null>${startTags[of.kind]}${of.operands.map(({ xml }) => xml).join("")}</${of.kind}></qti-is-null></qti-response-if></qti-response-condition></qti-response-processing></qti-assessment-item>`;
 
 /**
  * Read the one value of some operands' values, NULL's set aside: NULL's where they hold none, and
@@ -203,15 +257,40 @@ const deleteTypeOf = (operands: readonly Operand[]): Type => {
   };
 };
 
-describe("import/overlays/expressions.ts, a Delete's type", () => {
+/**
+ * The type an Index or a Random takes from its operands: its one operand's base type, as Tables
+ * 6.9.22 and 6.9.16 type it, their one base type where it writes more, NULL's `any` for none, and
+ * a single cardinality.
+ *
+ * @param operands - Its operands.
+ * @returns The type.
+ */
+const firstTypeOf = (operands: readonly Operand[]): Type => ({
+  base: oneValueOf(
+    operands.map(({ type }) => type.base),
+    nullType.base,
+  ),
+  cardinality: "single",
+});
+
+/**
+ * The type a case's expression takes, by its kind's rule.
+ *
+ * @param of - The case.
+ * @returns The type.
+ */
+const expectedTypeOf = (of: Case): Type =>
+  of.kind === "qti-delete" ? deleteTypeOf(of.operands) : firstTypeOf(of.operands);
+
+describe("import/overlays/expressions.ts, the types a Delete, an Index and a Random take from their operands", () => {
   it.effect(
-    "types a Delete as its second operand, as NULL where it has one operand, and as its later operands' one type where it has more, as the law oracle does",
+    "types a Delete by its later operands' one type and an Index or a Random by all of its operands', NULL's for none, as the law oracle does",
     (ctx) =>
       searched(
         ctx,
         exhaust(
           {
-            box: "a Delete of one operand of each base type, a container of it or a NULL, of two, a single of each base type with a container of it or a NULL, or of three over integer and string containers and NULLs",
+            box: "a Delete of one operand of each base type, a container of it or a NULL, of two, a single of each base type with a container of it or a NULL, or of three over integer and string containers and NULLs; an Index and a Random of none, one or two operands over integer and string containers and NULLs",
             caseHang,
             coverage: requiredInSpace<(typeof countNotes)[number]>(countNotes),
             generator: int(0, cases.length - 1),
@@ -219,17 +298,17 @@ describe("import/overlays/expressions.ts, a Delete's type", () => {
             literal: (at) => itemOf(Arr.getUnsafe(cases, at)),
             oracle: {
               kind: "second-implementation",
-              name: "the law oracle's typing and Table 6.9.20, against the import's Expression rows",
+              name: "the law oracle's typing and Tables 6.9.20, 6.9.22 and 6.9.16, against the import's Expression rows",
             },
-            suite: "import/overlays/expressions/delete",
+            suite: "import/overlays/expressions/operand-typing",
           },
           (at, c) =>
-            Effect.gen(function* deleteCase() {
-              const operands = Arr.getUnsafe(cases, at);
-              c.note(Arr.getUnsafe(countNotes, operands.length - 1));
-              assert.strictEqual(cases.length, 62);
+            Effect.gen(function* operandTypingCase() {
+              const of = Arr.getUnsafe(cases, at);
+              c.note(Arr.getUnsafe(countNotes, of.operands.length));
+              assert.strictEqual(cases.length, 74);
 
-              const item = itemOf(operands);
+              const item = itemOf(of);
               const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(item)));
               const tree = yield* Effect.orDie(shred(xml, "3.0.0", shredGrammarOf(grammar)));
               const folded = Result.getOrThrow(fold(tree, idOf, foldGrammarOf(grammar)));
@@ -252,10 +331,11 @@ describe("import/overlays/expressions.ts, a Delete's type", () => {
                 );
               }
 
-              const deleted = expressions.filter(({ kind }) => kind === "qti-delete");
               assert.deepStrictEqual(
-                deleted.map(({ baseType, cardinality }) => ({ base: baseType, cardinality })),
-                [deleteTypeOf(operands)],
+                expressions
+                  .filter(({ kind }) => kind === of.kind)
+                  .map(({ baseType, cardinality }) => ({ base: baseType, cardinality })),
+                [expectedTypeOf(of)],
                 item,
               );
             }),

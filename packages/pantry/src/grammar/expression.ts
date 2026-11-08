@@ -605,7 +605,8 @@ export const rpTemplatePattern = (template: Exclude<RpTemplate, "none">): string
  * - `numeric`: `integer` when every typed operand is an integer, `unknown` when one is unknown, else
  *   `float` (information model §2.11.3: Sum, Product, Subtract, Min, Max);
  * - `container`: its operands' one base type, `any` for none, `unknown` for several;
- * - `first`: its one operand's base type (Index, Random);
+ * - `first`: its operands' one base type, as `container`'s, of a single result (Index, Random, whose
+ *   one operand types it);
  * - `second`: its later operands' one base type and one cardinality, `any` and no cardinality
  *   (NULL's) for none, `unknown` for several (Delete, whose second operand types it);
  * - `declared`: the type of the variable its `identifier` names (Variable, Default, Correct);
