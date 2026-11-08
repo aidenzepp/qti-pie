@@ -18,7 +18,7 @@ import { interactionsIn } from "#plate/model/interactions.ts";
 import type { InlineChoiceInteraction } from "#plate/model/item.ts";
 import { fresh, startingValue } from "#plate/model/record.ts";
 import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { redact, render } from "#plate/render.ts";
 import { results } from "#plate/results/results.ts";
 import type { ResultContext, ResultsInput } from "#plate/results/results.ts";
@@ -831,6 +831,21 @@ const renderedOptions = Effect.fnUntraced(function* renderedOptions(
  */
 const failureTag = (input: ResultsInput): Option.Option<string> =>
   Option.map(Result.getFailure(results(input)), (failure) => failure._tag);
+
+/**
+ * The input of an item's result under the tests' context, written at {@link updated}.
+ *
+ * @param document The item.
+ * @param record Its stored record.
+ * @returns The input.
+ */
+const itemInputOf = (document: Accepted, record: StoredRecord): ResultsInput => ({
+  context,
+  datestamp: new Date(updated),
+  document,
+  kind: "item",
+  record,
+});
 
 /**
  * The fields of a result's {@link InvalidResultContext}.
@@ -2002,6 +2017,39 @@ describe("results", () => {
         );
         assert.deepStrictEqual(failureTag(input(twoValues)), Option.some("InvalidRecord"));
         assert.deepStrictEqual(failureTag(input(fullScore)), Option.some("InvalidRecord"));
+      }),
+  );
+
+  it.effect(
+    "[T-14] reports an item's record holding a record under its record response, and refuses one holding it under a response that is not a record response, or under an item that declares no record response: InvalidRecord",
+    () =>
+      Effect.gen(function* recordUnderItsDeclaration() {
+        const plain = yield* fixtureItem("p2-choice.xml");
+        const recorded = acceptForTest({
+          ...plain.item,
+          records: new Map([
+            ["RREC", { correct: Option.none(), defaultValue: Option.none(), identifier: "RREC" }],
+          ]),
+        });
+        const answer: RecordValue = {
+          cardinality: "record",
+          fields: [{ identifier: "stringValue", value: { baseType: "string", value: "12" } }],
+        };
+        const good = yield* Effect.fromResult(
+          score(recorded, { RESPONSE: identifiers("A"), RREC: answer }),
+        );
+        const decoded = yield* Effect.fromResult(decodeRecord(good));
+        const misplaced = yield* Effect.fromResult(
+          encodeRecord({ ...decoded, records: { RESPONSE: answer } }),
+        );
+
+        assert.deepStrictEqual(decoded.records, { RREC: answer });
+        assert.deepStrictEqual(failureTag(itemInputOf(recorded, good)), Option.none());
+        assert.deepStrictEqual(
+          failureTag(itemInputOf(recorded, misplaced)),
+          Option.some("InvalidRecord"),
+        );
+        assert.deepStrictEqual(failureTag(itemInputOf(plain, good)), Option.some("InvalidRecord"));
       }),
   );
 

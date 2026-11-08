@@ -6,7 +6,7 @@ import type { Configuration } from "#plate/configuration.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
 import { drawBelow, drawStream, outcomeLabel } from "#plate/engine/random.ts";
 import { encodeIntent } from "#plate/form/intent.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { IntentRefused, advance } from "#plate/session/advance.ts";
 import type { AdvanceFailure, IntentRule } from "#plate/session/advance.ts";
 import { allowedIntents } from "#plate/session/intents.ts";
@@ -14,7 +14,7 @@ import { SubmissionRefused } from "#plate/session/submit.ts";
 import type { Intent, Responses, Step, TestSession } from "#plate/session/session.ts";
 import { startTest } from "#plate/session/start.ts";
 import { open } from "#plate/validate/open.ts";
-import { acceptedItem } from "#plate/validate/verdict.ts";
+import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -763,6 +763,86 @@ describe("advance", () => {
         }
 
         assert.strictEqual(stored(), before);
+      }),
+  );
+
+  it.effect(
+    "[T-14] refuses a step's host-built record that breaks a record's rules or sits under the wrong kind of response: StepResponseMisfit, saving nothing; saves a well-formed one",
+    () =>
+      Effect.gen(function* judgesRecordStep() {
+        const given = yield* delivery({ navigation: "nonlinear", submission: "individual" });
+        const first = given.items.get("i1") ?? assert.fail("the delivery holds i1");
+        const items = new Map(given.items).set(
+          "i1",
+          acceptForTest({
+            ...first.item,
+            records: new Map([
+              ["RREC", { correct: Option.none(), defaultValue: Option.none(), identifier: "RREC" }],
+            ]),
+          }),
+        );
+        const configuration = yield* configure({});
+        const session = started({ items, test: given.test }, configuration);
+        const stored = (): string => JSON.stringify(Result.getOrThrow(encodeSession(session)));
+        const before = stored();
+        const post = (responses: Responses) =>
+          advance(
+            given.test,
+            items,
+            session,
+            { intent: { kind: "next" }, responses },
+            configuration,
+            {
+              now: after(1),
+            },
+          );
+        const typed: RecordValue = {
+          cardinality: "record",
+          fields: [{ identifier: "stringValue", value: { baseType: "string", value: "12" } }],
+        };
+        const misfits = {
+          "a field of base type file": {
+            RREC: {
+              cardinality: "record",
+              fields: [{ identifier: "upload", value: { baseType: "file", value: "a.txt" } }],
+            },
+          },
+          "a record for a response that is not a record response": { RESPONSE: typed },
+          "a value for the record response": { RREC: chosen("A") },
+          "an identifier that is not an NCName": {
+            RREC: {
+              cardinality: "record",
+              fields: [{ identifier: "1st", value: { baseType: "string", value: "a" } }],
+            },
+          },
+          "an identifier written twice": {
+            RREC: {
+              cardinality: "record",
+              fields: [
+                { identifier: "stringValue", value: { baseType: "string", value: "a" } },
+                { identifier: "stringValue", value: { baseType: "string", value: "b" } },
+              ],
+            },
+          },
+        };
+
+        for (const [name, responses] of Object.entries(misfits)) {
+          // @ts-expect-error -- some of these records break a rule of RecordValue that advance must refuse.
+          const failure = Option.getOrElse(Result.getFailure(post(responses)), () =>
+            assert.fail(`advance accepted ${name}`),
+          );
+          assert.strictEqual(failure._tag, "StepResponseMisfit", name);
+          if (failure._tag === "StepResponseMisfit") {
+            assert.strictEqual(failure.response, Object.keys(responses)[0], name);
+            assert.strictEqual(failure.sequenceIndex, 1, name);
+          }
+        }
+
+        assert.strictEqual(stored(), before);
+        assert.deepStrictEqual(
+          accepted(post({ RREC: typed })).items[0]?.saved,
+          Option.some({ RREC: typed }),
+        );
       }),
   );
 

@@ -24,7 +24,7 @@ import type { Element } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
 import { message, numeral } from "#plate/messages.ts";
-import { format } from "#plate/model/values.ts";
+import { format, isRecordValue } from "#plate/model/values.ts";
 import { itemRefs } from "#plate/package/open.ts";
 import { sessionControl } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
@@ -208,7 +208,9 @@ const shownValues = (item: FixtureItem, mode: ShownMode): readonly string[] => {
     return text === undefined ? (answers.choice.get(item.sequenceIndex) ?? []) : [text];
   }
 
-  return (solution(item.item)[response]?.values ?? []).map(format);
+  const correct = solution(item.item)[response];
+
+  return (correct === undefined || isRecordValue(correct) ? [] : correct.values).map(format);
 };
 
 /**

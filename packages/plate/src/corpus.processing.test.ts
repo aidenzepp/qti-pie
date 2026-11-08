@@ -9,6 +9,7 @@ import type { Accepted, StoredRecord } from "#plate/index.ts";
 import { expressionKinds, isUnlanded } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import type { SolutionRecord } from "#plate/model/record.ts";
+import { splitResponses } from "#plate/score.ts";
 import { isNull, trimXmlSpace } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 import { acceptedOf, begunUnder, openCorpus, sweepSeeds, templated } from "#plate/test/sweep.ts";
@@ -220,7 +221,9 @@ const correctResponsesOf = (
   record?: SolutionRecord,
 ): Readonly<Record<string, Value>> =>
   Object.fromEntries(
-    Object.entries(solution(accepted, record)).filter(([, correct]) => !isNull(correct)),
+    Object.entries(splitResponses(solution(accepted, record)).responses).filter(
+      ([, correct]) => !isNull(correct),
+    ),
   );
 
 /**

@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import type { Option } from "effect";
 import type { ItemRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { ResponseValue, Value } from "#plate/model/values.ts";
 import * as session from "#plate/session/session.ts";
 import type { Intent, Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import { readImports, sourceModules } from "#plate/test/imports.ts";
@@ -64,9 +64,9 @@ const templateDefaults: Equals<
 > = true;
 
 /**
- * Responses map an identifier to a value.
+ * Responses map an identifier to a value, or, for a record response, a record.
  */
-const responses: Equals<Responses, Readonly<Record<string, Value>>> = true;
+const responses: Equals<Responses, Readonly<Record<string, ResponseValue>>> = true;
 
 describe("the test session's types", () => {
   it("are the shapes the session codec and the transitions rely on", () => {

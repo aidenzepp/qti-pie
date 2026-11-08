@@ -17,12 +17,12 @@
 import { Data, Option, Result, Schema } from "effect";
 import { encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord } from "#plate/codec/record.ts";
-import { ValueSchema } from "#plate/codec/values.ts";
+import { ResponseValueSchema } from "#plate/codec/values.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { ResponseValue } from "#plate/model/values.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
-import { fitting, score } from "#plate/score.ts";
+import { fitting, score, splitResponses } from "#plate/score.ts";
 import type {
   InvalidResponses,
   RecordMismatch,
@@ -132,8 +132,9 @@ export class IntentRefused extends Data.TaggedError("IntentRefused")<{
 
 /**
  * The failure of {@link advance} for a step whose responses do not fit the current item: a response
- * the item does not score, one that is not a value, or one of another base type or cardinality than
- * its declaration. A host-caused error, returned through a `Result`.
+ * the item does not score, one that is not a value or a record, one of another base type or
+ * cardinality than its declaration, a record for a response that is not a record response, or a
+ * value for one that is. A host-caused error, returned through a `Result`.
  *
  * `response` is the first such response's identifier, `issue` what is wrong with it, and
  * `sequenceIndex` the current item's. `decode` gives only responses that fit, so a host meets this
@@ -151,7 +152,7 @@ export class StepResponseMisfit extends Data.TaggedError("StepResponseMisfit")<{
   override get message(): string {
     const name = JSON.stringify(this.response);
 
-    return `The step's response ${name} does not fit item ${this.sequenceIndex}, so the step is refused and nothing it carried is saved: ${this.issue}. Post each response as decode gives it from the item's form, a value of its declaration's base type and cardinality, or leave ${name} out of the step.`;
+    return `The step's response ${name} does not fit item ${this.sequenceIndex}, so the step is refused and nothing it carried is saved: ${this.issue}. Post each response as decode gives it from the item's form, a value of its declaration's base type and cardinality, or a record for a record response, or leave ${name} out of the step.`;
   }
 }
 
@@ -324,9 +325,10 @@ const leftScoreable = (
         new ItemNotInSession({ count: moved.items.length, sequenceIndex: session.position + 1 }),
     );
     const accepted = yield* deliveredItem(advancing.items, moved, left);
+    const held: Responses = { ...left.record.responses, ...left.record.records };
     const values = Option.match(left.saved, {
-      onNone: () => left.record.responses,
-      onSome: (saved) => ({ ...left.record.responses, ...saved }),
+      onNone: () => held,
+      onSome: (saved) => ({ ...held, ...saved }),
     });
     const attempt = score(accepted, values, yield* encodeRecord(left.record));
     if (Result.isFailure(attempt) && attempt.failure._tag === "ResponsesRefused") {
@@ -400,10 +402,12 @@ const moved = (
 /**
  * Say what is wrong with one response a step carries, as the current item declares it.
  *
- * The response must be a value, as the value Schema checks one, then fit the item's declarations
- * as `fitting` checks a record's responses: a response the item scores, of its declaration's base
- * type and cardinality. `fitting` reads a whole record, so it is handed the current record with
- * this response as its only response and no outcomes, and judges nothing else.
+ * The response must be a value or a record, as the response value Schema checks one, then fit the
+ * item's declarations as `fitting` checks a record's responses: a response the item scores, of its
+ * declaration's base type and cardinality, and a record under a record response's identifier and
+ * nowhere else. `fitting` reads a whole record, so it is handed the current record with this
+ * response as its only response or record and no outcomes, and judges nothing else. It judges a
+ * record's shape only, as `score` does, never its fields' values.
  *
  * @param accepted The current item.
  * @param entry The current session item.
@@ -415,12 +419,12 @@ const responseMisfit = (
   accepted: Accepted,
   entry: SessionItem,
   identifier: string,
-  value: Value,
+  value: ResponseValue,
 ): Option.Option<string> =>
-  Result.match(Schema.encodeResult(ValueSchema)(value), {
+  Result.match(Schema.encodeResult(ResponseValueSchema)(value), {
     onFailure: (error) =>
       Option.some(
-        `its response ${JSON.stringify(identifier)} is not a value: ${error.message.replaceAll(/\s*\n\s*/gu, " ")}`,
+        `its response ${JSON.stringify(identifier)} is not a value or a record: ${error.message.replaceAll(/\s*\n\s*/gu, " ")}`,
       ),
     onSuccess: () =>
       Option.map(
@@ -428,7 +432,7 @@ const responseMisfit = (
           fitting(accepted.item, {
             ...entry.record,
             outcomes: {},
-            responses: { [identifier]: value },
+            ...splitResponses({ [identifier]: value }),
           }),
         ),
         ({ issue }) => issue,

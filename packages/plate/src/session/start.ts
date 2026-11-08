@@ -1175,16 +1175,20 @@ const inspect = (
   });
 
 /**
- * Give an item's values: each response's saved value, else its record's.
+ * Give an item's values: each response's saved value, else its record's, a record response's from
+ * the record's `records` and the rest from its `responses`.
  *
  * @param item The session item.
  * @returns The values, by response identifier.
  */
-const valuesOf = (item: SessionItem): Responses =>
-  Option.match(item.saved, {
-    onNone: () => item.record.responses,
-    onSome: (saved) => ({ ...item.record.responses, ...saved }),
+const valuesOf = (item: SessionItem): Responses => {
+  const held: Responses = { ...item.record.responses, ...item.record.records };
+
+  return Option.match(item.saved, {
+    onNone: () => held,
+    onSome: (saved) => ({ ...held, ...saved }),
   });
+};
 
 /**
  * Build the view of one session item.

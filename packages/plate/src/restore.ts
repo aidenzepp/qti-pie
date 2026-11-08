@@ -30,7 +30,9 @@ export interface Restored {
    */
   readonly record: ItemRecord;
   /**
-   * The record's responses by identifier, NULL included, to pass to `render` as its `values`.
+   * The record's responses by identifier, NULL included, to pass to `render` as its `values`. A
+   * record response's record is not among them yet: the record holds it under `records`, and no
+   * control shows one.
    */
   readonly values: Responses;
 }
@@ -41,8 +43,9 @@ export interface Restored {
  *
  * The record is checked against the item as `results` checks it: it belongs to the item, and each
  * response it holds is one the item scores, and each outcome one the item declares, each of its
- * declaration's base type and cardinality, so another item's record, or values the item's controls
- * cannot hold, are refused rather than given back. Then, as `score` checks it, a record of an item
+ * declaration's base type and cardinality, and each record it holds one of a record response the
+ * item declares, so another item's record, or values the item's controls cannot hold, are refused
+ * rather than given back. Then, as `score` checks it, a record of an item
  * whose template processing runs must hold a value for each template variable the item declares,
  * as every record `begin` or `score` writes for it does (`templatesHeld` in `#plate/score.ts`).
  *
