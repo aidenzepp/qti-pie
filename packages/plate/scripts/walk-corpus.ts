@@ -24,6 +24,10 @@
  *   Placeholder start with different letters, so a test can type ahead to any of them.
  * - `xhtml.xml`, five Extended Texts, three of them `format="xhtml"`, each under its own Prompt,
  *   declaring no outcome and no response processing: the keyboard witness of the `xhtml` format.
+ * - `choices.xml`, three shuffled Choices of six elements each, with `max-choices` and `min-choices`
+ *   and two of the author's selection messages, every choice identifier distinct across the item,
+ *   declaring no outcome and no response processing: the witness of shuffled Choices across a
+ *   refused post.
  * - `derived/<corpus path without .xml>/<response>.xml`, one item per corpus text interaction that
  *   carries `pattern-mask`: the response's base type and cardinality, and the interaction's
  *   `pattern-mask`, `data-patternmask-message`, `expected-length` and `format` as written, under a
@@ -84,6 +88,11 @@ const inlineItem = "inline.xml";
  * The xhtml Extended Text item, relative to the walk directory.
  */
 export const xhtmlItem = "xhtml.xml";
+
+/**
+ * The shuffled Choices item, relative to the walk directory.
+ */
+export const choicesItem = "choices.xml";
 
 /**
  * The text interactions a derived probe copies.
@@ -170,8 +179,8 @@ export interface WalkCorpus {
   readonly directory: string;
   /**
    * Every probe item, relative to the walk directory: the OD-14 (e) probe, the pattern item, the
-   * ordered Extended Text, the Inline Choice item, the xhtml Extended Text item, then the derived
-   * probes.
+   * ordered Extended Text, the Inline Choice item, the xhtml Extended Text item, the shuffled
+   * Choices item, then the derived probes.
    */
   readonly items: readonly string[];
   /**
@@ -398,6 +407,104 @@ export const xhtmlProbe = itemDocument(
 );
 
 /**
+ * One shuffled Choice of {@link choicesProbe}: its response, its counts and selection message as
+ * written, its Prompt, and its six choices, each an identifier and a chemical element's name.
+ */
+interface ProbeChoice {
+  /**
+   * The six choices in document order, each its identifier and the element's name.
+   */
+  readonly choices: readonly (readonly [string, string])[];
+  /**
+   * The Choice's count attributes and its selection message, as written.
+   */
+  readonly counts: string;
+  /**
+   * The Prompt, as plain text.
+   */
+  readonly prompt: string;
+  /**
+   * The response identifier the Choice binds.
+   */
+  readonly response: string;
+}
+
+/**
+ * The three shuffled Choices of {@link choicesProbe}, in document order.
+ */
+const probeChoices: readonly ProbeChoice[] = [
+  {
+    choices: [
+      ["SALT_NA", "Sodium"],
+      ["SALT_CL", "Chlorine"],
+      ["SALT_K", "Potassium"],
+      ["SALT_I", "Iodine"],
+      ["SALT_CA", "Calcium"],
+      ["SALT_F", "Fluorine"],
+    ],
+    counts:
+      'max-choices="2" data-max-selections-message="Choose no more than two elements for table salt."',
+    prompt: "Choose the two elements that make up table salt.",
+    response: "RESPONSE1",
+  },
+  {
+    choices: [
+      ["GAS_HE", "Helium"],
+      ["GAS_NE", "Neon"],
+      ["GAS_AR", "Argon"],
+      ["GAS_H", "Hydrogen"],
+      ["GAS_N", "Nitrogen"],
+      ["GAS_O", "Oxygen"],
+    ],
+    counts: 'max-choices="2"',
+    prompt: "Choose up to two noble gases.",
+    response: "RESPONSE2",
+  },
+  {
+    choices: [
+      ["METAL_FE", "Iron"],
+      ["METAL_CU", "Copper"],
+      ["METAL_ZN", "Zinc"],
+      ["METAL_C", "Carbon"],
+      ["METAL_S", "Sulfur"],
+      ["METAL_P", "Phosphorus"],
+    ],
+    counts:
+      'max-choices="0" min-choices="2" data-min-selections-message="Choose two metals or more."',
+    prompt: "Choose at least two metals.",
+    response: "RESPONSE3",
+  },
+];
+
+/**
+ * The shuffled Choices item, the renderer's own text: three `multiple` identifier responses, each
+ * bound to a shuffled Choice of six chemical elements under its own Prompt. `RESPONSE1`'s Choice
+ * has `max-choices="2"` and the author's too-many message, `RESPONSE2`'s has `max-choices="2"`
+ * and the locale's message, and `RESPONSE3`'s has `min-choices="2"`, with `max-choices="0"` so it
+ * sets no most, and the author's too-few message. Every choice identifier is distinct across the
+ * item, and none names a variable. It declares no outcome and has no response processing, so a
+ * post is recorded and not scored. Hand-built, so the witness of shuffled Choices across a
+ * refused post reads no corpus file.
+ */
+export const choicesProbe = itemDocument(
+  "walk-choices",
+  "Walk probe: shuffled Choices",
+  probeChoices.map(
+    ({ response }) =>
+      `<qti-response-declaration identifier="${response}" cardinality="multiple" base-type="identifier"/>`,
+  ),
+  probeChoices.flatMap(({ choices, counts, prompt, response }) => [
+    `<qti-choice-interaction response-identifier="${response}" shuffle="true" ${counts}>`,
+    `  <qti-prompt>${prompt}</qti-prompt>`,
+    ...choices.map(
+      ([identifier, name]) =>
+        `  <qti-simple-choice identifier="${identifier}">${name}</qti-simple-choice>`,
+    ),
+    "</qti-choice-interaction>",
+  ]),
+);
+
+/**
  * Read an attribute in no namespace.
  *
  * @param element The element.
@@ -569,8 +676,8 @@ const writeText = (file: string, text: string): Effect.Effect<void, ProbeUnwrita
 
 /**
  * Write the walk corpus: the OD-14 (e) probe and its two documents, the pattern item, the ordered
- * Extended Text, the Inline Choice item, the xhtml Extended Text item, and one derived probe per
- * corpus text interaction that carries `pattern-mask`.
+ * Extended Text, the Inline Choice item, the xhtml Extended Text item, the shuffled Choices item,
+ * and one derived probe per corpus text interaction that carries `pattern-mask`.
  *
  * Fails with {@link ProbeUnderivable} or {@link ProbeUnwritable}, with `CorpusMissing` or
  * `CorpusFileUnreadable` when the corpus cannot be read, and with a `ConfigError` when neither
@@ -601,6 +708,7 @@ export const writeWalkCorpus: Effect.Effect<
     [path.join(directory, orderedItem), orderedProbe],
     [path.join(directory, inlineItem), inlineProbe],
     [path.join(directory, xhtmlItem), xhtmlProbe],
+    [path.join(directory, choicesItem), choicesProbe],
     ...derivations.map(
       (derivation, index) =>
         [
@@ -622,6 +730,7 @@ export const writeWalkCorpus: Effect.Effect<
       orderedItem,
       inlineItem,
       xhtmlItem,
+      choicesItem,
       ...derived.map((probe) => probe.item),
     ],
     od14: od14Item,
@@ -646,7 +755,7 @@ const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")
  */
 export const instructions = (written: WalkCorpus): string =>
   [
-    `Wrote ${String(written.items.length)} probe items under ${written.directory}: the OD-14 (e) probe, the pattern item, the ordered Extended Text, the Inline Choice item, the xhtml Extended Text item and ${String(written.derived.length)} derived probes.`,
+    `Wrote ${String(written.items.length)} probe items under ${written.directory}: the OD-14 (e) probe, the pattern item, the ordered Extended Text, the Inline Choice item, the xhtml Extended Text item, the shuffled Choices item and ${String(written.derived.length)} derived probes.`,
     "",
     "Serve them in the dev playground, from the repository root:",
     "",
