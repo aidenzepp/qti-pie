@@ -20,7 +20,13 @@
  * entries pass one statement accepted) need the importer's ChangeSet (Q5.15), and are stated in
  * Q5.06's report for the network seat's probe.
  */
-import { bytesMaxLength, ChangeSet, Db, messageMaxBytes } from "@bjornpagen/grizzle";
+import {
+  bytesMaxLength,
+  ChangeSet,
+  Db,
+  flightMaxBytes,
+  messageMaxBytes,
+} from "@bjornpagen/grizzle";
 import type { Fact, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
@@ -79,22 +85,47 @@ const someContent = Uint8Array.of(0x00, 0x01);
 const largeEntryBytes = 64 * 1024 * 1024;
 
 /**
- * The text a family write carries for one large entry: its hex form, `\x` and two digits a byte.
- * grizzle 1.0.0-beta.1 writes a family member's `bytes` value as that text in a text array
- * (grizzle-engine `scalar/values/bytes.ts` `bytesText`, `codec/recordset.ts` `arrayTexts`), though
- * its README says a `bytes` value is written in binary, as only an array outside a family is
- * (`codec/bytea.ts`).
+ * The large entries: the fewest whose bytes alone are past one Bind message, grizzle's
+ * `messageMaxBytes`: 16. grizzle sends a family's bytes column as one binary `bytea[]` a statement
+ * (grizzle-engine `codec/bytea.ts` `byteaArray`), so each value counts its raw bytes.
  */
-const largeEntryTextBytes = "\\x".length + 2 * largeEntryBytes;
+const largeEntries = Math.floor(messageMaxBytes.value / largeEntryBytes) + 1;
 
 /**
- * The large entries: the fewest whose text, as a family write carries it, is past one Bind
- * message, grizzle's `messageMaxBytes`: 8. Twice as many, past it in raw bytes, make about 2 GiB
- * of text, which grizzle 1.0.0-beta.1 sends as one TLS write that Node refuses (`SSL_write` takes
- * an `int` length), so it loses the connection after sending COMMIT and answers `CommitUnknown`.
- * They return to 16 once grizzle writes a family's bytes in binary and bounds a flight.
+ * The large entries whose bytes alone are past one flight, grizzle's `flightMaxBytes`, the most one
+ * write over TLS carries: the fewest, 29, 1,946,157,056 bytes.
  */
-const largeEntries = Math.floor(messageMaxBytes.value / largeEntryTextBytes) + 1;
+const flightEntries = Math.floor(flightMaxBytes.value / largeEntryBytes) + 1;
+
+/**
+ * A package of the manifest's stand-in and `count` large entries, every one the same buffer, so a
+ * test holds 64 MiB of content however many it writes.
+ *
+ * @param name - The package's name.
+ * @param count - Its large entries.
+ * @returns The package's id and the ChangeSet that inserts it.
+ */
+const largePackage = (name: string, count: number) => {
+  const id = crypto.randomUUID();
+  const large = new Uint8Array(largeEntryBytes);
+
+  return {
+    changes: ChangeSet.empty(Author).insert(Package, [
+      {
+        entries: [
+          { content: someContent, path: manifestPath },
+          ...Array.from({ length: count }, (_, at) => ({
+            content: large,
+            path: `large/${String(at)}.bin`,
+          })),
+        ],
+        id,
+        name,
+      },
+    ]),
+    id,
+  };
+};
 
 /**
  * Whether an outcome is `invariant-rejected` with a law among its `laws` that the predicate picks.
@@ -234,45 +265,55 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
         () =>
           // Oracle: a metamorphic relation over grizzle's transport (fin.md §4.5a): a family past
           // one statement's Bind message (1,073,741,822 bytes, grizzle's `messageMaxBytes`) is cut
-          // into consecutive statements of one transaction, so its verdict is the law's, here
-          // file-listed over its unlisted entries, as for a small package, and never
-          // `InputTooLarge`. The accepted form needs a whole manifest, which the importer's
-          // ChangeSet writes (Q5.15).
-          // Bound: the fewest entries of 64 MiB whose text passes the Bind bound, 8, sharing one
-          // buffer, so the test holds 64 MiB of content; grizzle's copies of it take the heap the
-          // database project states (`vite.config.ts`).
+          // into consecutive statements of one transaction, sent in one flight within grizzle's
+          // `flightMaxBytes`, so its verdict is the law's, here file-listed over its unlisted
+          // entries, as for a small package, and never `InputTooLarge`. The accepted form needs a
+          // whole manifest, which the importer's ChangeSet writes (Q5.15).
+          // Bound: the fewest entries of 64 MiB past the Bind bound, 16, sharing one buffer, so the
+          // test holds 64 MiB of content beside grizzle's one copy of each value.
           Effect.gen(function* pastOneStatement() {
             assert.isAtMost(
               largeEntryBytes,
               bytesMaxLength.value,
               "a large entry is one bytes value",
             );
-            assert.isAbove(
-              largeEntries * largeEntryTextBytes,
-              messageMaxBytes.value,
-              "the large entries' text fits one Bind message",
-            );
 
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            const large = new Uint8Array(largeEntryBytes);
-            const outcome = yield* db.apply(
-              ChangeSet.empty(Author).insert(Package, [
-                {
-                  entries: [
-                    { content: someContent, path: manifestPath },
-                    ...Array.from({ length: largeEntries }, (_, at) => ({
-                      content: large,
-                      path: `large/${String(at)}.bin`,
-                    })),
-                  ],
-                  id: crypto.randomUUID(),
-                  name: "past-one-statement",
-                },
-              ]),
-              {},
-            );
+            const { changes } = largePackage("past-one-statement", largeEntries);
+            const outcome = yield* db.apply(changes, {});
 
             assert.isTrue(rejectedBy(outcome, containedIn("Entry", "FileHref")), outcome.kind);
+          }),
+        { timeout: 600_000 },
+      );
+
+      it.effect(
+        "refuses a package whose flight is past one write as InputTooLarge before any byte is sent, never CommitUnknown",
+        () =>
+          // Oracle: grizzle's flight bound (adapter/wire/batch.ts `send`, core/limits.ts
+          // `flightMaxBytes`): a flight whose bytes, as pg writes them in its one corked write, are
+          // past what one write over TLS carries is refused before any byte of it is written, as
+          // the ExecutionFailure whose reason is `InputTooLarge` of kind `flight`, its bytes past
+          // its limit, `flightMaxBytes`. Nothing reached the server, so the package is absent.
+          // Without the bound the write failed whole with COMMIT unsent, and the apply answered
+          // `CommitUnknown` though nothing committed.
+          // Bound: the fewest entries of 64 MiB past one flight, 29, sharing one buffer, so the
+          // test holds 64 MiB of content; grizzle copies each value once into its statement's
+          // binary array before it counts the flight, 1.9 GB outside the JavaScript heap.
+          Effect.gen(function* pastOneFlight() {
+            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const { changes, id } = largePackage("past-one-flight", flightEntries);
+            const failure = yield* Effect.flip(db.apply(changes, {}));
+
+            assert.isTrue(
+              failure._tag === "ExecutionFailure" &&
+                failure.reason._tag === "InputTooLarge" &&
+                failure.reason.bound.kind === "flight" &&
+                failure.reason.bound.limit === flightMaxBytes.value &&
+                failure.reason.bound.bytes > flightMaxBytes.value,
+              failure.message,
+            );
+            assert.isTrue(Option.isNone(yield* db.get(Package, { id })), id);
           }),
         { timeout: 600_000 },
       );
