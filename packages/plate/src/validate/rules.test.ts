@@ -520,6 +520,42 @@ const settingScore = (expression: SourceElement) =>
   judged(item([outcome("SCORE")], [], [processing(undefined, [setScore(expression)])]));
 
 /**
+ * Construct a field of a record value: a `qti-value` with the attributes given.
+ *
+ * @param attributes Its attributes, such as `field-identifier` and `base-type`.
+ * @param written Its text, as written.
+ * @returns The `qti-value`.
+ */
+const field = (attributes: readonly SourceAttribute[], written: string): SourceElement =>
+  el("qti-value", attributes, [text(written)]);
+
+/**
+ * Check an item whose record response `RESPONSE` holds a `qti-default-value` of the fields given.
+ *
+ * @param fields The default's `qti-value` children.
+ * @param baseType The declaration's own `base-type`, none when absent.
+ * @returns The refusals, reduced.
+ */
+const recordDefault = (fields: readonly SourceElement[], baseType?: string) =>
+  judged(
+    item([response("RESPONSE", "record", baseType, [el("qti-default-value", [], fields)])], []),
+  );
+
+/**
+ * Construct the reduced refusal of a record field that lacks an attribute its record requires
+ * (`info.txt:73046`).
+ *
+ * @param attribute The attribute it lacks, `field-identifier` or `base-type`.
+ * @param path The missing attribute's path.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const missingField = (attribute: string, path: string) => ({
+  detail: { attribute, element: "qti-value", source: "info.txt:73046" },
+  path,
+  rule: "missing-attribute" as const,
+});
+
+/**
  * Construct an item, not time dependent, whose inline processing sets one outcome to an expression.
  *
  * @param declarations The item's declarations.
@@ -1314,16 +1350,74 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-1] does not refuse a qti-value in a record declaration", () => {
-      assert.deepStrictEqual(
-        judged(
-          item(
-            [response("RESPONSE", "record", undefined, [values("qti-default-value", "abc")])],
-            [],
+    describe("a record declaration's qti-value (info.txt:73046)", () => {
+      const named = attr("field-identifier", "n");
+      const integer = attr("base-type", "integer");
+
+      it("[I-1] a record value names its field: one with no base-type is refused missing-attribute at its @base-type (pantry drops its missing arm)", () => {
+        assert.deepStrictEqual(recordDefault([field([named], "5")]), [
+          missingField("base-type", `${declarationPath}/qti-default-value/qti-value/@base-type`),
+        ]);
+      });
+
+      it("[I-1] a record value names its field: one with no field-identifier is refused missing-attribute at its @field-identifier (pantry's RecordFieldIdentifier)", () => {
+        assert.deepStrictEqual(
+          recordDefault([field([named, integer], "5"), field([integer], "6")]),
+          [
+            missingField(
+              "field-identifier",
+              `${declarationPath}/qti-default-value/qti-value[2]/@field-identifier`,
+            ),
+          ],
+        );
+      });
+
+      it("[I-1] a record value names its field: a record outcome's default is judged as a response's", () => {
+        assert.deepStrictEqual(
+          judged(
+            item(
+              [
+                el(
+                  "qti-outcome-declaration",
+                  [attr("identifier", "R"), attr("cardinality", "record")],
+                  [el("qti-default-value", [], [field([integer], "5")])],
+                ),
+              ],
+              [],
+            ),
           ),
-        ),
-        [],
-      );
+          [
+            missingField(
+              "field-identifier",
+              "qti-assessment-item/qti-outcome-declaration/qti-default-value/qti-value/@field-identifier",
+            ),
+          ],
+        );
+      });
+
+      it("[I-1] a record value names its field: an integer field of x is refused value-type, under its own base-type", () => {
+        assert.deepStrictEqual(recordDefault([field([named, integer], "x")]), [
+          {
+            detail: { baseType: "integer", lexical: "x" },
+            path: `${declarationPath}/qti-default-value/qti-value`,
+            rule: "value-type",
+          },
+        ]);
+      });
+
+      it("[I-1] accepts a field with field-identifier, base-type and a fitting text, trimmed (reading 7)", () => {
+        assert.deepStrictEqual(
+          recordDefault([
+            field([named, integer], " 5 "),
+            field([attr("field-identifier", "s"), attr("base-type", "string")], "abc"),
+          ]),
+          [],
+        );
+      });
+
+      it('[I-1] accepts a record declaration that carries base-type="string" itself', () => {
+        assert.deepStrictEqual(recordDefault([field([named, integer], "5")], "string"), []);
+      });
     });
 
     it("[I-1] refuses a boolean qti-value of 1 (reading 34)", () => {
