@@ -663,6 +663,108 @@ const nestedRefsPackage = (processing: string): ReadonlyMap<string, Uint8Array> 
     { "items/a.xml": itemXml("a", "X.SCORE"), "items/ax.xml": itemXml("ax", "SCORE") },
   );
 
+/**
+ * Write a test `T` of one part `P` holding a section `SEC` with one item ref `ITEM0`, to
+ * `items/b.xml`, then the given section refs, which declares a float outcome `TOTAL` and has the
+ * given outcome processing.
+ *
+ * @param processing What the test's outcome processing holds, as written.
+ * @param sectionRefs The part's section refs, as written.
+ * @returns The test's text.
+ */
+const referringTestXml = (processing: string, sectionRefs: string): string =>
+  `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="SEC" title="SEC" visible="true">${itemRefXml("ITEM0", "items/b.xml")}</qti-assessment-section>${sectionRefs}</qti-test-part><qti-outcome-processing>${processing}</qti-outcome-processing></qti-assessment-test>`;
+
+/**
+ * Write a section ref of a test.
+ *
+ * @param identifier The section ref's identifier.
+ * @param href Its `href`.
+ * @returns The section ref's text.
+ */
+const sectionRefXml = (identifier: string, href: string): string =>
+  `<qti-assessment-section-ref identifier="${identifier}" href="${href}"/>`;
+
+/**
+ * Write the section document `S2`, whose one item ref `I1` names `items/a.xml` from the section
+ * document's own path, `sections/s2.xml`.
+ *
+ * @param itemRef What the item ref `I1` holds, as written.
+ * @param more What the section holds after the item ref, as written.
+ * @returns The section document's text.
+ */
+const sectionXml = (itemRef = "", more = ""): string =>
+  `<qti-assessment-section xmlns="${qti}" identifier="S2" title="S2" visible="true">${itemRefXml("I1", "../items/a.xml", itemRef)}${more}</qti-assessment-section>`;
+
+/**
+ * The files of a package whose test, at `test.xml`, holds the given outcome processing and section
+ * refs, beside the item `ITEM0` names, {@link otherItemXml} at `items/b.xml`, the item `I1` names,
+ * {@link reachedItemXml} at `items/a.xml`, and a section document at `sections/s2.xml`, each listed
+ * as a resource of its type.
+ *
+ * @param processing What the test's outcome processing holds, as written.
+ * @param sectionRefs The test part's section refs, as written.
+ * @param section The section document's text.
+ * @returns The package's files, by path.
+ */
+const referringFiles = (processing: string, sectionRefs: string, section: string) => ({
+  [manifestFile]: manifestXml(
+    resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+    resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+    resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+    resourceXml("S", "imsqti_section_xmlv3p0", "sections/s2.xml"),
+  ),
+  "items/a.xml": reachedItemXml,
+  "items/b.xml": otherItemXml,
+  "sections/s2.xml": section,
+  "test.xml": referringTestXml(processing, sectionRefs),
+});
+
+/**
+ * Open a package whose test reaches the section document `S2` through one section ref and whose
+ * outcome processing is the given one.
+ *
+ * @param processing What the test's outcome processing holds, as written.
+ * @param itemRef What the section document's item ref `I1` holds, as written.
+ * @returns The package's verdict.
+ */
+const openReferring = (processing: string, itemRef = "") =>
+  openPackage(
+    location,
+    packageOf(
+      referringFiles(processing, sectionRefXml("R", "sections/s2.xml"), sectionXml(itemRef)),
+    ),
+  );
+
+/**
+ * The path of a child of the section document's item ref `I1`, by its path step.
+ *
+ * @param step The child's path step.
+ * @returns Its path.
+ */
+const sectionRefChildAt = (step: string): string =>
+  `qti-assessment-section/qti-assessment-item-ref/${step}`;
+
+/**
+ * The `undeclared-variable` refusal of an attribute of a child of the section document's item ref
+ * `I1`.
+ *
+ * @param step The child's path step.
+ * @param attribute The attribute's local name.
+ * @param detail The refusal's detail.
+ * @returns The refusal's facts.
+ */
+const atSection = (
+  step: string,
+  attribute: string,
+  detail: Readonly<Record<string, string>>,
+): Seen => ({
+  detail,
+  document: fileLocation(location, "sections/s2.xml"),
+  location: { kind: "path", path: `${sectionRefChildAt(step)}/@${attribute}` },
+  rule: "undeclared-variable",
+});
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -1654,6 +1756,158 @@ describe("package/open.ts", () => {
             ],
           );
           assert.deepStrictEqual([...accepted.files], []);
+        }),
+    );
+
+    it.effect(
+      "[T-9] accepts I1.SCORE and S2.duration that a section document in the reach holds, its item ref resolved from its own path, with the test's processing marked by name and its items its own (reading 48)",
+      () =>
+        Effect.gen(function* reachedReads() {
+          const testPath = fileLocation(location, "test.xml");
+          const cases = [
+            ["I1.SCORE", settingTotal(variableXml("I1.SCORE"))],
+            [
+              "S2.duration",
+              `<qti-outcome-condition><qti-outcome-if><qti-is-null>${variableXml("S2.duration")}</qti-is-null>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition>`,
+            ],
+          ] as const;
+
+          for (const [reference, processing] of cases) {
+            const verdict = yield* openReferring(processing);
+            const { items, test } = testOf(acceptedOf(verdict), testPath);
+
+            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", reference);
+            assert.deepStrictEqual(test.test.outcomeProcessing, { kind: "marked" }, reference);
+            assert.deepStrictEqual(
+              test.unsupported.map((feature) => feature.feature),
+              ["qti-assessment-section-ref", `variable:${reference}`],
+              reference,
+            );
+            assert.deepStrictEqual([...items.keys()], ["ITEM0"], reference);
+          }
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a section document in the reach whose item ref sets a template variable its item does not declare, or maps from a response, at the section document, as pantry does",
+      () =>
+        Effect.gen(function* reachedItemRefs() {
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openReferring(
+                settingTotal(oneFloat),
+                '<qti-template-default template-identifier="NOPE"><qti-base-value base-type="integer">1</qti-base-value></qti-template-default>',
+              ),
+            ),
+            [
+              atSection("qti-template-default", "template-identifier", {
+                attribute: "template-identifier",
+                element: "qti-template-default",
+                expected: "template",
+                identifier: "NOPE",
+              }),
+            ],
+          );
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openReferring(
+                settingTotal(oneFloat),
+                '<qti-variable-mapping source-identifier="RESPONSE" target-identifier="X"/>',
+              ),
+            ),
+            [
+              atSection("qti-variable-mapping", "source-identifier", {
+                attribute: "source-identifier",
+                element: "qti-variable-mapping",
+                expected: "outcome",
+                identifier: "RESPONSE",
+              }),
+            ],
+          );
+          acceptedOf(
+            yield* openReferring(
+              settingTotal(oneFloat),
+              '<qti-variable-mapping source-identifier="SCORE" target-identifier="X"/><qti-template-default template-identifier="T"><qti-base-value base-type="integer">1</qti-base-value></qti-template-default>',
+            ),
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses I9.SCORE once, and I1.SCORE past a section ref whose href names no section resource, as a section document in the reach adds only what it holds (reading 48)",
+      () =>
+        Effect.gen(function* reachedOnly() {
+          const unread = (reference: string): Seen => ({
+            detail: {
+              check: "reading",
+              element: "qti-variable",
+              identifier: reference,
+              reading: "48",
+            },
+            document: fileLocation(location, "test.xml"),
+            location: {
+              kind: "path",
+              path: `qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-variable/@identifier`,
+            },
+            rule: "undeclared-variable",
+          });
+
+          assert.deepStrictEqual(
+            refusalsOf(yield* openReferring(settingTotal(variableXml("I9.SCORE")))),
+            [unread("I9.SCORE")],
+          );
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                packageOf(
+                  referringFiles(
+                    settingTotal(variableXml("I1.SCORE")),
+                    sectionRefXml("R", "sections/none.xml"),
+                    sectionXml(),
+                  ),
+                ),
+              ),
+            ),
+            [unread("I1.SCORE")],
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] walks a section document in the reach once for two section refs to it, its own section ref to itself and a second test, giving its refusal once",
+      () =>
+        Effect.gen(function* reachedOnce() {
+          const files = referringFiles(
+            settingTotal(oneFloat),
+            `${sectionRefXml("R1", "sections/s2.xml")}${sectionRefXml("R2", "./sections/s2.xml")}`,
+            sectionXml(
+              `<qti-template-default template-identifier="NOPE"><qti-base-value base-type="integer">1</qti-base-value></qti-template-default>`,
+              sectionRefXml("SELF", "s2.xml"),
+            ),
+          );
+          const verdict = yield* openPackage(
+            location,
+            packageOf({
+              ...files,
+              [manifestFile]: manifestXml(
+                resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+                resourceXml("T2", "imsqti_test_xmlv3p0", "test2.xml"),
+                resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+                resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+                resourceXml("S", "imsqti_section_xmlv3p0", "sections/s2.xml"),
+              ),
+              "test2.xml": referringTestXml(
+                settingTotal(oneFloat),
+                sectionRefXml("R", "sections/s2.xml"),
+              ).replace('identifier="T" title="T"', 'identifier="T2" title="T2"'),
+            }),
+          );
+
+          assert.deepStrictEqual(
+            refusalsOf(verdict).map((refusal) => [refusal.rule, refusal.document]),
+            [["undeclared-variable", fileLocation(location, "sections/s2.xml")]],
+          );
         }),
     );
 
