@@ -3359,7 +3359,8 @@ const namingResponse = (identifier: string, local: string) =>
   );
 
 /**
- * The refusal of a {@link namingResponse} test: its expression names no response.
+ * The refusal of a {@link namingResponse} test: its expression names no response, and the test,
+ * which declares none, is the declarer.
  *
  * @param identifier The name the expression gives.
  * @param local The expression's local name.
@@ -3367,7 +3368,7 @@ const namingResponse = (identifier: string, local: string) =>
  */
 const noResponse = (identifier: string, local: string) => [
   {
-    detail: { element: local, expected: "response", identifier },
+    detail: { declarer: "test", element: local, expected: "response", identifier },
     path: `${outcomeRulePath("qti-set-outcome-value")}/${local}`,
     rule: "undeclared-variable",
   },
@@ -3651,7 +3652,12 @@ describe("processingRefusals", () => {
       [
         [
           {
-            detail: { element: "qti-map-response", expected: "response", identifier: "SCORE" },
+            detail: {
+              declarer: "test",
+              element: "qti-map-response",
+              expected: "response",
+              identifier: "SCORE",
+            },
             path: `${rulePath}/qti-map-response`,
             rule: "undeclared-variable",
           },
@@ -3659,6 +3665,7 @@ describe("processingRefusals", () => {
         [
           {
             detail: {
+              declarer: "test",
               element: "qti-map-response-point",
               expected: "response",
               identifier: "SCORE",
@@ -3692,7 +3699,12 @@ describe("processingRefusals", () => {
       [
         [
           {
-            detail: { element: "qti-variable", expected: "variable", identifier: "NOPE" },
+            detail: {
+              declarer: "test",
+              element: "qti-variable",
+              expected: "variable",
+              identifier: "NOPE",
+            },
             path: `${conditionPath}/qti-variable`,
             rule: "undeclared-variable",
           },
@@ -3715,6 +3727,68 @@ describe("processingRefusals", () => {
         [],
         [],
         [],
+      ],
+    );
+  });
+
+  it("[T-9] names the test as the declarer of a name nothing answers in a test's outcome processing or in a section document a test reaches: its qti-variable of NOPE, its qti-round-to's figures of NOPE, the section's pre-condition over NOPE, and a qti-map-response of the test outcome A.B it declares whole", () => {
+    const reaching = scoringTest(baseValue("float", "1"));
+
+    assert.deepStrictEqual(
+      [
+        processed(scoringTest(variable("NOPE")), unknownTyping),
+        processed(
+          scoringTest(
+            el(
+              "qti-round-to",
+              [attr("figures", "NOPE"), attr("rounding-mode", "decimalPlaces")],
+              [variable("SCORE")],
+            ),
+          ),
+          unknownTyping,
+        ),
+        processed(conditionedSection(variable("NOPE")), unknownTyping, undefined, reaching),
+        namingResponse("A.B", "qti-map-response"),
+      ],
+      [
+        [
+          {
+            detail: {
+              declarer: "test",
+              element: "qti-variable",
+              expected: "variable",
+              identifier: "NOPE",
+            },
+            path: `${outcomeRulePath("qti-set-outcome-value")}/qti-variable`,
+            rule: "undeclared-variable",
+          },
+        ],
+        [
+          {
+            detail: {
+              attribute: "figures",
+              declarer: "test",
+              element: "qti-round-to",
+              expected: "variable",
+              identifier: "NOPE",
+            },
+            path: `${outcomeRulePath("qti-set-outcome-value")}/qti-round-to`,
+            rule: "undeclared-variable",
+          },
+        ],
+        [
+          {
+            detail: {
+              declarer: "test",
+              element: "qti-variable",
+              expected: "variable",
+              identifier: "NOPE",
+            },
+            path: "qti-assessment-section/qti-pre-condition/qti-variable",
+            rule: "undeclared-variable",
+          },
+        ],
+        noResponse("A.B", "qti-map-response"),
       ],
     );
   });
@@ -3796,7 +3870,12 @@ describe("processingRefusals", () => {
       [settingContext("C.X"), settingContext("C")],
       ["C.X", "C"].map((identifier) => [
         {
-          detail: { element: "qti-set-outcome-value", expected: "outcome", identifier },
+          detail: {
+            declarer: "test",
+            element: "qti-set-outcome-value",
+            expected: "outcome",
+            identifier,
+          },
           path: outcomeRulePath("qti-set-outcome-value"),
           rule: "undeclared-variable",
         },

@@ -2806,6 +2806,78 @@ describe("describeRefusal", () => {
     );
   });
 
+  it("[T-9] names the test as the declarer of a variable a test's qti-variable reads and nothing declares, and keeps the fix to declare it, which a test may", () => {
+    const sentence = describeRefusal(
+      refusalOf("undeclared-variable", {
+        declarer: "test",
+        element: "qti-variable",
+        expected: "variable",
+        identifier: "NOPE",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-variable` names `NOPE`, and the test declares no variable `NOPE`.",
+    );
+    assert.include(sentence, "To make it valid: declare `NOPE`, or name a declared variable.");
+    assert.notInclude(sentence, "the item declares");
+  });
+
+  it("[T-9] tells a test's qti-map-response or qti-correct, with the test as the declarer, to name an item's response through its item ref, since a test declares no response", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      for (const identifier of ["SCORE", "A.B"]) {
+        const sentence = describeRefusal(
+          refusalOf("undeclared-variable", {
+            declarer: "test",
+            element,
+            expected: "response",
+            identifier,
+          }),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` names \`${identifier}\`, and the test declares no response \`${identifier}\`; only an item declares responses.`,
+          `${element} ${identifier}`,
+        );
+        assert.include(
+          sentence,
+          "To make it valid: name a response an item declares, through its item ref, written `ITEMREF.RESPONSE`.",
+          `${element} ${identifier}`,
+        );
+        assert.notInclude(sentence, "the item declares", `${element} ${identifier}`);
+        assert.notInclude(sentence, `declare \`${identifier}\``, `${element} ${identifier}`);
+      }
+    }
+  });
+
+  it("[T-9] names the built-in a test's qti-correct reads, with the test as the declarer, as the built-in, and gives the item-ref fix", () => {
+    for (const identifier of ["numAttempts", "duration"]) {
+      const sentence = describeRefusal(
+        refusalOf("undeclared-variable", {
+          declarer: "test",
+          element: "qti-correct",
+          expected: "response",
+          identifier,
+        }),
+      );
+
+      assert.include(
+        sentence,
+        `\`qti-correct\` names the built-in \`${identifier}\`, which has no declaration, so no mapping or correct response.`,
+        identifier,
+      );
+      assert.include(
+        sentence,
+        "To make it valid: name a response an item declares, through its item ref, written `ITEMREF.RESPONSE`.",
+        identifier,
+      );
+      assert.notInclude(sentence, "declares no", identifier);
+      assert.notInclude(sentence, `declare \`${identifier}\``, identifier);
+    }
+  });
+
   it("names a built-in a mapping or correct response reads as the built-in, which has no declaration (built-in or dotted response wording)", () => {
     for (const element of ["qti-map-response", "qti-correct"]) {
       for (const identifier of ["numAttempts", "duration"]) {
@@ -2859,7 +2931,7 @@ describe("describeRefusal", () => {
     }
   });
 
-  it("gives a dotted name no ref is read through, one an item or a test declares whole, the sentence that names no item ref (dotted wording through a ref only)", () => {
+  it("gives a dotted name no ref is read through, one an item declares whole, the sentence that names no item ref (dotted wording through a ref only)", () => {
     for (const element of ["qti-map-response", "qti-correct"]) {
       for (const identifier of ["X.Y", "A.B"]) {
         const sentence = describeRefusal(

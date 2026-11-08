@@ -1133,7 +1133,12 @@ describe("checkTestRules", () => {
       assert.deepStrictEqual(
         judged(inEveryContext(() => variable("NOPE"))),
         contextPaths.map((path) => ({
-          detail: { element: "qti-variable", expected: "variable", identifier: "NOPE" },
+          detail: {
+            declarer: "test",
+            element: "qti-variable",
+            expected: "variable",
+            identifier: "NOPE",
+          },
           path: `${path}/qti-variable`,
           rule: "undeclared-variable",
         })),
