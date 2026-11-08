@@ -5,9 +5,10 @@ import { qtiNamespace } from "#plate/document/source.ts";
 import type { ChoiceInteraction, InlineChoiceInteraction, Item } from "#plate/model/item.ts";
 import type { ItemRef, Section, Test } from "#plate/model/test.ts";
 import { openPackage } from "#plate/package/open.ts";
+import type { PackageVerdict } from "#plate/package/open.ts";
 import { fileLocation, manifestFile } from "#plate/package/store.ts";
 import { open } from "#plate/validate/open.ts";
-import type { Refusal } from "#plate/validate/refusal.ts";
+import type { Location, Refusal, RefusalRule } from "#plate/validate/refusal.ts";
 import { acceptedItem, unsupportedFeatures } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
 import { manifestNamespace } from "#plate/vocabulary.ts";
@@ -645,6 +646,99 @@ describe("every xs:boolean attribute plate reads", () => {
             },
           ],
         );
+      }),
+  );
+});
+
+/**
+ * A 3.0.0 manifest listing the test `test.xml` and the item `i1.xml`, for the mapping packages.
+ */
+const mappingManifest = `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata><organizations/><resources><resource identifier="T" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource><resource identifier="I1" type="imsqti_item_xmlv3p0" href="i1.xml"><file href="i1.xml"/></resource></resources></manifest>`;
+
+/**
+ * A test whose outcome processing sets its float outcome `TOTAL` from `qti-map-response` of
+ * `ITEM1.F`, the response `F` of its item ref `ITEM1`.
+ */
+const mappingTest = `<qti-assessment-test xmlns="${qtiNamespace}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="nonlinear" submission-mode="individual"><qti-assessment-section identifier="S" title="S" visible="true"><qti-assessment-item-ref identifier="ITEM1" href="i1.xml"/></qti-assessment-section></qti-test-part><qti-outcome-processing><qti-set-outcome-value identifier="TOTAL"><qti-map-response identifier="ITEM1.F"/></qti-set-outcome-value></qti-outcome-processing></qti-assessment-test>`;
+
+/**
+ * The package of {@link mappingTest} and its item `i1.xml`, whose response `F`, declared with the
+ * given attributes, holds a `qti-mapping`.
+ *
+ * @param declared `F`'s cardinality and base type, as written.
+ * @returns The package's files.
+ */
+const mappingPackage = (declared: string): ReadonlyMap<string, Uint8Array> =>
+  new Map([
+    [manifestFile, bytesOf(mappingManifest)],
+    [
+      "i1.xml",
+      bytesOf(
+        `<qti-assessment-item xmlns="${qtiNamespace}" identifier="I1" title="I1" ${plainRoot}><qti-response-declaration identifier="F" ${declared}><qti-mapping default-value="0"><qti-map-entry map-key="A" mapped-value="1"/></qti-mapping></qti-response-declaration><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>x</p></qti-item-body></qti-assessment-item>`,
+      ),
+    ],
+    ["test.xml", bytesOf(mappingTest)],
+  ]);
+
+/**
+ * Keep each `misplaced-element` refusal of a package's verdict.
+ *
+ * @param verdict The package's verdict.
+ * @returns Those refusals' documents, locations and rules, none when it is not `refused`.
+ */
+const misplacedMappings = (verdict: PackageVerdict) =>
+  (verdict.verdict === "refused" ? verdict.refusals : [])
+    .filter((refusal) => refusal.rule === "misplaced-element")
+    .map(({ document, location, rule }) => ({ document, location, rule }));
+
+/**
+ * The one `misplaced-element` refusal of {@link mappingPackage}'s item when `F` cannot hold its
+ * `qti-mapping`.
+ */
+const atMapping: readonly { document: string; location: Location; rule: RefusalRule }[] = [
+  {
+    document: fileLocation(packageLocation, "i1.xml"),
+    location: { kind: "path", path: "qti-assessment-item/qti-response-declaration/qti-mapping" },
+    rule: "misplaced-element",
+  },
+];
+
+describe("a mapping in a response declaration that cannot hold one, through the package (D9-7)", () => {
+  it.effect(
+    "[I-1] a test mapping ITEM1.F, a file response with the mapping its base type forbids, is refused at open with the item's misplaced-element (pantry mapping-base-type)",
+    () =>
+      Effect.gen(function* fileMapping() {
+        const verdict = yield* openPackage(
+          packageLocation,
+          mappingPackage('cardinality="single" base-type="file"'),
+        );
+
+        assert.strictEqual(verdict.verdict, "refused");
+        assert.deepStrictEqual(misplacedMappings(verdict), atMapping);
+      }),
+  );
+
+  it.effect(
+    "[I-1] a test mapping ITEM1.F, a record response with the mapping its base type forbids, is refused at open with the item's misplaced-element (pantry mapping-base-type)",
+    () =>
+      Effect.gen(function* recordMapping() {
+        const verdict = yield* openPackage(packageLocation, mappingPackage('cardinality="record"'));
+
+        assert.strictEqual(verdict.verdict, "refused");
+        assert.deepStrictEqual(misplacedMappings(verdict), atMapping);
+      }),
+  );
+
+  it.effect(
+    "[I-1] a test mapping ITEM1.F, a string response with a mapping, is accepted, the control (pantry mapping-base-type)",
+    () =>
+      Effect.gen(function* stringMapping() {
+        const verdict = yield* openPackage(
+          packageLocation,
+          mappingPackage('cardinality="single" base-type="string"'),
+        );
+
+        assert.strictEqual(verdict.verdict, "accepted");
       }),
   );
 });
