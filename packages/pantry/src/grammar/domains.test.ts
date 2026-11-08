@@ -742,20 +742,9 @@ const mutantsOf = (word: string): readonly string[] => {
   );
 };
 
-/**
- * Whether `xmllint` can be run here.
- */
-const hasXmllint = await Effect.runPromise(
-  Effect.gen(function* findXmllint() {
-    const fs = yield* FileSystem.FileSystem;
-
-    return (
-      (yield* fs.exists("/usr/bin/xmllint")) || (yield* fs.exists("/opt/homebrew/bin/xmllint"))
-    );
-  }).pipe(Effect.provide(NodeServices.layer)),
-);
-
-describe.skipIf(!hasXmllint)("The translation of XSD regular expressions", () => {
+// xmllint is found as the oracle finds it, `XMLLINT` or `PATH` (`#pantry/xml/oracle.ts`), and is
+// never skipped: a machine without it fails as `OracleUnavailable`, which says how to supply one.
+describe("The translation of XSD regular expressions", () => {
   it.effect(
     "matches every pattern facet of the pinned XSDs exactly as xmllint does, on its words and their mutants",
     () =>
