@@ -713,7 +713,7 @@ export const fixed = {
     fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
     owner: "FB-META",
   },
-  "import-only-law: E1 derived, contained DeclarationName(document, identifier, node, declarationKind, cardinality, baseTypes) in VariableLookup(document, name, declaration, declarationKind, cardinality, baseTypes)":
+  "import-only-law: E1 derived, contained DeclarationIdentifier(document, identifier, node, declarationKind, cardinalities, baseTypes) in VariableLookup(document, name, declaration, declarationKind, cardinalities, baseTypes)":
     {
       files: [
         [

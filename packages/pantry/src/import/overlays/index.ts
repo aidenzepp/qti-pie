@@ -17,10 +17,7 @@
  */
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { Equal, Formatter, Result, Schema } from "effect";
-import {
-  rowsOf as declarationRowsOf,
-  untypedNamesOf,
-} from "#pantry/import/overlays/declarations.ts";
+import { rowsOf as declarationRowsOf } from "#pantry/import/overlays/declarations.ts";
 import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
 import {
   assembledExpressionRowsOf,
@@ -278,6 +275,7 @@ export const overlayPartsOf = (
   );
   const referenced = assembledExpressionRowsOf(
     built.map(({ document, rows }) => ({
+      cardinalities: rows.declarations.DeclarationCardinality,
       expressions: rows.expressions,
       ids: document.ids,
       tests: rows.tests,
@@ -323,11 +321,11 @@ export const overlayPartsOf = (
       assembled.Instance.values(),
     ),
     placedVariableRowsOf({
-      baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
-      declarations: built.flatMap(({ rows }) => [...rows.declarations.DeclarationName.values()]),
+      declarations: built.flatMap(({ rows }) => [
+        ...rows.declarations.DeclarationIdentifier.values(),
+      ]),
       instances: assembled.Instance.values(),
       references: built.flatMap(({ rows }) => [...rows.expressions.VariableRef.values()]),
-      untyped: documents.flatMap(({ ids, listed }) => untypedNamesOf(listed.tree, ids)),
     }),
     objectRowsOfPackage(manifest.document.listed.tree, manifest.document.ids, named),
     placedBindingRowsOf({
@@ -352,8 +350,13 @@ export const overlayPartsOf = (
     }),
     sectionRowsOf({
       baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
+      cardinalities: built.flatMap(({ rows }) => [
+        ...rows.declarations.DeclarationCardinality.values(),
+      ]),
       contexts: built.flatMap(({ rows }) => [...rows.interactions.SectionContextName.values()]),
-      declarations: built.flatMap(({ rows }) => [...rows.declarations.DeclarationName.values()]),
+      declarations: built.flatMap(({ rows }) => [
+        ...rows.declarations.DeclarationIdentifier.values(),
+      ]),
       feedbacks: built.flatMap(({ rows }) => [...rows.interactions.SectionFeedbackName.values()]),
       instances: assembled.Instance.values(),
       prints: built.flatMap(({ rows }) => [...rows.interactions.SectionPrintedName.values()]),

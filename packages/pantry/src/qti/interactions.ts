@@ -9,8 +9,9 @@
  * count, number and flag these laws read is an atomic XSD type whose whiteSpace is `collapse` (spec
  * reading 7: "An attribute the XSD itself types ... is read as the XSD reads it, outer whitespace
  * collapsed"), so the value is the form its type's lexical space is read on, the one
- * `DeclarationName.identifier` holds. The copy claims no type of it: a value with whitespace inside
- * (`max-choices="1 2"`) is in no such type's lexical space, and its value domain alone refuses it.
+ * `DeclarationIdentifier.identifier` holds. The copy claims no type of it: a value with whitespace
+ * inside (`max-choices="1 2"`) is in no such type's lexical space, and its value domain alone
+ * refuses it.
  * One selection of `Attribute` costs one UNIQUE on it (the addendum's "Text in keys"), so the
  * overlays below read `InteractionAttribute` and never `Attribute`.
  *
@@ -58,12 +59,12 @@
  * - The content references: {@link FeedbackRef}, {@link TemplateRef}, {@link PrintedVariableRef} (a
  *   printed variable's name, and its `base` or `index` where that names a variable) and
  *   {@link ContextRef}, each naming a declaration of a kind `ContentReference` allows, its row of
- *   its own ({@link FeedbackRefDeclaration} and the others), through `declarationNameRef`, or a
- *   built-in variable that stands as one (reading 77), in an item's or a test's own declarations
- *   (the port audit's A43 and A44), each built-in one its root holds (spec reading 29: an item's
- *   `completionStatus` is no test's), so each reference carries the root kind it resolves under. A
- *   reference that names neither has no declaration row, and its law refuses it (lane NIL's NS2:
- *   never the nil uuid).
+ *   its own ({@link FeedbackRefDeclaration} and the others), through `declarationIdentifierRef`
+ *   whatever its cardinality spells (spec reading 159), or a built-in variable that stands as one
+ *   (reading 77), in an item's or a test's own declarations (the port audit's A43 and A44), each
+ *   built-in one its root holds (spec reading 29: an item's `completionStatus` is no test's), so
+ *   each reference carries the root kind it resolves under. A reference that names neither has no
+ *   declaration row, and its law refuses it (lane NIL's NS2: never the nil uuid).
  * - A section document's feedback and printed variables ({@link SectionFeedbackName},
  *   {@link SectionPrintedName}) resolve once per test that places it ({@link SectionFeedbackRef},
  *   {@link SectionPrintedRef}, A45, each with its declaration row where it names a declaration, as
@@ -130,9 +131,8 @@ import { Document } from "#pantry/qti/chardata.ts";
 import {
   DeclarationBaseType,
   DeclarationCardinality,
+  DeclarationIdentifier,
   declarationIdentifierRef,
-  DeclarationName,
-  declarationNameRef,
 } from "#pantry/qti/declarations.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
@@ -836,9 +836,10 @@ export const placedHottextFamily = counted(
 /**
  * An identifier a document's choices, hottexts or variable declarations use, or that an assembly
  * rooted at the document places, a projection keyed by the document and the identifier: the
- * document's root kind, how many {@link Choice}, {@link Hottext} and `DeclarationName` rows of the
- * document bear it, and how many {@link PlacedChoice} and {@link PlacedHottext} rows of its
- * assembly do, which the five families draw.
+ * document's root kind, how many {@link Choice}, {@link Hottext} and `DeclarationIdentifier` rows
+ * of the document bear it, and how many {@link PlacedChoice} and {@link PlacedHottext} rows of its
+ * assembly do, which the five families draw. A declaration bears its name whatever its cardinality
+ * spells (spec reading 159): the law reads the name alone.
  *
  * Every choice class says of its identifier "This identifier must not be used by any other choice
  * or item variable" (§5.132.1; §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and
@@ -883,10 +884,12 @@ export const hottextNameFamily = counted(
 
 /**
  * Each used identifier's declarations, counted by `ChoiceVariableName.declarations`: Q5.08's
- * `DeclarationName`, whose `key(document, identifier)` makes the count 0 or 1 on an accepted state.
+ * `DeclarationIdentifier`, every declaration whose identifier names something, whatever its
+ * cardinality spells (spec reading 159), whose `key(document, identifier)` makes the count 0 or 1
+ * on an accepted state.
  */
 export const declarationNameFamily = counted(
-  on(DeclarationName, "document", "identifier"),
+  on(DeclarationIdentifier, "document", "identifier"),
   fin(ChoiceVariableName, "declarations"),
 );
 
@@ -1106,14 +1109,15 @@ const referenceFields = {
 
 /**
  * The fields of the declaration a content reference names, keyed as its reference is: the
- * reference's fields, and the declaration as `declarationNameRef` holds it, of a kind
- * `ContentReference` lets the reference name.
+ * reference's fields, and the declaration as `declarationIdentifierRef` holds it, whatever its
+ * cardinality spells (spec reading 159), its kind one `ContentReference` lets the reference name:
+ * its node, kind and counts of cardinalities and base types.
  */
 const referenceDeclarationFields = {
   assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
   baseTypes: natural,
-  cardinality: closedId(Cardinality),
+  cardinalities: natural,
   declaration: uuid,
   declarationKind: closedId(DeclarationKind),
   document: uuid,
@@ -1157,6 +1161,25 @@ export const ContextRef = relation("ContextRef", referenceFields, ["node", "attr
 export const FeedbackRefDeclaration = relation(
   "FeedbackRefDeclaration",
   referenceDeclarationFields,
+  ["node", "attribute"],
+);
+
+/**
+ * A {@link FeedbackRefDeclaration}'s outcome beside its cardinality, keyed as it is, where the
+ * outcome has one (spec reading 159): `declaration`, its declaration row's, and `cardinality`, the
+ * outcome's {@link DeclarationCardinality}'s, which "Feedback outcome type" holds to single or
+ * multiple. An outcome whose cardinality is unwritten or spells nothing leaves its reference none,
+ * so the law reads no cardinality the outcome does not have, and AL3 or its value domain refuses
+ * it alone (spec reading 158).
+ */
+export const FeedbackRefCardinality = relation(
+  "FeedbackRefCardinality",
+  {
+    attribute: closedId(AttributeName),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    node: uuid,
+  },
   ["node", "attribute"],
 );
 
@@ -1331,14 +1354,15 @@ const sectionReferenceFields = {
 
 /**
  * The fields of the declaration a placed reference names among its assembly's declarations, keyed
- * as its placed reference is: its fields, and the declaration as `declarationNameRef` holds it.
+ * as its placed reference is: its fields, and the declaration as `declarationIdentifierRef` holds
+ * it, whatever its cardinality spells (spec reading 159).
  */
 const sectionReferenceDeclarationFields = {
   assembly: uuid,
   assemblyKind: closedId(NodeKind),
   attribute: closedId(AttributeName),
   baseTypes: natural,
-  cardinality: closedId(Cardinality),
+  cardinalities: natural,
   declaration: uuid,
   declarationKind: closedId(DeclarationKind),
   document: uuid,
@@ -1397,6 +1421,22 @@ export const SectionContextRef = relation("SectionContextRef", sectionReferenceF
 export const SectionFeedbackRefDeclaration = relation(
   "SectionFeedbackRefDeclaration",
   sectionReferenceDeclarationFields,
+  ["instance", "node", "attribute"],
+);
+
+/**
+ * A {@link SectionFeedbackRefDeclaration}'s outcome beside its cardinality, keyed as it is, where
+ * the outcome has one, as {@link FeedbackRefCardinality} is an own feedback reference's.
+ */
+export const SectionFeedbackRefCardinality = relation(
+  "SectionFeedbackRefCardinality",
+  {
+    attribute: closedId(AttributeName),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    instance: uuid,
+    node: uuid,
+  },
   ["instance", "node", "attribute"],
 );
 
@@ -1484,6 +1524,7 @@ export const interactionRelations = {
   CountBound,
   CountRange,
   FeedbackRef,
+  FeedbackRefCardinality,
   FeedbackRefDeclaration,
   Hotspot,
   Hottext,
@@ -1506,6 +1547,7 @@ export const interactionRelations = {
   SectionContextRefDeclaration,
   SectionFeedbackName,
   SectionFeedbackRef,
+  SectionFeedbackRefCardinality,
   SectionFeedbackRefDeclaration,
   SectionPrintedName,
   SectionPrintedRef,
@@ -2109,8 +2151,8 @@ const namesAllowedBuiltIn = (r: ReferenceRow) =>
  *
  * - An own reference that names no built-in variable of its root has its declaration row, which is
  *   its own reference's, of a kind `ContentReference` allows, a declaration of its document through
- *   `declarationNameRef`, and names no built-in of its root; one that names a built-in of its root
- *   names one it may;
+ *   `declarationIdentifierRef`, whatever its cardinality spells (spec reading 159), and names no
+ *   built-in of its root; one that names a built-in of its root names one it may;
  * - A placed reference is one of its document's names, and under its placement resolves the same way
  *   among its assembly's declarations.
  *
@@ -2144,10 +2186,10 @@ const contentReferenceLaws = ({
       "document",
       "identifier",
       "declarationKind",
-      "cardinality",
+      "cardinalities",
       "baseTypes",
     ),
-    declarationNameRef,
+    declarationIdentifierRef,
   ),
   check(rule, ownDeclared, namesNoBuiltIn),
   check(rule, own, namesAllowedBuiltIn),
@@ -2191,10 +2233,10 @@ const contentReferenceLaws = ({
       "assembly",
       "identifier",
       "declarationKind",
-      "cardinality",
+      "cardinalities",
       "baseTypes",
     ),
-    declarationNameRef,
+    declarationIdentifierRef,
   ),
   check(rule, placedDeclared, namesNoBuiltIn),
   check(rule, placed, namesAllowedBuiltIn),
@@ -2287,11 +2329,14 @@ const identifierTyped = on(
  * - **content references:** each relation's rows are its source's, its `assemblyKind` its document's
  *   root kind; a name that is no built-in's of that root has its declaration row, the reference's,
  *   of a declaration kind `ContentReference` allows for its kind and attribute, a declaration
- *   through `declarationNameRef`; and a built-in's of that root is one its kind and attribute may
- *   name there, under its reference's law ("Feedback reference", "Template reference", "Printed
- *   variable reference", "Context variable reference"); and "Feedback outcome type" over the
- *   declaration rows (reading 77: an outcome of base type identifier, single or multiple; the one
- *   built-in a feedback may name, `completionStatus`, is a single identifier, §2.2.2.3).
+ *   through `declarationIdentifierRef` whatever its cardinality spells (spec reading 159); and a
+ *   built-in's of that root is one its kind and attribute may name there, under its reference's law
+ *   ("Feedback reference", "Template reference", "Printed variable reference", "Context variable
+ *   reference"); and "Feedback outcome type" (reading 77: an outcome of base type identifier,
+ *   single or multiple; the one built-in a feedback may name, `completionStatus`, is a single
+ *   identifier, §2.2.2.3), its cardinality half over the feedback's cardinality rows
+ *   ({@link FeedbackRefCardinality}, {@link SectionFeedbackRefCardinality}), each where the outcome
+ *   has a cardinality, and its base type half over the declaration rows where it has a base type.
  */
 export const interactionLawsByName = {
   ...pipe(contentReferences, Rec.map(contentReferenceLaws)),
@@ -2993,7 +3038,27 @@ export const interactionLawsByName = {
     ),
   ],
   "Feedback outcome type": [
-    check("Feedback_outcome_type", FeedbackRefDeclaration, (r) =>
+    // Each half judges the outcome where what it reads spells something (spec readings 158 and
+    // 159): its cardinality, where it has one, its reference's cardinality row's, copied from its
+    // declaration row and `DeclarationCardinality`; its base type, where it has one, its
+    // `DeclarationBaseType`'s.
+    contained(
+      on(
+        select(FeedbackRefDeclaration, (r) => r.eq(r.cardinalities, 1n)),
+        "node",
+        "attribute",
+      ),
+      on(FeedbackRefCardinality, "node", "attribute"),
+    ),
+    contained(
+      on(FeedbackRefCardinality, "node", "attribute", "declaration"),
+      on(FeedbackRefDeclaration, "node", "attribute", "declaration"),
+    ),
+    contained(
+      on(FeedbackRefCardinality, "declaration", "cardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
+    ),
+    check("Feedback_outcome_type", FeedbackRefCardinality, (r) =>
       r.in(r.cardinality, feedbackCardinalities),
     ),
     contained(
@@ -3003,7 +3068,24 @@ export const interactionLawsByName = {
       ),
       identifierTyped,
     ),
-    check("Feedback_outcome_type", SectionFeedbackRefDeclaration, (r) =>
+    contained(
+      on(
+        select(SectionFeedbackRefDeclaration, (r) => r.eq(r.cardinalities, 1n)),
+        "instance",
+        "node",
+        "attribute",
+      ),
+      on(SectionFeedbackRefCardinality, "instance", "node", "attribute"),
+    ),
+    contained(
+      on(SectionFeedbackRefCardinality, "instance", "node", "attribute", "declaration"),
+      on(SectionFeedbackRefDeclaration, "instance", "node", "attribute", "declaration"),
+    ),
+    contained(
+      on(SectionFeedbackRefCardinality, "declaration", "cardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
+    ),
+    check("Feedback_outcome_type", SectionFeedbackRefCardinality, (r) =>
       r.in(r.cardinality, feedbackCardinalities),
     ),
     contained(

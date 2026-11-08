@@ -313,19 +313,6 @@ export const typedCountOf = (typed: Option.Option<string>): bigint =>
   BigInt(Option.toArray(typed).length);
 
 /**
- * The fields a declaration gives every row that references it by name, and its kind's
- * `DeclarationKind`: its cardinality, its base type, none where it has none, which a row copies
- * only as its count ({@link typedCountOf}) and reads only from `DeclarationBaseType`, and its name,
- * none where its identifier names nothing.
- */
-export interface DeclaredFields {
-  readonly baseType: Option.Option<BaseTypeHandle>;
-  readonly cardinality: CardinalityHandle;
-  readonly declarationKind: DeclarationKindHandle;
-  readonly identifier: Option.Option<string>;
-}
-
-/**
  * Read a declaring element as every overlay that copies its declaration reads it: its kind's
  * `DeclarationKind` and the declaration as its rows hold it ({@link typedDeclarationOf}). An
  * element that declares nothing has none.
@@ -346,36 +333,6 @@ export const declarationOf = (
     }),
     declarationKind,
   }));
-
-/**
- * Read the fields a declaring element gives every row that references its declaration
- * (`declarationNameRef`), as {@link DeclarationName}'s builder writes them: the codes its
- * `base-type` and `cardinality` spell, its kind's `DeclarationKind`, and its name, its identifier
- * without its outer whitespace. Every overlay that resolves against a declaration reads them here,
- * so the database's containments into the tuple hold by construction.
- *
- * An element that declares nothing has none, and so has a declaration whose cardinality is
- * unwritten or spells nothing: its name types nothing, so nothing references it (spec reading
- * 158).
- *
- * @param kind - The element's kind.
- * @param attribute - Reads one of its attributes' lexical form, none where it is unwritten.
- * @returns The fields, or none.
- */
-export const declaredFieldsOf = (
-  kind: string,
-  attribute: (name: string) => string | undefined,
-): Option.Option<DeclaredFields> =>
-  Option.flatMap(declarationOf(kind, attribute), (declared) =>
-    declared.cardinality.pipe(
-      Option.map((cardinality) => ({
-        baseType: declared.baseType,
-        cardinality,
-        declarationKind: declared.declarationKind,
-        identifier: declared.name.pipe(Option.map(({ pieces }) => pieces.name)),
-      })),
-    ),
-  );
 
 /**
  * Index a document's attribute rows by their element and name.
@@ -819,39 +776,4 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
   addValueSetCardinalities(reading);
 
   return reading.rows;
-};
-
-/**
- * The names a document's declarations hold that only a declaration with no cardinality holds
- * ({@link typedDeclarationOf}): its identifier naming something, its cardinality unwritten or
- * spelling nothing. Such a name types nothing, so no reference to it is written, in place either:
- * the declaration's own law refuses it alone (lane NIL's audit, B11; spec reading 158).
- *
- * @param doc - The document's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
- * @returns Each name, under the document's node.
- */
-export const untypedNamesOf = (
-  doc: XdmDocument<Composed>,
-  ids: DocumentIds,
-): readonly { readonly document: NodeId; readonly name: string }[] => {
-  const flat = flatten(doc, ids.idOf);
-  const attributes = attributesOf(flat);
-  const typed = new Set<string>();
-  const untyped = new Set<string>();
-  for (const node of flat.nodes.filter(({ kind }) => declarationKinds.has(kind))) {
-    const lexical = (name: string) => attributes.get(node.id)?.get(name);
-    const held = typedDeclarationOf({
-      baseType: lexical("base-type"),
-      cardinality: lexical("cardinality"),
-      identifier: lexical("identifier"),
-    });
-    for (const { pieces } of Option.toArray(held.name)) {
-      (Option.isSome(held.cardinality) ? typed : untyped).add(pieces.name);
-    }
-  }
-
-  return [...untyped]
-    .filter((name) => !typed.has(name))
-    .map((name) => ({ document: flat.document.node, name }));
 };

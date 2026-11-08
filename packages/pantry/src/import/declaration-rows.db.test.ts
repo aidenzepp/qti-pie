@@ -5,12 +5,13 @@
  *
  * A declaration whose `cardinality` or `base-type` is unwritten or spells nothing keeps its
  * `Declaration` row and every row below it, and has no `DeclarationCardinality` or
- * `DeclarationBaseType` alone; one with no cardinality has no `DeclarationName` either, so nothing
- * binds or references it (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`).
- * Before, it had a row holding `""` and `single`, which its own `E1_derived` refused, and every row
- * that copied it judged the `single`; later it had no row at all, so the copies its children ask
- * broke beside its own law. Each case is now refused by AL3 or the value domain, or, where its
- * references name no declaration, by one of the laws the oracle names beside them.
+ * `DeclarationBaseType` alone; one with no cardinality has no `DeclarationName` either, and a
+ * binding or a reference still resolves to it by name, reading no cardinality of it (spec reading
+ * 159; `#pantry/import/overlays/declarations.ts` `typedDeclarationOf`). Before, it had a row
+ * holding `""` and `single`, which its own `E1_derived` refused, and every row that copied it
+ * judged the `single`; later it had no row at all, so the copies its children ask broke beside its
+ * own law. Each case is now refused by AL3 or the value domain, or, where its references name no
+ * declaration, by one of the laws the oracle names beside them.
  *
  * The host's guard over the same scope, with the rows, is
  * `src/test/declaration-rows.oracle.test.ts`.

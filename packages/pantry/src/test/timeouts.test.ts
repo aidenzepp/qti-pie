@@ -126,6 +126,10 @@ const exempt: ReadonlyMap<string, string> = new Map([
     "LANES.md: no lane touches census.migration.test.ts, so its timeout is named when its owner edits it",
   ],
   [
+    "pantry/src/import/overlays/referenced-cardinality.oracle.test.ts",
+    "measurement owed: FIX-REFCARD's 480-case exhaust ran 13.4 s at a load average of 7 in its run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
+  ],
+  [
     "pantry/src/import/overlays/id-names.oracle.test.ts",
     "measurement owed: its 97-case exhaust ran 31.5 s at a load average of 21 to 34 in FIX-IDNCNAME's run of 2026-11-07; its 600_000 stays in place until it is remeasured at a load average of at least 60",
   ],

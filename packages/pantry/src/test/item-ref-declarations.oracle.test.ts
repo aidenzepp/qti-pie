@@ -41,7 +41,11 @@ import { lawOfCheck, ruleOfLaws, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
-import type { DeclarationBaseType, DeclarationName } from "#pantry/qti/declarations.ts";
+import type {
+  DeclarationBaseType,
+  DeclarationCardinality,
+  DeclarationIdentifier,
+} from "#pantry/qti/declarations.ts";
 import type {
   Expression,
   MappingSourceDeclaration,
@@ -227,17 +231,17 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "itemDocument",
         "template",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ],
       kind: "contained",
       to: [
-        "DeclarationName",
+        "DeclarationIdentifier",
         "node",
         "document",
         "identifier",
         "declarationKind",
-        "cardinality",
+        "cardinalities",
         "baseTypes",
       ],
     },
@@ -245,6 +249,30 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
   ],
   [{ kind: "check", name: "Template_default_target" }, "Template default target"],
   [{ kind: "check", name: "Template_default_type" }, "Template default type"],
+  [
+    {
+      from: ["TemplateDefaultTarget", "node"],
+      kind: "contained",
+      to: ["TemplateDefaultCardinality", "node"],
+    },
+    "E1 derived",
+  ],
+  [
+    {
+      from: ["TemplateDefaultCardinality", "node", "declaration", "heldCardinality"],
+      kind: "contained",
+      to: ["TemplateDefaultTarget", "node", "declaration", "heldCardinality"],
+    },
+    "E1 derived",
+  ],
+  [
+    {
+      from: ["TemplateDefaultCardinality", "declaration", "declCardinality"],
+      kind: "contained",
+      to: ["DeclarationCardinality", "node", "cardinality"],
+    },
+    "E1 derived",
+  ],
   [
     {
       from: ["TemplateDefaultTarget", "node", "heldBase", "heldCardinality"],
@@ -285,17 +313,17 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "itemDocument",
         "source",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ],
       kind: "contained",
       to: [
-        "DeclarationName",
+        "DeclarationIdentifier",
         "node",
         "document",
         "identifier",
         "declarationKind",
-        "cardinality",
+        "cardinalities",
         "baseTypes",
       ],
     },
@@ -316,7 +344,7 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "variable",
         "declaration",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ],
       kind: "contained",
@@ -326,7 +354,7 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
         "target",
         "declaration",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ],
     },
@@ -381,7 +409,8 @@ const valueCardinalityOf = (cardinality: string): string =>
  */
 interface HostRows {
   readonly baseTypes: ReadonlyMap<string, Addition<typeof DeclarationBaseType>>;
-  readonly declarations: readonly Addition<typeof DeclarationName>[];
+  readonly cardinalities: ReadonlyMap<string, Addition<typeof DeclarationCardinality>>;
+  readonly declarations: readonly Addition<typeof DeclarationIdentifier>[];
   readonly documentOf: ReadonlyMap<string, string>;
   readonly expressions: readonly Addition<typeof Expression>[];
   readonly inputs: PackageInputs;
@@ -401,8 +430,8 @@ const unless = (holds: boolean, law: HostBreach["law"], name: string): readonly 
   holds ? [] : [{ law, name }];
 
 /**
- * Whether a declaration row's declaration is a `Declaration` of its item under the name it reads
- * (`declarationRef`).
+ * Whether a declaration row's declaration is a named declaration of its item under the name it
+ * reads, with its kind and counts (`declarationIdentifierRef`).
  *
  * @param rows - The rows.
  * @param row - The declaration row.
@@ -420,13 +449,15 @@ const declares = (
       d.document === row.itemDocument &&
       d.identifier === identifier &&
       d.declarationKind === row.declarationKind &&
-      (rows.baseTypes.has(d.node) ? 1n : 0n) === row.declBaseTypes &&
-      d.cardinality === row.declCardinality,
+      d.baseTypes === row.declBaseTypes &&
+      d.cardinalities === row.declCardinalities,
   );
 
 /**
  * Whether a template default's expression fits its template's type (`Template_default_type`): its
- * base type the declaration's `DeclarationBaseType`'s, `unknown` where it has none, a record's.
+ * base type the declaration's `DeclarationBaseType`'s, `unknown` where it has none, a record's;
+ * and its cardinality its `TemplateDefaultCardinality`'s, where the declaration has one (spec
+ * reading 159).
  *
  * @param rows - The rows.
  * @param target - The template default's target.
@@ -436,14 +467,38 @@ const fitsHeld = (rows: HostRows, target: Addition<typeof TemplateDefaultTarget>
   const typed = rows.baseTypes.get(target.declaration);
   const declaredBase =
     target.declBaseTypes === 1n && typed !== undefined ? valueBaseOf(typed.baseType) : "unknown";
+  const cardinality = rows.inputs.TemplateDefaultCardinality.get(target.node);
 
   return (
     (target.heldBase === declaredBase ||
       silentBases.has(target.heldBase) ||
       declaredBase === "unknown") &&
-    (target.heldCardinality === valueCardinalityOf(target.declCardinality) ||
-      target.heldCardinality === "unknown")
+    (cardinality === undefined ||
+      cardinality.heldCardinality === valueCardinalityOf(cardinality.declCardinality) ||
+      cardinality.heldCardinality === "unknown")
   );
+};
+
+/**
+ * Whether a template default's target has its cardinality row exactly where its declaration has a
+ * cardinality, copied from the target and the declaration (`E1_derived`, spec reading 159).
+ *
+ * @param rows - The rows.
+ * @param target - The template default's target.
+ * @returns Whether it does.
+ */
+const cardinalityHeld = (
+  rows: HostRows,
+  target: Addition<typeof TemplateDefaultTarget>,
+): boolean => {
+  const cardinality = rows.inputs.TemplateDefaultCardinality.get(target.node);
+
+  return cardinality === undefined
+    ? target.declCardinalities === 0n
+    : cardinality.declaration === target.declaration &&
+        cardinality.heldCardinality === target.heldCardinality &&
+        rows.cardinalities.get(cardinality.declaration)?.cardinality ===
+          cardinality.declCardinality;
 };
 
 /**
@@ -478,6 +533,7 @@ const targetBreaches = (
       name,
     ),
     ...unless(fitsHeld(rows, target), "Template default type", name),
+    ...unless(cardinalityHeld(rows, target), "E1 derived", name),
     ...unless(
       rows.expressions.some(
         (e) =>
@@ -574,7 +630,7 @@ const readingBreaches = (rows: HostRows): readonly HostBreach[] =>
           source.declaration === reading.declaration &&
           source.declarationKind === reading.declarationKind &&
           source.declBaseTypes === reading.declBaseTypes &&
-          source.declCardinality === reading.declCardinality,
+          source.declCardinalities === reading.declCardinalities,
       );
       const mapping = rows.mappings.find(
         ({ parent, target }) => parent === reading.named && target === reading.variable,
@@ -699,7 +755,8 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
 const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
   const rows: HostRows = {
     baseTypes: inputs.DeclarationBaseType,
-    declarations: [...inputs.DeclarationName.values()],
+    cardinalities: inputs.DeclarationCardinality,
+    declarations: [...inputs.DeclarationIdentifier.values()],
     documentOf: new Map(
       [...inputs.ItemRefDocument.values()].map(({ document, node }) => [node, document]),
     ),
