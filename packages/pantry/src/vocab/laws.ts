@@ -512,7 +512,7 @@ export const lawTable = {
   "Mastery range": {
     rule: "mastery-range",
     source:
-      "reading 9: the Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1 (ASI 3.0.1 XSD, on qti-outcome-declaration: 'not(@mastery-value < @normal-minimum)', 'The mastery-value attribute value must not be less than the normal-minimum value'; 'not(@mastery-value > @normal-maximum)', 'The mastery-value attribute value must not be greater than the normal-maximum value'), read by its intent: each pair judged where both have a value, a normal-minimum a 3.0.1 outcome declaration does not write being its XSD default 0.0 and a 3.0.0 one's none (reading 149), as xs:double values (INF and -INF infinite), NaN ordered against nothing; a value outside grizzle's double lexical form (outer whitespace, over 15 significant digits, an exponent beyond 293) is not judged, a recorded limit",
+      "reading 9: the Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1 (ASI 3.0.1 XSD, on qti-outcome-declaration: 'not(@mastery-value < @normal-minimum)', 'The mastery-value attribute value must not be less than the normal-minimum value'; 'not(@mastery-value > @normal-maximum)', 'The mastery-value attribute value must not be greater than the normal-maximum value'), read by its intent: each pair judged where both have a value, a normal-minimum a 3.0.1 outcome declaration does not write being its XSD default 0.0 and a 3.0.0 one's none (reading 149), as xs:double values, each form in xs:double's lexical space (XML Schema 1.0's, reading 71's edition, operators.ts doublePattern) read as the double XML Schema 1.1's doubleLexicalMap maps it to (Part 2 §3.3.5.2, reading 144; grizzle's Compute.parseDouble), of any digits and any exponent, NaN ordered against nothing; a form with outer whitespace is not judged, a stated limit while grizzle's Compute.matches guard proves nothing of a Compute.collapse subject (declarations.ts floorCheck)",
   },
   "MathML arity": {
     rule: "math-arity",
@@ -743,7 +743,7 @@ export const lawTable = {
   "Slider bounds": {
     rule: "slider-bounds",
     source:
-      "reading 9, the Schematron's rule 14Ba (RULE_SET_INTERACTION_14B, ASI 3.0.1 XSD, on qti-slider-interaction: 'not(@upper-bound < @lower-bound)', 'The upper-bound attribute value must not be less than the lower-bound value'), its values read as xs:double; the information model (§5.134.1-2) states no order",
+      "reading 9, the Schematron's rule 14Ba (RULE_SET_INTERACTION_14B, ASI 3.0.1 XSD, on qti-slider-interaction: 'not(@upper-bound < @lower-bound)', 'The upper-bound attribute value must not be less than the lower-bound value'), its values collapsed and read as xs:double, each in xs:double's lexical space (XML Schema 1.0's, reading 71's edition, operators.ts doublePattern) as the double XML Schema 1.1's doubleLexicalMap maps it to (Part 2 §3.3.5.2, reading 144; grizzle's Compute.parseDouble), of any digits and any exponent, NaN ordered against nothing; the information model (§5.134.1-2) states no order",
   },
   "Stimulus ref key": {
     rule: "stimulus-ref-key",

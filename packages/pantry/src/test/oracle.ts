@@ -2847,14 +2847,14 @@ const xsDoubleForm =
 const doubleSpecials: ReadonlySet<string> = new Set(["INF", "-INF", "NaN"]);
 
 /**
- * Decide whether a map key, as written, is in `xs:double`'s lexical space: a special value, or a
+ * Decide whether a form, as written, is in `xs:double`'s lexical space: a special value, or a
  * decimal mantissa of any digits with an optional exponent of any digits.
  *
- * @param key - The key.
+ * @param form - The form: a map key, or a slider's bound collapsed.
  * @returns Whether it is a double's lexical form.
  * @see {@link https://www.w3.org/TR/xmlschema-2/#double | XML Schema Part 2, 3.2.5 double}
  */
-const isDoubleKey = (key: string): boolean => doubleSpecials.has(key) || xsDoubleForm.test(key);
+const isDoubleForm = (form: string): boolean => doubleSpecials.has(form) || xsDoubleForm.test(form);
 
 /**
  * Two runs of non-space characters with one whitespace character between them and none around: a
@@ -2932,7 +2932,7 @@ const mapKeyValueOf = (baseType: string, key: string): string => {
     return items;
   }
 
-  return baseType === "float" && isDoubleKey(key)
+  return baseType === "float" && isDoubleForm(key)
     ? `typed ${String(numberOf(key))}`
     : `lexical ${key}`;
 };
@@ -3617,15 +3617,20 @@ const overlayLaws: readonly ((
       return [];
     }
 
+    // Reading 9, the Schematron's 14Ba: "not(@upper-bound < @lower-bound)", each bound collapsed
+    // and read where it is in xs:double's lexical space (reading 71's edition), as the double it
+    // names (reading 144); a bound that is no xs:double has no value, and NaN orders against
+    // nothing.
     return Option.all([
       valueOf(overlay.view, node.id, "lower-bound"),
       valueOf(overlay.view, node.id, "upper-bound"),
     ]).pipe(
-      Option.filter(([lower, upper]) => numberOf(upper) < numberOf(lower)),
-      Option.map(([lower, upper]): Finding => ({
-        keys: { lower: collapsed(lower), upper: collapsed(upper) },
-        law: "Slider bounds",
-      })),
+      Option.map(([lower, upper]) => [collapsed(lower), collapsed(upper)] as const),
+      Option.filter(
+        ([lower, upper]) =>
+          isDoubleForm(lower) && isDoubleForm(upper) && numberOf(upper) < numberOf(lower),
+      ),
+      Option.map(([lower, upper]): Finding => ({ keys: { lower, upper }, law: "Slider bounds" })),
       Option.toArray,
     );
   },

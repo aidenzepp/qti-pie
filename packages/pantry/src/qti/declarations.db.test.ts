@@ -28,7 +28,7 @@
  * `completion_status`, which P8 refuses as Q5.10's `VariableRef` states it) need a whole valid
  * package written first, and arrive with the importer (Q5.15); probe P2 restates them.
  */
-import { ChangeSet, Db, lexicalForm, pg } from "@bjornpagen/grizzle";
+import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { Addition, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Option } from "effect";
@@ -252,14 +252,16 @@ const keyOver =
     law.side.terms.every((term, at) => term.kind === "field" && term.field === fields[at]);
 
 /**
- * The lexical form `Mastery_range` parses: grizzle's double precision form, read by a JavaScript
- * host.
+ * `xs:double`'s lexical space as XML Schema 1.0 writes it (Part 2 §3.2.5.1, reading 71's edition):
+ * the forms `Mastery_range` reads, of any digits and any exponent.
  */
-const doubleForm = new RegExp(lexicalForm(pg["double precision"]), "u");
+const doubleForm = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$/u;
 
 /**
- * Read a scale attribute as the specification's model reads it: an `xs:double`, or none where it
- * is outside the form `Mastery_range` judges (a recorded limit).
+ * Read a scale attribute as the specification's model reads it: an `xs:double`, the double nearest
+ * the decimal it writes (XML Schema 1.1's doubleLexicalMap, reading 144, which JavaScript's
+ * `Number` rounds to), or none where it is outside {@link doubleForm}: no `xs:double`, or a form
+ * with outer whitespace, which the law does not read (the stated limit of its law catalog entry).
  *
  * @param lexical - The lexical form, as written.
  * @returns The value.
@@ -291,11 +293,25 @@ const above = (low: string, high: string): boolean =>
   });
 
 /**
- * The scale texts of the mastery box, each written: ordinary values, both infinities, `NaN`, and a
- * value with outer whitespace, outside the form the law judges. An unwritten attribute has no row,
- * and no pair holds it.
+ * The scale texts of the mastery box, each written: ordinary values, both infinities, `NaN`, a
+ * value with outer whitespace, which the law does not read, and values past grizzle's former
+ * bounded form of double precision (15 significant digits, an exponent of at most 293): 1e400,
+ * which overflows to +INF, a 17-digit integer, 1e294, and -1e-400, which underflows to -0. An
+ * unwritten attribute has no row, and no pair holds it.
  */
-const scaleTexts = ["0", "0.5", "1", "-INF", "INF", "NaN", " 0.5"] as const;
+const scaleTexts = [
+  "0",
+  "0.5",
+  "1",
+  "-INF",
+  "INF",
+  "NaN",
+  " 0.5",
+  "1e400",
+  "10000000000000001",
+  "1e294",
+  "-1e-400",
+] as const;
 
 /**
  * The texts of the typed-value box, each with the base types it is a value of, constructed from
@@ -755,9 +771,10 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         () =>
           // Oracle: the specification as a checker, the Schematron's OUTCOMEDEC 1 read by its intent
           // (reading 9): `not(@mastery-value < @normal-minimum)` and `not(@mastery-value >
-          // @normal-maximum)` over written values as xs:double, NaN ordered against nothing, a form
-          // outside grizzle's double form unjudged (the recorded limit).
-          // Bound: every pair (minimum, mastery) and (mastery, maximum) over 7 written texts, 98
+          // @normal-maximum)` over written values as xs:double (reading 144's doubleLexicalMap), of
+          // any digits and any exponent, NaN ordered against nothing, a form outside xs:double's
+          // lexical space or with outer whitespace unjudged (the stated limit).
+          // Bound: every pair (minimum, mastery) and (mastery, maximum) over 11 written texts, 242
           // cases, each a row of the pair it is.
           Effect.gen(function* masteryRange() {
             const client = yield* loginSession;

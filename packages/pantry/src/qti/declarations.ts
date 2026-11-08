@@ -74,7 +74,6 @@ import {
   drawn,
   fin,
   key,
-  lexicalForm,
   natural,
   on,
   pg,
@@ -104,6 +103,7 @@ import {
   ValueBaseOf,
 } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
+import { doublePattern } from "#pantry/qti/operators.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
@@ -1007,16 +1007,16 @@ const typedValues = select(Value, (v) => v.and(v.eq(v.baseTypes, 1n), v.eq(v.car
 const fieldValues = select(ValueBaseType, (b) => b.eq(b.cardinalities, 1n));
 
 /**
- * The lexical form of an `xs:double` that `Compute.cast` reads exactly: XML Schema's, cut to the
- * values a double precision holds (grizzle's `lexicalForm`), with no outer whitespace.
- */
-const doubleForm = lexicalForm(pg["double precision"]);
-
-/**
  * State `Mastery_range` over a mastery value written and a normal minimum, written or its version's
- * default (readings 9 and 149): the minimum is no greater than the mastery value, `NaN` ordered
- * against nothing, and a form outside {@link doubleForm} read as the bound that holds the order, so
- * it is not judged (a recorded limit).
+ * default (readings 9 and 149): the minimum is no greater than the mastery value. Each lexical form
+ * in `xs:double`'s lexical space (`doublePattern` of `#pantry/qti/operators.ts`, XML Schema 1.0's,
+ * reading 71's edition) is read as the double grizzle's `Compute.parseDouble` maps it to, XML
+ * Schema 1.1's doubleLexicalMap (Part 2 §3.3.5.2, reading 144), of any digits and any exponent.
+ * `NaN` is ordered against nothing. A form outside the lexical space stands as the end of the order
+ * that holds it, so the pair is not judged: a form that is no `xs:double` has no value, which its
+ * value domain alone refuses; and a form with outer whitespace, which `xs:double`'s whiteSpace
+ * collapses (XML Schema Part 2 §4.3.6), is not read, a stated limit while grizzle's
+ * `Compute.matches` guard proves nothing of a `Compute.collapse` subject in its branch.
  *
  * @param r - The row.
  * @returns The predicate.
@@ -1027,21 +1027,21 @@ const floorCheck = (r: MasteryFloorRow) =>
     r.eq(r.masteryValue, "NaN"),
     r.le(
       Compute.when(
-        Compute.matches(r.normalMinimum, doubleForm),
-        (low) => Compute.cast(low, pg["double precision"]),
+        Compute.matches(r.normalMinimum, doublePattern),
+        (low) => Compute.parseDouble(low),
         Number.NEGATIVE_INFINITY,
       ),
       Compute.when(
-        Compute.matches(r.masteryValue, doubleForm),
-        (mastery) => Compute.cast(mastery, pg["double precision"]),
+        Compute.matches(r.masteryValue, doublePattern),
+        (mastery) => Compute.parseDouble(mastery),
         Number.POSITIVE_INFINITY,
       ),
     ),
   );
 
 /**
- * State `Mastery_range` over a mastery value and a normal maximum both written, as
- * {@link floorCheck} states the other pair.
+ * State `Mastery_range` over a mastery value and a normal maximum both written, each read as
+ * {@link floorCheck} reads the other pair.
  *
  * @param r - The row.
  * @returns The predicate.
@@ -1052,13 +1052,13 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
     r.eq(r.normalMaximum, "NaN"),
     r.le(
       Compute.when(
-        Compute.matches(r.masteryValue, doubleForm),
-        (mastery) => Compute.cast(mastery, pg["double precision"]),
+        Compute.matches(r.masteryValue, doublePattern),
+        (mastery) => Compute.parseDouble(mastery),
         Number.NEGATIVE_INFINITY,
       ),
       Compute.when(
-        Compute.matches(r.normalMaximum, doubleForm),
-        (high) => Compute.cast(high, pg["double precision"]),
+        Compute.matches(r.normalMaximum, doublePattern),
+        (high) => Compute.parseDouble(high),
         Number.POSITIVE_INFINITY,
       ),
     ),

@@ -112,13 +112,17 @@ export const rangeModes = ["absolute", "relative"] as const;
 export const integerForm = lexicalForm(pg.bigint);
 
 /**
- * `xs:double`'s lexical space (XML Schema 1.0 Part 2 §3.2.5.1): a decimal mantissa with an
- * optional exponent, `INF`, `-INF` or `NaN`, unbounded in its digits. A tolerance value in it is a
- * number; any other is a string, which names a variable read at run time (spec reading 121).
+ * `xs:double`'s lexical space, pantry's one statement of it: XML Schema 1.0's (Part 2 §3.2.5.1),
+ * the edition QTI 3.0's XSDs are written in (spec reading 71), a decimal mantissa of any digits
+ * with an optional exponent of any digits, `INF`, `-INF` or `NaN`. XML Schema 1.1's adds `+INF`,
+ * which this space refuses, the stricter of the two (readings 144 and 154).
  *
- * The test is by form, not by a cast: grizzle's double form bounds a mantissa to 15 significant
- * digits (`lexicalForm(pg["double precision"])`), so a longer negative number would fall outside
- * it and pass as a string.
+ * It lies inside grizzle's `doubleText`, 1.1's grammar, which is this pattern with `+INF`, so
+ * `Compute.parseDouble` reads every form of it total: a value of it is the double that parse maps
+ * it to, XML Schema 1.1's doubleLexicalMap (Part 2 §3.3.5.2, reading 144), and every double pantry
+ * reads from a form in the database is read by that parse, guarded by this pattern or typed by it
+ * (`Slider_bounds`, `Mastery_range`, `MapKeyFloat`). A tolerance value in it is a number; any other
+ * is a string, which names a variable read at run time (spec reading 121).
  *
  * @see {@link https://www.w3.org/TR/xmlschema-2/#double | XML Schema Part 2, 3.2.5 double}
  */

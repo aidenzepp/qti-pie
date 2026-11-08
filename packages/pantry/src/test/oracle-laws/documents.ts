@@ -102,17 +102,22 @@ const reservedBaseTypes: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * The lexical form of an `xs:double` that PostgreSQL's double precision reads exactly, as grizzle
- * states it (`lexicalForm(pg["double precision"])`): XML Schema's, at most 15 significant digits
- * and an exponent of at most 293, no outer whitespace. A mastery value or a normal bound outside it
- * is not judged, a recorded limit (reading 9).
+ * `xs:double`'s lexical space as XML Schema 1.0 writes it (Part 2 §3.2.5.1, reading 71's edition,
+ * in which `+INF` is no form): a decimal mantissa of any digits with an optional exponent of any
+ * digits, `INF`, `-INF` or `NaN`. A mastery value or a normal bound outside it is not judged: a
+ * form that is no `xs:double` has no value, and a form with outer whitespace is not read, the
+ * stated limit the law catalog records for `Mastery range` (reading 9).
+ *
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#double | XML Schema Part 2, 3.2.5 double}
  */
-const doubleForm =
-  /^(?:[+-]?(?:0*(?:0|[1-9][0-9]{0,14})(?:\.(?:[0-9]{15}0*|[0-9]{0,14}))?|\.(?:[0-9]{15}0*|[0-9]{1,14}))(?:[eE][+-]?0*(?:0|[1-9][0-9]?|1[0-9]{2}|2[0-8][0-9]|29[0-2]|293))?|-?INF|NaN)$/u;
+const doubleForm = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$/u;
 
 /**
- * Read a scale attribute as a double for an order that sets aside what it cannot read: its value
- * where it is in {@link doubleForm}, the bound that holds the order otherwise.
+ * Read a scale attribute as a double for an order that sets aside what it cannot read: where its
+ * form is in {@link doubleForm}, the double it names, `INF` and `-INF` infinite and a decimal the
+ * double nearest it, which JavaScript's `Number` rounds to as XML Schema 1.1's doubleLexicalMap
+ * does (Part 2 §3.3.5.2, reading 144), of any digits and any exponent; the bound that holds the
+ * order otherwise.
  *
  * @param lexical - The attribute's lexical form.
  * @param otherwise - The value an unread form stands as.

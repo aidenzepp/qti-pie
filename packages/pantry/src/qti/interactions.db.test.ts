@@ -946,14 +946,23 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       it.effect(
         "refuses an upper bound below the lower and an aria-valuemax below aria-valuemin, by Slider bounds and Aria value range",
         () =>
-          // Oracle: PostgreSQL, the `Slider_bounds` check (reading 9, the Schematron's 14Ba) and
-          // the `Aria_value_range` check (§5.2.31), each value cast by G-parse.
-          // Bound: 5 above 3, 1e1 above 9.5, and aria 2 above 1.5.
+          // Oracle: PostgreSQL, the `Slider_bounds` check (reading 9, the Schematron's 14Ba), each
+          // bound read by grizzle's `Compute.parseDouble` (XML Schema 1.1's doubleLexicalMap,
+          // reading 144) of any digits and any exponent, and the `Aria_value_range` check
+          // (§5.2.31), each value cast by G-parse.
+          // Bound: 5 above 3, 1e1 above 9.5, and past grizzle's former bounded form of double
+          // precision (15 significant digits, an exponent of at most 293): a 17-digit lower bound
+          // above 1, 1e294 above 1e293, 1e400 (+INF) above the greatest finite double, and 1e-300
+          // above -1e-400 (-0); and aria 2 above 1.5.
           Effect.gen(function* ranges() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const row of [
               { lower: "5", node: strayNode(0), upper: "3" },
               { lower: "1e1", node: strayNode(0), upper: "9.5" },
+              { lower: "10000000000000001", node: strayNode(0), upper: "1" },
+              { lower: "1e294", node: strayNode(0), upper: "1e293" },
+              { lower: "1e400", node: strayNode(0), upper: "1.7976931348623157e308" },
+              { lower: "1e-300", node: strayNode(0), upper: "-1e-400" },
             ] satisfies Fact<typeof Slider>[]) {
               const outcome = yield* db.apply(ChangeSet.empty(Author).insert(Slider, [row]), {});
 
@@ -968,6 +977,35 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             );
             assert.isTrue(rejectedBy(outcome, checkNamed("AriaRange", "Aria_value_range")));
           }),
+      );
+
+      it.effect(
+        "accepts slider bounds whose doubles are in order past grizzle's former bounded form, and a bound that is no xs:double, by every law of the row itself",
+        () =>
+          // Oracle: PostgreSQL, the row's domains and CHECKs with every foreign key deferred:
+          // `Slider_bounds` reads each bound as the double XML Schema 1.1's doubleLexicalMap maps
+          // it to (reading 144), so two spellings of one double are in order, and a bound that is
+          // no xs:double, which its value domain alone refuses, is not judged.
+          // Bound: 1e400 against INF (both +INF), a 17-digit 1.0000000000000001 against 1 (one
+          // double), 1e-400 against -0 (two zeros), 1e293 below 1e294, and +INF and abc against
+          // -1, outside XML Schema 1.0's lexical space (reading 71's edition).
+          Effect.gen(function* orderedBounds() {
+            const client = yield* loginSession;
+            for (const row of [
+              { lower: "1e400", node: strayNode(0), upper: "INF" },
+              { lower: "1.0000000000000001", node: strayNode(0), upper: "1" },
+              { lower: "1e-400", node: strayNode(0), upper: "-0" },
+              { lower: "1e293", node: strayNode(0), upper: "1e294" },
+              { lower: "+INF", node: strayNode(0), upper: "-1" },
+              { lower: "abc", node: strayNode(0), upper: "-1" },
+            ] satisfies Fact<typeof Slider>[]) {
+              const refused = Option.getOrUndefined(
+                yield* judged(client, statedInserts([{ fact: row, relation: Slider }]), []),
+              );
+
+              assert.isUndefined(refused, `${row.lower} ${row.upper}: ${refused?.message ?? ""}`);
+            }
+          }).pipe(Effect.scoped),
       );
 
       it.effect(
