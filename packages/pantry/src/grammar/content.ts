@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * The content grammar: each (version, parent)'s content model as its Glushkov automaton (the
  * operator's ruling of 2026-11-05, Glushkov for all 638 models).

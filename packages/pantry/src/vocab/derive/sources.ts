@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 /**
  * The XSD files the vocabulary deriver reads, pinned by URL and SHA-256, and the reads that refuse
  * any file the pin does not describe.

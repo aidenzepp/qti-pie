@@ -15,7 +15,6 @@
  * (`#pantry/qti/schema.ts`): a ChangeSet over the author role writes only the relations the schema
  * holds.
  */
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { Equal, Formatter, Result, Schema } from "effect";
 import { rowsOf as declarationRowsOf } from "#pantry/import/overlays/declarations.ts";
 import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";

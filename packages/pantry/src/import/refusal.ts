@@ -1,5 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
 /**
  * The names a refused import carries, and how a refusal names one (plan W5, Q5.17; the W5
  * amendment's C22).

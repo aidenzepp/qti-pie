@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 /**
  * The open vocabulary: what the element and attribute wildcards admit without a declaration to
  * validate it (fin.md, D2), and the `xml:` and `xsi:` attributes every schema processor knows.

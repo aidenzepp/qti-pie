@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * Assemble: the rows one document is stored as, back to the tree they were written from (fin.md
  * §4.6, trees.md §6), the inverse of `flatten` in `#pantry/model/xdm.ts`.

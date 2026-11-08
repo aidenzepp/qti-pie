@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 /**
  * Download every XSD `src/vocab/derive/sources.ts` pins into the shared cache the vocabulary reads,
  * checking each file against its SHA-256 pin.

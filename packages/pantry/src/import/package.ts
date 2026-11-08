@@ -9,7 +9,6 @@
  * there is no split and no completion marker, and a family past one statement's transport bounds
  * is chunked by grizzle into consecutive statements of that transaction (fin.md §4.5a).
  */
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import {
   CommitUnknown,
   Db,

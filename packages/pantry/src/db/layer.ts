@@ -1,5 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
 import { DbLayer } from "@bjornpagen/grizzle";
 import type { PoolBounds } from "@bjornpagen/grizzle";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";

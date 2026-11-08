@@ -1,5 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
 import os from "node:os";
 import { Config, Effect, FileSystem, Option, Path, Runtime, Schema } from "effect";
 import { Flag } from "effect/cli";

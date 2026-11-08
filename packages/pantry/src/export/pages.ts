@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * The read half of export, without a database: the rows one document's scan delivers, paged
  * (fin.md §4.6, trees.md §3), folded into the rows `assemble` rebuilds the document from.

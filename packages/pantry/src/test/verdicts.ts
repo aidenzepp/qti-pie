@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import path from "node:path";
 import { Effect, Schema } from "effect";
 import { ImportRule } from "#pantry/import/refusal.ts";

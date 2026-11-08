@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * Value domains as data (review U1; fin.md §16, §17): each simple type an attribute's value or a
  * simple-content kind's text is read under, compiled from its resolved XSD definition (the leaf's

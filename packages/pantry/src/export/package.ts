@@ -46,7 +46,6 @@ const pageSize = 1000;
 /**
  * An export of a package id that no imported package has.
  */
-// oxlint-disable-next-line unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown.
 export class PackageNotFound extends Schema.TaggedError<PackageNotFound>()("PackageNotFound", {
   packageId: Schema.String,
 }) {

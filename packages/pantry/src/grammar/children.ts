@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * The child laws that read more than a family's content model: a barring, which reads the parent's
  * attributes, and a last-slot rule, which reads the child's.

@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * `Admission`: which child kinds each parent kind admits in each schema version, and what each
  * admitted child is under its parent (fin.md §17, R1 of the W1 to W4 review).

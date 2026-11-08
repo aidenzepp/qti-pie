@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 /**
  * The XSD reading the vocabulary derivations share: it reads the pinned QTI XSDs through crust's
  * `readXml`, for `models.ts`, `declarations.ts`, `domains.ts`, `ssml.ts` and `extensions.ts`, and

@@ -1,5 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
 /**
  * How the program's failures are told apart: the closed roster of kinds a failure may have, the
  * exit code each kind ends the process with, and {@link describeFailure}, which names the kind of

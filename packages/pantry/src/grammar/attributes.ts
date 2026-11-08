@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * The attribute grammar (review U1; fin.md §16, §17): `AttributeGrammar`, `ValueDomain`,
  * `ValueIdentity` and `TextDomain`, generated from the declarations the vocabulary leaves derive

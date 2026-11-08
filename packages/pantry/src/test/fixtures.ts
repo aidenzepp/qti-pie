@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { Config, Effect, FileSystem, Match, Option, Schema, Stream } from "effect";

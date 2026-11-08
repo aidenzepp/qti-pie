@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 /**
  * Format TypeScript text with `vp fmt`, as the committed generated files are formatted, for the
  * tests that check a generator's output byte for byte against its committed file.

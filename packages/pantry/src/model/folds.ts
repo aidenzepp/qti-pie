@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
  * Host folds: every field of the document layer the host writes, computed from a document and the
  * grammar's closed relations (plan §1.3 and §1.5, fin.md §4.3, §4.5a and §16).
