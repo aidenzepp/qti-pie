@@ -17,6 +17,10 @@
  *   section document a section resource names, each once, as if it were inline; that reach is its
  *   own parts, sections and item refs and each reached document's. Through that reach:
  *
+ *   - Each part's, section's and item ref's identifier is given once: one a section document gives
+ *     again after the test or a document reached before it gave it is `duplicate-identifier` at that
+ *     document (`info.txt:10759`, pantry's `structure-identifier`), given once however many tests
+ *     reach it, and is left out of the reach, so the first wins;
  *   - Each item ref resolves against its own document's path to an item resource the manifest lists; a
  *     test's own item ref that does not is `item-ref-unresolved`;
  *   - Each dotted reference in the test that it does not declare whole, a name an expression reads or
@@ -1434,14 +1438,36 @@ interface ResolvedItemRef {
 }
 
 /**
+ * One part's, section's or item ref's `identifier` in a test or section document, which must be
+ * unique within the test that reaches the document (`info.txt:10759`).
+ */
+interface StructureIdentifier {
+  /**
+   * The document's location, where a refusal of the identifier is.
+   */
+  readonly document: string;
+  readonly element: SourceElement;
+  readonly identifier: string;
+  /**
+   * The path of the element's `identifier` attribute, where a refusal of it is located.
+   */
+  readonly path: string;
+  /**
+   * Whether the element is a part or a section, a scope with a `duration`, rather than an item ref.
+   */
+  readonly scope: boolean;
+}
+
+/**
  * What a test's reach is built from in one test or section document, read from its elements in
  * document order.
  */
 interface DocumentStructure {
   /**
-   * The identifiers of its parts and sections, each a scope with a `duration`.
+   * The identifier of each of its parts, sections and item refs, in document order, an item ref's
+   * whether it resolves or not.
    */
-  readonly durations: readonly string[];
+  readonly identifiers: readonly StructureIdentifier[];
   /**
    * Each item ref that resolves, against the document's path, to an item resource.
    */
@@ -1463,9 +1489,10 @@ interface DocumentStructure {
 }
 
 /**
- * Read what a test's reach is built from in one test or section document: its parts' and sections'
- * identifiers, its item refs, each resolved against the document's path to an item resource the
- * manifest lists, and the paths its section refs name.
+ * Read what a test's reach is built from in one test or section document: its parts', sections' and
+ * item refs' identifiers, each with the path of its `identifier` attribute, its item refs, each
+ * resolved against the document's path to an item resource the manifest lists, and the paths its
+ * section refs name.
  *
  * An item ref that resolves to no listed item resource is `item-ref-unresolved` at the item ref,
  * its detail the `identifier`, the `href` and, when the `href` names a path inside the package,
@@ -1482,16 +1509,25 @@ const structureIn = (
   itemPaths: ReadonlySet<string>,
 ): DocumentStructure => {
   const visits = [...walk(source)];
-  const durations: string[] = [];
+  const identifiers: StructureIdentifier[] = [];
   const itemRefs: ResolvedItemRef[] = [];
   const sectionRefs: string[] = [];
   const unresolved: Refusal[] = [];
   for (const { element, path } of visits) {
     const identifier = Option.getOrUndefined(identifierOf(element));
     const href = Option.getOrUndefined(attributeOf(element, "href"));
-    if (identifier !== undefined && isQti(element, durationScopes)) {
-      durations.push(identifier);
-    } else if (href !== undefined && isQti(element, sectionRefElements)) {
+    const scope = isQti(element, durationScopes);
+    if (identifier !== undefined && (scope || isQti(element, itemRefElements))) {
+      identifiers.push({
+        document: source.location,
+        element,
+        identifier,
+        path: attributePath(path, { local: "identifier", namespace: "" }),
+        scope,
+      });
+    }
+
+    if (href !== undefined && isQti(element, sectionRefElements)) {
       sectionRefs.push(...Option.toArray(resolveReference(base, collapse(href))));
     } else if (identifier !== undefined && href !== undefined && isQti(element, itemRefElements)) {
       const written = collapse(href);
@@ -1515,7 +1551,7 @@ const structureIn = (
     }
   }
 
-  return { durations, itemRefs, sectionRefs, unresolved, visits };
+  return { identifiers, itemRefs, sectionRefs, unresolved, visits };
 };
 
 /**
@@ -1554,14 +1590,18 @@ const sectionDocumentAt = (
 /**
  * Give the section documents a test reaches, as pantry's `reachOf` walks them
  * (`packages/pantry/src/import/reach.ts`): a section ref "behaves as if its section document were
- * inline", so a test reaches, through each section ref in its own document and then in each
- * section document it reaches, depth first in document order, the section document the ref names
- * ({@link sectionDocumentAt}).
+ * inline", so the test reaches the section document each of its section refs names
+ * ({@link sectionDocumentAt}), and, before the ref after it, the ones that document's own section
+ * refs name, depth first in document order.
  *
  * Each document is reached once: a ref to one already reached adds nothing, so two refs to one
  * document walk it once and a cycle of refs ends where it meets a reached document. A ref whose
  * `href` names no section document the reader read adds nothing. Pantry refuses both, as
  * `section-ref-cycle` and `section-ref-target`, which plate has no rule for (2b.9 Q2).
+ *
+ * The walk keeps the refs still to follow in a list of its own rather than on the call stack, so
+ * no length of a chain of refs, each document naming the next, overflows the stack, and no limit is
+ * set on it.
  *
  * @param test What the test's own document holds.
  * @param sectionPaths The path of every section resource's document.
@@ -1577,25 +1617,21 @@ const sectionsReached = (
 ): readonly ReachedSection[] => {
   const reached: ReachedSection[] = [];
   const seen = new Set<string>();
-  /**
-   * Reach the section document each of some section refs names that is not yet reached, then,
-   * before the next ref, the ones its own section refs name.
-   *
-   * @param sectionRefs The paths the section refs name, in document order.
-   */
-  const follow = (sectionRefs: readonly string[]): void => {
-    for (const path of sectionRefs) {
-      const source = sectionDocumentAt(path, sectionPaths, documents);
-      if (Option.isSome(source) && !seen.has(path)) {
-        seen.add(path);
+  // The paths the refs still to follow name, the next one last: a document's are added in reverse,
+  // so the walk takes them in document order, each before the refs that follow its document.
+  const pending = test.sectionRefs.toReversed();
+  for (let path = pending.pop(); path !== undefined; path = pending.pop()) {
+    const source = sectionDocumentAt(path, sectionPaths, documents);
+    if (Option.isSome(source) && !seen.has(path)) {
+      seen.add(path);
 
-        const structure = structureIn(source.value, path, itemPaths);
-        reached.push({ path, source: source.value, structure });
-        follow(structure.sectionRefs);
+      const structure = structureIn(source.value, path, itemPaths);
+      reached.push({ path, source: source.value, structure });
+      for (const next of structure.sectionRefs.toReversed()) {
+        pending.push(next);
       }
     }
-  };
-  follow(test.sectionRefs);
+  }
 
   return reached;
 };
@@ -1621,6 +1657,50 @@ const variablesThrough = (
 };
 
 /**
+ * Find each part, section and item ref identifier that a test's reach gives again, walking the
+ * test's own document, then each section document it reaches, in the order it reaches them, each in
+ * its document order.
+ *
+ * The identifier of a section or item reference "must be unique within the test and must not be
+ * the identifier of any testPart" (`info.txt:10759`), and a section ref reads as if its section
+ * document were inline, so pantry keys each structure identifier by the test that reaches it
+ * (`TestReach` in `packages/pantry/src/schema/test/structure.ts`, refused `structure-identifier`).
+ * The first occurrence wins: a later one that a document reached before already gave is
+ * `duplicate-identifier` at its `identifier` attribute, its detail the `identifier`, as the test
+ * rules give one within a document. One a document gives twice is its own verdict's
+ * (`duplicateIdentifier` in `#plate/validate/test-rules.ts`), so only a document's first occurrence
+ * of an identifier is judged here, and a refusal is never given twice.
+ *
+ * @param test What the test's own document holds.
+ * @param reached The section documents it reaches, in the order the walk reaches them.
+ * @returns Each later occurrence's element, with its refusal, at the section document that gives
+ *   it.
+ */
+const repeatsIn = (
+  test: DocumentStructure,
+  reached: readonly ReachedSection[],
+): ReadonlyMap<SourceElement, Refusal> => {
+  const met = new Set<string>();
+  const repeats = new Map<SourceElement, Refusal>();
+  for (const { identifiers } of [test, ...reached.map((section) => section.structure)]) {
+    const own = new Set<string>();
+    for (const { document, element, identifier, path } of identifiers) {
+      if (met.has(identifier) && !own.has(identifier)) {
+        repeats.set(element, refuse(document, "duplicate-identifier", path, { identifier }));
+      }
+
+      own.add(identifier);
+    }
+
+    for (const identifier of own) {
+      met.add(identifier);
+    }
+  }
+
+  return repeats;
+};
+
+/**
  * What judging one test gives: each of its own item refs' item path, keyed by the item ref's
  * identifier, in document order; the section documents it reaches; the test's refusals: the item
  * refs', their variable mappings', their template defaults', the references', then those of the
@@ -1633,8 +1713,9 @@ interface TestJudgement {
   readonly refusals: readonly Refusal[];
   /**
    * The refusals of each section document the test reaches, judged under the test, in the order
-   * the walk reaches them: its references', then those of its expressions that only the test's
-   * scope and typed reach give, each at the section document, in its document order.
+   * the walk reaches them: the identifiers it gives again across the test's reach, its
+   * references', then those of its expressions that only the test's scope and typed reach give,
+   * each at the section document, in its document order.
    */
   readonly sections: readonly Refusal[];
 }
@@ -1647,15 +1728,18 @@ interface TestJudgement {
  *
  * The test's reach is its own parts, sections and item refs and those of each section document it
  * reaches through its section refs ({@link sectionsReached}), each item ref of a section document
- * resolved against that document's path. The test's dotted references resolve through all of them,
- * an item ref a reached document holds passed over when one the test or a document reached before
- * holds has its identifier. A reference the test declares whole, as an outcome or context variable
- * (reading 37 lets an identifier hold `.`), or holds as a built-in is never split, and a name with
- * no `.` is the test's own check's; every other is judged by {@link judgeReference}. An item ref
- * resolves a reading only through an item whose document the package holds and the reader read, so
- * a reference through any other names nothing, as pantry's reach holds no such item ref. Only the
- * test's own item refs are its items (`refs`): a session delivers no section document's item, and
- * the test model marks a processing that reads through one.
+ * resolved against that document's path. A part, section or item ref identifier is given once
+ * across the reach: one a section document gives again after the test or a document reached before
+ * gave it is `duplicate-identifier` at that document and left out of the reach, so the first wins
+ * ({@link repeatsIn}; pantry's `structure-identifier`), so a later item ref never shadows a part's
+ * or a section's `duration`. The test's dotted references resolve through the rest. A reference the
+ * test declares whole, as an outcome or context variable (reading 37 lets an identifier hold `.`),
+ * or holds as a built-in is never split, and a name with no `.` is the test's own check's; every
+ * other is judged by {@link judgeReference}. An item ref resolves a reading only through an item
+ * whose document the package holds and the reader read, so a reference through any other names
+ * nothing, as pantry's reach holds no such item ref. Only the test's own item refs are its items
+ * (`refs`): a session delivers no section document's item, and the test model marks a processing
+ * that reads through one.
  *
  * The test's expressions are then judged by the item's processing rules (`processingRefusals` in
  * `#plate/validate/rules.ts`: P20 to P24), with each prefixed read typed by the variable its one
@@ -1694,10 +1778,11 @@ const judgeTest = (
 ): TestJudgement => {
   const own = structureIn(source, testPath, itemPaths);
   const reached = sectionsReached(own, sectionPaths, itemPaths, documents);
+  const repeats = repeatsIn(own, reached);
   const refs = new Map(own.itemRefs.map((itemRef) => [itemRef.identifier, itemRef] as const));
   const reach = new Map(refs);
   for (const itemRef of reached.flatMap((section) => section.structure.itemRefs)) {
-    if (!reach.has(itemRef.identifier)) {
+    if (!repeats.has(itemRef.element) && !reach.has(itemRef.identifier)) {
       reach.set(itemRef.identifier, itemRef);
     }
   }
@@ -1725,10 +1810,13 @@ const judgeTest = (
   const mappingRefusals = judgeMappings(source.location, own.visits, variablesFor);
   const defaults = judgeTemplateDefaults(source.location, own.visits, variablesFor);
   const scope: ReferenceScope = {
-    durations: new Set([
-      ...own.durations,
-      ...reached.flatMap((section) => section.structure.durations),
-    ]),
+    durations: new Set(
+      [own, ...reached.map((section) => section.structure)].flatMap(({ identifiers }) =>
+        identifiers.flatMap((entry) =>
+          entry.scope && !repeats.has(entry.element) ? [entry.identifier] : [],
+        ),
+      ),
+    ),
     items,
   };
   const whole: ReadonlySet<string> = new Set([
@@ -1785,6 +1873,9 @@ const judgeTest = (
     [...processingRefusals(source, tables, () => unknownType), ...references],
   );
   const sections = reached.flatMap(({ source: section, structure }) => {
+    const repeated = structure.identifiers.flatMap(({ element }) =>
+      Option.toArray(Option.fromUndefinedOr(repeats.get(element))),
+    );
     const sectionReferences = judgeReferences(section.location, structure.visits);
     const { targets } = judgeTemplateDefaults(
       section.location,
@@ -1793,6 +1884,7 @@ const judgeTest = (
     );
 
     return [
+      ...repeated,
       ...sectionReferences,
       ...notHeld(
         processingRefusals(
