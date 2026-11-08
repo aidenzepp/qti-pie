@@ -24,16 +24,14 @@
  * schema of its own), over the fields the oracle knows of a row ({@link attributeFields},
  * {@link nodeFields}).
  */
-import type { Law, LawSourceSide } from "@bjornpagen/grizzle";
-import { Array as Arr, Formatter, Option, Predicate, Result, Schema } from "effect";
+import type { Law, LawSide } from "@bjornpagen/grizzle";
+import { Array as Arr, Option, Predicate, Result, Schema } from "effect";
 import {
   closedOf,
   evaluate,
-  fieldOf,
   fieldsOf,
   forcedBy,
   lawSideOf,
-  lawSourceSideOf,
   selectedBy,
   sourceOf,
   StatementSchema,
@@ -192,19 +190,13 @@ const copyKinds: ReadonlySet<string> = new Set(["check", "contained", "fold", "m
 const closed = closedOf(Qti.relations);
 
 /**
- * Write one term of a law side: a field as its name, `pred` of a field as `pred(field)`, and a
- * containment source's constant as `constant(value)`.
+ * Write one term of a law side: a field as its name, `pred` of a field as `pred(field)`.
  *
  * @param term - The term.
  * @returns Its text.
  */
-const termText = (term: LawSourceSide["terms"][number]): string => {
-  if (term.kind === "constant") {
-    return `constant(${Formatter.format(term.value)})`;
-  }
-
-  return term.kind === "pred" ? `pred(${term.field})` : term.field;
-};
+const termText = (term: LawSide["terms"][number]): string =>
+  term.kind === "pred" ? `pred(${term.field})` : term.field;
 
 /**
  * Write a law side as {@link identityOf} spells it: its relation and its terms, `pred` of a field as
@@ -213,7 +205,7 @@ const termText = (term: LawSourceSide["terms"][number]): string => {
  * @param side - The side.
  * @returns Its text.
  */
-const sideText = (side: LawSourceSide): string =>
+const sideText = (side: LawSide): string =>
   `${side.relation}(${side.terms.map(termText).join(", ")})`;
 
 /**
@@ -361,27 +353,26 @@ const containedCopies = (
     return [];
   }
 
-  const law = identityOf({ from: lawSourceSideOf(from), kind: "contained", to: lawSideOf(to) });
+  const law = identityOf({ from: lawSideOf(from), kind: "contained", to: lawSideOf(to) });
   const targets = fieldsOf(to);
 
-  // A constant reads no field of the source, so it copies no text into its target's.
-  return from.terms.flatMap((term, at): readonly Drafted[] => {
+  return fieldsOf(from).flatMap((reads, at): readonly Drafted[] => {
     const held = targets[at] ?? "";
 
-    return fieldOf(term).pipe(
-      Option.filter((reads) => holdsKeyText(target, held) && !holdsKeyText(name, reads)),
-      Option.map((reads): Drafted => ({
-        by: "contained",
-        field: `${target}.${held}`,
-        law,
-        reads,
-        source: name,
-        statement,
-        term: source.predicate,
-        test: selectedBy(source.predicate, closed),
-      })),
-      Option.toArray,
-    );
+    return holdsKeyText(target, held) && !holdsKeyText(name, reads)
+      ? [
+          {
+            by: "contained",
+            field: `${target}.${held}`,
+            law,
+            reads,
+            source: name,
+            statement,
+            term: source.predicate,
+            test: selectedBy(source.predicate, closed),
+          },
+        ]
+      : [];
   });
 };
 

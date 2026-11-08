@@ -15,7 +15,7 @@
  * entry is removed, and a law skipped for a value the list does not name fails it until the value
  * is named.
  */
-import type { Law, LawSourceSide } from "@bjornpagen/grizzle";
+import type { Law, LawSide } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Predicate } from "effect";
@@ -117,7 +117,7 @@ const unjudged = {
  * @param field - The field.
  * @returns Whether it is.
  */
-const readsOne = (side: LawSourceSide, relation: string, field: string): boolean =>
+const readsOne = (side: LawSide, relation: string, field: string): boolean =>
   side.relation === relation &&
   side.terms.length === 1 &&
   side.terms.every((term) => term.kind === "field" && term.field === field);

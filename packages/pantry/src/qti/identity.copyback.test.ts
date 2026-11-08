@@ -6,28 +6,31 @@
  * Each of these overlays' way back to its attribute was a containment into a selection of
  * `Attribute` with a key of its own over `node`, which a wider key already implied: an element
  * holds at most one ID-typed attribute (`idAttributes` and `namingIdAttributes` of
- * `#pantry/qti/identity.ts`). grizzle admits a containment into a selected side only under a key
- * over that same selection, so each is now stated into the wider selection, its source holding a
- * constant for what the narrower selection read beyond it:
+ * `#pantry/qti/identity.ts`). Each is now stated into a target whose conditions are the wider
+ * selection's and whose key is the wider selection's, the target fixing what the narrower selection
+ * read beyond it to a value outside its terms (grizzle's fixed target, `#fixedTarget` of
+ * `laws/model/plan.ts:1394-1444` at `3cc8fbd`):
  *
  * - **ManifestId:** `ManifestId(node) ⊆ manifestIdentifiers(node)`, the `cp:manifest` `identifier`s
- *   of the manifest (type `none`), is now `ManifestId(node, "cp:manifest", "none") ⊆
- *   idAttributes(node, kind, documentType)`;
+ *   of the manifest (type `none`), is now `ManifestId(node) ⊆ manifestIdAttributes("cp:manifest")
+ *   (node)`, the ID-typed attributes whose kind is `cp:manifest` and whose document is the
+ *   manifest, held by `idAttributes`' key;
  * - **ResourceId:** the same over `cp:resource`;
  * - **TableHeader:** `TableHeader(node) ⊆ headerIds(node)`, each `th`'s `id` that is an ID value, is
- *   now `TableHeader(node, "th") ⊆ namingIdAttributes(node, kind)`.
+ *   now `TableHeader(node) ⊆ namingIdAttributesOf("th")(node)`, held by `namingIdAttributes`' key.
  *
  * A containment from a row at a node holds where some attribute at that node is in its target, so
  * the two laws are one exactly where the narrower selection holds an attribute row if and only if
- * the wider one does and the row holds each constant. No constant names the attribute: the kind's
- * one ID-typed attribute is the copied one, which this search proves. A row of another kind fails
- * both laws, the old by its kind and the new by its kind's constant, so the box is the kind's rows:
- * each (version, governs) `GoverningOf` gives the kind, each name the governor's attribute model
- * admits, every document type, and a value of each verdict of the ID-value pattern, the one thing
- * either selection reads of the lexical form. The restated laws are read from the schema's own
- * statements (`#pantry/test/judged-laws.ts` `containmentsOf`); the replaced ones are restated over
- * plain rows.
+ * the restated target does. No fixed field names the attribute: the kind's one ID-typed attribute
+ * is the copied one, which this search proves. A row of another kind fails both laws, the old by
+ * its kind and the new by the kind its target fixes, so the box is the kind's rows: each (version,
+ * governs) `GoverningOf` gives the kind, each name the governor's attribute model admits, every
+ * document type, and a value of each verdict of the ID-value pattern, the one thing either
+ * selection reads of the lexical form. The restated laws are read from the schema's own statements
+ * (`#pantry/test/judged-laws.ts` `containmentsOf`), each target's selection, its fixed fields
+ * included, evaluated as the statement holds it; the replaced ones are restated over plain rows.
  */
+import type { Law } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
@@ -42,7 +45,7 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
-import type { Datum } from "#pantry/host/predicates.ts";
+import type { Containment } from "#pantry/import/host-judge.ts";
 
 /**
  * One attribute row of the box, as both laws read it: its element's version, kind, governing type
@@ -165,32 +168,47 @@ const rowsOf = (kind: string): readonly AttributeCase[] =>
 
 /**
  * Read the restated copy-back from the schema: its one containment from the relation into
- * `Attribute`, whose source pairs `node` with `node` and every other term is a constant, so the
- * law holds at a node exactly where some attribute row there is in its target and holds each
- * constant.
+ * `Attribute`, whose source pairs `node` with `node` alone, so the law holds at a node exactly
+ * where some attribute row there is in its target's selection, the fields it fixes included.
  *
  * @param from - The relation it copies back from.
- * @returns The containment, and each constant by the target field it meets.
+ * @returns The containment.
  */
-const restatedOf = (from: CopyBack["from"]) => {
+const restatedOf = (from: CopyBack["from"]): Containment => {
   const laws = containmentsOf(Qti, from).filter(({ to }) => to === "Attribute");
   assert.lengthOf(laws, 1, `${from}: its containments into Attribute`);
 
   const law = Option.getOrThrow(Arr.head(laws));
-  const paired = Arr.zip(law.fromTerms, law.toFields);
   assert.deepStrictEqual(
-    paired.flatMap(([term, field]) => (term.kind === "field" ? [[term.field, field]] : [])),
+    Arr.zip(law.fromFields, law.toFields),
     [["node", "node"]],
     `${from}: the fields its source pairs`,
   );
 
-  return {
-    constants: new Map<string, Datum>(
-      paired.flatMap(([term, field]) => (term.kind === "constant" ? [[field, term.value]] : [])),
-    ),
-    law,
-  };
+  return law;
 };
+
+/**
+ * Read the fields a containment's target fixes to a value, from its law as grizzle names it: each
+ * conjunct of the target's selection that equates a field with a literal, in grizzle's canonical
+ * form, the field first and the literal second (README, "Errors and outcomes").
+ *
+ * @param law - The containment's law.
+ * @returns Each fixed field's value, by the field.
+ */
+const fixedOf = (law: Law): ReadonlyMap<string, unknown> =>
+  new Map(
+    law.kind === "contained"
+      ? law.to.selection.conjuncts.flatMap((conjunct) =>
+          conjunct.kind === "compare" &&
+          conjunct.op === "eq" &&
+          conjunct.left.kind === "field" &&
+          conjunct.right.kind === "literal"
+            ? [[conjunct.left.field, conjunct.right.value] as const]
+            : [],
+        )
+      : [],
+  );
 
 /**
  * Name the situations one row reaches under a copy-back.
@@ -216,8 +234,12 @@ describe("qti/identity.ts, the copy-backs restated over the ID-typed attributes"
     it.effect(
       `holds ${copyBack.from} back to its ${copyBack.kind}'s ${copyBack.name} exactly as the containment into the narrower selection did`,
       (ctx) => {
-        const { constants, law } = restatedOf(copyBack.from);
-        assert.strictEqual(constants.get("kind"), copyBack.kind, `${copyBack.from}: its kind`);
+        const law = restatedOf(copyBack.from);
+        assert.strictEqual(
+          fixedOf(law.law).get("kind"),
+          copyBack.kind,
+          `${copyBack.from}: the kind its target fixes`,
+        );
 
         // Oracle: a specification, the containment into the narrower selection the restated law
         // replaced, restated over plain rows.
@@ -251,12 +273,11 @@ describe("qti/identity.ts, the copy-backs restated over the ID-typed attributes"
                   Effect.sync(() => {
                     c.noteAll(situationsOf(copyBack, row));
 
-                    const fields: Readonly<Record<string, Datum>> = row;
-                    const restated =
-                      law.targeted(row) &&
-                      [...constants].every(([field, value]) => fields[field] === value);
-
-                    assert.strictEqual(restated, copyBack.replaced(row), JSON.stringify(row));
+                    assert.strictEqual(
+                      law.targeted(row),
+                      copyBack.replaced(row),
+                      JSON.stringify(row),
+                    );
                   }),
               ),
             ),

@@ -30,7 +30,7 @@
  */
 import { Array as Arr, Formatter, Option, pipe, Predicate, Schema } from "effect";
 import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
-import type { Law, LawSourceSide } from "@bjornpagen/grizzle";
+import type { Law, LawSide } from "@bjornpagen/grizzle";
 import { lawNameOf, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
@@ -304,10 +304,6 @@ const StoredSide = Schema.Struct({
     Schema.Union([
       Schema.String,
       Schema.Struct({ field: Schema.String, kind: Schema.Literal("pred") }),
-      Schema.Struct({
-        kind: Schema.Literal("constant"),
-        value: Schema.Union([Schema.String, Schema.BigInt, Schema.Number, Schema.Boolean]),
-      }),
     ]),
   ),
 });
@@ -349,21 +345,16 @@ interface Side {
   readonly predicate: Option.Option<Term>;
   readonly relation: string;
   /**
-   * Each term: a field's name, a containment source's constant as its value's text, and none for a
-   * `pred` term, which this module does not evaluate.
+   * Each term: a field's name, and none for a `pred` term, which this module does not evaluate.
    */
-  readonly terms: readonly (
-    | { readonly field: string; readonly kind: "field" }
-    | { readonly kind: "constant"; readonly text: string }
-    | undefined
-  )[];
+  readonly terms: readonly ({ readonly field: string; readonly kind: "field" } | undefined)[];
 }
 
 /**
  * A side read two ways: as the host evaluates it, and as an outcome names its law.
  */
 interface ReadSide {
-  readonly law: LawSourceSide;
+  readonly law: LawSide;
   readonly side: Side;
 }
 
@@ -391,15 +382,9 @@ const sideOf = (side: typeof StoredSide.Type): ReadSide => {
       predicate:
         "desc" in side.source ? Option.some(termOf(side.source.desc.predicate)) : Option.none(),
       relation,
-      terms: side.terms.map((term) => {
-        if (Predicate.isString(term)) {
-          return { field: term, kind: "field" as const };
-        }
-
-        return term.kind === "constant"
-          ? { kind: "constant" as const, text: String(term.value) }
-          : undefined;
-      }),
+      terms: side.terms.map((term) =>
+        Predicate.isString(term) ? { field: term, kind: "field" as const } : undefined,
+      ),
     },
   };
 };
@@ -410,10 +395,10 @@ const sideOf = (side: typeof StoredSide.Type): ReadSide => {
  * none, and its terms as a stored side holds them.
  *
  * @param side - The side.
- * @returns The stored side, or none where a conjunct or a constant does not decode, which leaves
- *   its law unevaluated, as a statement that does not decode is.
+ * @returns The stored side, or none where a conjunct does not decode, which leaves its law
+ *   unevaluated, as a statement that does not decode is.
  */
-const storedSideOf = (side: LawSourceSide): Option.Option<typeof StoredSide.Type> =>
+const storedSideOf = (side: LawSide): Option.Option<typeof StoredSide.Type> =>
   Schema.decodeUnknownOption(StoredSide)({
     source: Arr.isReadonlyArrayNonEmpty(side.selection.conjuncts)
       ? {
@@ -451,20 +436,13 @@ type Evaluated =
  * @param read - The side as this module read it.
  * @returns Whether they are one side.
  */
-const sameSide = (law: LawSourceSide, read: LawSourceSide): boolean =>
+const sameSide = (law: LawSide, read: LawSide): boolean =>
   law.relation === read.relation &&
   law.terms.length === read.terms.length &&
   law.terms.every((term, at) => {
     const held = read.terms[at];
-    if (held === undefined) {
-      return false;
-    }
 
-    if (term.kind === "constant" || held.kind === "constant") {
-      return term.kind === "constant" && held.kind === "constant" && term.value === held.value;
-    }
-
-    return term.kind === held.kind && term.field === held.field;
+    return held !== undefined && term.kind === held.kind && term.field === held.field;
   });
 
 /**
@@ -1437,9 +1415,7 @@ const tuplesOf = (view: View, side: Side): Option.Option<readonly string[]> => {
     }
 
     if (selected === true) {
-      const values = terms.map((term) =>
-        term.kind === "constant" ? term.text : textOf(row[term.field]),
-      );
+      const values = terms.map((term) => textOf(row[term.field]));
       if (values.includes(undefined)) {
         return Option.none();
       }

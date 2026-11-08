@@ -2,7 +2,7 @@
  * A schema's families' axes, each with every law its foreign key carries, as grizzle's riding rule
  * merges them ({@link mergedAxes}): the laws one `some` refusal of a family's axis names together.
  */
-import type { AnySchema, Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
+import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
 import type { Array as Arr } from "effect";
 
 /**
@@ -34,19 +34,11 @@ export interface Axis {
  * @param prefix - The terms.
  * @returns Whether they begin it.
  */
-export const beginsWith = (
-  side: LawSourceSide,
-  prefix: readonly LawSide["terms"][number][],
-): boolean =>
+export const beginsWith = (side: LawSide, prefix: readonly LawSide["terms"][number][]): boolean =>
   prefix.every((term, at) => {
     const own = side.terms[at];
 
-    return (
-      own !== undefined &&
-      own.kind !== "constant" &&
-      own.kind === term.kind &&
-      own.field === term.field
-    );
+    return own !== undefined && own.kind === term.kind && own.field === term.field;
   });
 
 /**
@@ -55,7 +47,7 @@ export const beginsWith = (
  * @param side - The side.
  * @returns Whether it selects.
  */
-const selects = (side: LawSourceSide): boolean => side.selection.conjuncts.length > 0;
+const selects = (side: LawSide): boolean => side.selection.conjuncts.length > 0;
 
 /**
  * Read the axes of every family of a schema, each with the laws its foreign key carries: the

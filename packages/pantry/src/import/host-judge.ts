@@ -35,7 +35,7 @@
  * cause.
  */
 import { sameLaw } from "@bjornpagen/grizzle";
-import type { Law, LawSide, LawSourceSide, Refused } from "@bjornpagen/grizzle";
+import type { Law, LawSide, Refused } from "@bjornpagen/grizzle";
 import { Array as Arr, Formatter, Function as Fn, Option, Predicate, Schema } from "effect";
 import {
   closedOf,
@@ -44,7 +44,6 @@ import {
   fieldsOf,
   floatDatum,
   lawSideOf,
-  lawSourceSideOf,
   selectedBy,
   SideSchema,
   sourceOf,
@@ -291,26 +290,6 @@ export const judgedSideOf = (side: StoredSide): JudgedSide => ({
 });
 
 /**
- * A containment's source side as the host judges it: a {@link JudgedSide} whose terms may also be
- * constants, each its value on every row.
- */
-export interface JudgedSourceSide extends Omit<JudgedSide, "law"> {
-  readonly law: LawSourceSide;
-}
-
-/**
- * Read a containment's stored source side as the host judges it.
- *
- * @param side - The side.
- * @returns Its relation, terms, constants among them, selection, and the fields and unread terms
- *   the selection holds.
- */
-const judgedSourceSideOf = (side: StoredSide): JudgedSourceSide => ({
-  ...selectionOf(sourceOf(side)),
-  law: lawSourceSideOf(side),
-});
-
-/**
  * Read a law side as grizzle's `lawsOf` names it, its selection included: its relation, and the
  * conjunction of its selection's conjuncts as its predicate, none where it has none.
  *
@@ -318,7 +297,7 @@ const judgedSourceSideOf = (side: StoredSide): JudgedSourceSide => ({
  * @returns Its relation and predicate, or none where a conjunct does not decode as a stored term,
  *   which leaves its law unjudged, as a statement that does not decode is.
  */
-const lawSourceOf = (side: LawSourceSide): Option.Option<Source> =>
+const lawSourceOf = (side: LawSide): Option.Option<Source> =>
   Arr.isReadonlyArrayNonEmpty(side.selection.conjuncts)
     ? Option.map(
         Schema.decodeUnknownOption(StoredTermSchema)({
@@ -345,7 +324,7 @@ const AlternativesSchema = Schema.Struct({ kind: Schema.Literal("alternatives") 
  */
 export type JudgedLaw =
   | {
-      readonly from: JudgedSourceSide;
+      readonly from: JudgedSide;
       readonly kind: "contained";
       readonly law: Law;
       readonly to: JudgedSide;
@@ -373,9 +352,9 @@ const KeyStatementSchema = Schema.Struct({ kind: Schema.Literal("key"), side: Si
  * @returns The law.
  */
 const containedOf = (left: StoredSide, right: StoredSide): JudgedLaw => ({
-  from: judgedSourceSideOf(left),
+  from: judgedSideOf(left),
   kind: "contained",
-  law: { from: lawSourceSideOf(left), kind: "contained", to: lawSideOf(right) },
+  law: { from: lawSideOf(left), kind: "contained", to: lawSideOf(right) },
   to: judgedSideOf(right),
 });
 
@@ -552,7 +531,7 @@ const familyLawOf = (read: typeof FamilySchema.Type): readonly JudgedLaw[] => {
     return [];
   }
 
-  const from: LawSourceSide = {
+  const from: LawSide = {
     relation: family.member,
     selection: { conjuncts: [] },
     terms: group,
@@ -654,37 +633,13 @@ export const closedRows = (relation: string): Option.Option<readonly Row[]> =>
   Option.map(closed.factsOf(relation), ({ rows }) => rows);
 
 /**
- * One term of a containment's source side as a row meets its target's field: the field the row
- * holds there, a `pred` term's field among them, or the constant every row holds there.
- */
-export type SourceTerm =
-  | { readonly field: string; readonly kind: "field" }
-  | { readonly kind: "constant"; readonly value: bigint | boolean | number | string };
-
-/**
- * Read one term of a containment's stored source side ({@link SourceTerm}).
- *
- * @param term - The term.
- * @returns The field it reads, or its constant.
- */
-const sourceTermOf = (term: StoredSide["terms"][number]): SourceTerm => {
-  if (Predicate.isString(term)) {
-    return { field: term, kind: "field" };
-  }
-
-  return "field" in term
-    ? { field: term.field, kind: "field" }
-    : { kind: "constant", value: term.value };
-};
-
-/**
  * A containment the schema states, read from the statement grizzle keeps for it: its law, each
- * side's relation, its source's terms and its target's fields, and each side's selection as SQL's
- * `WHERE` reads it.
+ * side's relation and fields, a `pred` term's field among them, and each side's selection as SQL's
+ * `WHERE` reads it, a value a target fixes beyond its terms included.
  */
 export interface Containment {
   readonly from: string;
-  readonly fromTerms: readonly SourceTerm[];
+  readonly fromFields: readonly string[];
   readonly law: Law;
   readonly selected: (row: Readonly<Record<string, Datum>>) => boolean;
   readonly targeted: (row: Readonly<Record<string, Datum>>) => boolean;
@@ -720,7 +675,7 @@ export const containmentsIn = (
       return [
         {
           from: left.name,
-          fromTerms: read.left.terms.map(sourceTermOf),
+          fromFields: fieldsOf(read.left),
           law: containedOf(read.left, read.right).law,
           selected: selectedBy(left.predicate, closed),
           targeted: selectedBy(right.predicate, closed),
@@ -733,22 +688,18 @@ export const containmentsIn = (
 
 /**
  * Whether two law sides read one side, whatever their selections: one relation, and the same terms
- * in pairing order, each a field, `pred` of one, or a constant of one value.
+ * in pairing order, each a field or `pred` of one.
  *
  * @param stated - A side as grizzle's `lawsOf` names it.
  * @param read - The side as {@link judgedOf} read it from its statement.
  * @returns Whether they are one side.
  */
-const readsSide = (stated: LawSourceSide, read: LawSourceSide): boolean =>
+const readsSide = (stated: LawSide, read: LawSide): boolean =>
   stated.relation === read.relation &&
   stated.terms.length === read.terms.length &&
-  Arr.zip(stated.terms, read.terms).every(([held, term]) => {
-    if (held.kind === "constant" || term.kind === "constant") {
-      return held.kind === "constant" && term.kind === "constant" && held.value === term.value;
-    }
-
-    return held.kind === term.kind && held.field === term.field;
-  });
+  Arr.zip(stated.terms, read.terms).every(
+    ([held, term]) => held.kind === term.kind && held.field === term.field,
+  );
 
 /**
  * Whether a law grizzle's `lawsOf` names for a statement is the law {@link judgedOf} read from it: a
@@ -935,9 +886,9 @@ interface AxisCopy {
 }
 
 /**
- * A law side's term that reads a field as it is: no `pred` term and no constant.
+ * A law side's term that reads a field as it is: no `pred` term.
  */
-type FieldTerm = Extract<JudgedSourceSide["law"]["terms"][number], { readonly kind: "field" }>;
+type FieldTerm = Extract<LawSide["terms"][number], { readonly kind: "field" }>;
 
 /**
  * Test whether a law side's term reads a field as it is.
@@ -945,8 +896,7 @@ type FieldTerm = Extract<JudgedSourceSide["law"]["terms"][number], { readonly ki
  * @param term - The term.
  * @returns Whether it is a field term.
  */
-const isFieldTerm = (term: JudgedSourceSide["law"]["terms"][number]): term is FieldTerm =>
-  term.kind === "field";
+const isFieldTerm = (term: LawSide["terms"][number]): term is FieldTerm => term.kind === "field";
 
 /**
  * Read a containment as copies along a family's axis, where it is one.
@@ -1327,26 +1277,13 @@ interface LawRead {
 }
 
 /**
- * Whether a constant's literal is a scalar a row holds as it is: a text, a number, a bigint or a
- * boolean.
- *
- * @param value - The literal.
- * @returns Whether it is one.
- */
-const isScalar = (value: unknown): value is bigint | boolean | number | string =>
-  Predicate.isString(value) ||
-  Predicate.isBigInt(value) ||
-  Predicate.isNumber(value) ||
-  Predicate.isBoolean(value);
-
-/**
  * Project one side over a relation's rows ({@link Projection}).
  *
  * @param side - The side.
  * @param held - The rows.
  * @returns The tuples and the absent values.
  */
-const projectionOf = (side: JudgedSourceSide, held: readonly HostRow[]): Projection => {
+const projectionOf = (side: JudgedSide, held: readonly HostRow[]): Projection => {
   const absent = new Set(side.unread.map((kind) => `${side.relation}: a ${kind} term`));
   const tuples = new Map<string, HostRow>();
   for (const row of held) {
@@ -1364,18 +1301,6 @@ const projectionOf = (side: JudgedSourceSide, held: readonly HostRow[]): Project
     const values: Datum[] = [];
     let outside = false;
     for (const term of side.law.terms) {
-      if (term.kind === "constant") {
-        // A containment source's constant is its value on every row (grizzle's `constant(v)`).
-        const { value: constant } = term;
-        if (isScalar(constant)) {
-          values.push(constant);
-        } else {
-          absent.add(`${side.relation}: a constant term`);
-        }
-
-        continue;
-      }
-
       const value = row[term.field];
       if (value === undefined) {
         absent.add(`${side.relation}.${term.field}`);

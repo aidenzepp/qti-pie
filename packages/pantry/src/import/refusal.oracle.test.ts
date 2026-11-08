@@ -31,7 +31,7 @@ import {
   tree,
   uuid,
 } from "@bjornpagen/grizzle";
-import type { AnySchema, Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
+import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
@@ -275,18 +275,13 @@ const scratch = (() => {
  * @param expected - The side, as {@link sideOf} builds it.
  * @returns Whether it reads it.
  */
-const readsAs = (side: LawSourceSide, expected: LawSide): boolean =>
+const readsAs = (side: LawSide, expected: LawSide): boolean =>
   side.relation === expected.relation &&
   side.terms.length === expected.terms.length &&
   side.terms.every((term, at) => {
     const held = expected.terms[at];
 
-    return (
-      held !== undefined &&
-      term.kind !== "constant" &&
-      term.kind === held.kind &&
-      term.field === held.field
-    );
+    return held !== undefined && term.kind === held.kind && term.field === held.field;
   });
 
 /**

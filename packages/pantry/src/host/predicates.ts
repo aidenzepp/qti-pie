@@ -18,10 +18,10 @@
  *   key its relation holds no tuple at and an unread term are unknown; `and`, `or` and `not` are
  *   Kleene's.
  * - **Sides.** A stored side ({@link SideSchema}) gives its relation and selection ({@link sourceOf})
- *   and its terms, written as an outcome names a law's side ({@link lawSideOf},
- *   {@link lawSourceSideOf}).
+ *   and its terms, each a field or `pred` of one, written as an outcome names a law's side
+ *   ({@link lawSideOf}).
  */
-import type { AnySchema, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
+import type { AnySchema, LawSide } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, pipe, Predicate, Schema } from "effect";
 
 /**
@@ -117,18 +117,10 @@ export const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
 });
 
 /**
- * A containment source's constant term as grizzle keeps it, `constant(v)`: the value every fact of
- * the side holds there, which meets its target field's (`on` of grizzle's schema API).
- */
-const ConstantTermSchema = Schema.Struct({
-  kind: Schema.Literal("constant"),
-  value: Schema.Union([Schema.String, Schema.BigInt, Schema.Number, Schema.Boolean]),
-});
-
-/**
  * A side of a statement as grizzle keeps it: a selection with the predicate its desc holds, or a
- * whole relation, stored or closed, and its terms, a `pred` one as an object over its field and a
- * containment source's constant as {@link ConstantTermSchema}.
+ * whole relation, stored or closed, and its terms, each a field's name or a `pred` one as an object
+ * over its field. Every side reads a field at each term: grizzle `3cc8fbd` removed `constant(v)`,
+ * and a target fixes a field beyond its terms by its selection instead (README, "Rules").
  */
 export const SideSchema = Schema.Struct({
   source: Schema.Union([
@@ -139,7 +131,7 @@ export const SideSchema = Schema.Struct({
     Schema.Struct({ kind: Schema.String, name: Schema.String }),
   ]),
   terms: Schema.NonEmptyArray(
-    Schema.Union([Schema.String, Schema.Struct({ field: Schema.String }), ConstantTermSchema]),
+    Schema.Union([Schema.String, Schema.Struct({ field: Schema.String })]),
   ),
 });
 
@@ -970,81 +962,34 @@ export const sourceOf = (side: StoredSide): Source =>
  * Read the field a stored term reads: a field's name, or a `pred` term's field.
  *
  * @param term - The term.
- * @returns The field, none for a constant, which reads none.
+ * @returns The field.
  */
-export const fieldOf = (term: StoredSide["terms"][number]): Option.Option<string> => {
-  if (Predicate.isString(term)) {
-    return Option.some(term);
-  }
-
-  return "field" in term ? Option.some(term.field) : Option.none();
-};
+const fieldOf = (term: StoredSide["terms"][number]): string =>
+  Predicate.isString(term) ? term : term.field;
 
 /**
- * The defect of a reader of fields met with a constant term, which only a containment's source
- * holds.
- *
- * @param side - The side that holds it.
- * @returns The error, naming the side and the repair.
- */
-const constantHeld = (side: StoredSide): Error =>
-  new Error(
-    `The side over ${sourceOf(side).name} holds a constant term, which this reader pairs as no field. Read a containment's source by its terms, each a field or a constant.`,
-  );
-
-/**
- * Read a stored side's terms, each a field's name, a `pred` term's field among them, of a side that
- * holds no constant: a target's, a fold's or a family's, or a containment source of none.
+ * Read a stored side's terms, each a field's name, a `pred` term's field among them.
  *
  * @param side - The side.
  * @returns The fields, in pairing order.
- * @throws {Error} When the side holds a constant, which only a containment's source may hold and
- *   whose reader pairs its terms by {@link fieldOf}.
  */
-export const fieldsOf = (side: StoredSide): readonly string[] =>
-  side.terms.map((term) => Option.getOrThrowWith(fieldOf(term), () => constantHeld(side)));
+export const fieldsOf = (side: StoredSide): readonly string[] => side.terms.map(fieldOf);
 
 /**
- * Write a containment's stored source side as a law's source side: each term a field, `pred` of
- * one, or a constant.
+ * Write a stored side as a law's side: each term a field or `pred` of one.
  *
  * @param side - The side.
  * @returns The law side, its selection's conjuncts left out, as an outcome names it.
- */
-export const lawSourceSideOf = (side: StoredSide): LawSourceSide => ({
-  relation: sourceOf(side).name,
-  selection: { conjuncts: [] },
-  terms: pipe(
-    side.terms,
-    Arr.map((term): LawSourceSide["terms"][number] => {
-      if (Predicate.isString(term)) {
-        return { field: term, kind: "field" };
-      }
-
-      return "field" in term
-        ? { field: term.field, kind: "pred" }
-        : { kind: "constant", value: term.value };
-    }),
-  ),
-});
-
-/**
- * Write a stored side that holds no constant as a law's side: a target's, a key's, a fold's, or a
- * containment source of none.
- *
- * @param side - The side.
- * @returns The law side, its selection's conjuncts left out, as an outcome names it.
- * @throws {Error} When the side holds a constant, as {@link fieldsOf} does.
  */
 export const lawSideOf = (side: StoredSide): LawSide => ({
   relation: sourceOf(side).name,
   selection: { conjuncts: [] },
   terms: pipe(
     side.terms,
-    Arr.map((term): LawSide["terms"][number] => {
-      const field = Option.getOrThrowWith(fieldOf(term), () => constantHeld(side));
-
-      return Predicate.isString(term) ? { field, kind: "field" } : { field, kind: "pred" };
-    }),
+    Arr.map((term): LawSide["terms"][number] =>
+      Predicate.isString(term)
+        ? { field: term, kind: "field" }
+        : { field: term.field, kind: "pred" },
+    ),
   ),
 });

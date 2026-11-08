@@ -25,7 +25,7 @@
  * refuses for one cause is refused under that cause's rule alone. No row holds the nil uuid, no
  * target a `none` type, and no family member lacks its owner (`#pantry/test/family-owners.ts`).
  */
-import type { Addition, Law, LawSourceSide } from "@bjornpagen/grizzle";
+import type { Addition, Law, LawSide } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as plainIt, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
@@ -146,7 +146,7 @@ type Restated =
  * @param restated - The restated side.
  * @returns Whether it reads it.
  */
-const readsAs = (side: LawSourceSide, [relation, ...fields]: RestatedSide): boolean =>
+const readsAs = (side: LawSide, [relation, ...fields]: RestatedSide): boolean =>
   side.relation === relation &&
   side.terms.length === fields.length &&
   side.terms.every((term, at) => term.kind === "field" && term.field === fields[at]);
