@@ -529,26 +529,32 @@ const spelledBases: readonly ValueBase[] = valueBases.filter(
  * math operator's `integer` where its `name` is one of the integer operators and `float` for every
  * other (information model §2.11.3.32), an unwritten one among them, as the law oracle reads it;
  * a base value's and a test variables' the base its `base-type` spells exactly, `unknown` where
- * none is written or the one written spells none.
+ * the one written spells none; and a test variables that writes no `base-type` float where it
+ * writes a `weight-identifier` (§7.39.5: "When a weighting is specified the result of the
+ * expression always has base-type float"), `unknown` where it writes none (spec reading 167).
  *
  * @param kind - The expression's kind.
- * @param baseTypeLexical - Its `base-type`, if written.
- * @param name - Its `name`, if written.
+ * @param inputs - Its `base-type`, `name` and `weight-identifier`, each if written.
  * @returns The base type.
  */
 const attributeBaseOf = (
   kind: string,
-  baseTypeLexical: Option.Option<string>,
-  name: Option.Option<string>,
+  inputs: Pick<TypeInputs, "baseTypeLexical" | "name" | "weighted">,
 ): ValueBase => {
   if (kind === "qti-math-operator") {
-    return Option.exists(name, (written) => integerNames.test(written)) ? "integer" : "float";
+    return Option.exists(inputs.name, (written) => integerNames.test(written))
+      ? "integer"
+      : "float";
   }
 
-  return baseTypeLexical.pipe(
-    Option.flatMap((lexical) => Arr.findFirst(spelledBases, (base) => base === lexical)),
-    Option.getOrElse(() => unknownType.baseType),
-  );
+  return Option.match(inputs.baseTypeLexical, {
+    onNone: () => (inputs.weighted ? "float" : unknownType.baseType),
+    onSome: (lexical) =>
+      Option.getOrElse(
+        Arr.findFirst(spelledBases, (base) => base === lexical),
+        () => unknownType.baseType,
+      ),
+  });
 };
 
 /**
@@ -572,6 +578,7 @@ interface TypeInputs {
   readonly name: Option.Option<string>;
   readonly operands: readonly Typed[];
   readonly reference: Option.Option<Typed>;
+  readonly weighted: boolean;
 }
 
 /**
@@ -688,7 +695,7 @@ const typeOf = (kind: string, inputs: TypeInputs): Typed => {
     }
     case "attribute": {
       return {
-        baseType: attributeBaseOf(kind, inputs.baseTypeLexical, inputs.name),
+        baseType: attributeBaseOf(kind, inputs),
         cardinality: rule.cardinality,
       };
     }
@@ -1057,6 +1064,7 @@ const typesOf = (
             expressions.has(child.kind) ? [operandOf(child)] : [],
           ),
           reference: Option.fromNullishOr(references.get(pairKey(node.id, "identifier"))),
+          weighted: valueOf(doc, node.id, "weight-identifier") !== undefined,
         }),
       );
     }
@@ -1092,14 +1100,15 @@ const typingAttributes: ReadonlyMap<string, readonly string[]> = new Map([
 ]);
 
 /**
- * The typing attribute of each kind whose element may omit it (`optionallyTypedKinds` of
- * `#pantry/qti/expressions.ts`), which has a row on every element of the kind, unwritten where the
- * element omits it: a test variables' `base-type`. A base value's `base-type` and a math operator's
- * `name` are required, so an element that omits one has no row, and AL3 refuses it alone.
+ * The attributes of each kind whose element may omit them that have a row on every element of the
+ * kind, unwritten where the element omits one: a test variables' `base-type`
+ * (`optionallyTypedKinds` of `#pantry/qti/expressions.ts`), and its `weight-identifier`, whose
+ * unwritten row proves it unweighted, so its unwritten `base-type` is `unknown` (decision 434). A
+ * base value's `base-type` and a math operator's `name` are required, so an element that omits one
+ * has no row, and AL3 refuses it alone.
  */
-const unwrittenTypingOf: ReadonlyMap<string, "base-type"> = new Map(
-  optionallyTypedKinds.map((kind) => [kind, "base-type"] as const),
-);
+const unwrittenTypingOf: ReadonlyMap<string, readonly ("base-type" | "weight-identifier")[]> =
+  new Map(optionallyTypedKinds.map((kind) => [kind, ["base-type", "weight-identifier"]] as const));
 
 /**
  * The lexical form of an unwritten typing attribute's row: empty, `ExpressionAttribute`'s null
@@ -1199,14 +1208,18 @@ const expressionRowsOf = (
     }
   }
 
-  const typing = unwrittenTypingOf.get(node.kind);
-  if (typing !== undefined && !built.ExpressionAttribute.has(pairKey(node.id, typing))) {
-    built.ExpressionAttribute.set(pairKey(node.id, typing), {
-      ...own,
-      attribute: typing,
-      lexical: unwrittenLexical,
-      written: false,
-    });
+  for (const typing of Option.getOrElse(
+    Option.fromNullishOr(unwrittenTypingOf.get(node.kind)),
+    Arr.empty,
+  )) {
+    if (!built.ExpressionAttribute.has(pairKey(node.id, typing))) {
+      built.ExpressionAttribute.set(pairKey(node.id, typing), {
+        ...own,
+        attribute: typing,
+        lexical: unwrittenLexical,
+        written: false,
+      });
+    }
   }
 
   if (node.kind === "qti-base-value") {

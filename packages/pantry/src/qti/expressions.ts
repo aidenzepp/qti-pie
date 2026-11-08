@@ -515,10 +515,13 @@ export const placedVariableFamily = counted(
  *
  * `written` says whether the element writes it. A test variables' `base-type`, which it may omit
  * ({@link optionallyTypedKinds}), has a row on every test variables, so one that omits it has one
- * too, unwritten, with an empty lexical form: it is thereby proved `unknown` (M2,
- * `representation-gaps.md` §1: absence as a keyed null object, which the attribute's own copy
- * refutes where it is written). A base value's `base-type` and a math operator's `name` are
- * required, so an element that omits one has no row, and AL3 refuses it alone.
+ * too, unwritten, with an empty lexical form (M2, `representation-gaps.md` §1: absence as a keyed
+ * null object, which the attribute's own copy refutes where it is written). So does its optional
+ * `weight-identifier`, so that "not weighted" is a row too: an unwritten `base-type` is `unknown`
+ * where the weight is unwritten and float where it is written (information model §7.39.5: "When a
+ * weighting is specified the result of the expression always has base-type float"; decision 434). A
+ * base value's `base-type` and a math operator's `name` are required, so an element that omits one
+ * has no row, and AL3 refuses it alone.
  */
 export const ExpressionAttribute = relation(
   "ExpressionAttribute",
@@ -1448,6 +1451,35 @@ const referenceDocuments = select(Document, (d) => d.ne(d.rootKind, itemKind));
 const typeAttributes = select(ExpressionAttribute, (x) => x.in(x.attribute, ["base-type", "name"]));
 
 /**
+ * A test variables' `weight-identifier`, written or not: each test variables has one row of it, an
+ * unwritten one where it writes none, the proof that it is not weighted.
+ */
+const weightAttributes = select(ExpressionAttribute, (x) => x.eq(x.attribute, "weight-identifier"));
+
+/**
+ * The `weight-identifier`s a test variables writes: the test variables that are weighted.
+ */
+const writtenWeights = select(ExpressionAttribute, (x) =>
+  x.and(x.eq(x.attribute, "weight-identifier"), x.eq(x.written, true)),
+);
+
+/**
+ * The unwritten `base-type`s whose element is `unknown`, each a test variables' that writes neither
+ * a `base-type` nor, by the containment into {@link weightAttributes}, a `weight-identifier`.
+ */
+const unknownUnwrittenBases = select(ExpressionAttribute, (x) =>
+  x.and(x.eq(x.attribute, "base-type"), x.eq(x.written, false), x.eq(x.baseType, "unknown")),
+);
+
+/**
+ * The unwritten `base-type`s whose element is float, each a test variables' that writes no
+ * `base-type` and, by the containment into {@link writtenWeights}, writes a `weight-identifier`.
+ */
+const floatUnwrittenBases = select(ExpressionAttribute, (x) =>
+  x.and(x.eq(x.attribute, "base-type"), x.eq(x.written, false), x.eq(x.baseType, "float")),
+);
+
+/**
  * The kinds whose type an attribute of their own gives.
  */
 const attributeTypedKinds = ["qti-base-value", "qti-math-operator", "qti-test-variables"] as const;
@@ -1455,7 +1487,8 @@ const attributeTypedKinds = ["qti-base-value", "qti-math-operator", "qti-test-va
 /**
  * The attribute-typed kinds whose typing attribute an element may omit, so that its absence types
  * the element: a test variables' `base-type` (`TestVariablesDType`, `use="optional"`), whose
- * absence matches every variable and types it `unknown`. A base value's `base-type` and a math
+ * absence matches every integer and float variable and types it `unknown`, or float where it is
+ * weighted (spec reading 167). A base value's `base-type` and a math
  * operator's `name` are required (`BaseValueDType` and `MathOperatorDType`, `use="required"`), so
  * an element that omits one is AL3's alone, and holds no typing row.
  */
@@ -3098,6 +3131,23 @@ export const expressionLawsByName = {
       ),
       on(typeAttributes, "node"),
     ),
+    // A test variables' weight, written or not (decision 434): every test variables has its row,
+    // and an unwritten `base-type` is `unknown` only where the weight is unwritten, float only
+    // where it is written. `E1_derived` below admits no other type for an unwritten one.
+    key(on(weightAttributes, "node")),
+    key(on(writtenWeights, "node")),
+    contained(
+      on(
+        select(Expression, (e) => e.eq(e.kind, "qti-test-variables")),
+        "node",
+      ),
+      on(weightAttributes, "node"),
+    ),
+    contained(
+      on(unknownUnwrittenBases, "node", "written"),
+      on(weightAttributes, "node", "written"),
+    ),
+    contained(on(floatUnwrittenBases, "node"), on(writtenWeights, "node")),
     check("E1_derived", ExpressionAttribute, (x) =>
       x.or(
         x.and(
@@ -3130,10 +3180,12 @@ export const expressionLawsByName = {
         ),
         x.and(
           x.eq(x.written, false),
-          x.eq(x.attribute, "base-type"),
           x.eq(x.kind, "qti-test-variables"),
           x.eq(x.lexical, ""),
-          x.eq(x.baseType, "unknown"),
+          x.or(
+            x.and(x.eq(x.attribute, "base-type"), x.in(x.baseType, ["float", "unknown"])),
+            x.eq(x.attribute, "weight-identifier"),
+          ),
         ),
       ),
     ),
@@ -3378,7 +3430,11 @@ export const expressionLawsByName = {
   ],
   "Weighted base": [
     check("Weighted_base", ExpressionAttribute, (x) =>
-      x.or(x.ne(x.attribute, "weight-identifier"), x.in(x.baseType, ["float", "unknown"])),
+      x.or(
+        x.ne(x.attribute, "weight-identifier"),
+        x.eq(x.written, false),
+        x.in(x.baseType, ["float", "unknown"]),
+      ),
     ),
   ],
 } as const;

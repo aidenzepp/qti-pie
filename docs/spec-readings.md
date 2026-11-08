@@ -3308,3 +3308,40 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      has no declaration, so no mapping or area mapping has been declared (section 7.22). A built-in of another kind,
      such as `completionStatus`, stays "Variable kind"'s alone. A dotted map response point of a response with an area
      mapping is accepted. (Decided 2026-11-07 by the Mind, decision 431.)
+
+167. **A weighted `qti-test-variables` is float: with no `base-type` it is typed float, and with a `base-type` other
+     than float it is refused. Two expression types stay stated limits.** The information model's section 7.39.5, TestVariables `weight-identifier`
+     (https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_TestVariables.Attr_weight-identifier), says
+     "The behaviour of this characterisic is only defined if the base-type attribute is float or omitted . When a
+     weighting is specified the result of the expression always has base-type float. Note that this option is
+     incomptable with base-type integer.", and section 7.39.6, its `base-type`, says "If specified, matches only
+     variables declared with this base-type. This also becomes the base-type of the result (subject to type promotion
+     through weighting, as described below). If omitted, variables declared with base-type integer or float are
+     matched. The base-type of the result is integer if all matching values have base-type integer, otherwise it is
+     float and integer values are subject to type promotion." So a `qti-test-variables` that writes a
+     `weight-identifier` and no `base-type` is float multiple, whether or not an item ref holds the named weight:
+     `<qti-test-variables variable-identifier="RAW" weight-identifier="W"/>` set into an integer multiple outcome is
+     refused under "Set type", and a `qti-gcd` of it under "Operand fit", while `rtest04.xml`'s weighted sum into its
+     float `SCORE` is accepted. One that writes a `base-type` has that base, and weighted only float is admitted: with
+     `integer` the section calls the option incompatible, and with any other base it leaves the behaviour undefined,
+     so both are refused under "Weighted base", the stricter reading. `qti-outcome-minimum` and `qti-outcome-maximum`
+     are float multiple, weighted or not (sections 6.9.63 and 6.9.64: "The result has cardinality multiple and
+     base-type float."; section 7.28.5 gives their `weight-identifier` "As per the 'weight-identifier' characteristic
+     of 'qti-test-variables'.").
+
+     Two types stay `unknown`, each a stated limit (reading 91). First, a test's prefixed `qti-variable`, `I.SCORE`,
+     weighted or not, is `unknown` in its document. Its type is the declaration of the item each placing test's item
+     ref names (readings 5 and 117), so no one type of the element is right in every test, and a weight changes it
+     only for an integer or float item variable (section 7.47.2: "Weights only apply to item variables with
+     base-types integer and float. If the item variable is of any other type the weight is ignored."). Typing every
+     weighted read float would refuse valid content, such as a weighted `I.RESPONSE` of an identifier response in a
+     `qti-match`. Second, an unweighted `qti-test-variables` with no `base-type` is `unknown`: by section 7.39.6 its
+     base turns on which items the assembled test's sections and categories match, and, where they mix integer and
+     float, on which values are present at run time. What would lift both is typing an expression once per assembly,
+     each placing test's own type of the read and the matched declarations' bases folded per assembly (judging only
+     the uniform case of the second), with per-assembly copies of every law that reads an expression's type. Until
+     then each is accepted wherever `unknown` is, and a renderer evaluating real values may judge more. Between the two
+     packages the stricter normative reading wins. This binds pantry and plate alike, and pairs with plate's readings
+     198 and 199. This is not a case of documents in conflict. (Decided 2026-11-08 by the Mind, decisions 434 and 435,
+     on research ba1a2d84, relay 4da02d14 of plate readings 198 and 199, under the operator's delegation; FYI to the
+     operator.)
