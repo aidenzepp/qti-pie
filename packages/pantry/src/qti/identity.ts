@@ -100,6 +100,7 @@ import {
   check,
   closedId,
   Compute,
+  constant,
   contained,
   counted,
   drawn,
@@ -145,6 +146,7 @@ import {
   ResourceLomGeneral,
 } from "#pantry/qti/metadata.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
+import { ManifestId, ResourceId } from "#pantry/qti/package.ts";
 import { Instance, itemKind, testKind } from "#pantry/qti/tests.ts";
 
 /**
@@ -709,9 +711,11 @@ export const idAttributes = select(Attribute, idTyped);
 /**
  * The ID-typed attributes whose value is one of their document's IDs: those whose lexical form
  * names something once collapsed ({@link namingPattern}), each the source of a {@link DocumentId},
- * with a key of its own over `node` that the copy's reverse probe reads (C18).
+ * with a key of its own over `node` that the copy's reverse probe reads (C18), and that each copy
+ * back into it meets: a {@link DocumentId}'s, and a `th`'s `TableHeader`'s at its kind
+ * (`#pantry/qti/html.ts`).
  */
-const namingIdAttributes = select(Attribute, (a) =>
+export const namingIdAttributes = select(Attribute, (a) =>
   a.and(idTyped(a), Compute.matches(a.lexical, namingPattern)),
 );
 
@@ -992,7 +996,14 @@ export const ssmlLexiconReference = contained(
  *   and {@link ssmlLexiconReference};
  * - **Label tools:** each `label` that asks for its tool copied into its `LabelUse` row and each row
  *   a label's, its root kind its document's, and in an item each label's document one whose root
- *   carries `tool-name` and `tool-version`.
+ *   carries `tool-name` and `tool-version`;
+ * - **Manifest overlay:** each {@link ManifestId} and {@link ResourceId} row has its node's
+ *   `identifier`, the way back of the copy `#pantry/qti/package.ts` states (C18): an ID-typed
+ *   attribute at its node, of its kind (`cp:manifest` or `cp:resource`), in the manifest (type
+ *   `none`). Each of the two kinds has one ID-typed attribute, its `identifier`, in every version,
+ *   so this is the containment in the manifest's `identifier` selection, read through the key over
+ *   the ID-typed attributes, with no second key over the narrower selection (the one-way rule;
+ *   `#pantry/qti/identity.copyback.test.ts`).
  */
 export const identityLawsByName = {
   "Document lang": [
@@ -1177,6 +1188,16 @@ export const identityLawsByName = {
     key(on(toolVersions, "document")),
     contained(on(itemLabels, "document"), on(toolNames, "document")),
     contained(on(itemLabels, "document"), on(toolVersions, "document")),
+  ],
+  "Manifest overlay": [
+    contained(
+      on(ManifestId, "node", constant("cp:manifest"), constant("none")),
+      on(idAttributes, "node", "kind", "documentType"),
+    ),
+    contained(
+      on(ResourceId, "node", constant("cp:resource"), constant("none")),
+      on(idAttributes, "node", "kind", "documentType"),
+    ),
   ],
   "Node key": [key(on(identityNodes, "id")), key(on(lomLanguages, "id"))],
   "SSML lexicon reference": [ssmlLexiconReference],

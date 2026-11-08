@@ -2344,7 +2344,7 @@ ran 3.5 to 6 times CPU at load 42 to 73.
   gate that an encode's size does not grow with the roster. It is a hard cutover still to land, and fingerprints will
   change.
 
-### LP-3. Four of Attribute's keys are implied by wider ones (qti, after the database tier)
+### LP-3. Four of Attribute's keys are implied by wider ones (qti, done in the sweep)
 
 Each selection was evaluated exactly over the grammar's 78,424 attribute rows: (version, kind, governs, name, slot),
 from each GoverningOf row's model's slots, with the closed reads evaluated from their rows. Script and output:
@@ -2352,12 +2352,12 @@ from each GoverningOf row's model's slots, with the closed reads evaluated from 
 and `attr.out`, the dump of Attribute's unique objects it reads (it runs from a pantry package directory). Four keys lie
 inside a wider key over the same field, so each is one key stated twice:
 
-| Narrower key                                                                    | Inside                                                                        | Its containment                                                              |
-| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| metadata.ts:935 `key(on(objectIdentifiers, "node"))`, item and test `xml:lang`  | identity.ts:1015 `key(on(langAttributes, "node"))`, `xml:lang` everywhere     | copy-back beside it; grizzle's `beyondPrimary` already drops 935 as subsumed |
-| package.ts:600 `key(on(manifestIdentifiers, "node"))`, `cp:manifest@identifier` | identity.ts:929 `key(on(idAttributes, "node"))`, one ID attribute per element | copy-back at :601 into `ManifestId`                                          |
-| package.ts:610 `key(on(resourceIdentifiers, "node"))`, `cp:resource@identifier` | identity.ts:929                                                               | copy-back at :611 into `Resource`                                            |
-| html.ts:369 `key(on(headerIds, "node"))`, `th@id`                               | identity.ts:929                                                               | `contained(on(TableHeader, "node"), on(headerIds, "node"))` at :371          |
+| Narrower key                                                                      | Inside                                                                        | Its containment                                                                       |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| metadata.ts:935 `key(on(objectLangAttributes, "node"))`, item and test `xml:lang` | identity.ts:1015 `key(on(langAttributes, "node"))`, `xml:lang` everywhere     | the copy into `ObjectLang` beside it; grizzle's `beyondPrimary` drops 935 as subsumed |
+| package.ts:600 `key(on(manifestIdentifiers, "node"))`, `cp:manifest@identifier`   | identity.ts:929 `key(on(idAttributes, "node"))`, one ID attribute per element | copy-back at :601 into `ManifestId`                                                   |
+| package.ts:610 `key(on(resourceIdentifiers, "node"))`, `cp:resource@identifier`   | identity.ts:929                                                               | copy-back at :611 into `Resource`                                                     |
+| html.ts:369 `key(on(headerIds, "node"))`, `th@id`                                 | identity.ts:929                                                               | `contained(on(TableHeader, "node"), on(headerIds, "node"))` at :371                   |
 
 - **Ruling (the Mind, 2026-11-06):** they go by the one-way rule. Removing them restates their containments, which is
   a schema change, so it lands after the database tier is green, like GoverningOf.
@@ -2371,6 +2371,32 @@ inside a wider key over the same field, so each is one key stated twice:
 - declarations.ts:536 `key(on(identifiers, "node"))` and identity.ts:929 overlap on `qti-context-declaration` and
   `qti-response-declaration`'s `identifier`, but neither lies inside the other. They are two keys, and both stay.
 - Every other pair of Attribute's 52 keys over one field list is disjoint.
+- **Done (sweep seat LP3, 2026-11-08), at grizzle `0c2154c`:**
+  - The open question's answer: with the narrower key deleted, grizzle refuses the containment into its selection,
+    `UnsupportedLawFamily`, "a containment into an unkeyed side is not admitted"
+    (`packages/engine/src/laws/model/plan.ts:1293`, `#targetKeyed` at `:1425`). That is the README's rule ("a key over
+    the same selection among its terms"), a documented limit.
+  - So each containment is stated into the wider selection, its source holding a constant for what the narrower
+    selection read beyond it (README, Rules: "A containment's source ... may hold `constant(v)`"):
+    `ManifestId(node, "cp:manifest", "none") ⊆ idAttributes(node, kind, documentType)`, the same over `cp:resource`,
+    and `TableHeader(node, "th") ⊆ namingIdAttributes(node, kind)`. No constant names the attribute: each kind's one
+    ID-typed attribute is the copied one. The two manifest ones are stated in identity.ts, since package.ts cannot
+    import identity.ts without a cycle through metadata.ts.
+  - The `xml:lang` key had no containment into it, only the copy out of it, so it is deleted alone.
+  - Proof: `src/qti/identity.copyback.test.ts` exhausts every attribute row of each copied kind the grammar admits,
+    under every document type and both verdicts of the ID-value pattern (440, 616 and 5,896 cases), against the
+    replaced law restated over plain rows. Two plants fail it: `ManifestId` without its `none`, and `TableHeader` into
+    `idAttributes`.
+  - The cost, from the `_init` regenerated from zero: Attribute's four UNIQUEs become two, over (node, kind,
+    documentType) and (node, kind) of the wider selections, and four plain B-trees, the forward copies' reverse probes,
+    which the narrower UNIQUEs had served; Attribute gains three generated columns, and `ManifestId`, `ResourceId` and
+    `TableHeader` five constant columns. Each law is stated once, with two more indexes on Attribute.
+  - A question for the Mind to put to grizzle: admitting a containment into a selection that a keyed selection
+    contains, with grizzle installing the UNIQUE its foreign key needs, would state each law once at the old cost.
+  - C18's reason for a key beside each copy, that grizzle refuses an index over `Attribute.lexical`, no longer holds:
+    `plannedReverse` (`plan.ts:269`) indexes the leading run of bounded columns, the node alone. The keys beside a copy and no
+    containment into their selection (package.ts `resourceTypes`, `resourceHrefs`, `fileHrefs` and `dependencyRefs`,
+    metadata.ts `stringLanguageAttributes`) state again what AL2 holds, and are left to a follow-up.
 
 ### LP-4. The Qti import's repeated domain compiles (qti, fixed in `ef7423f0`)
 

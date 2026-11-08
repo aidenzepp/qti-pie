@@ -8,11 +8,11 @@
  * (`cp:manifest`), {@link Resource} and its optional {@link ResourceId} and {@link ResourceHref}
  * (`cp:resource`), {@link File} (`cp:file`) and {@link Dependency} (`cp:dependency`). Each copies
  * its node's {@link nodeRef} tuple, names a node of its own kind, and takes each attribute value it
- * compares from `Attribute` (C18), with the key over that attribute's selection that keeps its
- * lexical form out of every index (the tier-1 addendum's "Text in keys"). An identifier that may be
- * unwritten is a row of its own, or none (AGENTS.md, Schema intent): a `cp:manifest` that writes no
- * `identifier` has no {@link ManifestId}, and a `cp:resource` none no {@link ResourceId}, so AL3
- * refuses the element alone and no law compares an identifier it does not have.
+ * compares from `Attribute` (C18), with its lexical form in no index (the tier-1 addendum's "Text
+ * in keys"). An identifier that may be unwritten is a row of its own, or none (AGENTS.md, Schema
+ * intent): a `cp:manifest` that writes no `identifier` has no {@link ManifestId}, and a
+ * `cp:resource` none no {@link ResourceId}, so AL3 refuses the element alone and no law compares an
+ * identifier it does not have.
  *
  * Three relations are projections, keyed by their heading, each owning a counted family whose count
  * is above 0, so each holds exactly the values some member row holds: {@link FileHref}, the hrefs a
@@ -496,13 +496,16 @@ export const namedHrefFamily = counted(
  * attributes are no overlay's source.
  *
  * A copy, `contained(on(selection, "node", "lexical"), on(O, "node", field))`, makes the
- * attribute's lexical form the overlay's field and its existence the overlay row's. Every
- * containment lowers to a foreign key and a reverse index over its source's columns, and grizzle
- * refuses an index over `Attribute.lexical`, which no pattern bounds (`UnrepresentableKey`); so
- * each copy sits beside `key(on(selection, "node"))`, whose UNIQUE over the selection's node serves
- * that reverse probe, and no index holds the lexical form. The key holds already, since an element
- * has one attribute of a name (AL2). Each selection is one value, so the key and the copy read one
- * law column.
+ * attribute's lexical form the overlay's field and its existence the overlay row's. Its reverse
+ * probe reads an index over the selection's node alone: grizzle indexes the longest leading run of
+ * a containment's source columns whose entry is bounded (`plannedReverse`), and no pattern bounds
+ * `Attribute.lexical`. The `type`, `href` and `identifierref` selections each sit beside
+ * `key(on(selection, "node"))`, which holds already, since an element has one attribute of a name
+ * (AL2): the key and the copy read one selection value, so one law column, and the key's UNIQUE is
+ * that index. An `identifier` is an `xs:ID`, so its selection lies inside `idAttributes`
+ * (`#pantry/qti/identity.ts`), whose key holds every element to one ID-typed attribute: it states
+ * no key of its own, and the copy back from its overlay, stated there under "Manifest overlay",
+ * meets `idAttributes` at the selection's kind and the manifest's type, `none`.
  *
  * @param kind - The element's kind.
  * @param name - The attribute's name.
@@ -659,7 +662,9 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  * - **the record:** the entries in listing order, one per path, and every document an entry.
  * - **the overlays:** each copies its node's {@link nodeRef} tuple, names a node of its kind and its
  *   package's `Document` row, and takes its attribute values from `Attribute` (C18); a file's and a
- *   dependency's resource is their node's parent; the manifest is one per package.
+ *   dependency's resource is their node's parent; the manifest is one per package. A
+ *   {@link ManifestId}'s and a {@link ResourceId}'s way back to its `identifier` is stated in
+ *   `#pantry/qti/identity.ts`, over the ID-typed attributes.
  * - **P1 (spec reading 67):** a resource's type is one its version's content-packaging XSD
  *   enumerates, which the attribute's value domain states (`attribute-lexical`), and nothing here.
  * - **P2 `root-type-reverse` ("RootOfType"):** a document's (resource type, root kind) is a row of
@@ -717,8 +722,6 @@ export const packageLawsByName = {
     key(on(stimulusDocuments, "package", "path")),
   ],
   "DocumentId key": [
-    key(on(manifestIdentifiers, "node")),
-    key(on(resourceIdentifiers, "node")),
     key(on(resourceTypes, "node")),
     key(on(ResourceId, "package", "identifier")),
     key(on(resourceHrefs, "node")),
@@ -812,7 +815,6 @@ export const packageLawsByName = {
     contained(on(ManifestId, "node"), on(nodesOf("cp:manifest"), "id")),
     contained(on(ManifestId, "document", "package"), on(Document, "node", "package")),
     contained(on(manifestIdentifiers, "node", "lexical"), on(ManifestId, "node", "identifier")),
-    contained(on(ManifestId, "node"), on(manifestIdentifiers, "node")),
     key(on(ManifestId, "package")),
     contained(
       on(ManifestId, "package", "identifier"),
@@ -829,7 +831,6 @@ export const packageLawsByName = {
     contained(on(Resource, "node"), on(nodesOf("cp:resource"), "id")),
     contained(on(Resource, "document", "package"), on(Document, "node", "package")),
     contained(on(resourceIdentifiers, "node", "lexical"), on(ResourceId, "node", "identifier")),
-    contained(on(ResourceId, "node"), on(resourceIdentifiers, "node")),
     contained(on(ResourceId, "node", "package"), on(Resource, "node", "package")),
     contained(
       on(ResourceId, "package", "identifier"),

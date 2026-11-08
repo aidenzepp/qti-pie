@@ -771,8 +771,12 @@ const namingTitles = select(LomTitle, (t) => t.ne(t.named, "none"));
 
 /**
  * Select the attributes of one name on the elements of some kinds: the source of an overlay's copy
- * (C18), beside a key over the same selection, whose UNIQUE serves the copy's reverse probe so no
- * index holds `Attribute.lexical`.
+ * (C18). The copy's reverse probe reads an index over the selection's node alone, since grizzle
+ * indexes the longest leading run of a containment's source columns whose entry is bounded
+ * (`plannedReverse`) and no pattern bounds `Attribute.lexical`. Each selection but the `xml:lang`
+ * one sits beside a key over itself, whose UNIQUE is that index; the `xml:lang` one lies inside
+ * every `xml:lang`, which `#pantry/qti/identity.ts` keys over `node`, so it states no key of its
+ * own.
  *
  * @param name - The attribute's name.
  * @param kinds - The elements' kinds.
@@ -882,7 +886,6 @@ export const metadataLawsByName = {
     key(on(stringLanguageAttributes, "node")),
     key(on(objectIdentifiers, "node")),
     key(on(objectTitles, "node")),
-    key(on(objectLangAttributes, "node")),
     key(on(lastUpdateds, "node")),
     key(on(usageBaseTypes, "node")),
   ],
