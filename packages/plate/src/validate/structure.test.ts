@@ -501,6 +501,108 @@ const processed = (expression: SourceChild): SourceDocument =>
 const setOutcome = "qti-assessment-item/qti-response-processing/qti-set-outcome-value";
 
 /**
+ * A `qti-mapping` with one map entry.
+ */
+const mapping = el(
+  "qti-mapping",
+  [],
+  [el("qti-map-entry", [attr("map-key", "A"), attr("mapped-value", "1")])],
+);
+
+/**
+ * A `qti-area-mapping` with one circle.
+ */
+const areaMapping = el(
+  "qti-area-mapping",
+  [],
+  [
+    el("qti-area-map-entry", [
+      attr("shape", "circle"),
+      attr("coords", "10,10,5"),
+      attr("mapped-value", "1"),
+    ]),
+  ],
+);
+
+/**
+ * Construct an item, whole by the generated tables, whose one response declaration holds a mapping.
+ *
+ * @param cardinality The declaration's cardinality.
+ * @param base The declaration's base type, none for a record.
+ * @param held The mapping it holds.
+ * @returns The item as a source document.
+ */
+const mappingItem = (
+  cardinality: string,
+  base: Option.Option<string>,
+  held: SourceElement,
+): SourceDocument =>
+  item(
+    [
+      el(
+        "qti-response-declaration",
+        [
+          attr("identifier", "RESPONSE"),
+          attr("cardinality", cardinality),
+          ...Option.match(base, {
+            onNone: () => [],
+            onSome: (written) => [attr("base-type", written)],
+          }),
+        ],
+        [held],
+      ),
+    ],
+    [attr("identifier", "item"), attr("title", "Item"), attr("time-dependent", "false")],
+  );
+
+/**
+ * Check a mapping item against the generated tables, keeping each refusal's rule, location and
+ * detail.
+ *
+ * @param source The item.
+ * @returns Its refusals.
+ */
+const judgedMapping = (source: SourceDocument) =>
+  checkStructure(source, generatedTables).map((refusal) => ({
+    detail: refusal.detail,
+    location: refusal.location,
+    rule: refusal.rule,
+  }));
+
+/**
+ * The refusal of a mapping that a {@link mappingItem}'s response declaration cannot hold.
+ *
+ * @param local The mapping's local name.
+ * @param requires Where the mapping must sit, as the placement row words it.
+ * @returns The refusal's rule, location and detail.
+ */
+const misplacedMapping = (
+  local: string,
+  requires: string,
+): readonly {
+  detail: Readonly<Record<string, string>>;
+  location: Location;
+  rule: RefusalRule;
+}[] => [
+  {
+    detail: { element: local, requires },
+    location: at(`qti-assessment-item/qti-response-declaration/${local}`),
+    rule: "misplaced-element",
+  },
+];
+
+/**
+ * Where a `qti-mapping` must sit, as its placement row words it.
+ */
+const mappable =
+  "in a qti-response-declaration whose base type is neither file nor duration and whose cardinality is not record";
+
+/**
+ * Where a `qti-area-mapping` must sit, as its placement row words it.
+ */
+const pointed = "in a qti-response-declaration whose base type is point";
+
+/**
  * Construct an item whose catalog holds one card.
  *
  * @param children The card's children.
@@ -2118,6 +2220,55 @@ describe("checkStructure", () => {
         ],
       ]);
       assert.deepStrictEqual(found(matching), []);
+    });
+  });
+
+  describe("the information model's mapping placements (pantry mapping-base-type and area-mapping-point)", () => {
+    it("[I-1] refuses a qti-mapping in a file response, the mapping its base type forbids, as misplaced-element (pantry mapping-base-type; info.txt:34086)", () => {
+      assert.deepStrictEqual(
+        judgedMapping(mappingItem("single", Option.some("file"), mapping)),
+        misplacedMapping("qti-mapping", mappable),
+      );
+    });
+
+    it("[I-1] refuses a qti-mapping in a duration response, the mapping its base type forbids, as misplaced-element (pantry mapping-base-type; info.txt:34086)", () => {
+      assert.deepStrictEqual(
+        judgedMapping(mappingItem("single", Option.some("duration"), mapping)),
+        misplacedMapping("qti-mapping", mappable),
+      );
+    });
+
+    it("[I-1] refuses a qti-mapping in a record response, the mapping its base type forbids, as misplaced-element (pantry mapping-base-type; info.txt:9306)", () => {
+      assert.deepStrictEqual(
+        judgedMapping(mappingItem("record", Option.none(), mapping)),
+        misplacedMapping("qti-mapping", mappable),
+      );
+    });
+
+    it("[I-1] refuses a qti-area-mapping in an identifier response, an area mapping off a point, as misplaced-element (pantry area-mapping-point; info.txt:39388)", () => {
+      assert.deepStrictEqual(
+        judgedMapping(mappingItem("single", Option.some("identifier"), areaMapping)),
+        misplacedMapping("qti-area-mapping", pointed),
+      );
+    });
+
+    it("[I-1] refuses a qti-area-mapping in a record response, an area mapping off a point, as misplaced-element (pantry area-mapping-point; info.txt:39388)", () => {
+      assert.deepStrictEqual(
+        judgedMapping(mappingItem("record", Option.none(), areaMapping)),
+        misplacedMapping("qti-area-mapping", pointed),
+      );
+    });
+
+    it("[I-1] admits a qti-mapping in a string and a directedPair response, and a qti-area-mapping in a single and a multiple point response (pantry mapping-base-type, area-mapping-point)", () => {
+      assert.deepStrictEqual(
+        [
+          mappingItem("single", Option.some("string"), mapping),
+          mappingItem("multiple", Option.some("directedPair"), mapping),
+          mappingItem("single", Option.some("point"), areaMapping),
+          mappingItem("multiple", Option.some("point"), areaMapping),
+        ].map(judgedMapping),
+        [[], [], [], []],
+      );
     });
   });
 
