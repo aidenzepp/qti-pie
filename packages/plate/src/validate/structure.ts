@@ -322,18 +322,18 @@ const meetsBound = (name: BuiltinName, value: string, bound: string): boolean =>
  * What settles a narrowed attribute, which its refusal's detail carries: a shared reading, or a
  * line of the information model with the `check` that names the case and the qti package's rule
  * that refuses the same, `pantry`. A typed outcome's row also names the outcome, `identifier`, and
- * the base type it must have, `baseType`, for the wording.
+ * the base type it must have, `baseType`, for the wording; its `base-type` row cites the
+ * information model's line, and its `cardinality` row reading 153.
  */
 type Narrowing =
   | { readonly reading: string }
   | { readonly check: string; readonly pantry: string; readonly source: string }
-  | {
+  | ({
       readonly baseType: string;
       readonly check: "reserved-outcome-type";
       readonly identifier: string;
       readonly pantry: string;
-      readonly source: string;
-    };
+    } & ({ readonly reading: string } | { readonly source: string }));
 
 /**
  * A reading, or a sentence of the information model, that narrows an attribute: on the named
@@ -593,6 +593,26 @@ const declarations: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Report whether a declaration's `cardinality` spells one of some cardinalities, compared exactly
+ * as written: the XSD types it as an enumeration of `xs:string`, whose whiteSpace is `preserve`.
+ * One that is unwritten, holds an unexpanded entity reference or spells no cardinality spells none
+ * of them, so no row that reads the cardinality judges its declaration; its value domain, or the
+ * XSD's required attribute, refuses it alone (reading 158).
+ *
+ * @param declaration The declaration.
+ * @param cardinalities The cardinalities.
+ * @returns Whether its `cardinality` is one of them.
+ */
+const spellsCardinality = (declaration: SourceElement, cardinalities: readonly string[]): boolean =>
+  declaration.attributes.some(
+    (attribute) =>
+      attribute.namespace === "" &&
+      attribute.local === "cardinality" &&
+      attribute.references.length === 0 &&
+      cardinalities.includes(attribute.value),
+  );
+
+/**
  * Report whether a parent is a declaration whose `cardinality` is `single`, compared exactly as
  * written: the XSD types it as an enumeration of `xs:string`, with no whitespace facet.
  *
@@ -640,15 +660,26 @@ const reservingDeclarations = [
 ] as const;
 
 /**
+ * The declarations of a variable, one of each kind, each with a `cardinality` and a `base-type`,
+ * of which the information model says "Variables with record cardinality have no base-type"
+ * (info.txt:12060, :22682, :39280, :45897).
+ */
+const variableDeclarations: ReadonlySet<string> = new Set(
+  reservingDeclarations.map(([element]) => element),
+);
+
+/**
  * The outcomes whose base type the information model fixes, each with that base type, the line its
  * refusal cites and whether the type holds in a test too. The outcome declaration's description
  * (§4.5, info.txt:11979) says "SCORE needs to be a float" and "MAXSCORE needs to be a float" of
  * items ("Items that declare a numeric outcome variable", "Items that declare a maximum score"),
  * so they are typed in an item and any base type in a test; it says "PASSED needs to be a boolean"
  * of "Items or tests", so it is typed in both. Each row's line is §2.2.2.3's restatement of the
- * same sentence (info.txt:8478, :8480, :8482). The qti package's `Reserved type` law
+ * same sentence (info.txt:8478, :8480, :8482). A typed outcome is a value of its base type, so it
+ * is no record (reading 153), wherever its type holds. The qti package's `Reserved type` law
  * (`packages/pantry/src/qti/declarations.ts`) refuses a test's SCORE and MAXSCORE of another base
- * type too, so plate accepts such a test where pantry refuses it, until pantry follows.
+ * type, or declared `record`, too, so plate accepts such a test where pantry refuses it, as the
+ * operator ruled (P8).
  */
 const typedOutcomes = [
   ["SCORE", "float", "info.txt:8478", false],
@@ -667,20 +698,47 @@ const typedOutcomes = [
 const inTest = (path: string): boolean => path.startsWith("qti-assessment-test/");
 
 /**
+ * Report whether an outcome declaration is one a row of {@link typedOutcomes} types: it is named
+ * the row's outcome, and its document is one where the row's type holds. A row typed in an item
+ * only does not type a declaration in a test ({@link inTest}); in every other document, an item and
+ * a lone declaration included, it does.
+ *
+ * The identifier is compared exactly after collapse, as {@link reservedIdentifiers} compares it, so
+ * `Score` is another name; one that holds an unexpanded entity reference is unknown and is typed by
+ * no row.
+ *
+ * @param identifier The outcome the row types.
+ * @param inTests Whether the row's type holds in a test too.
+ * @param element The declaration.
+ * @param path Its path.
+ * @returns Whether the row types it.
+ */
+const typedHere = (
+  identifier: string,
+  inTests: boolean,
+  element: SourceElement,
+  path: string,
+): boolean => {
+  const named = element.attributes.find(
+    (attribute) => attribute.namespace === "" && attribute.local === "identifier",
+  );
+
+  return (
+    named !== undefined &&
+    named.references.length === 0 &&
+    collapse(named.value) === identifier &&
+    (inTests || !inTest(path))
+  );
+};
+
+/**
  * Report whether an outcome declaration's `base-type` is the one its identifier needs, as the qti
  * package's `ReservedOutcomeTypes` reads it.
  *
- * That rule reads only a typed declaration, one whose `cardinality` is not `record` as written
- * (`packages/pantry/src/import/item.ts:331`), so a `record` declaration holds whatever it writes.
- * Whether "SCORE MUST be a float" also refuses a `record` declaration, which has no base type, is
- * a reading that awaits the operator (G-R2, pending); until it settles, a `record` one is admitted,
- * as the qti package admits it.
- *
- * The identifier is compared exactly after collapse, as {@link reservedIdentifiers} compares it, so
- * `Score` is another name; one that holds an unexpanded entity reference is unknown and holds.
- *
- * A row typed in an item only holds for any base type on a declaration in a test ({@link inTest});
- * in every other document, an item and a lone declaration included, it keeps the item's type.
+ * A declaration whose `cardinality` is `record` holds here, for a record has no base type (reading
+ * 153): a typed one is refused at its `cardinality` ({@link valuedAs}), and the `base-type` a
+ * record writes is `unknown-attribute` ({@link isRecordBaseType}), so its base type is not judged
+ * a third time; one cause is refused under one rule.
  *
  * @param identifier The outcome the row types.
  * @param baseType The base type that outcome must have.
@@ -689,22 +747,27 @@ const inTest = (path: string): boolean => path.startsWith("qti-assessment-test/"
  */
 const typedAs =
   (identifier: string, baseType: string, inTests: boolean) =>
-  (lexical: string, element: SourceElement, path: string): boolean => {
-    const written = (local: string) =>
-      element.attributes.find(
-        (attribute) => attribute.namespace === "" && attribute.local === local,
-      );
-    const named = written("identifier");
+  (lexical: string, element: SourceElement, path: string): boolean =>
+    lexical === baseType ||
+    !typedHere(identifier, inTests, element, path) ||
+    spellsCardinality(element, ["record"]);
 
-    return (
-      lexical === baseType ||
-      (!inTests && inTest(path)) ||
-      written("cardinality")?.value === "record" ||
-      named === undefined ||
-      named.references.length > 0 ||
-      collapse(named.value) !== identifier
-    );
-  };
+/**
+ * Report whether an outcome declaration's `cardinality` lets it hold a value of the base type its
+ * identifier needs. The information model types SCORE and MAXSCORE as floats and PASSED as a
+ * boolean (§4.5, info.txt:11979), and a record has no base type (reading 153), so a typed outcome
+ * declared `record` is refused at its `cardinality`, whether or not it writes a `base-type`. A
+ * test's SCORE and MAXSCORE are typed by no row, so a test may declare them `record` (P8).
+ *
+ * @param identifier The outcome the row types.
+ * @param inTests Whether the row's type holds in a test too.
+ * @returns Whether a `cardinality`, in its value domain, meets the row on its declaration at its
+ *   path.
+ */
+const valuedAs =
+  (identifier: string, inTests: boolean) =>
+  (lexical: string, element: SourceElement, path: string): boolean =>
+    lexical !== "record" || !typedHere(identifier, inTests, element, path);
 
 /**
  * Report whether a collapsed `tolerance` holds only tokens the qti package's `toleranceList`
@@ -1028,25 +1091,45 @@ const readingRows: readonly ReadingRow[] = [
   })),
   // The information model fixes the base types of three outcomes: an item's SCORE and MAXSCORE are
   // floats, and an item's or a test's PASSED a boolean (§4.5, info.txt:11979); a test's SCORE and
-  // MAXSCORE may be of any base type. Pantry's `Reserved type` law refuses an outcome
-  // declaration of another base type in an item or a test, so it refuses a test's too, which plate
-  // accepts until pantry follows. A response or template declaration of those names is not an
-  // outcome, and a `record` one has no base type to fix.
-  ...typedOutcomes.map(([identifier, baseType, source, inTests]): NarrowedAttribute => ({
-    attribute: "base-type",
-    elements: ["qti-outcome-declaration"],
-    expected: `${baseType}, the base type of an outcome named ${identifier}`,
-    holds: typedAs(identifier, baseType, inTests),
-    kind: "narrowed-attribute",
-    settled: {
-      baseType,
-      check: "reserved-outcome-type",
-      identifier,
-      pantry: "ReservedOutcomeTypes",
-      source,
-    },
-    whiteSpace: "collapse",
-  })),
+  // MAXSCORE may be of any base type, a record included (P8). A record has no base type (reading
+  // 153), so a typed outcome declared `record` is refused at its `cardinality`. Pantry's `Reserved
+  // type` law refuses an outcome declaration of another base type, or a record, in an item or a
+  // test, so it refuses a test's SCORE and MAXSCORE too, which plate accepts as the operator ruled.
+  // A response or template declaration of those names is not an outcome.
+  ...typedOutcomes.flatMap(
+    ([identifier, baseType, source, inTests]): readonly NarrowedAttribute[] => [
+      {
+        attribute: "base-type",
+        elements: ["qti-outcome-declaration"],
+        expected: `${baseType}, the base type of an outcome named ${identifier}`,
+        holds: typedAs(identifier, baseType, inTests),
+        kind: "narrowed-attribute",
+        settled: {
+          baseType,
+          check: "reserved-outcome-type",
+          identifier,
+          pantry: "ReservedOutcomeTypes",
+          source,
+        },
+        whiteSpace: "collapse",
+      },
+      {
+        attribute: "cardinality",
+        elements: ["qti-outcome-declaration"],
+        expected: `single, multiple or ordered: an outcome named ${identifier} has the base type ${baseType}, and a record has none`,
+        holds: valuedAs(identifier, inTests),
+        kind: "narrowed-attribute",
+        settled: {
+          baseType,
+          check: "reserved-outcome-type",
+          identifier,
+          pantry: "ReservedOutcomeTypes",
+          reading: "153",
+        },
+        whiteSpace: "collapse",
+      },
+    ],
+  ),
   // The information model's `tolerance` (info.txt:24946) is two numbers, t0 and t1, or one for
   // both, and a token that is not a number names the variable that holds one. So each token is an
   // `xs:double` or an NCName, as pantry's `toleranceList` pattern (P6) admits, where the XSD's
@@ -1941,6 +2024,63 @@ const checkConditional = (
     : [];
 
 /**
+ * Check that a variable's declaration writes a `base-type` where it has a base type: a record has
+ * none, and every variable of another cardinality is "identified with a base-type" (info.txt:12060,
+ * :22682, :39280, :45897; reading 153). So a declaration whose `cardinality` spells `single`,
+ * `multiple` or `ordered` and writes no `base-type` is `missing-attribute` at the declaration,
+ * citing reading 158, which judges a declaration by what its attributes spell: one whose
+ * `cardinality` spells nothing is its value domain's alone ({@link spellsCardinality}).
+ *
+ * @param source The document.
+ * @param element The element.
+ * @param path The element's path.
+ * @returns Its `missing-attribute` refusal, or none.
+ */
+const checkUntyped = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+): readonly Refusal[] =>
+  element.namespace === qtiNamespace &&
+  variableDeclarations.has(element.local) &&
+  spellsCardinality(element, ["single", "multiple", "ordered"]) &&
+  !element.attributes.some(
+    (attribute) => attribute.namespace === "" && attribute.local === "base-type",
+  )
+    ? [
+        refuse(source, "missing-attribute", path, {
+          attribute: "base-type",
+          element: elementName(element),
+          reading: "158",
+        }),
+      ]
+    : [];
+
+/**
+ * Report whether an attribute is a `base-type` that a record declaration writes, which is
+ * `unknown-attribute`, citing reading 153: "Variables with record cardinality have no base-type"
+ * (info.txt:12060, :22682, :39280, :45897). Only a `base-type` in its value domain is: one outside
+ * it is that domain's alone, and so is every attribute of a declaration whose `cardinality` spells
+ * no cardinality (reading 158).
+ *
+ * @param element The attribute's element.
+ * @param attribute The attribute, whose value holds no unexpanded entity reference.
+ * @param type The attribute's type, as its declaration gives it.
+ * @returns Whether it is a record's `base-type`.
+ */
+const isRecordBaseType = (
+  element: SourceElement,
+  attribute: SourceAttribute,
+  type: AttributeType,
+): boolean =>
+  element.namespace === qtiNamespace &&
+  variableDeclarations.has(element.local) &&
+  attribute.namespace === "" &&
+  attribute.local === "base-type" &&
+  spellsCardinality(element, ["record"]) &&
+  admits(type, attribute.value);
+
+/**
  * Report whether an element sits where a placement row requires.
  *
  * @param row The placement.
@@ -2150,10 +2290,12 @@ const namedType = (
  * Check the attributes and the text of one element the walk admitted.
  *
  * A required attribute that is absent is `missing-attribute` at the element, and so is one the
- * information model requires under a mode the element sets ({@link checkConditional}). `xsi:type`
- * and `xsi:nil` go to {@link checkInstance}, before any other attribute. A declared attribute goes
- * to {@link checkValue} and is checked for `padded-attribute`, unless its value holds an unexpanded
- * entity reference, whose value is unknown. An undeclared one goes to {@link checkUndeclared}.
+ * information model requires under a mode the element sets ({@link checkConditional}), and a
+ * variable's `base-type` where it has a base type ({@link checkUntyped}). `xsi:type` and `xsi:nil`
+ * go to {@link checkInstance}, before any other attribute. A declared attribute goes to
+ * {@link checkValue} and is checked for `padded-attribute`, unless its value holds an unexpanded
+ * entity reference, whose value is unknown, or it is a record's `base-type`, which is
+ * `unknown-attribute` ({@link isRecordBaseType}). An undeclared one goes to {@link checkUndeclared}.
  * Non-whitespace text in an element whose table admits none is `text-not-allowed`. The placement
  * and child-count rows go to {@link checkPlacement} and {@link checkChildCounts}. The attributes and
  * the text are checked by the table that governs the element, and its `xsi:type` by the types its
@@ -2202,6 +2344,7 @@ const checkElement = (
 
   refusals.push(
     ...checkConditional(source, element, path, declared),
+    ...checkUntyped(source, element, path),
     ...checkInstance(source, element, path, name, parents, schemas),
   );
   for (const attribute of element.attributes) {
@@ -2219,6 +2362,17 @@ const checkElement = (
     }
 
     if (attribute.references.length > 0) {
+      continue;
+    }
+
+    if (isRecordBaseType(element, attribute, declaration.type)) {
+      refusals.push(
+        refuse(source, "unknown-attribute", attributePath(path, attribute), {
+          attribute: attributeName(attribute),
+          element: label,
+          reading: "153",
+        }),
+      );
       continue;
     }
 
