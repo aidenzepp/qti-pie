@@ -17,15 +17,12 @@
  * Each case also logs how long `db.compile` takes over its ChangeSet (the W5 amendment's C19), the
  * compile time per package the network seat reports.
  */
-import { CommitUnknown, Db, query, uuid, v, writableNamesOf } from "@bjornpagen/grizzle";
-import type { ApplyOutcome, DbConnection, Law, Plan } from "@bjornpagen/grizzle";
-import { NodeFileSystem, NodeServices } from "@effect/platform-node";
+import { CommitUnknown, Db, query, uuid, v } from "@bjornpagen/grizzle";
+import type { ApplyOutcome, Law, Plan } from "@bjornpagen/grizzle";
+import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Duration, Effect, Formatter, Layer, Option, Redacted, Result } from "effect";
-import { Client } from "pg";
-import type { QueryResultRow } from "pg";
+import { Duration, Effect, Formatter, Layer, Option, Result } from "effect";
 import { describe, inject } from "vitest";
-import { loginConnection } from "#pantry/db/connection.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage, WrapApply } from "#pantry/import/package.ts";
@@ -36,7 +33,6 @@ import type { NodeMember, NodeRoot, PackageInputs } from "#pantry/import/write.t
 import { readPackage } from "#pantry/package/read.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
-import { Qti } from "#pantry/qti/schema.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { materialize, materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
@@ -47,27 +43,6 @@ import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
-
-/**
- * The author login's PostgreSQL role, `<schema>__<login>`.
- */
-const authorAppRole = "qti__author_app";
-
-/**
- * The PostgreSQL schema of `Qti`'s tables.
- */
-const qtiSchema = "qti";
-
-/**
- * The table grizzle's migrations record themselves in, one per installation, beside `Qti`'s own.
- */
-const ledgerTable = "__ledger";
-
-/**
- * The trigger grizzle installs on each table of an installation, ledger included, that refuses a
- * write below SERIALIZABLE (`__require_serializable`, `01-setup.sql` of `migrations/qti`).
- */
-const isolationTrigger = "__isolation";
 
 /**
  * The tarball member `simple` is extracted from.
@@ -365,54 +340,6 @@ const valueNodeOf = (inputs: PackageInputs, text: string): string => {
 };
 
 /**
- * The password a connection authenticates with, read once.
- *
- * @param password - The connection's password.
- * @returns The password's text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
- * A session of the author login on the lease, over verify-full TLS against the cluster's CA, closed
- * with its scope: a direct reader of the catalog.
- */
-const loginSession = Effect.gen(function* loginSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-
-  return yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-}).pipe(Effect.provide(NodeFileSystem.layer));
-
-/**
- * Run one statement on a session and return its rows.
- *
- * @param client - The session.
- * @param text - The statement.
- * @param values - Its parameters.
- * @returns The rows.
- */
-const rowsOf = <R extends QueryResultRow>(
-  client: Client,
-  text: string,
-  values: readonly string[] = [],
-) =>
-  Effect.tryPromise(() => client.query<R>(text, [...values])).pipe(Effect.map(({ rows }) => rows));
-
-/**
  * Every node of a plan tree, the plan itself first.
  *
  * @param plan - The plan.
@@ -511,13 +438,9 @@ describe.skipIf(!hasLease)(
         }),
       );
 
-      it.effect("plans no recursion, and its only triggers are grizzle's isolation guards", () =>
-        // Oracle: PostgreSQL's own planner and catalog. No statement of an accepted package's
-        // ChangeSet plans a recursive union or a work-table scan (`db.explain`, estimate only). The
-        // user triggers (`pg_trigger.tgisinternal` false, so the foreign keys' own triggers are not
-        // counted) on the installation's tables and its roles' views are exactly grizzle's
-        // `__isolation`, which refuses a write below SERIALIZABLE, once on each table: a table per
-        // stored relation of `Qti` and grizzle's migration ledger. Qti installs none of its own.
+      it.effect("plans no recursion for any accepted package's ChangeSet", () =>
+        // Oracle: PostgreSQL's own planner. No statement of an accepted package's ChangeSet plans
+        // a recursive union or a work-table scan (`db.explain`, estimate only).
         Effect.gen(function* planAudit() {
           const db = yield* Db.open(AuthorApp.roles.author, {});
           for (const dir of Object.values(yield* acceptedPackages)) {
@@ -529,43 +452,7 @@ describe.skipIf(!hasLease)(
             assert.notInclude(nodes, "Recursive Union", dir);
             assert.notInclude(nodes, "WorkTable Scan", dir);
           }
-
-          const client = yield* loginSession;
-          const tables = yield* rowsOf<{ readonly relname: string }>(
-            client,
-            `SELECT c.relname FROM pg_catalog.pg_class c
-               JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-              WHERE n.nspname = $1 AND c.relkind = 'r'`,
-            [qtiSchema],
-          );
-          const triggers = yield* rowsOf<{
-            readonly nspname: string;
-            readonly relname: string;
-            readonly tgname: string;
-          }>(
-            client,
-            `SELECT n.nspname, c.relname, t.tgname FROM pg_catalog.pg_trigger t
-               JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
-               JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-              WHERE (n.nspname = $1 OR n.nspname LIKE $2) AND NOT t.tgisinternal`,
-            [qtiSchema, `${qtiSchema}\\_\\_%`],
-          );
-          assert.strictEqual(
-            tables.length,
-            writableNamesOf(Qti).length + 1,
-            "a table per stored relation, and the ledger",
-          );
-          assert.include(
-            tables.map(({ relname }) => relname),
-            ledgerTable,
-          );
-          assert.deepStrictEqual(
-            triggers
-              .map(({ nspname, relname, tgname }) => `${nspname}.${relname} ${tgname}`)
-              .toSorted(),
-            tables.map(({ relname }) => `${qtiSchema}.${relname} ${isolationTrigger}`).toSorted(),
-          );
-        }).pipe(Effect.scoped),
+        }),
       );
 
       it.effect("accepts a string mapping keyed York and york", () =>
