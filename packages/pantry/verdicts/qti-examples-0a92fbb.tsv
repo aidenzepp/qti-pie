@@ -12,7 +12,7 @@ qtiv3-examples/packaging/ccPackage/ccPackage.zip	accepted
 qtiv3-examples/packaging/englishBasicLevelV2/englishBasicLevelV2.zip	accepted	
 qtiv3-examples/packaging/englishHighLevelV2/englishHighLevelV2.zip	refused	lom-title
 qtiv3-examples/packaging/externalMetadata/externalMetadata.zip	accepted	
-qtiv3-examples/packaging/feedbackTest/feedbackTest.zip	refused	item-ref-target
+qtiv3-examples/packaging/feedbackTest/feedbackTest.zip	refused	file-exists
 qtiv3-examples/packaging/interactionMixSaxonyV3/interactionMixSaxonyV3.zip	accepted	
 qtiv3-examples/packaging/items/items.zip	refused	P23
 qtiv3-examples/packaging/lti/lti.zip	refused	attribute-lexical

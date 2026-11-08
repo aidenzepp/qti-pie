@@ -3215,10 +3215,11 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      entry-kind; read this way, it names entry-kind, as the law oracle does. Where the root bears out neither type both
      laws break, and the database names the CHECK it judges first, a stated limit of naming a refusal by the laws
      PostgreSQL reports (`src/import/package.ts`). This sets aside the first-type reading the importer and the law
-     oracle held (NS4, `src/test/gen/genetic/known.ts`). This reading moves no corpus verdict: no manifest of the
-     corpus's 29 zips names one `href` under two types, by a scan of their resources. This binds pantry and plate alike.
-     This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing
-     ruling of 2026-11-05, from seat DBLANE-1.)
+     oracle held (NS4, `src/test/gen/genetic/known.ts`). This reading moves no corpus verdict: no manifest of the 28
+     QTI 3 packages the corpus witness judges, nor of the tarball's one QTI 2.2 zip
+     (`qtiv2p2-examples/items/items.zip`), names one `href` under two types, by a scan of their resources. This binds
+     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under
+     the operator's standing ruling of 2026-11-05, from seat DBLANE-1.)
 163. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 4.5, OutcomeDeclaration (https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration), says
      of SCORE "Items that declare a numeric outcome variable representing the candidate's overall performance on the item
