@@ -64,6 +64,7 @@ import {
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import {
   assertVerdict,
   judged,
@@ -72,6 +73,7 @@ import {
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { itemRefPackageEntries } from "#pantry/test/gen/item-ref-declarations.ts";
 import type { ItemRefPackage, ItemTarget } from "#pantry/test/gen/item-ref-declarations.ts";
@@ -863,29 +865,29 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 client,
                 statedInserts([...readingFacts([standIn]), ...cardinalityOf("multiple")]),
               ),
-              "reference_type",
+              checkConstraintOf(Qti, ReadingCardinality.name, "Reference_type"),
               true,
-              "reference_type, broken",
+              "Reference_type, broken",
             );
             assertVerdict(
               yield* judged(
                 client,
                 statedInserts([...readingFacts([standIn]), ...cardinalityOf("single")]),
               ),
-              "reference_type",
+              checkConstraintOf(Qti, ReadingCardinality.name, "Reference_type"),
               false,
-              "reference_type, repaired",
+              "Reference_type, repaired",
             );
 
             const cases = [
               {
                 broken: readingRow({ ...throughItem, placements: 2n }),
-                check: "prefixed_reference",
+                check: "Prefixed_reference",
                 repaired: { placements: 1n },
               },
               {
                 broken: readingRow({ ...undeclared, identifier: "X", variable: "X" }),
-                check: "variable_declared",
+                check: "Variable_declared",
                 repaired: { identifier: "a.X", variable: "a.X" },
               },
               {
@@ -902,7 +904,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                   scope: "S",
                   variable: "",
                 }),
-                check: "section_identifier_target",
+                check: "Section_identifier_target",
                 repaired: {
                   found: true,
                   named: nodeOf(61),
@@ -912,15 +914,16 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               },
             ] as const;
             for (const { broken, check, repaired } of cases) {
+              const constraint = checkConstraintOf(Qti, Reading.name, check);
               assertVerdict(
                 yield* judged(client, statedInserts(readingFacts([broken]))),
-                check,
+                constraint,
                 true,
                 `${check}, broken`,
               );
               assertVerdict(
                 yield* judged(client, statedInserts(readingFacts([{ ...broken, ...repaired }]))),
-                check,
+                constraint,
                 false,
                 `${check}, repaired`,
               );

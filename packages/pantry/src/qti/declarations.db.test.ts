@@ -55,6 +55,7 @@ import {
 import { ChoiceVariableName } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Author } from "#pantry/qti/roles.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import {
   assertVerdict,
   constraintDescribed,
@@ -64,6 +65,7 @@ import {
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -382,6 +384,11 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // `completion_status`, `completion-status` and `SCORE`, 24 cases.
           Effect.gen(function* notReserved() {
             const client = yield* loginSession;
+            const check = checkConstraintOf(
+              Qti,
+              DeclarationIdentifier.name,
+              "Declaration_not_reserved",
+            );
             for (const kind of declarationKinds) {
               for (const identifier of [
                 ...sessionVariables,
@@ -398,7 +405,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                       Option.some(identifier === "SCORE" ? "float" : "identifier"),
                     ),
                   ),
-                  "declaration_not_reserved",
+                  check,
                   refused,
                   `${kind} ${identifier}`,
                 );
@@ -418,7 +425,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // the type the specification gives it, whatever its cardinality (spec reading 158), a
           // deferred foreign key set immediate: 23503 and its name, found by grizzle's comment on
           // it. QTI_CONTEXT's kind and cardinality are CHECKs on `DeclarationIdentifier` and
-          // `DeclarationName`: 23514 and `reserved_type`.
+          // `DeclarationName`: 23514 and `Reserved_type`, the identifier's row refusing first.
           // Bound: each typed outcome name under every declaration kind against every base type
           // (3 × 4 × 11), so the same name of another kind is the control, then QTI_CONTEXT
           // against every declaration kind and cardinality (4 × 4), 148 cases.
@@ -447,6 +454,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               }
             }
 
+            const reserved = checkConstraintOf(Qti, DeclarationIdentifier.name, "Reserved_type");
             for (const kind of declarationKinds) {
               for (const cardinality of Cardinality.handles) {
                 const row = declarationRow({
@@ -459,7 +467,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                     client,
                     declared(row, cardinality === "record" ? Option.none() : Option.some("string")),
                   ),
-                  "reserved_type",
+                  reserved,
                   kind !== contextVariable.kind || cardinality !== contextVariable.cardinality,
                   `QTI_CONTEXT ${kind} ${cardinality}`,
                 );
@@ -531,7 +539,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                     },
                   ]),
                 ),
-                "e_1_derived",
+                checkConstraintOf(Qti, DeclarationBaseType.name, "E1_derived"),
                 refused,
                 `declaration base type ${label}`,
               );
@@ -545,7 +553,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                     },
                   ]),
                 ),
-                "e_1_derived",
+                checkConstraintOf(Qti, ValueBaseType.name, "E1_derived"),
                 valueRefused,
                 `value base type ${label}`,
               );
@@ -554,10 +562,11 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
             const control = declarationRow({});
             const padded = declarationRow({ identifier: " A" });
             const cases = [
-              { facts: control, label: "control", refused: false },
+              { facts: control, label: "control", on: DeclarationIdentifier, refused: false },
               {
                 facts: declarationRow({ cardinalityLexical: "multiple" }),
                 label: "cardinality single written multiple",
+                on: DeclarationCardinality,
                 refused: true,
               },
               {
@@ -566,6 +575,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                   identifier: { ...control.identifier, identifierLexical: " A" },
                 },
                 label: "identifier padded but written bare",
+                on: DeclarationIdentifier,
                 refused: true,
               },
               {
@@ -578,6 +588,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                   },
                 },
                 label: "identifier padded, its lead written",
+                on: DeclarationIdentifier,
                 refused: false,
               },
               {
@@ -586,11 +597,17 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                   identifier: { ...padded.identifier, identifierLexical: " A" },
                 },
                 label: "identifier holding its own whitespace",
+                on: DeclarationIdentifier,
                 refused: true,
               },
             ];
-            for (const { facts, label, refused } of cases) {
-              assertVerdict(yield* judged(client, declared(facts)), "e_1_derived", refused, label);
+            for (const { facts, label, on, refused } of cases) {
+              assertVerdict(
+                yield* judged(client, declared(facts)),
+                checkConstraintOf(Qti, on.name, "E1_derived"),
+                refused,
+                label,
+              );
             }
           }).pipe(Effect.scoped),
         { timeout: leaseTestTimeoutMs },
@@ -652,6 +669,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // Bound: every cardinality (4) against 1 or 2 values and 0 to 2 fields, 24 cases.
           Effect.gen(function* valueCardinality() {
             const client = yield* loginSession;
+            const check = checkConstraintOf(Qti, ValueSetCardinality.name, "Value_cardinality");
             for (const cardinality of Cardinality.handles) {
               for (const values of [1, 2]) {
                 for (const fields of [0, 1, 2]) {
@@ -675,7 +693,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                         },
                       ]),
                     ),
-                    "value_cardinality",
+                    check,
                     !lawful,
                     `${cardinality} ${String(values)} values ${String(fields)} fields`,
                   );
@@ -700,6 +718,8 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // record's field).
           Effect.gen(function* typedValue() {
             const client = yield* loginSession;
+            const typed = checkConstraintOf(Qti, TypedValue.name, "Typed_value");
+            const field = checkConstraintOf(Qti, FieldValue.name, "Typed_value");
             for (const baseType of [...judgedBaseTypes, "string"]) {
               for (const { text, values } of typedTexts) {
                 const refused = baseType !== "string" && !values.includes(baseType);
@@ -713,13 +733,13 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                   };
                   assertVerdict(
                     yield* judged(client, statedInserts([{ fact, relation: TypedValue }])),
-                    "typed_value",
+                    typed,
                     cardinality !== "record" && refused,
                     `${baseType} in a ${cardinality} set ${JSON.stringify(text)}`,
                   );
                   assertVerdict(
                     yield* judged(client, statedInserts([{ fact, relation: FieldValue }])),
-                    "typed_value",
+                    field,
                     cardinality === "record" && refused,
                     `own ${baseType} in a ${cardinality} set ${JSON.stringify(text)}`,
                   );
@@ -741,6 +761,8 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // cases, each a row of the pair it is.
           Effect.gen(function* masteryRange() {
             const client = yield* loginSession;
+            const floor = checkConstraintOf(Qti, MasteryFloor.name, "Mastery_range");
+            const ceiling = checkConstraintOf(Qti, MasteryCeiling.name, "Mastery_range");
             for (const low of scaleTexts) {
               for (const high of scaleTexts) {
                 assertVerdict(
@@ -753,7 +775,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                       },
                     ]),
                   ),
-                  "mastery_range",
+                  floor,
                   above(low, high),
                   `floor ${JSON.stringify([low, high])}`,
                 );
@@ -767,7 +789,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                       },
                     ]),
                   ),
-                  "mastery_range",
+                  ceiling,
                   above(low, high),
                   `ceiling ${JSON.stringify([low, high])}`,
                 );

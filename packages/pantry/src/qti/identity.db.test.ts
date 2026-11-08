@@ -44,6 +44,7 @@ import {
   SsmlScope,
   XmlLang,
 } from "#pantry/qti/identity.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   assertVerdict,
@@ -55,13 +56,8 @@ import {
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
-
-/**
- * The name PostgreSQL gives every `E1_derived` check of the identity overlays: the check's name,
- * which grizzle writes in snake case.
- */
-const derivedCheck = "e_1_derived";
 
 /**
  * Read a foreign key's referencing and referenced columns from the catalogue.
@@ -542,7 +538,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
                 documentId(3, first, pieces),
               ]),
             ),
-            derivedCheck,
+            checkConstraintOf(Qti, DocumentId.name, "E1_derived"),
             label !== "the split",
             label,
           );
@@ -588,7 +584,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
               client,
               statedInserts([...projection.beside, projection.owner(first, "fr")]),
             ),
-            derivedCheck,
+            checkConstraintOf(Qti, projection.owner(first, "fr").relation.name, "E1_derived"),
             true,
             `${label}: an owner value no member carries`,
           );
@@ -744,7 +740,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
         ] as const) {
           assertVerdict(
             yield* judged(client, statedInserts(witness(lang, value))),
-            derivedCheck,
+            checkConstraintOf(Qti, GeneralLang.name, "E1_derived"),
             label !== "the collapsed value",
             label,
           );
@@ -810,7 +806,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
         ] as const) {
           assertVerdict(
             yield* judged(client, statedInserts([stated])),
-            derivedCheck,
+            checkConstraintOf(Qti, stated.relation.name, "E1_derived"),
             refused,
             label,
           );
@@ -943,7 +939,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
         ] as const) {
           assertVerdict(
             yield* judged(client, statedInserts([stated])),
-            derivedCheck,
+            checkConstraintOf(Qti, stated.relation.name, "E1_derived"),
             refused,
             label,
           );

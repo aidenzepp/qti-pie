@@ -43,9 +43,11 @@ import { layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { BranchTarget, Section, SectionSelection, TestFlag, TestToken } from "#pantry/qti/tests.ts";
 import { assertVerdict, judged, loginSession, statedInserts } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**
@@ -146,7 +148,7 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
       it.effect(
         "accepts a selection of exactly its section's parts, and refuses one over unless it is with replacement, by Selection_bound",
         () =>
-          // Oracle: PostgreSQL, the `selection_bound` CHECK; reading 79 says which states it holds.
+          // Oracle: PostgreSQL, the `Selection_bound` CHECK; reading 79 says which states it holds.
           // Bound: select at members and at members + 1, with and without replacement, members 3.
           Effect.gen(function* selectionBound() {
             const client = yield* loginSession;
@@ -162,7 +164,7 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
             ] as const) {
               assertVerdict(
                 yield* judged(client, statedInserts([stated])),
-                "selection_bound",
+                checkConstraintOf(Qti, SectionSelection.name, "Selection_bound"),
                 refused,
                 label,
               );
@@ -173,7 +175,7 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a selection that selects fewer parts than its section's required parts, by Selection_required",
         () =>
-          // Oracle: PostgreSQL, the `selection_required` CHECK; info §4.2.2 says which states it
+          // Oracle: PostgreSQL, the `Selection_required` CHECK; info §4.2.2 says which states it
           // holds. Bound: two required parts of three, under select 2 and select 1.
           Effect.gen(function* selectionRequired() {
             const client = yield* loginSession;
@@ -184,7 +186,7 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
             ] as const) {
               assertVerdict(
                 yield* judged(client, statedInserts([selection({ ...base, select })])),
-                "selection_required",
+                checkConstraintOf(Qti, SectionSelection.name, "Selection_required"),
                 refused,
                 label,
               );
@@ -195,7 +197,7 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a selection whose select is not its lexical form's integer, by E1_derived",
         () =>
-          // Oracle: PostgreSQL, the `e_1_derived` CHECK (`selectLexical = lead ‖ form ‖ trail`).
+          // Oracle: PostgreSQL, the `E1_derived` CHECK (`selectLexical = lead ‖ form ‖ trail`).
           // Bound: a padded form split right, and the same form with its lead dropped.
           Effect.gen(function* selectSplit() {
             const client = yield* loginSession;
@@ -216,7 +218,7 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
                     selection({ ...padded, split: { lead, lexical: " 2\t", trail: "\t" } }),
                   ]),
                 ),
-                "e_1_derived",
+                checkConstraintOf(Qti, SectionSelection.name, "E1_derived"),
                 refused,
                 label,
               );
@@ -227,7 +229,7 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
       it.effect(
         "accepts a token split around its collapsed value and a flag read from its form, and refuses either written otherwise, by E1_derived",
         () =>
-          // Oracle: PostgreSQL, each relation's `e_1_derived` CHECK; XML Schema Part 2 §4.3.6
+          // Oracle: PostgreSQL, each relation's `E1_derived` CHECK; XML Schema Part 2 §4.3.6
           // (collapse) and §3.2.2.1 (boolean) say which states it holds. Bound: one right and one
           // wrong row each.
           Effect.gen(function* tokensAndFlags() {
@@ -260,7 +262,7 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
             ] as const) {
               assertVerdict(
                 yield* judged(client, statedInserts([stated])),
-                "e_1_derived",
+                checkConstraintOf(Qti, stated.relation.name, "E1_derived"),
                 refused,
                 label,
               );
@@ -295,7 +297,7 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
           // Oracle: reading 87's bullets over the row (information model §5.23 and §5.98), the
           // law oracle's precedence (`#pantry/test/oracle-laws/tests.ts` `branchLawsOf`: a target
           // of the wrong kind breaks Branch target alone), against PostgreSQL's two CHECKs, which
-          // a row breaking both would report as `branch_forward`, the name that sorts first.
+          // a row breaking both would report as `Branch_forward`, whose installed name sorts first.
           // Bound: an item ref's rule in one instance naming a later item ref, an earlier one with
           // and without a shuffle, an earlier test part, an earlier item ref of another part, and
           // an earlier repeatable item ref.
@@ -331,34 +333,38 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
               viaStart: 0n,
             } satisfies Stated["fact"];
             const before = { ...target, target: "earlier", targetEnd: 3n, targetStart: 2n };
-            for (const [label, fact, constraint] of [
-              ["an item ref after the source", target, ""],
-              ["an item ref before the source, no shuffle", before, "branch_forward"],
+            for (const [label, fact, check, refused] of [
+              ["an item ref after the source", target, "Branch_forward", false],
+              ["an item ref before the source, no shuffle", before, "Branch_forward", true],
               [
                 "an item ref before the source, a shuffle ordering the two",
                 { ...before, shuffles: 1n },
-                "",
+                "Branch_forward",
+                false,
               ],
               [
                 "a test part, holding the source, from an item ref",
                 { ...before, targetEnd: 9n, targetKind: "qti-test-part", targetStart: 0n },
-                "branch_target",
+                "Branch_target",
+                true,
               ],
               [
                 "an item ref before the source in another part",
                 { ...before, targetPart: stray.parent },
-                "branch_target",
+                "Branch_target",
+                true,
               ],
               [
                 "an item ref before the source that a replacement can repeat",
                 { ...before, targetReplaced: true },
-                "branch_target",
+                "Branch_target",
+                true,
               ],
             ] as const) {
               assertVerdict(
                 yield* judged(client, statedInserts([{ fact, relation: BranchTarget }])),
-                constraint,
-                constraint !== "",
+                checkConstraintOf(Qti, BranchTarget.name, check),
+                refused,
                 label,
               );
             }

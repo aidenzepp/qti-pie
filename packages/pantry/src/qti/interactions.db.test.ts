@@ -66,6 +66,7 @@ import {
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import {
   assertVerdict,
   foreignKeysBetween,
@@ -74,6 +75,7 @@ import {
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**
@@ -89,13 +91,6 @@ const stray = "00000000-0000-4000-8000-0000000019f0";
  */
 const strayNode = (at: number): `${string}-${string}-${string}-${string}-${string}` =>
   `00000000-0000-4000-8000-0000000019${String(at).padStart(2, "0")}`;
-
-/**
- * PostgreSQL's name of the CHECK `E1_derived`, as grizzle names a check: its declared name split at
- * each case change and at each edge of a digit run, lowercased and joined by underscores
- * (`conversionOf`, `packages/engine/src/core/identity.ts`, which grizzle does not export).
- */
-const derivedCheck = "e_1_derived";
 
 /**
  * Whether an outcome is `invariant-rejected` with a law among its `laws` that the predicate picks.
@@ -701,17 +696,17 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               [
                 "a most past the choices",
                 { fact: mostOf({ most: "4", mostValue: 4n }), relation: MostCount },
-                "choice_bounds",
+                "Choice_bounds",
               ],
               [
                 "a least past the choices",
                 { fact: leastOf({ choices: 1n }), relation: LeastCount },
-                "choice_bounds",
+                "Choice_bounds",
               ],
               [
                 "a counted least past a most of 0",
                 { fact: rangeOf({ mostValue: 0n }), relation: CountRange },
-                "choice_bounds",
+                "Choice_bounds",
               ],
               [
                 "an unbounded least past its most",
@@ -719,22 +714,22 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   fact: rangeOf({ kind: "qti-choice-interaction", mostValue: 1n }),
                   relation: CountRange,
                 },
-                "choice_bounds",
+                "Choice_bounds",
               ],
               [
                 "a least whose integer is not its form's",
                 { fact: leastOf({ least: "02", leastValue: 3n }), relation: LeastCount },
-                derivedCheck,
+                "E1_derived",
               ],
               [
                 "a least no integer reads",
                 { fact: leastOf({ least: "two", leastValue: 2n }), relation: LeastCount },
-                derivedCheck,
+                "E1_derived",
               ],
               [
                 "a most written as no count",
                 { fact: mostOf({ most: "1abc", mostValue: 1n }), relation: MostCount },
-                derivedCheck,
+                "E1_derived",
               ],
               [
                 "an unwritten least whose kind has no default",
@@ -742,16 +737,16 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   fact: leastOf({ least: "0", leastValue: 0n, minWritten: false }),
                   relation: LeastCount,
                 },
-                derivedCheck,
+                "E1_derived",
               ],
             ];
-            for (const [label, stated, constraint] of cases) {
+            for (const [label, stated, check] of cases) {
               assertVerdict(
                 yield* judged(
                   client,
                   statedInserts([{ fact: boundOf(), relation: CountBound }, stated]),
                 ),
-                constraint,
+                checkConstraintOf(Qti, stated.relation.name, check),
                 true,
                 label,
               );
@@ -1250,7 +1245,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   declarations: 1n,
                   hottexts: 1n,
                 }),
-                "choice_not_variable",
+                "Choice_not_variable",
               ],
               [
                 "no use",
@@ -1259,7 +1254,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   declarations: 0n,
                   hottexts: 0n,
                 }),
-                derivedCheck,
+                "E1_derived",
               ],
             ] as const) {
               const refused = Option.getOrUndefined(
@@ -1274,7 +1269,11 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   "23514",
                   `${label}: ${refused?.message ?? "accepted"}`,
                 );
-                assert.strictEqual(refused?.constraint, refusedBy, label);
+                assert.strictEqual(
+                  refused?.constraint,
+                  checkConstraintOf(Qti, row.relation.name, refusedBy),
+                  label,
+                );
               }
             }
           }).pipe(Effect.scoped),

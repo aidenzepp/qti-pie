@@ -29,8 +29,8 @@
  *   `day`'s domain, `lexicalForm(date)` (23514).
  * - **Usage typed value** (reading 105): each usage value that writes a `baseType` in `usage3-typed`
  *   and `usage3-float-padded` is accepted by its row's laws; `usage3-integer-float`'s float under
- *   `integer` is refused by the `usage_typed_value` CHECK (23514), and a code its lexical form does
- *   not spell by `e_1_derived`.
+ *   `integer` is refused by the `Usage_typed_value` CHECK (23514), and a code its lexical form does
+ *   not spell by `E1_derived`.
  *
  * Whole-package cases, every law at once through the importer, arrive with Q5.15: `metaData`
  * refused `lom-identifier` and `lom-title`, `simple` accepted, `identifier-mismatch` refused
@@ -61,6 +61,7 @@ import {
   StatisticDate,
   UsageValue,
 } from "#pantry/qti/metadata.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import {
   assertVerdict,
   authorRole,
@@ -71,6 +72,7 @@ import {
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -409,14 +411,15 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
     "accepts each usage value its base type reads, and refuses a float under integer and a code its lexical form does not spell, by Usage typed value and E1 derived",
     () =>
       // Oracle: PostgreSQL, `UsageValue`'s own laws: the `Usage_typed_value` check (reading 105),
-      // its text matched against `BaseTypePattern`'s pattern of its base type (23514 on
-      // `usage_typed_value`), and `E1_derived`, its code the one `BaseTypeLexical` spells.
+      // its text matched against `BaseTypePattern`'s pattern of its base type (23514), and
+      // `E1_derived`, its code the one `BaseTypeLexical` spells.
       // Bound: the three usage-data fixtures whose values write a `baseType`: `usage3-typed`'s 24
       // (19 floats and 5 identifiers), `usage3-float-padded`'s padded float, accepted, and
       // `usage3-integer-float`'s `0.87` under `integer`, refused; one hand row of code `float`
       // under the lexical form `integer`.
       Effect.gen(function* usageTyped() {
         const client = yield* loginSession;
+        const typed = checkConstraintOf(Qti, UsageValue.name, "Usage_typed_value");
         for (const [name, count, refused] of [
           ["usage3-typed", 24, false],
           ["usage3-float-padded", 1, false],
@@ -428,7 +431,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
           for (const row of built.values) {
             assertVerdict(
               yield* judged(client, statedInserts([{ fact: row, relation: UsageValue }])),
-              "usage_typed_value",
+              typed,
               refused,
               `${name} ${row.text}`,
             );
@@ -450,7 +453,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
               },
             ]),
           ),
-          "e_1_derived",
+          checkConstraintOf(Qti, UsageValue.name, "E1_derived"),
           true,
           "a code its lexical form does not spell",
         );

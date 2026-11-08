@@ -73,6 +73,7 @@ import {
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf, nodeLawNames } from "#pantry/test/oracle.ts";
@@ -301,26 +302,31 @@ const outOfNode = (statements: readonly unknown[]) => {
 };
 
 /**
- * The role a constraint of `Node` plays, read off its name (a check this slice names) or the
- * identity its COMMENT spells (grizzle's hashed natives), `other` for another slice's.
+ * The role a constraint of `Node` plays, read off its name (a check this slice names, by its
+ * installed name, `checkConstraintOf`) or the identity its COMMENT spells (grizzle's hashed
+ * natives), `other` for another slice's.
  *
  * @param constraint - The constraint.
  * @returns Its role.
  */
 const roleOf = (constraint: Constraint): string => {
-  const named = new Map([
-    ["e_1_derived", "E1 derived"],
-    ["foreign_element_class", "Foreign element class"],
-    ["foreign_simple_content", "Foreign simple content"],
-    ["n_1_sentinel", "N1 sentinel"],
-    ["n_5_admitted", "N5 admitted"],
-    ["n_5_follow", "N5 Follow"],
-    ["n_6_ancestry", "N6 ancestry"],
-    ["n_7_barred_by", "N7 barred by"],
-    ["n_7_counted", "N7 Counted"],
-    ["n_7_last", "N7 Last"],
-    ["n_8_nearest", "N8 nearest"],
-  ]);
+  const named = new Map(
+    (
+      [
+        ["E1_derived", "E1 derived"],
+        ["Foreign_element_class", "Foreign element class"],
+        ["Foreign_simple_content", "Foreign simple content"],
+        ["N1_sentinel", "N1 sentinel"],
+        ["N5_admitted", "N5 admitted"],
+        ["N5_Follow", "N5 Follow"],
+        ["N6_ancestry", "N6 ancestry"],
+        ["N7_barred_by", "N7 barred by"],
+        ["N7_Counted", "N7 Counted"],
+        ["N7_Last", "N7 Last"],
+        ["N8_nearest", "N8 nearest"],
+      ] as const
+    ).map(([check, role]) => [checkConstraintOf(Qti, Node.name, check), role]),
+  );
   const { comment } = constraint;
   const held = named.get(constraint.name);
   if (held !== undefined) {

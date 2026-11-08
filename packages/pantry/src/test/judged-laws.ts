@@ -5,11 +5,11 @@
  *
  * `#pantry/test/key-copies.ts` reads each statement's laws ({@link judgedOf}) and containments
  * ({@link containmentsIn}) from the statement alone; this module pairs each with the law `lawsOf`
- * states for it. It reads grizzle's values, so the law oracle reaches it from none of its modules:
- * the oracle is a second implementation, and reads no value of grizzle's
- * (`src/grammar/purity.test.ts`).
+ * states for it, and {@link checkConstraintOf} gives a check's installed name from its law. It reads
+ * grizzle's values, so the law oracle reaches it from none of its modules: the oracle is a second
+ * implementation, and reads no value of grizzle's (`src/grammar/purity.test.ts`).
  */
-import { lawsOf } from "@bjornpagen/grizzle";
+import { constraintNameOf, lawsOf } from "@bjornpagen/grizzle";
 import type { Law, LawSourceSide } from "@bjornpagen/grizzle";
 import { Array as Arr, Formatter, Function as Fn } from "effect";
 import type { Qti } from "#pantry/qti/schema.ts";
@@ -91,7 +91,7 @@ const statedAs = <Judged extends { readonly law: Law }>(
  * Each statement of a schema beside its laws, as grizzle's `lawsOf` names them.
  *
  * `lawsOf` compiles the schema's law model, which takes seconds, so this is memoized by the
- * schema: {@link judgedLaws} and {@link containmentsOf} share one compile.
+ * schema: {@link judgedLaws}, {@link containmentsOf} and {@link checksOf} share one compile.
  */
 const statementLawsOf = Fn.memoize((schema: typeof Qti) => lawsOf(schema));
 
@@ -124,3 +124,50 @@ export const containmentsOf = (schema: typeof Qti, from: string): readonly Conta
   statementLawsOf(schema).flatMap(({ laws, statement }) =>
     containmentsIn(statement, from).map((containment) => statedAs(containment, laws)),
   );
+
+/**
+ * A check law, as `lawsOf` names one.
+ */
+type CheckLaw = Extract<Law, { readonly kind: "check" }>;
+
+/**
+ * Each check a schema states, as `lawsOf` names it, by its relation and declared name
+ * (`JSON.stringify([relation, name])`): the index {@link checkConstraintOf} reads, built once per
+ * schema.
+ */
+const checksOf = Fn.memoize(
+  (schema: typeof Qti): ReadonlyMap<string, CheckLaw> =>
+    new Map(
+      statementLawsOf(schema)
+        .flatMap(({ laws }) => laws)
+        .filter((law): law is CheckLaw => law.kind === "check")
+        .map((law) => [JSON.stringify([law.relation, law.name]), law]),
+    ),
+);
+
+/**
+ * The name PostgreSQL holds a row check's CHECK constraint under, which a direct SQL writer's
+ * refusal by it names (SQLSTATE 23514): grizzle's `constraintNameOf` of the check the schema
+ * states on a relation under a declared name, as `lawsOf` names it, so a test takes the name from
+ * the installation's own naming and never spells it.
+ *
+ * The first call compiles the schema's law model ({@link statementLawsOf}), so a test calls this
+ * in its body, under its own timeout, never where a run without the lease loads the file.
+ *
+ * @param schema - The schema, `Qti`.
+ * @param relation - The relation the check is declared on, by name.
+ * @param name - The check's declared name.
+ * @returns The installed name.
+ * @throws {Error} When the schema states no check of that name on that relation: a defect of the
+ *   test that asks, never of a document.
+ */
+export const checkConstraintOf = (schema: typeof Qti, relation: string, name: string): string => {
+  const law = checksOf(schema).get(JSON.stringify([relation, name]));
+  if (law === undefined) {
+    throw new Error(
+      `The schema states no check ${name} on ${relation} among grizzle's lawsOf, so the installation holds no CHECK for it. Name a check the schema declares on that relation.`,
+    );
+  }
+
+  return constraintNameOf(law);
+};

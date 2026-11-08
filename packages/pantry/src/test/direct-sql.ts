@@ -416,8 +416,9 @@ export const judged = (
  * accepted.
  *
  * @param verdict - The server's error, none for an accepted row.
- * @param constraint - The constraint the refusal names: PostgreSQL's spelling of a check's name,
- *   or a key's or foreign key's name as the catalog holds it.
+ * @param constraint - The constraint the refusal names: a row check's installed name, as
+ *   `#pantry/test/judged-laws.ts` `checkConstraintOf` derives it, or a key's or foreign key's name
+ *   as the catalog holds it.
  * @param refused - Whether the law refuses the rows.
  * @param label - The case, for a failure's message.
  * @param code - The SQLSTATE of the refusal: 23514, a CHECK's, unless the law is a key.

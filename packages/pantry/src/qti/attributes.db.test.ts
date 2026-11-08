@@ -37,6 +37,7 @@ import {
   NodeKind,
 } from "#pantry/grammar/install.ts";
 import { Attribute, Idref, OpenAttributeName } from "#pantry/qti/attributes.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   assertVerdict,
@@ -46,6 +47,7 @@ import {
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -321,7 +323,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
               withFields(admitted, { attrsAfter: slotBits(), name: unadmitted, slot: slotBits() }),
             ]),
           ),
-          "al_1_admission",
+          checkConstraintOf(Qti, Attribute.name, "AL1_admission"),
           true,
           `${unadmitted} on ${kind}`,
         );
@@ -334,7 +336,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
               withFields(admitted, { attrsAfter: slotBits(wrongSlot), slot: slotBits(wrongSlot) }),
             ]),
           ),
-          "e_1_derived",
+          checkConstraintOf(Qti, Attribute.name, "E1_derived"),
           true,
           "identifier holding shape's slot",
         );
@@ -344,7 +346,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
             client,
             statedInserts([secondOfTwo({ lexical: "H2", name: "identifier" }, [identifier])]),
           ),
-          "al_2_distinct",
+          checkConstraintOf(Qti, Attribute.name, "AL2_distinct"),
           true,
           "identifier repeated",
         );
@@ -387,7 +389,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
         for (const openName of [0n, 2n]) {
           assertVerdict(
             yield* judged(client, statedInserts([withFields(data, { openName })])),
-            "al_4_open_names",
+            checkConstraintOf(Qti, Attribute.name, "AL4_open_names"),
             true,
             `data-* with ${String(openName)} open names`,
           );
@@ -395,7 +397,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
 
         assertVerdict(
           yield* judged(client, statedInserts([withFields(admitted, { openName: 1n })])),
-          "al_4_open_names",
+          checkConstraintOf(Qti, Attribute.name, "AL4_open_names"),
           true,
           "a closed name with an open name",
         );
@@ -411,6 +413,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
       // Bound: every (kind, name) the two versions' grammars admit differently, up to 8.
       Effect.gen(function* versionDifferences() {
         const client = yield* loginSession;
+        const admission = checkConstraintOf(Qti, Attribute.name, "AL1_admission");
         const kinds: ReadonlySet<string> = new Set(NodeKind.handles);
         const admittedIn = (at: string) =>
           new Set(
@@ -467,13 +470,9 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
             const label = `${name} on ${governor} in ${at}`;
 
             if (row === undefined) {
-              assertVerdict(refused, "al_1_admission", true, label);
+              assertVerdict(refused, admission, true, label);
             } else {
-              assert.notStrictEqual(
-                Option.getOrUndefined(refused)?.constraint,
-                "al_1_admission",
-                label,
-              );
+              assert.notStrictEqual(Option.getOrUndefined(refused)?.constraint, admission, label);
             }
           }
         }
@@ -508,7 +507,12 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           if (valid) {
             assertNoRowLawRefuses(refused, `${name} ${value}`);
           } else {
-            assertVerdict(refused, "value_domain", true, `${name} ${value}`);
+            assertVerdict(
+              refused,
+              checkConstraintOf(Qti, Attribute.name, "value_domain"),
+              true,
+              `${name} ${value}`,
+            );
           }
         }
       }).pipe(Effect.scoped),
@@ -541,23 +545,23 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           boolean,
         ])[] = [
           ["identifier", "H1", "", "", { governs, kind }, true],
-          ["identifier", "H1", "x", "attribute_prefix", { governs, kind }, false],
+          ["identifier", "H1", "x", "Attribute_prefix", { governs, kind }, false],
           ["data-*", "v", "", "", { governs, kind }, true],
-          ["data-*", "v", "x", "attribute_prefix", { governs, kind }, false],
+          ["data-*", "v", "x", "Attribute_prefix", { governs, kind }, false],
           ["xml:lang", "en", "xml", "", { governs, kind }, true],
-          ["xml:lang", "en", "", "attribute_prefix", { governs, kind }, false],
-          ["xml:lang", "en", "x", "attribute_prefix", { governs, kind }, false],
+          ["xml:lang", "en", "", "Attribute_prefix", { governs, kind }, false],
+          ["xml:lang", "en", "x", "Attribute_prefix", { governs, kind }, false],
           ["xsi:schemaLocation", "urn:a b", "xsi", "", { governs, kind }, true],
           ["xsi:schemaLocation", "urn:a b", "zs", "", { governs, kind }, true],
-          ["xsi:schemaLocation", "urn:a b", "", "attribute_prefix", { governs, kind }, false],
-          ["xsi:schemaLocation", "urn:a b", "xml", "attribute_prefix", { governs, kind }, false],
-          ["xsi:schemaLocation", "urn:a b", "xmlns", "attribute_prefix", { governs, kind }, false],
+          ["xsi:schemaLocation", "urn:a b", "", "Attribute_prefix", { governs, kind }, false],
+          ["xsi:schemaLocation", "urn:a b", "xml", "Attribute_prefix", { governs, kind }, false],
+          ["xsi:schemaLocation", "urn:a b", "xmlns", "Attribute_prefix", { governs, kind }, false],
           ["xlink:href", "a.xml", "xl", "", lom, true],
-          ["xlink:href", "a.xml", "", "attribute_prefix", lom, false],
+          ["xlink:href", "a.xml", "", "Attribute_prefix", lom, false],
           ["foreign", "1", "f", "", foreign, true],
-          ["foreign", "1", "", "attribute_prefix", foreign, false],
+          ["foreign", "1", "", "Attribute_prefix", foreign, false],
           ["own-namespace", "1", "o", "", foreign, true],
-          ["own-namespace", "1", "", "attribute_prefix", foreign, false],
+          ["own-namespace", "1", "", "Attribute_prefix", foreign, false],
           ["xlink:type", "simple", "xlink", "", lom, true],
           ["xlink:type", " locator ", "xlink", "", lom, true],
           ["xlink:type", "bogus", "xlink", "value_domain", lom, false],
@@ -568,7 +572,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           ["view", "", "", "value_domain", rubric, false],
           ["view", "  ", "", "value_domain", rubric, false],
         ];
-        for (const [name, lexical, prefix, constraint, host, valid] of cases) {
+        for (const [name, lexical, prefix, check, host, valid] of cases) {
           const label = `${name}=${JSON.stringify(lexical)} written with ${JSON.stringify(prefix)} on ${host.kind}`;
           const refused = yield* judged(
             client,
@@ -578,7 +582,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           if (valid) {
             assertNoRowLawRefuses(refused, label);
           } else {
-            assertVerdict(refused, constraint, true, label);
+            assertVerdict(refused, checkConstraintOf(Qti, Attribute.name, check), true, label);
           }
         }
       }).pipe(Effect.scoped),
@@ -608,7 +612,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
               { ...controls, fact: { ...controls.fact, idrefText: "a", idrefs: 1n } },
             ]),
           ),
-          "e_1_derived",
+          checkConstraintOf(Qti, Attribute.name, "E1_derived"),
           true,
           "tokens short of the lexical form",
         );
@@ -622,7 +626,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
               ),
             ]),
           ),
-          "e_1_derived",
+          checkConstraintOf(Qti, Attribute.name, "E1_derived"),
           true,
           "an identifier, of no IDREF domain, with tokens",
         );
@@ -648,7 +652,12 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
             idrefPiece(1, { before: "", piecesAfter: "ab", piecesWas: "a", token: "b" }),
           ],
         ] as const) {
-          assertVerdict(yield* judged(client, statedInserts([stated])), "e_1_derived", true, label);
+          assertVerdict(
+            yield* judged(client, statedInserts([stated])),
+            checkConstraintOf(Qti, stated.relation.name, "E1_derived"),
+            true,
+            label,
+          );
         }
 
         assertVerdict(
@@ -718,7 +727,12 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           if (valid) {
             assertNoRowLawRefuses(refused, label);
           } else {
-            assertVerdict(refused, "foreign_attribute_class", true, label);
+            assertVerdict(
+              refused,
+              checkConstraintOf(Qti, OpenAttributeName.name, "Foreign_attribute_class"),
+              true,
+              label,
+            );
           }
         }
 
