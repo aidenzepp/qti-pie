@@ -513,7 +513,8 @@ export interface InlineChoiceInteraction {
 }
 
 /**
- * A `qti-text-entry-interaction` (Q-20), bound to a single `string`, `integer` or `float` response.
+ * A `qti-text-entry-interaction` (Q-20), bound to a single `string`, `integer` or `float` response,
+ * or to a record response.
  */
 export interface TextEntryInteraction {
   readonly ariaLabel: Option.Option<string>;
@@ -523,6 +524,11 @@ export interface TextEntryInteraction {
    */
   readonly base: number;
   readonly baseType: "float" | "integer" | "string";
+  /**
+   * The bound response's cardinality: `single`, or `record` for a record response, whose fields
+   * the typed text gives.
+   */
+  readonly cardinality: "record" | "single";
   /**
    * The author's `class` value, empty when absent.
    */
@@ -558,12 +564,16 @@ export interface TextEntryInteraction {
  * `format` of `plain` (the default), `preformatted` or `xhtml`, and its binding's cardinality with
  * `max-strings` and `min-strings`.
  */
-export interface ExtendedTextInteraction extends Omit<TextEntryInteraction, "kind"> {
+export interface ExtendedTextInteraction extends Omit<
+  TextEntryInteraction,
+  "cardinality" | "kind"
+> {
   /**
-   * The bound response's cardinality: `single`, or a container, `multiple` or `ordered`, whose
-   * strings each take a Control of their own.
+   * The bound response's cardinality: `single`; a container, `multiple` or `ordered`, whose
+   * strings each take a Control of their own; or `record` for a record response, whose fields the
+   * typed text gives.
    */
-  readonly cardinality: "multiple" | "ordered" | "single";
+  readonly cardinality: "multiple" | "ordered" | "record" | "single";
   /**
    * `expected-lines`: a count, held exactly, with no upper bound.
    */
@@ -1844,7 +1854,7 @@ const textFields = (
   build: Build,
   interaction: SourceElement,
   baseType: TextEntryInteraction["baseType"],
-): Effect.Effect<Omit<TextEntryInteraction, "kind">, Refusal> =>
+): Effect.Effect<Omit<TextEntryInteraction, "cardinality" | "kind">, Refusal> =>
   Effect.gen(function* readTextFields() {
     const base = yield* xsInt(build, interaction, "base");
 
@@ -2066,7 +2076,7 @@ const interactionNode = (
 
       const fields = yield* textFields(build, interaction, bound.success.baseType);
 
-      return { ...fields, kind: "text-entry" };
+      return { ...fields, cardinality: "single", kind: "text-entry" };
     }
 
     if (name === "qti-inline-choice-interaction") {

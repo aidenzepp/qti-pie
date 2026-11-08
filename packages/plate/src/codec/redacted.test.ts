@@ -165,6 +165,7 @@ const year: TextEntryInteraction = {
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "integer",
+  cardinality: "single",
   class: "",
   expectedLength: Option.some(4n),
   kind: "text-entry",
@@ -481,6 +482,7 @@ const jsonOf = (item: Item): RedactedJson =>
 const yearJson: BodyNodeJson = {
   base: 10,
   baseType: "integer",
+  cardinality: "single",
   class: "",
   kind: "text-entry",
   response: "YEAR",

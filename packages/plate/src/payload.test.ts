@@ -121,6 +121,7 @@ const textEntry = (response: string): TextEntryInteraction => ({
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "string",
+  cardinality: "single",
   class: "",
   expectedLength: Option.none(),
   kind: "text-entry",

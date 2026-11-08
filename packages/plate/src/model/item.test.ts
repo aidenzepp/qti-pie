@@ -2269,6 +2269,7 @@ describe("buildItem", () => {
         ariaLabelledby: Option.none(),
         base: 10,
         baseType: "string",
+        cardinality: "single",
         class: "",
         expectedLength: Option.some(12n),
         kind: "text-entry",

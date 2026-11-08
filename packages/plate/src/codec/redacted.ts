@@ -113,6 +113,7 @@ interface TextEntryInteractionJson {
   readonly ariaLabelledby?: string;
   readonly base: number;
   readonly baseType: TextEntryInteraction["baseType"];
+  readonly cardinality: TextEntryInteraction["cardinality"];
   readonly class: string;
   readonly expectedLength?: string;
   readonly kind: "text-entry";
@@ -126,7 +127,10 @@ interface TextEntryInteractionJson {
  * An Extended Text in the JSON form: a Text Entry's fields, with `expectedLines`, `maxStrings` and
  * `minStrings` as decimal digits, and `expectedLines`, `maxStrings` and its Prompt optional keys.
  */
-interface ExtendedTextInteractionJson extends Omit<TextEntryInteractionJson, "kind"> {
+interface ExtendedTextInteractionJson extends Omit<
+  TextEntryInteractionJson,
+  "cardinality" | "kind"
+> {
   readonly cardinality: ExtendedTextInteraction["cardinality"];
   readonly expectedLines?: string;
   readonly format: ExtendedTextInteraction["format"];
@@ -387,10 +391,14 @@ const BodyNodeSchema = Schema.Union([
     response: Schema.String,
     shuffle: Schema.Boolean,
   }),
-  Schema.Struct({ ...textControlFields, kind: Schema.Literal("text-entry") }),
   Schema.Struct({
     ...textControlFields,
-    cardinality: Schema.Literals(["multiple", "ordered", "single"]),
+    cardinality: Schema.Literals(["record", "single"]),
+    kind: Schema.Literal("text-entry"),
+  }),
+  Schema.Struct({
+    ...textControlFields,
+    cardinality: Schema.Literals(["multiple", "ordered", "record", "single"]),
     expectedLines: OptionalCount,
     format: Schema.Literals(["plain", "preformatted", "xhtml"]),
     kind: Schema.Literal("extended-text"),

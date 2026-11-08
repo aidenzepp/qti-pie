@@ -61,6 +61,7 @@ const city: TextEntryInteraction = {
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "string",
+  cardinality: "single",
   class: "short-answer",
   expectedLength: Option.some(12n),
   kind: "text-entry",
@@ -189,11 +190,15 @@ const rivers: ExtendedTextInteraction = {
  * Construct an item whose body is an Extended Text, then the paragraph of {@link itemOf} holding
  * {@link city}.
  *
- * @param group The Extended Text.
+ * @param group The Extended Text, bound to a value, never a record.
  * @returns The item.
  */
 const besideGroup = (group: ExtendedTextInteraction): Item => {
   const alone = itemOf([city]);
+  const cardinality =
+    group.cardinality === "record"
+      ? assert.fail(`The Extended Text for ${group.response} binds a record.`)
+      : group.cardinality;
 
   return {
     ...alone,
@@ -205,7 +210,7 @@ const besideGroup = (group: ExtendedTextInteraction): Item => {
         {
           areaMapping: Option.none(),
           baseType: group.baseType,
-          cardinality: group.cardinality,
+          cardinality,
           correct: Option.none(),
           defaultValue: Option.none(),
           identifier: group.response,
