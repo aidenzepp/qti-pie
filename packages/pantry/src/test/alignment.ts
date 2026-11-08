@@ -543,8 +543,8 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     104,
     {
       owner:
-        "PM's `ChoiceVariableName` (`src/qti/interactions.ts`): `Choice_not_variable` over the counted families of `Choice`, `Hottext` and `Declaration` on (document, identifier), and the keys `Choice(document, kind, identifier)` and `Hottext(document, identifier)`; the oracle's Choice not variable and Choice identifier key",
-      status: "G",
+        "PM's `ChoiceVariableName` (`src/qti/interactions.ts`): `Choice_not_variable` over the counted families of `Choice`, `Hottext` and `Declaration` on (document, identifier), and the keys `Choice(document, kind, identifier)` and `Hottext(document, identifier)`; the oracle's Choice not variable and Choice identifier key; align-n-1: the per-class keys and the cross-class check on ChoiceVariableName",
+      status: "P",
     },
   ],
   [
@@ -1048,6 +1048,37 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       owner:
         "`E1_derived` over `ExpressionAttribute` (`src/qti/expressions.ts`): every test variables has a `weight-identifier` row, unwritten where it writes none, and its unwritten `base-type` is `unknown` only where that weight is unwritten and float only where it is written (the containments into the keyed `weightAttributes` and `writtenWeights`); `Weighted_base` refuses a written non-float `base-type` beside a written weight; the import's `attributeBaseOf` (`src/import/overlays/expressions.ts`) and the oracle's (`src/test/oracle-laws/expressions.ts`) type a weighted test variables with no `base-type` float. The prefixed read and the unweighted untyped test variables stay `unknown`, the reading's stated limits. Held by `src/test/weighted-test-variables.oracle.test.ts` and `src/import/overlays/expressions.test.ts`",
       status: "G",
+    },
+  ],
+  [
+    168,
+    {
+      owner:
+        'align-n-2: "Declaration not reserved" by parent kind, a test\'s own `numAttempts` and `completionStatus` admitted and its `duration` refused',
+      status: "P",
+    },
+  ],
+  [
+    169,
+    {
+      owner:
+        'align-n-3: "Binding cardinality" over a gap match\'s own gaps, `multiple` required of two or more',
+      status: "P",
+    },
+  ],
+  [
+    170,
+    {
+      owner:
+        'align-n-5: "Remote section ref" (`remote-section`), a stated limit among `limitRules`',
+      status: "P",
+    },
+  ],
+  [
+    171,
+    {
+      owner: "align-n-8: `printfFormat` (`src/grammar/attributes.ts`) with `d` among its codes",
+      status: "P",
     },
   ],
 ]);

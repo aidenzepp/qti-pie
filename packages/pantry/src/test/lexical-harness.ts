@@ -499,7 +499,7 @@ export const recorded: readonly Recorded[] = [
     reason: {
       _tag: "reading",
       reading: 132,
-      says: "The rest of this reading stands: each specifier ends in one of the listed codes, and `%q`, `2f%`, `%` and `%d` are still refused under `attribute-lexical`.",
+      says: "The rest of this reading stands: each specifier ends in one of the listed codes, and `%q`, `2f%` and `%` are still refused under `attribute-lexical`; reading 171 adds `d` to the listed codes.",
       why: "the information model's printf grammar (§2.3.4) refuses a `%` that begins neither the escape `%%` nor a conversion specifier over its listed codes, where the XSD types format xs:normalizedString; a format of any number of well-formed specifiers is admitted (reading 161), so its refusal stays unrecorded",
     },
     // The value read from the left as C reads a format: text, `%%` and well-formed specifiers, then a

@@ -1766,31 +1766,40 @@ against it. A reading that is not an information-model-over-XSD case says which 
      operator's standing ruling of 2026-11-05 that the spec wins; the `xml:base` clause restated 2026-11-06 by
      RV seat P, on the review of PR #46.)
 
-104. **A choice's identifier names it among its document's choices of its class, and names no item variable.** Each
-     choice class of the information model says of its identifier "This identifier must not be used by any other
+104. **A choice's identifier is used by no other choice of any class in its document, and names no item variable.** Four
+     choice classes of the information model say of their identifier "This identifier must not be used by any other
      choice or item variable" (section 5.132.1, SimpleChoice,
      https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier, and sections
-     5.131.1, 5.73.1 and 5.67.1 of SimpleAssociableChoice, InlineChoice and HotspotChoice), and the other classes say
-     it of their own noun: "any other gap" (section 5.55.1, Gap), "any other image" (5.56.1, GapImg), "any other text"
+     5.131.1, 5.73.1 and 5.67.1 of SimpleAssociableChoice, InlineChoice and HotspotChoice), and the other five name
+     their own noun: "any other gap" (section 5.55.1, Gap), "any other image" (5.56.1, GapImg), "any other text"
      (5.58.1, GapText), "any other hotspot" (5.7.1, AssociableHotspot) and "any other hottext choice" (5.65.1,
-     HotText). The noun is each time the head of the class's own name, so "any other choice" of a simple choice is
-     another simple choice, and two choices of different classes may share an identifier, as a gap and a gap text of
-     one gap match interaction may. The sentence names no interaction, and its other term, "item variable", is the
-     item's; the information model reads an identifier as "a logical reference to another object in the item, such
-     as an itemVariable or choice" (section 7.16, Identifier). So the scope is the document: no two choices of one
-     class in one document share an identifier, whichever interactions hold them, and no two hottexts do, inside a
-     hottext interaction or not (reading 38). The item variables are an item's declared variables, of all four kinds,
-     and its built-in variables, which "are declared implicitly" (section 2.2.2): `completionStatus`, `numAttempts`
-     and `duration`, and `QTI_CONTEXT` (section 2.2.2.1). So in an item no choice and no hottext bears the identifier
-     of a declaration of its document or of a built-in variable. A document that is no item, such as a stimulus, has
-     no built-in variables, and its choices are judged against its declarations, of which it has none. Identifiers
-     are compared collapsed (reading 7). In the corpus, 16 items of `shared-vocabulary` repeat choice identifiers
-     across the interactions each one replicates (`Item_QTI3_Hotspot_01` holds two hotspot interactions whose choices
-     are both `A` to `D`), and that package is refused already; no item gives a choice the identifier of a declaration
-     or of a built-in variable, and no interaction repeats an identifier within a class. So no verdict moves. This
-     binds pantry and plate alike. This is not a case of documents in conflict: the XSD types a choice's identifier
-     `IdentifierDType` and decides nothing of its uniqueness. (Decided 2026-11-06 by W5 seat PM under the operator's
-     standing ruling of 2026-11-05 that the spec wins.)
+     HotText). The four are read literally: "any other choice" is any other element of the nine choice classes, each an
+     element whose identifier a response holds as an identifier, pair or directed pair value, "a logical reference to
+     another object in the item, such as an itemVariable or choice" (section 7.16, Identifier). The five say what
+     their own class bars and do not say that another class may reuse the identifier, and a response names a choice by
+     its identifier alone, so the nine classes share one space of identifiers, and the stricter reading of the
+     normative text is the one taken. A gap and a gap text of one gap match interaction therefore may not share an
+     identifier, and neither may a simple choice and a hottext, or an inline choice and a gap. The sentence names no
+     interaction, and its other term, "item variable", is the item's. So the scope is the document: no two choices of
+     the nine classes in one document share an identifier, whichever interactions hold them, and no two hottexts do,
+     inside a hottext interaction or not (reading 38). The item variables are an item's declared variables, of all four
+     kinds, and its built-in variables, which "are declared implicitly" (section 2.2.2): `completionStatus`,
+     `numAttempts` and `duration`, and `QTI_CONTEXT` (section 2.2.2.1). So in an item no choice and no hottext bears
+     the identifier of a declaration of its document or of a built-in variable. A document that is no item, such as a
+     stimulus, has no built-in variables, and its choices are judged against its declarations, of which it has none.
+     Identifiers are compared collapsed (reading 7). The schema states it with "Choice identifier key", which holds
+     the per-class keys, and a check on `ChoiceVariableName` that a name one of the nine classes bears is borne by no
+     other choice or hottext, in the document and over its assembly (an included fragment's choices count among its
+     item's, reading 117). In the corpus, the 28 packages hold 1,266 elements of the nine classes, and none shares an
+     identifier with an element of another class; 16 items of `shared-vocabulary` repeat choice identifiers across the
+     interactions each one replicates (`Item_QTI3_Hotspot_01` holds two hotspot interactions whose choices are both `A`
+     to `D`), and that package is refused already; no item gives a choice the identifier of a declaration or of a
+     built-in variable. So no verdict moves. This binds pantry and plate alike. This is not a case of documents in
+     conflict: the XSD types a choice's identifier `IdentifierDType` and decides nothing of its uniqueness. (Decided
+     2026-11-06 by W5 seat PM under the operator's standing ruling of 2026-11-05 that the spec wins. Amended 2026-11-08
+     by the overseer under the operator's delegation, mail 7a7e6287, ruling 1: the four classes' "any other choice" is
+     read across classes, the stricter normative reading, and the nine classes share one space of identifiers; the
+     reading of those four one class at a time is withdrawn.)
 105. **A usage statistic's value is typed by the base type it names, and untyped where it names none.** The usage data
      binding (QTI 3.0 Usage Data Information Model and XSD Binding 1.0, section 2.6.5, the Value class,
      https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html; line 2620 of the page in
@@ -2014,7 +2023,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
        has no `SitePath` either and is admitted (`Site.external`, above). So does an include whose path names an entry
        the manifest lists as no document.
      - A section ref, which must write an href (AL3 refuses one that doesn't), names a section document the package
-       lists. One that is external, or names an entry that is no section document, breaks "Document entry" alone.
+       lists. One that names an entry that is no section document breaks "Document entry" alone, and one that is
+       external breaks the stated limit "Remote section ref" alone (reading 170).
 
      This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat IN
      under the operator's standing ruling of 2026-11-05 that the spec wins; amended by the audit of PR #46, C B2.
@@ -2418,7 +2428,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
      Reading 161 sets aside this reading's rule that a format holds at most one conversion specifier, and with it the
      operator's decision on item L4: a format of any number of specifiers is accepted and stored as written, so
      `%i of %i` and `%%%e%%%G` are admitted. The rest of this reading stands: each specifier ends in one of the listed
-     codes, and `%q`, `2f%`, `%` and `%d` are still refused under `attribute-lexical`.
+     codes, and `%q`, `2f%` and `%` are still refused under `attribute-lexical`; reading 171 adds `d` to the listed
+     codes.
 
 133. **A key text holds at most 2,587 UTF-8 bytes: a stated limit of the representation, not a law of QTI.** No QTI
      specification bounds the length of an identifier, an ID, an IDREF, an `xml:lang`, a title, an href, a map key or a
@@ -3180,9 +3191,9 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      (section 7.21.6.1) says what a C program that prints such a format does, not what a QTI document may write. So a
      format is a printf format string over the listed codes: characters other than `%`, the escape `%%`, and conversion
      specifiers, any number of them, none included (`printfFormat`, `src/grammar/attributes.ts`). `%i of %i`, `%%%e%%%G`
-     and `%i, %.2f and %#x` are admitted and kept as the attribute's lexical form; `%i of %d`, `%i of %` and `%d %d` are
-     still refused under `attribute-lexical`, since a specifier there ends in no listed code: reading 132 reads `d` as
-     none, though the ruling's own example writes it, and a `%` at the end ends in no code at all. The law oracle reads
+     and `%i, %.2f and %#x` are admitted and kept as the attribute's lexical form; `%i of %d` and `%d %d` are admitted since reading 171, and `%i of %` is still
+     refused under `attribute-lexical`, since a `%` at the end ends in no code at all. (Before reading 171 the first
+     two were refused too, since reading 132 read `d` as no listed code.) The law oracle reads
      the composed grammar's domain, so both sides judge by the one pattern. This sets aside reading 132's rule of at
      most one specifier, and the operator's decision of 2026-11-06 on item L4 that it recorded. The corpus writes only
      `%.1f`, so no verdict moves. This binds pantry and plate alike in what a document may write; how a renderer prints
@@ -3351,3 +3362,52 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      above. (Decided 2026-11-08 by the Mind, decisions 434 and 435, on research ba1a2d84, relay 4da02d14 of plate
      readings 198 and 199, under the operator's delegation; FYI to the operator. Decision 436 (2026-11-08) records
      plate's package-level typing.)
+
+168. **A test may declare a variable named `numAttempts` or `completionStatus`; in a test only `duration` is reserved.**
+     The information model says of an item's variables "All variables must be declared except for the built-in session
+     variables referred to below which are declared implicitly and must not be declared" (section 2.2.2, not
+     normative), and the identifier rows of the declaration classes list "completionStatus, numAttempts and duration"
+     and go on "All item variables declared in an item share the same namespace" (tables 4.5.1, 5.115.1 and 5.151.1).
+     Section 2.2.2.2 makes `numAttempts` "the number of attempts at each item", and a test's processing holds
+     `duration` and `QTI_CONTEXT` as built-ins and neither of the other two (reading 29). So a test's declaration of
+     `numAttempts` or `completionStatus` shadows no built-in of the test and is accepted, a test's declaration of
+     `duration` stays refused under "Declaration not reserved", and so does an item's declaration of any of the three.
+     An unprefixed `numAttempts` in a test's processing names the test's own declaration where it has one, and a
+     prefixed `Q01.numAttempts` still names the item's built-in (reading 106). This narrows "Declaration not
+     reserved", which held the three names reserved in every document (reading 72's law). In the corpus, none of the
+     28 packages' tests or sections declares any of the three, so no verdict moves. This binds pantry and plate alike.
+     (Decided 2026-11-08 by the overseer under the operator's delegation, mail 7a7e6287, ruling 2:
+     the refusal in a test rests on the non-normative section 2.2.2.)
+
+169. **A gap match interaction with two or more gaps binds a response of multiple cardinality.** The information model
+     says "The GapMatchInteraction must be bound to a response variable with base-type directedPair and either single or
+     multiple cardinality, depending on the number of gaps" (section 5.57). Each gap takes a pair of its own, and a
+     single response holds one pair, so with one gap either cardinality may bind, and with two or more only `multiple`
+     may. Reading 92's sentence on `max-associations` (section 5.57.3) still holds beside it. The gaps counted are the
+     interaction's own `qti-gap` elements, an included fragment's among them (reading 117). The law is "Binding
+     cardinality" (rule `binding-fit`). In the corpus, 13 gap match interactions hold two or more gaps and each binds a
+     `multiple` response, so no verdict moves. Plate refuses the case already. This binds pantry and plate alike.
+     (Decided 2026-11-08 by the overseer under the operator's delegation, mail 7a7e6287, ruling 3, on the
+     operator's review of PR #46, comment 6716564108.)
+
+170. **A section ref whose href is external is refused under the stated limit "Remote section ref" (`remote-section`):
+     a stated limit of pantry, not a law of QTI.** pantry imports a package offline and cannot assemble a test from a
+     section it does not hold. The information model makes a section ref a facade "for the qti-assessment-section to
+     which it refers" (section 7.5) and bans no remote one, but pantry assembles every test from its package's
+     documents (readings 86 and 117) and never fetches a resource (reading 115). An external include can stand as
+     written because its document's own content is judged without it; a section ref's section is the test's content,
+     so there is nothing to judge. What would lift the limit is a fetch of the section at import. It is listed with the
+     other stated limits (`limitRules`: key-text bound, href form, fragment context). In the corpus, no section ref of
+     the 28 packages is external, so no verdict moves. This binds pantry and plate alike.
+     (Decided 2026-11-08 by
+     the overseer under the operator's delegation, mail 7a7e6287, ruling 5; register row B5.)
+
+171. **A printed variable's `format` may use `d` as a conversion code.** The code list of the information model's
+     section 2.3.4 (E, e, f, G, g, r, R, i, o, X, x) is in a section the information model marks not normative; the
+     normative section 7.30.7 says only "The format conversion specifier to use when converting numerical values to
+     strings"; the implementation guide's own example writes `format="%d"`; and C reads `d` as it reads `i` (ISO/IEC
+     9899:2011, section 7.21.6.1: "d,i The int argument is converted to signed decimal"). So `%d`, `%5d`, `%d %d` and
+     `%i of %d` are admitted and stored as written, and `%q`, `2f%` and `%` stay refused under `attribute-lexical`.
+     This adds `d` to the codes of readings 132 and 161. In the corpus, the only `format` is `%.1f`, so no verdict
+     moves. This binds pantry and plate alike. (Decided 2026-11-08 by the overseer under the operator's
+     delegation, mail 7a7e6287, ruling 8, on the operator's ruling in his comment on PR #46, 6722164084: admit `d`.)
