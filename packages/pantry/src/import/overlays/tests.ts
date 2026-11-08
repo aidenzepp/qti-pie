@@ -827,7 +827,7 @@ const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
                 node: node.id,
                 package: view.ids.package,
                 path: comparedPathOf(resolution, lexical),
-                resolved: entryPathOf(resolution) !== undefined,
+                resolved: Option.isSome(entryPathOf(resolution)),
               },
             ] as const;
           })

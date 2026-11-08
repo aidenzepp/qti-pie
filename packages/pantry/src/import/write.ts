@@ -40,7 +40,7 @@ import {
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
-import { contextAt, contextsOf } from "#pantry/import/context.ts";
+import { contextsOf } from "#pantry/import/context.ts";
 import { foldAt, foldOf, governorOf, textDomainOf } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
@@ -214,39 +214,38 @@ export const nodeIdsOf = (
   const packageId = mint();
   const listed = documents.map((document) => ({ document, idOf: drawnBy(mint) }));
   const placed = new Map<string, NodeId>();
-  const targets = new Map<string, Omit<ListedTarget, "context">>();
   for (const { document, idOf } of listed) {
     if (!placed.has(document.path)) {
       placed.set(document.path, idOf(0));
-    }
-
-    if (document.resourceType !== "none" && !targets.has(document.path)) {
-      targets.set(document.path, { node: idOf(0), rootKind: document.tree.root.kind });
     }
   }
 
   const documentAt = (path: string): Option.Option<NodeId> =>
     Option.fromUndefinedOr(placed.get(path));
-  const { assembled, contexts, targeted } = contextsOf(
-    listed.map(({ document: { path, resourceType, tree }, idOf }) => ({
+  const judged = contextsOf(
+    listed.map(({ document, idOf }) => ({
+      document,
       idOf,
-      named: resourceType !== "none",
-      path,
-      tree,
+      named: document.resourceType !== "none",
+      path: document.path,
+      tree: document.tree,
     })),
   );
+  const targets = new Map<string, ListedTarget>();
+  for (const { context, listed: target } of judged) {
+    if (target.named && !targets.has(target.path)) {
+      targets.set(target.path, { context, node: target.idOf(0), rootKind: target.tree.root.kind });
+    }
+  }
+
   const targetAt = (path: string): Option.Option<ListedTarget> =>
-    Option.map(Option.fromUndefinedOr(targets.get(path)), ({ node, rootKind }) => ({
-      context: contextAt(contexts, node),
-      node,
-      rootKind,
-    }));
+    Option.fromUndefinedOr(targets.get(path));
 
   return {
-    documents: listed.map(({ document, idOf }) => ({
+    documents: judged.map(({ assembled, context, listed: { document, idOf }, targeted }) => ({
       ids: {
-        assembled: assembled.has(idOf(0)),
-        context: contextAt(contexts, idOf(0)),
+        assembled,
+        context,
         documentAt,
         documentType: document.resourceType,
         entryAt,
@@ -254,7 +253,7 @@ export const nodeIdsOf = (
         package: packageId,
         path: document.path,
         targetAt,
-        targeted: targeted.has(idOf(0)),
+        targeted,
       },
       listed: document,
     })),

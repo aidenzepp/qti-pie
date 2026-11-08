@@ -1032,8 +1032,10 @@ const packageRowsOf = (
     documents.map(([at, tree], n) => [at, { node: idsIn(n)(0), tree }] as const),
   );
   const nodeAt = (to: string) => Option.fromNullishOr(nodes.get(to));
-  const { assembled: inAssembly } = contextsOf(
-    documents.map(([at, tree], n) => ({ idOf: idsIn(n), named: true, path: at, tree })),
+  const inAssembly = new Set(
+    contextsOf(documents.map(([at, tree], n) => ({ idOf: idsIn(n), named: true, path: at, tree })))
+      .filter(({ assembled }) => assembled)
+      .map(({ listed }) => listed.idOf(0)),
   );
   const inputs = documents.map(([at, tree], n): AssembledExpressionInput => {
     const ids: TestIds = {

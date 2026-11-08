@@ -8,7 +8,6 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { contextsOf } from "#pantry/import/context.ts";
 import type { FlagHandle } from "#pantry/import/context.ts";
-import { ownContext } from "#pantry/import/fold.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -189,7 +188,7 @@ describe("contextsOf", () => {
                 `<p xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude">a <xi:include href="g.xml"/></p>`,
               );
               const nested = yield* treeOf(`<span xmlns="${asi}">b</span>`);
-              const { assembled, contexts, targeted } = contextsOf([
+              const judged = contextsOf([
                 { idOf: idsOf(1), named: true, path: "i.xml", tree: item },
                 { idOf: idsOf(2), named: true, path: "f.xml", tree: fragment },
                 { idOf: idsOf(3), named: true, path: "g.xml", tree: nested },
@@ -203,32 +202,41 @@ describe("contextsOf", () => {
                 .find(({ interaction }) => interaction !== undefined);
               const expectedNearest = interactionOf(inside?.interaction) ?? idsOf(2)(0);
               const flags = new Set<FlagHandle>(sited.flatMap((name) => positions[name].flags));
+              const nearestKind = inside?.interaction ?? "document";
               const placed = sited.length > 0 ? [idsOf(2)(0)] : [];
+              const selvesWhere = (holds: (judgment: (typeof judged)[number]) => boolean) =>
+                new Set(judged.filter(holds).map(({ listed }) => listed.idOf(0)));
               c.note(noteOf(inside !== undefined, sited));
 
-              for (const [document, self] of [
-                ["f.xml", idsOf(2)(0)],
-                ["g.xml", idsOf(3)(0)],
-              ] as const) {
-                const context = contexts.get(self) ?? ownContext(self);
-
-                assert.deepStrictEqual(new Set(context.ancestry), flags, document);
-                assert.strictEqual(
-                  context.nearest,
-                  document === "f.xml" || inside !== undefined ? expectedNearest : self,
-                  document,
-                );
-                assert.strictEqual(
-                  context.nearestKind,
-                  inside?.interaction ?? "document",
-                  document,
-                );
-              }
-
-              assert.deepStrictEqual(contexts.get(idsOf(1)(0)), ownContext(idsOf(1)(0)));
-              assert.deepStrictEqual(targeted, new Set([...placed, idsOf(3)(0)]));
               assert.deepStrictEqual(
-                assembled,
+                judged.map(({ context: { ancestry, nearest, nearestKind: kind }, listed }) => ({
+                  ancestry: new Set(ancestry),
+                  nearest,
+                  nearestKind: kind,
+                  path: listed.path,
+                })),
+                [
+                  {
+                    ancestry: new Set<FlagHandle>(),
+                    nearest: idsOf(1)(0),
+                    nearestKind: "document",
+                    path: "i.xml",
+                  },
+                  { ancestry: flags, nearest: expectedNearest, nearestKind, path: "f.xml" },
+                  {
+                    ancestry: flags,
+                    nearest: inside === undefined ? idsOf(3)(0) : expectedNearest,
+                    nearestKind,
+                    path: "g.xml",
+                  },
+                ],
+              );
+              assert.deepStrictEqual(
+                selvesWhere(({ targeted }) => targeted),
+                new Set([...placed, idsOf(3)(0)]),
+              );
+              assert.deepStrictEqual(
+                selvesWhere(({ assembled }) => assembled),
                 new Set([...(sited.length > 0 ? [idsOf(1)(0)] : []), idsOf(2)(0), idsOf(3)(0)]),
               );
             }),

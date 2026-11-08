@@ -19,11 +19,12 @@
  * context, and a chain that returns to a document on it, which the database refuses as an
  * inclusion cycle, is cut where the walk meets the bound.
  */
-import { Option } from "effect";
+import { Array as Arr, Option } from "effect";
 import type { Kind } from "#pantry/grammar/compose.ts";
 import { includeParentKinds } from "#pantry/grammar/install.ts";
 import type { Flag } from "#pantry/grammar/install.ts";
 import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
+import type { Folded } from "#pantry/import/fold.ts";
 import { entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -95,18 +96,23 @@ interface SiteOf {
 }
 
 /**
- * Every listed document's context, and the documents some site names, each an instance under every
- * document that places it (Q5.13's `Instance`), and the root of an assembly of its own unless an
- * include splices it in place (`splicingParents`, spec reading 117).
+ * One listed document as {@link contextsOf} judges it: the listing as given, its context, and
+ * whether it is in an assembly and whether a site names it.
  */
-export interface Contexts {
+export interface Judged<L extends Listed> {
   /**
-   * The documents in an assembly: a test or a section, or a document that holds a site or that a
-   * site names, each with Q5.13's `TestDocument` row (`Document.assembled`).
+   * Whether the document is in an assembly: a test or a section, or a document that holds a site or
+   * that a site names, each with Q5.13's `TestDocument` row (`Document.assembled`).
    */
-  readonly assembled: ReadonlySet<NodeId>;
-  readonly contexts: ReadonlyMap<NodeId, DocumentContext>;
-  readonly targeted: ReadonlySet<NodeId>;
+  readonly assembled: boolean;
+  readonly context: DocumentContext;
+  readonly listed: L;
+  /**
+   * Whether a site names the document, so it is an instance under every document that places it
+   * (Q5.13's `Instance`), and the root of an assembly of its own unless an include splices it in
+   * place (`splicingParents`, spec reading 117).
+   */
+  readonly targeted: boolean;
 }
 
 /**
@@ -122,6 +128,16 @@ interface Read {
 }
 
 /**
+ * One listed document at one step of the fixpoint: the listing as given, its reading, and its
+ * present context.
+ */
+interface Judging<L extends Listed> {
+  readonly context: DocumentContext;
+  readonly listed: L;
+  readonly read: Read;
+}
+
+/**
  * Read one listed document's sites: each section ref and each include the information model reads,
  * an include written as a site even with no href, as Q5.13's builder writes it, and each resolved
  * as its `ReferencePath` is (`hrefResolverOf`: against the `xml:base` in scope or the document's
@@ -129,10 +145,20 @@ interface Read {
  *
  * @param document - The document.
  * @returns Its reading.
+ * @throws {Error} When a node's parent is no node of the document's rows, which `flatten` rules
+ *   out: it writes every node's parent, the document node as its own.
  */
 const readOf = ({ idOf, path, tree }: Listed): Read => {
   const rows = flatten(tree, idOf);
   const kindOf = new Map(rows.nodes.map((node) => [node.id, node.kind] as const));
+  const parentKindOf = (node: NodeRow<Composed>): Kind =>
+    Option.getOrThrowWith(
+      Option.fromUndefinedOr(kindOf.get(node.parent)),
+      () =>
+        new Error(
+          `Node ${node.id}'s parent ${node.parent} is no node of its document's rows, but flatten writes every node's parent, the document node as its own. Read each document's sites in the rows flatten wrote for it.`,
+        ),
+    );
   const hrefs = new Map(
     rows.attributes
       .filter(({ name }) => name === "href")
@@ -141,7 +167,7 @@ const readOf = ({ idOf, path, tree }: Listed): Read => {
   const resolve = hrefResolverOf(rows, path);
   const written = rows.nodes.filter(
     (node) =>
-      isSiteKind(node.kind, kindOf.get(node.parent) ?? "") &&
+      isSiteKind(node.kind, parentKindOf(node)) &&
       (hrefs.has(node.id) || node.kind === "xi:include"),
   );
 
@@ -150,151 +176,138 @@ const readOf = ({ idOf, path, tree }: Listed): Read => {
     holdsSites: written.length > 0,
     nodes: rows.nodes,
     self: rows.document.node,
-    sites: written.flatMap((node): readonly SiteOf[] => {
-      const href = hrefs.get(node.id);
-      const resolved = href === undefined ? undefined : entryPathOf(resolve(node.id, href));
-
-      return resolved === undefined ? [] : [{ node: node.id, path: resolved }];
-    }),
+    sites: written.flatMap((node): readonly SiteOf[] =>
+      Option.fromUndefinedOr(hrefs.get(node.id)).pipe(
+        Option.flatMap((href) => entryPathOf(resolve(node.id, href))),
+        Option.map((resolved) => ({ node: node.id, path: resolved })),
+        Option.toArray,
+      ),
+    ),
   };
+};
+
+/**
+ * One site that names a listed document: the document, and the site's fold under its including
+ * document's present context.
+ */
+interface Reach {
+  readonly folded: Folded;
+  readonly target: NodeId;
+}
+
+/**
+ * Judge a document under the sites that name it, in listing order: its ancestry the union of
+ * theirs, and its nearest interaction the first one a site stands in, else its own document node.
+ * A document no site names is judged as it stands, its own context.
+ *
+ * @param self - The document node's id.
+ * @param reaches - The sites that name it, in listing order.
+ * @returns Its context.
+ */
+const contextUnder = (self: NodeId, reaches: readonly Reach[]): DocumentContext => {
+  const ancestry = new Set(reaches.flatMap(({ folded }) => [...folded.ancestry]));
+
+  return Option.match(
+    Arr.findFirst(reaches, ({ folded }) => folded.nearestKind !== "document"),
+    {
+      onNone: () => ({ ...ownContext(self), ancestry }),
+      onSome: ({ folded: { nearest, nearestKind } }) => ({ ancestry, nearest, nearestKind }),
+    },
+  );
 };
 
 /**
  * Take one step of the fixpoint: each document's context under every site's, read through its
  * including document's present context.
  *
- * @param read - The documents.
+ * @param judging - The documents, each with its present context.
  * @param byPath - The document node at each path.
- * @param contexts - The present contexts.
- * @returns The next contexts.
+ * @returns The documents, in the same order, each with its next context.
  */
-const stepOf = (
-  read: readonly Read[],
+const stepOf = <L extends Listed>(
+  judging: readonly Judging<L>[],
   byPath: ReadonlyMap<string, NodeId>,
-  contexts: ReadonlyMap<NodeId, DocumentContext>,
-): ReadonlyMap<NodeId, DocumentContext> => {
-  const unions = new Map<NodeId, Set<FlagHandle>>();
-  const nearests = new Map<NodeId, { readonly kind: Kind; readonly node: NodeId }>();
-  for (const { nodes, self, sites } of read) {
-    const folds = foldOf(nodes, contexts.get(self) ?? ownContext(self));
-    for (const site of sites) {
-      const target = byPath.get(site.path);
-      if (target !== undefined) {
-        const folded = foldAt(folds, site.node);
-        const union = unions.get(target) ?? new Set<FlagHandle>();
-        for (const flag of folded.ancestry) {
-          union.add(flag);
-        }
+): readonly Judging<L>[] => {
+  const reached = Map.groupBy(
+    judging.flatMap(({ context, read: { nodes, sites } }): readonly Reach[] => {
+      const folds = foldOf(nodes, context);
 
-        unions.set(target, union);
-
-        if (folded.nearestKind !== "document" && !nearests.has(target)) {
-          nearests.set(target, { kind: folded.nearestKind, node: folded.nearest });
-        }
-      }
-    }
-  }
-
-  return new Map(
-    read.map(({ self }) => {
-      const near = nearests.get(self);
-
-      return [
-        self,
-        {
-          ancestry: unions.get(self) ?? new Set<FlagHandle>(),
-          nearest: near?.node ?? self,
-          nearestKind: near?.kind ?? "document",
-        },
-      ] as const;
+      return sites.flatMap(({ node, path }) =>
+        Option.toArray(
+          Option.map(Option.fromUndefinedOr(byPath.get(path)), (target) => ({
+            folded: foldAt(folds, node),
+            target,
+          })),
+        ),
+      );
     }),
+    ({ target }) => target,
   );
+
+  return judging.map(({ listed, read }) => ({
+    context: contextUnder(read.self, reached.get(read.self) ?? []),
+    listed,
+    read,
+  }));
 };
 
 /**
- * Decide whether two steps of the fixpoint agree on every document's context.
+ * Decide whether two contexts of one document, at two steps of the fixpoint, agree.
  *
  * An ancestry only grows from one step to the next: the walk starts from none, and each step's is
  * the union of its sites' folds, each the including document's present ancestry with the flags
  * its path enters (`foldOf`). So the later ancestry is the earlier one exactly where it holds no
  * flag the earlier lacks.
  *
- * @param held - The earlier contexts.
- * @param next - The later contexts.
+ * @param was - The earlier context.
+ * @param next - The later context.
  * @returns Whether they agree.
  */
-const settledOn = (
-  held: ReadonlyMap<NodeId, DocumentContext>,
-  next: ReadonlyMap<NodeId, DocumentContext>,
-): boolean =>
-  [...next].every(([self, context]) => {
-    const was = held.get(self);
-
-    return (
-      was !== undefined &&
-      was.nearest === context.nearest &&
-      was.nearestKind === context.nearestKind &&
-      [...context.ancestry].every((flag) => was.ancestry.has(flag))
-    );
-  });
+const settledOn = (was: DocumentContext, next: DocumentContext): boolean =>
+  was.nearest === next.nearest &&
+  was.nearestKind === next.nearestKind &&
+  [...next.ancestry].every((flag) => was.ancestry.has(flag));
 
 /**
- * Compute every listed document's context.
+ * Judge every listed document: its context, and whether it is in an assembly and a site names it.
  *
  * @param documents - The package's documents, each with the ids its rows are written under, and
  *   whether a site may name it.
- * @returns Each document's context, by its document node's id, and the documents sites name.
+ * @returns Each document as judged, in the order given.
  */
-export const contextsOf = (documents: readonly Listed[]): Contexts => {
-  const read = documents.map(readOf);
+export const contextsOf = <L extends Listed>(documents: readonly L[]): readonly Judged<L>[] => {
+  let judging: readonly Judging<L>[] = documents.map((listed) => {
+    const read = readOf(listed);
+
+    return { context: ownContext(read.self), listed, read };
+  });
   const byPath = new Map<string, NodeId>();
-  for (const [at, { named, path }] of documents.entries()) {
-    const self = read[at]?.self;
-    if (named && self !== undefined && !byPath.has(path)) {
-      byPath.set(path, self);
+  for (const { listed, read } of judging) {
+    if (listed.named && !byPath.has(listed.path)) {
+      byPath.set(listed.path, read.self);
     }
   }
 
   const targeted = new Set(
-    read.flatMap(({ sites }) =>
-      sites.flatMap(({ path }) => Option.toArray(Option.fromNullishOr(byPath.get(path)))),
+    judging.flatMap(({ read: { sites } }) =>
+      sites.flatMap(({ path }) => Option.toArray(Option.fromUndefinedOr(byPath.get(path)))),
     ),
   );
-  let contexts: ReadonlyMap<NodeId, DocumentContext> = new Map(
-    read.map(({ self }) => [self, ownContext(self)] as const),
-  );
-  for (let round = 0; round <= read.length; round += 1) {
-    const next = stepOf(read, byPath, contexts);
-    const settled = settledOn(contexts, next);
-    contexts = next;
+  for (let round = 0; round <= documents.length; round += 1) {
+    const next = stepOf(judging, byPath);
+    const settled = Arr.zip(judging, next).every(([was, now]) =>
+      settledOn(was.context, now.context),
+    );
+    judging = next;
     if (settled) {
       break;
     }
   }
 
-  return {
-    assembled: new Set(
-      read
-        .filter(
-          ({ assembledRoot, holdsSites, self }) =>
-            assembledRoot || holdsSites || targeted.has(self),
-        )
-        .map(({ self }) => self),
-    ),
-    contexts,
-    targeted,
-  };
+  return judging.map(({ context, listed, read: { assembledRoot, holdsSites, self } }) => ({
+    assembled: assembledRoot || holdsSites || targeted.has(self),
+    context,
+    listed,
+    targeted: targeted.has(self),
+  }));
 };
-
-/**
- * Read a context by its document node, the document's own where none is held.
- *
- * @param contexts - The contexts.
- * @param self - The document node's id.
- * @returns Its context.
- */
-export const contextAt = (
-  contexts: ReadonlyMap<NodeId, DocumentContext>,
-  self: NodeId,
-): DocumentContext =>
-  Option.getOrElse(Option.fromNullishOr(contexts.get(self)), () => ownContext(self));

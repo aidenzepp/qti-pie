@@ -666,10 +666,10 @@ export const hrefResolverOf = (rows: FlatRows<Composed>, path: string): HrefReso
  * The entry path a resolution names, none for one outside the package.
  *
  * @param resolution - The resolution.
- * @returns Its path where its scope is `entry`.
+ * @returns Its path where its scope is `entry`, and none for every other scope.
  */
-export const entryPathOf = (resolution: HrefResolution): string | undefined =>
-  resolution.scope === "entry" ? resolution.path : undefined;
+export const entryPathOf = (resolution: HrefResolution): Option.Option<string> =>
+  resolution.scope === "entry" ? Option.some(resolution.path) : Option.none();
 
 /**
  * The path an href is compared by, `ResourceHref`'s and `File`'s `path`, and an item ref's or a

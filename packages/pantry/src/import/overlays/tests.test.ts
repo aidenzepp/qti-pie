@@ -138,16 +138,15 @@ const idsOfPackage = (
   documents: readonly (readonly [string, XdmDocument<Composed>])[],
 ): readonly (readonly [XdmDocument<Composed>, TestIds])[] => {
   const listed = documents.map(([path, tree], n) => ({ idOf: idsOf(n), named: true, path, tree }));
-  const { assembled } = contextsOf(listed);
   const roots = new Map(
     listed.map(({ idOf: ids, path, tree }) => [path, { node: ids(0), tree }] as const),
   );
   const rootAt = (at: string) => Option.fromNullishOr(roots.get(at));
 
-  return listed.map(({ idOf: ids, path, tree }) => [
+  return contextsOf(listed).map(({ assembled, listed: { idOf: ids, path, tree } }) => [
     tree,
     {
-      assembled: assembled.has(ids(0)),
+      assembled,
       context: ownContext(ids(0)),
       documentAt: (at) => Option.map(rootAt(at), ({ node }) => node),
       documentType: listedTypeOf(tree),
