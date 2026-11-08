@@ -1552,40 +1552,29 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] refuses ITEM1.duration as untimed-duration when ITEM1's item is not time dependent, pantry's item-duration, and accepts a time-dependent item's",
+      "[T-9] align-54 untimed duration D7: accepts ITEM1.duration whether ITEM1's item is time dependent or not (reading 150, \"an item's built-in `duration` may be read whether or not the item is time dependent\")",
       () =>
         Effect.gen(function* untimed() {
-          const durationOf = (timeDependent: string) =>
-            openPackage(
-              location,
-              readingPackage(
-                readingTestXml(
-                  '<qti-variable identifier="ITEM1.duration"/>',
-                  "",
-                  itemRefXml("ITEM1", "items/a.xml"),
-                ),
-                {
-                  "items/a.xml": itemXml("a", "SCORE").replace(
-                    'time-dependent="false"',
-                    `time-dependent="${timeDependent}"`,
+          for (const timeDependent of ["false", "true"]) {
+            acceptedOf(
+              yield* openPackage(
+                location,
+                readingPackage(
+                  readingTestXml(
+                    '<qti-variable identifier="ITEM1.duration"/>',
+                    "",
+                    itemRefXml("ITEM1", "items/a.xml"),
                   ),
-                },
+                  {
+                    "items/a.xml": itemXml("a", "SCORE").replace(
+                      'time-dependent="false"',
+                      `time-dependent="${timeDependent}"`,
+                    ),
+                  },
+                ),
               ),
             );
-
-          assert.deepStrictEqual(refusalsOf(yield* durationOf("false")), [
-            {
-              detail: {
-                check: "untimed-duration",
-                element: "qti-variable",
-                identifier: "ITEM1.duration",
-              },
-              document: fileLocation(location, "test.xml"),
-              location: { kind: "path", path: `${expressionAt("qti-variable")}/@identifier` },
-              rule: "undeclared-variable",
-            },
-          ]);
-          acceptedOf(yield* durationOf("true"));
+          }
         }),
     );
 
@@ -2109,7 +2098,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      '[T-9] built-in maps nothing: a dotted map-response of an untimed item\'s ITEM1.duration is refused twice as undeclared-variable, the untimed duration and then the response it does not read (info.txt:9306; reading 111 ("a processing element\'s `identifier` names a variable of the kind the element reads or sets"), with G-R3 194, pending, for the mapping ("a prefixed map-response or map-response-point of a response with no mapping is refused"))',
+      '[T-9] align-54 untimed duration D7: built-in maps nothing: a dotted map-response of an untimed item\'s ITEM1.duration is refused once as undeclared-variable, the response it does not read, as a timed item\'s is (reading 150 ("an item\'s built-in `duration` may be read whether or not the item is time dependent"); info.txt:9306; reading 111 ("a processing element\'s `identifier` names a variable of the kind the element reads or sets"), with G-R3 194, pending, for the mapping ("a prefixed map-response or map-response-point of a response with no mapping is refused"))',
       () =>
         Effect.gen(function* untimedBuiltInMapsNothing() {
           const verdict = yield* openSettingThroughPoints(
@@ -2123,14 +2112,6 @@ describe("package/open.ts", () => {
           } as const;
 
           assert.deepStrictEqual(refusalsOf(verdict), [
-            {
-              ...at,
-              detail: {
-                check: "untimed-duration",
-                element: "qti-map-response",
-                identifier: "ITEM1.duration",
-              },
-            },
             {
               ...at,
               detail: {
@@ -2350,7 +2331,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] controls for a dotted rule target: ITEM1.SCORE, which resolves, is accepted, ITEM1.duration of an item that is not time dependent gets no untimed-duration, and the qti-variable forms of ITEM9.SCORE and ITEM1.X.SCORE are refused as before (reading 48)",
+      "[T-9] align-54 untimed duration D7: controls for a dotted rule target: ITEM1.SCORE, which resolves, is accepted, ITEM1.duration of an item that is not time dependent is accepted, and the qti-variable forms of ITEM9.SCORE and ITEM1.X.SCORE are refused as before (reading 48)",
       () =>
         Effect.gen(function* dottedTargetControls() {
           acceptedOf(

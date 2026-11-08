@@ -12,8 +12,8 @@ import type { EngineFailure } from "#plate/engine/failures.ts";
 import { runOutcomes, testScopeOf } from "#plate/engine/outcome.ts";
 import { drawBelow, drawStream, outcomeLabel } from "#plate/engine/random.ts";
 import type { Draw } from "#plate/engine/random.ts";
-import { itemVariable, prefixedVariable } from "#plate/engine/scope.ts";
-import type { DeclaredType, Reading, ScopeItem, TestScope } from "#plate/engine/scope.ts";
+import { itemName, itemVariable, prefixedVariable } from "#plate/engine/scope.ts";
+import type { DeclaredType, ItemName, Reading, ScopeItem, TestScope } from "#plate/engine/scope.ts";
 import type { Expression, Rule } from "#plate/model/expression.ts";
 import { buildItem } from "#plate/model/item.ts";
 import type {
@@ -862,6 +862,54 @@ const testDocument = (others: readonly SourceElement[]): SourceDocument =>
     ),
   );
 
+/**
+ * Construct an item document with an empty body that declares a float outcome `SCORE`, whose
+ * `time-dependent` is written as given.
+ *
+ * @param timeDependent The item's `time-dependent`.
+ * @returns The document.
+ */
+const durationItem = (timeDependent: string): SourceDocument =>
+  doc(
+    "items/ITEM1.xml",
+    el(
+      "qti-assessment-item",
+      [
+        attr("identifier", "ITEM1"),
+        attr("title", "Item one"),
+        attr("time-dependent", timeDependent),
+      ],
+      [
+        el("qti-outcome-declaration", [
+          attr("base-type", "float"),
+          attr("cardinality", "single"),
+          attr("identifier", "SCORE"),
+        ]),
+        el("qti-item-body"),
+      ],
+    ),
+  );
+
+/**
+ * What an item's `duration` names through its item ref: the item-session built-in, a single
+ * float (reading 29), whatever the item's `time-dependent` (reading 150).
+ */
+const durationName: ItemName = {
+  identifier: "duration",
+  kind: "built-in",
+  type: { baseType: "float", cardinality: "single" },
+};
+
+/**
+ * The failure a run gives reading an item's `duration` through its item ref: the record holds no
+ * value of it, since the engine holds no item's duration.
+ */
+const durationGap = new UnknownIdentifierError({
+  holder: "record",
+  identifier: "duration",
+  role: "variable",
+});
+
 describe("testScopeOf over built models", () => {
   it.effect(
     "[T-9] the outcome interpreter's scope of a session reads an item's file and record declarations as NULL of their type, and never splits a test's context name",
@@ -1017,6 +1065,48 @@ describe("testScopeOf over built models", () => {
           kind: "record",
           value: { cardinality: "record", fields: [] },
         });
+      }),
+  );
+
+  it.effect(
+    "align-54 untimed duration D7: a test's outcome processing reads the duration of an item that is not time dependent through its item ref as the single float a time-dependent item's is, and a run reads the two alike (readings 29 and 150)",
+    () =>
+      Effect.gen(function* durationThroughItemRef() {
+        const test = yield* buildTest(testDocument([]));
+        const scopes = yield* Effect.forEach(["false", "true"], (timeDependent) =>
+          Effect.map(buildItem(durationItem(timeDependent)), (item) =>
+            testScopeOf(
+              test,
+              new Map([["ITEM1", acceptForTest(item)]]),
+              { items: [sessionItem(fresh(item, "sitting.1"), 1, true)] },
+              new Map(),
+              Option.none(),
+            ),
+          ),
+        );
+        const reading = (scope: TestScope) =>
+          runOutcomes(
+            {
+              outcomeProcessing: {
+                kind: "runs",
+                rules: [set("TOTAL", variable("ITEM1.duration"))],
+              },
+              outcomes: test.outcomes,
+            },
+            scope,
+            drawStream("sitting", outcomeLabel("sitting", 1)),
+          );
+
+        assert.deepStrictEqual(
+          scopes.map((scope) => scope.items.map((entry) => itemName(entry, "duration"))),
+          [[Option.some(durationName)], [Option.some(durationName)]],
+        );
+        // The engine holds no item's duration, timed or not, so a run's read is the record's gap
+        // for both, never a refusal of the untimed item's.
+        assert.deepStrictEqual(
+          scopes.map((scope) => failureOf(reading(scope))),
+          [durationGap, durationGap],
+        );
       }),
   );
 });

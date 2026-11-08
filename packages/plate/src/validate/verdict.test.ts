@@ -3829,33 +3829,6 @@ describe("describeRefusal", () => {
     assert.notInclude(sentence, "outcome, to a");
   });
 
-  it("names the built-in duration an item that is not time dependent reads, and the attribute that names it", () => {
-    const read = describeRefusal(
-      refusalOf("undeclared-variable", {
-        check: "untimed-duration",
-        element: "qti-variable",
-        identifier: "duration",
-      }),
-    );
-    const named = describeRefusal(
-      refusalOf("undeclared-variable", {
-        attribute: "min",
-        check: "untimed-duration",
-        element: "qti-any-n",
-        identifier: "duration",
-      }),
-    );
-
-    assert.include(
-      read,
-      "`qti-variable` reads the built-in `duration`, which an item that is not time dependent does not have",
-    );
-    assert.include(read, '`time-dependent="true"`');
-    assert.notInclude(read, "declares no");
-    assert.include(named, "`qti-any-n`'s attribute `min` names the built-in `duration`");
-    assert.notInclude(named, "declares no");
-  });
-
   it("[I-9a] names the built-in a qti-lookup-outcome-value sets, which only a qti-set-outcome-value may set, and cites the information model's line", () => {
     const sentence = describeRefusal(
       refusalOf("undeclared-variable", {

@@ -1541,30 +1541,14 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9a] accepts a qti-variable of the built-in duration in a time-dependent item and of a declared template variable, and refuses the duration in an item that is not (item-duration)", () => {
+    it("[I-9a] align-54 untimed duration D7: accepts a qti-variable of the built-in duration and of a declared template variable, in a time-dependent item and in one that is not (reading 150)", () => {
       const reading = item(
         [outcome("SCORE"), declaration("qti-template-declaration", "T", "single", "float")],
         [],
         [processing(undefined, [setScore(variable("duration")), setScore(variable("T"))])],
       );
 
-      assert.deepStrictEqual(
-        [judged(timed(reading)), judged(reading)],
-        [
-          [],
-          [
-            {
-              detail: {
-                check: "untimed-duration",
-                element: "qti-variable",
-                identifier: "duration",
-              },
-              path: `${rulePath}[1]/qti-variable`,
-              rule: "undeclared-variable",
-            },
-          ],
-        ],
-      );
+      assert.deepStrictEqual([judged(timed(reading)), judged(reading)], [[], []]);
     });
 
     it("accepts a qti-variable of the built-in QTI_CONTEXT and of a declared context variable", () => {
@@ -1661,7 +1645,7 @@ describe("checkRules", () => {
       });
     });
 
-    describe("the built-in duration, which only a time-dependent item has (item-duration)", () => {
+    describe("the built-in duration, which an item has whether it is time dependent or not (reading 150)", () => {
       /**
        * A `qti-any-n` whose `min` names `duration`, a reference attribute of base type integer,
        * over one boolean operand.
@@ -1671,31 +1655,6 @@ describe("checkRules", () => {
         [attr("min", "duration"), attr("max", "1")],
         [baseValue("boolean", "true")],
       );
-
-      /**
-       * The refusal of a `qti-variable` that reads `duration` in an item that is not time
-       * dependent.
-       */
-      const untimedRead = {
-        detail: { check: "untimed-duration", element: "qti-variable", identifier: "duration" },
-        path: `${rulePath}/qti-variable`,
-        rule: "undeclared-variable" as const,
-      };
-
-      /**
-       * The refusal of {@link anyN}'s `min`, which names `duration`, in an item that is not time
-       * dependent.
-       */
-      const untimedNamed = {
-        detail: {
-          attribute: "min",
-          check: "untimed-duration",
-          element: "qti-any-n",
-          identifier: "duration",
-        },
-        path: `${rulePath}/qti-any-n`,
-        rule: "undeclared-variable" as const,
-      };
 
       /**
        * The refusal of {@link anyN}'s `min`, which names a built-in, no template or outcome variable
@@ -1713,17 +1672,17 @@ describe("checkRules", () => {
         rule: "expression-type" as const,
       };
 
-      it("[I-9a] refuses a qti-variable of duration in an item that is not time dependent (item-duration)", () => {
+      it("[I-9a] align-54 untimed duration D7: accepts a qti-variable of duration in an item that is not time dependent", () => {
         assert.deepStrictEqual(
           judged(settingOutcome([outcome("SCORE")], "SCORE", variable("duration"))),
-          [untimedRead],
+          [],
         );
       });
 
-      it("[I-9a] refuses qti-any-n's min naming duration in an item that is not time dependent, and as no template or outcome variable (item-duration, P24)", () => {
+      it("[I-9a] align-54 untimed duration D7: refuses qti-any-n's min naming duration in an item that is not time dependent only as no template or outcome variable (P24)", () => {
         assert.deepStrictEqual(
           judged(settingOutcome([outcome("PASSED", "boolean")], "PASSED", anyN)),
-          [untimedNamed, builtInNamed],
+          [builtInNamed],
         );
       });
 
@@ -1822,30 +1781,14 @@ describe("checkRules", () => {
       assert.deepStrictEqual(settingScore(variable("numAttempts")), [scoreRefused("integer")]);
     });
 
-    it("[I-9a] accepts setting it from duration, a float in a time-dependent item (reading 29), and refuses no type in an item that is not, only the read (item-duration)", () => {
+    it("[I-9a] align-54 untimed duration D7: accepts setting it from duration, a float in an item time dependent or not (readings 29 and 150)", () => {
       const setting = item(
         [outcome("SCORE")],
         [],
         [processing(undefined, [setScore(variable("duration"))])],
       );
 
-      assert.deepStrictEqual(
-        [judged(timed(setting)), judged(setting)],
-        [
-          [],
-          [
-            {
-              detail: {
-                check: "untimed-duration",
-                element: "qti-variable",
-                identifier: "duration",
-              },
-              path: `${rulePath}/qti-variable`,
-              rule: "undeclared-variable",
-            },
-          ],
-        ],
-      );
+      assert.deepStrictEqual([judged(timed(setting)), judged(setting)], [[], []]);
     });
 
     it("accepts setting the float SCORE from a qti-field-value of QTI_CONTEXT, a single of unknown base type", () => {

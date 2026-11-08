@@ -35,7 +35,6 @@ import type {
   ReferenceEntry,
   ResultAttributes,
 } from "#plate/model/expression.ts";
-import { xsBooleanOf } from "#plate/model/attributes.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import {
   isModelled,
@@ -1252,9 +1251,9 @@ const literalValueType = (
  * which has no base type of its own: "any references within an item or an assessment to the
  * QTI_CONTEXT variable [...] must succeed" (`info-compact.txt:8456`).
  *
- * `duration` is typed here in every item, so a read of it types the same whether the item is time
- * dependent or not; an item that is not may not read it at all, which {@link untimedDuration}
- * decides.
+ * `duration` is typed here in every item, and read whether the item is time dependent or not:
+ * reading 150 ("an item's built-in `duration` may be read whether or not the item is time
+ * dependent") finds no normative law that reads `time-dependent`.
  */
 const builtIns: ReadonlyMap<string, ExpressionType> = new Map<string, ExpressionType>([
   ["completionStatus", singleOf("identifier")],
@@ -1320,32 +1319,6 @@ const declaredBy = (
   facts: Readonly<Record<string, string>>,
   declarer: VariableScope["declarer"],
 ): Readonly<Record<string, string>> => (declarer === "item" ? facts : { ...facts, declarer });
-
-/**
- * Report whether a name, which no declaration answers, reads the built-in `duration` of an item
- * that is not time dependent: "The value of duration for items that are not time dependent must
- * not be used in any item or test-level expression" (`info-compact.txt:8472`). The qti package
- * refuses the same as `item-duration` (S-R49, `untimedDuration` in
- * `packages/pantry/src/processing/check.ts`).
- *
- * The root's `time-dependent` is read as `xs:boolean`. One that is absent or outside
- * `xs:boolean` is the structural validator's refusal, so the item is not judged untimed here. A
- * root other than a `qti-assessment-item` has no item `duration` of its own: a test reaches an
- * item's through an item ref, which is not judged here.
- *
- * @param source The document whose root the name is read in.
- * @param identifier The name, which the caller has found no declaration of.
- * @returns Whether the name is `duration` and the root is an item whose `time-dependent` is false.
- */
-const untimedDuration = (source: SourceDocument, identifier: string): boolean =>
-  identifier === "duration" &&
-  isQti(source.root, (local) => local === "qti-assessment-item") &&
-  Option.exists(
-    Option.flatMap(attributeOf(source.root, "time-dependent"), (attribute) =>
-      xsBooleanOf(attribute.value),
-    ),
-    (timeDependent) => !timeDependent,
-  );
 
 /**
  * The kind of a variable template processing may not read: a declared response or outcome
@@ -1629,14 +1602,11 @@ const variableType = (
  * package, which keeps its first refusal, reports it: `read` refuses it before anything else judges
  * the name.
  *
- * One that reads the built-in `duration`, which no declaration of the expected kind answers, in an
- * item that is not time dependent is refused too, with `check: "untimed-duration"`
- * ({@link untimedDuration}, pantry's `item-duration`). A declaration named `duration` is read
- * instead, timed or not, as the qti package's `reference` reads the declaration first; the
- * structural walk refuses such a declaration (pantry's `DeclarationNotReserved`), so a checked item
- * holds none. A rule other than {@link builtInSetters} that targets a built-in no declaration
- * answers, a `qti-lookup-outcome-value` of `completionStatus`, is refused with
- * `check: "built-in-target"` and the information model's line as `source` (pantry's P9).
+ * A read of the built-in `duration` is never refused for the item's `time-dependent`: reading 150
+ * ("an item's built-in `duration` may be read whether or not the item is time dependent"). A rule
+ * other than {@link builtInSetters} that targets a built-in no declaration answers, a
+ * `qti-lookup-outcome-value` of `completionStatus`, is refused with `check: "built-in-target"` and
+ * the information model's line as `source` (pantry's P9).
  *
  * In a test a name its context's typer answers (`typeUnanswered`), a prefixed read, is never
  * refused here, nor is any name in a section on its own ({@link processingRefusals}): the qti
@@ -1652,9 +1622,9 @@ const variableType = (
  * @param source The document.
  * @param visit The element's visit.
  * @param context The document's declarations and the parents the walk has met.
- * @returns The refusal at the element's path when it names no variable of the kind it must, or the
- *   `duration` an item that is not time dependent does not have; none for any other element, for
- *   one outside processing, and for a read template processing may not make.
+ * @returns The refusal at the element's path when it names no variable of the kind it must, or
+ *   when a rule that may not set a built-in targets one; none for any other element, for one
+ *   outside processing, and for a read template processing may not make.
  */
 const undeclaredVariable = (
   source: SourceDocument,
@@ -1687,23 +1657,14 @@ const undeclaredVariable = (
 
   const builtIn =
     !declarationsNamable(expected, context).has(identifier) && context.builtIns.has(identifier);
-  if (builtIn && referencing.has(visit.element.local) && !builtInSetters.has(visit.element.local)) {
-    return [
-      refusal(source, "undeclared-variable", visit.path, {
-        check: "built-in-target",
-        element: visit.element.local,
-        identifier,
-        source: "info.txt:8488",
-      }),
-    ];
-  }
 
-  return builtIn && untimedDuration(source, identifier)
+  return builtIn && referencing.has(visit.element.local) && !builtInSetters.has(visit.element.local)
     ? [
         refusal(source, "undeclared-variable", visit.path, {
-          check: "untimed-duration",
+          check: "built-in-target",
           element: visit.element.local,
           identifier,
+          source: "info.txt:8488",
         }),
       ]
     : [];
@@ -2629,10 +2590,9 @@ const namableBy = (
  * reference whose text is no NCName lies outside both members of the attribute's union, which is
  * the structural validator's refusal, so it is passed over here.
  *
- * A reference to the built-in `duration`, which no declaration answers, in an item that is not time
- * dependent is also `undeclared-variable`, with `check: "untimed-duration"` and the `attribute`
- * ({@link untimedDuration}, pantry's `item-duration`), before its P24: the qti package refuses
- * both, `item-duration` first. In a time-dependent item it is P24 alone.
+ * A reference to the built-in `duration`, which no declaration answers, is P24 alone, whether the
+ * item is time dependent or not: reading 150 ("an item's built-in `duration` may be read whether or
+ * not the item is time dependent").
  *
  * In template processing a reference that names a variable template processing may not read, a
  * declared response or outcome or a built-in other than `QTI_CONTEXT` ({@link forbiddenRead}), is
@@ -2662,8 +2622,7 @@ const namableBy = (
  * @param names The document's built-ins, the typer of a name nothing else answers and the kind of
  *   document that declares the variables, an item's unless given.
  * @returns The refusals at the expression's path, one per value that names no variable, one of
- *   another kind or type, or one template processing may not read, and one more for each that
- *   names the `duration` an item that is not time dependent does not have.
+ *   another kind or type, or one template processing may not read.
  */
 export const referenceRefusals = (
   source: SourceDocument,
@@ -2743,29 +2702,17 @@ export const referenceRefusals = (
         onSome: (type) => agree(type, singleOf(entry.baseType)),
       });
 
-      return [
-        ...(declaration === undefined && untimedDuration(source, identifier)
-          ? [
-              refusal(source, "undeclared-variable", visit.path, {
-                attribute: entry.attribute,
-                check: "untimed-duration",
-                element: visit.element.local,
-                identifier,
-              }),
-            ]
-          : []),
-        ...(fits
-          ? []
-          : [
-              refusal(source, "expression-type", visit.path, {
-                attribute: entry.attribute,
-                check: "reference",
-                element: visit.element.local,
-                expectedBaseType: entry.baseType,
-                identifier,
-              }),
-            ]),
-      ];
+      return fits
+        ? []
+        : [
+            refusal(source, "expression-type", visit.path, {
+              attribute: entry.attribute,
+              check: "reference",
+              element: visit.element.local,
+              expectedBaseType: entry.baseType,
+              identifier,
+            }),
+          ];
     });
   });
 
@@ -3291,19 +3238,18 @@ const setCorrectResponses = (
  * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `undeclared-variable` judges the
  * variable a rule or an expression names, through its kind's declaration facet in the registry, and
  * the variables its reference attributes name, through its kind's reference facet, and refuses a
- * read of the built-in `duration` in an item whose `time-dependent` is false, a rule other than
- * `qti-set-outcome-value` that sets a built-in, a template rule that sets a variable of a kind it
- * may not set, and a name a `qti-printed-variable` or a `template-identifier` gives that the item
- * declares no variable of. `expression-type` judges what a `qti-set-outcome-value`,
- * `qti-set-template-value`, `qti-set-correct-response` or `qti-set-default-value` sets, a branch's
- * or a template constraint's condition, a lookup's operand, every expression's operands by its
- * kind's rule, the variables its reference attributes name, a read template processing may not
- * make, and the kind and type of the variables a `qti-printed-variable` or a `template-identifier`
- * names. Each expression is typed through its kind's rule in the registry (`kindRules` in
- * `#plate/model/expressions/read.ts`). The variable, type and reference rules judge inline response
- * processing and template processing alike, as the qti package does. A field of a record
- * declaration's value that lacks its `field-identifier` or its `base-type` is `missing-attribute`
- * ({@link recordFieldAttributes}).
+ * rule other than `qti-set-outcome-value` that sets a built-in, a template rule that sets a
+ * variable of a kind it may not set, and a name a `qti-printed-variable` or a `template-identifier`
+ * gives that the item declares no variable of. `expression-type` judges what a
+ * `qti-set-outcome-value`, `qti-set-template-value`, `qti-set-correct-response` or
+ * `qti-set-default-value` sets, a branch's or a template constraint's condition, a lookup's
+ * operand, every expression's operands by its kind's rule, the variables its reference attributes
+ * name, a read template processing may not make, and the kind and type of the variables a
+ * `qti-printed-variable` or a `template-identifier` names. Each expression is typed through its
+ * kind's rule in the registry (`kindRules` in `#plate/model/expressions/read.ts`). The variable,
+ * type and reference rules judge inline response processing and template processing alike, as the
+ * qti package does. A field of a record declaration's value that lacks its `field-identifier` or
+ * its `base-type` is `missing-attribute` ({@link recordFieldAttributes}).
  *
  * The rules judge exactly what the structural walk checks, and only an item they can read whole:
  *
