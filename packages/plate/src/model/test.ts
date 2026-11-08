@@ -15,6 +15,7 @@
 import { Array as Arr, Effect, Option, pipe } from "effect";
 import { attributePath, walk, xincludeNamespace } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
+import { occurrenceOf } from "#plate/engine/scope.ts";
 import {
   attributeOf,
   childrenNamed,
@@ -745,11 +746,6 @@ const processingBuiltIns: readonly string[] = [
 ];
 
 /**
- * The last step of a dotted name that reads a part's, a section's or an item reference's duration.
- */
-const durationStep = ".duration";
-
-/**
  * What a test's processing, its outcome processing and its template defaults, resolves a name
  * against.
  */
@@ -768,21 +764,37 @@ interface ProcessingNames {
    */
   readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
   /**
-   * The identifiers of the test's parts, sections and item references.
+   * Whether the test holds a `qti-assessment-section-ref` under one of its parts or sections. A
+   * section document it references holds parts of the test the engine does not deliver.
+   */
+  readonly referencesSection: boolean;
+  /**
+   * The identifiers of the test's own parts, sections and item references, none of a section
+   * document it references.
    */
   readonly structure: ReadonlySet<string>;
 }
 
 /**
+ * A test's own structure, as {@link structureOf} reads it.
+ */
+interface Structure {
+  readonly identifiers: ReadonlySet<string>;
+  readonly referencesSection: boolean;
+}
+
+/**
  * Give the identifiers of a test's parts, sections and item references, nested sections included,
  * read from the elements the tree holds as {@link testPart} and {@link section} walk them, so the
- * names are known before the item references, whose template defaults read them, are built.
+ * names are known before the item references, whose template defaults read them, are built; and
+ * whether the walk meets a `qti-assessment-section-ref`, which the tree leaves out.
  *
  * @param root The test's root.
- * @returns Their identifiers.
+ * @returns Their identifiers, and whether the test references a section document.
  */
-const structureOf = (root: SourceElement): ReadonlySet<string> => {
+const structureOf = (root: SourceElement): Structure => {
   const identifiers = new Set<string>();
+  let referencesSection = false;
   const add = (element: SourceElement): void => {
     for (const identifier of Option.toArray(
       Option.map(valueOf(element, "identifier"), identifierOf),
@@ -790,24 +802,27 @@ const structureOf = (root: SourceElement): ReadonlySet<string> => {
       identifiers.add(identifier);
     }
   };
-  const addChild = (element: SourceElement): void => {
-    add(element);
-    if (isQti(element, "qti-assessment-section")) {
-      for (const child of elementsOf(element)) {
-        if (isQti(child, "qti-assessment-section") || isQti(child, "qti-assessment-item-ref")) {
-          addChild(child);
-        }
+  const addChildren = (element: SourceElement): void => {
+    for (const child of elementsOf(element)) {
+      if (isQti(child, "qti-assessment-section-ref")) {
+        referencesSection = true;
+      } else if (isQti(child, "qti-assessment-section")) {
+        add(child);
+        addChildren(child);
+      } else if (
+        isQti(child, "qti-assessment-item-ref") &&
+        isQti(element, "qti-assessment-section")
+      ) {
+        add(child);
       }
     }
   };
   for (const read of childrenNamed(root, "qti-test-part")) {
     add(read);
-    for (const child of childrenNamed(read, "qti-assessment-section")) {
-      addChild(child);
-    }
+    addChildren(read);
   }
 
-  return identifiers;
+  return { identifiers, referencesSection };
 };
 
 /**
@@ -830,21 +845,69 @@ const processingNamesOf = (
     ),
   );
 
+  const { identifiers, referencesSection } = structureOf(root);
+
   return {
     declared,
     named: new Set([...declared, ...processingBuiltIns]),
     outcomes,
-    structure: structureOf(root),
+    referencesSection,
+    structure: identifiers,
   };
+};
+
+/**
+ * Report whether a reading of a dotted name, split at one of its dots, reads a part's, a section's
+ * or an item reference's `duration`: its prefix is an identifier of the test's own structure and
+ * its rest names `duration`, directly or in the occurrence form `N.duration` (reading 4), as the
+ * test scope splits a rest ({@link occurrenceOf}).
+ *
+ * @param names What the processing resolves a name against.
+ * @param prefix The part before the dot.
+ * @param rest The part after it.
+ * @returns Whether it reads a `duration` of the test's structure.
+ */
+const readsStructureDuration = (names: ProcessingNames, prefix: string, rest: string): boolean =>
+  names.structure.has(prefix) && occurrenceOf(rest).variable === "duration";
+
+/**
+ * Report whether the engine holds what a dotted name the test does not declare whole reads, judged
+ * on each of its readings, one for each dot it may split at, from the first.
+ *
+ * It is not held when a reading reads a `duration` of the test's structure
+ * ({@link readsStructureDuration}; G-R3, pending: the engine holds no part's, section's or item
+ * reference's `duration`, the occurrence form included). In a test that references a section
+ * document, it is not held when no reading's prefix is an identifier of the test's own structure:
+ * it can resolve only through the section document, whose items the engine does not deliver.
+ * Otherwise it is held, the test scope's to resolve.
+ *
+ * @param names What the processing resolves a name against.
+ * @param name The dotted name.
+ * @returns Whether the engine holds it.
+ */
+const isPrefixedHeld = (names: ProcessingNames, name: string): boolean => {
+  let ownPrefix = false;
+  for (let dot = name.indexOf("."); dot !== -1; dot = name.indexOf(".", dot + 1)) {
+    const prefix = name.slice(0, dot);
+    if (readsStructureDuration(names, prefix, name.slice(dot + 1))) {
+      return false;
+    }
+
+    ownPrefix ||= names.structure.has(prefix);
+  }
+
+  return ownPrefix || !names.referencesSection;
 };
 
 /**
  * Report whether the engine holds a variable a test's processing reads by a name. A name
  * the test declares whole is held when the model holds it as an outcome, so a context variable and
  * an outcome the model does not hold are not. A dotted name the test does not declare whole is a
- * prefixed read, which the test scope resolves, held unless it is a part's, a section's or an item
- * reference's `duration` (G-R3, pending). Any other name is held only when it is the test's own
- * `duration`: `numAttempts`, `completionStatus` and `QTI_CONTEXT` are not.
+ * prefixed read, which the test scope resolves, held as {@link isPrefixedHeld} judges it: not when
+ * it reads a part's, a section's or an item reference's `duration`, directly or in the occurrence
+ * form, nor, in a test that references a section document, when it names none of the test's own
+ * structure. Any other name is held only when it is the test's own `duration`: `numAttempts`,
+ * `completionStatus` and `QTI_CONTEXT` are not.
  *
  * @param names What the processing resolves a name against.
  * @param name The name.
@@ -856,9 +919,7 @@ const isHeld = (names: ProcessingNames, name: string): boolean => {
   }
 
   if (name.includes(".")) {
-    return !(
-      name.endsWith(durationStep) && names.structure.has(name.slice(0, -durationStep.length))
-    );
+    return isPrefixedHeld(names, name);
   }
 
   return name === "duration";
