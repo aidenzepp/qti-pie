@@ -27,10 +27,12 @@
  *   `usage3-typed`, `usage3-padded` and `usage3-float-padded` is accepted by its row's laws, its
  *   generated `date` the day it names; `usage3-feb-30`'s and `usage3-bad-month`'s are refused by
  *   `day`'s domain, `lexicalForm(date)` (23514).
- * - **Usage typed value** (reading 105): each usage value that writes a `baseType` in `usage3-typed`
- *   and `usage3-float-padded` is accepted by its row's laws; `usage3-integer-float`'s float under
- *   `integer` is refused by the `usage_typed_value` CHECK (23514), and a code its lexical form does
- *   not spell by `e_1_derived`.
+ * - **Usage typed value** (reading 105): a usage value is typed only in a record, so each fixture's
+ *   values are put into a record first (`fieldIdentifier="F"`); outside one a value writes no row.
+ *   Each usage value that writes a `baseType` in `usage3-typed` and `usage3-float-padded` is
+ *   accepted by its row's laws; `usage3-integer-float`'s float under `integer` is refused by the
+ *   `usage_typed_value` CHECK (23514), and a code its lexical form does not spell by
+ *   `e_1_derived`.
  *
  * Whole-package cases, every law at once through the importer, arrive with Q5.15: `metaData`
  * refused `lom-identifier` and `lom-title`, `simple` accepted, `identifier-mismatch` refused
@@ -186,6 +188,26 @@ const builtOf = Effect.fn("test.metadata.db.builtOf")(function* builtOf(
     values,
   };
 });
+
+/**
+ * Put every usage value that writes a `baseType` into a record, as reading 105 types it: each such
+ * `value` also writes `fieldIdentifier="F"`, in the package's `example.xml`.
+ *
+ * @param files - The package's entries.
+ * @returns The package with each typed value in a record.
+ */
+const inRecords = (files: readonly PackageFile[]): readonly PackageFile[] =>
+  files.map((file) => {
+    if (file.path !== "example.xml") {
+      return file;
+    }
+
+    const text = new TextDecoder().decode(file.bytes);
+    const edited = text.replaceAll(/<value (?=baseType=)/gu, '<value fieldIdentifier="F" ');
+    assert.notStrictEqual(edited, text, "the example holds a value that writes a baseType");
+
+    return { ...file, bytes: new TextEncoder().encode(edited) };
+  });
 
 /**
  * Replace one passage of a package's manifest, failing when the manifest does not hold it.
@@ -411,10 +433,11 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
       // Oracle: PostgreSQL, `UsageValueBaseType`'s own laws: the `Usage_typed_value` check (reading 105),
       // its text matched against `BaseTypePattern`'s pattern of its base type (23514 on
       // `usage_typed_value`), and `E1_derived`, its code the one `BaseTypeLexical` spells.
-      // Bound: the three usage-data fixtures whose values write a `baseType`: `usage3-typed`'s 24
-      // (19 floats and 5 identifiers), `usage3-float-padded`'s padded float, accepted, and
-      // `usage3-integer-float`'s `0.87` under `integer`, refused; one hand row of code `float`
-      // under the lexical form `integer`.
+      // Bound: the three usage-data fixtures whose values write a `baseType`, each value put into a
+      // record (`fieldIdentifier="F"`, `inRecords`) because outside one a value is untyped text and
+      // writes no row (reading 105): `usage3-typed`'s 24 (19 floats and 5 identifiers),
+      // `usage3-float-padded`'s padded float, accepted, and `usage3-integer-float`'s `0.87` under
+      // `integer`, refused; one hand row of code `float` under the lexical form `integer`.
       Effect.gen(function* usageTyped() {
         const client = yield* loginSession;
         for (const [name, count, refused] of [
@@ -422,7 +445,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
           ["usage3-float-padded", 1, false],
           ["usage3-integer-float", 1, true],
         ] as const satisfies readonly (readonly [FixtureName, number, boolean])[]) {
-          const built = yield* builtOf(yield* readPackage(yield* materialize(name)));
+          const built = yield* builtOf(inRecords(yield* readPackage(yield* materialize(name))));
           assert.lengthOf(built.values, count, `${name} writes a baseType on ${String(count)}`);
 
           for (const row of built.values) {
