@@ -23,6 +23,7 @@ import type {
 } from "#plate/document/source.ts";
 import type { BodyElement, BodyNode, InlineChoiceInteraction, Item } from "#plate/model/item.ts";
 import type { Test } from "#plate/model/test.ts";
+import { InvalidValue } from "#plate/model/values.ts";
 import type { Redacted } from "#plate/payload.ts";
 import { redact } from "#plate/render.ts";
 import { open } from "#plate/validate/open.ts";
@@ -2277,6 +2278,24 @@ describe("describeRefusal", () => {
     assert.notInclude(codeSpans(sentence).outside, "![");
   });
 
+  it("[I-9a] gives a duration's value-type the seconds remedy a parse failure gives, and keeps an integer's sentence", () => {
+    const sentence = describeRefusal(
+      refusalOf("value-type", { baseType: "duration", lexical: "PT1M" }),
+    );
+    const { spans } = codeSpans(sentence);
+    const parse = new InvalidValue({ baseType: "duration", lexical: "PT1M" }).message;
+    const remedy = parse.slice(parse.indexOf("; write ") + "; ".length);
+
+    assert.include(spans, "PT1M");
+    assert.include(spans, "90.5");
+    assert.include(spans, "PT1M30.5S");
+    assert.include(sentence.replaceAll("`", ""), `To make it valid: ${remedy}.`);
+    assert.include(
+      describeRefusal(refusalOf("value-type", { baseType: "integer", lexical: "1.5" })),
+      "`1.5` is not a value of base type `integer`. Rule `value-type`. To make it valid: write a value of base type `integer`.",
+    );
+  });
+
   it("cites the reading that refuses a child, and names QTI 3.0's schema only when none does", () => {
     const cited = describeRefusal(
       refusalOf("unknown-element", { element: "b", parent: "data", reading: "60" }),
@@ -2965,6 +2984,26 @@ describe("describeRefusal", () => {
     for (const span of spans) {
       assert.include(written.spans, span);
     }
+  });
+
+  it("[I-9a] gives an item's weighted qti-variable the weight remedy in an item: remove the attribute, never move it into outcome processing", () => {
+    const sentence = describeRefusal(
+      refusalAt(
+        "expression-placement",
+        "item.xml",
+        {
+          kind: "path",
+          path: `${root}/qti-response-processing/qti-set-outcome-value/qti-variable/@weight-identifier`,
+        },
+        { attribute: "weight-identifier", element: "qti-variable", reading: "23" },
+      ),
+    );
+    const { spans } = codeSpans(sentence);
+
+    assert.include(spans, "qti-variable");
+    assert.include(spans, "weight-identifier");
+    assert.notInclude(spans, "qti-outcome-processing");
+    assert.include(sentence, "To make it valid: remove `weight-identifier` from `qti-variable`.");
   });
 
   it("names both readings of an ambiguous reference, each its prefix and its variable", () => {

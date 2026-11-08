@@ -44,7 +44,7 @@ import type {
 import { buildTest } from "#plate/model/test.ts";
 import type { MarkedFeature, Test } from "#plate/model/test.ts";
 import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
-import { trimXmlSpace } from "#plate/model/values.ts";
+import { durationForm, trimXmlSpace } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { checkRules } from "#plate/validate/rules.ts";
@@ -1827,12 +1827,19 @@ const wordings = {
       `give each one its own identifier in place of ${code(identifier)}`,
     );
   },
+  /**
+   * An attribute refused with no `context` is an item's weighted `qti-variable` (P12): weights are
+   * "defined only in the test context (and hence only in outcomes processing)" (info.txt:72139),
+   * so the one change an item can make is to remove the attribute. A test's refusal names its
+   * `context`, and moving the expression into outcome processing is offered there.
+   */
   "expression-placement": (refusal) => {
     const { cite, element } = named(refusal);
     const outcomeProcessing = code("qti-outcome-processing");
-    const where = Option.match(optionalFact(refusal, "context"), {
+    const context = optionalFact(refusal, "context");
+    const where = Option.match(context, {
       onNone: () => "",
-      onSome: (context) => `, and it is in ${code(context)}`,
+      onSome: (container) => `, and it is in ${code(container)}`,
     });
 
     return Option.match(optionalFact(refusal, "attribute"), {
@@ -1843,11 +1850,17 @@ const wordings = {
           `move ${code(element)} into ${outcomeProcessing}, or remove it`,
         ),
       onSome: (attribute) =>
-        sentence(
-          refusal,
-          `${code(element)}'s attribute ${code(attribute)} is allowed only in outcome processing${where}${cite}.`,
-          `remove ${code(attribute)} from ${code(element)}, or move the expression into ${outcomeProcessing}`,
-        ),
+        Option.isNone(context)
+          ? sentence(
+              refusal,
+              `${code(element)}'s attribute ${code(attribute)} is allowed only in a test's outcome processing${cite}.`,
+              `remove ${code(attribute)} from ${code(element)}`,
+            )
+          : sentence(
+              refusal,
+              `${code(element)}'s attribute ${code(attribute)} is allowed only in outcome processing${where}${cite}.`,
+              `remove ${code(attribute)} from ${code(element)}, or move the expression into ${outcomeProcessing}`,
+            ),
     });
   },
   "expression-type": expressionType,
@@ -2102,13 +2115,20 @@ const wordings = {
             ),
     });
   },
+  /**
+   * A duration's remedy names its seconds in the words a parse failure uses ({@link durationForm});
+   * every other base type's names the base type.
+   */
   "value-type": (refusal) => {
-    const baseType = baseTypeText(fact(refusal, "baseType", ""));
+    const written = fact(refusal, "baseType", "");
+    const baseType = baseTypeText(written);
 
     return sentence(
       refusal,
       `${code(fact(refusal, "lexical", ""))} is not a value of base type ${baseType}.`,
-      `write a value of base type ${baseType}`,
+      written === "duration"
+        ? `write ${durationForm(code)}`
+        : `write a value of base type ${baseType}`,
     );
   },
 } satisfies { readonly [R in RefusalRule]: (refusal: Refusal) => string };
