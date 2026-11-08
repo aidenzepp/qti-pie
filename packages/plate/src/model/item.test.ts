@@ -34,14 +34,16 @@ import type {
   Expression,
   InlineChoiceInteraction,
   Item,
+  RecordDeclaration,
   Rule,
   TemplateDeclaration,
   TemplateVisibility,
   TextEntryInteraction,
+  UnheldDeclaration,
   UnsupportedFeature,
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import { score as scoreItem } from "#plate/score.ts";
 import { rptemplatesDirectory } from "#plate/test/caches.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
@@ -389,6 +391,21 @@ const templateSetting = (
  */
 const variableElement = (identifier: string): SourceElement =>
   el("qti-variable", [attr("identifier", identifier)]);
+
+/**
+ * Construct a `qti-value` that writes one field of a record declaration's value.
+ *
+ * @param identifier The `field-identifier`, as written.
+ * @param baseType The field's `base-type`.
+ * @param written The value's text.
+ * @returns The value element.
+ */
+const recordField = (identifier: string, baseType: string, written: string): SourceElement =>
+  el(
+    "qti-value",
+    [attr("base-type", baseType), attr("field-identifier", identifier)],
+    [text(written)],
+  );
 
 /**
  * Construct a `qti-is-null` of one operand.
@@ -2854,44 +2871,214 @@ describe("buildItem", () => {
     }),
   );
 
-  it.effect("[I-1] [I-2] marks each record and each untyped declaration at its path", () =>
-    Effect.gen(function* marksUnmodelledDeclarations() {
-      const built = yield* buildItem(
-        item({
-          body: [],
-          declarations: [
-            el("qti-response-declaration", [
-              attr("cardinality", "record"),
-              attr("identifier", "DETAIL"),
-            ]),
-            el("qti-response-declaration", [
-              attr("cardinality", "single"),
-              attr("identifier", "BARE"),
-            ]),
-            declaration("qti-response-declaration", "RESPONSE", "string", "single"),
-            el("qti-outcome-declaration", [
-              attr("cardinality", "record"),
-              attr("identifier", "CONTEXT"),
-            ]),
-            el("qti-outcome-declaration", [
-              attr("cardinality", "multiple"),
-              attr("identifier", "LIST"),
-            ]),
-          ],
-        }),
-      );
-      const response = `${root}/qti-response-declaration`;
-      const outcome = `${root}/qti-outcome-declaration`;
+  it.effect(
+    "[I-1] [I-2] marks each record outcome and each untyped declaration at its path, and holds a record response declaration with no mark",
+    () =>
+      Effect.gen(function* marksUnmodelledDeclarations() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              el("qti-response-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "DETAIL"),
+              ]),
+              el("qti-response-declaration", [
+                attr("cardinality", "single"),
+                attr("identifier", "BARE"),
+              ]),
+              declaration("qti-response-declaration", "RESPONSE", "string", "single"),
+              el("qti-outcome-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "CONTEXT"),
+              ]),
+              el("qti-outcome-declaration", [
+                attr("cardinality", "multiple"),
+                attr("identifier", "LIST"),
+              ]),
+            ],
+          }),
+        );
+        const response = `${root}/qti-response-declaration`;
+        const outcome = `${root}/qti-outcome-declaration`;
 
-      assert.deepStrictEqual([...built.responses.keys()], ["RESPONSE"]);
-      assert.deepStrictEqual([...built.outcomes.keys()], []);
-      assert.deepStrictEqual(built.unsupported, [
-        { feature: 'cardinality="record"', path: `${response}[1]`, shown: "mark" },
-        { feature: 'base-type=""', path: `${response}[2]`, shown: "mark" },
-        { feature: 'cardinality="record"', path: `${outcome}[1]`, shown: "mark" },
-        { feature: 'base-type=""', path: `${outcome}[2]`, shown: "mark" },
-      ]);
-    }),
+        assert.deepStrictEqual([...built.responses.keys()], ["RESPONSE"]);
+        assert.deepStrictEqual([...(built.records?.keys() ?? [])], ["DETAIL"]);
+        assert.deepStrictEqual([...built.outcomes.keys()], []);
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: 'base-type=""', path: `${response}[2]`, shown: "mark" },
+          { feature: 'cardinality="record"', path: `${outcome}[1]`, shown: "mark" },
+          { feature: 'base-type=""', path: `${outcome}[2]`, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-1] holds a record response declaration bound to a Text Entry in records, its correct and default values read field by field, the first of a repeated identifier kept",
+    () =>
+      Effect.gen(function* holdsRecordResponse() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              el(
+                "qti-response-processing",
+                [],
+                [
+                  el(
+                    "qti-set-outcome-value",
+                    [attr("identifier", "EMPTY")],
+                    [isNullOf(variableElement("ANSWER"))],
+                  ),
+                ],
+              ),
+            ],
+            body: [el("qti-text-entry-interaction", [attr("response-identifier", "ANSWER")])],
+            declarations: [
+              el(
+                "qti-response-declaration",
+                [attr("cardinality", "record"), attr("identifier", "ANSWER")],
+                [
+                  el(
+                    "qti-correct-response",
+                    [],
+                    [
+                      recordField("stringValue", "string", " 12 "),
+                      recordField(" floatValue ", "float", " 12 "),
+                      recordField("integerValue", "integer", "12"),
+                      recordField("integerValue", "integer", "99"),
+                    ],
+                  ),
+                  el(
+                    "qti-default-value",
+                    [],
+                    [
+                      recordField("stringValue", "string", ""),
+                      recordField("stringValue", "string", "later"),
+                      recordField("exponent", "integer", " 3 "),
+                      recordField("stringValue", "string", "last"),
+                    ],
+                  ),
+                ],
+              ),
+              el("qti-response-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "BARE"),
+              ]),
+              declaration("qti-outcome-declaration", "EMPTY", "boolean", "single"),
+            ],
+          }),
+        );
+        const expected: ReadonlyMap<string, RecordDeclaration> = new Map([
+          [
+            "ANSWER",
+            {
+              correct: Option.some<RecordValue>({
+                cardinality: "record",
+                fields: [
+                  { identifier: "stringValue", value: { baseType: "string", value: " 12 " } },
+                  { identifier: "floatValue", value: { baseType: "float", value: 12 } },
+                  { identifier: "integerValue", value: { baseType: "integer", value: 12n } },
+                ],
+              }),
+              defaultValue: Option.some<RecordValue>({
+                cardinality: "record",
+                fields: [
+                  { identifier: "stringValue", value: { baseType: "string", value: "later" } },
+                  { identifier: "exponent", value: { baseType: "integer", value: 3n } },
+                ],
+              }),
+              identifier: "ANSWER",
+            },
+          ],
+          ["BARE", { correct: Option.none(), defaultValue: Option.none(), identifier: "BARE" }],
+        ]);
+
+        assert.deepStrictEqual(built.records, expected);
+        assert.deepStrictEqual([...built.responses.keys()], []);
+        assert.isUndefined(built.unheld);
+        // The Text Entry keeps its notice and the processing that reads ANSWER its mark, since the
+        // engine holds no record yet; the declaration itself carries no mark.
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          {
+            feature: 'cardinality="record"',
+            path: `${body}/qti-text-entry-interaction`,
+            shown: "notice",
+          },
+          { feature: "variable:ANSWER", path: `${root}/qti-response-processing`, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-1] keeps a record response declaration of a file field, or of base type file, unheld and marked, and holds one of modelled fields",
+    () =>
+      Effect.gen(function* keepsFileRecordUnheld() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              el(
+                "qti-response-declaration",
+                [attr("cardinality", "record"), attr("identifier", "UPLOADS")],
+                [
+                  el(
+                    "qti-correct-response",
+                    [],
+                    [
+                      recordField("name", "string", "a.txt"),
+                      recordField("content", "file", "a.txt"),
+                    ],
+                  ),
+                ],
+              ),
+              el("qti-response-declaration", [
+                attr("base-type", "file"),
+                attr("cardinality", "record"),
+                attr("identifier", "FILED"),
+              ]),
+              el(
+                "qti-response-declaration",
+                [attr("cardinality", "record"), attr("identifier", "HELD")],
+                [el("qti-default-value", [], [recordField("name", "string", "a.txt")])],
+              ),
+            ],
+          }),
+        );
+        const response = `${root}/qti-response-declaration`;
+
+        assert.deepStrictEqual(
+          built.unheld,
+          new Map<string, UnheldDeclaration>([
+            [
+              "UPLOADS",
+              {
+                baseType: Option.none(),
+                cardinality: "record",
+                declaresCorrect: true,
+                identifier: "UPLOADS",
+                kind: "response",
+              },
+            ],
+            [
+              "FILED",
+              {
+                baseType: Option.some("file"),
+                cardinality: "record",
+                declaresCorrect: false,
+                identifier: "FILED",
+                kind: "response",
+              },
+            ],
+          ]),
+        );
+        assert.deepStrictEqual([...(built.records?.keys() ?? [])], ["HELD"]);
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: 'cardinality="record"', path: `${response}[1]`, shown: "mark" },
+          { feature: 'base-type="file"', path: `${response}[2]`, shown: "mark" },
+          { feature: 'cardinality="record"', path: `${response}[2]`, shown: "mark" },
+        ]);
+      }),
   );
 
   it.effect(

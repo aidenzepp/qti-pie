@@ -25,6 +25,7 @@ import { attemptsStarted } from "#plate/engine/scope.ts";
 import type { DeclaredType, ScopeItem, TestScope } from "#plate/engine/scope.ts";
 import type {
   Item,
+  RecordDeclaration,
   ResponseDeclaration,
   TemplateDeclaration,
   UnheldDeclaration,
@@ -110,11 +111,12 @@ export const runOutcomes = (
 };
 
 /**
- * An item the host passed for an item ref, as the scope reads it: the item's declarations, and its
- * declarations of a type the value model does not hold. An accepted item passes as it is.
+ * An item the host passed for an item ref, as the scope reads it: the item's declarations, its
+ * record responses, and its declarations of a type the value model does not hold. An accepted item
+ * passes as it is.
  */
 interface DeliveredItem {
-  readonly item: Declarations & Pick<Item, "unheld">;
+  readonly item: Declarations & Pick<Item, "records" | "unheld">;
 }
 
 /**
@@ -182,6 +184,23 @@ const declaredTypeOf = (declaration: UnheldDeclaration): DeclaredType => ({
 });
 
 /**
+ * Give the unheld declaration the scope reads a record response the item model holds as: one of
+ * cardinality `record` that writes no base type, with whether it declares a correct response. The
+ * scope holds no record, so it reads a record response as NULL, as it read one before the item
+ * model held it.
+ *
+ * @param declaration The record response.
+ * @returns It, as an unheld response declaration.
+ */
+const unheldRecord = (declaration: RecordDeclaration): UnheldDeclaration => ({
+  baseType: Option.none(),
+  cardinality: "record",
+  declaresCorrect: Option.isSome(declaration.correct),
+  identifier: declaration.identifier,
+  kind: "response",
+});
+
+/**
  * What the scope reads of an item ref the test does not hold: no category, weight or mapping.
  */
 const unreferenced: Pick<ItemRef, "category" | "mappings" | "weights"> = {
@@ -217,7 +236,13 @@ const entryOf = (
   const { category, mappings, weights } = Option.getOrElse(ref, () => unreferenced);
   const item = Option.match(delivered, { onNone: () => undelivered, onSome: (each) => each.item });
   const { record } = sessionItem;
-  const unheld: ReadonlyMap<string, UnheldDeclaration> = item.unheld ?? new Map();
+  const unheld: ReadonlyMap<string, UnheldDeclaration> = new Map([
+    ...(item.unheld ?? new Map<string, UnheldDeclaration>()),
+    ...Array.from(
+      item.records ?? new Map<string, RecordDeclaration>(),
+      ([identifier, declaration]) => [identifier, unheldRecord(declaration)] as const,
+    ),
+  ]);
 
   return {
     categories: category,
@@ -254,9 +279,10 @@ const entryOf = (
  * items map was built in, since an aggregate's float sum depends on the order of its operands: two
  * hosts that build the map apart get one scope. Each entry holds its item ref's categories, weights
  * and variable mappings, its item's declarations, those of a type the value model does not hold
- * among them (with whether each such response declares a correct response), its record's responses,
- * outcomes, template values, and the correct responses and defaults its template processing set (no
- * seed), whether it was presented, and the attempts it has started under its item ref's limit
+ * among them, its record responses read as such (with whether each such response declares a
+ * correct response), its record's responses, outcomes, template values, and the correct responses
+ * and defaults its template processing set (no seed), whether it was presented, and the attempts it
+ * has started under its item ref's limit
  * (`attemptsStarted`, the count the results report writes). The scope holds every part's and every
  * section's item refs at any depth, and the names the test declares: its outcomes' identifiers and
  * every identifier its outcome and context declarations declare (`Test.declared`).
