@@ -2397,6 +2397,16 @@ inside a wider key over the same field, so each is one key stated twice:
     `plannedReverse` (`plan.ts:269`) indexes the leading run of bounded columns, the node alone. The keys beside a copy and no
     containment into their selection (package.ts `resourceTypes`, `resourceHrefs`, `fileHrefs` and `dependencyRefs`,
     metadata.ts `stringLanguageAttributes`) state again what AL2 holds, and are left to a follow-up.
+- **Follow-up done (sweep seat SWEEP-AL2KEYS, 2026-11-08), at grizzle `0c2154c`:**
+  - The five keys are deleted. Each selection is a copy's source and no containment's target, so grizzle asks no key of
+    it (`#targetKeyed`, `plan.ts:1293`) and no law is restated. Each name is closed (none is one of `openClasses`), so
+    AL2's `AL2_distinct` already holds an element to one attribute of it.
+  - The cost, from `_init` regenerated from zero: Attribute's five UNIQUEs over a law column become five plain B-trees
+    over the same columns, the forward copies' reverse probes. No column or other object changes.
+  - In these two files, each key that stays beside a copy serves a containment into its selection: metadata.ts's
+    `objectIdentifiers`, `objectTitles`, `lastUpdateds` and `usageBaseTypes` are the targets of `ObjectIdentifier`'s,
+    `ObjectTitle`'s, `StatisticDate`'s and `UsageValue`'s ways back, and package.ts's `censusAttributes` of
+    `Reference`'s.
 
 ### LP-4. The Qti import's repeated domain compiles (qti, fixed in `ef7423f0`)
 

@@ -776,9 +776,10 @@ const namingTitles = select(LomTitle, (t) => t.ne(t.named, "none"));
  * (C18). The copy's reverse probe reads an index over the selection's node alone, since grizzle
  * indexes the longest leading run of a containment's source columns whose entry is bounded
  * (`plannedReverse`) and no pattern bounds `Attribute.lexical`. Each selection but the `xml:lang`
- * one sits beside a key over itself, whose UNIQUE is that index; the `xml:lang` one lies inside
- * every `xml:lang`, which `#pantry/qti/identity.ts` keys over `node`, so it states no key of its
- * own.
+ * one is also the target of its overlay's way back, which grizzle admits only under a key over
+ * that selection (`laws/model/plan.ts` `#targetKeyed`), so it sits beside `key(on(selection,
+ * "node"))`, which holds already, since an element holds one attribute of a closed name (AL2). The
+ * `xml:lang` one is no containment's target, so it states no key.
  *
  * @param name - The attribute's name.
  * @param kinds - The elements' kinds.
@@ -805,7 +806,9 @@ const objectTitles = attributesOf("title", objectKinds);
 const objectLangAttributes = attributesOf("xml:lang", objectKinds);
 
 /**
- * The `language` of each `lom:string` of a record's document.
+ * The `language` of each `lom:string` of a record's document: the source of
+ * {@link LomStringLanguage}'s copy and no containment's target, so, like the `xml:lang` selection
+ * of `attributesOf`, it states no key.
  */
 const stringLanguageAttributes = select(Attribute, (a) =>
   a.and(
@@ -886,7 +889,6 @@ const spelledUsageBaseTypes = select(Attribute, (a) =>
 export const metadataLawsByName = {
   "Document entry": [contained(on(objectHrefs, "node", "type"), on(LomResource, "node", "named"))],
   "DocumentId key": [
-    key(on(stringLanguageAttributes, "node")),
     key(on(objectIdentifiers, "node")),
     key(on(objectTitles, "node")),
     key(on(lastUpdateds, "node")),

@@ -499,13 +499,13 @@ export const namedHrefFamily = counted(
  * attribute's lexical form the overlay's field and its existence the overlay row's. Its reverse
  * probe reads an index over the selection's node alone: grizzle indexes the longest leading run of
  * a containment's source columns whose entry is bounded (`plannedReverse`), and no pattern bounds
- * `Attribute.lexical`. The `type`, `href` and `identifierref` selections each sit beside
- * `key(on(selection, "node"))`, which holds already, since an element has one attribute of a name
- * (AL2): the key and the copy read one selection value, so one law column, and the key's UNIQUE is
- * that index. An `identifier` is an `xs:ID`, so its selection lies inside `idAttributes`
- * (`#pantry/qti/identity.ts`), whose key holds every element to one ID-typed attribute: it states
- * no key of its own, and the copy back from its overlay, stated there under "Manifest overlay",
- * meets `idAttributes` at the selection's kind and the manifest's type, `none`.
+ * `Attribute.lexical`. No selection states a key of its own. An element holds one attribute of a
+ * closed name (AL2), and every name here is closed, so a key over `node` would state that again;
+ * grizzle asks a key only of a containment's target (`laws/model/plan.ts` `#targetKeyed`), and the
+ * `type`, `href` and `identifierref` selections are no containment's target. An `identifier` is an
+ * `xs:ID`, so its selection lies inside `idAttributes` (`#pantry/qti/identity.ts`), whose key holds
+ * every element to one ID-typed attribute, and the copy back from its overlay, stated there under
+ * "Manifest overlay", meets `idAttributes` at the selection's kind and the manifest's type, `none`.
  *
  * @param kind - The element's kind.
  * @param name - The attribute's name.
@@ -624,9 +624,10 @@ const listedEntries = select(Entry, (e) => e.ne(e.path, manifestPath));
 /**
  * The attributes of the reference census (`ReferenceAttribute`, spec reading 103): each an
  * attribute by which an element of its kind names a file under its version, of either form. Each is
- * a {@link Reference}'s copy (C18); the key over its `(node, name)`, true since an element holds one
- * attribute of a closed name (AL2), serves the copy's reverse probe, so no index holds the lexical
- * form.
+ * a {@link Reference}'s copy (C18), and every {@link Reference} is one's, a containment into this
+ * selection that grizzle admits only under a key over it (`laws/model/plan.ts` `#targetKeyed`): the
+ * key over its `(node, name)`, which holds already, since an element holds one attribute of a
+ * closed name (AL2).
  */
 const censusAttributes = select(Attribute, (a) =>
   a.in(ReferenceAttribute.at("form", a.version, a.kind, a.name), ["uri", "srcset"]),
@@ -721,13 +722,7 @@ export const packageLawsByName = {
     ),
     key(on(stimulusDocuments, "package", "path")),
   ],
-  "DocumentId key": [
-    key(on(resourceTypes, "node")),
-    key(on(ResourceId, "package", "identifier")),
-    key(on(resourceHrefs, "node")),
-    key(on(fileHrefs, "node")),
-    key(on(dependencyRefs, "node")),
-  ],
+  "DocumentId key": [key(on(ResourceId, "package", "identifier"))],
   "E1 derived": [
     check("E1_derived", ResourceTyped, (r) =>
       r.eq(ResourceTypeLexical.at("lexical", r.type), r.typeLexical),
