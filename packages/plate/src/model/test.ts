@@ -39,6 +39,7 @@ import {
 import type { ModelWalk } from "#plate/model/attributes.ts";
 import type { Branch, Expression, KindRule, Rule } from "#plate/model/expression.ts";
 import { kindRules, readExpression } from "#plate/model/expressions/read.ts";
+import { testRules } from "#plate/model/expressions/test.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
 import { outcomeDeclaration, pathsOf, xmlWhitespaceRun } from "#plate/model/item.ts";
 import type { OutcomeDeclaration, UnsupportedFeature } from "#plate/model/item.ts";
@@ -765,7 +766,10 @@ interface ProcessingNames {
   readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
   /**
    * Whether the test holds a `qti-assessment-section-ref` under one of its parts or sections. A
-   * section document it references holds parts of the test the engine does not deliver.
+   * section document it references holds parts of the test the engine does not deliver, so a dotted
+   * name that resolves only through it is not held ({@link isPrefixedHeld}), and an outcome-only
+   * expression, which would count only the test document's own items, marks the outcome processing
+   * ({@link outcomeOnlyMarks}).
    */
   readonly referencesSection: boolean;
   /**
@@ -878,8 +882,10 @@ const readsStructureDuration = (names: ProcessingNames, prefix: string, rest: st
  * ({@link readsStructureDuration}; G-R3, pending: the engine holds no part's, section's or item
  * reference's `duration`, the occurrence form included). In a test that references a section
  * document, it is not held when no reading's prefix is an identifier of the test's own structure:
- * it can resolve only through the section document, whose items the engine does not deliver.
- * Otherwise it is held, the test scope's to resolve.
+ * it can resolve only through the section document, whose items the engine does not deliver. A
+ * read whose prefix names the test's own structure stays held there; an outcome-only expression in
+ * such a test is marked on its own ({@link outcomeOnlyMarks}). Otherwise it is held, the test
+ * scope's to resolve.
  *
  * @param names What the processing resolves a name against.
  * @param name The dotted name.
@@ -1060,6 +1066,38 @@ const collectsDurations = (element: SourceElement): boolean =>
       (written) => identifierOf(written) === "duration",
     )) ||
   elementsOf(element).some(collectsDurations);
+
+/**
+ * The local names of the eight outcome-only expressions, `qti-<kind>` for each kind of the test
+ * family's rules ({@link testRules}), the list `outcomeOnly` in `#plate/validate/test-rules.ts`
+ * holds: each looks up a sub-set of the items the test refers to (info.txt:9332-9360).
+ */
+const outcomeOnlyKinds: ReadonlySet<string> = new Set(
+  Object.keys(testRules).map((kind) => `qti-${kind}`),
+);
+
+/**
+ * Give the mark of each outcome-only expression under an element, in document order: its local
+ * name, the feature the reader gives an expression the engine does not run, at the expression's
+ * own path, each once.
+ *
+ * It reads the source, not the model, so it finds each expression whatever the reader made of it.
+ * The processing of a test that references a section document takes these marks, by the Mind's
+ * ruling: mark, do not narrow. The engine delivers no section document's item, so such an
+ * expression would count the test document's own items alone, and its result would be a wrong
+ * score reported without saying so. Every one is marked, whatever its `section-identifier` names.
+ *
+ * @param build The build.
+ * @param element The `qti-outcome-processing` element.
+ * @returns The marks.
+ */
+const outcomeOnlyMarks = (build: ModelWalk, element: SourceElement): readonly MarkedFeature[] =>
+  elementsOf(element).flatMap((child): readonly MarkedFeature[] => [
+    ...(isQti(child) && outcomeOnlyKinds.has(child.local)
+      ? [{ feature: child.local, path: pathOf(build, child), shown: "mark" } as const]
+      : []),
+    ...outcomeOnlyMarks(build, child),
+  ]);
 
 /**
  * Give the generic expression reader its context for a test's outcome processing: the walk, the
@@ -1317,16 +1355,21 @@ interface ReadProcessing {
  * Its rules are read into the item model's {@link Rule} union, each expression through the
  * registry's generic reader. It is `marked`, and nothing is refused, when the engine cannot run
  * it: an element the reader marks at its path (an expression kind the registry has not landed, an
- * `xi:include`, a rule of a malformed shape), or a name the engine does not hold in a test
+ * `xi:include`, a rule of a malformed shape), a name the engine does not hold in a test
  * ({@link unheldNames}, and a `qti-test-variables` that names `duration`,
  * {@link collectsDurations}), each the mark `variable:<name>` at the processing element's path, as
- * the item model marks an item's. Otherwise it `runs` with its rules.
+ * the item model marks an item's, or, in a test that references a section document, an
+ * outcome-only expression, each marked by its name at its own path ({@link outcomeOnlyMarks}): the
+ * engine delivers no section document's item, so it would count the test document's own items
+ * alone. Otherwise it `runs` with its rules.
  *
  * @param build The build.
  * @param element The `qti-outcome-processing` element.
  * @param names What the processing resolves a name against.
- * @returns The state and its marks, the processing element's own first; or the refusal an
- *   attribute gives, such as `value-type` for a `qti-base-value` outside its lexical space.
+ * @returns The state and its marks: the processing element's own `variable:` marks first, then
+ *   each outcome-only expression's in document order, then those its reading recorded that are not
+ *   already among them; or the refusal an attribute gives, such as `value-type` for a
+ *   `qti-base-value` outside its lexical space.
  */
 const outcomeProcessingOf = (
   build: ModelWalk,
@@ -1344,7 +1387,14 @@ const outcomeProcessingOf = (
       unheld.add("duration");
     }
 
-    const marks = processingMarks(build, element, unheld, recorded);
+    const besideReference = names.referencesSection ? outcomeOnlyMarks(build, element) : [];
+    const placed = new Set(
+      besideReference.map((mark) => JSON.stringify([mark.feature, mark.path])),
+    );
+    const marks = processingMarks(build, element, unheld, [
+      ...besideReference,
+      ...recorded.filter((mark) => !placed.has(JSON.stringify([mark.feature, mark.path]))),
+    ]);
 
     return {
       marks,
@@ -1429,8 +1479,10 @@ const templateDefaultOf = (
  * absent, and each item reference's weights, variable mappings and template defaults are read, a
  * template default the engine cannot apply marked and left out ({@link templateDefaultOf}). The
  * test's outcome declarations are held and marked as the item model holds and marks an item's. Its
- * outcome processing is `absent` when it has none, `marked` when the engine cannot run it
- * ({@link outcomeProcessingOf}), and `runs` with its rules otherwise; nothing in it or in a
+ * outcome processing is `absent` when it has none, `marked` when the engine cannot run it ({@link
+ * outcomeProcessingOf}), as when it holds an outcome-only expression in a test that references a
+ * section document (the engine delivers no section document's item, so the expression would count
+ * the test document's own items alone), and `runs` with its rules otherwise; nothing in it or in a
  * template default is refused but an attribute outside its type. `declared` holds every identifier
  * the test's outcome and context declarations declare.
  *
