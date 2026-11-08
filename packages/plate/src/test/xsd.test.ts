@@ -89,7 +89,7 @@ describe("test/xsd.ts", () => {
           assert.include(result.binary.version, "libxml");
         }
       }),
-    { tags: ["corpus", "qti-xsd"] },
+    { tags: ["corpus", "results-xsd"] },
   );
 
   it.effect(
@@ -104,7 +104,7 @@ describe("test/xsd.ts", () => {
         assert.isFalse(result.valid);
         assert.isNotEmpty(result.messages);
       }),
-    { tags: ["corpus", "qti-xsd"] },
+    { tags: ["corpus", "results-xsd"] },
   );
 
   it.effect(
@@ -122,7 +122,7 @@ describe("test/xsd.ts", () => {
           result.messages.join("\n"),
         );
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(

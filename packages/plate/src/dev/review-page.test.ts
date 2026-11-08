@@ -722,7 +722,7 @@ describe("routeReview", () => {
         assert.deepStrictEqual(identifiers, [closed.id]);
         assert.isTrue(verdict.valid, verdict.messages.join("\n"));
       }),
-    { tags: ["qti-xsd"], timeout: oracleTimeoutMs },
+    { tags: ["results-xsd"], timeout: oracleTimeoutMs },
   );
 
   it.effect(

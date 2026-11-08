@@ -903,7 +903,7 @@ describe("results", () => {
           [{ identifier: `s-${uuid}`, sourceID: "http://localhost:5190/" }],
         );
       }),
-    { tags: ["corpus", "qti-xsd"] },
+    { tags: ["corpus", "results-xsd"] },
   );
 
   it.effect(
@@ -951,7 +951,7 @@ describe("results", () => {
         assert.deepStrictEqual((yield* written(unattempted))?.values, ["not_attempted"]);
         assert.deepStrictEqual((yield* written(lacking))?.values, ["unknown"]);
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -973,7 +973,7 @@ describe("results", () => {
         yield* assertValid(xml);
         assert.notInclude(xml, "choiceSequence");
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1066,7 +1066,7 @@ describe("results", () => {
           itemOf(report, "one").responses["RESPONSE"]?.attributes["choiceSequence"],
         );
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1113,7 +1113,7 @@ describe("results", () => {
         assert.notStrictEqual(seeded, underProcessingSeed);
         assert.notStrictEqual(unseeded, underProcessingSeed);
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1145,7 +1145,7 @@ describe("results", () => {
           order.join(" "),
         );
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1197,7 +1197,7 @@ describe("results", () => {
           ["outcomeVariable", "SCORE"],
         ]);
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1230,7 +1230,7 @@ describe("results", () => {
           HIDDEN: { attributes: hidingTemplate("HIDDEN"), values: [] },
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1253,7 +1253,7 @@ describe("results", () => {
           HIDDEN: { attributes: hidingTemplate("HIDDEN"), values: ["B"] },
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1329,7 +1329,7 @@ describe("results", () => {
           ["presented", "answered"],
         );
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1371,7 +1371,7 @@ describe("results", () => {
           ],
         );
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1398,7 +1398,7 @@ describe("results", () => {
         const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
         assert.deepStrictEqual(Object.keys(written.outcomes), []);
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1427,7 +1427,7 @@ describe("results", () => {
           values: ["0.5"],
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1518,7 +1518,7 @@ describe("results", () => {
           },
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1551,7 +1551,7 @@ describe("results", () => {
         });
         assert.deepStrictEqual(Object.keys(written.responses), ["duration"]);
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1589,7 +1589,7 @@ describe("results", () => {
           identifier: "MAXSCORE",
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1622,7 +1622,7 @@ describe("results", () => {
           values: ["0.5"],
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(
@@ -1668,7 +1668,7 @@ describe("results", () => {
           },
         });
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect("counts the attempts started, and gives each sessionStatus and completionStatus", () =>
@@ -1900,7 +1900,7 @@ describe("results", () => {
           "C",
         ]);
       }),
-    { tags: ["qti-xsd"] },
+    { tags: ["results-xsd"] },
   );
 
   it.effect(

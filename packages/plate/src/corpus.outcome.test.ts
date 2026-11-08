@@ -517,7 +517,7 @@ describe("outcome processing over the corpus's delivering tests", { tags: ["corp
         assert.isAbove(swept.length, 0, "no corpus test with outcome processing is delivered");
         assert.deepStrictEqual(problems, []);
       }),
-    { tags: ["qti-xsd"], timeout: sweepTimeoutMs },
+    { tags: ["results-xsd"], timeout: sweepTimeoutMs },
   );
 
   it.effect(
