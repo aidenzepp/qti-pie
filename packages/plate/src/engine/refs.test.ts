@@ -500,7 +500,7 @@ describe("a test's run reads a prefixed name through its item ref [T-9]", () => 
     assert.deepStrictEqual(Result.getOrThrow(variableValue(testRun, "ITEM2.SCORE")), floatOf(0.75));
   });
 
-  it("[T-9] variableValue gives ITEM1.numAttempts read through its item ref: the processed attempt count, a single integer", () => {
+  it("[T-9] variableValue gives ITEM1.numAttempts read through its item ref: the count of attempts started, a single integer", () => {
     assert.deepStrictEqual(Result.getOrThrow(variableValue(testRun, "ITEM1.numAttempts")), {
       baseType: "integer",
       cardinality: "single",

@@ -107,6 +107,10 @@ export interface TestScope {
    * default's (G-R3, pending: a template default reads the test's duration as NULL).
    */
   readonly duration: Option.Option<number>;
+  /**
+   * One entry per session item, in sequence order: the order the candidate meets them, which an
+   * aggregate's float sum depends on.
+   */
   readonly items: readonly ScopeItem[];
   /**
    * Each test part's identifier, keyed to the identifiers of the item refs it holds at any depth.
@@ -190,10 +194,17 @@ export type ItemName =
   | { readonly identifier: ItemBuiltIn; readonly kind: "built-in"; readonly type: DeclaredType };
 
 /**
- * A prefixed name's one resolving reading: the item it reads through, and what it reads.
+ * A prefixed name's one resolving reading: the item it reads through, what its rest names in that
+ * item and at which occurrence, and what it reads.
  */
 export interface PrefixedRead {
   readonly item: ScopeItem;
+  readonly named: ItemName;
+  /**
+   * The occurrence the name reads, counted from 1 ({@link occurrenceOf}): 1 for `ITEMREF.VAR` and
+   * `ITEMREF.1.VAR`.
+   */
+  readonly occurrence: bigint;
   readonly reading: Reading;
 }
 
@@ -542,10 +553,11 @@ const resolve = (scope: TestScope, prefix: string, rest: string): Option.Option<
  *
  * @param scope The test scope.
  * @param name The name, as the test's processing writes it.
- * @returns The item the name reads through and its reading; or an {@link UnknownIdentifierError}
- *   with holder `record` when the test declares the name whole, when no reading or more than one
- *   resolves it, when it reads a part's or a section's `duration`, or when the item's record holds
- *   no value of the response or outcome it names.
+ * @returns The item the name reads through, what it names there and at which occurrence, and its
+ *   reading; or an {@link UnknownIdentifierError} with holder `record` when the test declares the
+ *   name whole, when no reading or more than one resolves it, when it reads a part's or a
+ *   section's `duration`, or when the item's record holds no value of the response or outcome it
+ *   names.
  */
 export const prefixedVariable = (
   scope: TestScope,
@@ -572,10 +584,10 @@ export const prefixedVariable = (
 
   const { item, named, occurrence } = only;
   if (occurrence !== 1n) {
-    return Result.succeed({ item, reading: nullReading(named.type) });
+    return Result.succeed({ item, named, occurrence, reading: nullReading(named.type) });
   }
 
-  return Result.map(readingOf(item, named), (reading) => ({ item, reading }));
+  return Result.map(readingOf(item, named), (reading) => ({ item, named, occurrence, reading }));
 };
 
 /**

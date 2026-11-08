@@ -11,7 +11,13 @@ import {
   prefixedVariable,
   weightOf,
 } from "#plate/engine/scope.ts";
-import type { ItemFilters, Reading, ScopeItem, TestScope } from "#plate/engine/scope.ts";
+import type {
+  ItemFilters,
+  PrefixedRead,
+  Reading,
+  ScopeItem,
+  TestScope,
+} from "#plate/engine/scope.ts";
 import type {
   OutcomeDeclaration,
   ResponseDeclaration,
@@ -103,7 +109,7 @@ const template: TemplateDeclaration = {
 
 /**
  * The declarations of the items below: a response `RESPONSE`, two float outcomes `SCORE` and
- * `NOTA`, an integer outcome `numAttempts` that shadows the built-in, and a template variable `T`.
+ * `NOTA`, and a template variable `T`.
  */
 const declarations: Declarations = {
   outcomes: new Map([
@@ -257,6 +263,19 @@ const prefixed = (name: string) => {
   const read = Result.getOrThrow(result);
 
   return { reading: read.reading, ref: read.item.ref };
+};
+
+/**
+ * Give what a prefixed name names in its item and the occurrence it reads, after checking that it
+ * resolved.
+ *
+ * @param name The name.
+ * @returns What it names and the occurrence.
+ */
+const namedAt = (name: string): Pick<PrefixedRead, "named" | "occurrence"> => {
+  const { named, occurrence } = Result.getOrThrow(prefixedVariable(scope, name));
+
+  return { named, occurrence };
 };
 
 /**
@@ -422,6 +441,14 @@ describe("prefixedVariable", () => {
     });
     assert.deepStrictEqual(prefixed("ITEM2.1.NOTA"), prefixed("ITEM2.NOTA"));
     assert.deepStrictEqual(prefixed("ITEM2.SCORE"), prefixed("ITEM2.NOTA"));
+    assert.deepStrictEqual(namedAt("ITEM2.1.SCORE"), {
+      named: {
+        identifier: "NOTA",
+        kind: "outcome",
+        type: { baseType: "float", cardinality: "single" },
+      },
+      occurrence: 1n,
+    });
     assert.deepStrictEqual(prefixed("ITEM3.numAttempts").reading, {
       kind: "held",
       value: integerValue(3n),
@@ -432,6 +459,14 @@ describe("prefixedVariable", () => {
     assert.deepStrictEqual(prefixed("ITEM3.2.SCORE"), {
       reading: { kind: "held", value: { baseType: "float", cardinality: "single", values: [] } },
       ref: "ITEM3",
+    });
+    assert.deepStrictEqual(namedAt("ITEM3.2.SCORE"), {
+      named: {
+        identifier: "SCORE",
+        kind: "outcome",
+        type: { baseType: "float", cardinality: "single" },
+      },
+      occurrence: 2n,
     });
     assert.deepStrictEqual(prefixed("ITEM3.02.UPLOAD").reading, {
       kind: "unheld",

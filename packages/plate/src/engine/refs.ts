@@ -19,7 +19,7 @@ import { Option, Result } from "effect";
 import type { Variables } from "#plate/engine/evaluate.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
 import { integerOf, integerValue, singleValue } from "#plate/engine/numbers.ts";
-import { durationOf, itemName, occurrenceOf, prefixedVariable } from "#plate/engine/scope.ts";
+import { durationOf, prefixedVariable } from "#plate/engine/scope.ts";
 import type { ItemName, Reading, ScopeItem, TestScope } from "#plate/engine/scope.ts";
 import type {
   FloatOrRef,
@@ -168,11 +168,7 @@ export interface PrefixedName {
  * Read a prefixed name of a test's processing through its item ref: the one reading of the name
  * that resolves, by reading 48, as `prefixedVariable` in `#plate/engine/scope.ts` resolves it (a
  * name the test declares whole never split, a mapping target before the item's own declaration),
- * with what it names in the item.
- *
- * The item's identifier is unique among the test's item refs, so the name splits after it alone;
- * what follows names, directly or in the occurrence form `N.VAR` ({@link occurrenceOf}), what
- * `itemName` resolves.
+ * with what it names in the item and whether it reads the item's one occurrence.
  *
  * @param test The test scope.
  * @param name The name, as the test's processing writes it.
@@ -184,19 +180,12 @@ export const prefixedRead = (
   test: TestScope,
   name: string,
 ): Result.Result<PrefixedName, UnknownIdentifierError> =>
-  Result.flatMap(prefixedVariable(test, name), ({ item, reading }) => {
-    const { occurrence, variable } = occurrenceOf(name.slice(item.ref.length + 1));
-
-    return Result.fromOption(
-      Option.map(itemName(item, variable), (named) => ({
-        first: occurrence === 1n,
-        item,
-        named,
-        value: readValue(reading),
-      })),
-      () => new UnknownIdentifierError({ holder: "record", identifier: name, role: "variable" }),
-    );
-  });
+  Result.map(prefixedVariable(test, name), ({ item, named, occurrence, reading }) => ({
+    first: occurrence === 1n,
+    item,
+    named,
+    value: readValue(reading),
+  }));
 
 /**
  * What a `qti-variable` reads: the value, and the item a test's run read it through when the name

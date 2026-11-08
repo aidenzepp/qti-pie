@@ -363,10 +363,7 @@ const evaluateOutcomeMinimum: Evaluator<"outcome-minimum"> = (expression, scope)
     floatsOf(
       keptItems(test, expression).flatMap((item) =>
         Option.toArray(
-          Option.flatMap(
-            declaredBound(item, expression.outcomeIdentifier, "normalMinimum"),
-            (minimum) => minimum,
-          ),
+          Option.flatten(declaredBound(item, expression.outcomeIdentifier, "normalMinimum")),
         ).map((minimum) => weighted(item, expression.weightIdentifier, minimum)),
       ),
     ),
