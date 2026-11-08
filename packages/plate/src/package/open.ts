@@ -1379,14 +1379,18 @@ const judgeTemplateDefaults = (
 };
 
 /**
- * Give a refusal's facts as one string, its rule, location and detail, the detail's facts in key
- * order, so two refusals with the same facts give the same string.
+ * Give a refusal's facts as one string, its document, rule, location and detail, the detail's facts
+ * in key order, so two refusals with the same facts give the same string.
+ *
+ * The document is a fact because a location is a path within a document: two section documents
+ * that two tests reach may hold the same error at the same path, and each is refused.
  *
  * @param refusal The refusal.
  * @returns Its facts.
  */
 const factsOf = (refusal: Refusal): string =>
   JSON.stringify([
+    refusal.document,
     refusal.rule,
     refusal.location,
     Object.entries(refusal.detail).toSorted(([one], [other]) => (one < other ? -1 : 1)),
