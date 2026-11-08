@@ -847,7 +847,7 @@ describe("score", () => {
     }
   });
 
-  it("fails InvalidResponses for a response the item does not score, saying a declaration of an unscored type is one", () => {
+  it("fails InvalidResponses for a response the item does not score, naming file, record and no base type as unscored types, never duration (duration is scored)", () => {
     assert.deepStrictEqual(
       Option.map(failureOf(score(accepted, { EXTRA: identifiers("single", "A") })), (failure) =>
         failure._tag === "InvalidResponses"
@@ -856,13 +856,54 @@ describe("score", () => {
               failure.problem,
               Option.isNone(failure.expected),
               failure.message.includes('"EXTRA"'),
+              failure.message.includes("file"),
+              failure.message.includes("record"),
               failure.message.includes("duration"),
             ]
           : [failure._tag],
       ),
-      Option.some(["InvalidResponses", "undeclared", true, true, true]),
+      Option.some(["InvalidResponses", "undeclared", true, true, true, true, false]),
     );
   });
+
+  it.effect(
+    "takes a single duration response of an item that declares it duration (duration is scored)",
+    () =>
+      Effect.gen(function* scoresDuration() {
+        const elapsed: Value = {
+          baseType: "duration",
+          cardinality: "single",
+          values: [{ baseType: "duration", value: 90.5 }],
+        };
+        const timed = acceptForTest({
+          ...item,
+          document: "items/timed.xml",
+          identifier: "timed",
+          responses: new Map([
+            ...item.responses,
+            [
+              "ELAPSED",
+              {
+                areaMapping: Option.none(),
+                baseType: "duration",
+                cardinality: "single",
+                correct: Option.none(),
+                defaultValue: Option.none(),
+                identifier: "ELAPSED",
+                mapping: Option.none(),
+              },
+            ],
+          ]),
+        });
+        const stored = yield* Effect.fromResult(score(timed, { ELAPSED: elapsed }));
+
+        assert.deepStrictEqual(stored.responses["ELAPSED"], {
+          baseType: "duration",
+          cardinality: "single",
+          values: [{ baseType: "duration", value: 90.5 }],
+        });
+      }),
+  );
 
   it("fails ResponsesRefused with the messages when three identifiers break max-choices 2", () => {
     assert.deepStrictEqual(

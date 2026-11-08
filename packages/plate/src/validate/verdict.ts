@@ -1781,19 +1781,32 @@ const undeclaredVariable = (refusal: Refusal): string => {
  * the detail has one, and otherwise the element that needs the declaration, so it never blames a
  * template the item may not have.
  *
+ * A test's `qti-map-response` or `qti-map-response-point` of a dotted name carries the `prefix`
+ * its reading reads through (`openPackage`, reading 48): the name reads a response the item that
+ * item ref names declares without the `qti-mapping`, or the `point` base type and the
+ * `qti-area-mapping`, the expression needs. The sentence names the response as that item's, and
+ * the fix gives it what it lacks in that item; it never asks for the dotted name to be declared,
+ * since that item already declares the response. With no `prefix`, the item lacks the
+ * declaration, and the fix is to declare it.
+ *
  * @param refusal The refusal.
  * @returns The sentence.
  */
 const templateRequirements = (refusal: Refusal): string => {
+  const baseType = optionalFact(refusal, "baseType");
+  const child = optionalFact(refusal, "child");
   const needs = [
-    ...Option.toArray(
-      Option.map(optionalFact(refusal, "baseType"), (type) => `of base type ${code(type)}`),
+    ...baseType.pipe(
+      Option.map((type) => `of base type ${code(type)}`),
+      Option.toArray,
     ),
-    ...Option.toArray(
-      Option.map(optionalFact(refusal, "child"), (child) => `with a ${code(child)}`),
+    ...child.pipe(
+      Option.map((name) => `with a ${code(name)}`),
+      Option.toArray,
     ),
   ].join(" ");
-  const declared = `${code(fact(refusal, "identifier", ""))} in a ${code(fact(refusal, "declaration", "declaration"))}${needs === "" ? "" : ` ${needs}`}`;
+  const lacking = needs === "" ? "" : ` ${needs}`;
+  const identifier = code(fact(refusal, "identifier", ""));
   const needer = Option.match(optionalFact(refusal, "template"), {
     onNone: () =>
       Option.match(optionalFact(refusal, "element"), {
@@ -1803,11 +1816,36 @@ const templateRequirements = (refusal: Refusal): string => {
     onSome: (uri) => `The response processing template ${code(uri)}`,
   });
 
-  return sentence(
-    refusal,
-    `${needer} needs ${declared}, and the item has none.`,
-    `declare ${declared}`,
-  );
+  return Option.match(optionalFact(refusal, "prefix"), {
+    onNone: () => {
+      const declared = `${identifier} in a ${code(fact(refusal, "declaration", "declaration"))}${lacking}`;
+
+      return sentence(
+        refusal,
+        `${needer} needs ${declared}, and the item has none.`,
+        `declare ${declared}`,
+      );
+    },
+    onSome: (prefix) => {
+      const item = `the item that item ref ${code(prefix)} names`;
+      const gives = [
+        ...child.pipe(
+          Option.map((name) => `a ${code(name)}`),
+          Option.toArray,
+        ),
+        ...baseType.pipe(
+          Option.map((type) => `the base type ${code(type)}`),
+          Option.toArray,
+        ),
+      ].join(" and ");
+
+      return sentence(
+        refusal,
+        `${needer} reads ${identifier}, a response of ${item}, and that item does not declare it${lacking}.`,
+        `give that response ${gives === "" ? "what it needs" : gives} in ${item}`,
+      );
+    },
+  });
 };
 
 /**

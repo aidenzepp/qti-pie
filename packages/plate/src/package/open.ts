@@ -1126,9 +1126,12 @@ const referencesOf = (
  *   name reads there, so this is an agreement difference (G-R3, pending).
  * - In a `qti-map-response` or `qti-map-response-point`, a response its item declares without the
  *   mapping or the area mapping the expression needs is `template-requirements`, as an item's
- *   inline expression is, the `identifier` as written: the information model's "transforms it using
- *   the associated mapping, which must have been declared" (`info.txt:9306`). Pantry checks no P27
- *   for a prefixed name, so this is an agreement difference (G-R3, pending).
+ *   inline expression is, the `identifier` as written, with the `prefix` the reading reads through:
+ *   the information model's "transforms it using the associated mapping, which must have been
+ *   declared" (`info.txt:9306`). The `prefix` is what tells the wording that the response is one
+ *   the item that item ref names declares, to be given its mapping there, and not a dotted name to
+ *   declare. Pantry checks no P27 for a prefixed name, so this is an agreement difference (G-R3,
+ *   pending).
  *
  * @param document The test's location.
  * @param visit The element's visit.
@@ -1210,7 +1213,9 @@ const judgeReference = (
     ...variable.declaration.pipe(
       Option.filter(() => isMapping && response),
       Option.flatMap((declaration) => mappingRequirement(element, identifier, declaration)),
-      Option.map((detail) => refuse(document, "template-requirements", visit.path, detail)),
+      Option.map((detail) =>
+        refuse(document, "template-requirements", visit.path, { ...detail, prefix: first.prefix }),
+      ),
       Option.toArray,
     ),
   ];

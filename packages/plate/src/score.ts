@@ -115,7 +115,7 @@ export class InvalidResponses extends Data.TaggedError("InvalidResponses")<{
 
     return Option.match(this.expected, {
       onNone: () =>
-        `The responses hold ${name}, but the item scores no response by that identifier: it declares none, or declares one the renderer does not score (base type duration or file, cardinality record, or no base type). Leave ${name} out of the responses.`,
+        `The responses hold ${name}, but the item scores no response by that identifier: it declares none, or declares one the renderer does not score (base type file, cardinality record, or no base type). Leave ${name} out of the responses.`,
       onSome: ({ baseType, cardinality }) =>
         `The response ${name} ${problemWords[this.problem]}. Pass a value of base type ${baseType} and cardinality ${cardinality}, an integer as a bigint and NULL as no values, as decode gives it.`,
     });
