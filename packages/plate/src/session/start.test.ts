@@ -2270,3 +2270,171 @@ describe("a nonlinear item ref's template defaults", () => {
       }),
   );
 });
+
+/**
+ * The text of the hand-built item `I1` the package regressions below read through its item ref:
+ * the single identifier response `RESPONSE`, a Choice whose correct response is `A`; the single
+ * file response `FR`, an upload; the single float outcome `SCORE`; the record outcome `REC`; and
+ * the single duration template variable `U`. The value model holds no value of `FR` or `REC`.
+ */
+const unheldItemXml = [
+  `<qti-assessment-item xmlns="${qtiNamespace}" identifier="I1" title="I1" adaptive="false" time-dependent="false">`,
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+  "<qti-correct-response><qti-value>A</qti-value></qti-correct-response></qti-response-declaration>",
+  '<qti-response-declaration identifier="FR" cardinality="single" base-type="file"/>',
+  '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+  '<qti-outcome-declaration identifier="REC" cardinality="record"/>',
+  '<qti-template-declaration identifier="U" cardinality="single" base-type="duration"/>',
+  '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+  '<qti-simple-choice identifier="A">Choice A</qti-simple-choice>',
+  '<qti-simple-choice identifier="B">Choice B</qti-simple-choice></qti-choice-interaction>',
+  '<qti-upload-interaction response-identifier="FR"/></qti-item-body></qti-assessment-item>',
+].join("");
+
+/**
+ * What a hand-built test of the package regressions below writes: its outcome declarations, the
+ * template defaults its item ref `I1` holds, and the rules of its outcome processing, each as
+ * text and each possibly empty.
+ */
+interface UnheldTest {
+  readonly declarations: string;
+  readonly defaults: string;
+  readonly rules: string;
+}
+
+/**
+ * Open, as one package, a hand-built test of one nonlinear part whose one item ref `I1` names
+ * {@link unheldItemXml}: the test at `package/test.xml` and the item beside it at
+ * `package/I1.xml`.
+ *
+ * @param test What the test writes; it holds a `qti-outcome-processing` only when it has rules.
+ * @returns The test and its items, as the package resolved them.
+ */
+const unheldPackage = Effect.fnUntraced(function* unheldPackage(test: UnheldTest) {
+  const encoder = new TextEncoder();
+  const manifest = [
+    `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema>`,
+    "<schemaversion>3.0.0</schemaversion></metadata><organizations/><resources>",
+    '<resource identifier="T" type="imsqti_test_xmlv3p0" href="package/test.xml"><file href="package/test.xml"/></resource>',
+    '<resource identifier="I-I1" type="imsqti_item_xmlv3p0" href="package/I1.xml"><file href="package/I1.xml"/></resource>',
+    "</resources></manifest>",
+  ].join("");
+  const testText = [
+    `<qti-assessment-test xmlns="${qtiNamespace}" identifier="unheld" title="unheld">`,
+    test.declarations,
+    '<qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">',
+    '<qti-assessment-section identifier="section" title="Section" visible="true">',
+    `<qti-assessment-item-ref identifier="I1" href="I1.xml">${test.defaults}</qti-assessment-item-ref>`,
+    "</qti-assessment-section></qti-test-part>",
+    test.rules === "" ? "" : `<qti-outcome-processing>${test.rules}</qti-outcome-processing>`,
+    "</qti-assessment-test>",
+  ].join("");
+  const texts: readonly (readonly [path: string, text: string])[] = [
+    [manifestFile, manifest],
+    ["package/test.xml", testText],
+    ["package/I1.xml", unheldItemXml],
+  ];
+  const verdict = yield* openPackage(
+    "packages/unheld",
+    new Map(texts.map(([path, text]) => [path, encoder.encode(text)] as const)),
+  );
+  if (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") {
+    return assert.fail(`the package is ${verdict.verdict}`);
+  }
+
+  const [delivery] = verdict.accepted.tests.values();
+
+  return delivery ?? assert.fail("the package holds no test");
+});
+
+/**
+ * Start a session of a package's test and end its one part, as a host's `end-part` does, which
+ * closes the test and runs its outcome processing, after checking that the processing runs.
+ *
+ * @param delivery The test and its items.
+ * @returns The test's outcomes once it has closed.
+ */
+const closedOutcomes = Effect.fnUntraced(function* closedOutcomes(delivery: Delivery) {
+  assert.strictEqual(delivery.test.test.outcomeProcessing.kind, "runs");
+
+  const configuration = yield* configure({});
+  const session = started(delivery, configuration, "unheld");
+  const closed = Result.getOrElse(
+    advance(
+      delivery.test,
+      delivery.items,
+      session,
+      { intent: { kind: "end-part" } },
+      configuration,
+      { now: after(5000) },
+    ),
+    (failure) => assert.fail(`end-part refused: ${failure._tag}: ${failure.message}`),
+  );
+
+  return closed.outcomes;
+});
+
+describe("a package whose test reads a built-in's default or an unheld item variable", () => {
+  it.effect(
+    "[T-9] starts and ends the part of a package whose test sets D from qti-default of duration, with D NULL of a single duration: a built-in declares no default",
+    () =>
+      Effect.gen(function* defaultOfDuration() {
+        const outcomes = yield* closedOutcomes(
+          yield* unheldPackage({
+            declarations:
+              '<qti-outcome-declaration identifier="D" cardinality="single" base-type="duration"/>',
+            defaults: "",
+            rules:
+              '<qti-set-outcome-value identifier="D"><qti-default identifier="duration"/></qti-set-outcome-value>',
+          }),
+        );
+
+        assert.deepStrictEqual(outcomes["D"], nullOf("duration", "single"));
+      }),
+  );
+
+  for (const [named, expression] of [
+    ["qti-correct of I1.FR", '<qti-correct identifier="I1.FR"/>'],
+    ["qti-default of I1.FR", '<qti-default identifier="I1.FR"/>'],
+    ["qti-default of I1.REC", '<qti-default identifier="I1.REC"/>'],
+  ] as const) {
+    it.effect(
+      `[T-9] ends the part of a package whose test sets B from qti-is-null over ${named} with B true: a file or record reads NULL`,
+      () =>
+        Effect.gen(function* isNullOfUnheld() {
+          const outcomes = yield* closedOutcomes(
+            yield* unheldPackage({
+              declarations:
+                '<qti-outcome-declaration identifier="B" cardinality="single" base-type="boolean"/>',
+              defaults: "",
+              rules: `<qti-set-outcome-value identifier="B"><qti-is-null>${expression}</qti-is-null></qti-set-outcome-value>`,
+            }),
+          );
+
+          assert.deepStrictEqual(outcomes["B"], {
+            baseType: "boolean",
+            cardinality: "single",
+            values: [{ baseType: "boolean", value: true }],
+          });
+        }),
+    );
+  }
+
+  it.effect(
+    "[T-9] starts a package whose item ref gives the duration template variable U the qti-default of duration, with U NULL of a single duration: a built-in declares no default",
+    () =>
+      Effect.gen(function* templateDefaultOfDuration() {
+        const delivery = yield* unheldPackage({
+          declarations: "",
+          defaults: defaultXml("U", '<qti-default identifier="duration"/>'),
+          rules: "",
+        });
+        const [first] = started(delivery, yield* configure({}), "unheld").items;
+
+        assert.deepStrictEqual(
+          [first?.templateDefaults, first?.record.templates["U"]],
+          [Option.some({ U: nullOf("duration", "single") }), nullOf("duration", "single")],
+        );
+      }),
+  );
+});

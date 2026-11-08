@@ -945,13 +945,14 @@ const itemDeclarations: Declarations = {
 
 /**
  * A presented item, `ITEM1`: its record holds the response `A`, the points (5, 5) and (20, 20),
- * `SCORE` 1.5, `N` 3 and `LIST` {1, 2}, and a template-set default of `SCORE`, 0.25. Its item ref
- * weights `W` by 2 and `HALF` by 0.5.
+ * `SCORE` 1.5, `N` 3 and `LIST` {1, 2}, and a template-set default of `SCORE`, 0.25. It declares
+ * the file response `FR` and the record outcome `REC`, of which the value model holds no value.
+ * Its item ref weights `W` by 2 and `HALF` by 0.5, and maps `UPLOADED` to `FR`.
  */
 const firstItem: ScopeItem = {
   categories: [],
   declarations: itemDeclarations,
-  mappings: new Map(),
+  mappings: new Map([["UPLOADED", "FR"]]),
   numAttempts: 1,
   presented: true,
   record: {
@@ -983,7 +984,10 @@ const firstItem: ScopeItem = {
     templates: {},
   },
   ref: "ITEM1",
-  unheld: new Map(),
+  unheld: new Map([
+    ["FR", { baseType: "file", cardinality: "single" }],
+    ["REC", { baseType: "file", cardinality: "record" }],
+  ]),
   weights: new Map([
     ["HALF", 0.5],
     ["W", 2],
@@ -1136,6 +1140,97 @@ describe("the references family's evaluators in a test's run, each read through 
     assert.deepStrictEqual(
       inTest({ identifier: "ITEM1.POINT", kind: "map-response-point", operands: [] }),
       float(2.25),
+    );
+  });
+});
+
+/**
+ * Give the failure an expression gives in a run, after checking that it failed.
+ *
+ * @param expression The expression.
+ * @param holder The declarations holder the run reads.
+ * @param variables The variables of the run.
+ * @returns The failure's tag, and its holder, identifier and role when it is an
+ *   `UnknownIdentifierError`.
+ */
+const failureIn = (
+  expression: Expression,
+  holder: Declarations,
+  variables: Variables,
+): readonly string[] =>
+  Option.match(Result.getFailure(evaluateExpression(expression, holder, variables)), {
+    onNone: () => assert.fail(`qti-${expression.kind} did not fail`),
+    onSome: (failure) =>
+      failure._tag === "UnknownIdentifierError"
+        ? [failure._tag, failure.holder, failure.identifier, failure.role]
+        : [failure._tag],
+  });
+
+describe("the references family's qti-default of a built-in and its reads of an unheld item variable in a test's run [T-9]", () => {
+  it("[T-9] qti-default of duration in a test's run gives NULL of a single duration, timed or untimed, and qti-variable of it the seconds: a built-in declares no default", () => {
+    const untimed: Variables = { ...testRun, test: { ...testScope, duration: Option.none() } };
+
+    assert.deepStrictEqual(
+      [
+        inTest(defaultOf("duration")),
+        Result.getOrThrow(evaluateExpression(defaultOf("duration"), testHolder, untimed)),
+        inTest(variableOf("duration")),
+      ],
+      [
+        nullOf("duration", "single"),
+        nullOf("duration", "single"),
+        {
+          baseType: "duration",
+          cardinality: "single",
+          values: [{ baseType: "duration", value: 60 }],
+        },
+      ],
+    );
+  });
+
+  it("[T-9] qti-default of duration in an item's run, which holds no duration, fails UnknownIdentifierError of the item: a built-in declares no default only where the run holds it", () => {
+    assert.deepStrictEqual(
+      failureIn(defaultOf("duration"), itemDeclarations, { outcomes: {}, responses: {} }),
+      ["UnknownIdentifierError", "item", "duration", "variable"],
+    );
+  });
+
+  it("[T-9] qti-correct of ITEM1.FR, a file response, gives a NULL, and of ITEM1.RESPONSE its correct response: a file or record reads NULL", () => {
+    assert.isTrue(isNull(inTest(correctOf("ITEM1.FR"))), "ITEM1.FR");
+    assert.deepStrictEqual(inTest(correctOf("ITEM1.RESPONSE")), identifier("A"));
+  });
+
+  it("[T-9] qti-default of ITEM1.FR, a file response, and of ITEM1.REC, a record outcome, each gives a NULL: a file or record reads NULL", () => {
+    for (const named of ["ITEM1.FR", "ITEM1.REC"]) {
+      assert.isTrue(isNull(inTest(defaultOf(named))), named);
+    }
+  });
+
+  it("[T-9] qti-correct and qti-default of ITEM1.UPLOADED, a mapping target whose source is a file response, and of ITEM1.2.FR each gives a NULL: a file or record reads NULL", () => {
+    for (const named of ["ITEM1.UPLOADED", "ITEM1.2.FR"]) {
+      assert.isTrue(isNull(inTest(correctOf(named))), `qti-correct of ${named}`);
+      assert.isTrue(isNull(inTest(defaultOf(named))), `qti-default of ${named}`);
+    }
+  });
+
+  it("[T-9] qti-map-response and qti-map-response-point of ITEM1.FR, a file response, each fail UnknownIdentifierError of the item, as the engine holds no mapping of it", () => {
+    assert.deepStrictEqual(
+      [
+        failureIn(
+          { identifier: "ITEM1.FR", kind: "map-response", operands: [] },
+          testHolder,
+          testRun,
+        ),
+        failureIn(
+          { identifier: "ITEM1.FR", kind: "map-response-point", operands: [] },
+          testHolder,
+          testRun,
+        ),
+      ],
+      [
+        ["UnknownIdentifierError", "item", "ITEM1.FR", "response"],
+        ["UnknownIdentifierError", "item", "ITEM1.FR", "response"],
+      ],
     );
   });
 });

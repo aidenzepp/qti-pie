@@ -3,7 +3,7 @@
  * and {@link variableRead} with the item a test's run read it through), from the responses,
  * outcomes and template values the attempt holds ({@link own}), from a built-in variable
  * ({@link builtInValue}) or, in a test's run, from an item through its item ref
- * ({@link prefixedRead}); the type of each built-in the engine holds ({@link builtInType}); and the
+ * ({@link prefixedRead}); the type of each built-in the run holds ({@link builtInType}); and the
  * run-time resolver of an attribute that holds a literal or names a template or outcome variable
  * ({@link referenceValue}, and {@link referenceInteger} for an integer one).
  *
@@ -84,12 +84,13 @@ export const builtInValue = (variables: Variables, identifier: string): Option.O
 };
 
 /**
- * The type of each built-in variable the engine holds: the built-in outcome `completionStatus` a
- * single identifier ({@link completionStatusType}), and `numAttempts` a single integer.
+ * The type of each built-in variable the engine holds in every run: the built-in outcome
+ * `completionStatus` a single identifier ({@link completionStatusType}), and `numAttempts` a single
+ * integer.
  *
- * An item's built-in `duration` is not among them: the value model holds the base type duration,
- * but the engine holds no value of the item's time spent, and the item model marks a rule that
- * reads it.
+ * `duration` is not among them: the engine holds the test's own `duration` in a test's run only
+ * ({@link durationType}), and holds no value of an item's time spent, so the item model marks an
+ * item's rule that reads it.
  */
 const builtInTypes: ReadonlyMap<string, Pick<Value, "baseType" | "cardinality">> = new Map<
   string,
@@ -100,20 +101,36 @@ const builtInTypes: ReadonlyMap<string, Pick<Value, "baseType" | "cardinality">>
 ]);
 
 /**
- * Give the type of a built-in variable the engine holds, from {@link builtInTypes} and never from
- * the attempt, so a built-in's type does not depend on what the attempt holds of it.
+ * The type of the test's own built-in `duration`, a single duration, which a test's run holds
+ * ({@link builtInValue}).
+ */
+const durationType: Pick<Value, "baseType" | "cardinality"> = {
+  baseType: "duration",
+  cardinality: "single",
+};
+
+/**
+ * Give the type of a built-in variable the run holds, from {@link builtInTypes}, and, in a test's
+ * run, the test's own `duration` a single duration ({@link durationType}), never from the attempt,
+ * so a built-in's type does not depend on what the attempt holds of it. It holds the built-ins
+ * {@link builtInValue} gives a value of.
  *
- * It is the type a `qti-default` of the built-in gives NULL of: a built-in has no declaration, so
- * no declared default.
+ * It is the type a `qti-default` of the built-in gives NULL of: a built-in declares no default, so
+ * a test's `qti-default` of `duration` is NULL of a single duration, timed or not.
  *
+ * @param variables The variables of the run, whose test scope, when it has one, makes the run a
+ *   test's.
  * @param identifier The variable's identifier.
- * @returns Its base type and cardinality, or none for an identifier that names no built-in the
- *   engine holds.
+ * @returns Its base type and cardinality, or none for an identifier that names no built-in the run
+ *   holds: `duration` outside a test's run among them.
  */
 export const builtInType = (
+  variables: Variables,
   identifier: string,
 ): Option.Option<Pick<Value, "baseType" | "cardinality">> =>
-  Option.fromUndefinedOr(builtInTypes.get(identifier));
+  identifier === "duration"
+    ? Option.as(Option.fromUndefinedOr(variables.test), durationType)
+    : Option.fromUndefinedOr(builtInTypes.get(identifier));
 
 /**
  * Give the value a test-level read of an item variable stands for.
