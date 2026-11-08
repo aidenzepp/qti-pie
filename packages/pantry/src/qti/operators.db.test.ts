@@ -312,7 +312,19 @@ const refusedCases = [
           Rounding: new Map([...inputs.Rounding].slice(1)),
         })),
       ),
-    laws: [containedIn(["Node", "id"], ["Rounding", "node"])],
+    // The first rounding operator holds a figures and a mode, so its missing row breaks each of
+    // E1 derived's containments into `Rounding`: from its node, and from its figures', its mode's
+    // and their pair's rows, each now a row of its own.
+    laws: [
+      containedIn(["Node", "id"], ["Rounding", "node"]),
+      containedIn(["RoundingFigures", "node"], ["Rounding", "node"]),
+      containedIn(["RoundingMode", "node"], ["Rounding", "node"]),
+      containedIn(
+        ["RoundingMode", "node", "kind", "modeWritten"],
+        ["Rounding", "node", "kind", "modeWritten"],
+      ),
+      containedIn(["RoundingModeFigures", "node"], ["Rounding", "node"]),
+    ],
     name: "a rounding operator with no Rounding row (E1 derived)",
   },
   {
