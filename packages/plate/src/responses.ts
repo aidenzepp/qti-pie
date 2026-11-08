@@ -12,7 +12,7 @@
  */
 import { Option } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import type { Malformed } from "#plate/form/encoding.ts";
+import { Malformed } from "#plate/form/encoding.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { validateExtendedText } from "#plate/interactions/extended-text.ts";
 import { validateInlineChoice } from "#plate/interactions/inline-choice.ts";
@@ -20,8 +20,8 @@ import { validateTextEntry } from "#plate/interactions/text-entry.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type { Interaction, Item } from "#plate/model/item.ts";
 import type { ResponsesRecord } from "#plate/model/record.ts";
-import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import { isRecordValue, nullOf } from "#plate/model/values.ts";
+import type { ResponseValue, Value } from "#plate/model/values.ts";
 import { redactStructure } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
@@ -124,11 +124,11 @@ const shownInteractions = (item: Item, record?: ResponsesRecord): readonly Inter
  * It judges only what the page showed: the interactions of the item as `redact` shows it under the
  * record's template values ({@link shownInteractions}). Each interaction shown, in document order,
  * validates its response: a host that posts a native form passes what `decode` gave for each
- * response, a {@link Malformed} included, and a form-library host passes values. A response left
- * out is NULL. Tier (a) limits apply always and tier (b) ones only under
- * `configuration.validateResponses`. An Extended Text that renders the cap's notice in place of
- * its Controls (Q23) is not judged against its `min-strings`, so a post with no entry for it never
- * holds its item back.
+ * response, a {@link Malformed} included, and a form-library host passes values. A response left out
+ * is NULL. A record gives no message: no interaction yet judges one. Tier (a) limits apply always
+ * and tier (b) ones only under `configuration.validateResponses`. An Extended Text that renders the
+ * cap's notice in place of its Controls (Q23) is not judged against its `min-strings`, so a post
+ * with no entry for it never holds its item back.
  *
  * A choice its template hides, or withholds because the record holds no value of its template
  * variable, is not among the choices presented, so posting it to its interaction gives
@@ -148,7 +148,8 @@ const shownInteractions = (item: Item, record?: ResponsesRecord): readonly Inter
  *   // is the one the item was rendered under, as redact took it
  *
  * @param document The document `check` accepted.
- * @param responses The responses by identifier, each a value or the `Malformed` `decode` gave.
+ * @param responses The responses by identifier, each a value, a record or the `Malformed` `decode`
+ *   gave.
  * @param configuration The configuration, which gives the locale and `validateResponses`.
  * @param record The template values of the attempt the page showed, the record `redact` took; none
  *   to judge the item as it reads with no record.
@@ -157,7 +158,7 @@ const shownInteractions = (item: Item, record?: ResponsesRecord): readonly Inter
  */
 export const checkResponses = (
   document: Accepted,
-  responses: Readonly<Record<string, Value | Malformed>>,
+  responses: Readonly<Record<string, ResponseValue | Malformed>>,
   configuration: Configuration,
   record?: ResponsesRecord,
 ): readonly ValidationMessage[] =>
@@ -165,6 +166,10 @@ export const checkResponses = (
     const given = Object.hasOwn(responses, interaction.response)
       ? responses[interaction.response]
       : undefined;
+
+    if (given !== undefined && !(given instanceof Malformed) && isRecordValue(given)) {
+      return [];
+    }
 
     return validate(interaction, given ?? absent(document.item, interaction), configuration);
   });

@@ -470,14 +470,21 @@ const refusalsOf = (
   const entries: readonly Entry[] = Object.entries(posted).flatMap(([response, values]) =>
     values.map((value): Entry => [entryName(instance, response), value]),
   );
+  // A record response, which no item here declares, has no base type, so it is left out.
   const responses = Object.fromEntries(
-    redacted.responses.flatMap(({ baseType, cardinality, identifier }) =>
-      Object.hasOwn(posted, identifier) && isPosted(baseType)
+    redacted.responses.flatMap((response) =>
+      response.cardinality !== "record" &&
+      Object.hasOwn(posted, response.identifier) &&
+      isPosted(response.baseType)
         ? [
             [
-              identifier,
+              response.identifier,
               Result.merge(
-                decode(entries, { baseType, cardinality, name: entryName(instance, identifier) }),
+                decode(entries, {
+                  baseType: response.baseType,
+                  cardinality: response.cardinality,
+                  name: entryName(instance, response.identifier),
+                }),
               ),
             ] as const,
           ]

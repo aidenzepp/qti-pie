@@ -271,9 +271,17 @@ const submit = (
     assert.fail("the keys never submit the form"),
   );
   const { own } = partition(entries, instance);
-  const bindings = opened.redacted.responses.flatMap(({ baseType, cardinality, identifier }) =>
-    isPosted(baseType)
-      ? [{ baseType, cardinality, identifier, name: entryName(instance, identifier) }]
+  // A record response, which no item here declares, has no base type, so it is left out.
+  const bindings = opened.redacted.responses.flatMap((response) =>
+    response.cardinality !== "record" && isPosted(response.baseType)
+      ? [
+          {
+            baseType: response.baseType,
+            cardinality: response.cardinality,
+            identifier: response.identifier,
+            name: entryName(instance, response.identifier),
+          },
+        ]
       : [],
   );
   const decoded = Object.fromEntries(

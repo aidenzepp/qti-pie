@@ -362,6 +362,36 @@ const noticeItem = itemOf(
 );
 
 /**
+ * The Text Entry item with a second Text Entry, for a string, bound to the record response
+ * `ANSWER`, built by hand: the model builds no interaction bound to a record yet.
+ */
+const answerItem: Item = {
+  ...itemOf(
+    "landing-answer",
+    Option.none(),
+    [
+      {
+        attributes: [],
+        children: [
+          words("The first Moon landing was in "),
+          year,
+          words(". Its crew numbered "),
+          { ...year, baseType: "string", patternMask: Option.none(), response: "ANSWER" },
+          words("."),
+        ],
+        kind: "element",
+        path: "qti-assessment-item/qti-item-body/p",
+        tag: "p",
+      },
+    ],
+    [declaration("YEAR", "integer", "single")],
+  ),
+  records: new Map([
+    ["ANSWER", { correct: Option.none(), defaultValue: Option.none(), identifier: "ANSWER" }],
+  ]),
+};
+
+/**
  * The items the round trip covers, by name.
  */
 const items: readonly (readonly [string, Item])[] = [
@@ -713,6 +743,29 @@ describe("encodeRedacted and decodeRedacted", () => {
         const configuration = yield* defaults;
 
         assert.deepStrictEqual(decoded.body, withoutPaths(colourItem.body));
+        assert.deepStrictEqual(decoded, pathless(redacted));
+        assert.strictEqual(
+          Result.getOrThrow(render(decoded, configuration, { instance })).html,
+          Result.getOrThrow(render(redacted, configuration, { instance })).html,
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] record binding in the page: a redacted item with a record binding round-trips its JSON form, which writes the binding with no base type",
+    () =>
+      Effect.gen(function* recordBindingRoundTrip() {
+        const redacted = redact(acceptForTest(answerItem));
+        const json = Result.getOrThrow(encodeRedacted(redacted));
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+        const handedOver: unknown = JSON.parse(JSON.stringify(json));
+        const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+        const configuration = yield* defaults;
+
+        assert.deepStrictEqual(json.responses, [
+          { baseType: "integer", cardinality: "single", identifier: "YEAR" },
+          { cardinality: "record", identifier: "ANSWER" },
+        ]);
         assert.deepStrictEqual(decoded, pathless(redacted));
         assert.strictEqual(
           Result.getOrThrow(render(decoded, configuration, { instance })).html,

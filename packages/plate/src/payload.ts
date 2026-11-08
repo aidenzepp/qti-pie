@@ -29,7 +29,7 @@ import { integerOf } from "#plate/engine/numbers.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
 import { entryName, isPosted } from "#plate/form/encoding.ts";
-import type { DecodeOptions, ValueBinding } from "#plate/form/encoding.ts";
+import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
@@ -437,22 +437,26 @@ export interface Payload {
 }
 
 /**
- * A response's binding as the page may know it: its identifier, base type and cardinality, with no
- * correct response, mapping or default.
+ * A response's binding as the page may know it, with no correct response, mapping or default: for
+ * a response of a base type its identifier, base type and cardinality, and for a record response
+ * its identifier and the cardinality `record`, since a record has no base type of its own.
  */
-export interface ResponseBinding {
-  readonly baseType: ModelledBaseType;
-  readonly cardinality: Value["cardinality"];
-  readonly identifier: string;
-}
+export type ResponseBinding =
+  | {
+      readonly baseType: ModelledBaseType;
+      readonly cardinality: Value["cardinality"];
+      readonly identifier: string;
+    }
+  | { readonly cardinality: "record"; readonly identifier: string };
 
 /**
  * The fields of an item the page may know, which {@link redactItem} copies by name.
  *
- * `responses` lists the response bindings in document order, every response but those only content
- * the page does not see binds ({@link hiddenOnlyResponses}), and `notices` the features the body
- * shows as notices. Exported for the codec of {@link Redacted}'s JSON form, whose Schema's type it
- * is; `src/index.ts` does not export it.
+ * `responses` lists the response bindings, every response but those only content the page does not
+ * see binds ({@link hiddenOnlyResponses}): those of a base type in document order, then the record
+ * responses in document order. `notices` lists the features the body shows as notices. Exported for
+ * the codec of {@link Redacted}'s JSON form, whose Schema's type it is; `src/index.ts` does not
+ * export it.
  */
 export interface RedactedFields {
   readonly body: readonly BodyNode[];
@@ -1899,18 +1903,23 @@ const printBody = (
 };
 
 /**
- * Give the response bindings a redaction lists: each response the item declares, in document
- * order, but the hidden-only ones.
+ * Give the response bindings a redaction lists: each response the item declares but the
+ * hidden-only ones, those of a base type in document order, then the record responses in document
+ * order. The item keeps the two kinds in two maps, so their order across the two is not kept.
  *
  * @param item The item.
  * @param hiddenOnly The responses only content the page does not see binds.
  * @returns The bindings.
  */
-const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly ResponseBinding[] =>
-  [...item.responses.values()].flatMap(
+const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly ResponseBinding[] => [
+  ...[...item.responses.values()].flatMap(
     ({ baseType, cardinality, identifier }): readonly ResponseBinding[] =>
       hiddenOnly.has(identifier) ? [] : [{ baseType, cardinality, identifier }],
-  );
+  ),
+  ...[...(item.records?.values() ?? [])].flatMap(({ identifier }): readonly ResponseBinding[] =>
+    hiddenOnly.has(identifier) ? [] : [{ cardinality: "record", identifier }],
+  ),
+];
 
 /**
  * Copy the parts of an item the page may know: the allowlist, and the only way to make a
@@ -2099,15 +2108,34 @@ export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): Readonly
  * not under the binding's `name`.
  */
 export interface Posting {
-  readonly binding: ValueBinding;
+  readonly binding: Binding;
   readonly identifier: string;
   /**
    * The number base its integer is written in: the `base` of the first Text Entry or Extended
    * Text, in document order, that binds the response, and 10 when only a Choice or an Inline
-   * Choice binds it.
+   * Choice binds it. `decode` does not apply it to a record.
    */
   readonly options: DecodeOptions;
 }
+
+/**
+ * Give the binding a response travels through the form under: a `RecordBinding` for a record
+ * response, a `ValueBinding` for a response of a base type a phase-1 interaction posts, and
+ * none for a response of any other base type, which no Control posts.
+ *
+ * @param response The response's binding as the page knows it.
+ * @param name The entry name its Controls post under.
+ * @returns Its form binding, or none.
+ */
+const formBinding = (response: ResponseBinding, name: string): Option.Option<Binding> => {
+  if (response.cardinality === "record") {
+    return Option.some({ cardinality: "record", name });
+  }
+
+  const { baseType, cardinality } = response;
+
+  return isPosted(baseType) ? Option.some({ baseType, cardinality, name }) : Option.none();
+};
 
 /**
  * Give the number base an interaction's posted text is read in: a Text Entry's or an Extended
@@ -2155,28 +2183,30 @@ export const postingsIn = (
     }
   }
 
-  return redaction.responses.flatMap(
-    ({ baseType, cardinality, identifier }): readonly Posting[] => {
-      const bound = byResponse.get(identifier) ?? [];
-      if (!isPosted(baseType) || bound.length === 0) {
-        return [];
-      }
+  return redaction.responses.flatMap((response): readonly Posting[] => {
+    const { identifier } = response;
+    const bound = byResponse.get(identifier) ?? [];
+    const binding = formBinding(response, entryName(instance, identifier));
+    if (Option.isNone(binding) || bound.length === 0) {
+      return [];
+    }
 
-      return [
-        {
-          binding: { baseType, cardinality, name: entryName(instance, identifier) },
-          identifier,
-          options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
-        },
-      ];
-    },
-  );
+    return [
+      {
+        binding: binding.value,
+        identifier,
+        options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
+      },
+    ];
+  });
 };
 
 /**
- * Give the postings of a redacted item in one instance: one for each response of a posted base
- * type that an interaction in the body binds, in the order of the item's `responses`, so a host
- * decodes each from its form with the base its interaction declares instead of assuming base 10.
+ * Give the postings of a redacted item in one instance: one for each record response, and each
+ * response of a posted base type, that an interaction in the body binds, in the order of the
+ * item's `responses`, so a host decodes each from its form with the base its interaction declares
+ * instead of assuming base 10. A record response's binding is a `RecordBinding`, which
+ * `decode` reads as a record.
  *
  * A declared response that no interaction binds has no posting. The form has no Control for it,
  * so a post never carries it, and decoding it would give NULL. A host that saved that NULL would

@@ -13,7 +13,7 @@ import { Effect, Option, Result } from "effect";
 import { decode, Malformed, partition } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { ResponseValue } from "#plate/model/values.ts";
 import { postings } from "#plate/payload.ts";
 import { redact } from "#plate/render.ts";
 import type { Responses } from "#plate/session/session.ts";
@@ -24,7 +24,7 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  * and the responses whose entries do not decode.
  */
 export interface Post {
-  readonly decoded: Readonly<Record<string, Malformed | Value>>;
+  readonly decoded: Readonly<Record<string, Malformed | ResponseValue>>;
   readonly malformed: ReadonlySet<string>;
   readonly posted: Readonly<Record<string, readonly string[]>>;
 }
