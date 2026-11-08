@@ -878,7 +878,7 @@ describe("README.md", () => {
   it("states round 9h in the README: a value two map entries match maps by the first listed, the XSD cache's folders and the tag of the tests that read the Results Reporting XSD, and a section ref's outcome-only mark", () => {
     assert.include(
       flatSectionOf("## Scoring"),
-      "A value that two or more entries of a `qti-mapping` match maps by the first entry listed *(pending)*, as a point that two areas of a `qti-area-mapping` hold maps by the first area listed.",
+      "A value that two or more entries of a `qti-mapping` match maps by the first entry listed, as a point that two areas of a `qti-area-mapping` hold maps by the first area listed.",
     );
 
     const development = flatSectionOf("## Development");
@@ -899,6 +899,42 @@ describe("README.md", () => {
       outcomes,
       "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that does not start with a part, section or item ref of the test document itself",
     );
+  });
+
+  it("states repair round 9 in the README: the misplaced mapping, the template default keys decodeSession checks, an identifier given twice, the weighted and collected types, and an item's context variable a test reads", () => {
+    const scoring = flatSectionOf("## Scoring");
+
+    assert.include(
+      scoring,
+      "| A `qti-mapping` in a response declaration of base type `file` or `duration`, or of cardinality `record`, or a `qti-area-mapping` in one whose base type is not `point` | `misplaced-element` | `mapping-base-type`, `area-mapping-point` |",
+    );
+    assert.notInclude(scoring, "first entry listed *(pending)*");
+
+    const recordsSection = flatSectionOf("## Records");
+
+    for (const fragment of [
+      "- in a nonlinear part that has started, an item's template defaults are not keyed by exactly the template variables its item ref's `qti-template-default`s set",
+      "`decodeSession` does not check the values of an item's template defaults",
+    ]) {
+      assert.include(recordsSection, fragment);
+    }
+    assert.notInclude(recordsSection, "`decodeSession` does not check an item's template defaults");
+
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "reads an item's context variable through its item ref",
+      "there its processing runs and fails at that read with `UnknownIdentifierError`. `open` accepts these",
+      "- A weighted `qti-variable` that reads an item's `integer` or `float` variable through its item ref is a `float` of that variable's cardinality",
+      "- `qti-outcome-minimum` and `qti-outcome-maximum` give a multiple `float`.",
+      "a multiple `integer` when every single `integer` or `float` declaration is `integer`, and a multiple `float` otherwise",
+      "`open` checks a test without its items, so it types this collection unknown.",
+      "so plate may refuse a package that pantry accepts, but only one that would fail at run time.",
+      "| A part, section or item ref identifier given twice across a test and the section documents it reaches, refused at the second | `duplicate-identifier` | `structure-identifier` |",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
+    assert.notInclude(outcomes, "plate holds no value of it *(pending)*");
   });
 
   it.effect("runs the plain server action on a base-16 Text Entry, which scores ff as 255", () =>

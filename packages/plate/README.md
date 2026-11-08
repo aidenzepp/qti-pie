@@ -327,11 +327,13 @@ It refuses with `InvalidSession` a session that does not fit the test you pass i
 - an item's record does not carry the session's instance and the item's number
 - its dates are not UTC instants, or it was updated before it started
 - its position names none of its items
+- in a nonlinear part that has started, an item's template defaults are not keyed by exactly the
+  template variables its item ref's `qti-template-default`s set
 - its outcomes are not the test's declared outcomes, each of its declared base type and cardinality
 
-`decodeSession` does not check an item's template defaults, since the test does not hold the
-items. `advance` checks them when it shows the item, and fails with `EngineFailure` when one does
-not fit. Keep the stored session where only your server can change it.
+`decodeSession` does not check the values of an item's template defaults, since the test does not
+hold the items. `advance` checks them when it shows the item, and fails with `EngineFailure` when
+one does not fit. Keep the stored session where only your server can change it.
 
 | Record | Holds | Written by | Read by |
 | --- | --- | --- | --- |
@@ -417,8 +419,8 @@ Until it lands, the [ledger](#conformance-ledger) reports row I-9a (Response Pro
 [Outcome processing](#outcome-processing) says, so `open` refuses one in an item with
 `expression-placement`.
 
-A value that two or more entries of a `qti-mapping` match maps by the first entry listed
-*(pending)*, as a point that two areas of a `qti-area-mapping` hold maps by the first area listed.
+A value that two or more entries of a `qti-mapping` match maps by the first entry listed, as a
+point that two areas of a `qti-area-mapping` hold maps by the first area listed.
 
 The verdict marks each of these, and `score` runs no processing that holds one:
 
@@ -450,6 +452,7 @@ its processing runs, and the operator's value is NULL.
 | An item's outcome declaration named `SCORE` or `MAXSCORE` whose base type is not `float`, or an item's or a test's named `PASSED` whose base type is not `boolean`. A `record` one is accepted *(pending)* | `attribute-type` | `ReservedOutcomeTypes` |
 | A `qti-equal` whose `tolerance` holds a token that is neither an `xs:double` nor a variable's name (an NCName), such as `1,5` | `attribute-type` | P6 |
 | A `qti-equal` in `absolute` or `relative` mode that has no `tolerance` | `missing-attribute` | P36 |
+| A `qti-mapping` in a response declaration of base type `file` or `duration`, or of cardinality `record`, or a `qti-area-mapping` in one whose base type is not `point` | `misplaced-element` | `mapping-base-type`, `area-mapping-point` |
 
 The refusals with `expression-type` and `undeclared-variable` judge inline response processing and
 template processing. [Template processing](#template-processing) lists the refusals that only
@@ -668,7 +671,11 @@ marks a dotted name that does not start with a part, section or item ref of the 
 itself, such as `I1.SCORE` where `I1` is an item ref in a section document. It also marks such a
 test's outcome processing when the processing holds one of the eight expressions above, because they
 would look up only the test document's own items: a session delivers none of a section document's
-items. `open` accepts these, as pantry does.
+items. `openPackage` also marks a test's outcome processing, and leaves out a template default,
+that reads an item's context variable through its item ref, such as `ITEM1.CTX` where the item
+declares `CTX` in a `qti-context-declaration`: the item marks that declaration, and plate holds no
+value of it. A test checked apart from its items cannot see this, so there its processing runs and
+fails at that read with `UnknownIdentifierError`. `open` accepts these, as pantry does.
 
 Where QTI 3.0 leaves a choice open, plate makes one. A choice marked *(pending)* awaits approval
 and can change.
@@ -676,6 +683,10 @@ and can change.
 - `qti-exit-test` ends only the current run, and the next run starts the rules again.
 - A weight that the item ref does not define is 1.0. A weighted read of a base type other than
   integer or float, or of a name with no item ref, reads unweighted *(pending)*.
+- A weighted `qti-variable` that reads an item's `integer` or `float` variable through its item ref
+  is a `float` of that variable's cardinality, in `openPackage`'s checks and when a session runs
+  it, whether or not the item ref defines the weight. pantry leaves the read's type unknown, so
+  plate may refuse a package that pantry accepts, but only one that would fail at run time.
 - A read through an item ref gives NULL of the variable's declared type and cardinality when the
   item's record holds no value for it, such as a template variable of an item not yet shown. So do
   a `qti-variable`, `qti-correct` or `qti-default` of a `file` or `record` variable, and a read of
@@ -698,6 +709,17 @@ and can change.
   `numAttempts` and `completionStatus` as a dotted name reads them. A built-in declares no
   `normal-minimum` or `normal-maximum`, so the minimum leaves the item out and the maximum is NULL
   *(pending)*.
+- `qti-outcome-minimum` and `qti-outcome-maximum` give a multiple `float`. `qti-test-variables`
+  gives a multiple of its `base-type`, or, with no `base-type`, a multiple `float` when it has a
+  `weight-identifier`. With neither, `openPackage` and a session type it from the declarations of
+  its variable in the test's items, read through each item ref's variable mappings, whatever its
+  filters: a multiple `integer` when every single `integer` or `float` declaration is `integer`,
+  and a multiple `float` otherwise. QTI 3.0 speaks of the values collected. plate decides by the
+  declarations so that the check and the run agree, and the two differ only when every value
+  collected from a `float` declaration is NULL. `open` checks a test without its items, so it
+  types this collection unknown. pantry types all three by their written `base-type`, or unknown
+  with none, so plate may refuse a package that pantry accepts, but only one that would fail at
+  run time.
 
 `open` refuses the following in a test's or a section's processing, each as pantry does:
 
@@ -716,8 +738,9 @@ A dotted name the test declares whole, such as an outcome named `S.TOTAL`, is th
 and the table judges it as it judges an undotted name. A `qti-correct` of `S.TOTAL` is refused,
 since it names an outcome and not a response.
 
-`openPackage` also refuses the following, which need the items that a test's item refs name. It
-never splits a dotted name the test declares whole into an item ref and a variable.
+`openPackage` also refuses the following, which need the documents that a test's item refs and
+section refs name. It never splits a dotted name the test declares whole into an item ref and a
+variable.
 
 | Refused | Rule | pantry's rule |
 | --- | --- | --- |
@@ -728,6 +751,7 @@ never splits a dotted name the test declares whole into an item ref and a variab
 | A `qti-variable-mapping` whose `source-identifier` names no outcome its item declares | `undeclared-variable` | `variable-mapping-source` |
 | A second `qti-variable-mapping` on one item ref with the same `target-identifier` | `duplicate-identifier` | `variable-mapping-target` |
 | A `qti-template-default` whose `template-identifier` names no template variable of its item | `undeclared-variable` | `template-default-target` |
+| A part, section or item ref identifier given twice across a test and the section documents it reaches, refused at the second | `duplicate-identifier` | `structure-identifier` |
 | A dotted `qti-correct` that reads anything but a response *(pending)* | `undeclared-variable` | none |
 | A dotted `qti-map-response` or `qti-map-response-point` that reads anything but a response *(pending)* | `undeclared-variable` | none |
 | A dotted `qti-map-response` or `qti-map-response-point` whose response declares no mapping or area mapping *(pending)* | `template-requirements` | none |
