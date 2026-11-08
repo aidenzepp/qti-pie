@@ -29,7 +29,7 @@ import { integerOf } from "#plate/engine/numbers.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { own } from "#plate/engine/refs.ts";
 import { entryName, isPosted } from "#plate/form/encoding.ts";
-import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
+import type { DecodeOptions, ValueBinding } from "#plate/form/encoding.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { IntegerOrRef } from "#plate/model/expression.ts";
@@ -2099,7 +2099,7 @@ export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): Readonly
  * not under the binding's `name`.
  */
 export interface Posting {
-  readonly binding: Binding;
+  readonly binding: ValueBinding;
   readonly identifier: string;
   /**
    * The number base its integer is written in: the `base` of the first Text Entry or Extended

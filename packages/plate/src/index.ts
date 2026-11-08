@@ -76,6 +76,8 @@ export type {
   InstanceRequirement,
   Partition,
   PostedBaseType,
+  RecordBinding,
+  ValueBinding,
 } from "#plate/form/encoding.ts";
 
 export {
