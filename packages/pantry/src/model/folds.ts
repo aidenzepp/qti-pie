@@ -582,18 +582,25 @@ export interface Ends {
  *
  * A code point past U+FFFF is two UTF-16 code units, a surrogate pair, and XML's `Char` holds no
  * lone surrogate, so the last code point is the pair that starts two units from the end where one
- * does, and the last unit otherwise.
+ * does, and the last unit otherwise: where the characters are shorter than two units, no code point
+ * starts two units from the end.
  *
  * @param chars - The node's characters.
  * @returns Its first and last code points.
  */
 export const endsOf = (chars: string): Ends => {
   const head = chars.codePointAt(0);
-  const pair = chars.codePointAt(chars.length - 2) ?? 0;
+  const pair = Option.filter(
+    Option.fromUndefinedOr(chars.codePointAt(chars.length - 2)),
+    (point) => point > 0xff_ff,
+  );
 
   return {
     first: head === undefined ? "" : String.fromCodePoint(head),
-    last: pair > 0xff_ff ? String.fromCodePoint(pair) : chars.slice(-1),
+    last: Option.match(pair, {
+      onNone: () => chars.slice(-1),
+      onSome: (point) => String.fromCodePoint(point),
+    }),
   };
 };
 
