@@ -1360,7 +1360,12 @@ const valuesSet: ReadonlyMap<string, string> = new Map([
 
 /**
  * Word an `expression-type` refusal whose detail names no `check`: a lookup operand against its
- * table (reading 28), or an expression against the variable it sets (pantry's P20).
+ * table (reading 28), a lookup operand no lookup reads, or an expression against the variable it
+ * sets (pantry's P20).
+ *
+ * A lookup's refusal with no `table` is a `qti-lookup-outcome-value` whose outcome a test reads
+ * through an item ref (`I1.SCORE`), whose table is its item's: the sentence names what every
+ * lookup reads, a single `integer`, `float` or `duration` (pantry's P22).
  *
  * The variable's type is the detail's `outcomeCardinality` and `outcomeBaseType` whatever its
  * kind, and its kind is the `targetKind` a template rule's refusal carries (`template`,
@@ -1376,6 +1381,16 @@ const uncheckedType = (refusal: Refusal, element: string, expression: string): s
 
   return Option.match(optionalFact(refusal, "table"), {
     onNone: () => {
+      if (element === "qti-lookup-outcome-value") {
+        const read = `a single ${alternatives("integer float duration", code)} value`;
+
+        return sentence(
+          refusal,
+          `${code(element)} looks ${code(identifier)} up with ${withArticle(expression)} value, but a lookup reads only ${read}${citation(refusal)}.`,
+          `look ${code(identifier)} up with ${read}`,
+        );
+      }
+
       const variable = withArticle(
         `${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))} ${variableKind(fact(refusal, "targetKind", "outcome"))}`,
       );
@@ -1488,8 +1503,9 @@ const templateReadSource = "info.txt:65111";
  *   template variables (`info.txt:65111`), unless the detail names a reading; the remedy offers a
  *   template variable, never `qti-correct` or `qti-default`, which read the refused variable too.
  * - `weight` (P29): a weighted `qti-test-variables` whose base type is not `float`.
- * - None: an expression against the variable it sets (P20), or a lookup operand against its table
- *   (see {@link uncheckedType}).
+ * - None: an expression against the variable it sets (P20), or a lookup operand against its table or,
+ *   for an outcome a test reads through an item ref, against what every lookup reads (P22; see
+ *   {@link uncheckedType}).
  *
  * An `expressionBaseType` of `""`, a type with no base type of its own, is worded `untyped`.
  *
