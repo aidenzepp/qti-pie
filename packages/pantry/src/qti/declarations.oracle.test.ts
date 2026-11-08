@@ -7,14 +7,24 @@
  * tests (`#pantry/import/overlays/declarations.test.ts`) check its rows and codes.
  */
 import { schema } from "@bjornpagen/grizzle";
+import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect } from "effect";
+import { Array as Arr, Duration, Effect, Option } from "effect";
 import { patternFlags } from "#pantry/grammar/domains.ts";
-import { BaseType, BuiltIn, BuiltInVariable, ValueDomainOf } from "#pantry/grammar/install.ts";
+import {
+  BaseType,
+  BuiltIn,
+  BuiltInVariable,
+  grammar,
+  ValueDomainOf,
+} from "#pantry/grammar/install.ts";
+import { lawNameOf } from "#pantry/import/refusal.ts";
+import { readProgram } from "#pantry/import/program.ts";
+import { readPackage } from "#pantry/package/read.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import {
@@ -27,6 +37,7 @@ import {
   declarationLaws,
   domainValues,
   FieldValue,
+  itemSessionVariables,
   MasteryCeiling,
   MasteryFloor,
   MasteryValue,
@@ -38,6 +49,7 @@ import {
   RecordFieldName,
   reservedBaseTypes,
   sessionVariables,
+  testSessionVariables,
   unjudgedBaseTypes,
   Value,
   ValueBaseType,
@@ -47,7 +59,11 @@ import {
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
 import { Qti } from "#pantry/qti/schema.ts";
-import { lawNames, ruleOf } from "#pantry/test/oracle.ts";
+import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
+import { hostRowsOf, judge as judgeHost } from "#pantry/test/host-judge.ts";
+import { judgedLaws } from "#pantry/test/judged-laws.ts";
+import { judge as judgeOracle, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
 /**
  * The O2 overlay relations, each under its own name.
@@ -313,4 +329,124 @@ describe("qti/declarations.ts, typed values", () => {
 
     assert.isFalse(uri.test("%zz"), "%zz");
   });
+});
+
+/**
+ * The QTI 3.0 namespace.
+ */
+const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
+
+/**
+ * Write an XML document: its declaration, then its text.
+ *
+ * @param text - The document's root element.
+ * @returns The document's bytes.
+ */
+const xml = (text: string): Uint8Array =>
+  new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8"?>\n${text}\n`);
+
+/**
+ * Write a manifest resource of one document.
+ *
+ * @param path - The document's path.
+ * @param type - Its resource type.
+ * @param at - Its position, which numbers its identifier.
+ * @returns The resource element.
+ */
+const resource = (path: string, type: string, at: number): string =>
+  `<resource identifier="R${String(at)}" type="${type}" href="${path}"><file href="${path}"/></resource>`;
+
+/**
+ * Write a package of one item and a test that places it, the item or the test declaring one outcome
+ * `identifier`, and the manifest that lists both.
+ *
+ * @param root - The document that declares the name.
+ * @param identifier - The declared name.
+ * @returns The package's entries.
+ */
+const declaringPackage = (root: "item" | "test", identifier: string): PackageEntries => {
+  const declared = `<qti-outcome-declaration identifier="${identifier}" cardinality="single" base-type="integer"/>`;
+
+  return new Map([
+    [
+      "imsmanifest.xml",
+      xml(
+        `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata><organizations/><resources>${resource("test.xml", "imsqti_test_xmlv3p0", 0)}${resource("item.xml", "imsqti_item_xmlv3p0", 1)}</resources></manifest>`,
+      ),
+    ],
+    [
+      "item.xml",
+      xml(
+        `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" adaptive="false" time-dependent="false">${root === "item" ? declared : ""}<qti-item-body><p>An item.</p></qti-item-body></qti-assessment-item>`,
+      ),
+    ],
+    [
+      "test.xml",
+      xml(
+        `<qti-assessment-test xmlns="${asi}" identifier="test" title="Test">${root === "test" ? declared : ""}<qti-test-part identifier="part" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="first" title="First" visible="true"><qti-assessment-item-ref identifier="ref" href="item.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ),
+    ],
+  ]);
+};
+
+describe("qti/declarations.ts, Declaration not reserved by parent", () => {
+  it("reserves the three session variables under an item and duration alone under a test (reading 168)", () => {
+    // Oracle: the specification as a checker, §2.2.2 by hand: an item's built-ins are numAttempts,
+    // duration and completionStatus, a test's duration alone.
+    assert.sameMembers([...itemSessionVariables], ["completionStatus", "duration", "numAttempts"]);
+    assert.sameMembers([...testSessionVariables], ["duration"]);
+  });
+
+  it.effect(
+    "refuses a declaration of a name its parent reserves and admits any other, the oracle and the import's rows alike",
+    () =>
+      // Oracle: two implementations side by side, the law oracle and the schema's laws over the
+      // import's rows, and the specification's table by hand. Bound: an item and a test by the
+      // three session variables, 6 packages.
+      Effect.gen(function* byParent() {
+        const hostLaws = judgedLaws(Qti);
+        const oracleLaws = lawsOf(grammar);
+        const cases = (["item", "test"] as const).flatMap((root) =>
+          sessionVariables.map((identifier) => ({
+            identifier,
+            refused: root === "item" || identifier === "duration",
+            root,
+          })),
+        );
+
+        for (const drawn of cases) {
+          yield* Effect.scoped(
+            Effect.gen(function* oneCase() {
+              const dir = yield* scopedPackage(declaringPackage(drawn.root, drawn.identifier));
+              const judgment = yield* judgeOracle(yield* readPackage(dir), grammar, oracleLaws);
+              assert.strictEqual(judgment._tag, "Judged", JSON.stringify(drawn));
+
+              const oracle = new Set<string>(
+                judgment._tag === "Judged" ? judgment.breaches.map(({ law }) => law) : [],
+              );
+              const host = judgeHost(hostRowsOf((yield* readProgram(dir)).inputs), hostLaws);
+              const broken = new Set(
+                host.broken.flatMap(({ law }) => Option.toArray(lawNameOf(law))),
+              );
+
+              assert.strictEqual(
+                oracle.has("Declaration not reserved"),
+                drawn.refused,
+                JSON.stringify(drawn),
+              );
+              assert.strictEqual(
+                broken.has("Declaration not reserved"),
+                drawn.refused,
+                JSON.stringify(drawn),
+              );
+              assert.deepStrictEqual(
+                [...broken].toSorted(),
+                [...oracle].toSorted(),
+                `${JSON.stringify(drawn)}: the import's rows and the oracle break one set`,
+              );
+            }),
+          );
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
+  );
 });

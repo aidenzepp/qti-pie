@@ -105,7 +105,7 @@ import {
 } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
-import { testKind } from "#pantry/qti/tests.ts";
+import { itemKind, testKind } from "#pantry/qti/tests.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
@@ -148,7 +148,9 @@ export const valueSetKinds = ["qti-default-value", "qti-correct-response"] as co
  * and 5.151.1 ("The identifiers of the built-in session variables are reserved. They are
  * completionStatus, numAttempts and duration"). Spec reading 72: the name is spelled exactly, with
  * no alias, so `completion_status` is an ordinary identifier. Each name is read once, though
- * `BuiltInVariable` holds `duration` under an item's roots and a test's alike.
+ * `BuiltInVariable` holds `duration` under an item's roots and a test's alike. Which of them a
+ * declaration may not name depends on its parent: {@link itemSessionVariables} and
+ * {@link testSessionVariables}.
  *
  * The built-in context variable `QTI_CONTEXT` is no session variable: the implementation guide
  * declares it explicitly, "an explicit (though unnecessary) qti-context-declaration of QTI_CONTEXT"
@@ -161,6 +163,35 @@ export const sessionVariables = [
       .map(({ variable }) => variable),
   ),
 ];
+
+/**
+ * The session variables the processing of one root holds, which are the ones a declaration under
+ * that root's kind may not name.
+ *
+ * @param root - The root kind.
+ * @returns The names, each once.
+ */
+const sessionVariablesOf = (root: string): readonly string[] => [
+  ...new Set(
+    BuiltInVariable.rows
+      .filter(
+        ({ declaration, root: held }) => held === root && declaration !== "qti-context-declaration",
+      )
+      .map(({ variable }) => variable),
+  ),
+];
+
+/**
+ * The session variables an item's declaration may not name: the three of an item, `numAttempts`,
+ * `duration` and `completionStatus` (reading 168).
+ */
+export const itemSessionVariables = sessionVariablesOf(itemKind);
+
+/**
+ * The session variables a test's declaration may not name: `duration` alone, since a test's own
+ * `numAttempts` and `completionStatus` are ordinary names there (reading 168).
+ */
+export const testSessionVariables = sessionVariablesOf(testKind);
 
 /**
  * A name the specification types where it is declared: the declaration kind a declaration of the
@@ -1117,9 +1148,10 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   image; each name is its lexical form collapsed; a normal minimum not written is its version's
  *   default.
  * - **`Declaration key`** (spec reading 74): `key(document, identifier)` over the identifiers.
- * - **`Declaration not reserved`** (reading 72): no declaration names a built-in session variable, in
- *   any document, an item's, a test's or a section's alike, since every named declaration element
- *   has its identifier whatever its root (information model tables 4.5.1, 5.115.1 and 5.151.1).
+ * - **`Declaration not reserved`** (readings 72 and 168): no declaration names a built-in session
+ *   variable of its parent: an item's declaration, none of the three, and a test's, `duration`
+ *   alone, so a test's own `numAttempts` and `completionStatus` are ordinary names (information
+ *   model tables 4.5.1, 5.115.1 and 5.151.1; §2.2.2).
  * - **`Reserved type`**: SCORE and MAXSCORE of an item, PASSED and QTI_CONTEXT keep their specified
  *   types: a typed name has its type where it has a base type, QTI_CONTEXT is declared as a
  *   context, and, where it has a cardinality, a typed outcome name is no record and QTI_CONTEXT is
@@ -1152,7 +1184,12 @@ export const declarationLawsByName = {
   "Declaration key": [key(on(DeclarationIdentifier, "document", "identifier"))],
   "Declaration not reserved": [
     check("Declaration_not_reserved", DeclarationIdentifier, (d) =>
-      d.not(d.in(d.identifier, sessionVariables)),
+      d.not(
+        d.or(
+          d.and(d.eq(d.parentKind, testKind), d.in(d.identifier, testSessionVariables)),
+          d.and(d.ne(d.parentKind, testKind), d.in(d.identifier, itemSessionVariables)),
+        ),
+      ),
     ),
   ],
   "Declaration overlay": [
