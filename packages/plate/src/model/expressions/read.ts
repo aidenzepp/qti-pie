@@ -4,8 +4,8 @@
  * expression element through them.
  *
  * The model, the validator and the engine read a kind through its entry here in place of a case
- * per kind, so a family lands a kind by replacing its entries in its own files. It value-imports
- * the ten families, which value-import `#plate/model/expression.ts` and the leaf
+ * per kind, so a kind's rule and reader spec change in its family's own files alone. It
+ * value-imports the ten families, which value-import `#plate/model/expression.ts` and the leaf
  * `#plate/model/attributes.ts`, never this module: they name its reader types with `import type`
  * only. So the value imports point one way: from the item model and the validator to here, and
  * from here to the families.
