@@ -756,6 +756,81 @@ const portable = (declarations: readonly SourceElement[], contextVariables: read
     ],
   );
 
+/**
+ * Construct an interaction bound to a response, with its counts and its children.
+ *
+ * @param local The interaction's local name.
+ * @param responseIdentifier Its `response-identifier`.
+ * @param attributes Its further attributes, its counts among them.
+ * @param children Its children.
+ * @returns The interaction.
+ */
+const counting = (
+  local: string,
+  responseIdentifier: string,
+  attributes: readonly SourceAttribute[],
+  children: readonly SourceElement[] = [],
+): SourceElement =>
+  el(local, [attr("response-identifier", responseIdentifier), ...attributes], children);
+
+/**
+ * Construct a Media interaction bound to `PLAYS` with its counts, over one `audio`.
+ *
+ * @param attributes Its counts.
+ * @returns The interaction.
+ */
+const media = (attributes: readonly SourceAttribute[]): SourceElement =>
+  counting(
+    "qti-media-interaction",
+    "PLAYS",
+    [attr("autostart", "false"), ...attributes],
+    [el("audio", [attr("src", "media/sound.mp3")])],
+  );
+
+/**
+ * Construct an Order over the given number of simple choices.
+ *
+ * @param choices How many `qti-simple-choice`s it holds.
+ * @param attributes Its counts.
+ * @param responseIdentifier Its `response-identifier`, `ORDER` unless another is given.
+ * @returns The interaction.
+ */
+const order = (
+  choices: number,
+  attributes: readonly SourceAttribute[],
+  responseIdentifier = "ORDER",
+): SourceElement =>
+  counting(
+    "qti-order-interaction",
+    responseIdentifier,
+    attributes,
+    Array.from({ length: choices }, (_, index) =>
+      el("qti-simple-choice", [attr("identifier", `C${index}`)], [text(`c${index}`)]),
+    ),
+  );
+
+/**
+ * Construct a count pair's refusal.
+ *
+ * @param path The path it points at.
+ * @param element The element whose pair it is.
+ * @param least The least count, then its value.
+ * @param most The most count, then its value.
+ * @param reading The reading that settles it.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const pairRefusal = (
+  path: string,
+  element: string,
+  [least, leastValue]: readonly [string, string],
+  [most, mostValue]: readonly [string, string],
+  reading = "76",
+) => ({
+  detail: { check: "count-pair", element, least, leastValue, most, mostValue, reading },
+  path,
+  rule: "count-range" as const,
+});
+
 describe("checkRules", () => {
   describe("undeclared-response", () => {
     it("[I-1] refuses an interaction naming RESP2 when only RESPONSE is declared", () => {
@@ -1397,6 +1472,361 @@ describe("checkRules", () => {
           ),
         ),
         [],
+      );
+    });
+  });
+
+  describe("align-54 counts: a least count at most its most, five pairs, and an order interaction's counts", () => {
+    const body = "qti-assessment-item/qti-item-body";
+
+    it("align-54 counts E2: refuses each of the five pairs with its least above its most, as count-range count-pair at the most (reading 76)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("CHOICE", "multiple", "identifier"),
+              response("PAIRS", "multiple", "pair"),
+              response("ESSAY", "single", "string"),
+              response("PLAYS", "single", "integer"),
+            ],
+            [
+              counting("qti-choice-interaction", "CHOICE", [
+                attr("max-choices", "2"),
+                attr("min-choices", "3"),
+              ]),
+              counting(
+                "qti-associate-interaction",
+                "PAIRS",
+                [attr("max-associations", "2"), attr("min-associations", "3")],
+                [
+                  el("qti-simple-associable-choice", [
+                    attr("identifier", "A"),
+                    attr("match-max", "1"),
+                    attr("match-min", "2"),
+                  ]),
+                  el("qti-simple-associable-choice", [
+                    attr("identifier", "B"),
+                    attr("match-max", "1"),
+                  ]),
+                ],
+              ),
+              counting("qti-extended-text-interaction", "ESSAY", [
+                attr("max-strings", "2"),
+                attr("min-strings", "3"),
+              ]),
+              media([attr("max-plays", "2"), attr("min-plays", "3")]),
+            ],
+          ),
+        ),
+        [
+          pairRefusal(
+            `${body}/qti-choice-interaction/@max-choices`,
+            "qti-choice-interaction",
+            ["min-choices", "3"],
+            ["max-choices", "2"],
+          ),
+          pairRefusal(
+            `${body}/qti-associate-interaction/@max-associations`,
+            "qti-associate-interaction",
+            ["min-associations", "3"],
+            ["max-associations", "2"],
+          ),
+          pairRefusal(
+            `${body}/qti-associate-interaction/qti-simple-associable-choice[1]/@match-max`,
+            "qti-simple-associable-choice",
+            ["match-min", "2"],
+            ["match-max", "1"],
+          ),
+          pairRefusal(
+            `${body}/qti-extended-text-interaction/@max-strings`,
+            "qti-extended-text-interaction",
+            ["min-strings", "3"],
+            ["max-strings", "2"],
+          ),
+          pairRefusal(
+            `${body}/qti-media-interaction/@max-plays`,
+            "qti-media-interaction",
+            ["min-plays", "3"],
+            ["max-plays", "2"],
+          ),
+        ],
+      );
+    });
+
+    it("align-54 counts E2: reads an unwritten most as its XSD default, refused at the element (reading 76)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("CHOICE", "single", "identifier"), response("PAIRS", "single", "pair")],
+            [
+              counting("qti-choice-interaction", "CHOICE", [attr("min-choices", "2")]),
+              counting("qti-associate-interaction", "PAIRS", [attr("min-associations", "2")]),
+            ],
+          ),
+        ),
+        [
+          pairRefusal(
+            `${body}/qti-choice-interaction`,
+            "qti-choice-interaction",
+            ["min-choices", "2"],
+            ["max-choices", "1"],
+          ),
+          pairRefusal(
+            `${body}/qti-associate-interaction`,
+            "qti-associate-interaction",
+            ["min-associations", "2"],
+            ["max-associations", "1"],
+          ),
+        ],
+      );
+    });
+
+    it("align-54 counts E2: exempts a most of 0, written or the XSD's default, which sets no limit (reading 76)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("CHOICE", "multiple", "identifier"),
+              response("POINTS", "multiple", "point"),
+              response("ESSAY", "single", "string"),
+              response("PLAYS", "single", "integer"),
+            ],
+            [
+              counting("qti-choice-interaction", "CHOICE", [
+                attr("max-choices", "0"),
+                attr("min-choices", "3"),
+              ]),
+              counting("qti-select-point-interaction", "POINTS", [attr("min-choices", "2")]),
+              counting("qti-extended-text-interaction", "ESSAY", [
+                attr("max-strings", "0"),
+                attr("min-strings", "3"),
+              ]),
+              media([attr("min-plays", "5")]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 counts E2: accepts a least at or below its most", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("CHOICE", "multiple", "identifier"),
+              response("PAIRS", "multiple", "pair"),
+              response("PLAYS", "single", "integer"),
+            ],
+            [
+              counting("qti-choice-interaction", "CHOICE", [
+                attr("max-choices", "2"),
+                attr("min-choices", "2"),
+              ]),
+              counting(
+                "qti-associate-interaction",
+                "PAIRS",
+                [attr("max-associations", "3"), attr("min-associations", "1")],
+                [
+                  el("qti-simple-associable-choice", [
+                    attr("identifier", "A"),
+                    attr("match-max", "1"),
+                    attr("match-min", "1"),
+                  ]),
+                  el("qti-simple-associable-choice", [
+                    attr("identifier", "B"),
+                    attr("match-max", "2"),
+                  ]),
+                ],
+              ),
+              media([attr("max-plays", "2"), attr("min-plays", "1")]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 counts D4a: refuses an Order's or a Graphic Order's min-choices, and a max-choices beside it, above its number of choices, as count-range choice-count (reading 18)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("ORDER", "ordered", "identifier"),
+              response("HOTSPOTS", "ordered", "identifier"),
+            ],
+            [
+              order(3, [attr("max-choices", "5"), attr("min-choices", "4")]),
+              counting(
+                "qti-graphic-order-interaction",
+                "HOTSPOTS",
+                [attr("min-choices", "3")],
+                [
+                  el("img", [
+                    attr("alt", "A map"),
+                    attr("height", "100"),
+                    attr("src", "images/map.png"),
+                    attr("width", "100"),
+                  ]),
+                  ...["H1", "H2"].map((identifier) =>
+                    el("qti-hotspot-choice", [
+                      attr("coords", "10,10,5"),
+                      attr("identifier", identifier),
+                      attr("shape", "circle"),
+                    ]),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              attribute: "min-choices",
+              check: "choice-count",
+              choices: "3",
+              reading: "18",
+              value: "4",
+            },
+            path: `${body}/qti-order-interaction/@min-choices`,
+            rule: "count-range",
+          },
+          {
+            detail: {
+              attribute: "max-choices",
+              check: "choice-count",
+              choices: "3",
+              reading: "18",
+              value: "5",
+            },
+            path: `${body}/qti-order-interaction/@max-choices`,
+            rule: "count-range",
+          },
+          {
+            detail: {
+              attribute: "min-choices",
+              check: "choice-count",
+              choices: "2",
+              reading: "18",
+              value: "3",
+            },
+            path: `${body}/qti-graphic-order-interaction/@min-choices`,
+            rule: "count-range",
+          },
+        ],
+      );
+    });
+
+    it('align-54 counts D4a: refuses an Order\'s max-choices="0", and one below its min-choices, beside a written min-choices, as count-range count-pair with no 0 exemption (reading 18)', () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("ORDER", "ordered", "identifier"),
+              response("ORDER2", "ordered", "identifier"),
+            ],
+            [
+              order(3, [attr("max-choices", "0"), attr("min-choices", "2")]),
+              order(3, [attr("max-choices", "2"), attr("min-choices", "3")], "ORDER2"),
+            ],
+          ),
+        ),
+        [
+          pairRefusal(
+            `${body}/qti-order-interaction[1]/@max-choices`,
+            "qti-order-interaction",
+            ["min-choices", "2"],
+            ["max-choices", "0"],
+            "18",
+          ),
+          pairRefusal(
+            `${body}/qti-order-interaction[2]/@max-choices`,
+            "qti-order-interaction",
+            ["min-choices", "3"],
+            ["max-choices", "2"],
+            "18",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 counts D4a: reads no max-choices without a min-choices beside it, and accepts counts within the choices (reading 18)", () => {
+      for (const counts of [
+        [attr("max-choices", "9")],
+        [attr("max-choices", "0")],
+        [attr("max-choices", "3"), attr("min-choices", "2")],
+        [attr("max-choices", "3"), attr("min-choices", "3")],
+      ]) {
+        assert.deepStrictEqual(
+          judged(item([response("ORDER", "ordered", "identifier")], [order(3, counts)])),
+          [],
+        );
+      }
+    });
+
+    it("align-54 counts D3a: accepts an Extended Text bound to a multiple float response whose string-identifier names a multiple string, the cardinality of its own response (rule 5b8ee08b)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("NUMBERS", "multiple", "float"), response("TEXTS", "multiple", "string")],
+            [
+              counting("qti-extended-text-interaction", "NUMBERS", [
+                attr("max-strings", "2"),
+                attr("string-identifier", "TEXTS"),
+              ]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 counts D3a: refuses a multiple string beside a single binding, and a single string beside a multiple one, as binding string-binding (reading 14)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("ESSAY", "single", "float"),
+              response("LINES", "multiple", "string"),
+              response("NUMBERS", "multiple", "float"),
+              response("TEXT", "single", "string"),
+            ],
+            [
+              capturing("ESSAY", "LINES", "qti-extended-text-interaction"),
+              counting("qti-extended-text-interaction", "NUMBERS", [
+                attr("max-strings", "2"),
+                attr("string-identifier", "TEXT"),
+              ]),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              baseType: "string",
+              cardinality: "multiple",
+              check: "string-binding",
+              interaction: "qti-extended-text-interaction",
+              reading: "14",
+              response: "LINES",
+            },
+            path: `${body}/qti-extended-text-interaction[1]`,
+            rule: "binding",
+          },
+          {
+            detail: {
+              baseType: "string",
+              cardinality: "single",
+              check: "string-binding",
+              interaction: "qti-extended-text-interaction",
+              reading: "14",
+              response: "TEXT",
+            },
+            path: `${body}/qti-extended-text-interaction[2]`,
+            rule: "binding",
+          },
+        ],
       );
     });
   });
