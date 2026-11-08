@@ -4,9 +4,9 @@
  * (`#pantry/test/gen/sites.ts` `rulesOfBox`) and the law oracle's (`#pantry/test/oracle-verdict.ts`
  * `oracleVerdict`). A package whose one fault is an href naming an absent file is refused under
  * `file-exists` alone, `SitePath`'s `File_exists` CHECK, which PostgreSQL meets as the row is
- * inserted, before any deferred key; one whose one fault is an include with no href, under
- * `include-target` alone: the site has no `SitePath`, so no stand-in path breaks the href's
- * reachability beside it.
+ * inserted, before any deferred key; one whose one fault is an include that places nothing, under
+ * `include-target` or the fragment's outside rule (`outsideRulesOfBox`): the site has no
+ * `SitePath`, so no stand-in path breaks the href's reachability beside it.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -35,9 +35,9 @@ import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
  * Import one package of the box and hold the database's verdict to the case table's
  * (`rulesOfBox`, with `outsideRulesOfBox`'s rules beside the site laws) and the law oracle's:
  * accepted exactly where both accept; refused under a rule of the table that the oracle names too,
- * and where the table names one rule, that rule alone, so
- * an href naming an absent file is refused under `file-exists` and an include with no href under
- * `include-target`, whatever order PostgreSQL's deferred keys run in.
+ * and where the table names one rule, that rule alone, so an href naming an absent file is refused
+ * under `file-exists` alone, and an include that places nothing under `include-target` or the
+ * fragment's outside rule, whatever order PostgreSQL's deferred keys run in.
  *
  * @param box - The package.
  * @returns Nothing; fails the case on a disagreement.
@@ -78,7 +78,7 @@ describe.skipIf(!hasLease)("test/gen/sites.ts, on the lease", { timeout: 3_600_0
     timeout: authorLayerHookTimeoutMs,
   })("each package of the site box imported and judged by PostgreSQL", (it) => {
     it.effect(
-      "gives every package of the site box the law oracle's verdict, and an include with no href include-target alone",
+      "gives every package of the site box the law oracle's verdict, and an include that places nothing include-target or the fragment's outside rule",
       (ctx) =>
         // Oracle: the specification as a checker, reading 115 and §7.5 per case (`ruleOfCase`),
         // and a second implementation, the law oracle over the same entries.

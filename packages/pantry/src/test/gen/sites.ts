@@ -191,17 +191,20 @@ export const ruleOfCase = (name: SiteName, href: HrefCase): string | undefined =
 };
 
 /**
- * The rules a package of the box breaks outside the site laws: where the item body's include of
- * `fragment.xml` names a file outside the package, it is stored as written and never fetched, so
- * no include places the fragment, which is then judged as written, and its text entry's
- * `response-identifier` and its context variable's `identifier` name declarations only the item
- * holds ("Idref target"). The other sites' documents hold no such reference.
+ * The rules a package of the box breaks outside the site laws: where no include places
+ * `fragment.xml` (the fragment's file is absent, listed as no document, outside the package, or its
+ * include writes no href), the fragment is judged as written, and its text entry's
+ * `response-identifier`, its context variable's `identifier` and its `data-catalog-idref` name
+ * declarations or catalogs only the item holds, none of its own document ("Idref target" and
+ * "Catalog reference"). PostgreSQL reports whichever deferred key it checks first; for an absent
+ * file it meets `File_exists` at INSERT before any of them. The other sites' documents hold no such
+ * reference.
  *
  * @param box - The package.
  * @returns The rules.
  */
 export const outsideRulesOfBox = (box: SiteBox): ReadonlySet<string> =>
-  new Set(box.fragment === "external" ? ["idref-target"] : []);
+  new Set(box.fragment === "listed" ? [] : ["idref-target"]);
 
 /**
  * The rules a package of the box breaks, one per site whose case breaks one.
