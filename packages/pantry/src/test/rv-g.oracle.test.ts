@@ -13,8 +13,8 @@
  *   §5.163.2, §5.166.1, §5.166.9; the HTML Standard's `srcset`);
  * - Reading 129, `lang`, `xml:lang` and `srclang` BCP 47 language tags (§5.15.3, §4.1.4, §5.163.3;
  *   XML 1.0 §2.12);
- * - Reading 132, a printed variable's `format` a printf format string of at most one conversion
- *   (§2.3.4; C11 §7.21.6.1);
+ * - Readings 132 and 161, a printed variable's `format` a printf format string over the listed codes,
+ *   of any number of conversions (§2.3.4; C11 §7.21.6.1; PR #46, comment 6701102861);
  * - Reading 2, MathML's `number` with no `+` and `cn`'s `base` a positive integer (MathML 3 §2.1.5.1,
  *   §4.2.1.3).
  */
@@ -301,10 +301,10 @@ const refused: readonly Refused[] = [
   },
   {
     law: "value domain",
-    lexical: "%i of %i",
-    name: 'reading 132: <qti-printed-variable format="%i of %i">, two conversions of one value',
+    lexical: "%i of %d",
+    name: 'reading 132: <qti-printed-variable format="%i of %d">, a second conversion of no listed code',
     rule: "attribute-lexical",
-    text: withBody(`<p><qti-printed-variable identifier="SCORE" format="%i of %i"/></p>`),
+    text: withBody(`<p><qti-printed-variable identifier="SCORE" format="%i of %d"/></p>`),
   },
   {
     law: "value domain",
@@ -359,6 +359,12 @@ const accepted: readonly { readonly name: string; readonly text: string }[] = [
     name: 'reading 132: <qti-printed-variable format="%.2f">, text around a conversion, and a format of none',
     text: withBody(
       `<p><qti-printed-variable identifier="SCORE" format="%.2f"/> <qti-printed-variable identifier="SCORE" format="Score: %i%%"/> <qti-printed-variable identifier="SCORE" format="100%%"/></p>`,
+    ),
+  },
+  {
+    name: 'reading 161: <qti-printed-variable format="%i of %i">, two conversions of one value, and several',
+    text: withBody(
+      `<p><qti-printed-variable identifier="SCORE" format="%i of %i"/> <qti-printed-variable identifier="SCORE" format="%%%e%%%G"/> <qti-printed-variable identifier="SCORE" format="%i, %.2f and %#x"/></p>`,
     ),
   },
   {

@@ -334,18 +334,19 @@ const isLanguageTag = (value: string): boolean => {
 };
 
 /**
- * Whether a value is a printf format string over the information model's conversion codes (§2.3.4)
- * that converts at most one argument, read left to right: a character that is not `%`, or `%%`, or
- * `%`, flags, a width, an optional precision of `.` and digits, and one of the codes, which may
- * stand once.
+ * The conversion specifiers a value writes, read left to right as C reads a format string (C11
+ * §7.21.6.1): a character that is not `%` is text, `%%` writes a `%` and converts nothing, and
+ * every other `%` begins a specifier of flags, a width and an optional precision of `.` and
+ * digits, well-formed where one of the information model's codes ends it (§2.3.4). A malformed
+ * specifier ends where its code would stand, and the walk reads on from there.
  *
  * @param value - The value.
- * @returns Whether it is a format.
+ * @returns Whether each specifier is well-formed, in the order written.
  */
-const isPrintfFormat = (value: string): boolean => {
+const printfSpecifiers = (value: string): readonly boolean[] => {
   const points = Array.from(value, String);
+  const specifiers: boolean[] = [];
   let next = 0;
-  let conversions = 0;
   const takeWhile = (characters: string): void => {
     while (next < points.length && characters.includes(points[next] ?? "")) {
       next += 1;
@@ -364,18 +365,141 @@ const isPrintfFormat = (value: string): boolean => {
       }
 
       const code = points[next];
-      conversions += 1;
-      if (code === undefined || !"EefGgrRioXx".includes(code) || conversions > 1) {
-        return false;
-      }
-
-      next += 1;
+      const wellFormed = code !== undefined && "EefGgrRioXx".includes(code);
+      specifiers.push(wellFormed);
+      next += wellFormed ? 1 : 0;
     } else {
       next += 1;
     }
   }
 
-  return true;
+  return specifiers;
+};
+
+/**
+ * Whether a value is a printf format string over the information model's conversion codes (§2.3.4):
+ * every specifier it writes is well-formed ({@link printfSpecifiers}), however many it writes,
+ * none included (spec reading 161 sets aside reading 132's one).
+ *
+ * @param value - The value.
+ * @returns Whether it is a format.
+ */
+const isPrintfFormat = (value: string): boolean => printfSpecifiers(value).every(Boolean);
+
+/**
+ * What a generated format is, for the search's coverage: how many specifiers it writes, none, one,
+ * two or several, and whether one of them is malformed. A format of none has no specifier to
+ * break, so the search must reach the six others, each count well-formed and malformed.
+ */
+const printfNotes = [
+  "none",
+  "one",
+  "one malformed",
+  "two",
+  "two malformed",
+  "several",
+  "several malformed",
+] as const;
+
+/**
+ * A {@link printfNotes} note.
+ */
+type PrintfNote = (typeof printfNotes)[number];
+
+/**
+ * Note a format for the search ({@link printfNotes}).
+ *
+ * @param value - The value.
+ * @returns Its note.
+ */
+const printfNote = (value: string): PrintfNote => {
+  const specifiers = printfSpecifiers(value);
+  const malformed = specifiers.includes(false);
+  if (specifiers.length === 0) {
+    return "none";
+  }
+
+  if (specifiers.length === 1) {
+    return malformed ? "one malformed" : "one";
+  }
+
+  if (specifiers.length === 2) {
+    return malformed ? "two malformed" : "two";
+  }
+
+  return malformed ? "several malformed" : "several";
+};
+
+/**
+ * The pieces a generated format is drawn from, each a swarm feature: text with no `%`, the escape
+ * `%%`, a well-formed specifier's code, a code the information model does not list, and a `%`
+ * alone. A specifier's flags, width and precision are drawn apart ({@link printfMiddle}). A piece's
+ * class says how it was drawn, never what the format is: pieces run together, so `%` and `5i` read
+ * as one specifier, and the note reads the format as written.
+ */
+const printfClasses = {
+  bare: ["%"],
+  code: ["E", "e", "f", "G", "g", "r", "R", "i", "o", "X", "x"],
+  escape: ["%%"],
+  text: ["a", "Score: ", " of ", "5", ".", "-", "é", "\u{1F600}", "\u00A0"],
+  unlisted: ["d", "u", "s", "c", "q", "%", ""],
+} as const;
+
+/**
+ * A {@link printfClasses} feature.
+ */
+type PrintfClass = keyof typeof printfClasses;
+
+/**
+ * The features in the order a swarm draws them, text first, the floor.
+ */
+const printfClassNames = [
+  "text",
+  "escape",
+  "code",
+  "unlisted",
+  "bare",
+] as const satisfies readonly PrintfClass[];
+
+/**
+ * Draw a specifier's middle: up to three flags, a width of up to two digits, and, half the time, a
+ * precision of `.` and up to two digits.
+ */
+const printfMiddle: Gen<string> = (source) => {
+  const flags = source.draw(array(element(["#", "0", " ", "+", "-"] as const), { max: 3, min: 0 }));
+  const width = source.draw(array(element(["0", "1", "5", "9"] as const), { max: 2, min: 0 }));
+  const precision = source.draw(element([false, true] as const))
+    ? `.${source.draw(array(element(["0", "2", "7"] as const), { max: 2, min: 0 })).join("")}`
+    : "";
+
+  return `${flags.join("")}${width.join("")}${precision}`;
+};
+
+/**
+ * Draw one piece of a format under a swarm: for a code or an unlisted one, a specifier of `%`, its
+ * middle ({@link printfMiddle}) and the code; for any other class, the class's text.
+ *
+ * @param mix - The case's swarm.
+ * @returns The generator.
+ */
+const printfPieceOf =
+  (mix: Swarm<PrintfClass>): Gen<string> =>
+  (source) => {
+    const drawnClass = source.draw(swarmChoice(mix, printfClassNames));
+    const piece = source.draw(element(printfClasses[drawnClass]));
+
+    return drawnClass === "code" || drawnClass === "unlisted"
+      ? `%${source.draw(printfMiddle)}${piece}`
+      : piece;
+  };
+
+/**
+ * Draw a format under one swarm: up to eight pieces run together.
+ */
+const printfCase: Gen<string> = (source) => {
+  const mix = source.draw(swarm(printfClassNames));
+
+  return source.draw(array(printfPieceOf(mix), { max: 8, min: 0 })).join("");
 };
 
 /**
@@ -1126,14 +1250,15 @@ describe("The spec readings", () => {
     }
   });
 
-  it("read 132: a printed variable's format is a printf format string of at most one conversion over the listed codes, against an independent recogniser on every string of one to four pieces", () => {
+  it("read 132 and 161: a printed variable's format is a printf format string over the listed codes, of any number of conversions, against an independent recogniser on every string of one to four pieces", () => {
     // Information model §2.3.4: each conversion specifier is "%", flags of "#", "0", "-", " " and
     // "+", an optional width, an optional precision ("." and zero or more digits), and one of E, e,
-    // f, G, g, r, R, i, o, X or x; the rest of a C format string is text and "%%". C11 §7.21.6.1:
-    // "If there are insufficient arguments for the format, the behavior is undefined", and the
-    // variable is one argument, so a format holds at most one specifier, and may hold none.
-    // Oracle: `isPrintfFormat`, a left-to-right walk of the string that counts its conversions, not
-    // the pattern.
+    // f, G, g, r, R, i, o, X or x; the rest of a C format string is text and "%%". Reading 161 sets
+    // aside reading 132's one specifier: QTI bans no second conversion (PR #46, comment
+    // 6701102861), so a format holds any number, none included, and is stored as written.
+    // Oracle: `isPrintfFormat`, a left-to-right walk of the string that reads each specifier, not
+    // the pattern. Bound: every string of one to four pieces (30,940), which reaches each count of
+    // specifiers, none to several, well-formed and malformed.
     const pieces = ["%", "%%", "%i", "d", "f", ".", "5", " ", "#", "-", "x", "q", "é"];
     const strings = [
       "",
@@ -1154,25 +1279,83 @@ describe("The spec readings", () => {
       strings.push(...level);
     }
 
+    assert.deepStrictEqual(
+      printfNotes.filter((note) => !strings.some((value) => printfNote(value) === note)),
+      [],
+      "the bound reaches every count of specifiers, well-formed and malformed",
+    );
     for (const version of schemaVersions) {
       const format = Option.getOrThrow(domainAt(version, "qti-printed-variable", "format"));
       const wrong = strings.filter((value) => matches(format, value) !== isPrintfFormat(value));
 
       assert.deepStrictEqual(wrong.slice(0, 20), [], version);
       assert.isTrue(
-        matches(format, "%.2f") && matches(format, "Score: %i%%") && matches(format, "100%%"),
+        matches(format, "%.2f") &&
+          matches(format, "Score: %i%%") &&
+          matches(format, "100%%") &&
+          matches(format, "%i of %i") &&
+          matches(format, "%%%e%%%G") &&
+          matches(format, "%i, %.2f and %#x"),
         version,
       );
       assert.isFalse(
         matches(format, "%d") ||
           matches(format, "%") ||
           matches(format, "%q") ||
-          matches(format, "%i of %i") ||
-          matches(format, "%%%e%%%G"),
+          matches(format, "%d %d") ||
+          matches(format, "%i of %d") ||
+          matches(format, "%i of %"),
         version,
       );
     }
   });
+
+  it.effect(
+    "read 161, searched: generated formats of any number of specifiers, swarm-weighted over five kinds of piece, judged as the independent recogniser judges them, each count of specifiers reached well-formed and malformed",
+    (ctx) =>
+      // Reading 161 (PR #46, comment 6701102861): a format with two or more conversions is
+      // accepted and stored as written; reading 132's codes still judge each one. The search must
+      // reach each count, none, one, two and several, with every specifier well-formed and with
+      // one malformed (`printfNotes`), so a domain that refuses a second conversion, or admits a
+      // malformed one beside a well-formed one, fails it.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang: Duration.minutes(1),
+            concurrency: 1,
+            coverage: required<PrintfNote>(printfNotes, { cases: 600, sense: notesOnly }),
+            draw: drawn(printfCase),
+            kept: [],
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "information model §2.3.4's conversion specifier and C11 §7.21.6.1's format string read character by character (printfSpecifiers, isPrintfFormat), not the pattern",
+            },
+            runs: 800,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "grammar/attributes/printf-format",
+          },
+          (value, c) =>
+            Effect.sync(() => {
+              c.note(printfNote(value));
+              for (const version of schemaVersions) {
+                const format = Option.getOrThrow(
+                  domainAt(version, "qti-printed-variable", "format"),
+                );
+
+                assert.strictEqual(
+                  matches(format, value),
+                  isPrintfFormat(value),
+                  `${version} ${JSON.stringify(value)}`,
+                );
+              }
+            }),
+        ),
+      ),
+    testTimeoutMs,
+  );
 
   it("read 9: an h1's role is heading, tab or presentation, and every other kind's ARIA role keeps each role the XSD lists, every declarer against every listed role and the near misses", () => {
     // ASI binding §5.3.1, RULE ARIA ROLE 1b: "The 'h1' tag may have an ARIA role value of

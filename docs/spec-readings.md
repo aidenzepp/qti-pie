@@ -2284,6 +2284,12 @@ against it. A reading that is not an information-model-over-XSD case says which 
      only be formatted in the e, E, f, g, G, r or R styles" (section 7.30) is advice and is not read. (Decided
      2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec
      wins; at most one conversion is the operator's decision of 2026-11-06 on item L4.)
+
+     Reading 161 sets aside this reading's rule that a format holds at most one conversion specifier, and with it the
+     operator's decision on item L4: a format of any number of specifiers is accepted and stored as written, so
+     `%i of %i` and `%%%e%%%G` are admitted. The rest of this reading stands: each specifier ends in one of the listed
+     codes, and `%q`, `2f%`, `%` and `%d` are still refused under `attribute-lexical`.
+
 133. **A key text holds at most 2,587 UTF-8 bytes: a stated limit of the representation, not a law of QTI.** No QTI
      specification bounds the length of an identifier, an ID, an IDREF, an `xml:lang`, a title, an href, a map key or a
      value's lexical form (readings 45 and 94 state that the productions state no length). pantry's representation still
@@ -2919,3 +2925,24 @@ against it. A reading that is not an information-model-over-XSD case says which 
      expected it until this reading. The corpus holds no repeated key (reading 98), so no verdict moves. This binds
      pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under
      the operator's standing ruling of 2026-11-05, from seat FIX-MAPKEYDUP.)
+161. **A printed variable's `format` may hold any number of conversion specifiers, two or more included, and pantry
+     stores it as written; each specifier is still one reading 132 admits.** The upstream reviewer of PR #46 ruled
+     "`qti-printed-variable@format` with two or more conversions, such as `%d %d`: our side has ruled it should be
+     accepted and stored as written. QTI defines `format` by reference to printf for one value, but it doesn't ban a
+     second conversion, and C's undefined behaviour isn't a QTI prohibition. Pantry never renders, so it can store the
+     value. How a renderer prints the extra conversion is the renderer's call" (comment 6701102861, 2026-11-07,
+     https://github.com/aidenzepp/qti-pie/pull/46#issuecomment-6701102861), and the operator's standing steer takes that
+     reviewer's advice. The information model defines `format` as "The format conversion specifier to use when
+     converting numerical values to strings" (section 7.30.7) and the syntax of a specifier (section 2.3.4), and states
+     no count; ISO/IEC 9899:2011's "If there are insufficient arguments for the format, the behavior is undefined"
+     (section 7.21.6.1) says what a C program that prints such a format does, not what a QTI document may write. So a
+     format is a printf format string over the listed codes: characters other than `%`, the escape `%%`, and conversion
+     specifiers, any number of them, none included (`printfFormat`, `src/grammar/attributes.ts`). `%i of %i`, `%%%e%%%G`
+     and `%i, %.2f and %#x` are admitted and kept as the attribute's lexical form; `%i of %d`, `%i of %` and `%d %d` are
+     still refused under `attribute-lexical`, since a specifier there ends in no listed code: reading 132 reads `d` as
+     none, though the ruling's own example writes it, and a `%` at the end ends in no code at all. The law oracle reads
+     the composed grammar's domain, so both sides judge by the one pattern. This sets aside reading 132's rule of at
+     most one specifier, and the operator's decision of 2026-11-06 on item L4 that it recorded. The corpus writes only
+     `%.1f`, so no verdict moves. This binds pantry and plate alike in what a document may write; how a renderer prints
+     a second conversion is plate's own reading. This is not a case of documents in conflict. (Decided 2026-11-07 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-PRINTFMT.)

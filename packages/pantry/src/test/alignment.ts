@@ -749,7 +749,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
-  [132, { owner: "AL1 (`printfFormat` on `qti-printed-variable`'s `format`)", status: "G" }],
+  [
+    132,
+    {
+      owner:
+        "AL1 (`printfFormat` on `qti-printed-variable`'s `format`): each conversion specifier over the listed codes; its one-specifier rule is set aside by reading 161",
+      status: "G",
+    },
+  ],
   [
     133,
     {
@@ -971,6 +978,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     {
       owner:
         "the schema's two Map key keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over every mapping's keys as written, whatever its declaration's base type spells, and `key(mapping, value)` over `MapKeyInteger`, `MapKeyFloat`, `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`, which hang from `MapKeyType`, only where the declaration has a base type; the oracle's mapping law, which reads a key as written where the base type spells nothing and by `mapKeyValueOf` where it spells a code (`src/test/oracle.ts`); held by `src/test/unspelled-declarations.oracle.test.ts`",
+      status: "G",
+    },
+  ],
+  [
+    161,
+    {
+      owner:
+        "AL1 (`printfFormat` on `qti-printed-variable`'s `format`, `src/grammar/attributes.ts`): text, `%%` and conversion specifiers over the listed codes, any number of them, kept as the attribute's lexical form; the law oracle reads the same composed domain; held by `src/grammar/attributes.test.ts` (read 161, searched, against `printfSpecifiers`) and `src/test/rv-g.oracle.test.ts`",
       status: "G",
     },
   ],
