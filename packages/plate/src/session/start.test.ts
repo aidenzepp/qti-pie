@@ -10,6 +10,7 @@ import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { openPackage } from "#plate/package/open.ts";
+import type { PackageVerdict } from "#plate/package/open.ts";
 import { manifestFile } from "#plate/package/store.ts";
 import { redact, render } from "#plate/render.ts";
 import { advance } from "#plate/session/advance.ts";
@@ -2293,24 +2294,25 @@ const unheldItemXml = [
 
 /**
  * What a hand-built test of the package regressions below writes: its outcome declarations, the
- * template defaults its item ref `I1` holds, and the rules of its outcome processing, each as
- * text and each possibly empty.
+ * children its item ref `I1` holds (its template defaults and weights), and the rules of its
+ * outcome processing, each as text and each possibly empty, with the item `I1` names, which is
+ * {@link unheldItemXml} unless given.
  */
 interface UnheldTest {
   readonly declarations: string;
   readonly defaults: string;
+  readonly item?: string;
   readonly rules: string;
 }
 
 /**
- * Open, as one package, a hand-built test of one nonlinear part whose one item ref `I1` names
- * {@link unheldItemXml}: the test at `package/test.xml` and the item beside it at
- * `package/I1.xml`.
+ * Open, as one package, a hand-built test of one nonlinear part whose one item ref `I1` names its
+ * item: the test at `package/test.xml` and the item beside it at `package/I1.xml`.
  *
  * @param test What the test writes; it holds a `qti-outcome-processing` only when it has rules.
- * @returns The test and its items, as the package resolved them.
+ * @returns The package's verdict.
  */
-const unheldPackage = Effect.fnUntraced(function* unheldPackage(test: UnheldTest) {
+const unheldVerdict = (test: UnheldTest) => {
   const encoder = new TextEncoder();
   const manifest = [
     `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema>`,
@@ -2332,12 +2334,23 @@ const unheldPackage = Effect.fnUntraced(function* unheldPackage(test: UnheldTest
   const texts: readonly (readonly [path: string, text: string])[] = [
     [manifestFile, manifest],
     ["package/test.xml", testText],
-    ["package/I1.xml", unheldItemXml],
+    ["package/I1.xml", test.item ?? unheldItemXml],
   ];
-  const verdict = yield* openPackage(
+
+  return openPackage(
     "packages/unheld",
     new Map(texts.map(([path, text]) => [path, encoder.encode(text)] as const)),
   );
+};
+
+/**
+ * Open a package as {@link unheldVerdict} does, failing the test when the package is not accepted.
+ *
+ * @param test What the test writes.
+ * @returns The test and its items, as the package resolved them.
+ */
+const unheldPackage = Effect.fnUntraced(function* unheldPackage(test: UnheldTest) {
+  const verdict = yield* unheldVerdict(test);
   if (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") {
     return assert.fail(`the package is ${verdict.verdict}`);
   }
@@ -2434,6 +2447,89 @@ describe("a package whose test reads a built-in's default or an unheld item vari
         assert.deepStrictEqual(
           [first?.templateDefaults, first?.record.templates["U"]],
           [Option.some({ U: nullOf("duration", "single") }), nullOf("duration", "single")],
+        );
+      }),
+  );
+});
+
+/**
+ * A hand-built item `I1` whose integer outcome `INT` defaults to 3, with no response processing,
+ * so `INT` holds 3 whatever its attempts.
+ */
+const integerItemXml = [
+  `<qti-assessment-item xmlns="${qtiNamespace}" identifier="I1" title="I1" adaptive="false" time-dependent="false">`,
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+  "<qti-correct-response><qti-value>A</qti-value></qti-correct-response></qti-response-declaration>",
+  '<qti-outcome-declaration identifier="INT" cardinality="single" base-type="integer">',
+  "<qti-default-value><qti-value>3</qti-value></qti-default-value></qti-outcome-declaration>",
+  '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+  '<qti-simple-choice identifier="A">Choice A</qti-simple-choice>',
+  '<qti-simple-choice identifier="B">Choice B</qti-simple-choice></qti-choice-interaction>',
+  "</qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
+ * What a test of {@link integerItemXml} writes that sets one outcome to `I1.INT` weighted by a
+ * weight: the float `F` and the integer `N`, and `I1`'s weight `W` of 2.
+ *
+ * @param target The outcome it sets, `F` or `N`.
+ * @param weight The `weight-identifier` it reads `I1.INT` by.
+ * @returns What the test writes.
+ */
+const weightedTest = (target: "F" | "N", weight: string): UnheldTest => ({
+  declarations: [
+    '<qti-outcome-declaration identifier="F" cardinality="single" base-type="float"/>',
+    '<qti-outcome-declaration identifier="N" cardinality="single" base-type="integer"/>',
+  ].join(""),
+  defaults: '<qti-weight identifier="W" value="2"/>',
+  item: integerItemXml,
+  rules: `<qti-set-outcome-value identifier="${target}"><qti-variable identifier="I1.INT" weight-identifier="${weight}"/></qti-set-outcome-value>`,
+});
+
+/**
+ * Reduce a package's verdict to each refusal's rule and the base types its detail names, the
+ * expression's and the outcome's, or to the verdict when the package is not refused.
+ *
+ * @param verdict The verdict.
+ * @returns One entry per refusal, or the verdict alone.
+ */
+const typeRefusals = (verdict: PackageVerdict) =>
+  verdict.verdict === "refused"
+    ? verdict.refusals.map((refusal) => [
+        refusal.rule,
+        refusal.detail["expressionBaseType"],
+        refusal.detail["outcomeBaseType"],
+      ])
+    : [verdict.verdict];
+
+describe("a package whose test reads an integer item variable weighted", () => {
+  it.effect(
+    "[T-9] weighted read is a float: a package whose test sets the float F from I1.INT weighted by W, 2, ends its part with F 6, twice INT's 3, and with F 3 when the weight names no qti-weight of I1 (G-R3 198)",
+    () =>
+      Effect.gen(function* weightedIntoFloat() {
+        const weighted = yield* closedOutcomes(yield* unheldPackage(weightedTest("F", "W")));
+        const unweighted = yield* closedOutcomes(yield* unheldPackage(weightedTest("F", "NOPE")));
+
+        assert.deepStrictEqual(
+          [weighted["F"], unweighted["F"]],
+          [
+            { baseType: "float", cardinality: "single", values: [{ baseType: "float", value: 6 }] },
+            { baseType: "float", cardinality: "single", values: [{ baseType: "float", value: 3 }] },
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-9] weighted read is a float: a package whose test sets the integer N from I1.INT weighted is refused at open as expression-type, a float into an integer, whether or not I1 defines the weight (G-R3 198, pantry P20)",
+    () =>
+      Effect.gen(function* weightedIntoInteger() {
+        assert.deepStrictEqual(
+          [
+            typeRefusals(yield* unheldVerdict(weightedTest("N", "W"))),
+            typeRefusals(yield* unheldVerdict(weightedTest("N", "NOPE"))),
+          ],
+          [[["expression-type", "float", "integer"]], [["expression-type", "float", "integer"]]],
         );
       }),
   );

@@ -7,11 +7,14 @@
  *
  * Each kind reads the test's items through its filters, `section-identifier`, `include-category`
  * and `exclude-category`; the engine evaluates them over the test scope
- * (`#plate/engine/expressions/test.ts`). Their rules type them as the qti package's rows do
- * (`resultTypes` in `packages/pantry/src/processing/types.ts`): each count a single integer, and
- * the other three a multiple of the written `base-type`, unknown when none is written, so the
- * validator refuses what the qti package refuses, a multiple set straight into a single outcome
- * among it (P20), and nothing more.
+ * (`#plate/engine/expressions/test.ts`). Their rules type them as the engine gives their values:
+ * each count a single integer, `qti-outcome-minimum` and `qti-outcome-maximum` a multiple float,
+ * and `qti-test-variables` a multiple of its written `base-type`, a float when it is weighted and
+ * has none, and unknown otherwise (G-R3 199). So the validator refuses a multiple set straight into
+ * a single outcome (P20), as the qti package does, and a minimum, a maximum or a weighted
+ * `qti-test-variables` set into an integer, which the qti package's rows (`attributeContainer` in
+ * `packages/pantry/src/processing/types.ts`, typed by the written `base-type` alone) accept: an
+ * agreement difference G-R3 199 settles.
  *
  * It value-imports only `effect`, `#plate/model/expression.ts`, the leaf
  * `#plate/model/attributes.ts`, `#plate/model/values.ts` and `#plate/vocabulary.ts`, and names the
@@ -70,20 +73,38 @@ const countRule: KindRule = {
 };
 
 /**
- * The rule of `qti-outcome-minimum`, `qti-outcome-maximum` and `qti-test-variables`: a multiple of
- * the base type the caller passes in its attributes, the expression's own `base-type`, unknown
- * when it passes none, as the qti package's `attributeContainer` types them. The engine gives a
- * minimum's and a maximum's values as floats and `qti-test-variables`' as integers or floats when
- * no `base-type` is written; an unknown base type agrees with either.
+ * The rule of `qti-outcome-minimum` and `qti-outcome-maximum`: a multiple float, whatever they
+ * read. "The result has cardinality multiple and base-type float" (`info.txt:9352`, `:9356`; G-R3
+ * 199), and the engine gives each value as a float.
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutOutcomeMin
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutOutcomeMax
+ */
+const extremesRule: KindRule = {
+  operandsAccept: acceptsAnyOperands,
+  references: [],
+  resultType: () => ({ baseType: "float", cardinality: "multiple" }),
+};
+
+/**
+ * The rule of `qti-test-variables`: a multiple of the base type the caller passes in its
+ * attributes, the expression's own `base-type`, which "also becomes the base-type of the result"
+ * (`info.txt:71484`); with none, a float when it is weighted, since "when a weighting is specified
+ * the result of the expression always has base-type float" (`info.txt:71457`; G-R3 199), and
+ * unknown when it is not, since the result is then an integer or a float by what it collects.
+ *
+ * A weighted one with a written `base-type` keeps that base type, the weight ignored, as a
+ * `qti-variable` ignores a weight on a variable that is not numeric. A weight is defined only for a
+ * `base-type` of `float` or none, so the validator refuses any other written with a weight
+ * (`weightType` in `#plate/validate/rules.ts`, pantry's P29).
+ *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OutTestVariables
  */
-const collectedRule: KindRule = {
+const testVariablesRule: KindRule = {
   operandsAccept: acceptsAnyOperands,
   references: [],
   resultType: (_operands, attributes) => ({
-    baseType: attributes.baseType ?? "unknown",
+    baseType: attributes.baseType ?? (attributes.weighted === true ? "float" : "unknown"),
     cardinality: "multiple",
   }),
 };
@@ -97,9 +118,9 @@ export const testRules: FamilyRules<TestKind> = {
   "number-presented": countRule,
   "number-responded": countRule,
   "number-selected": countRule,
-  "outcome-maximum": collectedRule,
-  "outcome-minimum": collectedRule,
-  "test-variables": collectedRule,
+  "outcome-maximum": extremesRule,
+  "outcome-minimum": extremesRule,
+  "test-variables": testVariablesRule,
 };
 
 /**

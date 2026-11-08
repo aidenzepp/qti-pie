@@ -2916,7 +2916,7 @@ describe("describeRefusal", () => {
     }
   });
 
-  it("names the base type of a weighted qti-test-variables that is not float", () => {
+  it("names the base type of a weighted qti-test-variables that is not float, says a weight is defined only for float or none, and gives the fix: drop the weight or the base-type (G-R3 199)", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {
         baseType: "integer",
@@ -2927,7 +2927,11 @@ describe("describeRefusal", () => {
 
     assert.include(
       sentence,
-      "`qti-test-variables` is weighted and has the base type `integer`, not `float`",
+      "`qti-test-variables` is weighted and has the base type `integer`, but a weight is defined only for the base type `float` or none (info.txt:71457).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: remove `weight-identifier` from `qti-test-variables`, or remove its `base-type`.",
     );
     assert.notInclude(sentence, "outcome, to a");
   });

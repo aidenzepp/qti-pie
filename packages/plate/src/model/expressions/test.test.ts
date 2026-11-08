@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
-import type { Expression, ExpressionType } from "#plate/model/expression.ts";
+import type { Expression, ResultAttributes } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import { buildTest } from "#plate/model/test.ts";
 import type { MarkedFeature, Test } from "#plate/model/test.ts";
@@ -264,10 +264,10 @@ describe("the test family's reader specs", () => {
 });
 
 describe("the test family's kind rules", () => {
-  it("[T-9] type each count over the test scope a single integer, and qti-outcome-minimum, qti-outcome-maximum and qti-test-variables a multiple of the written base-type, unknown when none is written (pantry's rows)", () => {
+  it("[T-9] type each count over the test scope a single integer, the collected minimum and maximum a multiple float, and qti-test-variables a multiple of its written base-type, else a float when weighted, else unknown (G-R3 199)", () => {
     const none: readonly [] = [];
-    const typed = (kind: keyof typeof kindRules, baseType?: ExpressionType["baseType"]) =>
-      kindRules[kind].resultType(none, baseType === undefined ? {} : { baseType });
+    const typed = (kind: keyof typeof kindRules, attributes: ResultAttributes = {}) =>
+      kindRules[kind].resultType(none, attributes);
 
     assert.deepStrictEqual(
       {
@@ -279,7 +279,13 @@ describe("the test family's kind rules", () => {
         outcomeMaximum: typed("outcome-maximum"),
         outcomeMinimum: typed("outcome-minimum"),
         testVariables: typed("test-variables"),
-        testVariablesInteger: typed("test-variables", "integer"),
+        testVariablesInteger: typed("test-variables", { baseType: "integer" }),
+        testVariablesWeighted: typed("test-variables", { weighted: true }),
+        testVariablesWeightedFloat: typed("test-variables", { baseType: "float", weighted: true }),
+        testVariablesWeightedString: typed("test-variables", {
+          baseType: "string",
+          weighted: true,
+        }),
       },
       {
         numberCorrect: { baseType: "integer", cardinality: "single" },
@@ -287,10 +293,13 @@ describe("the test family's kind rules", () => {
         numberPresented: { baseType: "integer", cardinality: "single" },
         numberResponded: { baseType: "integer", cardinality: "single" },
         numberSelected: { baseType: "integer", cardinality: "single" },
-        outcomeMaximum: { baseType: "unknown", cardinality: "multiple" },
-        outcomeMinimum: { baseType: "unknown", cardinality: "multiple" },
+        outcomeMaximum: { baseType: "float", cardinality: "multiple" },
+        outcomeMinimum: { baseType: "float", cardinality: "multiple" },
         testVariables: { baseType: "unknown", cardinality: "multiple" },
         testVariablesInteger: { baseType: "integer", cardinality: "multiple" },
+        testVariablesWeighted: { baseType: "float", cardinality: "multiple" },
+        testVariablesWeightedFloat: { baseType: "float", cardinality: "multiple" },
+        testVariablesWeightedString: { baseType: "string", cardinality: "multiple" },
       },
     );
   });

@@ -1490,6 +1490,13 @@ const referenceType = (refusal: Refusal, element: string, identifier: string): s
 const templateReadSource = "info.txt:65111";
 
 /**
+ * The line of QTI's information model a weighted `qti-test-variables` refusal cites: a weight's
+ * behaviour "is only defined if the base-type attribute is float or omitted", and the line rules
+ * out `base-type` integer.
+ */
+const weightSource = "info.txt:71457";
+
+/**
  * Word an `expression-type` refusal, by the `check` its detail names.
  *
  * - `condition` (pantry's P21): the condition of a rule's branch is not a single `boolean`.
@@ -1502,7 +1509,9 @@ const templateReadSource = "info.txt:65111";
  *   attribute an `attribute` fact names. It cites the information model's line, which allows only
  *   template variables (`info.txt:65111`), unless the detail names a reading; the remedy offers a
  *   template variable, never `qti-correct` or `qti-default`, which read the refused variable too.
- * - `weight` (P29): a weighted `qti-test-variables` whose base type is not `float`.
+ * - `weight` (P29): a weighted `qti-test-variables` whose base type is not `float`. A weight is
+ *   defined only for a `base-type` of `float` or none (`info.txt:71457`; G-R3 199), so the remedy
+ *   drops the weight or the `base-type`.
  * - None: an expression against the variable it sets (P20), or a lookup operand against its table or,
  *   for an outcome a test reads through an item ref, against what every lookup reads (P22; see
  *   {@link uncheckedType}).
@@ -1559,8 +1568,8 @@ const expressionType = (refusal: Refusal): string => {
 
       return sentence(
         refusal,
-        `${code(element)} is weighted and has the base type ${baseType}, not ${code("float")}${cite}.`,
-        `give ${code(element)} the base type ${code("float")}, remove its ${code("base-type")}, or remove its ${code("weight-identifier")}`,
+        `${code(element)} is weighted and has the base type ${baseType}, but a weight is defined only for the base type ${code("float")} or none${cite === "" ? ` (${weightSource})` : cite}.`,
+        `remove ${code("weight-identifier")} from ${code(element)}, or remove its ${code("base-type")}`,
       );
     }
     default: {

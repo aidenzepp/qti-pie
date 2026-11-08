@@ -438,6 +438,34 @@ const weighted = (baseType?: string): SourceElement =>
   ]);
 
 /**
+ * Construct a test with the multiple outcome `ALL` and one item ref, `ITEM1`, whose outcome
+ * processing sets `ALL` to the `qti-outcome-maximum` of `SCORE`.
+ *
+ * @param baseType The base type `ALL` declares.
+ * @returns The test.
+ */
+const collectingMaximum = (baseType: string): SourceDocument =>
+  assessmentTest([
+    el("qti-outcome-declaration", [
+      attr("base-type", baseType),
+      attr("cardinality", "multiple"),
+      attr("identifier", "ALL"),
+    ]),
+    part("P", [section("S", [itemRef("ITEM1")])]),
+    el(
+      "qti-outcome-processing",
+      [],
+      [
+        el(
+          "qti-set-outcome-value",
+          [attr("identifier", "ALL")],
+          [el("qti-outcome-maximum", [attr("outcome-identifier", "SCORE")])],
+        ),
+      ],
+    ),
+  ]);
+
+/**
  * Reduce refusals to what a test asserts: the rule, the path and the detail.
  *
  * @param source The document to check.
@@ -1220,6 +1248,29 @@ describe("checkTestRules", () => {
                 identifier: "SCORE",
                 outcomeBaseType: "float",
                 outcomeCardinality: "single",
+              },
+              path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
+              rule: "expression-type",
+            },
+          ],
+          [],
+        ],
+      );
+    });
+
+    it("[T-9] types the collected minimum and maximum a multiple float in a test alone: qti-outcome-maximum set into an integer multiple is expression-type, and into a float multiple is accepted (G-R3 199, pantry P20)", () => {
+      assert.deepStrictEqual(
+        [judged(collectingMaximum("integer")), judged(collectingMaximum("float"))],
+        [
+          [
+            {
+              detail: {
+                element: "qti-set-outcome-value",
+                expressionBaseType: "float",
+                expressionCardinality: "multiple",
+                identifier: "ALL",
+                outcomeBaseType: "integer",
+                outcomeCardinality: "multiple",
               },
               path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value",
               rule: "expression-type",
