@@ -1355,6 +1355,65 @@ const testDeclaring = (outcomes: readonly SourceElement[]): SourceDocument =>
   );
 
 /**
+ * The four kinds of variable declaration, each with a `cardinality` and a `base-type`.
+ */
+const variableKinds = [
+  "qti-context-declaration",
+  "qti-outcome-declaration",
+  "qti-response-declaration",
+  "qti-template-declaration",
+] as const;
+
+/**
+ * Construct an outcome declaration of record cardinality.
+ *
+ * @param identifier Its `identifier`, as written.
+ * @param base Its `base-type`, when it writes one.
+ * @returns The declaration.
+ */
+const recordOutcome = (identifier: string, base?: string): SourceElement =>
+  el("qti-outcome-declaration", [
+    attr("identifier", identifier),
+    attr("cardinality", "record"),
+    ...(base === undefined ? [] : [attr("base-type", base)]),
+  ]);
+
+/**
+ * The detail of the refusal of a typed outcome declared `record`, at its `cardinality`.
+ *
+ * @param identifier The outcome.
+ * @param fixed The base type it must have.
+ * @returns The detail.
+ */
+const reservedRecord = (identifier: string, fixed: string) => ({
+  attribute: "cardinality",
+  baseType: fixed,
+  check: "reserved-outcome-type",
+  element: "qti-outcome-declaration",
+  expected: `single, multiple or ordered: an outcome named ${identifier} has the base type ${fixed}, and a record has none`,
+  identifier,
+  pantry: "ReservedOutcomeTypes",
+  reading: "153",
+  value: "record",
+});
+
+/**
+ * The refusals below an item's root, checked against the generated tables: the hand-built item
+ * writes none of its root's required attributes, which these tests do not judge.
+ *
+ * @param source The item.
+ * @returns Each refusal below the root, with its rule, location and detail, in the order found.
+ */
+const declarationRefusals = (source: SourceDocument) =>
+  checkStructure(source, generatedTables)
+    .filter(
+      (refusal) =>
+        refusal.location.kind === "path" &&
+        refusal.location.path.startsWith("qti-assessment-item/"),
+    )
+    .map((refusal) => [refusal.rule, refusal.location, refusal.detail] as const);
+
+/**
  * The `attribute-type` refusals of a document checked against the generated tables, by
  * location.
  *
@@ -2760,7 +2819,7 @@ describe("checkStructure", () => {
       }
     });
 
-    it("[I-9a] admits SCORE, MAXSCORE and PASSED of any base type on a response or template declaration, and on a record outcome, which pantry's ReservedOutcomeTypes does not read (G-R2, pending)", () => {
+    it("[I-9a] admits SCORE, MAXSCORE and PASSED of any base type on a response or template declaration, which is no outcome", () => {
       for (const [identifier] of typedOutcomes) {
         for (const name of ["qti-response-declaration", "qti-template-declaration"]) {
           assert.deepStrictEqual(
@@ -2777,11 +2836,6 @@ describe("checkStructure", () => {
             `${name} ${identifier}`,
           );
         }
-        assert.deepStrictEqual(
-          found(outcomeAs(identifier, "integer", "record"), generatedTables),
-          [],
-          `record ${identifier}`,
-        );
       }
     });
 
@@ -2890,6 +2944,187 @@ describe("checkStructure", () => {
         "",
       ]) {
         assert.deepStrictEqual(found(tolerated(tolerance), generatedTables), [], tolerance);
+      }
+    });
+  });
+
+  describe("align-54 reserved outcomes: records as reserved outcomes and record declarations (readings 153 and 158)", () => {
+    it("align-54 reserved outcomes B1b: refuses an item's SCORE and MAXSCORE, and a lone declaration's, declared record, as attribute-type at its cardinality, whether or not it writes a base-type (reading 153)", () => {
+      for (const [identifier, fixed] of typedOutcomes) {
+        if (identifier === "PASSED") {
+          continue;
+        }
+
+        const record = recordOutcome(identifier);
+        const cardinality = "qti-assessment-item/qti-outcome-declaration/@cardinality";
+
+        assert.deepStrictEqual(
+          declarationRefusals(item([record])),
+          [["attribute-type", at(cardinality), reservedRecord(identifier, fixed)]],
+          identifier,
+        );
+        assert.deepStrictEqual(
+          declarationRefusals(item([recordOutcome(identifier, fixed)])).map(([rule, where]) => [
+            rule,
+            where,
+          ]),
+          [
+            ["attribute-type", at(cardinality)],
+            ["unknown-attribute", at("qti-assessment-item/qti-outcome-declaration/@base-type")],
+          ],
+          `${identifier} with a base-type`,
+        );
+        assert.deepStrictEqual(
+          found(doc(location, recordOutcome(` ${identifier} `)), generatedTables),
+          [["attribute-type", at("qti-outcome-declaration/@cardinality")]],
+          `a lone ${identifier}`,
+        );
+      }
+    });
+
+    it("align-54 reserved outcomes B1b: refuses a PASSED declared record in an item and in a test, as attribute-type at its cardinality (reading 153)", () => {
+      assert.deepStrictEqual(declarationRefusals(item([recordOutcome("PASSED")])), [
+        [
+          "attribute-type",
+          at("qti-assessment-item/qti-outcome-declaration/@cardinality"),
+          reservedRecord("PASSED", "boolean"),
+        ],
+      ]);
+      assert.deepStrictEqual(found(testDeclaring([recordOutcome("PASSED")]), generatedTables), [
+        ["attribute-type", at("qti-assessment-test/qti-outcome-declaration/@cardinality")],
+      ]);
+    });
+
+    it("align-54 reserved outcomes B1b: admits a test's SCORE and MAXSCORE declared record, which a test may declare of any base type (P8), and a record outcome of any other name", () => {
+      assert.deepStrictEqual(
+        found(
+          testDeclaring([
+            recordOutcome("SCORE"),
+            recordOutcome("MAXSCORE"),
+            recordOutcome("TOTAL"),
+          ]),
+          generatedTables,
+        ),
+        [],
+      );
+      assert.deepStrictEqual(
+        declarationRefusals(item([recordOutcome("Score"), recordOutcome("TOTAL")])),
+        [],
+      );
+      for (const kind of ["qti-response-declaration", "qti-template-declaration"]) {
+        assert.deepStrictEqual(
+          declarationRefusals(
+            item([el(kind, [attr("identifier", "SCORE"), attr("cardinality", "record")])]),
+          ),
+          [],
+          kind,
+        );
+      }
+    });
+
+    it("align-54 reserved outcomes B1c: refuses a base-type on a record declaration of each kind, as unknown-attribute at the base-type (reading 153)", () => {
+      for (const kind of variableKinds) {
+        for (const base of ["float", "string", "identifier"]) {
+          const source = item([
+            el(kind, [
+              attr("identifier", "RECORD"),
+              attr("cardinality", "record"),
+              attr("base-type", base),
+            ]),
+          ]);
+
+          assert.deepStrictEqual(
+            declarationRefusals(source),
+            [
+              [
+                "unknown-attribute",
+                at(`qti-assessment-item/${kind}/@base-type`),
+                { attribute: "base-type", element: kind, reading: "153" },
+              ],
+            ],
+            `${kind} ${base}`,
+          );
+        }
+      }
+    });
+
+    it("align-54 reserved outcomes B1c: leaves a record's base-type that spells no base type, and a base-type beside a cardinality that spells no cardinality, to the value domain alone (reading 158)", () => {
+      assert.deepStrictEqual(
+        declarationRefusals(
+          item([
+            el("qti-outcome-declaration", [
+              attr("identifier", "RECORD"),
+              attr("cardinality", "record"),
+              attr("base-type", " float"),
+            ]),
+          ]),
+        ).map(([rule, where]) => [rule, where]),
+        [["attribute-type", at("qti-assessment-item/qti-outcome-declaration/@base-type")]],
+      );
+      assert.deepStrictEqual(
+        declarationRefusals(
+          item([
+            el("qti-outcome-declaration", [
+              attr("identifier", "RECORD"),
+              attr("cardinality", " record"),
+              attr("base-type", "float"),
+            ]),
+          ]),
+        ).map(([rule, where]) => [rule, where]),
+        [["attribute-type", at("qti-assessment-item/qti-outcome-declaration/@cardinality")]],
+      );
+    });
+
+    it("align-54 reserved outcomes E39a: refuses a single, multiple or ordered declaration of each kind that writes no base-type, as missing-attribute at the declaration (reading 158)", () => {
+      for (const kind of variableKinds) {
+        for (const cardinality of ["single", "multiple", "ordered"]) {
+          const source = item([
+            el(kind, [attr("identifier", "UNTYPED"), attr("cardinality", cardinality)]),
+          ]);
+
+          assert.deepStrictEqual(
+            declarationRefusals(source),
+            [
+              [
+                "missing-attribute",
+                at(`qti-assessment-item/${kind}`),
+                { attribute: "base-type", element: kind, reading: "158" },
+              ],
+            ],
+            `${kind} ${cardinality}`,
+          );
+        }
+      }
+      assert.deepStrictEqual(
+        found(
+          testDeclaring([
+            el("qti-outcome-declaration", [
+              attr("identifier", "TOTAL"),
+              attr("cardinality", "single"),
+            ]),
+          ]),
+          generatedTables,
+        ),
+        [["missing-attribute", at("qti-assessment-test/qti-outcome-declaration")]],
+      );
+    });
+
+    it("align-54 reserved outcomes E39a: admits a record declaration with no base-type, and leaves one whose cardinality spells no cardinality to the value domain alone (reading 158)", () => {
+      for (const kind of variableKinds) {
+        assert.deepStrictEqual(
+          declarationRefusals(
+            item([el(kind, [attr("identifier", "RECORD"), attr("cardinality", "record")])]),
+          ),
+          [],
+          kind,
+        );
+        assert.deepStrictEqual(
+          declarationRefusals(
+            item([el(kind, [attr("identifier", "UNTYPED"), attr("cardinality", "many")])]),
+          ).map(([rule, where]) => [rule, where]),
+          [["attribute-type", at(`qti-assessment-item/${kind}/@cardinality`)]],
+          kind,
+        );
       }
     });
   });
