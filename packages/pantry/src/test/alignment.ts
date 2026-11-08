@@ -966,6 +966,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    160,
+    {
+      owner:
+        "the schema's two Map key keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over every mapping's keys as written, whatever its declaration's base type spells, and `key(mapping, value)` over `MapKeyInteger`, `MapKeyFloat`, `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`, which hang from `MapKeyType`, only where the declaration has a base type; the oracle's mapping law, which reads a key as written where the base type spells nothing and by `mapKeyValueOf` where it spells a code (`src/test/oracle.ts`); held by `src/test/unspelled-declarations.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

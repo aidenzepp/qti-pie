@@ -2891,3 +2891,26 @@ against it. A reading that is not an information-model-over-XSD case says which 
      reference row and broke "E1 derived"'s copy of the attribute, beside the AL3 or value domain the law oracle alone
      raised. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
      coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-BINDCARD.)
+160. **A mapping's keys repeat as written whatever its declaration's base type spells, and as values of the base type
+     only where it spells one.** Reading 98 makes a mapping's keys distinct as values of its base type, since "The map
+     is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float"
+     (section 5.88.4, https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping), and reading 158 counts Map key among
+     the laws that read neither the cardinality nor the base type. Both hold, as two comparisons. Two keys written alike
+     are one form, which names one value under every base type whose lexical space holds it and none under any other,
+     so a mapping that writes a key twice maps one source twice whatever its base type spells: that comparison reads
+     neither attribute and judges every mapping. Two keys written apart are one value only under a base type whose
+     values have several forms (`1` and `01` as integers, reading 45; `A B` and `B A` as pairs, reading 98; `0` and
+     `-0` as floats, reading 154), so that comparison reads the base type and judges a mapping only where it spells a
+     code, as reading 158 has each law over a base type do. So a mapping under `base-type=" string "` that writes the
+     key `a` twice breaks Map key beside its value domain, and one under `base-type=" integer "` keyed `1` and `01`
+     breaks its value domain alone. This is also the stricter reading: no base type accepts a key written twice. The
+     schema states the two as two keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over every mapping's keys as
+     written, and `key(mapping, value)` over the typed keys, which hang from `MapKeyType`, written only where the
+     declaration has a base type; the law oracle reads a key as written where the base type spells nothing, and as
+     `mapKeyValueOf` gives it where the base type spells a code (`src/test/oracle.ts`). This sets aside lane NIL's B11
+     reading, under which neither the import's rows (no `Declaration` row, so no `MapKey`) nor the law oracle (no base
+     type to read the keys in) judged the keys of a mapping whose base type spells nothing, so a key written twice there
+     broke its value domain alone; reading 158 left it at 6fea789a, and `src/test/unspelled-declarations.oracle.test.ts`
+     expected it until this reading. The corpus holds no repeated key (reading 98), so no verdict moves. This binds
+     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under
+     the operator's standing ruling of 2026-11-05, from seat FIX-MAPKEYDUP.)

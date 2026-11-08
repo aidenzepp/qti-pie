@@ -5,7 +5,9 @@
  * declaration of the every-relation package; these cases reach the readers whose laws judge only
  * what a type types, so a valid package shows none of them: a mapping's keys and a lookup table's
  * values under a declaration's base type, a record field's value under its own, and a lookup
- * table's, a feedback outcome's, a value set's and an expression's cardinality.
+ * table's, a feedback outcome's, a value set's and an expression's cardinality. A key written twice
+ * is one form whatever the base type spells, so Map key judges it beside the value domain (spec
+ * reading 160); only two forms of one typed value, `1` and `01`, need the base type.
  *
  * Oracle: the XSD's types of `base-type` and `cardinality`, enumerations of `xs:string`, whose
  * whitespace is preserved (`imsqti_asiv3p0_v1p0.xsd:26164` and `:26148`; XML Schema 1.1 Part 2
@@ -68,14 +70,28 @@ const packageOf = ({
     .toSorted((left, right) => (left.path < right.path ? -1 : 1));
 
 /**
- * A response whose mapping names one key twice, under a base type as written.
+ * A response whose mapping holds two keys, under a base type as written.
  *
- * @param baseType - The `base-type` as written.
- * @returns The declaration.
+ * @param keys - The two keys.
+ * @returns The item's parts under a base type as written.
  */
-const doubleKeyed = (baseType: string): ItemParts => ({
-  declarations: `<qti-response-declaration identifier="R" cardinality="single" base-type="${baseType}"><qti-mapping default-value="0"><qti-map-entry map-key="a" mapped-value="1"/><qti-map-entry map-key="a" mapped-value="2"/></qti-mapping></qti-response-declaration>`,
-});
+const mappedOf =
+  (keys: readonly [string, string]) =>
+  (baseType: string): ItemParts => ({
+    declarations: `<qti-response-declaration identifier="R" cardinality="single" base-type="${baseType}"><qti-mapping default-value="0">${keys.map((key, at) => `<qti-map-entry map-key="${key}" mapped-value="${String(at + 1)}"/>`).join("")}</qti-mapping></qti-response-declaration>`,
+  });
+
+/**
+ * A response whose mapping names one integer twice, as `1` and `01`: two forms, one value as an
+ * integer (reading 98), which only a base type that spells `integer` makes one.
+ */
+const doubleValued = mappedOf(["1", "01"]);
+
+/**
+ * A response whose mapping writes the key `a` twice: one form, which repeats whatever the base type
+ * spells (reading 160).
+ */
+const doubleWritten = mappedOf(["a", "a"]);
 
 /**
  * An outcome whose match table's default is no integer, under a base type as written.
@@ -157,9 +173,9 @@ const cases: readonly {
   {
     attribute: "base-type",
     law: "Map key",
-    name: "a mapping's key named twice",
-    of: doubleKeyed,
-    spelled: "string",
+    name: "a mapping's integer named twice, as 1 and 01",
+    of: doubleValued,
+    spelled: "integer",
   },
   {
     attribute: "base-type",
@@ -253,4 +269,22 @@ describe("test/oracle.ts, a base-type or a cardinality that spells nothing (lane
         }),
     );
   }
+
+  it.effect(
+    "a mapping's key written twice: refused by Map key whatever the base-type spells, beside its value domain where whitespace is beside it (spec reading 160)",
+    () =>
+      // Oracle: reading 160, two keys written alike are one form under any base type or none, and
+      // reading 158's example, a mapping that repeats a key breaks Map key beside the value domain.
+      // Bound: the mapping under `string`, and with whitespace on both sides, after and before it.
+      Effect.gen(function* writtenTwice() {
+        assert.deepStrictEqual(yield* lawsIn(doubleWritten("string")), ["Map key"], "spelled");
+        for (const form of paddedForms("string")) {
+          assert.deepStrictEqual(
+            yield* lawsIn(doubleWritten(form)),
+            ["Map key", "value domain"],
+            JSON.stringify(form),
+          );
+        }
+      }),
+  );
 });
