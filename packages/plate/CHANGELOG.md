@@ -9,6 +9,104 @@ changes. [`docs/spec-readings.md`](../../docs/spec-readings.md) numbers the read
 The first entry lists the surface of M1 and M2, and what M3 adds to it. plate is not published,
 and both of its entry points are unstable until M3.
 
+### Record answers and `qti-field-value` (M3)
+
+- A Text Entry or Extended Text bound to a `record` response renders as one text control. Before,
+  it showed a notice in its place, and the verdict marked the response declaration
+  `cardinality="record"`. A `record` response of base type `file`, or with a field of that base
+  type, keeps the notice and the mark. The README's [Interactions](README.md#interactions) section
+  says what a host can rely on.
+- `postings` gives a `record` response a `RecordBinding`, and `decode` reads its posted text into a
+  record: `stringValue`, and, when the text is a decimal number, `floatValue`, `integerValue`,
+  `leftDigits`, `rightDigits`, `ndp`, `nsf` and `exponent`, each integer exact. `encode` posts a
+  record's `stringValue`.
+- `RecordValue` and `ResponseValue`, which is a `Value` or a `RecordValue`, are exported. `Binding`
+  is now the union of `ValueBinding`, the binding of a response of a base type that `Binding` named
+  before, and `RecordBinding`, and all three are exported. `decode`'s result follows its binding: a
+  `Value` for a `ValueBinding`, a `RecordValue` for a `RecordBinding` and a `ResponseValue` for a
+  `Binding`. `Posting.binding` is a `Binding`, so decoding every posting gives a `ResponseValue`.
+- The maps of responses a host passes and gets back hold `ResponseValue`: `score`'s and
+  `checkResponses`' responses, `render`'s `values`, and `Responses`, so `Step.responses`,
+  `SessionItem.saved`, `Restored["values"]` and `solution`'s result. Type a map of responses as
+  `Record<string, ResponseValue>` where you typed it as `Record<string, Value>`.
+- `score` keeps a `record` answer in the stored record's `records`, beside `responses`. It checks
+  the record's shape, never its fields' values. It refuses with `InvalidResponses` a malformed
+  record, with the problem `not-a-value`, and a record for any other response or a value for a
+  `record` response, with the problem `cardinality`. `InvalidResponses.expected` is
+  `{ cardinality: "record" }` for a `record` response. `advance` refuses such a step with
+  `StepResponseMisfit`.
+- `checkResponses` judges a `record` answer to a Text Entry or Extended Text as the text typed, so
+  its `pattern-mask` matches the `stringValue` as typed. `restore` gives a `record` answer back
+  among its `values`, and `render` shows its `stringValue` in its control. An item whose session
+  control does not allow skipping counts a `record` response as skipped while it is absent, the
+  NULL record or its declared default.
+- An item's first attempt starts each `record` response at its declared default, else the NULL
+  record. `solution` gives each its declared correct response, else the NULL record.
+- `results` writes a `record` response as a `responseVariable` with `cardinality="record"` and no
+  `baseType`, whose `candidateResponse` holds a `value` per field with its `fieldIdentifier` and
+  `baseType`. A NULL record writes an empty `candidateResponse`.
+- `qti-field-value` runs, so plate runs all 64 expressions. It gives the value of the field it
+  names, or NULL for a field the record lacks, a NULL record or an operand that is not a record.
+  `qti-is-null` and `qti-match` read a record whole. The ledger no longer reports row I-9a
+  (Response Processing: Full) as `limited`.
+- `EngineFailure` gains `RecordOperandError`, which plate exports, for processing that reads a
+  `record` response other than through `qti-field-value`, `qti-is-null` or `qti-match`. `open`
+  refuses such a read in an item (P20, P23), so only a test's processing, on a test and items you
+  `open` one at a time, meets it.
+- A test's processing reads an item's `record` response through its item ref, such as
+  `ITEM1.RESPONSE`, as the answer the item's record holds, or the NULL record when it holds none.
+  Before, it read NULL. `qti-number-correct` and `qti-number-incorrect` match it against its
+  declared correct response as `qti-match` compares two records, and `qti-number-responded` counts
+  it when it differs from its declared default. A `record` outcome, template or context variable
+  still reads NULL.
+- `Accepted`'s `item` gains `records`: its `record` response declarations, each with its declared
+  correct response and default, absent when the item declares none. `unheld` no longer lists a
+  `record` response, unless it or one of its fields has base type `file`.
+- A redacted item's `responses` list a `record` response as `{ cardinality: "record", identifier }`,
+  with no base type. Its Text Entry gains `cardinality`, `"record"` or `"single"`, and its Extended
+  Text's `cardinality` takes `"record"`. `encodeRedacted` writes a Text Entry's `cardinality`, and
+  `decodeRedacted` requires it, so a redacted item written before this change no longer reads.
+- Template processing that sets a `record` response, through `qti-set-correct-response` or
+  `qti-set-default-value`, is marked `record-set` at the rule and does not run.
+- `open` refuses with `missing-attribute` a `qti-value` without `field-identifier` or `base-type` in
+  the `qti-correct-response` or `qti-default-value` of a `record` declaration, as pantry does
+  (`RecordFieldIdentifier`). It judges each field's text against the field's own `base-type`, with
+  `value-type`. No corpus document declares a record, so no corpus verdict changes.
+- Both stored forms are version 4. A `StoredRecord` holds `records`, and a `StoredTestSession`'s
+  `saved` holds `record` answers. plate refuses a version-3 record or session with `InvalidRecord`
+  or `InvalidSession`, so a record or session written before this change no longer reads.
+
+### How plate reads record answers (2026-11-08)
+
+- These readings are not yet numbered in `docs/spec-readings.md`, and all of them await approval
+  and can change _(pending)_:
+  - A `record` answer's text is its `stringValue`, with CRLF and a lone CR made LF. An empty post
+    is the NULL record.
+  - When that text, trimmed of XML whitespace, is a decimal number with an optional sign and
+    exponent, it also gives `floatValue`. A number past the largest double gives the largest finite
+    double of its sign. `integerValue` comes only when no fractional digit and no exponent is
+    written, so `5.` gives 5. `leftDigits` and `rightDigits` count the digits written before and
+    after the point, zeros included. `ndp` is `rightDigits` minus the exponent, so for `1.5e3` it
+    is minus 2. `nsf` counts from the first non-zero digit to the last digit written, and for zero
+    it counts the digits after the point, at least 1. `exponent` comes only when one is written.
+    `INF`, `-INF`, `NaN` and grouped digits such as `1,000` are not numbers here.
+  - A Text Entry's `base` is not applied to a record.
+  - In a declaration's written record, a NULL field is no field, a record with no field is NULL,
+    and of two fields with one identifier the first written is kept. A `base-type` on the record
+    declaration itself types none of its fields.
+  - `qti-field-value` gives NULL for a field the record lacks, a NULL record and an operand that is
+    not a record.
+  - plate holds no value of a `record` outcome, template or context variable, `QTI_CONTEXT` among
+    them. The verdict marks processing that reads one, and a test reads one through an item ref as
+    NULL. No printed variable prints a record.
+  - A rule that sets a `record` response is marked `record-set`, so the response keeps the correct
+    response and default its declaration writes.
+  - `results` writes a NULL record as an empty `candidateResponse`.
+  - An item whose `record` response declares no correct response is neither correct nor incorrect
+    to `qti-number-correct` and `qti-number-incorrect`.
+- No corpus document declares a record, reads a field or holds a context declaration, so no corpus
+  verdict changes.
+
 ### Outcome processing and durations (M3)
 
 - A test's outcome processing runs. A test session runs it from the declared defaults after
