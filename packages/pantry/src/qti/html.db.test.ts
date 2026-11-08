@@ -15,6 +15,12 @@
  *   named twice by `HeaderToken`'s key (main's `same-table-headers` guard case, ported); and the
  *   overlay's rows held to the tree, by an edit of the package's inputs that writes a state no
  *   valid document shreds to.
+ * - **Reading 156:** a `th`'s `id` that is no NCName names no header. The builder copies every `th`'s
+ *   `id` into `TableHeader` and judges none of them, so the database refuses that copy: AL1's value
+ *   domain refuses the attribute, and "E1 derived" refuses its `TableHeader`, whose copy back into
+ *   the ID values whose form names something (`namingIdAttributes`) and into `DocumentId` finds no
+ *   row. One case imports such a `th` as the builder writes it; the other writes a `TableHeader`
+ *   for a `th` that carries no `id`, which no value domain refuses, so the copy back alone does.
  */
 import { Db, query, v } from "@bjornpagen/grizzle";
 import type { ApplyOutcome, Law } from "@bjornpagen/grizzle";
@@ -156,6 +162,20 @@ const applyEdited = (
 
     return yield* db.apply(changeSetOf(Author, edit(program.inputs)), {});
   });
+
+/**
+ * The two containments that hold a `TableHeader` to an ID its `th` carries (E1 derived): its copy
+ * back into the ID-typed attributes whose form names something (`namingIdAttributes`, at the `th`
+ * kind), and into `DocumentId`. A row for a `th` whose `id` is no NCName, or that carries no `id`,
+ * breaks both.
+ */
+const headerCopyBack = [
+  containedIn(["TableHeader", "node", "constant"], ["Attribute", "node", "kind"]),
+  containedIn(
+    ["TableHeader", "node", "document", "id", "owner"],
+    ["DocumentId", "node", "document", "id", "owner"],
+  ),
+];
 
 /**
  * The markup of every valid form the three readings read: a picture's source with `srcset`, a
@@ -319,6 +339,44 @@ const refusedCases = [
       ),
     laws: [containedIn(["TableScope", "parent", "table"], ["TableScope", "node", "table"])],
     name: "a tbody's scope that names itself as its table (E1 derived)",
+  },
+  {
+    apply: () =>
+      Effect.flatMap(
+        withBody(
+          "header-id-no-ncname",
+          `<table><tbody><tr><th id="1a">h</th><td headers="1a">a</td></tr></tbody></table>`,
+        ),
+        (dir) => applyEdited(dir),
+      ),
+    laws: [checkNamed("Attribute", "value_domain"), ...headerCopyBack],
+    name: "a th whose id is no NCName, its TableHeader written (AL1's value domain; E1 derived, reading 156)",
+  },
+  {
+    apply: () =>
+      Effect.flatMap(
+        withBody(
+          "header-copy-back",
+          `<table><tbody><tr><th id="ho">h</th><th headers="ho">p</th></tr></tbody></table>`,
+        ),
+        (dir) =>
+          applyEdited(dir, (inputs) => {
+            const [cell] = [...inputs.CellHeaders.values()];
+            const [header] = [...inputs.TableHeader.values()];
+
+            return cell === undefined || header === undefined
+              ? assert.fail("the body writes a th with an id and a th with headers")
+              : {
+                  ...inputs,
+                  TableHeader: new Map([
+                    ...inputs.TableHeader,
+                    [cell.node, { ...header, id: "hp", node: cell.node, owner: cell.node }],
+                  ]),
+                };
+          }),
+      ),
+    laws: headerCopyBack,
+    name: "a TableHeader of a th that carries no id (E1 derived, reading 156)",
   },
 ];
 

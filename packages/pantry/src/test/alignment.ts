@@ -945,7 +945,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     156,
     {
       owner:
-        "the schema's copy sources of the IDs into `DocumentId`, `namingIdAttributes` and `idTexts` (`namingPattern` over `ncNamePattern`, `src/qti/identity.ts`), and of a `th`'s ID into `TableHeader`, `headerIds` (`src/qti/html.ts`), under \"DocumentId key\" and \"E1 derived\"; the import's `documentIdOf` (`src/import/overlays/identity.ts`) and `th` headers (`src/import/overlays/html.ts`) by `isNcName`; the oracle's `idsOf` by each ID's value domain and `tableHeadersOf` by `nameForm` (`src/test/oracle.ts`); held by `src/import/overlays/id-names.oracle.test.ts`",
+        "the schema's copy sources of the IDs into `DocumentId`, `namingIdAttributes` and `idTexts` (`namingPattern` over `ncNamePattern`, `src/qti/identity.ts`), and of a `th`'s ID into `TableHeader`, `headerIds` (`src/qti/html.ts`), under \"DocumentId key\" and \"E1 derived\"; the import's `documentIdOf` (`src/import/overlays/identity.ts`) by `isNcName`, and its `th` headers (`src/import/overlays/html.ts`) copying every `th`'s `id`, whose copy back into `namingIdAttributes` and `DocumentId` refuses one that is no NCName (\"E1 derived\", `src/qti/html.ts`); the oracle's `idsOf` by each ID's value domain and `tableHeadersOf` by `nameForm` (`src/test/oracle.ts`); held by `src/import/overlays/id-names.oracle.test.ts`",
       status: "G",
     },
   ],

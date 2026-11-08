@@ -134,16 +134,8 @@ const crossings: ByStep = [
     "S1",
     ["cli/errors.ts: #pantry/import/refusal.ts", "import/package.ts: #pantry/import/host-judge.ts"],
   ],
-  // S3 drops the NCName gates of declarations.ts:219 and html.ts:223 (B1), and mapping.ts:123's
-  // float-key gate (B2).
-  [
-    "S3",
-    [
-      "import/overlays/declarations.ts: #pantry/grammar/domains.ts",
-      "import/overlays/html.ts: #pantry/grammar/domains.ts",
-      "import/overlays/mapping.ts: #pantry/qti/operators.ts",
-    ],
-  ],
+  // S3 drops the NCName gate of declarations.ts:219 (B1).
+  ["S3", ["import/overlays/declarations.ts: #pantry/grammar/domains.ts"]],
   // S6 makes generated fields of operators.ts:228's collapse (B3) and tests.ts:466's boolean read
   // (B4), each the last read of `grammar/domains.ts` in its overlay.
   [

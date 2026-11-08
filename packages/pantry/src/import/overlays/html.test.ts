@@ -1,8 +1,8 @@
 /**
  * The HTML builder's free tests: `headerPiecesOf` splits every `headers` value into exactly its
  * whitespace-separated tokens, and over documents of a known structure `rowsOf` gives each cell's
- * `headers` its nearest table, each `th`'s `id` its value and table, and each element on the way
- * up its scope, as the document's own construction says.
+ * `headers` its nearest table, each `th`'s `id` its value and table whatever its form, and each
+ * element on the way up its scope, as the document's own construction says.
  *
  * The expected rows are written by hand from each document's construction, element by element, so
  * no expected row is computed by the builder's own walk. The database tests
@@ -200,6 +200,27 @@ describe("import/overlays/html.ts, headerPiecesOf", () => {
 const padding: Gen<string> = string(element([" ", "\t", "\n", "\r"] as const), { max: 2, min: 0 });
 
 /**
+ * The XML whitespace a `th`'s `id` is padded by on one side in the copy box: none, or one of
+ * space, tab, line feed and carriage return.
+ */
+const edge: Gen<string> = string(element([" ", "\t", "\n", "\r"] as const), { max: 1, min: 0 });
+
+/**
+ * The values a `th`'s `id` takes in the copy box, each with whether it is an NCName: a name, and
+ * each form spec reading 156 reads as no ID value, the empty one, one that starts with a digit,
+ * two names, and `٠a`, whose first character starts a name in XML 1.0's fifth edition but is a
+ * digit in the `Letter` tables `xs:NCName` reads.
+ */
+const idForms = [
+  { names: true, value: "h" },
+  { names: false, value: "" },
+  { names: false, value: "1a" },
+  { names: false, value: "a b" },
+  { names: false, value: "٠a" },
+  { names: true, value: "h.1-x" },
+] as const;
+
+/**
  * Escape a text for an attribute value written between double quotes, so the reader gives it back
  * as written: the three whitespace controls as character references, which attribute-value
  * normalization leaves alone (XML 1.0, §3.3.3).
@@ -358,6 +379,65 @@ describe("import/overlays/html.ts, rowsOf", () => {
                 ),
                 ["h"],
                 JSON.stringify(id),
+              );
+            }),
+        ),
+      ),
+  );
+
+  it.effect(
+    "gives every th that writes an id its TableHeader, the id's value whatever its form, for the database to judge which names a header",
+    (ctx) =>
+      // Oracle: the copy as the schema states it (`#pantry/qti/html.ts`): `TableHeader` holds a
+      // `th`'s `id`, its value the lexical form with its outer XML whitespace set apart (XML Schema
+      // Part 2, §4.3.6), at the `th`'s node and table. Which form names a header is the database's
+      // to judge: a form that is no NCName names none (spec reading 156), and its row breaks the
+      // copy back into `namingIdAttributes` ("E1 derived") beside AL1's value domain, so the
+      // builder copies every form and judges none.
+      // Bound: an NCName and each of reading 156's forms that are no NCName, each padded by at
+      // most one of space, tab, line feed and carriage return on each side, 150.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "a th's id of an NCName or a form that is no NCName, padded by at most one XML whitespace character on each side",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<"an NCName" | "no NCName">(["an NCName", "no NCName"]),
+            generator: (source) => ({
+              after: source.draw(edge),
+              before: source.draw(edge),
+              form: source.draw(element(idForms)),
+            }),
+            limit: 200,
+            literal: (drawn) => JSON.stringify(drawn),
+            oracle: {
+              kind: "specification",
+              name: "TableHeader's copy of a th's id, its value collapsed at its ends, XML Schema Part 2, §4.3.6",
+            },
+            suite: "import/overlays/html-header-copy",
+          },
+          ({ after, before, form }, c) =>
+            Effect.gen(function* copiedId() {
+              c.note(form.names ? "an NCName" : "no NCName");
+
+              const tree = yield* itemOf(
+                `<table><tbody><tr><th id="${attributeText(`${before}${form.value}${after}`)}">H</th></tr></tbody></table>`,
+              );
+              const { nodes } = flatten(tree, idOf);
+              const th = nodes.find(({ kind }) => kind === "th");
+              const table = nodes.find(({ kind }) => kind === "table");
+              assert.isDefined(th, "the body writes a th");
+              assert.isDefined(table, "the body writes a table");
+
+              assert.deepStrictEqual(
+                [...rowsOf(tree, ids).TableHeader.values()].map((row) => ({
+                  id: row.id,
+                  node: row.node,
+                  owner: row.owner,
+                  table: row.table,
+                })),
+                [{ id: form.value, node: th.id, owner: th.id, table: table.id }],
+                JSON.stringify(`${before}${form.value}${after}`),
               );
             }),
         ),
