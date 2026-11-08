@@ -13,11 +13,11 @@
       "items": {
         "type": "object",
         "properties": {
-          "identity": { "type": "string" },
           "name": { "type": "string" },
-          "rule": { "type": "string" }
+          "rule": { "type": "string" },
+          "text": { "type": "string" }
         },
-        "required": ["identity"],
+        "required": ["text"],
         "additionalProperties": true
       }
     },

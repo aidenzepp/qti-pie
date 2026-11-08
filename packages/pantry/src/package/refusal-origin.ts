@@ -33,14 +33,20 @@ const witnessKinds = {
 export const WitnessKind = Schema.Literals(Object.values(witnessKinds));
 
 /**
- * One law a database refusal names: its identity, the law as grizzle reports it, written by
- * Effect's `Formatter.format`, and the name and rule the law table gives it, absent for a law the
- * table does not hold.
+ * One law a database refusal names: its `text`, the law as grizzle's outcome names it, written by
+ * Effect's `Formatter.format` for a person to read, and the `name` and `rule` the law table gives
+ * it, absent for a law the table does not hold. A program reads which law broke by its `name`.
+ *
+ * The text is no JSON: `Formatter.format` writes a literal's absent type as `undefined` and a
+ * bigint as `1n`. The law stays text because grizzle publishes no Schema of its `Law`: a side's
+ * selection is grizzle's expression description and a constant term any literal grizzle holds, a
+ * bigint, a decimal or a span among them, so a structure here would define grizzle's type a second
+ * time.
  */
 export const RefusedLaw = Schema.Struct({
-  identity: Schema.String,
   name: Schema.optionalKey(Schema.String),
   rule: Schema.optionalKey(Schema.String),
+  text: Schema.String,
 });
 
 /**

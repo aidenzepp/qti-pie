@@ -1483,11 +1483,11 @@ export const refusalOfLaws = (
       const named = pipe(
         laws,
         Arr.map((law) => {
-          const identity = Formatter.format(law);
+          const text = Formatter.format(law);
 
           return Option.match(lawNameOf(law), {
-            onNone: () => ({ identity }),
-            onSome: (name) => ({ identity, name, rule: lawTable[name].rule }),
+            onNone: () => ({ text }),
+            onSome: (name) => ({ name, rule: lawTable[name].rule, text }),
           });
         }),
       );

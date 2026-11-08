@@ -243,9 +243,9 @@ describe("describeFailure, a program grizzle refused to compile", () => {
  * One law a database refusal names, as the refusal carries it: AL1's admission check.
  */
 const refusedLaw = {
-  identity: "check AL1_admission",
   name: "AL1 admission",
   rule: "attribute-admission",
+  text: "check AL1_admission",
 };
 
 describe("describeFailure, a refused import", () => {

@@ -99,11 +99,11 @@ const errorObjectsOf = (stderr: string) =>
   stderr.split("\n").flatMap((line) => Option.toArray(errorObjectOf(line)));
 
 /**
- * The identities of a refusal's laws, as a sorted list: the laws are a set, so their order is no
- * part of what the two refusals must agree on.
+ * The texts of a refusal's laws, as a sorted list: the laws are a set, so their order is no part of
+ * what the two refusals must agree on.
  */
-const identities = (facts: readonly { readonly identity: string }[]): readonly string[] =>
-  facts.map(({ identity }) => identity).toSorted();
+const texts = (facts: readonly { readonly text: string }[]): readonly string[] =>
+  facts.map(({ text }) => text).toSorted();
 
 /**
  * Run one corpus package through the importer and through the CLI, and assert the CLI lands it
@@ -205,8 +205,8 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
     );
 
     assert.deepStrictEqual(
-      identities(errors[0]?.laws ?? []),
-      identities(Option.getOrElse(laws, () => [])),
+      texts(errors[0]?.laws ?? []),
+      texts(Option.getOrElse(laws, () => [])),
       `${entry.name}: the CLI names the laws the database named`,
     );
     assert.strictEqual(
