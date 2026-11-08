@@ -2860,7 +2860,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      as a row of its own, `DeclarationCardinality`, beside `DeclarationBaseType` and `DeclarationIdentifier`
      (`src/qti/declarations.ts`), only where it spells a code: a missing value is a row of its own relation, never a
      sentinel. Each law over a cardinality reads that row, through a row that hangs from the declaration beside it
-     (`ValueSetCardinality`, `DeclaredValue`, `FieldValue`, `MappingCardinality`, `AreaMappingCardinality`,
+     (`ValueSetCardinality`, `TypedValue`, `FieldValue`, `MappingCardinality`, `AreaMappingCardinality`,
      `LookupTableCardinality`, `DeclarationName`), or from it (Declaration base type). This sets aside lane NIL's B11
      reading, under which such a declaration had no `Declaration` row and nothing below it, so the importer's rows broke
      "Declaration overlay"'s copy of its cardinality and "Mapping overlay"'s copy of each map key beside the value

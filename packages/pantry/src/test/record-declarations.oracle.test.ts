@@ -15,7 +15,7 @@
  * Now a declaration's base type is `DeclarationBaseType`'s alone, a row only where it writes one,
  * every row that names the declaration copies its count of them (`baseTypes`), and each row that
  * reads a base type copies it from the typed row (`BindingBaseType`, `MappingBaseType`,
- * `MapKeyType`, `LookupValueType`, `DeclaredValue`), so only where it is. A law about a record's
+ * `MapKeyType`, `LookupValueType`, `TypedValue`), so only where it is. A law about a record's
  * whole value judges its cardinality, as the specification states it; one over a base type judges
  * the typed row, and a variable of no base type that is no record is Declaration base type's alone
  * (the orchestrator's ruling of 2026-11-06: one cause is refused under one rule).

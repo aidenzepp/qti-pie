@@ -689,7 +689,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
       "ValueSet",
       "ValueSetCardinality",
       "Value",
-      "DeclaredValue",
+      "TypedValue",
       "ValueBaseType",
       "FieldValue",
       "RecordField",

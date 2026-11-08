@@ -75,7 +75,6 @@ const relationNames = [
   "DeclarationCardinality",
   "DeclarationIdentifier",
   "DeclarationName",
-  "DeclaredValue",
   "FieldValue",
   "MasteryCeiling",
   "MasteryFloor",
@@ -84,6 +83,7 @@ const relationNames = [
   "NormalMinimum",
   "RecordField",
   "RecordFieldName",
+  "TypedValue",
   "Value",
   "ValueBaseType",
   "ValueSet",
@@ -424,7 +424,7 @@ const walkValue = (expected: Expected, { child, tuple, valueOf }: Met, owner: Wa
   for (const [baseType, cardinality] of Option.toArray(
     Option.all([owner.baseType, owner.cardinality]),
   )) {
-    expected.DeclaredValue.set(tuple.node, {
+    expected.TypedValue.set(tuple.node, {
       baseType,
       cardinality,
       declaration: owner.declaration,
@@ -488,7 +488,6 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     DeclarationCardinality: new Map(),
     DeclarationIdentifier: new Map(),
     DeclarationName: new Map(),
-    DeclaredValue: new Map(),
     FieldValue: new Map(),
     MasteryCeiling: new Map(),
     MasteryFloor: new Map(),
@@ -497,6 +496,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     NormalMinimum: new Map(),
     RecordField: new Map(),
     RecordFieldName: new Map(),
+    TypedValue: new Map(),
     Value: new Map(),
     ValueBaseType: new Map(),
     ValueSet: new Map(),

@@ -24,8 +24,8 @@
  *   and {@link ValueSetCardinality}, a set beside its declaration's cardinality, where it has one.
  * - {@link Value}, one per `qti-value` of a value set: its text, Node's string value of it, and its
  *   set's declaration and counts.
- * - {@link DeclaredValue}, a value's text beside its declaration's base type and cardinality, where
- *   its declaration has both: the base type a value of a set that is no record's is read in.
+ * - {@link TypedValue}, a value's text beside its declaration's base type and cardinality, where its
+ *   declaration has both: the base type a value of a set that is no record's is read in.
  * - {@link ValueBaseType}, a value's own `base-type`, where it writes one that spells a code, and
  *   {@link FieldValue}, its text beside that base type and its declaration's cardinality, where the
  *   declaration has one: the base type a record's field's text is read in.
@@ -440,7 +440,7 @@ export const ValueSetCardinality = relation(
  *   `copiedTextKinds`), copied from `Node`;
  * - `cardinalities` and `baseTypes`, its set's, and `declaration`, its set's parent: where its
  *   declaration has both a cardinality and a base type, its text is read beside them, its
- *   {@link DeclaredValue}, in that base type unless the declaration is a record; a record's field's
+ *   {@link TypedValue}, in that base type unless the declaration is a record; a record's field's
  *   text is read in its own base type, its {@link FieldValue}'s (information model §7.46, Value:
  *   "The base-type is defined by the 'base-type' attribute of the declaration except in the case of
  *   variables with record cardinality").
@@ -472,8 +472,8 @@ export const Value = relation(
  * A declaration with no base type gives its values none to be read in, and one with no
  * cardinality none to tell a record's from another's.
  */
-export const DeclaredValue = relation(
-  "DeclaredValue",
+export const TypedValue = relation(
+  "TypedValue",
   {
     baseType: closedId(BaseType),
     cardinality: closedId(Cardinality),
@@ -512,7 +512,7 @@ export const ValueBaseType = relation(
  * and `declaration`, its {@link Value}'s, `baseType`, its {@link ValueBaseType}'s, and
  * `cardinality`, its declaration's {@link DeclarationCardinality}'s. `Typed_value` reads a record's
  * field's text in its own base type; any other value's is read in its declaration's
- * ({@link DeclaredValue}).
+ * ({@link TypedValue}).
  */
 export const FieldValue = relation(
   "FieldValue",
@@ -855,9 +855,9 @@ type DeclarationNameRow = RowScalars<typeof DeclarationName>;
 type RecordFieldNameRow = RowScalars<typeof RecordFieldName>;
 
 /**
- * A `DeclaredValue` row as a row check reads it.
+ * A `TypedValue` row as a row check reads it.
  */
-type DeclaredValueRow = RowScalars<typeof DeclaredValue>;
+type TypedValueRow = RowScalars<typeof TypedValue>;
 
 /**
  * A `FieldValue` row as a row check reads it.
@@ -972,7 +972,7 @@ export {
  * @param v - The row.
  * @returns The predicate.
  */
-const valueCheck = (v: DeclaredValueRow) =>
+const valueCheck = (v: TypedValueRow) =>
   v.or(
     v.eq(v.cardinality, "record"),
     v.in(v.baseType, unjudgedBaseTypes),
@@ -996,11 +996,9 @@ const fieldValueCheck = (f: FieldValueRow) =>
 
 /**
  * The values of a declaration that has both a base type and a cardinality: each has its
- * {@link DeclaredValue}.
+ * {@link TypedValue}.
  */
-const declaredValues = select(Value, (v) =>
-  v.and(v.eq(v.baseTypes, 1n), v.eq(v.cardinalities, 1n)),
-);
+const typedValues = select(Value, (v) => v.and(v.eq(v.baseTypes, 1n), v.eq(v.cardinalities, 1n)));
 
 /**
  * The values that write a base type spelling a code, of a declaration that has a cardinality:
@@ -1075,7 +1073,7 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   that names something and its declaration's {@link declarationRef} tuple,
  *   {@link DeclarationName} its identifier's name and its cardinality, a value set its
  *   declaration's, {@link ValueSetCardinality} its set's counts and its declaration's cardinality,
- *   a value its text and its set's, {@link DeclaredValue} a value's text and its declaration's base
+ *   a value its text and its set's, {@link TypedValue} a value's text and its declaration's base
  *   type and cardinality, {@link ValueBaseType} a value's own `base-type` that spells a code,
  *   {@link FieldValue} a value's text, its own base type and its declaration's cardinality, a
  *   record field its `field-identifier` and `base-type`, {@link RecordFieldName} its field's
@@ -1117,7 +1115,7 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   {@link RecordFieldName}); a value writes a `field-identifier` or a `base-type` only as a field,
  *   both or neither, whatever its declaration's cardinality.
  * - **`Typed value`** (C1, G-match): each value's text is a lexical form of its base type: its
- *   declaration's ({@link DeclaredValue}) or, a record's field's, its own ({@link FieldValue}).
+ *   declaration's ({@link TypedValue}) or, a record's field's, its own ({@link FieldValue}).
  * - **`Mastery range`** (C2, G-parse): the mastery value lies in the normal range, each pair judged
  *   where both have a value: written, or a normal minimum's version default (reading 149).
  */
@@ -1249,17 +1247,17 @@ export const declarationLawsByName = {
       on(Value, "parent", "cardinalities", "baseTypes", "declaration"),
       on(ValueSet, "node", "cardinalities", "baseTypes", "parent"),
     ),
-    contained(on(declaredValues, "node"), on(DeclaredValue, "node")),
+    contained(on(typedValues, "node"), on(TypedValue, "node")),
     contained(
-      on(DeclaredValue, "node", "declaration", "text"),
+      on(TypedValue, "node", "declaration", "text"),
       on(Value, "node", "declaration", "text"),
     ),
     contained(
-      on(DeclaredValue, "declaration", "baseType"),
+      on(TypedValue, "declaration", "baseType"),
       on(DeclarationBaseType, "node", "baseType"),
     ),
     contained(
-      on(DeclaredValue, "declaration", "cardinality"),
+      on(TypedValue, "declaration", "cardinality"),
       on(DeclarationCardinality, "node", "cardinality"),
     ),
     contained(
@@ -1390,7 +1388,7 @@ export const declarationLawsByName = {
     ),
   ],
   "Typed value": [
-    check("Typed_value", DeclaredValue, valueCheck),
+    check("Typed_value", TypedValue, valueCheck),
     check("Typed_value", FieldValue, fieldValueCheck),
   ],
   "Value cardinality": [
