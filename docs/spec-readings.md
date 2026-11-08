@@ -3066,3 +3066,26 @@ against it. A reading that is not an information-model-over-XSD case says which 
      none of its 29 zips writes a variable mapping, by a scan of their XML entries. This binds pantry and plate alike.
      This is not a case of documents in conflict. (Decided 2026-11-08 by the coordinator, under the operator's standing
      ruling of 2026-11-05, from seat SWEEP-REFNONE.)
+167. **A document's type in its package is total: the manifest is of type `manifest`, every other document of the type of
+     the resource that lists it, and a document's resource type, where a resource lists it, is a row of its own.** IMS
+     Content Packaging 1.2 gives a package two roles of document: "The InterchangePackage shall include a Manifest
+     object and may include content files and control files" (Information Model, Version 1.2 Public Draft v2.0,
+     section 6.3, the InterchangePackage class), and "Resource and File are used to reference content files and control
+     files" (section 6.4.1, the Manifest class). A Resource "is a container for information relating to a particular
+     collection of files used by the ancestor Manifest object" (section 6.6.2, the Resource class), and its Type
+     "indicates the type of resource being described by the parent Resource object", one per resource (section 6.11.13,
+     the Type class, multiplicity 1..1). So a resource's file has the type of the resource that lists it, and the
+     manifest, the bound instance of the information model (reading 146), has the role of the manifest and no resource
+     type: no resource describes it. Every node and attribute of a document copies the document's type, so a law tells
+     the manifest's content packaging elements and records from another document's (170356bd's reading), and that type
+     is the document's role, `manifest` or a resource type, held on every row (`DocumentType`, `src/grammar/install.ts`;
+     `Node.documentType`, `Attribute.documentType` and `Site.documentType`). The resource type alone may be absent, so
+     it is a row of its own, `ResourceDocument`, keyed by the document node, which "RootOfType" and "Document entry"
+     read and "E1 derived" ties to the document's type (`ResourceDocumentType`, `src/qti/package.ts`); the manifest has
+     none. This sets aside the `ResourceType` handle `none` as every manifest row's type (reading 146's "of no resource
+     type (`none`)"), a null object of a type the manifest does not have, which the manifest attributes' selections,
+     the record documents' (`recordDocumentTypes`) and the manifest's identifier copy-backs read. It moves no law and no
+     verdict: each selection reads `manifest` where it read `none`. `NameLookup`'s `none` for a name that is no item ref
+     of a resource, and the records' `named`, are join copies of another kind, which grizzle's rules over queries
+     delete. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-08 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from seat SWEEP-NODESENT.)

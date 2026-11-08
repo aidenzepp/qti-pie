@@ -67,9 +67,11 @@ import {
 } from "@bjornpagen/grizzle";
 import {
   AttributeName,
+  DocumentType,
   documentTypes,
   NodeKind,
   ReferenceAttribute,
+  ResourceDocumentType,
   ResourceType,
   ResourceTypeLexical,
   RootOfType,
@@ -321,6 +323,28 @@ export const TypedHref = relation(
 );
 
 /**
+ * A document a resource of its package lists, keyed by its document node: the type of that resource
+ * (IMS Content Packaging 1.2: a resource's file; spec reading 167). The package's manifest is no
+ * resource's document (spec reading 146) and has no row: its type is `manifest`, its `Document`'s
+ * `documentType`, and every other document's is the type here, by `ResourceDocumentType`.
+ *
+ * - **the host's:** `type`, the type its listing names it under (`#pantry/import/program.ts`); and
+ *   its `Document`'s `package`, `path`, `rootKind` and `documentType`, which "E1 derived" proves.
+ */
+export const ResourceDocument = relation(
+  "ResourceDocument",
+  {
+    documentType: closedId(DocumentType),
+    node: uuid,
+    package: uuid,
+    path: EntryPath,
+    rootKind: closedId(NodeKind),
+    type: closedId(ResourceType),
+  },
+  ["node"],
+);
+
+/**
  * The (path, type) pairs a package's typed resources name, a projection keyed by its heading: one
  * row per pair, its `names` the resources whose href's path it is ({@link TypedHref}).
  */
@@ -491,9 +515,9 @@ export const namedHrefFamily = counted(
 /**
  * Select the attributes of one name on elements of one kind in the package's manifest: the source
  * of an overlay's copy (C18). The manifest is the package's one `imsmanifest.xml` (IMS Content
- * Packaging 1.2), the one document of type `none` (`RootOfType`'s check), and a content packaging
- * element of another document describes no part of the package (170356bd's ruling), so its
- * attributes are no overlay's source.
+ * Packaging 1.2), the one document of type `manifest` (`RootOfType`'s check), and a content
+ * packaging element of another document describes no part of the package (170356bd's ruling), so
+ * its attributes are no overlay's source.
  *
  * A copy, `contained(on(selection, "node", "lexical"), on(O, "node", field))`, makes the
  * attribute's lexical form the overlay's field and its existence the overlay row's. Its reverse
@@ -505,10 +529,11 @@ export const namedHrefFamily = counted(
  * `identifierref` are required (AL3), and each overlay's row is its node's, so the copy alone makes
  * the row's field the attribute's: those selections are no target and state no key. A resource's
  * `href` is optional, and its {@link ResourceHref} stands only where it is written, a containment
- * back into `resourceHrefs`, which sits beside its key for it. An `identifier` is an
- * `xs:ID`, so its selection lies inside `idAttributes` (`#pantry/qti/identity.ts`), whose key holds
- * every element to one ID-typed attribute, and the copy back from its overlay, stated there under
- * "Manifest overlay", meets `idAttributes` at the selection's kind and the manifest's type, `none`.
+ * back into `resourceHrefs`, which sits beside its key for it. An `identifier` is an `xs:ID`, so
+ * its selection lies inside `idAttributes` (`#pantry/qti/identity.ts`), whose key holds every
+ * element to one ID-typed attribute, and the copy back from its overlay, stated there under
+ * "Manifest overlay", meets `idAttributes` at the selection's kind and the manifest's type,
+ * `manifest`.
  *
  * @param kind - The element's kind.
  * @param name - The attribute's name.
@@ -519,7 +544,7 @@ const attributesOf = (
   name: "href" | "identifier" | "identifierref" | "type",
 ) =>
   select(Attribute, (a) =>
-    a.and(a.eq(a.name, name), a.eq(a.kind, kind), a.eq(a.documentType, "none")),
+    a.and(a.eq(a.name, name), a.eq(a.kind, kind), a.eq(a.documentType, "manifest")),
   );
 
 /**
@@ -673,9 +698,10 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  * - **P1 (spec reading 67):** a resource's type is one its version's content-packaging XSD
  *   enumerates, which the attribute's value domain states (`attribute-lexical`), and nothing here.
  * - **P2 `root-type-reverse` ("RootOfType"):** a document's (resource type, root kind) is a row of
- *   the set `RootOfType`, or it is the manifest, of type `none` (an included fragment's type holds
- *   every kind an include stands for, spec reading 114); and every document but the manifest is one
- *   a resource names, of the type it names.
+ *   the set `RootOfType`, where it is a resource's, its {@link ResourceDocument} (an included
+ *   fragment's type holds every kind an include stands for, spec reading 114); and every document
+ *   is the manifest, at its path, or one a resource names, of the type it names (spec reading
+ *   167).
  * - **P3 `file-listed` ("File listed"), `href-listed` ("Href listed") and `entry-kind` ("Document
  *   entry"):** every entry but the manifest is the resolved path of a file; a resource's href names
  *   the file one of its own files names, compared by resolved path in the package and as written
@@ -686,8 +712,10 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  *   two are one (package, identifier) of {@link ManifestIdSpace}, each side's rows exactly its
  *   written identifiers, and every row but the manifest's a resource's.
  * - **C17 ("E1 derived"):** a resource's type code is the one its lexical form spells, or `none`; a
- *   path resolved in the package holds no dot segment ({@link resolvedPathPattern}); a reference is
- *   its written pieces, external where its target has a scheme or a leading `/`, and its own
+ *   document a resource lists has its {@link ResourceDocument}, its `Document`'s copy, and its
+ *   document type is its resource type's (`ResourceDocumentType`), so the manifest alone has none;
+ *   a path resolved in the package holds no dot segment ({@link resolvedPathPattern}); a reference
+ *   is its written pieces, external where its target has a scheme or a leading `/`, and its own
  *   document's only where its target is empty.
  * - **`href-form` ("Href form"), a stated limit:** no href is one the importer reads no name from
  *   (`unresolved`), and a `srcset` is one candidate, its URL alone.
@@ -722,12 +750,27 @@ export const packageLawsByName = {
     contained(on(documentHrefs, "package", "path"), on(Entry, "package", "path")),
     contained(
       on(documentHrefs, "package", "path", "type"),
-      on(Document, "package", "path", "resourceType"),
+      on(ResourceDocument, "package", "path", "type"),
     ),
+    key(on(ResourceDocument, "package", "path")),
     key(on(stimulusDocuments, "package", "path")),
   ],
   "DocumentId key": [key(on(ResourceId, "package", "identifier")), key(on(resourceHrefs, "node"))],
   "E1 derived": [
+    contained(
+      on(ResourceDocument, "node", "package", "path", "rootKind", "documentType"),
+      on(Document, "node", "package", "path", "rootKind", "documentType"),
+    ),
+    check("E1_derived", ResourceDocument, (r) =>
+      r.eq(r.documentType, ResourceDocumentType.at("documentType", r.type)),
+    ),
+    contained(
+      on(
+        select(Document, (d) => d.ne(d.documentType, "manifest")),
+        "node",
+      ),
+      on(ResourceDocument, "node"),
+    ),
     check("E1_derived", ResourceTyped, (r) =>
       r.eq(ResourceTypeLexical.at("lexical", r.type), r.typeLexical),
     ),
@@ -891,25 +934,13 @@ export const packageLawsByName = {
     namedHrefFamily,
     check("RootOfType", NamedHref, (h) => h.gt(h.names, 0n)),
     contained(
-      on(
-        select(Document, (d) => d.ne(d.resourceType, "none")),
-        "package",
-        "path",
-        "resourceType",
-      ),
+      on(ResourceDocument, "package", "path", "type"),
       on(NamedHref, "package", "path", "type"),
     ),
     check("RootOfType", Document, (d) =>
-      d.or(d.ne(d.resourceType, "none"), d.eq(d.path, manifestPath)),
+      d.or(d.ne(d.documentType, "manifest"), d.eq(d.path, manifestPath)),
     ),
-    contained(
-      on(
-        select(Document, (d) => d.ne(d.resourceType, "none")),
-        "resourceType",
-        "rootKind",
-      ),
-      on(RootOfType, "type", "root"),
-    ),
+    contained(on(ResourceDocument, "type", "rootKind"), on(RootOfType, "type", "root")),
   ],
   "Self dependency": [
     check("Self_dependency", DependencyTarget, (d) => d.ne(d.target, d.resource)),

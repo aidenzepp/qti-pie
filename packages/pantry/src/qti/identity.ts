@@ -1010,10 +1010,10 @@ export const ssmlLexiconReference = contained(
  * - **Manifest overlay:** each {@link ManifestId} and {@link ResourceId} row has its node's
  *   `identifier`, the way back of the copy `#pantry/qti/package.ts` states (C18): an ID-typed
  *   attribute at its node, of its kind (`cp:manifest` or `cp:resource`), in the manifest (type
- *   `none`). Each of the two kinds has one ID-typed attribute, its `identifier`, in every version,
- *   so this is the containment in the manifest's `identifier` selection, read through the key over
- *   the ID-typed attributes, with no second key over the narrower selection (the one-way rule;
- *   `#pantry/qti/identity.copyback.test.ts`).
+ *   `manifest`). Each of the two kinds has one ID-typed attribute, its `identifier`, in every
+ *   version, so this is the containment in the manifest's `identifier` selection, read through the
+ *   key over the ID-typed attributes, with no second key over the narrower selection (the one-way
+ *   rule; `#pantry/qti/identity.copyback.test.ts`).
  */
 export const identityLawsByName = {
   "Document lang": [
@@ -1208,11 +1208,11 @@ export const identityLawsByName = {
   ],
   "Manifest overlay": [
     contained(
-      on(ManifestId, "node", constant("cp:manifest"), constant("none")),
+      on(ManifestId, "node", constant("cp:manifest"), constant("manifest")),
       on(idAttributes, "node", "kind", "documentType"),
     ),
     contained(
-      on(ResourceId, "node", constant("cp:resource"), constant("none")),
+      on(ResourceId, "node", constant("cp:resource"), constant("manifest")),
       on(idAttributes, "node", "kind", "documentType"),
     ),
   ],

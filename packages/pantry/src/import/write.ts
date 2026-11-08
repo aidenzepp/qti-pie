@@ -100,11 +100,12 @@ export interface NodeIds {
    */
   readonly entryAt: (path: string) => boolean;
   /**
-   * The document's type, the type of the resource that lists it, `none` for the manifest, which is
-   * no resource's document (spec reading 146): every node of the document copies it
-   * (`Node.documentType`), so a law can tell the manifest's elements from another document's.
+   * The document's type: `manifest` for the manifest, which is no resource's document (spec
+   * readings 146 and 167), else the type of the resource that lists it. Every node of the document
+   * copies it (`Node.documentType`), so a law can tell the manifest's elements from another
+   * document's.
    */
-  readonly documentType: ListedDocument["resourceType"];
+  readonly documentType: ListedDocument["documentType"];
   /**
    * The id of the node or attribute numbered `index` by `flatten`: the nodes in document order from
    * the document node's 0, then the attributes, so every caller that flattens the document under
@@ -139,13 +140,13 @@ export interface NodeIds {
 }
 
 /**
- * A document as the importer lists it, one per path: its path, its tree as shred gives it, and the
- * type of the resource that names it, `none` for the manifest, which is no resource's document
- * (spec reading 146).
+ * A document as the importer lists it, one per path: its path, its tree as shred gives it, and its
+ * type: `manifest` for the manifest, which is no resource's document (spec readings 146 and 167),
+ * else the type of the resource that names it.
  */
 export interface ListedDocument {
+  readonly documentType: Addition<typeof Document>["documentType"];
   readonly path: string;
-  readonly resourceType: Addition<typeof Document>["resourceType"];
   readonly tree: XdmDocument<Composed>;
 }
 
@@ -226,7 +227,7 @@ export const nodeIdsOf = (
     listed.map(({ document, idOf }) => ({
       document,
       idOf,
-      named: document.resourceType !== "none",
+      named: document.documentType !== "manifest",
       path: document.path,
       tree: document.tree,
     })),
@@ -247,7 +248,7 @@ export const nodeIdsOf = (
         assembled,
         context,
         documentAt,
-        documentType: document.resourceType,
+        documentType: document.documentType,
         entryAt,
         idOf,
         package: packageId,
@@ -764,13 +765,13 @@ interface WrittenMember {
  *
  * @param gathered - The node, gathered with its own rows.
  * @param folded - Its fold (`foldOf`): its ancestry, its nearest interaction and its state.
- * @param documentType - The type of the resource that lists its document.
+ * @param documentType - Its document's type.
  * @returns The member, with the list its children are nested in.
  */
 const memberOf = (
   gathered: Gathered,
   folded: Folded,
-  documentType: ListedDocument["resourceType"],
+  documentType: ListedDocument["documentType"],
 ): WrittenMember => {
   const { node } = gathered;
   const { kind, version } = node;
@@ -889,7 +890,8 @@ export const rootInsertOf = (
  * its parent's kind and namespace name, the document node's none, and the named governing type of
  * each element a named type governs: a vocabulary element's `ElementType`, and a foreign element's
  * `OpenElementType` with its parent's namespace name, each with its node's governor
- * (`governorOf`).
+ * (`governorOf`); and, for a document a resource lists, its `ResourceDocument`, the type of that
+ * resource, which the manifest has none of (spec reading 167).
  *
  * @param document - The document as the importer lists it.
  * @param ids - The ids its rows are written under, whether it is in an assembly, and the context
@@ -943,12 +945,12 @@ export const documentRowsOf = (
           assembled: ids.assembled,
           contextNearest: context.nearest,
           contextNearestKind: context.nearestKind,
+          documentType: document.documentType,
           nodeChildren: BigInt(
             rows.nodes.filter((node) => node.parent === self && node.id !== self).length,
           ),
           package: ids.package,
           path: document.path,
-          resourceType: document.resourceType,
           rootKind: document.tree.root.kind,
           version: document.tree.version,
         },
@@ -1001,6 +1003,23 @@ export const documentRowsOf = (
       ),
     ),
     Pi: new Map(rows.pis.map(({ data, node, target }) => [node, { data, node, target }] as const)),
+    ResourceDocument: new Map(
+      document.documentType === "manifest"
+        ? []
+        : [
+            [
+              self,
+              {
+                documentType: document.documentType,
+                node: self,
+                package: ids.package,
+                path: document.path,
+                rootKind: document.tree.root.kind,
+                type: document.documentType,
+              },
+            ],
+          ],
+    ),
     SdDecl: new Map(rows.sdDecls.map((row) => [row.node, row] as const)),
     XmlDecl: new Map(rows.xmlDecls.map((row) => [row.node, row] as const)),
   };

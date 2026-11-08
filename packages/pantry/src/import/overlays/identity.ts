@@ -17,6 +17,7 @@ import type { Addition } from "@bjornpagen/grizzle";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import { Option } from "effect";
 import { collapse, isNcName } from "#pantry/grammar/domains.ts";
+import type { DocumentType } from "#pantry/grammar/install.ts";
 import {
   attributeRows,
   ResourceType,
@@ -87,10 +88,11 @@ export interface IdentityIds {
    */
   readonly context: DocumentContext;
   /**
-   * The document's type, the resource's that lists it, `none` for the manifest: its LOM records
-   * are read where it is of a type a package's records are read from (`recordDocumentTypes`).
+   * The document's type, `manifest` for the manifest, else the resource's that lists it: its LOM
+   * records are read where it is of a type a package's records are read from
+   * (`recordDocumentTypes`).
    */
-  readonly documentType: Addition<typeof GeneralNamed>["named"];
+  readonly documentType: (typeof DocumentType.handles)[number];
   readonly idOf: (index: number) => NodeId;
   /**
    * The document a resource names at a path of the package, none where no resource names one

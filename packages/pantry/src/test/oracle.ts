@@ -2298,12 +2298,12 @@ const charsOf = (view: View, node: FoldedNode<Composed>): string => {
 const manifestEntry = "imsmanifest.xml";
 
 /**
- * The type of the resource that lists a document, as its nodes and attributes copy it
- * (`Node.documentType`): `none` for the package's manifest, its one `imsmanifest.xml`, which is no
- * resource's document (reading 146), and for every other document the type `RootOfType` pairs
- * with its root's kind, which is the type a resource lists it under wherever `RootOfType` holds:
- * an external record file's root, a `lom:lom`, gives `resourcemetadata/xml`. A root no type pairs
- * gives the empty text, which is no type.
+ * A document's type, as its nodes and attributes copy it (`Node.documentType`): `manifest` for the
+ * package's manifest, its one `imsmanifest.xml`, which is no resource's document (readings 146 and
+ * 165), and for every other document the type of the resource that lists it, the type `RootOfType`
+ * pairs with its root's kind, which is the type a resource lists it under wherever `RootOfType`
+ * holds: an external record file's root, a `lom:lom`, gives `resourcemetadata/xml`. A root no type
+ * pairs gives the empty text, which is no type.
  *
  * @param view - The document.
  * @param laws - The grammar's tables.
@@ -2311,7 +2311,7 @@ const manifestEntry = "imsmanifest.xml";
  */
 const documentTypeOf = (view: View, laws: Laws): string => {
   if (view.path === manifestEntry) {
-    return "none";
+    return "manifest";
   }
 
   const roots = view.rows.nodes.filter(
@@ -5075,9 +5075,9 @@ const packageBreaches = (
     Option.exists(resource.handle, (type) =>
       grammar.package.rootOfType.rows.some((row) => row.type === type),
     );
-  // The types each path is read under: the manifest's own, `none` (reading 146), then each type a
-  // resource names the path under.
-  const typesAt = new Map<string, ReadonlySet<string>>([[manifest.path, new Set(["none"])]]);
+  // The types each path is read under: the manifest's own, `manifest` (readings 146 and 167), then
+  // each type a resource names the path under.
+  const typesAt = new Map<string, ReadonlySet<string>>([[manifest.path, new Set(["manifest"])]]);
   for (const { path, resource } of documentsOf(resources, grammar)) {
     typesAt.set(path, new Set([...(typesAt.get(path) ?? []), resource.type]));
   }
@@ -5146,7 +5146,7 @@ const packageBreaches = (
       .flatMap((resource) => Option.toArray(resource.resolved))
       .filter(({ resolution }) => resolution.scope !== "entry")
       .map(({ path }) => breach("Document entry", { path })),
-    // A path two types name, the manifest's `none` among them, is one document, of the type its
+    // A path two types name, the manifest's `manifest` among them, is one document, of the type its
     // root bears out where one does (readings 93, 146 and 162), so another's href names no document
     // of its type: "Document entry" alone, and the document is judged once, where its sites place
     // it.

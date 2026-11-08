@@ -112,8 +112,8 @@ const judgedListedAgain = (type: string, before: boolean) =>
         judgment._tag === "Judged"
           ? [...new Set(judgment.breaches.map(({ law }) => law))].toSorted()
           : [judgment.rule],
-      types: [...inputs.Document.values()].flatMap(({ path, resourceType }) =>
-        path === "choice.xml" ? [resourceType] : [],
+      types: [...inputs.Document.values()].flatMap(({ documentType, path }) =>
+        path === "choice.xml" ? [documentType] : [],
       ),
     };
   });

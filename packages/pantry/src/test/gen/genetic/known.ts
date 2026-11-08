@@ -1682,7 +1682,7 @@ export const fixed: readonly Known[] = [
                 kind: "compare",
                 left: { field: "documentType", kind: "field" },
                 op: "eq",
-                right: { kind: "literal", type: undefined, value: "none" },
+                right: { kind: "literal", type: undefined, value: "manifest" },
               },
               {
                 kind: "compare",

@@ -157,14 +157,14 @@ const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(
   const named = namedDocuments(
     packageRowsOf(manifestTree, { idOf: provisionalIdOf, package: provisionalIdOf(0) }),
   );
-  // A path is one document, of one type (reading 93): the manifest's, `none`, read before any
+  // A path is one document, of one type (reading 93): the manifest's, `manifest`, read before any
   // resource names a path (reading 146), else the type its root bears out among those resources
   // name it under (reading 162). Another type's href, the manifest's path's included, then names
   // no document of its type, which "Document entry" refuses, and the document is read once and
   // judged where its sites place it.
   const pairs = [...named.values()];
   const documents = new Map<string, ListedDocument>([
-    [manifest.path, { path: manifest.path, resourceType: "none", tree: manifestTree }],
+    [manifest.path, { documentType: "manifest", path: manifest.path, tree: manifestTree }],
   ]);
   for (const [at, { path, type }] of pairs.entries()) {
     const file = byPath.get(path);
@@ -172,8 +172,8 @@ const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(
       const tree = yield* shredFile(file, version);
       const others = pairs.slice(at + 1).flatMap((pair) => (pair.path === path ? [pair.type] : []));
       documents.set(path, {
+        documentType: documentTypeOf([type, ...others], tree.root.kind),
         path,
-        resourceType: documentTypeOf([type, ...others], tree.root.kind),
         tree,
       });
     }

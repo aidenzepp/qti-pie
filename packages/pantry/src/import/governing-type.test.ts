@@ -113,10 +113,10 @@ describe("the import's governing types", () => {
 
               const context = ownContext(idOf(0));
               const governors = governorsOf(
-                rootInsertOf(document, { context, documentType: "none", idOf }),
+                rootInsertOf(document, { context, documentType: "imsqti_item_xmlv3p0", idOf }),
               );
               const layer = documentRowsOf(
-                { path: "item.xml", resourceType: "none", tree: document },
+                { documentType: "imsqti_item_xmlv3p0", path: "item.xml", tree: document },
                 { assembled: false, context, idOf, package: idOf(0xff_ff_ff) },
               );
               const { nodes } = flatten(document, idOf);

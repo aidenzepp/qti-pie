@@ -865,7 +865,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     146,
     {
       owner:
-        "the import's listing, one document per path with the manifest's `none` first (`listDocuments`, `src/import/program.ts`), under \"Document entry\"'s key over `Document`'s (package, path) and its containment of each document-typed href in a document of its type (`src/qti/package.ts`); the oracle's listing and its `typesAt` from the manifest's `none` (`judge`, `packageBreaches`, `src/test/oracle.ts`), held by `src/import/manifest-document.oracle.test.ts`",
+        "the import's listing, one document per path with the manifest's `manifest` first (`listDocuments`, `src/import/program.ts`), under \"Document entry\"'s key over `Document`'s (package, path) and its containment of each document-typed href in a resource's document of its type (`ResourceDocument`, `src/qti/package.ts`); the oracle's listing and its `typesAt` from the manifest's `manifest` (`judge`, `packageBreaches`, `src/test/oracle.ts`), held by `src/import/manifest-document.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -1026,6 +1026,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     {
       owner:
         "the import's `ReadingDeclaration`, a resolving declared or mapped reading's declaration as a row of its own, justified by `declarationIdentifierRef` or by its mapping's `MappingSourceDeclaration`, a mapped reading's forced in under \"Variable mapping source\", with \"Variable kind\" judging a built-in reading by its scope's root (`readsAllowedBuiltIn`); and `VariableRefTable`, a declared reference's table claim as a row of its own, forced in under \"Mapped response\" and \"Lookup type\" (`src/qti/expressions.ts`; `readingOf` and `referenceDeclarationsOf`, `src/import/overlays/expressions.ts`); the law oracle's reading kinds, a mapped name's its source's declaration's or none (`readingsOf`, `src/test/oracle-laws/tests.ts`), and its references' tables and kinds, none where they have none (`referenceBreachesOf`, `src/test/oracle-laws/expressions.ts`); held by `src/import/overlays/reading-declarations.oracle.test.ts`",
+      status: "G",
+    },
+  ],
+  [
+    167,
+    {
+      owner:
+        "the `DocumentType` roster, `manifest` then the resource types, and `ResourceDocumentType` (`src/grammar/install.ts`); `Node.documentType`, `Attribute.documentType`, `Site.documentType` and `Document.documentType`, and the type of a resource's document as a row of its own, `ResourceDocument`, under \"RootOfType\", \"Document entry\" and `E1_derived` (`src/qti/package.ts`); the manifest attributes' selections (`attributesOf`, `src/qti/package.ts`), `recordDocumentTypes` (`src/qti/metadata.ts`) and the identifier copy-backs (`src/qti/identity.ts`) at `manifest`; the import's listing and `documentRowsOf` (`src/import/program.ts`, `src/import/write.ts`); the law oracle's `documentTypeOf` and `typesAt` (`src/test/oracle.ts`)",
       status: "G",
     },
   ],

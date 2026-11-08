@@ -16,6 +16,7 @@ import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, pipe } from "effect";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import { collapse, patternFlags } from "#pantry/grammar/domains.ts";
+import type { DocumentType } from "#pantry/grammar/install.ts";
 import { ResourceType } from "#pantry/grammar/install.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
@@ -70,10 +71,10 @@ export interface MetadataIds {
    */
   readonly context: DocumentContext;
   /**
-   * The document's type, the resource's that lists it, `none` for the manifest: a package's
-   * records are read from a document of a type of `recordDocumentTypes` alone.
+   * The document's type, `manifest` for the manifest, else the resource's that lists it: a
+   * package's records are read from a document of a type of `recordDocumentTypes` alone.
    */
-  readonly documentType: (typeof ResourceType.handles)[number];
+  readonly documentType: (typeof DocumentType.handles)[number];
   readonly idOf: (index: number) => NodeId;
   readonly package: Uuid;
   /**

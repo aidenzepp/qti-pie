@@ -37,8 +37,8 @@ import { Array as Arr, Duration, Effect, Option } from "effect";
 import {
   AttributeModelOf,
   AttributeSlotOf,
+  DocumentType,
   GoverningOf,
-  ResourceType,
 } from "#pantry/grammar/install.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
@@ -50,7 +50,7 @@ import type { Datum } from "#pantry/host/predicates.ts";
  * ID value.
  */
 type AttributeCase = Readonly<{
-  documentType: (typeof ResourceType.handles)[number];
+  documentType: (typeof DocumentType.handles)[number];
   governor: string;
   governs: string;
   idValue: boolean;
@@ -84,7 +84,7 @@ interface CopyBack {
 
 /**
  * The manifest's selections, `attributesOf` of `#pantry/qti/package.ts`: one name on one kind, in
- * the manifest, the one document of type `none`.
+ * the manifest, the one document of type `manifest`.
  *
  * @param kind - The element's kind.
  * @returns The copy-back.
@@ -93,7 +93,8 @@ const manifestCopyBack = (kind: "cp:manifest" | "cp:resource"): CopyBack => ({
   from: kind === "cp:manifest" ? "ManifestId" : "ResourceId",
   kind,
   name: "identifier",
-  replaced: (row) => row.kind === kind && row.name === "identifier" && row.documentType === "none",
+  replaced: (row) =>
+    row.kind === kind && row.name === "identifier" && row.documentType === "manifest",
   situations: [
     "the copied attribute",
     "another attribute of the kind",
@@ -147,7 +148,7 @@ const rowsOf = (kind: string): readonly AttributeCase[] =>
         .filter((model) => model.version === version && model.governor === governor)
         .flatMap(({ model }) => AttributeSlotOf.rows.filter((slot) => slot.model === model))
         .flatMap(({ name }) =>
-          ResourceType.handles.flatMap((documentType) =>
+          DocumentType.handles.flatMap((documentType) =>
             lexicals.map(({ idValue, lexical }) => ({
               documentType,
               governor,
@@ -203,7 +204,7 @@ const situationsOf = (copyBack: CopyBack, row: AttributeCase): readonly Situatio
   const reached: readonly (readonly [Situation, boolean])[] = [
     ["the copied attribute", copyBack.replaced(row)],
     ["another attribute of the kind", !copied],
-    ["the copied attribute outside the manifest", copied && row.documentType !== "none"],
+    ["the copied attribute outside the manifest", copied && row.documentType !== "manifest"],
     ["the copied attribute with no ID value", copied && !row.idValue],
   ];
 

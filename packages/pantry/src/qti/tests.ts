@@ -76,6 +76,7 @@ import type { Kind, Name } from "#pantry/grammar/compose.ts";
 import { booleanTruePattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeName,
+  DocumentType,
   Flag,
   Governor,
   grammar,
@@ -517,7 +518,7 @@ export const Site = relation(
     ancestry: bits(Flag),
     children: natural,
     document: uuid,
-    documentType: closedId(ResourceType),
+    documentType: closedId(DocumentType),
     governor: closedId(Governor),
     kind: closedId(NodeKind),
     nearest: uuid,

@@ -255,7 +255,7 @@ export const unionsOf = <Rows>(
  * relation its builder writes.
  *
  * @param documents - The package's documents, each listed and under its ids, the manifest among
- *   them, the one of resource type `none`.
+ *   them, the one of type `manifest`.
  * @param mint - Draws a fresh uuid for each assembled instance but a root.
  * @returns The parts, in the order {@link overlayRowsOf} merges them.
  * @throws {Error} When no document is the manifest: every package lists its own (`readProgram`).
@@ -288,15 +288,15 @@ export const overlayPartsOf = (
   );
   const named = new Map<string, NamedDocument>();
   for (const { document, rows } of built) {
-    if (document.listed.resourceType !== "none" && !named.has(document.listed.path)) {
+    if (document.listed.documentType !== "manifest" && !named.has(document.listed.path)) {
       named.set(document.listed.path, namedDocumentOf(document.ids.idOf(0), rows.metadata));
     }
   }
 
-  const manifest = built.find(({ document }) => document.listed.resourceType === "none");
+  const manifest = built.find(({ document }) => document.listed.documentType === "manifest");
   if (manifest === undefined) {
     throw new Error(
-      "overlayPartsOf was given no manifest, the one document of resource type none. Pass every document of the package, as readProgram lists them, its manifest first.",
+      "overlayPartsOf was given no manifest, the one document of type manifest. Pass every document of the package, as readProgram lists them, its manifest first.",
     );
   }
 
@@ -379,7 +379,7 @@ export const overlayPartsOf = (
  * the schema (`overlayRelations`).
  *
  * @param documents - The package's documents, each listed and under its ids; the manifest is the
- *   one no resource names (resource type `none`).
+ *   one no resource names (type `manifest`).
  * @param mint - Draws a fresh uuid for each assembled instance but a root, whose id is its
  *   document's node.
  * @returns The rows, every relation of {@link OverlayRows} present; or the {@link OverlayConflict}

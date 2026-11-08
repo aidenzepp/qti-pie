@@ -249,7 +249,7 @@ const builtOf = (input: Shredded): Built => {
     }
   }
 
-  const manifestIds = { ...idsFor(0, "none"), targetAt: targetsOf(documents) };
+  const manifestIds = { ...idsFor(0, "manifest"), targetAt: targetsOf(documents) };
 
   return {
     identifiers,
@@ -1299,7 +1299,10 @@ describe("import/overlays/metadata.ts, learning resource types", { timeout: sear
 
                 const xml = yield* Effect.orDie(readXml(file.bytes));
                 const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammar));
-                const ids = idsFor(1, path === "imsmanifest.xml" ? "none" : "resourcemetadata/xml");
+                const ids = idsFor(
+                  1,
+                  path === "imsmanifest.xml" ? "manifest" : "resourcemetadata/xml",
+                );
                 const rows = rowsOf(tree, ids);
                 const { nodes } = flatten(tree, ids.idOf);
                 const typeNodes = nodes.filter(({ kind }) => kind === "lom:learningResourceType");

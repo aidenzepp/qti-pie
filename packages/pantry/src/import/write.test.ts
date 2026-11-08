@@ -243,9 +243,9 @@ const flatRowsOf = (root: NodeRoot, flat: DocumentLayerRows): FlatRows<Composed>
 const roundTripOf = (tree: XdmDocument<Composed>, ids: (index: number) => NodeId) =>
   assemble(
     flatRowsOf(
-      rootInsertOf(tree, { context: ownContext(ids(0)), documentType: "none", idOf: ids }),
+      rootInsertOf(tree, { context: ownContext(ids(0)), documentType: "manifest", idOf: ids }),
       documentRowsOf(
-        { path: "item.xml", resourceType: "none", tree },
+        { documentType: "manifest", path: "item.xml", tree },
         { assembled: false, context: ownContext(ids(0)), idOf: ids, package: packageId },
       ),
     ),
@@ -1229,13 +1229,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("nodeIdsOf", (suite) =>
         const entries = program.files.map(({ path }) => path);
         for (const again of listed) {
           const minted = nodeIdsOf(
-            [...listed, { ...again, resourceType: "imsqti_item_xmlv3p0" }],
+            [...listed, { ...again, documentType: "imsqti_item_xmlv3p0" }],
             entries,
           );
           const firstAt = (path: string, named: boolean) =>
             Option.fromUndefinedOr(
               minted.documents
-                .find(({ ids }) => ids.path === path && (!named || ids.documentType !== "none"))
+                .find(({ ids }) => ids.path === path && (!named || ids.documentType !== "manifest"))
                 ?.ids.idOf(0),
             );
 

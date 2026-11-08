@@ -174,7 +174,7 @@ const builtOf = Effect.fn("test.metadata.db.builtOf")(function* builtOf(
 
   // The document a resource names at each path, as the importer's `targetAt` reads it.
   const manifestIds: MetadataIds = {
-    ...idsFor(0, "none"),
+    ...idsFor(0, "manifest"),
     targetAt: (path) =>
       Option.map(Option.fromNullishOr(documents.get(path)), ({ document }) => ({
         node: document,

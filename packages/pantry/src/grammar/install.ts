@@ -177,15 +177,19 @@ export const toolLabelKinds: readonly Kind[] = toolLabelKindsOf({
 // Rosters, each a generator's in code order. Codes are history: a vocabulary appends.
 
 /**
- * The null object of a roster whose value may be absent: the handle a row takes where it has none,
- * which no lexical form spells.
+ * The `ResourceType` handle `none`: the null object that `NameLookup`'s probes and a name that is
+ * no item ref of a resource hold, and the records' `named` where a record names no resource,
+ * which no lexical form spells. Each is a join copy that grizzle's rules over queries delete (the
+ * coordinator's ruling of 2026-11-08). No document's type is it: a document's type is
+ * {@link DocumentType}'s.
  */
-const none = "none";
+const noResourceType = "none";
 
 /**
- * The `ResourceType` handle of a document no resource lists, the manifest.
+ * The `DocumentType` handle of the package's manifest, the IMS Content Packaging manifest document,
+ * which is no resource's (spec readings 146 and 167).
  */
-const noResourceType = none;
+const manifestDocument = "manifest";
 
 /**
  * The `SchemaVersion` roster: the QTI 3.0 schema versions, a key digit of every relation that
@@ -247,14 +251,39 @@ export const Cardinality = closed(
 const asCardinality = handleLookup("Cardinality", Cardinality.handles);
 
 /**
- * The `ResourceType` roster: `none`, the null object of the manifest's own `Document` row, at code
- * 0, then the 21 types a `cp:resource` may name, each spelled as its lexical form (`package.ts`).
- * No `RootOfType` or `ResourceTypeLexical` row names `none`, and a lexical form no handle spells
- * is outside the attribute's value domain, so a resource that carries it is refused.
+ * The `ResourceType` roster: `none` ({@link noResourceType}) at code 0, then the 21 types a
+ * `cp:resource` may name, each spelled as its lexical form (`package.ts`). No `RootOfType` or
+ * `ResourceTypeLexical` row names `none`, and a lexical form no handle spells is outside the
+ * attribute's value domain, so a resource that carries it is refused.
  */
 export const ResourceType = closed(
   "ResourceType",
   nonEmpty("ResourceType", [noResourceType, ...grammar.package.resourceType.handles]),
+);
+
+/**
+ * The `DocumentType` roster: the type of a document of a package, which every node and attribute of
+ * the document copies: `manifest`, the package's manifest document, then the 21 types a
+ * `cp:resource` may name, the type of the resource that lists the document (IMS Content Packaging
+ * 1.2 sets the manifest apart from the resources it declares; spec reading 167). Every document is
+ * one or the other, so the type is total and names no absence.
+ */
+export const DocumentType = closed(
+  "DocumentType",
+  nonEmpty("DocumentType", [manifestDocument, ...grammar.package.resourceType.handles]),
+);
+
+/**
+ * `ResourceDocumentType`: resource type → document type, the type of the documents a resource of
+ * the type lists, spelled as the resource type is: a document a resource lists holds the type of
+ * that resource, a row of its own (`ResourceDocument`), and its `DocumentType` by this function.
+ * `none` names no resource, and has no row.
+ */
+export const ResourceDocumentType = closed.relation(
+  "ResourceDocumentType",
+  { documentType: closedId(DocumentType), type: closedId(ResourceType) },
+  ["type"],
+  grammar.package.resourceType.handles.map((type) => ({ documentType: type, type })),
 );
 
 /**

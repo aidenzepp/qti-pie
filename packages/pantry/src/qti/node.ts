@@ -61,6 +61,7 @@ import {
   ChildGrammar,
   ContentModelOf,
   CountedOf,
+  DocumentType,
   Enters,
   Flag,
   Follow,
@@ -74,7 +75,6 @@ import {
   nonElementKinds,
   openElementClasses,
   Position,
-  ResourceType,
   SchemaVersion,
   SharedModelOf,
   Symbol as ContentSymbol,
@@ -149,14 +149,15 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  * Its fields by how each is written (§C):
  *
  * - **the host's:** `id`, `document` (the root field, on the root alone, its own id), `kind`,
- *   `version`, `documentType` (the type of the resource that lists its document, `none` for the
- *   manifest: its document's `Document.resourceType` at the root, its parent's below), `governor`
- *   (what its attributes and text are read under: its kind's own `Governor` handle where no named
- *   type governs it, else `GoverningOf`'s of its {@link ElementType} or `OpenElementType`),
- *   `prefix`, `nearest`, `nearestKind`, `state` (its content-automaton state, from `placedStep`),
- *   `ancestry` (`parentAncestry ∪ Enters(kind)`), `chars` (a text or whitespace node's characters,
- *   an entity reference's `&name;`, empty elsewhere: the string value fold's step), and `first` and
- *   `last` (the first and last code points of its `chars`, empty where `chars` is);
+ *   `version`, `documentType` (its document's type: `manifest` for the package's manifest, else the
+ *   type of the resource that lists it; its document's `Document.documentType` at the root, its
+ *   parent's below), `governor` (what its attributes and text are read under: its kind's own
+ *   `Governor` handle where no named type governs it, else `GoverningOf`'s of its
+ *   {@link ElementType} or `OpenElementType`), `prefix`, `nearest`, `nearestKind`, `state` (its
+ *   content-automaton state, from `placedStep`), `ancestry` (`parentAncestry ∪ Enters(kind)`),
+ *   `chars` (a text or whitespace node's characters, an entity reference's `&name;`, empty
+ *   elsewhere: the string value fold's step), and `first` and `last` (the first and last code
+ *   points of its `chars`, empty where `chars` is);
  * - **the tree's group:** `parent`, which the nesting supplies and the root holds as its own id;
  * - **drawn:** `at`, `children`, `start`, `end`, and the attribute, namespace and typed text
  *   (`doubleValue`, `TextDoubleValue` of `#pantry/qti/attributes.ts`) family counts;
@@ -183,7 +184,7 @@ export const Node = relation(
     children: drawn(natural),
     countedChildren: accumulated(natural, 0n),
     document: uuid,
-    documentType: closedId(ResourceType),
+    documentType: closedId(DocumentType),
     doubleValue: drawn(natural),
     elementChildren: accumulated(natural, 0n),
     elements: accumulated(natural, 0n),

@@ -416,12 +416,12 @@ const strayDocument = {
   charset: "UTF-8",
   contextNearest: stray,
   contextNearestKind: "document",
+  documentType: "manifest",
   exportCharset: "UTF-8",
   node: stray,
   nodeChildren: 1n,
   package: stray,
   path: manifestPath,
-  resourceType: "none",
   rootKind: "qti-assessment-item",
   version: "3.0.1",
 } as const satisfies Addition<typeof Document>;

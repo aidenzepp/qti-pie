@@ -46,6 +46,7 @@ import {
   Package,
   Reference,
   ReferencePath,
+  ResourceDocument,
   ResourceFile,
   ResourceHref,
   ResourceTyped,
@@ -179,14 +180,14 @@ const keyOn =
 
 /**
  * A document row, its node and package stray, as a direct writer fills its table: every written
- * column, the manifest's when `resourceType` is `none`, lawful on its own CHECKs (no declaration,
- * no site naming it, its context its own node), and its families' counts at 0.
+ * column, the manifest's when `documentType` is `manifest`, lawful on its own CHECKs (no
+ * declaration, no site naming it, its context its own node), and its families' counts at 0.
  *
  * @param fields - The fields the case sets.
  * @returns The table's row.
  */
 const documentSqlRow = (
-  fields: Pick<Fact<typeof Document>, "path" | "resourceType" | "rootKind">,
+  fields: Pick<Fact<typeof Document>, "documentType" | "path" | "rootKind">,
 ) =>
   sqlRowOf(Document, {
     assembled: false,
@@ -400,10 +401,11 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a document whose root its resource type does not name, and a document of no resource but the manifest",
         () =>
-          // Oracle: PostgreSQL, P2: a typed document's (resource type, root kind) is a row of the
-          // set RootOfType (its containment, a CHECK on `Document`), and an untyped one is the
-          // manifest, of type `none` at imsmanifest.xml (reading 93, the `RootOfType` CHECK).
-          // Bound: an item resource's document with a stimulus root, and a `none` document at
+          // Oracle: PostgreSQL, P2: a resource's document's (resource type, root kind) is a row of
+          // the set RootOfType (its `ResourceDocument`'s containment, a CHECK on that relation), and
+          // a document of type `manifest` is at imsmanifest.xml (readings 93 and 165, the
+          // `RootOfType` CHECK on `Document`).
+          // Bound: an item resource's document with a stimulus root, and a `manifest` document at
           // another path.
           Effect.gen(function* rootOfType() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
@@ -418,27 +420,43 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               package: stray,
               version: "3.0.0",
             } as const;
-            for (const row of [
-              {
-                ...base,
-                path: "item.xml",
-                resourceType: "imsqti_item_xmlv3p0",
-                rootKind: "qti-assessment-stimulus",
-              },
-              { ...base, path: "other.xml", resourceType: "none", rootKind: "cp:manifest" },
-            ] as const) {
-              const outcome = yield* db.apply(ChangeSet.empty(Author).insert(Document, [row]), {});
+            const item = {
+              ...base,
+              documentType: "imsqti_item_xmlv3p0",
+              path: "item.xml",
+              rootKind: "qti-assessment-stimulus",
+            } as const;
+            const listed = yield* db.apply(
+              ChangeSet.empty(Author)
+                .insert(Document, [item])
+                .insert(ResourceDocument, [
+                  {
+                    documentType: item.documentType,
+                    node: item.node,
+                    package: item.package,
+                    path: item.path,
+                    rootKind: item.rootKind,
+                    type: "imsqti_item_xmlv3p0",
+                  },
+                ]),
+              {},
+            );
+            assert.isTrue(
+              rejectedBy(listed, containedIn("ResourceDocument", "RootOfType")),
+              item.path,
+            );
 
-              assert.isTrue(
-                rejectedBy(
-                  outcome,
-                  row.resourceType === "none"
-                    ? checkNamed("Document", "RootOfType")
-                    : containedIn("Document", "RootOfType"),
-                ),
-                row.path,
-              );
-            }
+            const manifest = {
+              ...base,
+              documentType: "manifest",
+              path: "other.xml",
+              rootKind: "cp:manifest",
+            } as const;
+            const outcome = yield* db.apply(
+              ChangeSet.empty(Author).insert(Document, [manifest]),
+              {},
+            );
+            assert.isTrue(rejectedBy(outcome, checkNamed("Document", "RootOfType")), manifest.path);
           }),
       );
 
@@ -704,8 +722,8 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 inserts: [
                   {
                     fact: documentSqlRow({
+                      documentType: "manifest",
                       path: manifestPath,
-                      resourceType: "none",
                       rootKind: "cp:manifest",
                     }),
                     relation: Document,

@@ -183,12 +183,12 @@ const documentOf = (reference: Addition<typeof VariableRef>): Addition<typeof Do
   charset: "UTF-8",
   contextNearest: reference.document,
   contextNearestKind: "document",
+  documentType: "manifest",
   exportCharset: "UTF-8",
   node: reference.document,
   nodeChildren: 1n,
   package: strayNode,
   path: manifestPath,
-  resourceType: "none",
   rootKind: reference.rootKind,
   version: "3.0.0",
 });

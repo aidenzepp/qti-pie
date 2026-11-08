@@ -110,6 +110,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
+import type { DocumentType } from "#pantry/grammar/install.ts";
 import {
   BaseType,
   BaseTypeLexical,
@@ -649,7 +650,7 @@ export const metadataRelations = {
 };
 
 /**
- * The types of the documents a package's records are read from: its manifest's, `none`, the one
+ * The types of the documents a package's records are read from: its manifest's, `manifest`, the one
  * document of that type (`RootOfType`'s check), whose `cp:metadata` holds the package's and each
  * resource's records; and an external record file's, `resourcemetadata/xml`, whose root is a
  * `lom:lom` (spec reading 81: an external LOM metadata file, assessed against the loose LOM
@@ -659,9 +660,9 @@ export const metadataRelations = {
  * describes no part of the package (170356bd's ruling), so its `lom:*` elements are no record's.
  */
 export const recordDocumentTypes = [
-  "none",
+  "manifest",
   "resourcemetadata/xml",
-] as const satisfies readonly (typeof ResourceType.handles)[number][];
+] as const satisfies readonly (typeof DocumentType.handles)[number][];
 
 /**
  * Whether a node is of a document a package's records are read from ({@link recordDocumentTypes}).

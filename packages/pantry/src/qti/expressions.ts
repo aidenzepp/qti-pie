@@ -750,6 +750,13 @@ export const MappingLookup = relation(
  * holds none of, its node, instance and item the test itself, its kind `document`, its type `none`
  * and its placements 0. The test itself stands as the item of every name that is no item ref of an
  * item, the null object RG4's design gives it (`representation-gaps.md` §4.3).
+ *
+ * Its `resourceType` keeps the `ResourceType` null object `none` for a name that is no item ref of
+ * a resource and on every probe. A {@link Reading} copies the lookup at its scope whole, and its
+ * laws read the type there (an unsplit reading's `none`, `itemHeld`), so a type held as a row of
+ * its own, absent for no resource, would be read through an anti-join of `Reading` against that
+ * row, which grizzle states only with its rules over queries (phase 2's anti-join rule). Until then
+ * it is this join copy, which those rules delete (the coordinator's ruling of 2026-11-08).
  */
 export const NameLookup = relation(
   "NameLookup",

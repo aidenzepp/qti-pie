@@ -320,7 +320,7 @@ describe("model/shred.ts and test/oracle.ts, a document's root", () => {
                 Result.isSuccess(read)
                   ? [...read.success.inputs.Document.values()]
                       .filter(({ path }) => path === "doc.xml")
-                      .map(({ resourceType, rootKind }) => `${resourceType} ${rootKind}`)
+                      .map(({ documentType, rootKind }) => `${documentType} ${rootKind}`)
                   : read.failure._tag,
                 [`${drawn.type} ${drawn.root}`],
                 `${JSON.stringify(drawn)}: the import's Document cell`,

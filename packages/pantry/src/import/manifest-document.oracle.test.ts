@@ -208,8 +208,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("the manifest", (it) =>
                 assert.deepStrictEqual(
                   read.documents
                     .filter(({ listed }) => listed.path === manifestPath)
-                    .map(({ listed }) => listed.resourceType),
-                  ["none"],
+                    .map(({ listed }) => listed.documentType),
+                  ["manifest"],
                   said,
                 );
                 for (const { ids, listed } of read.documents) {

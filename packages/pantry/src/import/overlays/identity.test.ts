@@ -1059,7 +1059,7 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
               const manifestRows = rowsOf(documentOf(manifest), {
                 assembled: false,
                 context: ownContext(idOf(0)),
-                documentType: "none",
+                documentType: "manifest",
                 idOf,
                 targetAt: (path) =>
                   path === itemPath ? Option.some({ node: itemDocument }) : Option.none(),

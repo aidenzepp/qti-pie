@@ -48,6 +48,7 @@ import {
 } from "@bjornpagen/grizzle";
 import { uriReference } from "@qti-pie/crust/uri.ts";
 import {
+  DocumentType,
   Flag,
   Governor,
   HeldRootsUnder,
@@ -58,7 +59,6 @@ import {
   NodeKind,
   nonElementKinds,
   openElementClasses,
-  ResourceType,
   SchemaVersion,
   StrictlyHeld,
   TypeAvailable,
@@ -342,18 +342,20 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
 /**
  * The document row, one per document node, keyed by the node (plan §1.4): the entry it was read
  * from, the charset it was decoded under and the one it is written back in, its root element's
- * kind, and the type of the resource that lists it. Its XML declaration is no field of it: the
- * declaration is optional, and so are its encoding and standalone parts (XML 1.0 §2.8), so each is
- * a row of its own, {@link XmlDecl}, {@link EncodingDecl} and {@link SdDecl}, written only where
+ * kind, and its type: the manifest, or the type of the resource that lists it, which is a row of
+ * its own (`ResourceDocument` of `#pantry/qti/package.ts`). Its XML declaration is no field of it:
+ * the declaration is optional, and so are its encoding and standalone parts (XML 1.0 §2.8), so each
+ * is a row of its own, {@link XmlDecl}, {@link EncodingDecl} and {@link SdDecl}, written only where
  * the document writes it.
  *
  * - `package` and `path` are its `Entry`'s, which Q5.06's P3 states, with the key over them.
  * - `rootKind` is a `NodeKind` handle, the root element's kind, which a containment from the root
  *   element proves. `RootOfType`'s payload is over `NodeKind` too, so P2 compares them directly.
- * - `resourceType` is the type of the resource that lists the document, `none` for the manifest,
- *   which no resource lists (ResourceType's code 0); Q5.06's P1 and P2 judge it. Its document node
- *   holds it as its `documentType`, and every node and attribute of the document holds it alike, so
- *   a law can tell the manifest's elements from another document's.
+ * - `documentType` is the document's type in its package (spec reading 167): `manifest` for the
+ *   package's manifest, which no resource lists, else the type of the resource that lists it, whose
+ *   `ResourceDocument` row Q5.06's P1 and P2 judge. Its document node holds it, and every node and
+ *   attribute of the document holds it alike, so a law can tell the manifest's elements, and a
+ *   record file's, from another document's.
  * - **its context** (spec readings 85 and 117): the ancestry and nearest interaction its document
  *   node holds, which every node below it inherits along the tree's owner axis, so an included
  *   fragment's content is judged where it is included. `context` is the union of the ancestries of
@@ -373,8 +375,8 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  * - **its document node's copies:** `nodeChildren` and `version`, the document node's own, so the row
  *   states the node's context through {@link nodeContext}, the owner axis's own UNIQUE, and no
  *   other index on `Node` holds it. What every document node holds alike is no field: the
- *   containment's source reads `node` again as the node's `document` and states its governing type
- *   `none`, its kind and its parent's `document`, and its start 0 as constants.
+ *   containment's source reads `node` again as the node's `document` and states its governor, its
+ *   kind and its parent's `document`, and its start 0 as constants.
  */
 export const Document = relation(
   "Document",
@@ -386,6 +388,7 @@ export const Document = relation(
     context: accumulated(bits(Flag), Bits.of(Flag, [])),
     contextNearest: uuid,
     contextNearestKind: closedId(NodeKind),
+    documentType: closedId(DocumentType),
     exportCharset: EncName,
     hottexts: drawn(natural),
     idrefTargets: drawn(natural),
@@ -395,7 +398,6 @@ export const Document = relation(
     nodeChildren: natural,
     package: uuid,
     path: EntryPath,
-    resourceType: closedId(ResourceType),
     rootKind: closedId(NodeKind),
     spliced: accumulated(natural, 0n),
     targetedBy: drawn(natural),
@@ -590,7 +592,7 @@ export const chardataLawsByName = {
         "nodeChildren",
         "context",
         "node",
-        "resourceType",
+        "documentType",
         constant("document"),
         constant("document"),
         "contextNearest",

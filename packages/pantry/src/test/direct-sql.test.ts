@@ -582,9 +582,9 @@ describe("the direct writer's tree slots and hidden folds", () => {
 });
 
 /**
- * The resource types a drawn document holds: an item's, a test's, and a manifest's, `none`.
+ * The document types a drawn document holds: an item's, a test's, and the manifest's, `manifest`.
  */
-const documentTypes = ["imsqti_item_xmlv3p0", "imsqti_test_xmlv3p0", "none"] as const;
+const documentTypes = ["imsqti_item_xmlv3p0", "imsqti_test_xmlv3p0", "manifest"] as const;
 
 /**
  * A drawn tree of `Node` facts with up to two attributes on each node, its resource type stated on
@@ -636,7 +636,7 @@ const typedFacts = ({ attributes, byDocument, tree, type }: TypedTree): readonly
       relation: Attribute,
     })),
   ),
-  ...(byDocument ? [{ fact: { node: "n0", resourceType: type }, relation: Document }] : []),
+  ...(byDocument ? [{ fact: { documentType: type, node: "n0" }, relation: Document }] : []),
 ];
 
 /**
@@ -701,7 +701,7 @@ describe("the direct writer's copies across containments", () => {
     (ctx) =>
       // Oracle: the specification as a checker, Qti's statements: T3 holds a tree member's
       // documentType to its parent's, AL1 owner an attribute's to its element's, and the
-      // `Document` row's containment into `nodeContext` the root's to its resourceType, so every
+      // `Document` row's containment into `nodeContext` the root's to its documentType, so every
       // node and attribute of a document holds the one type.
       // Bound: trees of up to 8 nodes with up to two attributes each, the type stated on the root
       // or on its Document row, in a drawn order of all the facts.
