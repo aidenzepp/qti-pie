@@ -302,14 +302,22 @@ const dottedPackage = (...declaredInA: readonly string[]): ReadonlyMap<string, U
   });
 
 /**
+ * A `qti-selection` with replacement, which lets each item ref of its section be instantiated more
+ * than once, so a numbered reading through it counts (reading 88).
+ */
+const replacingSelection = '<qti-selection select="2" with-replacement="true"/>';
+
+/**
  * A package whose test's item refs are `a` and `a.2` and whose section is `a.S`, and whose outcome
  * processing reads a given reference: item `a` declares `SCORE` and `S.duration`, and item `a.2`
  * declares `SCORE`.
  *
  * @param reference The reference the test's outcome processing reads.
+ * @param selection What the section holds before its item refs, as written: a
+ *   {@link replacingSelection} lets a numbered reading through `a` count.
  * @returns The package's files.
  */
-const formsPackage = (reference: string): ReadonlyMap<string, Uint8Array> =>
+const formsPackage = (reference: string, selection = ""): ReadonlyMap<string, Uint8Array> =>
   packageOf({
     "items/a.xml": itemXml("a", "SCORE", "S.duration"),
     "items/a2.xml": itemXml("a2", "SCORE"),
@@ -319,8 +327,8 @@ const formsPackage = (reference: string): ReadonlyMap<string, Uint8Array> =>
       resourceXml("A2", "imsqti_item_xmlv3p0", "items/a2.xml"),
     ),
     "test.xml": testXml(reference, ["a", "items/a.xml"], ["a.2", "items/a2.xml"]).replace(
-      'identifier="S"',
-      'identifier="a.S"',
+      'identifier="S" title="S" visible="true">',
+      `identifier="a.S" title="S" visible="true">${selection}`,
     ),
   });
 
@@ -1104,6 +1112,23 @@ const openLookingUp = (expression: string) =>
   );
 
 /**
+ * Take the facts of each refusal of a package verdict the dotted lookup cases compare.
+ *
+ * @param verdict The package verdict.
+ * @returns Each refusal's rule, element, identifier, reading, table, document and location.
+ */
+const lookupFacts = (verdict: PackageVerdict) =>
+  refusalsOf(verdict).map(({ detail, document, location: at, rule }) => [
+    rule,
+    detail["element"],
+    detail["identifier"],
+    detail["reading"],
+    detail["table"],
+    document,
+    at,
+  ]);
+
+/**
  * Open an {@link openTestingNull} package whose tested expression is a `qti-pattern-match` of
  * `ITEM2.S`, a string, against a pattern.
  *
@@ -1134,15 +1159,18 @@ const templatedItemXml = `<qti-assessment-item xmlns="${qti}" identifier="I2" ti
  *
  * @param expression The expression `TOTAL` is set to, as written.
  * @param defaults What `second` holds, as written.
+ * @param selection What the section holds before its item refs, as written: a
+ *   {@link replacingSelection} lets a numbered reading through `first` count.
  * @returns The package's verdict.
  */
-const openContextReading = (expression: string, defaults = "") =>
+const openContextReading = (expression: string, defaults = "", selection = "") =>
   openPackage(
     location,
     readingPackage(
       readingTestXml(
         expression,
         "",
+        selection,
         itemRefXml("first", "items/i1.xml"),
         itemRefXml("second", "items/i2.xml", defaults),
       ),
@@ -1375,7 +1403,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "refuses a.b.SCORE as ambiguous-reference when item refs a and a.b both resolve it (reading 48)",
+      `refuses a.b.SCORE as ambiguous-reference when item refs a and a.b both resolve it (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
       () =>
         Effect.gen(function* ambiguous() {
           const verdict = yield* openPackage(location, dottedPackage("b.SCORE"));
@@ -1401,33 +1429,37 @@ describe("package/open.ts", () => {
         }),
     );
 
-    it.effect("accepts a.b.SCORE when only item ref a.b resolves it (reading 48)", () =>
-      Effect.gen(function* unambiguous() {
-        const accepted = acceptedOf(yield* openPackage(location, dottedPackage("SCORE")));
+    it.effect(
+      `accepts a.b.SCORE when only item ref a.b resolves it (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
+      () =>
+        Effect.gen(function* unambiguous() {
+          const accepted = acceptedOf(yield* openPackage(location, dottedPackage("SCORE")));
 
-        assert.deepStrictEqual(
-          [...testOf(accepted, fileLocation(location, "test.xml")).items].map(
-            ([identifier, item]) => [identifier, item.document],
-          ),
-          [
-            ["a", fileLocation(location, "items/a.xml")],
-            ["a.b", fileLocation(location, "items/ab.xml")],
-          ],
-          "each item ref is resolved",
-        );
-      }),
+          assert.deepStrictEqual(
+            [...testOf(accepted, fileLocation(location, "test.xml")).items].map(
+              ([identifier, item]) => [identifier, item.document],
+            ),
+            [
+              ["a", fileLocation(location, "items/a.xml")],
+              ["a.b", fileLocation(location, "items/ab.xml")],
+            ],
+            "each item ref is resolved",
+          );
+        }),
     );
 
     it.effect(
-      "counts the occurrence form, the built-ins and a section's duration among a reference's readings (reading 48)",
+      `align-54 prefixed references D6: counts the numbered form under a selection with replacement, the built-ins and a section's duration among a reference's readings, and the numbered form nowhere else (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"); reading 88 ("a numbered reference such as Q01.2.SCORE names an instance of an item ref that a selection with replacement can repeat, and nothing else"))`,
       () =>
         Effect.gen(function* forms() {
           assert.deepStrictEqual(
-            readings(yield* openPackage(location, formsPackage("a.2.SCORE"))),
+            readings(yield* openPackage(location, formsPackage("a.2.SCORE", replacingSelection))),
             [["a", "2.SCORE", "a.2", "SCORE"]],
           );
           assert.deepStrictEqual(
-            readings(yield* openPackage(location, formsPackage("a.2.duration"))),
+            readings(
+              yield* openPackage(location, formsPackage("a.2.duration", replacingSelection)),
+            ),
             [["a", "2.duration", "a.2", "duration"]],
           );
           assert.deepStrictEqual(
@@ -1438,11 +1470,13 @@ describe("package/open.ts", () => {
             readings(yield* openPackage(location, formsPackage("a.b.SCORE"))),
             [],
           );
+          acceptedOf(yield* openPackage(location, formsPackage("a.2.SCORE")));
+          acceptedOf(yield* openPackage(location, formsPackage("a.2.duration")));
         }),
     );
 
     it.effect(
-      "[T-9] refuses ITEM1.SCORE as undeclared-variable when no reading resolves it, pantry's prefixed-ref (reading 48)",
+      `[T-9] refuses ITEM1.SCORE as undeclared-variable when no reading resolves it, pantry's prefixed-ref (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
       () =>
         Effect.gen(function* unresolvedReading() {
           const verdict = yield* openPackage(location, readingThroughA("ITEM1.SCORE"));
@@ -1464,21 +1498,71 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] refuses a.0.SCORE when no reading resolves it, an occurrence counting from 1, and accepts a.1.SCORE (reading 4)",
+      'align-54 prefixed references D6: a numbered reading counts only under a selection with replacement: a.1.SCORE is refused as undeclared-variable with check numbered when none holds item ref a, and accepted when one does, in the test or above the section ref that places a section document holding the item ref; a.0.SCORE names no instance and keeps its reading refusal (reading 88 ("a numbered reference such as Q01.2.SCORE names an instance of an item ref that a selection with replacement can repeat, and nothing else"))',
       () =>
-        Effect.gen(function* occurrenceFromOne() {
+        Effect.gen(function* numberedReadings() {
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, readingThroughA("a.1.SCORE"))),
+            [
+              {
+                detail: {
+                  check: "numbered",
+                  element: "qti-variable",
+                  identifier: "a.1.SCORE",
+                  itemRef: "a",
+                  reading: "88",
+                  reference: "a.1.SCORE",
+                },
+                document: fileLocation(location, "test.xml"),
+                location: { kind: "path", path: `${expressionAt("qti-variable")}/@identifier` },
+                rule: "undeclared-variable",
+              },
+            ],
+          );
           assert.deepStrictEqual(
             refusalsOf(yield* openPackage(location, readingThroughA("a.0.SCORE"))).map(
               (refusal) => [refusal.rule, refusal.detail["check"]],
             ),
             [["undeclared-variable", "reading"]],
           );
-          acceptedOf(yield* openPackage(location, readingThroughA("a.1.SCORE")));
+          acceptedOf(
+            yield* openPackage(
+              location,
+              readingPackage(
+                readingTestXml(
+                  variableXml("a.1.SCORE"),
+                  "",
+                  replacingSelection,
+                  itemRefXml("a", "items/a.xml"),
+                ),
+                { "items/a.xml": itemXml("a", "SCORE") },
+              ),
+            ),
+          );
+
+          const reaching = (sectionRefs: string) =>
+            openPackage(
+              location,
+              packageOf(
+                referringFiles(settingTotal(variableXml("I1.1.SCORE")), sectionRefs, sectionXml()),
+              ),
+            );
+          acceptedOf(
+            yield* reaching(
+              `<qti-assessment-section identifier="OUTER" title="OUTER" visible="true">${replacingSelection}${sectionRefXml("R", "sections/s2.xml")}</qti-assessment-section>`,
+            ),
+          );
+          assert.deepStrictEqual(
+            refusalsOf(yield* reaching(sectionRefXml("R", "sections/s2.xml"))).map(
+              ({ detail, rule }) => [rule, detail["check"], detail["itemRef"]],
+            ),
+            [["undeclared-variable", "numbered", "I1"]],
+          );
         }),
     );
 
     it.effect(
-      "[T-9] refuses a dotted name in qti-index's n that no reading resolves, as one in identifier is (reading 48)",
+      `[T-9] refuses a dotted name in qti-index's n that no reading resolves, as one in identifier is (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
       () =>
         Effect.gen(function* unresolvedAttribute() {
           const verdict = yield* openPackage(
@@ -1531,22 +1615,60 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] accepts A.B.C declared whole beside item refs A and A.B whose items would each resolve it (reading 48)",
+      'align-54 prefixed references D6: refuses a.b, which the test declares, as ambiguous-reference beside item ref a whose item declares b, the unsplit reading first with an empty prefix (reading 48 ("the unsplit reading counts among them"))',
+      () =>
+        Effect.gen(function* unsplitReading() {
+          const verdict = yield* openPackage(
+            location,
+            readingPackage(
+              readingTestXml(
+                variableXml("a.b"),
+                '<qti-outcome-declaration identifier="a.b" cardinality="single" base-type="float"/>',
+                itemRefXml("a", "items/a.xml"),
+              ),
+              { "items/a.xml": itemXml("a", "b") },
+            ),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                firstPrefix: "",
+                firstVariable: "a.b",
+                reading: "48",
+                reference: "a.b",
+                secondPrefix: "a",
+                secondVariable: "b",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: { kind: "path", path: `${expressionAt("qti-variable")}/@identifier` },
+              rule: "ambiguous-reference",
+            },
+          ]);
+          assert.isTrue(acceptedAlone(verdict), "the test alone is accepted");
+        }),
+    );
+
+    it.effect(
+      'align-54 prefixed references D6: refuses A.B.C declared whole beside item refs A and A.B whose items would each resolve it, as ambiguous-reference between the unsplit reading and the first split (reading 48 ("the unsplit reading counts among them"))',
       () =>
         Effect.gen(function* declaredWholeBesideReadings() {
-          acceptedOf(
-            yield* openPackage(
-              location,
-              readingPackage(
-                readingTestXml(
-                  '<qti-variable identifier="A.B.C"/>',
-                  '<qti-outcome-declaration identifier="A.B.C" cardinality="single" base-type="float"/>',
-                  itemRefXml("A", "items/a.xml"),
-                  itemRefXml("A.B", "items/ab.xml"),
+          assert.deepStrictEqual(
+            readings(
+              yield* openPackage(
+                location,
+                readingPackage(
+                  readingTestXml(
+                    '<qti-variable identifier="A.B.C"/>',
+                    '<qti-outcome-declaration identifier="A.B.C" cardinality="single" base-type="float"/>',
+                    itemRefXml("A", "items/a.xml"),
+                    itemRefXml("A.B", "items/ab.xml"),
+                  ),
+                  { "items/a.xml": itemXml("a", "B.C"), "items/ab.xml": itemXml("ab", "C") },
                 ),
-                { "items/a.xml": itemXml("a", "B.C"), "items/ab.xml": itemXml("ab", "C") },
               ),
             ),
+            [["", "A.B.C", "A", "B.C"]],
           );
         }),
     );
@@ -1919,7 +2041,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] refuses a prefixed map-response that resolves to nothing as undeclared-variable, pantry's prefixed-ref, and accepts ITEM1.MAPPED, a response with a mapping (reading 48)",
+      `[T-9] refuses a prefixed map-response that resolves to nothing as undeclared-variable, pantry's prefixed-ref, and accepts ITEM1.MAPPED, a response with a mapping (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
       () =>
         Effect.gen(function* mapResponseReading() {
           const verdict = yield* openSettingTotal(
@@ -2064,13 +2186,12 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      '[T-9] built-in maps nothing: a dotted map-response-point of ITEM1.numAttempts, and a dotted map-response of a timed ITEM1.duration, of ITEM1.1.numAttempts and of P.duration and SEC.duration, are refused once as undeclared-variable expecting a response (info.txt:9306, info.txt:9314; reading 111 ("a processing element\'s `identifier` names a variable of the kind the element reads or sets"), with G-R3 194, pending, for the mapping ("a prefixed map-response or map-response-point of a response with no mapping is refused"))',
+      '[T-9] built-in maps nothing: a dotted map-response-point of ITEM1.numAttempts, and a dotted map-response of a timed ITEM1.duration and of P.duration and SEC.duration, are refused once as undeclared-variable expecting a response (info.txt:9306, info.txt:9314; reading 111 ("a processing element\'s `identifier` names a variable of the kind the element reads or sets"), with G-R3 194, pending, for the mapping ("a prefixed map-response or map-response-point of a response with no mapping is refused"))',
       () =>
         Effect.gen(function* builtInMapsNothing() {
           const cases = [
             ["qti-map-response-point", "ITEM1.numAttempts", "false", "ITEM1"],
             ["qti-map-response", "ITEM1.duration", "true", "ITEM1"],
-            ["qti-map-response", "ITEM1.1.numAttempts", "false", "ITEM1"],
             ["qti-map-response", "P.duration", "false", "P"],
             ["qti-map-response", "SEC.duration", "false", "SEC"],
           ] as const;
@@ -2161,10 +2282,10 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] qti-correct reads a response: refuses ITEM1.SCORE, ITEM1.T and ITEM1.numAttempts, an outcome, a template variable and a built-in, once each as undeclared-variable expecting a response (info.txt:9302; G-R3, pending)",
+      "[T-9] qti-correct reads a response: refuses ITEM1.SCORE and ITEM1.T, an outcome and a template variable, once each as undeclared-variable expecting a response (info.txt:9302; G-R3, pending)",
       () =>
         Effect.gen(function* correctOfNoResponse() {
-          for (const reference of ["ITEM1.SCORE", "ITEM1.T", "ITEM1.numAttempts"]) {
+          for (const reference of ["ITEM1.SCORE", "ITEM1.T"]) {
             const verdict = yield* openTestingNull(`<qti-correct identifier="${reference}"/>`);
             assert.deepStrictEqual(
               refusalsOf(verdict),
@@ -2189,7 +2310,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] controls for qti-correct reads a response: ITEM1.RESPONSE, a response, and a qti-default of ITEM1.SCORE are accepted, and an unresolvable ITEM9.RESPONSE keeps its one reading refusal (reading 48)",
+      `[T-9] controls for qti-correct reads a response: ITEM1.RESPONSE, a response, and a qti-default of ITEM1.SCORE are accepted, and an unresolvable ITEM9.RESPONSE keeps its one reading refusal (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
       () =>
         Effect.gen(function* correctOfResponseControls() {
           acceptedOf(yield* openTestingNull('<qti-correct identifier="ITEM1.RESPONSE"/>'));
@@ -2210,6 +2331,43 @@ describe("package/open.ts", () => {
               },
             ],
           );
+        }),
+    );
+
+    it.effect(
+      'align-54 prefixed references E22b: a built-in read through a prefix is judged by its kind: a qti-correct of ITEM1.numAttempts or ITEM1.duration, each a response of the item, or of SEC.duration, a response of the section, is accepted (reading 111 ("a processing element\'s `identifier` names a variable of the kind the element reads or sets"))',
+      () =>
+        Effect.gen(function* correctOfBuiltInResponse() {
+          for (const reference of ["ITEM1.numAttempts", "ITEM1.duration", "SEC.duration"]) {
+            const verdict = yield* openTestingNull(`<qti-correct identifier="${reference}"/>`);
+            assert.deepStrictEqual(refusalsOf(verdict), [], reference);
+            acceptedOf(verdict);
+          }
+        }),
+    );
+
+    it.effect(
+      'align-54 prefixed references E22b: control: a qti-map-response of ITEM1.numAttempts stays refused once as undeclared-variable expecting a response, since a built-in response declares no mapping (reading 111 ("a processing element\'s `identifier` names a variable of the kind the element reads or sets"), with G-R3 194, pending, for the mapping ("a prefixed map-response or map-response-point of a response with no mapping is refused"))',
+      () =>
+        Effect.gen(function* mapResponseOfBuiltIn() {
+          const verdict = yield* openSettingTotal(
+            '<qti-map-response identifier="ITEM1.numAttempts"/>',
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                element: "qti-map-response",
+                expected: "response",
+                identifier: "ITEM1.numAttempts",
+                prefix: "ITEM1",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: { kind: "path", path: `${expressionAt("qti-map-response")}/@identifier` },
+              rule: "undeclared-variable",
+            },
+          ]);
+          assert.isTrue(acceptedAlone(verdict), "the test alone is accepted");
         }),
     );
 
@@ -2274,35 +2432,43 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] refuses a dotted rule target no reading resolves, ITEM9.SCORE set by qti-set-outcome-value or qti-lookup-outcome-value, as undeclared-variable, pantry's prefixed-ref (reading 48)",
+      '[T-9] align-54 prefixed references D6: a setter is judged by its unsplit reading alone: ITEM1.SCORE, which item ref ITEM1 resolves, ITEM9.SCORE, which no item ref resolves, and the untimed ITEM1.duration, each set by qti-set-outcome-value or qti-lookup-outcome-value and none declared by the test, are refused once as undeclared-variable with check setter (reading 112 ("a test\'s setter sets a variable of its own document, so a prefixed reading never resolves it"))',
       () =>
-        Effect.gen(function* unresolvedTarget() {
+        Effect.gen(function* setterOfItemVariable() {
           for (const element of ["qti-set-outcome-value", "qti-lookup-outcome-value"]) {
-            const verdict = yield* openPackage(
-              location,
-              reachPackage(settingOne(element, "ITEM9.SCORE")),
-            );
-            assert.deepStrictEqual(
-              refusalsOf(verdict),
-              [
-                {
-                  detail: { check: "reading", element, identifier: "ITEM9.SCORE", reading: "48" },
-                  document: fileLocation(location, "test.xml"),
-                  location: { kind: "path", path: `${ruleAt(element)}/@identifier` },
-                  rule: "undeclared-variable",
-                },
-              ],
-              element,
-            );
-            assert.isTrue(acceptedAlone(verdict), element);
+            for (const reference of ["ITEM1.SCORE", "ITEM9.SCORE", "ITEM1.duration"]) {
+              const verdict = yield* openPackage(
+                location,
+                reachPackage(settingOne(element, reference)),
+              );
+              assert.deepStrictEqual(
+                refusalsOf(verdict),
+                [
+                  {
+                    detail: {
+                      check: "setter",
+                      element,
+                      identifier: reference,
+                      reading: "112",
+                      reference,
+                    },
+                    document: fileLocation(location, "test.xml"),
+                    location: { kind: "path", path: `${ruleAt(element)}/@identifier` },
+                    rule: "undeclared-variable",
+                  },
+                ],
+                `${element} ${reference}`,
+              );
+              assert.isTrue(acceptedAlone(verdict), `${element} ${reference}`);
+            }
           }
         }),
     );
 
     it.effect(
-      "[T-9] refuses a dotted rule target two readings resolve, ITEM1.X.SCORE beside item refs ITEM1 and ITEM1.X, as ambiguous-reference with both readings, pantry's prefixed-ref (reading 48)",
+      '[T-9] align-54 prefixed references D6: a setter of ITEM1.X.SCORE beside item refs ITEM1 and ITEM1.X, which two split readings would resolve, is refused once as undeclared-variable with check setter, never ambiguous-reference (reading 112 ("a test\'s setter sets a variable of its own document, so a prefixed reading never resolves it"))',
       () =>
-        Effect.gen(function* ambiguousTarget() {
+        Effect.gen(function* setterBesideTwoReadings() {
           const verdict = yield* openPackage(
             location,
             nestedRefsPackage(settingOne("qti-set-outcome-value", "ITEM1.X.SCORE")),
@@ -2311,19 +2477,18 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(refusalsOf(verdict), [
             {
               detail: {
-                firstPrefix: "ITEM1",
-                firstVariable: "X.SCORE",
-                reading: "48",
+                check: "setter",
+                element: "qti-set-outcome-value",
+                identifier: "ITEM1.X.SCORE",
+                reading: "112",
                 reference: "ITEM1.X.SCORE",
-                secondPrefix: "ITEM1.X",
-                secondVariable: "SCORE",
               },
               document: fileLocation(location, "test.xml"),
               location: {
                 kind: "path",
                 path: `${ruleAt("qti-set-outcome-value")}/@identifier`,
               },
-              rule: "ambiguous-reference",
+              rule: "undeclared-variable",
             },
           ]);
           assert.isTrue(acceptedAlone(verdict));
@@ -2331,19 +2496,16 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] align-54 untimed duration D7: controls for a dotted rule target: ITEM1.SCORE, which resolves, is accepted, ITEM1.duration of an item that is not time dependent is accepted, and the qti-variable forms of ITEM9.SCORE and ITEM1.X.SCORE are refused as before (reading 48)",
+      '[T-9] align-54 prefixed references D6: controls for a setter: a.SCORE, which the test declares and sets beside item ref a whose item declares SCORE, is accepted and not ambiguous, and the qti-variable forms of ITEM9.SCORE and ITEM1.X.SCORE keep their reading and ambiguous-reference refusals (reading 112 ("a test\'s setter sets a variable of its own document, so a prefixed reading never resolves it"); reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))',
       () =>
-        Effect.gen(function* dottedTargetControls() {
+        Effect.gen(function* setterControls() {
           acceptedOf(
             yield* openPackage(
               location,
-              reachPackage(settingOne("qti-set-outcome-value", "ITEM1.SCORE")),
-            ),
-          );
-          acceptedOf(
-            yield* openPackage(
-              location,
-              reachPackage(settingOne("qti-set-outcome-value", "ITEM1.duration")),
+              readingPackage(
+                `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-outcome-declaration identifier="a.SCORE" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="SEC" title="SEC" visible="true">${itemRefXml("a", "items/a.xml")}</qti-assessment-section></qti-test-part><qti-outcome-processing>${settingOne("qti-set-outcome-value", "a.SCORE")}</qti-outcome-processing></qti-assessment-test>`,
+                { "items/a.xml": itemXml("a", "SCORE") },
+              ),
             ),
           );
           assert.deepStrictEqual(
@@ -2402,7 +2564,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] accepts I1.SCORE and S2.duration that a section document in the reach holds, its item ref resolved from its own path, with the test's processing marked by name and its items its own (reading 48)",
+      `[T-9] accepts I1.SCORE and S2.duration that a section document in the reach holds, its item ref resolved from its own path, with the test's processing marked by name and its items its own (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
       () =>
         Effect.gen(function* reachedReads() {
           const testPath = fileLocation(location, "test.xml");
@@ -2476,7 +2638,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] refuses I9.SCORE once, and I1.SCORE past a section ref whose href names no section resource, as a section document in the reach adds only what it holds (reading 48)",
+      `[T-9] refuses I9.SCORE once, and I1.SCORE past a section ref whose href names no section resource, as a section document in the reach adds only what it holds (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
       () =>
         Effect.gen(function* reachedOnly() {
           const unread = (reference: string): Seen => ({
@@ -2793,7 +2955,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] refuses a dotted name in a section document that none of the reaching test's readings resolve, judged under the reaching test, as undeclared-variable at the section document (reading 48)",
+      `[T-9] refuses a dotted name in a section document that none of the reaching test's readings resolve, judged under the reaching test, as undeclared-variable at the section document (reading 48 ("a dotted reference is accepted when exactly one reading names a real item ref, test part or section and its variable"))`,
       () =>
         Effect.gen(function* sectionUnread() {
           const verdict = yield* openReferring(
@@ -2891,22 +3053,25 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] dotted lookup and pattern through the package: the lookup of ITEM1.SCORE from a string is refused once, as expression-type with reading 28, and an integer is accepted",
+      "[T-9] align-54 prefixed references D6: dotted lookup and pattern through the package: the lookup of ITEM1.SCORE, which the test does not declare, is refused as a setter of an item's variable whatever its operand, and its operand is still judged, so a string is refused once more, as expression-type with reading 28, and an integer is not (reading 112 (\"a test's setter sets a variable of its own document, so a prefixed reading never resolves it\"))",
       () =>
         Effect.gen(function* lookupThroughPackage() {
+          const setter: ReturnType<typeof lookupFacts>[number] = [
+            "undeclared-variable",
+            "qti-lookup-outcome-value",
+            "ITEM1.SCORE",
+            "112",
+            undefined,
+            fileLocation(location, "test.xml"),
+            { kind: "path", path: `${ruleAt("qti-lookup-outcome-value")}/@identifier` },
+          ];
+
           assert.deepStrictEqual(
-            refusalsOf(
+            lookupFacts(
               yield* openLookingUp('<qti-base-value base-type="string">x</qti-base-value>'),
-            ).map(({ detail, document, location: at, rule }) => [
-              rule,
-              detail["element"],
-              detail["identifier"],
-              detail["reading"],
-              detail["table"],
-              document,
-              at,
-            ]),
+            ),
             [
+              setter,
               [
                 "expression-type",
                 "qti-lookup-outcome-value",
@@ -2918,8 +3083,11 @@ describe("package/open.ts", () => {
               ],
             ],
           );
-          acceptedOf(
-            yield* openLookingUp('<qti-base-value base-type="integer">1</qti-base-value>'),
+          assert.deepStrictEqual(
+            lookupFacts(
+              yield* openLookingUp('<qti-base-value base-type="integer">1</qti-base-value>'),
+            ),
+            [setter],
           );
         }),
     );
@@ -3324,15 +3492,15 @@ describe("package/open.ts", () => {
 
   describe("openPackage, a test that reads an item's context variable", () => {
     it.effect(
-      "[T-9] context read through an item ref: a test whose outcome processing reads first.CTX, first.1.CTX or the qti-default of first.CTX, which item I1 declares in a qti-context-declaration, is delivered with its processing marked, variable:<name> at the processing",
+      "[T-9] context read through an item ref: a test whose outcome processing reads first.CTX, first.1.CTX under a selection with replacement, or the qti-default of first.CTX, which item I1 declares in a qti-context-declaration, is delivered with its processing marked, variable:<name> at the processing",
       () =>
         Effect.gen(function* contextInProcessing() {
-          for (const [name, expression] of [
-            ["first.CTX", variableXml("first.CTX")],
-            ["first.1.CTX", variableXml("first.1.CTX")],
-            ["first.CTX", '<qti-default identifier="first.CTX"/>'],
+          for (const [name, expression, selection] of [
+            ["first.CTX", variableXml("first.CTX"), ""],
+            ["first.1.CTX", variableXml("first.1.CTX"), replacingSelection],
+            ["first.CTX", '<qti-default identifier="first.CTX"/>', ""],
           ] as const) {
-            const verdict = yield* openContextReading(expression);
+            const verdict = yield* openContextReading(expression, "", selection);
             const { delivered } = deliveredAndAlone(verdict);
 
             assert.strictEqual(verdict.verdict, "accepted-with-unsupported", expression);
@@ -3348,6 +3516,22 @@ describe("package/open.ts", () => {
             );
             assert.deepStrictEqual(delivered.unsupported, delivered.test.unsupported, expression);
           }
+        }),
+    );
+
+    it.effect(
+      "align-54 prefixed references E20: a test whose outcome processing tests ITEM1.QTI_CONTEXT for NULL is accepted with its processing marked, variable:ITEM1.QTI_CONTEXT at the processing, as a read of a declared context variable is, while the document's own verdict runs it (reading 106 (\"a prefixed reference reaches every built-in variable its item ref's item holds, `QTI_CONTEXT` among them\"))",
+      () =>
+        Effect.gen(function* builtInContext() {
+          const verdict = yield* openTestingNull(variableXml("ITEM1.QTI_CONTEXT"));
+          const { alone, delivered } = deliveredAndAlone(verdict);
+
+          assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+          assert.deepStrictEqual(delivered.test.outcomeProcessing, { kind: "marked" });
+          assert.deepStrictEqual(variableMarks(delivered), [
+            ["variable:ITEM1.QTI_CONTEXT", processingPath],
+          ]);
+          assert.strictEqual(alone.test.outcomeProcessing.kind, "runs");
         }),
     );
 

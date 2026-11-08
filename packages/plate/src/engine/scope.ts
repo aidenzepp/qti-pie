@@ -194,8 +194,13 @@ export const attemptsStarted = (presented: boolean, processed: number, limit: nu
 };
 
 /**
- * The item-session built-ins a test reads through an item ref (pantry's `itemSessionBuiltIns`,
- * `processing/env.ts`; `QTI_CONTEXT` is not one).
+ * The item-session built-ins a test reads through an item ref that the engine holds a value of.
+ * A prefix also reaches an item's `QTI_CONTEXT` (reading 106, "a prefixed reference reaches every
+ * built-in variable its item ref's item holds, `QTI_CONTEXT` among them"), as the qti package's
+ * `BuiltInVariable` holds it under an item's root (`packages/pantry/src/grammar/install.ts`), but
+ * the engine holds none: `openPackage` marks the processing that reads one through its item ref,
+ * as it marks a read of a declared context variable, so on a checked package the engine never
+ * reads it, and in documents opened apart the read fails {@link UnknownIdentifierError}.
  */
 type ItemBuiltIn = "completionStatus" | "duration" | "numAttempts";
 
@@ -521,8 +526,10 @@ export const itemVariable = (
   });
 
 /**
- * One reading of a dotted name that resolves (reading 48): through an item ref, the item variable
- * its rest names at an occurrence; or a part's or a section's `duration`.
+ * One reading of a dotted name that resolves (reading 48, "a dotted reference is accepted when
+ * exactly one reading names a real item ref, test part or section and its variable"): through an
+ * item ref, the item variable its rest names at an occurrence; or a part's or a section's
+ * `duration`.
  */
 type Resolved =
   | {
@@ -534,11 +541,15 @@ type Resolved =
   | { readonly kind: "duration" };
 
 /**
- * Resolve one reading of a dotted name, in pantry's order (`resolveReading`,
- * `processing/env.ts`), as the package resolves it (`readingOf` in `#plate/package/open.ts`).
+ * Resolve one split or numbered reading of a dotted name, in pantry's order (the relation `Reading`
+ * in `packages/pantry/src/qti/expressions.ts`, its source mapped, declared or built in), as the
+ * package resolves it (`readingOf` in `#plate/package/open.ts`).
  *
- * After an item ref, the rest names, directly or in the occurrence form `N.VAR` (reading 4), what
- * {@link itemName} resolves it to. After a part or a section, the rest is its `duration`.
+ * After an item ref, the rest names, directly or in the numbered form `N.VAR`
+ * ({@link occurrenceOf}), what {@link itemName} resolves it to. After a part or a section, the rest
+ * is its `duration`. A numbered reading resolves here whatever selection holds its item ref: the
+ * engine does not read the selection, where the package counts a numbered reading only through an
+ * item ref a selection with replacement can repeat (reading 88).
  *
  * @param scope The test scope.
  * @param prefix The part before the dot the reading splits at.
@@ -564,19 +575,34 @@ const resolve = (scope: TestScope, prefix: string, rest: string): Option.Option<
 };
 
 /**
- * Give the value of a dotted name, a prefixed reference of a test's processing, by reading 48.
+ * Give the value of a dotted name, a prefixed reference of a test's processing, by reading 48 ("a
+ * dotted reference is accepted when exactly one reading names a real item ref, test part or
+ * section and its variable").
  *
  * A name has one reading for each dot it may split at, from the first, and the name reads its one
  * resolving reading ({@link resolve}): `ITEMREF.VAR` and `ITEMREF.1.VAR` read the item's variable
  * as {@link itemVariable} does, a mapping target first. `ITEMREF.N.VAR` with `N` other than 1
  * names an occurrence that does not exist, since selection with replacement is marked, and reads
  * NULL of the variable's type, the NULL record of a record response (G-R3, pending; Admission A3).
+ * On a checked package a numbered name reaches here only through an item ref that a selection
+ * with replacement can repeat: the package counts a numbered reading nowhere else (reading 88, "a
+ * numbered reference such as `Q01.2.SCORE` names an instance of an item ref that a selection with
+ * replacement can repeat, and nothing else").
  *
- * A name the test declares whole is never split. A name no reading resolves, or two readings
- * resolve (Admission A4), reads nothing: on a checked package the first is refused
- * `undeclared-variable` and the second `ambiguous-reference`, so only a test and items checked
- * apart reach either. The engine holds no part's or section's `duration`, and the test model marks
- * a processing that reads one, so that reading reads nothing too.
+ * A name the test declares whole is never split: it names the test's own variable, its unsplit
+ * reading. On a checked package no other reading resolves it, since the package counts the
+ * unsplit reading beside the split and numbered ones (reading 48, "the unsplit reading counts
+ * among them") and refuses the name as `ambiguous-reference` where another resolves too. A name
+ * no reading resolves, or two readings resolve (Admission A4), reads nothing: on a checked package
+ * the first is refused `undeclared-variable` and the second `ambiguous-reference`, so only a test
+ * and items checked apart reach either. The engine holds no part's or section's `duration`, and
+ * the test model marks a processing that reads one, so that reading reads nothing too.
+ *
+ * A recorded limit: this resolution counts every numbered reading, where the package counts one
+ * only through a repeatable item ref. So where a numbered and a split reading of one name both
+ * resolve and the numbered one's item ref is not repeatable, as `a.2.SCORE` in a test with item
+ * refs `a` and `a.2` and no selection with replacement, the package accepts the name through its
+ * split reading alone, and here it has two readings and reads nothing.
  *
  * @param scope The test scope.
  * @param name The name, as the test's processing writes it.
