@@ -419,7 +419,7 @@ const floatOf = (value: number): Value => ({
 });
 
 /**
- * A presented item, `ITEM1`, with three processed attempts: its record holds `RESPONSE`, `SCORE`
+ * A presented item, `ITEM1`, with three started attempts: its record holds `RESPONSE`, `SCORE`
  * 1.5, `NOTA` 0.5, `N` 4 and the template value `T`. It maps nothing and declares a `file`
  * response `UPLOAD`.
  */
