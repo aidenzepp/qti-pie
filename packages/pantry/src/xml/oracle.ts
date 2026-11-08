@@ -193,6 +193,26 @@ export type XsdVerdict =
   | { readonly _tag: "Invalid"; readonly messages: readonly XsdMessage[] };
 
 /**
+ * A pattern's named groups as a match holds them, each undefined where it took no part in the
+ * match.
+ */
+type Groups = Readonly<Record<string, string | undefined>>;
+
+/**
+ * Build a reader of texts by one of the report's patterns, into the record its named groups make.
+ *
+ * @param pattern - The pattern, whose named groups are the record's fields.
+ * @param decode - The record's decoder, `Schema.decodeUnknownSync` of its schema.
+ * @returns The reader: the record where the pattern matches the text, none where it does not. It
+ *   throws when the pattern matches and its groups are not the record's, which each pattern's own
+ *   groups rule out: a defect of this module, whose pattern and record disagree.
+ */
+const partsOf =
+  <A>(pattern: RegExp, decode: (groups: Groups) => A) =>
+  (text: string): Option.Option<A> =>
+    Option.map(Option.fromNullishOr(pattern.exec(text)?.groups), decode);
+
+/**
  * A schema message's shape after `file:line: `: an optional `element NAME: `, then `Schemas
  * validity error : ` or `warning`, `Element 'QNAME'`, an optional `, attribute 'NAME'`, and the
  * message.
@@ -207,6 +227,22 @@ export type XsdVerdict =
  */
 const schemaMessage =
   /^(?:element [^:]+: )?Schemas validity (?<level>error|warning) : Element '(?<element>[^']+)'(?:, attribute '(?<attribute>[^']+)')?: (?<text>.*)$/su;
+
+/**
+ * Read a schema message into its parts, {@link schemaMessage}'s groups: its level, its element, the
+ * attribute it names, none where it names none, and its text.
+ */
+const schemaMessageOf = partsOf(
+  schemaMessage,
+  Schema.decodeUnknownSync(
+    Schema.Struct({
+      attribute: Schema.OptionFromUndefinedOr(Schema.String),
+      element: Schema.String,
+      level: Schema.Literals(["error", "warning"]),
+      text: Schema.String,
+    }),
+  ),
+);
 
 /**
  * A parser message libxml2 writes as a warning: `warning: ` itself, or a domain's warning, as
@@ -228,27 +264,25 @@ const filesPerProcess = 1000;
  * @param body - What follows `file:line: `.
  * @returns The message, a schema message's element and attribute read out of it.
  */
-const messageOf = (line: number, body: string): XsdMessage => {
-  const groups = schemaMessage.exec(body)?.groups;
-
-  return groups === undefined
-    ? {
-        attribute: Option.none(),
-        element: Option.none(),
-        level: parserWarning.test(body) ? "warning" : "error",
-        line,
-        source: "parser",
-        text: body,
-      }
-    : {
-        attribute: Option.fromNullishOr(groups["attribute"]),
-        element: Option.fromNullishOr(groups["element"]),
-        level: groups["level"] === "warning" ? "warning" : "error",
-        line,
-        source: "schema",
-        text: groups["text"] ?? "",
-      };
-};
+const messageOf = (line: number, body: string): XsdMessage =>
+  Option.match(schemaMessageOf(body), {
+    onNone: (): XsdMessage => ({
+      attribute: Option.none(),
+      element: Option.none(),
+      level: parserWarning.test(body) ? "warning" : "error",
+      line,
+      source: "parser",
+      text: body,
+    }),
+    onSome: ({ attribute, element, level, text }): XsdMessage => ({
+      attribute,
+      element: Option.some(element),
+      level,
+      line,
+      source: "schema",
+      text,
+    }),
+  });
 
 /**
  * A judged file's message line: the file, the line it names, and what follows. The file is the
@@ -257,9 +291,33 @@ const messageOf = (line: number, body: string): XsdMessage => {
 const messageLine = /^(?<path>.+?):(?<line>\d+): (?<body>.*)$/su;
 
 /**
+ * Read a message line into its parts, {@link messageLine}'s groups: the file, the line it names and
+ * what follows.
+ */
+const messageLineOf = partsOf(
+  messageLine,
+  Schema.decodeUnknownSync(
+    Schema.Struct({ body: Schema.String, line: Schema.NumberFromString, path: Schema.String }),
+  ),
+);
+
+/**
  * A judged file's status line: the file, then whether it validates.
  */
 const statusLine = /^(?<path>.+) (?<status>validates|fails to validate)$/u;
+
+/**
+ * Read a status line into its parts, {@link statusLine}'s groups: the file and its status.
+ */
+const statusLineOf = partsOf(
+  statusLine,
+  Schema.decodeUnknownSync(
+    Schema.Struct({
+      path: Schema.String,
+      status: Schema.Literals(["validates", "fails to validate"]),
+    }),
+  ),
+);
 
 /**
  * Read one process's report into each file's verdict.
@@ -280,34 +338,37 @@ export const verdictsOf = (
 ): Effect.Effect<readonly XsdVerdict[], OracleUnreadable> =>
   Effect.gen(function* readReport() {
     const judged = new Set(paths);
-    const messages = new Map<string, XsdMessage[]>();
+    const messages = new Map<string, Arr.NonEmptyArray<XsdMessage>>();
     const status = new Map<string, boolean>();
-    let last: XsdMessage[] | undefined;
+    let last: Option.Option<Arr.NonEmptyArray<XsdMessage>> = Option.none();
 
     for (const line of report.split("\n")) {
-      const stated = statusLine.exec(line)?.groups;
-      const said = messageLine.exec(line)?.groups;
+      const stated = Option.filter(statusLineOf(line), ({ path }) => judged.has(path));
+      const said = Option.filter(messageLineOf(line), ({ path }) => judged.has(path));
 
-      if (stated !== undefined && judged.has(stated["path"] ?? "")) {
-        status.set(stated["path"] ?? "", stated["status"] === "validates");
-        last = undefined;
-      } else if (said !== undefined && judged.has(said["path"] ?? "")) {
-        const path = said["path"] ?? "";
-        const list = messages.get(path) ?? [];
-
-        list.push(messageOf(Number(said["line"]), said["body"] ?? ""));
-        messages.set(path, list);
-        last = list;
-      } else if (last === undefined) {
+      if (Option.isSome(stated)) {
+        status.set(stated.value.path, stated.value.status === "validates");
+        last = Option.none();
+      } else if (Option.isSome(said)) {
+        const { body, line: at, path } = said.value;
+        const message = messageOf(at, body);
+        const held = messages.get(path);
+        if (held === undefined) {
+          const list: Arr.NonEmptyArray<XsdMessage> = [message];
+          messages.set(path, list);
+          last = Option.some(list);
+        } else {
+          held.push(message);
+          last = Option.some(held);
+        }
+      } else if (Option.isNone(last)) {
         if (line.trim() !== "") {
           return yield* new OracleUnreadable({ line, stderr: report });
         }
       } else {
-        const held = last.pop();
-
-        if (held !== undefined) {
-          last.push({ ...held, text: `${held.text}\n${line}` });
-        }
+        const list = last.value;
+        const message = Arr.lastNonEmpty(list);
+        list[list.length - 1] = { ...message, text: `${message.text}\n${line}` };
       }
     }
 
