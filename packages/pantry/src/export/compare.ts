@@ -1,25 +1,31 @@
-import { Effect, FileSystem } from "effect";
-import type { PlatformError } from "effect";
-import type { ChildProcessSpawner } from "effect/process";
-import { listPackage, readEntry } from "#pantry/package/read.ts";
+/**
+ * The comparison of an export with the record it was made from (fin.md P7, D6): every entry the
+ * import read, by path, against the entry the export wrote at that path.
+ *
+ * An entry's bytes are compared first, and byte equality is reported as `byte-identical`. Where the
+ * bytes differ, the entry is held to canonical equality: an entry that is well-formed XML on both
+ * sides is equal when its Canonical XML 1.0 forms, comments kept, are (`canonical-equal`), which is
+ * what an export of a rebuilt document promises; an entry that is not XML on either side has its
+ * bytes as its canonical form, so it differs. The record and the export are each a set of entries
+ * keyed by path, so an entry only the export writes, and a path either side holds twice, differ
+ * too.
+ */
+import { Array as Arr, Effect, Option } from "effect";
+import type { FileSystem, PlatformError } from "effect";
+import { readPackage } from "#pantry/package/read.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
-import type { ZipRefusal } from "#pantry/package/zip.ts";
-import { recordTypes, soleFileTypes } from "#pantry/import/record.ts";
-import { collapse } from "#pantry/import/whitespace.ts";
-import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
+import type { ZipEntry, ZipRefusal } from "#pantry/package/zip.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
-import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
-import { xmllintC14n } from "#pantry/xml/oracle.ts";
-import type { OracleError, OracleUnavailable } from "#pantry/xml/oracle.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
-import type { Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 /**
- * What comparing one entry found.
+ * What comparing one path found.
  *
- * `canonical-equal` is an XML file whose canonical forms agree and `byte-identical` any other file
- * whose bytes agree. `differs` says where in `at`: `missing` for an entry the export lacks,
- * otherwise `byte <offset>` and, for an XML file, `, line <n>` with both canonical lines.
+ * `byte-identical` is an entry whose bytes the export wrote back exactly, and `canonical-equal` an
+ * XML entry whose bytes differ but whose canonical forms agree. `differs` says where in `at`:
+ * `missing` for an entry the export lacks, `extra` for one only the export writes, `repeated` for a
+ * path either side holds twice, otherwise `byte <offset>` and, for an XML entry, `, line <n>` with
+ * both canonical lines, `ends` for a side whose form has no line `<n>`.
  */
 export type Outcome =
   | { kind: "canonical-equal" }
@@ -27,45 +33,16 @@ export type Outcome =
   | { kind: "differs"; at: string };
 
 /**
- * The comparison of a package's export with its source: one outcome per source entry, in
- * `listPackage` order.
+ * The comparison of an export with its record: one outcome per path of the record, in the record's
+ * order, then one per path only the export writes, in the export's order.
  */
 export type Report = readonly { path: string; outcome: Outcome }[];
 
 /**
- * What can stop a comparison: a directory that is not a package, a file that cannot be read, an
- * XML file that cannot be parsed, the oracle refusing a file, or an oracle that does not start.
+ * What can stop a comparison of two package directories or zips: a directory that is not a package,
+ * a zip the container rules refuse, or the file system.
  */
-type CompareError =
-  | PackageReadError
-  | ZipRefusal
-  | PlatformError.PlatformError
-  | OracleError
-  | OracleUnavailable
-  | WellFormednessError
-  | ReaderRefusal;
-
-/**
- * What the comparison needs from its host.
- */
-type CompareContext = FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner;
-
-/**
- * The namespace of the manifest's elements.
- */
-const cpNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
-
-/**
- * The resource types of the documents the export writes from a tree: the types the seed names a
- * root for.
- */
-const documentTypes: ReadonlySet<string> = new Set(rootOfType.map((row) => row.type));
-
-/**
- * The resource types whose one `file` is a document when the resource has no `href`: the import's
- * record types and its sole-file types.
- */
-const soleFileDocumentTypes: ReadonlySet<string> = new Set([...recordTypes, ...soleFileTypes]);
+type CompareError = PackageReadError | ZipRefusal | PlatformError.PlatformError;
 
 /**
  * Find the first offset at which two byte strings differ.
@@ -88,206 +65,183 @@ const firstDifference = (left: Uint8Array, right: Uint8Array): number | undefine
 };
 
 /**
- * Describe where two canonical texts first differ: the byte offset and the first differing line of
- * each.
+ * Quote a form's line for {@link describeCanonical}, or say the form ends before it, which an empty
+ * line does not: `""` is a line that holds nothing.
  *
- * @param source - The source's canonical form.
+ * @param lines - The form's lines.
+ * @param at - The line's index.
+ * @returns The line as JSON, or `ends` when the form has no such line.
+ */
+const lineAt = (lines: readonly string[], at: number): string =>
+  Option.match(Arr.get(lines, at), {
+    onNone: () => "ends",
+    onSome: (text) => JSON.stringify(text),
+  });
+
+/**
+ * Describe where two canonical forms first differ: the byte offset and the first differing line of
+ * each, or `ends` for a form that has no such line.
+ *
+ * @param recorded - The record's canonical form.
  * @param exported - The export's canonical form.
  * @param offset - The first differing byte offset.
  * @returns The `at` text.
  */
-const describeCanonical = (source: Uint8Array, exported: Uint8Array, offset: number): string => {
+const describeCanonical = (recorded: Uint8Array, exported: Uint8Array, offset: number): string => {
   const decoder = new TextDecoder();
-  const left = decoder.decode(source).split("\n");
+  const left = decoder.decode(recorded).split("\n");
   const right = decoder.decode(exported).split("\n");
   const line = left.findIndex((text, index) => text !== right[index]);
   const at = line === -1 ? left.length : line;
 
-  return `byte ${offset}, line ${at + 1}: source ${JSON.stringify(left[at] ?? "")}, export ${JSON.stringify(right[at] ?? "")}`;
+  return `byte ${String(offset)}, line ${String(at + 1)}: record ${lineAt(left, at)}, export ${lineAt(right, at)}`;
 };
 
 /**
- * Whether an element or anything below it holds an entity reference, in content or in an
- * attribute value.
+ * Canonicalize an entry when it is well-formed XML.
  *
- * @param element - The element to search.
- * @returns `true` when one is found.
+ * An entry crust's reader refuses, for its charset, its prolog, an entity reference or its
+ * well-formedness, is no XML document, and none is its canonical form.
+ *
+ * @param bytes - The entry's bytes.
+ * @returns Its Canonical XML 1.0 form with comments, or none for bytes that are not an XML
+ *   document.
+ * @see {@link https://www.w3.org/TR/xml-c14n/ | Canonical XML 1.0}
  */
-const holdsReference = (element: Element): boolean =>
-  element.attributes.some((attribute) => attribute.references.length > 0) ||
-  element.children.some((child: Child) =>
-    child.kind === "entityRef" ? true : child.kind === "element" && holdsReference(child),
-  );
+const canonicalOf = (bytes: Uint8Array) =>
+  Effect.option(Effect.map(readXml(bytes), (document) => canonicalize(document)));
 
 /**
- * The element children of `element` in the manifest namespace with local name `local`.
+ * Compare one entry the record and the export both hold.
  *
- * @param element - The parent.
- * @param local - The local name.
- * @returns The children in document order.
+ * @param recorded - The bytes the import read.
+ * @param exported - The bytes the export wrote.
+ * @returns `byte-identical` for equal bytes; otherwise `canonical-equal` or a canonical `differs`
+ *   when both are XML documents, and a byte `differs` when either is not.
  */
-const childrenNamed = (element: Element, local: string): readonly Element[] =>
-  element.children.filter(
-    (child): child is Element =>
-      child.kind === "element" && child.namespace === cpNamespace && child.local === local,
-  );
+const compareEntry = Effect.fnUntraced(function* compareEntry(
+  recorded: Uint8Array,
+  exported: Uint8Array,
+): Effect.fn.Return<Outcome> {
+  const offset = firstDifference(recorded, exported);
+  if (offset === undefined) {
+    return { kind: "byte-identical" };
+  }
+
+  const left = yield* canonicalOf(recorded);
+  const right = yield* canonicalOf(exported);
+  if (left._tag === "None" || right._tag === "None") {
+    return { at: `byte ${String(offset)}`, kind: "differs" };
+  }
+
+  const canonical = firstDifference(left.value, right.value);
+
+  return canonical === undefined
+    ? { kind: "canonical-equal" }
+    : { at: describeCanonical(left.value, right.value, canonical), kind: "differs" };
+});
 
 /**
- * The collapsed value of an element's attribute that has no namespace.
- *
- * @param element - The element.
- * @param local - The attribute's local name.
- * @returns The value, or `undefined` when the attribute is absent.
+ * A list of entries keyed by path: each path's bytes, and the paths the list holds more than once.
  */
-const attributeOf = (element: Element, local: string): string | undefined => {
-  const value = element.attributes.find(
-    (attribute) => attribute.namespace === "" && attribute.local === local,
-  )?.value;
-
-  return value === undefined ? undefined : collapse(value);
-};
+interface Keyed {
+  readonly bytes: ReadonlyMap<string, Uint8Array>;
+  readonly repeated: ReadonlySet<string>;
+}
 
 /**
- * The entries the export writes from a tree, which are the import's documents.
+ * Key a list of entries by path, keeping the first of a repeated path and naming it repeated.
  *
- * A resource with an `href` adds it when its type is one the seed's `rootOfType` names. A resource
- * with no `href` adds the `href` of its only `file` when it has exactly one and its type is in
- * {@link soleFileDocumentTypes}. Every other entry is stored as bytes, so it is written back as it
- * was read.
- *
- * @param manifest - The source manifest.
- * @returns The paths, each as the import reads it after whitespace collapse.
+ * @param entries - The entries, in their order.
+ * @returns The entries by path, in first-occurrence order, and the repeated paths.
  */
-const rewrittenEntries = (manifest: XmlDocument): ReadonlySet<string> => {
-  const paths = new Set<string>();
-
-  for (const container of childrenNamed(manifest.root, "resources")) {
-    for (const resource of childrenNamed(container, "resource")) {
-      const type = resource.attributes.find(
-        (attribute) => attribute.namespace === "" && attribute.local === "type",
-      )?.value;
-      const href = attributeOf(resource, "href");
-
-      if (type === undefined) {
-        continue;
-      }
-
-      if (href !== undefined) {
-        if (documentTypes.has(type)) {
-          paths.add(href);
-        }
-
-        continue;
-      }
-
-      const files = childrenNamed(resource, "file").map((file) => attributeOf(file, "href"));
-      const [only, ...rest] = files;
-
-      if (soleFileDocumentTypes.has(type) && rest.length === 0 && only !== undefined) {
-        paths.add(only);
-      }
+const keyedByPath = (entries: readonly ZipEntry[]): Keyed => {
+  const bytes = new Map<string, Uint8Array>();
+  const repeated = new Set<string>();
+  for (const { bytes: content, path } of entries) {
+    if (bytes.has(path)) {
+      repeated.add(path);
+    } else {
+      bytes.set(path, content);
     }
   }
 
-  return paths;
+  return { bytes, repeated };
 };
 
 /**
- * Compare one XML entry canonically.
+ * Compare an export with the record of the package it was made from.
  *
- * With no entity reference on either side the oracle's canonical forms are compared; with one,
- * the oracle cannot see the exception, so the package's own canonicalizer's forms are.
+ * Each path of the record is looked up in the export: a path the export lacks differs at
+ * `missing`, and any other is compared by {@link compareEntry}. Then each path only the export
+ * writes differs at `extra`. A path either side holds twice differs at `repeated` and is compared
+ * no further, so the report is one outcome per path.
  *
- * @param source - The source package directory.
- * @param exported - The export directory.
- * @param path - The entry path.
- * @returns The outcome.
+ * @param record - The entries the import read, in listing order: the `Entry` family's bytes.
+ * @param exported - The entries the export wrote, in the order it wrote them.
+ * @returns One outcome per path, the record's paths first.
  */
-const compareXml = Effect.fn("compare.compareXml")(function* compareXml(
-  source: string,
-  exported: string,
-  path: string,
-): Effect.fn.Return<Outcome, CompareError, CompareContext> {
-  const left = yield* readXml(yield* readEntry(source, path));
-  const right = yield* readXml(yield* readEntry(exported, path));
-  const external = holdsReference(left.root) || holdsReference(right.root);
-  const canonical = (
-    document: XmlDocument,
-    dir: string,
-  ): Effect.Effect<Uint8Array, CompareError, CompareContext> =>
-    external ? Effect.succeed(canonicalize(document)) : xmllintC14n(`${dir}/${path}`);
-  const leftBytes = yield* canonical(left, source);
-  const rightBytes = yield* canonical(right, exported);
-  const offset = firstDifference(leftBytes, rightBytes);
-
-  return offset === undefined
-    ? { kind: "canonical-equal" }
-    : { at: describeCanonical(leftBytes, rightBytes, offset), kind: "differs" };
-});
-
-/**
- * Compare one non-XML entry byte for byte.
- *
- * @param source - The source package directory.
- * @param exported - The export directory.
- * @param path - The entry path.
- * @returns The outcome.
- */
-const compareBytes = Effect.fn("compare.compareBytes")(function* compareBytes(
-  source: string,
-  exported: string,
-  path: string,
-): Effect.fn.Return<Outcome, CompareError, CompareContext> {
-  const offset = firstDifference(yield* readEntry(source, path), yield* readEntry(exported, path));
-
-  return offset === undefined
-    ? { kind: "byte-identical" }
-    : { at: `byte ${offset}`, kind: "differs" };
-});
-
-/**
- * Compare an export directory with the package it was made from.
- *
- * Every entry of the source is looked up in the export. The manifest and every entry the export
- * writes from a tree ({@link rewrittenEntries}: the QTI, record, usage-data and outcome documents)
- * compare canonically; every other entry, a stored file, compares byte for byte. An entry the
- * export lacks differs at `missing`. Entries only the export has are not reported.
- *
- * @param sourceDir - The source package directory.
- * @param exportDir - The export directory.
- * @returns One outcome per source entry in listing order, a `PackageReadError` when the source has
- *   no manifest or names an href outside the package, or the read, parse and oracle errors.
- */
-export const comparePackage = Effect.fn("compare.comparePackage")(function* comparePackage(
-  sourceDir: string,
-  exportDir: string,
-): Effect.fn.Return<Report, CompareError, CompareContext> {
-  const fs = yield* FileSystem.FileSystem;
-  const entries = yield* listPackage(sourceDir);
-  const manifest = yield* readXml(yield* readEntry(sourceDir, "imsmanifest.xml"));
-  const documents = rewrittenEntries(manifest);
-
+export const compareRecord = Effect.fn("compare.compareRecord")(function* compareRecord(
+  record: readonly ZipEntry[],
+  exported: readonly ZipEntry[],
+): Effect.fn.Return<Report> {
+  const recorded = keyedByPath(record);
+  const written = keyedByPath(exported);
   const report: { path: string; outcome: Outcome }[] = [];
-
-  for (const entry of entries) {
-    if (!(yield* fs.exists(`${exportDir}/${entry.path}`))) {
-      report.push({ outcome: { at: "missing", kind: "differs" }, path: entry.path });
+  for (const [path, bytes] of recorded.bytes) {
+    const counterpart = written.bytes.get(path);
+    if (recorded.repeated.has(path) || written.repeated.has(path)) {
+      report.push({ outcome: { at: "repeated", kind: "differs" }, path });
       continue;
     }
 
-    const outcome =
-      entry.kind === "manifest" || documents.has(entry.path)
-        ? yield* compareXml(sourceDir, exportDir, entry.path)
-        : yield* compareBytes(sourceDir, exportDir, entry.path);
-
-    report.push({ outcome, path: entry.path });
+    const outcome: Outcome =
+      counterpart === undefined
+        ? { at: "missing", kind: "differs" }
+        : yield* compareEntry(bytes, counterpart);
+    report.push({ outcome, path });
   }
+
+  for (const path of written.bytes.keys()) {
+    if (!recorded.bytes.has(path)) {
+      report.push({
+        outcome: { at: written.repeated.has(path) ? "repeated" : "extra", kind: "differs" },
+        path,
+      });
+    }
+  }
+
+  yield* Effect.annotateCurrentSpan({
+    differing: report.filter(({ outcome }) => outcome.kind === "differs").length,
+    entries: report.length,
+  });
 
   return report;
 });
 
 /**
- * Render a report as text: a line `<path>: <kind>[ at <where>]` for each entry, then `all equal`
+ * Compare an export directory or zip with the package directory or zip it was made from.
+ *
+ * Both sides are read whole by `readPackage`, so a directory and a zip of the same files compare
+ * alike; the source's entries are the record its import wrote (`recordOf`), and the export's are
+ * compared with them by {@link compareRecord}.
+ *
+ * @param sourceDir - The source package directory, or its `.zip` file.
+ * @param exportDir - The export directory, or its `.zip` file.
+ * @returns One outcome per path; or a `PackageReadError` when either side has no manifest at its
+ *   root, a `ZipRefusal`, or the file system's error.
+ */
+export const comparePackage = Effect.fn("compare.comparePackage")(function* comparePackage(
+  sourceDir: string,
+  exportDir: string,
+): Effect.fn.Return<Report, CompareError, FileSystem.FileSystem> {
+  yield* Effect.annotateCurrentSpan({ exportDir, sourceDir });
+
+  return yield* compareRecord(yield* readPackage(sourceDir), yield* readPackage(exportDir));
+});
+
+/**
+ * Render a report as text: a line `<path>: <kind>[ at <where>]` for each path, then `all equal`
  * or `<n> differ`.
  *
  * @param report - The report to render.
@@ -299,5 +253,5 @@ export const renderReport = (report: Report): string => {
   );
   const differing = report.filter(({ outcome }) => outcome.kind === "differs").length;
 
-  return [...lines, differing === 0 ? "all equal" : `${differing} differ`].join("\n");
+  return [...lines, differing === 0 ? "all equal" : `${String(differing)} differ`].join("\n");
 };

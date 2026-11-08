@@ -363,12 +363,12 @@ describe("the core, from src/index.ts", () => {
     );
   });
 
-  it("holds playwright-core and playwright at exactly 1.64.1 and @vitest/browser-playwright at exactly 5.0.1 among the devDependencies, never the dependencies", () => {
+  it("holds playwright-core and playwright at exactly 1.64.1 and @vitest/browser-playwright at exactly 5.1.0 among the devDependencies, never the dependencies", () => {
     const { dependencies, devDependencies } = readManifest();
 
     assert.strictEqual(devDependencies["playwright-core"], "1.64.1");
     assert.strictEqual(devDependencies["playwright"], "1.64.1");
-    assert.strictEqual(devDependencies["@vitest/browser-playwright"], "5.0.1");
+    assert.strictEqual(devDependencies["@vitest/browser-playwright"], "5.1.0");
     assert.notProperty(dependencies, "playwright-core");
     assert.notProperty(dependencies, "playwright");
     assert.notProperty(dependencies, "@vitest/browser-playwright");

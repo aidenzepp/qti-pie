@@ -7,18 +7,26 @@
 #   scripts/db.sh drop      drop the database, this package's PostgreSQL roles and the password directory
 #   scripts/db.sh check-clear  list roles and gr8des_qti databases this one does not own; exit 1 if any, else 0
 #
-# Roles are cluster-wide, so drop removes the roles of every schema under migrations/ along with the database.
+# Roles are cluster-wide, so drop removes the roles of every schema under the config's migrations/ along with the
+# database.
 # GR8DES_PG_DATABASE must match ^[a-z_][a-z0-9_]{0,62}$ (lowercase, at most 63 bytes), or every command exits 2.
+# GR8DES_GRIZZLE_CONFIG names the grizzle config migrate runs (grizzle.config.ts by default), whose migrations
+# directory is the folder migrations/ beside it.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# The GR8DES_PG_* defaults below are read again, with the same values, by `localCluster` in src/db/layer.ts; change one, change both.
+# The GR8DES_PG_* and GRIZZLE_PG_STATE defaults below are read again, with the same values, by `localCluster` in
+# src/db/connection.ts; change one, change both. They are exported, so the grizzle config connects where this script
+# does.
 : "${GRIZZLE_PG_STATE:=$HOME/.local/var/grizzle/pg19rc1}"
 : "${GRIZZLE_PG_BIN:=$HOME/.local/opt/postgresql/19rc1/bin}"
 : "${GR8DES_PG_HOST:=localhost}"
 : "${GR8DES_PG_PORT:=5433}"
 : "${GR8DES_PG_DATABASE:=gr8des_qti}"
 : "${GR8DES_PG_SECRETS:=$HOME/.local/var/gr8des/$GR8DES_PG_DATABASE}"
+export GRIZZLE_PG_STATE GR8DES_PG_HOST GR8DES_PG_PORT GR8DES_PG_DATABASE GR8DES_PG_SECRETS
+config="${GR8DES_GRIZZLE_CONFIG:-grizzle.config.ts}"
+migrations="$(dirname "$config")/migrations"
 
 if ! [[ $GR8DES_PG_DATABASE =~ ^[a-z_][a-z0-9_]{0,62}$ ]]; then
 	echo "GR8DES_PG_DATABASE is '$GR8DES_PG_DATABASE'; use 1 to 63 lowercase letters, digits or underscores, not starting with a digit (create folds an unquoted name to lowercase, but migrate connects as written)." >&2
@@ -37,9 +45,9 @@ as_owner() {
 		"host=$GR8DES_PG_HOST port=$GR8DES_PG_PORT dbname=$db user=$owner sslmode=verify-full sslrootcert=$ca" "$@"
 }
 
-# The snake_case schema names this package installs, one per folder under migrations/.
+# The snake_case schema names the config installs, one per folder under its migrations/.
 schemas() {
-	find migrations -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | sort
+	find "$migrations" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | sort
 }
 
 create() {
@@ -51,9 +59,10 @@ create() {
 	echo "$GR8DES_PG_DATABASE: created"
 }
 
+# grizzle reads no environment variable for where to connect: the config's connection (src/db/connection.ts) reads
+# the settings exported above and the migration identity's password, which only this command is given.
 migrate() {
-	DATABASE_URL="postgresql://$owner@$GR8DES_PG_HOST:$GR8DES_PG_PORT/$GR8DES_PG_DATABASE?sslrootcert=$ca" \
-		PGPASSWORD="$owner_password" pnpm exec grizzle migrate
+	GR8DES_PG_MIGRATION_PASSWORD="$owner_password" pnpm exec grizzle migrate "$config"
 	mkdir -p "$GR8DES_PG_SECRETS"
 	chmod 700 "$GR8DES_PG_SECRETS"
 	local schema login file

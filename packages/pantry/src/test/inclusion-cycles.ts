@@ -1,0 +1,176 @@
+/**
+ * Packages of inclusion cycles through `rtest01`'s fragment, for the oracle's box
+ * (`inclusion-cycles.oracle.test.ts`) and the database's (`import/inclusion-cycles.db.test.ts`).
+ *
+ * `rtest01`'s three set items each include `rtest01-fragment.xml`, a `div` holding a hottext
+ * interaction bound to `RESPONSE`. A case keeps the include in the first `includers` items and
+ * drops it from the rest, none of them among the cases, so no head places the fragment and any
+ * cycle through it is one no assembly reaches (spec readings 85 and 117). It closes its cycle:
+ * none; the fragment including itself before its interaction; or the fragment including
+ * `rtest01-loop.xml`, a text fragment listed as its own `imsqti_fragment_xmlv3p0` resource, which
+ * includes the fragment back. And the fragment may include `rtest01-tail.xml` too, a text
+ * fragment no other document includes, which hangs off the fragment's cycle where there is one.
+ */
+import { assert } from "@effect/vitest";
+import type { PackageFile } from "#pantry/package/read.ts";
+
+/**
+ * The cycles a case's inclusion graph closes: none, the fragment through itself, or the fragment
+ * and a text fragment through each other.
+ */
+export const cycles = ["none", "self", "pair"] as const;
+
+/**
+ * How many of `rtest01`'s set items include the fragment.
+ */
+export const includerCounts = [0, 1, 2, 3] as const;
+
+/**
+ * Whether the fragment includes the tail fragment, which only it includes.
+ */
+export const tails = [false, true] as const;
+
+/**
+ * One case: the cycle its inclusion graph closes, how many set items place the fragment, and
+ * whether the fragment includes the tail.
+ */
+export interface CycleCase {
+  readonly cycle: (typeof cycles)[number];
+  readonly includers: (typeof includerCounts)[number];
+  readonly tail: boolean;
+}
+
+/**
+ * The include each `rtest01` set item writes.
+ */
+const setInclude = '<xi:include href="rtest01-fragment.xml" parse="xml"/>';
+
+/**
+ * Where the fragment's cycle-closing include goes: before its interaction.
+ */
+const interactionOpen = "<qti-hottext-interaction";
+
+/**
+ * The text fragment of a two-fragment cycle, which includes the fragment back.
+ */
+const loopText =
+  '<?xml version="1.0" encoding="UTF-8"?>\n<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><p>Again.</p><xi:include href="rtest01-fragment.xml"/></div>\n';
+
+/**
+ * The text fragment's resource, listed after the others.
+ */
+const loopResource =
+  '<resource identifier="r-rtest01-loop" type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-loop.xml"><file href="rtest01/rtest01-loop.xml"/></resource>';
+
+/**
+ * The tail fragment, which includes nothing.
+ */
+const tailText =
+  '<?xml version="1.0" encoding="UTF-8"?>\n<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><p>Tail.</p></div>\n';
+
+/**
+ * The tail fragment's resource, listed after the others.
+ */
+const tailResource =
+  '<resource identifier="r-rtest01-tail" type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-tail.xml"><file href="rtest01/rtest01-tail.xml"/></resource>';
+
+/**
+ * The href of the include that closes each cycle: the fragment's own, or the loop's.
+ */
+const cycleHrefs: Readonly<Record<Exclude<CycleCase["cycle"], "none">, string>> = {
+  pair: "rtest01-loop.xml",
+  self: "rtest01-fragment.xml",
+};
+
+/**
+ * The files a case adds to `rtest01`'s, each with the cases that add it: the loop of a pair cycle,
+ * and the tail.
+ */
+const added: readonly {
+  readonly path: string;
+  readonly text: string;
+  readonly when: (drawn: CycleCase) => boolean;
+}[] = [
+  { path: "rtest01/rtest01-loop.xml", text: loopText, when: ({ cycle }) => cycle === "pair" },
+  { path: "rtest01/rtest01-tail.xml", text: tailText, when: ({ tail }) => tail },
+];
+
+/**
+ * Replace the one occurrence of a text in an entry, or fail the case's construction.
+ *
+ * @param text - The entry's text.
+ * @param search - The text to replace, which occurs once.
+ * @param replacement - Its replacement.
+ * @returns The edited text.
+ */
+const replaceOnce = (text: string, search: string, replacement: string): string => {
+  const at = text.indexOf(search);
+  if (at === -1 || text.includes(search, at + 1)) {
+    return assert.fail(`${search} does not occur once in the entry the case edits`);
+  }
+
+  return `${text.slice(0, at)}${replacement}${text.slice(at + search.length)}`;
+};
+
+/**
+ * Write a case's package from `rtest01`'s entries.
+ *
+ * @param base - `rtest01`'s entries, as `readPackage` returns them.
+ * @param drawn - The case.
+ * @returns The case's entries, sorted by path.
+ */
+export const cyclePackageOf = (
+  base: readonly PackageFile[],
+  drawn: CycleCase,
+): readonly PackageFile[] => {
+  const edited = base.map((file): PackageFile => {
+    const text = new TextDecoder().decode(file.bytes);
+    const set = /rtest01-set0(?<n>[123])\.xml$/u.exec(file.path)?.groups?.["n"];
+    const encode = (edit: string): PackageFile => ({
+      ...file,
+      bytes: new TextEncoder().encode(edit),
+    });
+
+    if (set !== undefined && Number(set) > drawn.includers) {
+      return encode(replaceOnce(text, setInclude, ""));
+    }
+
+    if (file.path.endsWith("rtest01-fragment.xml") && (drawn.cycle !== "none" || drawn.tail)) {
+      const hrefs = [
+        ...(drawn.cycle === "none" ? [] : [cycleHrefs[drawn.cycle]]),
+        ...(drawn.tail ? ["rtest01-tail.xml"] : []),
+      ];
+
+      return encode(
+        replaceOnce(
+          text,
+          interactionOpen,
+          `${hrefs.map((href) => `<xi:include href="${href}"/>`).join("")}${interactionOpen}`,
+        ),
+      );
+    }
+
+    if (file.kind === "manifest" && (drawn.cycle === "pair" || drawn.tail)) {
+      return encode(
+        replaceOnce(
+          text,
+          "</resources>",
+          `${drawn.cycle === "pair" ? loopResource : ""}${drawn.tail ? tailResource : ""}</resources>`,
+        ),
+      );
+    }
+
+    return file;
+  });
+
+  return [
+    ...edited,
+    ...added
+      .filter(({ when }) => when(drawn))
+      .map(({ path, text }) => ({
+        bytes: new TextEncoder().encode(text),
+        kind: "file" as const,
+        path,
+      })),
+  ].toSorted((left, right) => (left.path < right.path ? -1 : 1));
+};

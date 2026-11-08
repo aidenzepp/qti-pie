@@ -7,11 +7,16 @@ import { rolldown } from "vite/rolldown";
 /**
  * The most gzip bytes crust's read path may weigh in a browser bundle.
  *
- * Set at 28000: 25752 bytes were measured at this gate with rolldown 1.2.11 (vite-plus-core 1.0.0),
- * which leaves about 9 percent headroom. Raising it is a reviewed change, not a re-pin to whatever
- * is measured.
+ * Set at 31000 on 2026-11-07, reviewed by the coordinator: 28727 bytes were measured with
+ * vite-plus-core 1.5.0's rolldown, which leaves about 8 percent headroom, the policy the first
+ * budget (28000, over 25752 measured with rolldown 1.2.11) set. Two changes grew it: the decoder
+ * carries XML 1.0 Appendix F.1's table as data (`decode.ts`, about 1700 bytes), and namespace
+ * resolution moved from `saxes` into crust, after the attribute-list defaults (`namespaces.ts` and
+ * Effect's `Result`, about 1200). `saxes` still ships its own namespace mode, which crust no longer
+ * runs: its namespace-only methods weigh about 680 bytes that nothing reaches. Raising the budget
+ * is a reviewed change, not a re-pin to whatever is measured.
  */
-const GZIP_BUDGET = 28_000;
+const GZIP_BUDGET = 31_000;
 
 /**
  * Effect modules that carry Schema, which crust's browser path must not import.

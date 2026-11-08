@@ -290,13 +290,13 @@ const testXml = (
  */
 const dottedPackage = (...declaredInA: readonly string[]): ReadonlyMap<string, Uint8Array> =>
   packageOf({
+    "items/a.xml": itemXml("a", ...declaredInA),
+    "items/ab.xml": itemXml("ab", "SCORE"),
     [manifestFile]: manifestXml(
       resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
       resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
       resourceXml("AB", "imsqti_item_xmlv3p0", "items/ab.xml"),
     ),
-    "items/a.xml": itemXml("a", ...declaredInA),
-    "items/ab.xml": itemXml("ab", "SCORE"),
     "test.xml": testXml("a.b.SCORE", ["a", "items/a.xml"], ["a.b", "items/ab.xml"]),
   });
 
@@ -310,13 +310,13 @@ const dottedPackage = (...declaredInA: readonly string[]): ReadonlyMap<string, U
  */
 const formsPackage = (reference: string): ReadonlyMap<string, Uint8Array> =>
   packageOf({
+    "items/a.xml": itemXml("a", "SCORE", "S.duration"),
+    "items/a2.xml": itemXml("a2", "SCORE"),
     [manifestFile]: manifestXml(
       resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
       resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
       resourceXml("A2", "imsqti_item_xmlv3p0", "items/a2.xml"),
     ),
-    "items/a.xml": itemXml("a", "SCORE", "S.duration"),
-    "items/a2.xml": itemXml("a2", "SCORE"),
     "test.xml": testXml(reference, ["a", "items/a.xml"], ["a.2", "items/a2.xml"]).replace(
       'identifier="S"',
       'identifier="a.S"',
@@ -680,11 +680,11 @@ const openScoringPoints = (timeDependent: "false" | "true", expression: string) 
   openPackage(
     location,
     packageOf({
-      [manifestFile]: manifestXml(resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml")),
       "items/a.xml": pointsItemXml(
         timeDependent,
         `<qti-response-processing><qti-set-outcome-value identifier="SCORE">${expression}</qti-set-outcome-value></qti-response-processing>`,
       ),
+      [manifestFile]: manifestXml(resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml")),
     }),
   );
 
@@ -769,14 +769,14 @@ const sectionXml = (itemRef = "", more = ""): string =>
  * @returns The package's files, by path.
  */
 const referringFiles = (processing: string, sectionRefs: string, section: string) => ({
+  "items/a.xml": reachedItemXml,
+  "items/b.xml": otherItemXml,
   [manifestFile]: manifestXml(
     resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
     resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
     resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
     resourceXml("S", "imsqti_section_xmlv3p0", "sections/s2.xml"),
   ),
-  "items/a.xml": reachedItemXml,
-  "items/b.xml": otherItemXml,
   "sections/s2.xml": section,
   "test.xml": referringTestXml(processing, sectionRefs),
 });
@@ -941,6 +941,8 @@ const reachingFiles = (
   processing: string,
   ...sections: readonly (readonly [identifier: string, content: string])[]
 ) => ({
+  "items/a.xml": reachedItemXml,
+  "items/b.xml": otherItemXml,
   [manifestFile]: manifestXml(
     resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
     resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
@@ -949,8 +951,6 @@ const reachingFiles = (
       resourceXml(identifier, "imsqti_section_xmlv3p0", `sections/${identifier}.xml`),
     ),
   ),
-  "items/a.xml": reachedItemXml,
-  "items/b.xml": otherItemXml,
   ...Object.fromEntries(
     sections.map(([identifier, content]) => [
       `sections/${identifier}.xml`,
@@ -1012,6 +1012,8 @@ const chainPackage = (length: number): ReadonlyMap<string, Uint8Array> => {
   const indices = Array.from({ length }, (_, index) => index);
 
   return packageOf({
+    "items/a.xml": reachedItemXml,
+    "items/b.xml": otherItemXml,
     [manifestFile]: manifestXml(
       resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
       resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
@@ -1020,8 +1022,6 @@ const chainPackage = (length: number): ReadonlyMap<string, Uint8Array> => {
         resourceXml(`S${index}`, "imsqti_section_xmlv3p0", `sections/s${index}.xml`),
       ),
     ),
-    "items/a.xml": reachedItemXml,
-    "items/b.xml": otherItemXml,
     ...Object.fromEntries(
       indices.map((index) => [
         `sections/s${index}.xml`,
@@ -1311,8 +1311,8 @@ describe("package/open.ts", () => {
           const verdict = yield* openPackage(
             location,
             packageOf({
-              [manifestFile]: manifestXml(resourceXml("A", "imsqti_test_xmlv3p0", "items/a.xml")),
               "items/a.xml": itemXml("a", "SCORE"),
+              [manifestFile]: manifestXml(resourceXml("A", "imsqti_test_xmlv3p0", "items/a.xml")),
             }),
           );
 
@@ -1341,12 +1341,12 @@ describe("package/open.ts", () => {
         const verdict = yield* openPackage(
           location,
           packageOf({
+            "items/a.xml": itemXml("a", "SCORE"),
+            "items/b.xml": `<qti-assessment-item xmlns="${qti}" identifier="b" adaptive="false" time-dependent="false"><qti-item-body><p>b</p></qti-item-body></qti-assessment-item>`,
             [manifestFile]: manifestXml(
               resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
               resourceXml("B", "imsqti_item_xmlv3p0", "items/b.xml"),
             ),
-            "items/a.xml": itemXml("a", "SCORE"),
-            "items/b.xml": `<qti-assessment-item xmlns="${qti}" identifier="b" adaptive="false" time-dependent="false"><qti-item-body><p>b</p></qti-item-body></qti-assessment-item>`,
           }),
         );
         const beneath = Option.getOrThrow(resourceOf(verdict, "B").verdict);
@@ -2384,11 +2384,11 @@ describe("package/open.ts", () => {
             yield* openPackage(
               location,
               packageOf({
+                "items/a b.xml": itemXml("a", "SCORE"),
                 [manifestFile]: manifestXml(
                   resourceXml("T", "imsqti_test_xmlv3p0", "tests/test.xml"),
                   resourceXml("A", "imsqti_item_xmlv3p0", "items/a%20b.xml"),
                 ),
-                "items/a b.xml": itemXml("a", "SCORE"),
                 "tests/test.xml": testXml(
                   "a.SCORE",
                   ["a", "../items/a%20b.xml"],
@@ -2964,11 +2964,11 @@ describe("package/open.ts", () => {
         const verdict = yield* openPackage(
           location,
           packageOf({
+            "items/a.xml": itemXml("a", "SCORE"),
             [manifestFile]: manifestXml(
               resourceXml("T", "imsqti_test_xmlv3p0", "tests/test.xml"),
               resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
             ),
-            "items/a.xml": itemXml("a", "SCORE"),
             "tests/test.xml": testXml(
               "a.SCORE",
               ["a", "../items/a.xml"],
@@ -3001,14 +3001,14 @@ describe("package/open.ts", () => {
           const verdict = yield* openPackage(
             location,
             packageOf({
+              "items/img.png": "PNG",
+              "items/q.html": itemXml("q", "SCORE"),
               [manifestFile]: manifestXml(
                 resourceXml("T", "imsqti_test_xmlv3p0", "tests/test.xml"),
                 '<resource identifier="Q" type="imsqti_item_xmlv3p0" href="items/q.html"><file href="items/q.html"/><file href="items/img.png"/></resource>',
                 resourceXml("S", "imsqti_stimulus_xmlv3p0", "stimuli/s.xml"),
                 resourceXml("W", "webcontent", "shared/page.html"),
               ),
-              "items/img.png": "PNG",
-              "items/q.html": itemXml("q", "SCORE"),
               "shared/page.html": "<p>page</p>",
               "stimuli/s.xml": `<qti-assessment-stimulus xmlns="${qti}" identifier="s" title="s"><qti-stimulus-body><p>s</p></qti-stimulus-body></qti-assessment-stimulus>`,
               "tests/test.xml": testXml("q.SCORE", ["q", "../items/q.html"]),
@@ -3033,6 +3033,7 @@ describe("package/open.ts", () => {
           const verdict = yield* openPackage(
             location,
             packageOf({
+              "items/a.xml": itemXml("a", "SCORE"),
               [manifestFile]: manifestXml(
                 resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
                 resourceXml("O", "imsqti_outcomes_xmlv3p0", "shared/outcomes.xml"),
@@ -3040,7 +3041,6 @@ describe("package/open.ts", () => {
                 resourceXml("RT", "imsqti_rptemplate_xmlv3p0", "shared/template.xml"),
                 resourceXml("F", "imsqti_fragment_xmlv3p0", "shared/fragment.xml"),
               ),
-              "items/a.xml": itemXml("a", "SCORE"),
               "shared/fragment.xml": `<p xmlns="${qti}">fragment</p>`,
               "shared/outcomes.xml": `<qti-outcome-declaration xmlns="${qti}" identifier="SCORE" cardinality="single" base-type="float"/>`,
               "shared/rp.css": "p {}",
@@ -3061,14 +3061,14 @@ describe("package/open.ts", () => {
           const verdict = yield* openPackage(
             location,
             packageOf({
-              [manifestFile]: manifestXml(
-                '<resource identifier="H" type="imsqti_item_xmlv3p0"><file href="items/q.html"/><file href="items/q.png"/></resource>',
-                '<resource identifier="A" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/><file href="items/a.png"/></resource>',
-              ),
               "items/a.png": "PNG",
               "items/a.xml": itemXml("a", "SCORE"),
               "items/q.html": `<qti-assessment-item xmlns="${qti}" identifier="q" title="q" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"><qti-correct-response><qti-value>A</qti-value></qti-correct-response></qti-response-declaration><qti-item-body><p>q</p></qti-item-body></qti-assessment-item>`,
               "items/q.png": "PNG",
+              [manifestFile]: manifestXml(
+                '<resource identifier="H" type="imsqti_item_xmlv3p0"><file href="items/q.html"/><file href="items/q.png"/></resource>',
+                '<resource identifier="A" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/><file href="items/a.png"/></resource>',
+              ),
             }),
           );
           const accepted = acceptedOf(verdict);
@@ -3090,14 +3090,14 @@ describe("package/open.ts", () => {
           const verdict = yield* openPackage(
             location,
             packageOf({
-              [manifestFile]: manifestXml(
-                `<resource identifier="R" type="imsqti_item_xmlv3p0" href="${remote}"><file href="${remote}"/><file href="items/r.xml"/><file href="items/r.png"/></resource>`,
-                '<resource identifier="A" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/><file href="items/a.png"/></resource>',
-              ),
               "items/a.png": "PNG",
               "items/a.xml": itemXml("a", "SCORE"),
               "items/r.png": "PNG",
               "items/r.xml": itemXml("r", "SCORE"),
+              [manifestFile]: manifestXml(
+                `<resource identifier="R" type="imsqti_item_xmlv3p0" href="${remote}"><file href="${remote}"/><file href="items/r.xml"/><file href="items/r.png"/></resource>`,
+                '<resource identifier="A" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/><file href="items/a.png"/></resource>',
+              ),
             }),
           );
           const accepted = acceptedOf(verdict);
@@ -3133,10 +3133,10 @@ describe("package/open.ts", () => {
             openPackage(
               location,
               packageOf({
+                "items/a.xml": itemXml("a"),
                 [manifestFile]: manifestXml(
                   describedXml("A", "imsqti_item_xmlv3p0", "items/a.xml", general),
                 ),
-                "items/a.xml": itemXml("a"),
               }),
             );
           const facts = { identifier: "a", path: "items/a.xml", reading: "62", resource: "A" };
@@ -3174,11 +3174,11 @@ describe("package/open.ts", () => {
           const verdict = yield* openPackage(
             location,
             packageOf({
+              "items/a.xml": itemXml("a", "SCORE"),
               [manifestFile]: manifestXml(
                 describedXml("T", "imsqti_test_xmlv3p0", "test.xml", lomTitle("Test", "Prüfung")),
                 describedXml("A", "imsqti_item_xmlv3p0", "items/a.xml", lomTitle("Item A")),
               ),
-              "items/a.xml": itemXml("a", "SCORE"),
               "test.xml": testXml("a.SCORE", ["a", "items/a.xml"]),
             }),
           );
@@ -3219,6 +3219,9 @@ describe("package/open.ts", () => {
           const verdict = yield* openPackage(
             location,
             packageOf({
+              "items/a.xml": itemXml("a"),
+              "items/b.xml": itemXml("b"),
+              "items/c.xml": itemXml("c"),
               [manifestFile]: manifestXml(
                 describedXml(
                   "A",
@@ -3240,9 +3243,6 @@ describe("package/open.ts", () => {
                   `${lomIdentifiers("other")}${lomTitle("Other")}`,
                 ),
               ),
-              "items/a.xml": itemXml("a"),
-              "items/b.xml": itemXml("b"),
-              "items/c.xml": itemXml("c"),
               "passages/s.xml": `<qti-assessment-stimulus xmlns="${qti}" identifier="s" title="s"><qti-stimulus-body><p>s</p></qti-stimulus-body></qti-assessment-stimulus>`,
             }),
           );

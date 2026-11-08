@@ -1,29 +1,29 @@
 file	verdict	rule
-QTI3_BPIG_Examples/BPIG_22April.zip	refused	unmodeled-vocabulary
+QTI3_BPIG_Examples/BPIG_22April.zip	refused	root-type-reverse
 QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip	accepted	
 qtiv3-examples/CAT/CAT_Test01_Adaptive_EchoAdapt.zip	refused	not-qti3
 qtiv3-examples/PCI/sample_pci.zip	refused	not-qti3
-qtiv3-examples/items/shared-vocabulary/shared-vocabulary-imsmanifest.zip	refused	unmodeled-vocabulary
-qtiv3-examples/packaging/BBQsTest/BBQsTest.zip	refused	file-exists
+qtiv3-examples/items/shared-vocabulary/shared-vocabulary-imsmanifest.zip	refused	attribute-admission
+qtiv3-examples/packaging/BBQsTest/BBQsTest.zip	refused	document-lang
 qtiv3-examples/packaging/CASE/CASE.zip	accepted	
 qtiv3-examples/packaging/CASEWithOutcome/CASEWithOutcome.zip	refused	lom-title
 qtiv3-examples/packaging/basicFeedbackTest/basicFeedbackTest.zip	accepted	
 qtiv3-examples/packaging/ccPackage/ccPackage.zip	accepted	
 qtiv3-examples/packaging/englishBasicLevelV2/englishBasicLevelV2.zip	accepted	
-qtiv3-examples/packaging/englishHighLevelV2/englishHighLevelV2.zip	refused	section-empty
+qtiv3-examples/packaging/englishHighLevelV2/englishHighLevelV2.zip	refused	lom-title
 qtiv3-examples/packaging/externalMetadata/externalMetadata.zip	accepted	
-qtiv3-examples/packaging/feedbackTest/feedbackTest.zip	refused	item-ref-target
+qtiv3-examples/packaging/feedbackTest/feedbackTest.zip	refused	file-exists
 qtiv3-examples/packaging/interactionMixSaxonyV3/interactionMixSaxonyV3.zip	accepted	
-qtiv3-examples/packaging/items/items.zip	refused	unmodeled-vocabulary
-qtiv3-examples/packaging/lti/lti.zip	refused	resource-type
+qtiv3-examples/packaging/items/items.zip	refused	P23
+qtiv3-examples/packaging/lti/lti.zip	refused	attribute-lexical
 qtiv3-examples/packaging/maxfiles/maxfiles.zip	refused	P8
 qtiv3-examples/packaging/metaData/metaData.zip	refused	lom-identifier
-qtiv3-examples/packaging/pci-simple/pci_simple_example.zip	refused	unmodeled-vocabulary
-qtiv3-examples/packaging/pci/pci_item_examples.zip	refused	unmodeled-vocabulary
+qtiv3-examples/packaging/pci-simple/pci_simple_example.zip	accepted	
+qtiv3-examples/packaging/pci/pci_item_examples.zip	refused	attribute-admission
 qtiv3-examples/packaging/sharedMedia/sharedMedia.zip	accepted	
-qtiv3-examples/packaging/sharedStimulus/sharedStimulus.zip	refused	unmodeled-vocabulary
+qtiv3-examples/packaging/sharedStimulus/sharedStimulus.zip	refused	file-exists
 qtiv3-examples/packaging/simple/simple.zip	accepted	
 qtiv3-examples/packaging/svg/svg.zip	accepted	
-qtiv3-examples/packaging/testWithLti/testWithLti.zip	refused	unmodeled-vocabulary
+qtiv3-examples/packaging/testWithLti/testWithLti.zip	refused	attribute-lexical
 qtiv3-examples/packaging/test_package_minfiles/test_package_minfiles.zip	refused	P8
 qtiv3-examples/packaging/usageData/usageData.zip	refused	not-qti3

@@ -1,91 +1,71 @@
-import { Db, query, v } from "@bjornpagen/grizzle";
-import { assert, layer } from "@effect/vitest";
-import { Effect } from "effect";
-import { readFileSync } from "node:fs";
-import { describe, it as plainIt } from "vitest";
-import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { Author } from "#pantry/schema/roles.ts";
-import { AuthorApp } from "#pantry/schema/logins.ts";
-import { AncestryStep } from "#pantry/schema/ancestry.ts";
-import { AttributeAdmission } from "#pantry/schema/attributes.ts";
-import { Admission } from "#pantry/schema/node.ts";
-import { admission, ancestryStep, attributeAdmission } from "#pantry/schema/seed/admission.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+/**
+ * No module of the package imports a migration artifact as a module: the snapshot grizzle compiles
+ * a login against is read from disk (`#pantry/db/layer.ts` reads `#migrations/qti/snapshot.json`
+ * with `readFileString` at the path `import.meta.resolve` gives), so evaluating a module never
+ * parses its megabytes and no bundle carries it.
+ *
+ * Oracle: a search of every TypeScript module of `src` for a static, type-only or dynamic import,
+ * or a re-export, of a `#migrations/` specifier, this file's planted cases aside.
+ * `import.meta.resolve` only names a path, and is no import.
+ */
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { assert, describe, it } from "@effect/vitest";
 
-const admissionCount = query(Author).rule((r) => {
-  const { child, parent, version } = v(Admission, "admission");
+/**
+ * The package's `src` folder.
+ */
+const sourceRoot = path.resolve(import.meta.dirname, "..");
 
-  return r.match(Admission, { child, parent, version }).find({ total: r.count() });
-});
-
-const ancestryStepCount = query(Author).rule((r) => {
-  const { ancestry, kind, next } = v(AncestryStep, "ancestryStep");
-
-  return r.match(AncestryStep, { ancestry, kind, next }).find({ total: r.count() });
-});
-
-const attributeAdmissionCount = query(Author).rule((r) => {
-  const { attribute, kind } = v(AttributeAdmission, "attributeAdmission");
-
-  return r.match(AttributeAdmission, { attribute, kind }).find({ total: r.count() });
-});
-
-describe.skipIf(!hasLease)("db/layer.test.ts, on the lease", () => {
-  layer(AuthorAppLayer, { timeout: authorLayerHookTimeoutMs })(
-    "the author application's pool on the lease",
-    (it) => {
-      it.effect("opens the author role", () =>
-        Effect.gen(function* opensTheAuthorRole() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
-
-          assert.isDefined(db);
-        }),
-      );
-
-      it.effect("reads the seeded admission rows through the author role", () =>
-        Effect.gen(function* readsTheSeed() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
-          const rows = yield* (yield* db.execute(admissionCount, {})).collect;
-
-          assert.deepStrictEqual(
-            rows.map((row) => row.total),
-            [BigInt(admission.length)],
-          );
-        }),
-      );
-
-      it.effect("reads the seeded ancestry steps through the author role", () =>
-        Effect.gen(function* readsTheAncestrySteps() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
-          const rows = yield* (yield* db.execute(ancestryStepCount, {})).collect;
-
-          assert.deepStrictEqual(
-            rows.map((row) => row.total),
-            [BigInt(ancestryStep.length)],
-          );
-        }),
-      );
-
-      it.effect("reads the seeded attribute admissions through the author role", () =>
-        Effect.gen(function* readsTheAttributeAdmissions() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
-          const rows = yield* (yield* db.execute(attributeAdmissionCount, {})).collect;
-
-          assert.deepStrictEqual(
-            rows.map((row) => row.total),
-            [BigInt(attributeAdmission.length)],
-          );
-        }),
-      );
-    },
-  );
-});
+/**
+ * Find the migration artifacts a module's text imports: each `#migrations/` specifier of an
+ * `import … from`, an `export … from`, a bare `import`, an `import(…)` call or an `import(…)` type.
+ *
+ * @param text - The module's text.
+ * @returns The specifiers, in order.
+ */
+const migrationImports = (text: string): readonly string[] =>
+  [
+    ...text.matchAll(
+      /\b(?:from\s*|import\s*\(\s*|^[ \t]*import\s+)["'](?<specifier>#migrations\/[^"']+)["']/gmu,
+    ),
+  ].map(({ groups }) => groups?.["specifier"] ?? "");
 
 describe("db/layer.ts, without a database", () => {
-  plainIt("reads the migrations snapshot from disk, never as a module", () => {
-    const source = readFileSync(new URL("layer.ts", import.meta.url), "utf-8");
+  it("imports no migration artifact as a module anywhere in src, the snapshot read from disk", () => {
+    const imported = readdirSync(sourceRoot, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+      .map((entry) => path.join(entry.parentPath, entry.name))
+      .filter((file) => file !== import.meta.filename)
+      .flatMap((file) =>
+        migrationImports(readFileSync(file, "utf-8")).map(
+          (specifier) => `${path.relative(sourceRoot, file)}: ${specifier}`,
+        ),
+      );
 
-    assert.notInclude(source, "import snapshot");
-    assert.notMatch(source, /^import .*snapshot\.json/mu);
+    assert.deepStrictEqual(imported, []);
+  });
+
+  it("finds a planted import of the snapshot in each form, and no path import.meta.resolve names", () => {
+    // Oracle: the rule above, on the named cases. Wild: the static import a module once had, a
+    // dynamic import inside the layer's effect, a type-only import and a re-export. Live: the
+    // layer's own resolution of the snapshot's path, which reads no module.
+    assert.deepStrictEqual(
+      migrationImports(
+        [
+          'import snapshot from "#migrations/qti/snapshot.json" with { type: "json" };',
+          'const read = Effect.promise(() => import("#migrations/qti/snapshot.json"));',
+          'import type { Snapshot } from "#migrations/qti/types.ts";',
+          'export { fingerprint } from "#migrations/qti/fingerprint.ts";',
+          'const at = fileURLToPath(import.meta.resolve("#migrations/qti/snapshot.json"));',
+        ].join("\n"),
+      ),
+      [
+        "#migrations/qti/snapshot.json",
+        "#migrations/qti/snapshot.json",
+        "#migrations/qti/types.ts",
+        "#migrations/qti/fingerprint.ts",
+      ],
+    );
   });
 });

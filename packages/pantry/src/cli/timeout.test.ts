@@ -13,13 +13,15 @@ import {
   withTimeout,
 } from "#pantry/cli/timeout.ts";
 import { captureCli, preloadEngine } from "#pantry/test/cli.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 
 const fixtures = inject("fixtures");
 
 /**
- * The scratch folder this file owns: the home and the cluster state of the run on the real root.
+ * The scratch folder this file owns, `work/cli-timeout-*`, the run's own: the home and the cluster
+ * state of the run on the real root.
  */
-const scratch = path.resolve(import.meta.dirname, "..", "..", "work", "cli-timeout");
+const scratch = fileScratchDirectory("cli-timeout-");
 
 /**
  * A command whose handler waits one second, wired as the root is: the setting, then the bound.
@@ -122,8 +124,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("p14-u8c: --timeout", (
         yield* fs.makeDirectory(home, { recursive: true });
         yield* fs.writeFileString(path.join(state, "tls", "ca.crt"), "placeholder\n");
 
-        // The engine is already loaded, so the 1 ms timer fires while the handler reads the certificate
-        // and the 36 MB snapshot (`src/db/layer.ts:86-99`). The certificate exists, so nothing fails
+        // The pool is built before the importer loads (`withAuthorApp`), so the 1 ms timer fires
+        // while the layer reads the certificate (`src/db/connection.ts`) and the snapshot
+        // (`src/db/layer.ts`), before it loads the login. The certificate exists, so nothing fails
         // before the timer; port 1 is where no cluster listens, in case a pool opens before it does.
         const { exit, stdout } = yield* captureCli(
           ["--timeout", "1 millis", "import", fixtures.simple],

@@ -1,0 +1,322 @@
+/**
+ * The import's steps before the database: read the package once, shred each document it names,
+ * mint the ids, and build every row (plan W5, Q5.15; the W5 amendment's C19).
+ *
+ * The package is read whole (`readPackage`), its manifest is decoded and its schema version read,
+ * and the manifest is shredded. The documents it names are the (href, type) pairs of its resources
+ * whose type `RootOfType` maps (spec reading 93, `namedDocuments`), and each path one names that an
+ * entry holds is shredded once, in the version the manifest declares: the manifest's path is the
+ * manifest's alone, no resource's document (reading 146). A named href no entry holds is shredded
+ * as nothing: the record's laws refuse it in the database (`entry-kind`). Then one id is minted per
+ * package, node and attribute ({@link nodeIdsOf}), and the rows are built: each document's tree,
+ * its document layer's flat rows, every overlay's, and the package's record.
+ *
+ * Both the import (`#pantry/import/package.ts`) and the dry run (`#pantry/import/preview.ts`) read
+ * through {@link readProgram}, so a dry run reads exactly what an import writes. Nothing here
+ * reaches the author login (`#pantry/qti/logins.ts`), whose workload grizzle builds when that
+ * module is evaluated.
+ */
+import type { Uuid } from "@bjornpagen/grizzle";
+import { Array as Arr, Effect, Option, Order } from "effect";
+import type { FileSystem, PlatformError } from "effect";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { XmlDocument } from "@qti-pie/crust/tree.ts";
+import { grammar, versions } from "#pantry/grammar/install.ts";
+import { overlayRowsOf, unionsOf } from "#pantry/import/overlays/index.ts";
+import { namedDocuments, rowsOf as packageRowsOf } from "#pantry/import/overlays/package.ts";
+import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
+import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
+import { documentLayerNames } from "#pantry/import/roster.ts";
+import { ruleOfError } from "#pantry/import/refusal.ts";
+import type { ImportRefused } from "#pantry/import/refusal.ts";
+import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
+import type {
+  DocumentLayerRows,
+  ListedDocument,
+  NodeMember,
+  NodeRoot,
+  PackageInputs,
+  PlacedDocument,
+} from "#pantry/import/write.ts";
+import { shredGrammarOf } from "#pantry/model/composed.ts";
+import { shred, versionOf } from "#pantry/model/shred.ts";
+import type { NodeId } from "#pantry/model/xdm.ts";
+import { PackageReadError, readPackage } from "#pantry/package/read.ts";
+import type { PackageFile } from "#pantry/package/read.ts";
+import { manifestPath } from "#pantry/qti/package.ts";
+import { cpNamespace } from "#pantry/vocab/namespaces.ts";
+
+/**
+ * One document of the package as the import writes it: as listed, and under its ids.
+ */
+export type ProgramDocument = PlacedDocument;
+
+/**
+ * Everything one import writes, before the database: the package's entries as read, its documents
+ * shredded and listed under their ids, and every input of its ChangeSet.
+ */
+export interface ImportProgram {
+  readonly documents: readonly ProgramDocument[];
+  readonly files: readonly PackageFile[];
+  readonly inputs: PackageInputs;
+  readonly packageId: Uuid;
+}
+
+/**
+ * The ids of the manifest's provisional rows, read only for the hrefs and types its resources name
+ * before the package's ids are minted: one distinct uuid per number `flatten` gives, since the
+ * builder groups each attribute under its node's id.
+ *
+ * @param index - The number of a node or an attribute.
+ * @returns A uuid that spells the number.
+ */
+const provisionalIdOf = (index: number): NodeId =>
+  `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
+
+/**
+ * Find the schema version a manifest declares: the text of the first `schemaversion` under its
+ * first `metadata`, where its root is the content package's `manifest`.
+ *
+ * @param manifest - The manifest crust read.
+ * @returns The version as written, none when the manifest declares none.
+ */
+export const declaredVersionOf = (manifest: XmlDocument): Option.Option<string> => {
+  const { root } = manifest;
+  if (root.namespace !== cpNamespace || root.local !== "manifest") {
+    return Option.none();
+  }
+
+  const metadata = root.children.find(
+    (child) => child.kind === "element" && child.local === "metadata",
+  );
+  const version =
+    metadata?.kind === "element"
+      ? metadata.children.find(
+          (child) => child.kind === "element" && child.local === "schemaversion",
+        )
+      : undefined;
+
+  return version?.kind === "element"
+    ? Option.some(
+        version.children.map((child) => (child.kind === "text" ? child.value : "")).join(""),
+      )
+    : Option.none();
+};
+
+/**
+ * Read and shred one document of the package.
+ *
+ * @param file - Its entry.
+ * @param version - The version the manifest declares.
+ * @returns Its tree; the reader's or the codec's refusal.
+ */
+const shredFile = (file: PackageFile, version: (typeof versions)[number]) =>
+  Effect.flatMap(readXml(file.bytes), (xml) => shred(xml, version, shredGrammarOf(grammar)));
+
+/**
+ * Choose the type a path's document is read as, of the types its resources name it under (spec
+ * readings 93 and 162): the first, in the manifest's order, whose `RootOfType` pair holds the
+ * root's kind, and the first of all where none does. Every other type's href then names no document
+ * of its type, which "Document entry" refuses; and `RootOfType` refuses a root only where no type
+ * its resources name bears it out, whatever order they are listed in. The sort is stable, so the
+ * types the root bears out come first, each group in the manifest's order.
+ *
+ * @param types - The types, in the manifest's order.
+ * @param rootKind - The kind of the document's root.
+ * @returns The type.
+ */
+const documentTypeOf = <T extends string>(
+  types: Arr.NonEmptyReadonlyArray<T>,
+  rootKind: string,
+): T =>
+  Arr.headNonEmpty(
+    Arr.sortWith(
+      types,
+      (type) => Option.isNone(grammar.package.rootOfType.lookup({ root: rootKind, type })),
+      Order.Boolean,
+    ),
+  );
+
+/**
+ * Read the package at `dir` and list its documents, one per path: the manifest, then each other
+ * document its resources name that an entry holds, in the manifest's order, each shredded once.
+ *
+ * @param dir - The package directory or `.zip` file.
+ * @returns The entries and the documents; the reader's, the container's or the codec's refusal.
+ */
+const listDocuments = Effect.fn("import.listDocuments")(function* listDocuments(dir: string) {
+  const files = yield* readPackage(dir);
+  const manifest = files.find(({ kind }) => kind === "manifest");
+  if (manifest === undefined) {
+    return yield* new PackageReadError({ dir, path: manifestPath, rule: "manifest-root" });
+  }
+
+  const manifestXml = yield* readXml(manifest.bytes);
+  const version = yield* Effect.fromResult(versionOf(versions, declaredVersionOf(manifestXml)));
+  const manifestTree = yield* shred(manifestXml, version, shredGrammarOf(grammar));
+  const byPath = new Map(files.map((file) => [file.path, file] as const));
+  const named = namedDocuments(
+    packageRowsOf(manifestTree, { idOf: provisionalIdOf, package: provisionalIdOf(0) }),
+  );
+  // A path is one document, of one type (reading 93): the manifest's, `none`, read before any
+  // resource names a path (reading 146), else the type its root bears out among those resources
+  // name it under (reading 162). Another type's href, the manifest's path's included, then names
+  // no document of its type, which "Document entry" refuses, and the document is read once and
+  // judged where its sites place it.
+  const pairs = [...named.values()];
+  const documents = new Map<string, ListedDocument>([
+    [manifest.path, { path: manifest.path, resourceType: "none", tree: manifestTree }],
+  ]);
+  for (const [at, { path, type }] of pairs.entries()) {
+    const file = byPath.get(path);
+    if (file !== undefined && !documents.has(path)) {
+      const tree = yield* shredFile(file, version);
+      const others = pairs.slice(at + 1).flatMap((pair) => (pair.path === path ? [pair.type] : []));
+      documents.set(path, {
+        path,
+        resourceType: documentTypeOf([type, ...others], tree.root.kind),
+        tree,
+      });
+    }
+  }
+
+  return { documents: [...documents.values()], files };
+});
+
+/**
+ * Whether an error is a refusal of the package, as opposed to the platform's failure to read it.
+ *
+ * @param error - The error.
+ * @returns Whether it is a `ReadRefusal` of `#pantry/import/refusal.ts`.
+ */
+const isReadRefusal = <E extends { readonly _tag: string }>(
+  error: E,
+): error is Exclude<E, PlatformError.PlatformError> => error._tag !== "PlatformError";
+
+/**
+ * Read the package at `dir` as an import writes it: its entries, its documents shredded, their ids
+ * minted, and every input of its ChangeSet built, each a keyed set.
+ *
+ * A key two builders give two different rows is a defect of the builders, and dies as the
+ * `OverlayConflict` that names it.
+ *
+ * @param dir - The package directory or `.zip` file.
+ * @param mint - Draws each fresh uuid. Defaults to `crypto.randomUUID`; a test passes its own.
+ * @returns The program. Fails with `ImportRefused` naming the rule the reader, the container or the
+ *   codec refused the package under, and with the platform's error when the package cannot be read.
+ */
+export const readProgram = Effect.fn("import.readProgram")(function* readProgram(
+  dir: string,
+  mint: () => NodeId = () => crypto.randomUUID(),
+): Effect.fn.Return<
+  ImportProgram,
+  ImportRefused | PlatformError.PlatformError,
+  FileSystem.FileSystem
+> {
+  const { documents, files } = yield* listDocuments(dir).pipe(
+    Effect.catchIf(isReadRefusal, (refusal) => Effect.fail(ruleOfError(refusal))),
+  );
+  const ids = nodeIdsOf(
+    documents,
+    files.map(({ path }) => path),
+    mint,
+  );
+  const placed = ids.documents;
+  const overlays = yield* Effect.orDie(Effect.fromResult(overlayRowsOf(placed, mint)));
+  const layers = placed.map(({ ids: held, listed }) => documentRowsOf(listed, held));
+  const layer = yield* Effect.orDie(
+    Effect.fromResult(unionsOf<DocumentLayerRows>(documentLayerNames, layers)),
+  );
+  const roots = new Map<string, NodeRoot>(
+    placed.map(({ ids: held, listed }) => {
+      const root = rootInsertOf(listed.tree, held);
+
+      return [root.id, root] as const;
+    }),
+  );
+  const record = packageRecordOf({ files, id: ids.package, name: packageNameOf(dir) });
+
+  yield* Effect.annotateCurrentSpan({ documents: placed.length, entries: files.length });
+
+  return {
+    documents: placed,
+    files,
+    inputs: {
+      ...overlays,
+      ...layer,
+      Node: roots,
+      Package: new Map([[record.id, record]]),
+    },
+    packageId: ids.package,
+  };
+});
+
+/**
+ * Count the rows a program writes, relation by relation, each nested member under its own
+ * relation: a tree's nodes, attributes, declarations and their families, an attribute's and a
+ * text's typed double, an identity text's IDREF tokens, a cell's `headers` tokens, a
+ * `tolerance`'s values, an assembly's instances, a record's entries.
+ *
+ * @param program - The program.
+ * @returns Each relation's number of rows, zero for a relation whose keyed set is empty.
+ */
+export const rowCountsOf = (program: ImportProgram): ReadonlyMap<string, number> => {
+  const counted: (readonly [relation: string, n: number])[] = [];
+  const add = (relation: string, n: number): void => {
+    counted.push([relation, n]);
+  };
+  const { Instance, Node, Package, ...flat } = program.inputs;
+
+  for (const [relation, rows] of Object.entries(flat)) {
+    add(relation, rows.size);
+  }
+
+  for (const text of flat.IdentityText.values()) {
+    add("TextIdref", text.idrefs.length);
+  }
+
+  for (const headers of flat.CellHeaders.values()) {
+    add("HeaderToken", headers.tokens.length);
+  }
+
+  for (const tolerance of flat.Tolerance.values()) {
+    add("ToleranceToken", tolerance.tokens.length);
+  }
+
+  for (const reference of flat.AssembledReference.values()) {
+    add("ReferenceSegment", reference.segments.length);
+  }
+
+  const instances: InstanceMember[] = [...Instance.values()];
+  for (let instance = instances.pop(); instance !== undefined; instance = instances.pop()) {
+    add("Instance", 1);
+    instances.push(...instance.children);
+  }
+
+  for (const record of Package.values()) {
+    add("Package", 1);
+    add("Entry", record.entries.length);
+  }
+
+  const stack: NodeMember[] = [...Node.values()];
+  for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
+    add("Node", 1);
+    add("Namespace", node.namespaces.length);
+    add("TextDoubleValue", node.doubleValue.length);
+    add("Attribute", node.attributes.length);
+    for (const attribute of node.attributes) {
+      add("AttributeEntity", attribute.entities.length);
+      add("DoubleValue", attribute.doubleValue.length);
+      add("Idref", attribute.idrefs.length);
+      add("OpenAttributeName", attribute.openName.length);
+    }
+
+    stack.push(...node.children);
+  }
+
+  return new Map(
+    [...Map.groupBy(counted, ([relation]) => relation)].map(
+      ([relation, ns]) => [relation, ns.reduce((sum, [, n]) => sum + n, 0)] as const,
+    ),
+  );
+};

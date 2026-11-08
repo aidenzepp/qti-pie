@@ -13,6 +13,7 @@
     "./errors.ts": "./src/errors.ts",
     "./read.ts": "./src/read.ts",
     "./tree.ts": "./src/tree.ts",
+    "./uri.ts": "./src/uri.ts",
     "./write.ts": "./src/write.ts"
   },
   "scripts": {
@@ -25,6 +26,7 @@
   "devDependencies": {
     "@effect/platform-node": "4.1.2",
     "@effect/vitest": "4.1.2",
-    "vitest": "5.0.1"
+    "@grizzle/testing": "file:../../vendor/grizzle-testing-0.0.0.tgz",
+    "vitest": "5.1.0"
   }
 }

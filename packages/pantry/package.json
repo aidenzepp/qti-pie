@@ -10,17 +10,22 @@
   "exports": {},
   "scripts": {
     "db": "scripts/db.sh",
+    "fetch-xsds": "node src/vocab/derive/fetch-xsds.ts",
     "grizzle": "grizzle",
     "test": "mkdir -p work/.vp-tmp && TMPDIR=\"$PWD/work/.vp-tmp\" NODE_OPTIONS=\"$NODE_OPTIONS --disable-proto=delete --disable-sigusr1\" vp test run"
   },
   "dependencies": {
-    "@bjornpagen/grizzle": "file:../../vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz",
+    "@bjornpagen/grizzle": "file:../../vendor/bjornpagen-grizzle-1.0.0-beta.1.tgz",
     "@effect/platform-node": "4.1.2",
     "@qti-pie/crust": "workspace:*",
-    "effect": "4.1.2"
+    "effect": "4.1.2",
+    "pg": "8.23.1",
+    "saxes": "6.0.0"
   },
   "devDependencies": {
     "@effect/vitest": "4.1.2",
-    "vitest": "5.0.1"
+    "@grizzle/testing": "file:../../vendor/grizzle-testing-0.0.0.tgz",
+    "@types/pg": "8.23.1",
+    "vitest": "5.1.0"
   }
 }

@@ -1,10 +1,23 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
-import { ConfigProvider, Console, Effect, FileSystem, Layer, Stdio, Stream } from "effect";
+import {
+  ConfigProvider,
+  Console,
+  Effect,
+  FileSystem,
+  JsonSchema,
+  Layer,
+  Schema,
+  SchemaRepresentation,
+  Stdio,
+  Stream,
+} from "effect";
 import type { Exit } from "effect";
 import type { Command } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { cli } from "#pantry/cli.ts";
 import { runCli } from "#pantry/cli/run.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
  * The package folder, `packages/pantry`: where the program runs by default and where `work/` is.
@@ -12,16 +25,43 @@ import { runCli } from "#pantry/cli/run.ts";
 const packageRoot = path.resolve(import.meta.dirname, "..", "..");
 
 /**
- * The folder that holds every copy `packageCopy` makes.
+ * The folder that holds every copy `packageCopy` makes, `work/cli-copies-*`, the run's own, so two
+ * runs at once never replace each other's copy of a package mid-test.
  */
-const copiesRoot = path.join(packageRoot, "work", "cli-copies");
+const copiesRoot = fileScratchDirectory("cli-copies-");
 
 /**
- * Load every engine module a command handler imports when it runs, all at once.
+ * A check of a printed line against the committed JSON Schema `schema/<name>.json`, read as a
+ * person's validator would read it rather than through the schema that printed the line: the
+ * file is parsed as a JSON Schema 2020-12 document and the line as plain JSON.
+ *
+ * @param name - The schema's file name under `schema/`, without `.json`: `error`, `import`,
+ *   `export` or `roundtrip`.
+ * @returns Whether a line, parsed as JSON, matches the committed schema.
+ */
+export const matchesCommitted = (name: string): ((line: string) => boolean) => {
+  const committed = Schema.is(
+    SchemaRepresentation.fromJsonSchemaDocument(
+      JsonSchema.fromSchemaDraft2020_12(
+        Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
+          readFileSync(path.join(packageRoot, "schema", `${name}.json`), "utf-8"),
+        ),
+      ),
+    ),
+  );
+  const parse = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+
+  return (line) => committed(parse(line));
+};
+
+/**
+ * Load every engine module a command handler imports outside the database's pool, all at once.
  *
  * A test file pays that load once, in a `beforeAll` under `engineLoadHookTimeoutMs`, instead of
- * inside its first test's timeout. The list must equal this command's output, so a new lazy import
- * gets added here:
+ * inside its first test's timeout. The list is every module this command prints but the ones a
+ * handler passes to `withAuthorApp` (`#pantry/cli/engine.ts`), the importer and the exporter, which
+ * load only once the database's settings resolve and so never in a test without a database; a new
+ * lazy import outside `withAuthorApp` gets added here:
  *
  * ```sh
  * cd packages/pantry && grep -hoE 'import\("#pantry/[^"]+"\)' src/cli.ts $(ls src/cli/*.ts | grep -v '\.test\.ts$') | sort -u
@@ -31,9 +71,8 @@ export const preloadEngine = Effect.promise(() =>
   Promise.all([
     import("#pantry/db/layer.ts"),
     import("#pantry/export/compare.ts"),
-    import("#pantry/export/package.ts"),
-    import("#pantry/import/package.ts"),
     import("#pantry/import/preview.ts"),
+    import("#pantry/import/refusal.ts"),
     import("#pantry/package/read.ts"),
   ]),
 );
@@ -134,8 +173,8 @@ export const spawnCli = Effect.fn("test.cli.spawnCli")(function* spawnCli(
 });
 
 /**
- * Copy the package folder `source` to `packages/pantry/work/cli-copies/<label>`, replacing any
- * earlier copy, so a test that exports or rewrites a package works on a folder of its own.
+ * Copy the package folder `source` to `<label>` in the run's copies folder, replacing any earlier
+ * copy, so a test that exports or rewrites a package works on a folder of its own.
  *
  * @param source - The package folder to copy.
  * @param label - The copy's name; it starts `copy-` and appears in one test file only.

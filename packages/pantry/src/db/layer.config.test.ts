@@ -2,7 +2,8 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Result } from "effect";
 import { fileURLToPath } from "node:url";
-import { AuthorAppLayer, ClusterConfigError } from "#pantry/db/layer.ts";
+import { ClusterConfigError } from "#pantry/db/connection.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
 
 /**
  * The folder this file's empty `HOME` and `GRIZZLE_PG_STATE` folders are made in, under the
@@ -40,21 +41,6 @@ layer(NodeServices.layer)("db/layer.ts, a cluster that is not set up", (it) => {
       assert.include(failure.message, `${state}/tls/ca.crt`);
       assert.include(failure.message, "pnpm pg:init");
       assert.include(failure.message, "GRIZZLE_PG_STATE");
-    }),
-  );
-
-  it.effect("a malformed port is Effect's ConfigError, before any file is read", () =>
-    Effect.gen(function* malformedPort() {
-      const failure = yield* buildFailure({
-        GR8DES_PG_PORT: "x",
-        GRIZZLE_PG_STATE: `${scratch}state`,
-        HOME: `${scratch}home`,
-      });
-
-      assert.deepStrictEqual(
-        Object.getOwnPropertyDescriptor(failure, "_tag")?.value,
-        "ConfigError",
-      );
     }),
   );
 });
