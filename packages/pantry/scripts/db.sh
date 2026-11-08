@@ -10,6 +10,10 @@
 # Roles are cluster-wide, so drop removes the roles of every schema under the config's migrations/ along with the
 # database.
 # GR8DES_PG_DATABASE must match ^[a-z_][a-z0-9_]{0,62}$ (lowercase, at most 63 bytes), or every command exits 2.
+# GR8DES_PG_PASSWORD_COMMAND, when set and not empty, names an executable that prints a role's password: every
+# connection runs it, without a shell, with the role's name as its one argument, and reads its output, trimmed, as
+# src/db/connection.ts does. It then replaces the migration identity's password file, and migrate gives no login a local
+# password, since every login's comes from the command too.
 # GR8DES_GRIZZLE_CONFIG names the grizzle config migrate runs (grizzle.config.ts by default), whose migrations
 # directory is the folder migrations/ beside it.
 set -euo pipefail
@@ -37,13 +41,32 @@ fi
 
 owner="$GR8DES_PG_MIGRATION_ROLE"
 ca="$GR8DES_PG_CA"
-owner_password="$(cat "$GRIZZLE_PG_STATE/$owner.password")"
+
+# Prints the migration identity's password for one connection: GR8DES_PG_PASSWORD_COMMAND's output for it, trimmed,
+# where the command is set, else the password file in the cluster's state folder.
+owner_password() {
+	if [[ -z "${GR8DES_PG_PASSWORD_COMMAND:-}" ]]; then
+		cat "$GRIZZLE_PG_STATE/$owner.password"
+		return
+	fi
+	local password
+	password="$("$GR8DES_PG_PASSWORD_COMMAND" "$owner")"
+	password="${password#"${password%%[![:space:]]*}"}"
+	password="${password%"${password##*[![:space:]]}"}"
+	if [[ -z "$password" ]]; then
+		echo "GR8DES_PG_PASSWORD_COMMAND printed no password for $owner; run it by hand with $owner as its one argument to see why." >&2
+		return 1
+	fi
+	printf '%s' "$password"
+}
 
 # Usage: as_owner <database> [psql args...]
 as_owner() {
 	local db=$1
 	shift
-	PGPASSWORD="$owner_password" "$GRIZZLE_PG_BIN/psql" -X -q -v ON_ERROR_STOP=1 -At \
+	local password
+	password="$(owner_password)"
+	PGPASSWORD="$password" "$GRIZZLE_PG_BIN/psql" -X -q -v ON_ERROR_STOP=1 -At \
 		"host=$GR8DES_PG_HOST port=$GR8DES_PG_PORT dbname=$db user=$owner sslmode=verify-full sslrootcert=$ca" "$@"
 }
 
@@ -62,9 +85,16 @@ create() {
 }
 
 # grizzle reads no environment variable for where to connect: the config's connection (src/db/connection.ts) reads
-# the settings exported above and the migration identity's password, which only this command is given.
+# the settings exported above and the migration identity's password, which only this command is given, or runs
+# GR8DES_PG_PASSWORD_COMMAND for it, which also gives every login its password, so no login gets a local one.
 migrate() {
-	GR8DES_PG_MIGRATION_PASSWORD="$owner_password" pnpm exec grizzle migrate "$config"
+	if [[ -n "${GR8DES_PG_PASSWORD_COMMAND:-}" ]]; then
+		pnpm exec grizzle migrate "$config"
+		return
+	fi
+	local password
+	password="$(owner_password)"
+	GR8DES_PG_MIGRATION_PASSWORD="$password" pnpm exec grizzle migrate "$config"
 	mkdir -p "$GR8DES_PG_SECRETS"
 	chmod 700 "$GR8DES_PG_SECRETS"
 	local schema login file

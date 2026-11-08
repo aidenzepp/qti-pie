@@ -49,6 +49,12 @@ needs `--yes` to replace a directory that already has content. `--output json` p
 
 `scripts/db.sh reset` drops the database and this package's roles, then creates and migrates again.
 
+## Optional settings
+
+- `GR8DES_PG_PASSWORD_COMMAND` names an executable that prints a role's password. Every connection attempt runs it,
+  without a shell, with the role's name as its one argument, in place of `GR8DES_PG_MIGRATION_PASSWORD` and the logins'
+  password files.
+
 ## Development
 
 [`docs/qti-intent.md`](../../docs/qti-intent.md) records what was settled before the model was planned. Read it before

@@ -7,7 +7,11 @@
 import net from "node:net";
 import { CredentialError } from "@bjornpagen/grizzle";
 import type { DbConnection, MigrationConnectionConfig, Transport } from "@bjornpagen/grizzle";
-import { Config, Effect, FileSystem, Option, Redacted, Schema } from "effect";
+import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
+import { Config, Effect, FileSystem, Layer, Option, Redacted, Schema, Stream } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import pg from "pg";
 
 /**
@@ -25,6 +29,39 @@ export class ClusterConfigError extends Schema.TaggedError<ClusterConfigError>()
     return this.setting === "GR8DES_PG_CA"
       ? `Cannot read the database's CA certificate at ${this.path}, the file GR8DES_PG_CA names. Set GR8DES_PG_CA to a readable PEM file, such as the certificate bundle of the server's RDS region, or unset it to use the local cluster's.`
       : `Cannot read the local database's CA certificate at ${this.path}. Start the cluster from the grizzle clone (\`pnpm pg:init\`, and \`pnpm pg start\` after a reboot), set GRIZZLE_PG_STATE to the folder that holds its tls/ca.crt, or set GR8DES_PG_CA to another server's CA file.`;
+  }
+}
+
+/**
+ * The password command `GR8DES_PG_PASSWORD_COMMAND` names exited with a code other than 0 for a
+ * role, so it gave no password: the cause of the connection attempt's `CredentialError`.
+ */
+export class PasswordCommandFailed extends Schema.TaggedError<PasswordCommandFailed>()(
+  "PasswordCommandFailed",
+  { command: Schema.String, exitCode: Schema.Number, role: Schema.String },
+) {
+  /**
+   * The command, the role it was run for, its exit code, and how to see why.
+   */
+  override get message(): string {
+    return `The password command ${this.command} exited with code ${String(this.exitCode)} for the role ${this.role}, so the connection attempt has no password. Run it by hand with ${this.role} as its one argument to see why, or unset GR8DES_PG_PASSWORD_COMMAND to read the local passwords.`;
+  }
+}
+
+/**
+ * The password command `GR8DES_PG_PASSWORD_COMMAND` names exited with 0 for a role and printed
+ * nothing but whitespace, so it gave no password: the cause of the connection attempt's
+ * `CredentialError`.
+ */
+export class PasswordCommandSilent extends Schema.TaggedError<PasswordCommandSilent>()(
+  "PasswordCommandSilent",
+  { command: Schema.String, role: Schema.String },
+) {
+  /**
+   * The command, the role it was run for, and what it must print.
+   */
+  override get message(): string {
+    return `The password command ${this.command} printed no password for the role ${this.role}. It must print the role's password on standard output; check that it is signed in, by running it by hand with ${this.role} as its one argument.`;
   }
 }
 
@@ -108,6 +145,15 @@ const localCluster = Config.all({
 });
 
 /**
+ * The executable that gives each role its password, `GR8DES_PG_PASSWORD_COMMAND`, none where it is
+ * unset or empty, as scripts/db.sh reads it. Where it is set, it replaces both local sources: the
+ * migration identity's `GR8DES_PG_MIGRATION_PASSWORD` and each login's password file.
+ */
+const passwordCommand = Config.option(Config.String("GR8DES_PG_PASSWORD_COMMAND")).pipe(
+  Config.map(Option.filter((command) => command !== "")),
+);
+
+/**
  * The bound, in milliseconds, of one connection attempt to the cluster and of the one
  * CancelRequest an interrupted statement sends, for the migration identity and every login alike.
  *
@@ -130,14 +176,67 @@ const connectTimeoutMs = 5000;
 const migrationPasswordSetting = "GR8DES_PG_MIGRATION_PASSWORD";
 
 /**
- * A connection to the cluster, without its password, the migration identity's role, and the folder
- * its logins' password files are in.
+ * A connection to the cluster, without its password, the migration identity's role, the folder its
+ * logins' password files are in, and the source of a role's password where the settings name one
+ * for every role: the password command, run once per connection attempt.
  */
 interface ClusterConnection {
+  readonly commandPassword: Option.Option<(role: string) => DbConnection["password"]>;
   readonly connection: Omit<DbConnection, "password">;
   readonly migrationRole: string;
   readonly secrets: string;
 }
+
+/**
+ * The Node services a password command runs under: the child process spawner, with the file system
+ * and path services it reads.
+ */
+const commandServices = NodeChildProcessSpawner.layer.pipe(
+  Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+);
+
+/**
+ * Run the password command for one role, as one connection attempt asks for its password: the
+ * executable itself, never a shell, with the role's name as its one argument, its standard input
+ * and error the process's own, so a sign-in it runs can prompt and report, and its standard output,
+ * trimmed, the password. It runs as a child of this Node process, so the attempt's password needs
+ * no service of its caller's, as grizzle's `password` Effect takes none.
+ *
+ * It fails with grizzle's `CredentialError`, whose cause is the spawn's `PlatformError` (no such
+ * executable, or one that may not be run), a {@link PasswordCommandFailed} for an exit code other
+ * than 0, or a {@link PasswordCommandSilent} for an output of whitespace alone. Interrupting the
+ * attempt, as its connect timeout does, ends the command with it.
+ *
+ * @param command - The executable, `GR8DES_PG_PASSWORD_COMMAND`.
+ * @param role - The PostgreSQL role the password is for.
+ * @returns The password.
+ */
+const runPasswordCommand = (command: string, role: string): DbConnection["password"] =>
+  Effect.gen(function* passwordCommandRun() {
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const handle = yield* spawner.spawn(
+      ChildProcess.make(command, [role], { stderr: "inherit", stdin: "inherit", stdout: "pipe" }),
+    );
+    const { exitCode, output } = yield* Effect.all(
+      { exitCode: handle.exitCode, output: Stream.mkString(Stream.decodeText(handle.stdout)) },
+      { concurrency: "unbounded" },
+    );
+    const password = output.trim();
+    if (exitCode !== ChildProcessSpawner.ExitCode(0)) {
+      return yield* new PasswordCommandFailed({ command, exitCode, role });
+    }
+
+    if (password === "") {
+      return yield* new PasswordCommandSilent({ command, role });
+    }
+
+    return Redacted.make(password);
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(commandServices),
+    Effect.mapError((cause) => new CredentialError({ cause })),
+    Effect.withSpan("db.passwordCommand", { attributes: { role } }),
+  );
 
 /**
  * Read the cluster's settings and its CA, as every connection to it is built from them: TCP to the
@@ -151,6 +250,7 @@ interface ClusterConnection {
 const clusterConnection = Effect.gen(function* clusterConnection() {
   const fs = yield* FileSystem.FileSystem;
   const cluster = yield* localCluster;
+  const command = yield* passwordCommand;
   const ca = yield* fs
     .readFileString(cluster.ca.path)
     .pipe(Effect.mapError(() => new ClusterConfigError(cluster.ca)));
@@ -163,6 +263,9 @@ const clusterConnection = Effect.gen(function* clusterConnection() {
     servername: cluster.host,
   };
   const result: ClusterConnection = {
+    commandPassword: command.pipe(
+      Option.map((executable) => (role: string) => runPasswordCommand(executable, role)),
+    ),
     connection: { connectTimeoutMs, database: cluster.database, driver: pg, transport },
     migrationRole: cluster.migrationRole,
     secrets: cluster.secrets,
@@ -174,32 +277,39 @@ const clusterConnection = Effect.gen(function* clusterConnection() {
 /**
  * The migration identity's connection to the cluster, the `connection` of grizzle.config.ts.
  *
- * Its password is read from `GR8DES_PG_MIGRATION_PASSWORD` at each connection attempt, never when
- * the connection is built, so `grizzle generate`, `check` and `names`, which never connect, need no
- * password. A missing password fails the attempt with grizzle's `CredentialError`, whose cause is
- * Effect's `ConfigError` naming the variable.
+ * Its password is read at each connection attempt, never when the connection is built, so `grizzle
+ * generate`, `check` and `names`, which never connect, need no password: from the password command
+ * where `GR8DES_PG_PASSWORD_COMMAND` names one, run for the migration role, else from
+ * `GR8DES_PG_MIGRATION_PASSWORD`. A missing password fails the attempt with grizzle's
+ * `CredentialError`, whose cause is the command's failure or Effect's `ConfigError` naming the
+ * variable.
  *
  * Building it fails as {@link loginConnection} does: with Effect's `ConfigError` for a missing or
  * malformed setting, and with a {@link ClusterConfigError} when the CA is unreadable.
  */
 export const migrationConnection = clusterConnection.pipe(
-  Effect.map(({ connection, migrationRole }): MigrationConnectionConfig => ({
+  Effect.map(({ commandPassword, connection, migrationRole }): MigrationConnectionConfig => ({
     ...connection,
-    password: Config.Redacted(migrationPasswordSetting).pipe(
-      Effect.mapError((cause) => new CredentialError({ cause })),
-    ),
+    password: Option.match(commandPassword, {
+      onNone: () =>
+        Config.Redacted(migrationPasswordSetting).pipe(
+          Effect.mapError((cause) => new CredentialError({ cause })),
+        ),
+      onSome: (passwordOf) => passwordOf(migrationRole),
+    }),
     role: migrationRole,
   })),
   Effect.withSpan("db.migrationConnection"),
 );
 
 /**
- * Build a login's connection to the cluster, for its `DbLayer`: the cluster's connection with
- * the password scripts/db.sh gave the login, read from `<GR8DES_PG_SECRETS>/<login>.password` at
- * each connection attempt.
+ * Build a login's connection to the cluster, for its `DbLayer`: the cluster's connection with the
+ * login's password at each connection attempt, from the password command where
+ * `GR8DES_PG_PASSWORD_COMMAND` names one, run for the login's role, else the one scripts/db.sh gave
+ * the login, read from `<GR8DES_PG_SECRETS>/<login>.password`.
  *
- * A missing password file is not found here: it fails each connection attempt with grizzle's
- * `CredentialError`.
+ * A missing password, a password file absent or a command that fails, is not found here: it fails
+ * each connection attempt with grizzle's `CredentialError`.
  *
  * @param login - The login's PostgreSQL role, `<schema>__<login>`, which names its password file.
  * @returns The connection, which fails to build with Effect's `ConfigError` for a missing or
@@ -210,14 +320,26 @@ export const loginConnection = Effect.fn("db.loginConnection")(function* loginCo
   login: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const { connection, secrets } = yield* clusterConnection;
+  const { commandPassword, connection, secrets } = yield* clusterConnection;
   const result: DbConnection = {
     ...connection,
-    password: fs.readFileString(`${secrets}/${login}.password`).pipe(
-      Effect.map((text) => Redacted.make(text.trim())),
-      Effect.mapError((cause) => new CredentialError({ cause })),
-    ),
+    password: Option.match(commandPassword, {
+      onNone: () =>
+        fs.readFileString(`${secrets}/${login}.password`).pipe(
+          Effect.map((text) => Redacted.make(text.trim())),
+          Effect.mapError((cause) => new CredentialError({ cause })),
+        ),
+      onSome: (passwordOf) => passwordOf(login),
+    }),
   };
 
   return result;
 });
+
+/**
+ * The services building either connection reads: the file system its CA and the logins' password
+ * files are read from. A password command needs none of the caller's: it runs as a child of this
+ * Node process. grizzle.config.ts and `AuthorAppLayer` (src/db/layer.ts) provide it, and so does an
+ * install outside this package that builds a connection here.
+ */
+export const connectionServices = NodeFileSystem.layer;
