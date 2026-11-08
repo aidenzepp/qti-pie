@@ -10,13 +10,15 @@
  * `metadata` as XML Schema assesses them (Q6). Each element of the manifest's namespace the walk
  * checks then holds each child its profile names as many times as the profile's occurrences admit,
  * which the walk leaves alone: the root's `organizations` and `resources` once each, a resource's
- * `file` at least once. The manifest's own rules follow: a resource's `href` references one of its
- * `file` entries, a `dependency` names a resource, and every `href` stays inside the package's
- * root. The walk's refusals, the counts' and the rules' are reported together, in that order. What
- * needs the package's files or documents, which files exist and what each document's root is,
- * belongs to the package reader. {@link resourceLom} reads what each resource's own LOM metadata
- * gives as its object's identifier and title, which the package reader compares with the object's
- * document (reading 62).
+ * `file` at least once. Each LOM element the walk checks holds each child the loose LOM binding's
+ * Schematron caps at most once (reading 130, {@link lomCaps}). The manifest's own rules follow: a
+ * resource's `href` references one of its `file` entries, a `dependency` names a resource, every
+ * `href` stays inside the package's root, and no LOM `learningResourceType` of the LOM vocabulary
+ * is `exam` or `self assessment` (reading 122). The walk's refusals, the counts' and the rules'
+ * are reported together, in that order. What needs the package's files or documents, which files
+ * exist and what each document's root is, belongs to the package reader. {@link resourceLom} reads
+ * what each resource's own LOM metadata gives as its object's identifier and title, which the
+ * package reader compares with the object's document (reading 62).
  *
  * The readings the manifest binds: `qtiMetadata` is admitted as a `cp:metadata` child or inside
  * `lom` (reading 32), a `controlfile` resource and a packaged XSD listed as a file are admitted
@@ -35,6 +37,8 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { xmlWhitespaceRun } from "#plate/model/attributes.ts";
+import { trimXmlSpace } from "#plate/model/values.ts";
 import { packageOccurrences, packageTables } from "#plate/package/tables.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
@@ -232,6 +236,19 @@ const childrenNamed = (element: SourceElement, local: string): readonly SourceEl
   );
 
 /**
+ * Take an element's children in LOM's namespace with one local name.
+ *
+ * @param element The element.
+ * @param local The children's local name.
+ * @returns The children, in document order.
+ */
+const lomChildren = (element: SourceElement, local: string): readonly SourceElement[] =>
+  element.children.filter(
+    (child): child is SourceElement =>
+      child.kind === "element" && child.namespace === lomNamespace && child.local === local,
+  );
+
+/**
  * Find an element's attribute in no namespace.
  *
  * @param element The element.
@@ -367,64 +384,262 @@ const occurrencesOf = (
 };
 
 /**
- * Check the child counts of every element of the manifest's namespace the walk checks, against
- * its profile's occurrences: each child the governing table names is held at least its
- * `minOccurs` and at most its `maxOccurs` times, or the element is refused `child-count` as the
- * walk refuses one, its detail naming the child, the counts and the profile.
+ * A table of LOM repetition caps: for each Schematron context, the local names from a `lom` down,
+ * the greatest number of times its element holds each LOM child the context names.
+ */
+type LomCaps = Readonly<Record<string, Readonly<Record<string, number>>>>;
+
+/**
+ * The repetition caps of the loose LOM binding both profiles import, `imsmd_loose_v1p3p2.xsd`
+ * (reading 130, "a LOM element repeats no more than the loose binding's Schematron allows").
  *
- * The walk checks no XSD counts, so this is where a manifest without `organizations` or
- * `resources`, or a resource without a `file`, is refused. An element the walk passes over, such
- * as a manifest nested in LOM's lax content (reading 6), is not counted.
+ * The binding's XSD writes each LOM type as an unbounded choice of its elements, so the walk admits
+ * any number of each; its embedded Schematron caps those the XSD bounds to one inside that choice.
+ * Each key is a Schematron rule's context, the local names from a `lom` down to the capped element,
+ * and each value the greatest number of times that element holds each LOM child the rule names.
+ * The binding's 43 rules make 94 asserts, every cap one, over these 41 contexts; its rules for
+ * `lom/technical/requirement` and `lom/relation/resource` assert nothing. An element no context
+ * caps, such as `keyword`, `language`, `educational` or `identifier`, repeats freely. The table is
+ * numbers, not a copy of the binding; `manifest.test.ts` derives it from the cached binding.
+ */
+export const lomCaps = {
+  lom: { general: 1, lifeCycle: 1, metaMetadata: 1, rights: 1, technical: 1 },
+  "lom/annotation": { date: 1, description: 1, entity: 1 },
+  "lom/annotation/date": { dateTime: 1, description: 1 },
+  "lom/classification": { description: 1, purpose: 1 },
+  "lom/classification/purpose": { source: 1, value: 1 },
+  "lom/classification/taxonPath": { source: 1 },
+  "lom/classification/taxonPath/taxon": { entry: 1, id: 1 },
+  "lom/educational": {
+    description: 1,
+    difficulty: 1,
+    interactivityLevel: 1,
+    interactivityType: 1,
+    semanticDensity: 1,
+    typicalLearningTime: 1,
+  },
+  "lom/educational/context": { source: 1, value: 1 },
+  "lom/educational/difficulty": { source: 1, value: 1 },
+  "lom/educational/intendedEndUserRole": { source: 1, value: 1 },
+  "lom/educational/interactivityLevel": { source: 1, value: 1 },
+  "lom/educational/interactivityType": { source: 1, value: 1 },
+  "lom/educational/learningResourceType": { source: 1, value: 1 },
+  "lom/educational/semanticDensity": { source: 1, value: 1 },
+  "lom/educational/typicalLearningTime": { description: 1, duration: 1 },
+  "lom/general": { aggregationLevel: 1, structure: 1, title: 1 },
+  "lom/general/aggregationLevel": { source: 1, value: 1 },
+  "lom/general/identifier": { catalog: 1, entry: 1 },
+  "lom/general/structure": { source: 1, value: 1 },
+  "lom/lifeCycle": { status: 1, version: 1 },
+  "lom/lifeCycle/contribute": { date: 1, role: 1 },
+  "lom/lifeCycle/contribute/date": { dateTime: 1, description: 1 },
+  "lom/lifeCycle/contribute/role": { source: 1, value: 1 },
+  "lom/lifeCycle/status": { source: 1, value: 1 },
+  "lom/metaMetadata": { language: 1 },
+  "lom/metaMetadata/contribute": { date: 1, role: 1 },
+  "lom/metaMetadata/contribute/date": { dateTime: 1, description: 1 },
+  "lom/metaMetadata/contribute/role": { source: 1, value: 1 },
+  "lom/metaMetadata/identifier": { catalog: 1, entry: 1 },
+  "lom/relation": { kind: 1, resource: 1 },
+  "lom/relation/kind": { source: 1, value: 1 },
+  "lom/relation/resource/identifier": { catalog: 1, entry: 1 },
+  "lom/rights": { copyrightAndOtherRestrictions: 1, cost: 1, description: 1 },
+  "lom/rights/copyrightAndOtherRestrictions": { source: 1, value: 1 },
+  "lom/rights/cost": { source: 1, value: 1 },
+  "lom/technical": {
+    duration: 1,
+    installationRemarks: 1,
+    otherPlatformRequirements: 1,
+    size: 1,
+  },
+  "lom/technical/duration": { description: 1, duration: 1 },
+  "lom/technical/requirement/orComposite": {
+    maximumVersion: 1,
+    minimumVersion: 1,
+    name: 1,
+    type: 1,
+  },
+  "lom/technical/requirement/orComposite/name": { source: 1, value: 1 },
+  "lom/technical/requirement/orComposite/type": { source: 1, value: 1 },
+} satisfies LomCaps;
+
+/**
+ * The caps of {@link lomCaps} by context, for a context read from a document.
+ */
+const capsByContext: ReadonlyMap<string, Readonly<Record<string, number>>> = new Map(
+  Object.entries(lomCaps),
+);
+
+/**
+ * The context of {@link lomCaps} where a LOM learning resource type stands, the one element
+ * reading 122 reads.
+ */
+const learningResourceTypeContext = "lom/educational/learningResourceType";
+
+/**
+ * Name the Schematron context a LOM element stands at, as a key of {@link lomCaps} spells it: the
+ * local names of the element and its parents up to the nearest `lom`, joined by `/`.
+ *
+ * A context names a chain of parents and children in LOM's namespace, so an element with an
+ * element of another namespace, or none, between it and every `lom` stands at none.
+ *
+ * @param element The element.
+ * @param parents Each element's parent, as the walk gives it.
+ * @returns Its context, none when no `lom` is above it through LOM's namespace.
+ */
+const lomContext = (
+  element: SourceElement,
+  parents: ReadonlyMap<SourceElement, Option.Option<SourceElement>>,
+): Option.Option<string> => {
+  const steps: string[] = [];
+  for (
+    let at: Option.Option<SourceElement> = Option.some(element);
+    Option.isSome(at) && at.value.namespace === lomNamespace;
+    at = parents.get(at.value) ?? Option.none()
+  ) {
+    steps.push(at.value.local);
+    if (at.value.local === "lom") {
+      return Option.some(steps.toReversed().join("/"));
+    }
+  }
+
+  return Option.none();
+};
+
+/**
+ * Count an element's children of one namespace and local name.
+ *
+ * @param element The element.
+ * @param namespace The children's namespace.
+ * @param local The children's local name.
+ * @returns How many it holds.
+ */
+const heldCount = (element: SourceElement, namespace: string, local: string): bigint =>
+  BigInt(
+    element.children.filter(
+      (held) => held.kind === "element" && held.namespace === namespace && held.local === local,
+    ).length,
+  );
+
+/**
+ * Check the child counts of every element the walk checks: one of the manifest's namespace against
+ * its profile's occurrences, and one of LOM's against the loose LOM binding's caps
+ * ({@link lomCaps}). An element of the manifest's namespace holds each child the governing table
+ * names at least its `minOccurs` and at most its `maxOccurs` times, and a LOM element each child
+ * its context caps at most that many times, or the element is refused `child-count` as the walk
+ * refuses one, its detail naming the child, the counts, the profile and the `source` that settles
+ * them: the profile for the manifest's counts, reading 130 for LOM's.
+ *
+ * The walk checks no XSD counts, and LOM's binding states its caps in Schematron, not its XSD, so
+ * this is where a manifest without `organizations` or `resources`, a resource without a `file`, or
+ * a LOM `general` with two titles, is refused. An element the walk passes over, such as a manifest
+ * nested in LOM's lax content (reading 6), is not counted.
  *
  * @param source The manifest.
  * @param version The profile its `schemaversion` names.
  * @param paths Each element's path, as the walk spells it.
+ * @param parents Each element's parent, as the walk gives it.
+ * @param governing The table that governs each element the walk checks, as `governingTables`
+ *   gives it, in document order.
  * @returns The refusals, in document order of the elements.
  */
 const checkCounts = (
   source: SourceDocument,
   version: CpVersion,
   paths: ReadonlyMap<SourceElement, string>,
+  parents: ReadonlyMap<SourceElement, Option.Option<SourceElement>>,
+  governing: ReadonlyMap<SourceElement, ContentTable>,
 ): readonly Refusal[] => {
-  const others = packageTables.get(version) ?? new Map<string, Tables>();
-  const tables = others.get(manifestNamespace) ?? noQtiTables;
+  const tables = packageTables.get(version)?.get(manifestNamespace) ?? noQtiTables;
   const occurrences = packageOccurrences.get(version)?.get(manifestNamespace) ?? {
     elements: {},
     types: {},
   };
+  /**
+   * Refuse an element's count of one child.
+   *
+   * @param element The element.
+   * @param child The child's name, `{<namespace>}<local>`.
+   * @param least The least count.
+   * @param greatest The greatest count, none when it is unbounded.
+   * @param settledBy What settles the counts, the detail's `source`.
+   * @returns The `child-count` refusal at the element.
+   */
+  const refuseCount = (
+    element: SourceElement,
+    child: string,
+    least: bigint,
+    greatest: Option.Option<bigint>,
+    settledBy: string,
+  ): Refusal =>
+    refuse(source, "child-count", paths.get(element) ?? "", {
+      child,
+      element: elementName(element),
+      required: requiredText(least, greatest),
+      schemaversion: version,
+      source: settledBy,
+    });
+  /**
+   * Check a LOM element against the caps of the context it stands at.
+   *
+   * @param element The element.
+   * @returns Its refusals, one per child it holds past its cap, in the table's order.
+   */
+  const lomCounts = (element: SourceElement): readonly Refusal[] =>
+    Option.match(
+      Option.flatMap(lomContext(element, parents), (context) =>
+        Option.fromUndefinedOr(capsByContext.get(context)),
+      ),
+      {
+        onNone: () => [],
+        onSome: (caps) =>
+          Object.entries(caps).flatMap(([child, cap]) =>
+            heldCount(element, lomNamespace, child) > BigInt(cap)
+              ? [
+                  refuseCount(
+                    element,
+                    `{${lomNamespace}}${child}`,
+                    0n,
+                    Option.some(BigInt(cap)),
+                    "reading 130",
+                  ),
+                ]
+              : [],
+          ),
+      },
+    );
 
-  return [...governingTables(source, noQtiTables, others)].flatMap(([element, table]) =>
-    element.namespace === manifestNamespace
-      ? occurrencesOf(tables, occurrences, element, table).flatMap((child) => {
-          const count = BigInt(
-            element.children.filter(
-              (held) =>
-                held.kind === "element" &&
-                held.namespace === child.namespace &&
-                held.local === child.local,
-            ).length,
-          );
-          const least = BigInt(child.minOccurs);
-          const greatest =
-            child.maxOccurs === "unbounded" ? Option.none() : Option.some(BigInt(child.maxOccurs));
-          const within =
-            count >= least &&
-            Option.match(greatest, { onNone: () => true, onSome: (most) => count <= most });
+  return [...governing].flatMap(([element, table]) => {
+    if (element.namespace === lomNamespace) {
+      return lomCounts(element);
+    }
 
-          return within
-            ? []
-            : [
-                refuse(source, "child-count", paths.get(element) ?? "", {
-                  child: `{${child.namespace}}${child.local}`,
-                  element: elementName(element),
-                  required: requiredText(least, greatest),
-                  schemaversion: version,
-                  source: `QTI 3.0 content packaging profile ${version}`,
-                }),
-              ];
-        })
-      : [],
-  );
+    if (element.namespace !== manifestNamespace) {
+      return [];
+    }
+
+    return occurrencesOf(tables, occurrences, element, table).flatMap((child) => {
+      const count = heldCount(element, child.namespace, child.local);
+      const least = BigInt(child.minOccurs);
+      const greatest =
+        child.maxOccurs === "unbounded" ? Option.none() : Option.some(BigInt(child.maxOccurs));
+      const within =
+        count >= least &&
+        Option.match(greatest, { onNone: () => true, onSome: (most) => count <= most });
+
+      return within
+        ? []
+        : [
+            refuseCount(
+              element,
+              `{${child.namespace}}${child.local}`,
+              least,
+              greatest,
+              `QTI 3.0 content packaging profile ${version}`,
+            ),
+          ];
+    });
+  });
 };
 
 /**
@@ -649,17 +864,94 @@ const profileOf = (
 };
 
 /**
+ * The source that names the LOM vocabulary, which the loose binding gives a learning resource
+ * type's `source` as its default.
+ */
+const lomVocabulary = "LOMv1.0";
+
+/**
+ * The LOM vocabulary's learning resource types QTI forbids, since "QTI objects are designed to be
+ * reusable in a variety of assessment scenarios" (QTI 3.0 Metadata binding, section 2.7.5.1;
+ * reading 122). Each is compared with a value collapsed and with its case kept.
+ */
+const forbiddenResourceTypes: ReadonlySet<string> = new Set(["exam", "self assessment"]);
+
+/**
+ * Read a text-only element's text as XML Schema's `collapse` whitespace facet reads it: its outer
+ * XML whitespace removed and each inner run of it one space.
+ *
+ * @param element The element.
+ * @returns Its text, collapsed.
+ */
+const collapsedText = (element: SourceElement): string =>
+  trimXmlSpace(element.children.map((child) => writtenText(child)).join("")).replaceAll(
+    xmlWhitespaceRun,
+    " ",
+  );
+
+/**
+ * Check every LOM learning resource type the walk checks against reading 122: one whose `source`
+ * names the LOM vocabulary and whose `value` is `exam` or `self assessment` is refused
+ * `lom-learning-resource-type` at the type, its detail the collapsed `value` and the `reading`.
+ *
+ * The type's term is the LOM vocabulary's when its `source` collapses to `LOMv1.0` or to nothing,
+ * which the binding's default fills, or when it writes no `source`; a term of any other source is
+ * another vocabulary's, which the loose binding does not enforce, and is not read. Every LOM record
+ * of the manifest is read, the manifest's own, a resource's and a file's. A type holding two
+ * `source`s or two `value`s is refused `child-count` by {@link checkCounts} and not read here, and a
+ * type with no `value` names no term.
+ *
+ * @param source The manifest.
+ * @param paths Each element's path, as the walk spells it.
+ * @param parents Each element's parent, as the walk gives it.
+ * @param governing Each element the walk checks, in document order.
+ * @returns The refusals, in document order of the types.
+ */
+const checkLearningResourceTypes = (
+  source: SourceDocument,
+  paths: ReadonlyMap<SourceElement, string>,
+  parents: ReadonlyMap<SourceElement, Option.Option<SourceElement>>,
+  governing: ReadonlyMap<SourceElement, ContentTable>,
+): readonly Refusal[] =>
+  [...governing.keys()]
+    .filter((element) =>
+      Option.exists(
+        lomContext(element, parents),
+        (context) => context === learningResourceTypeContext,
+      ),
+    )
+    .flatMap((type) => {
+      const sources = lomChildren(type, "source");
+      const [value, ...others] = lomChildren(type, "value");
+      if (value === undefined || others.length > 0 || sources.length > 1) {
+        return [];
+      }
+
+      const vocabulary = sources[0] === undefined ? lomVocabulary : collapsedText(sources[0]);
+      const term = collapsedText(value);
+
+      return (vocabulary === lomVocabulary || vocabulary === "") && forbiddenResourceTypes.has(term)
+        ? [
+            refuse(source, "lom-learning-resource-type", paths.get(type) ?? "", {
+              reading: "122",
+              value: term,
+            }),
+          ]
+        : [];
+    });
+
+/**
  * Read a package's manifest and check it by every rule that needs only the manifest.
  *
  * A root outside {@link manifestNamespace} is refused `not-qti3-package` alone, and a
  * `schemaversion` other than `3.0.0` or `3.0.1`, or none, `package-profile` alone. Otherwise the
  * manifest is walked against its profile's tables with `checkStructure`, each refusal of the walk
  * carrying the profile it was judged against as `schemaversion` in its detail; its elements' child
- * counts are checked against the profile's occurrences (`child-count`, also carrying
- * `schemaversion`); and it is checked by the manifest's own rules: `package-path-outside`,
- * `child-count` for a resource whose `href` no `file` entry references, and
- * `dependency-unresolved`. All are reported, in that order. Nothing is read or fetched beyond the
- * document given.
+ * counts are checked against the profile's occurrences and its LOM elements' against the loose LOM
+ * binding's caps (`child-count`, also carrying `schemaversion`); and it is checked by the
+ * manifest's own rules: `package-path-outside`, `child-count` for a resource whose `href` no `file`
+ * entry references, `dependency-unresolved`, and `lom-learning-resource-type`. All are reported,
+ * in that order. Nothing is read or fetched beyond the document given.
  *
  * @param source The manifest, as the reader adapter built it, whose location every refusal carries.
  * @returns The manifest, or every refusal of it in the order above.
@@ -670,7 +962,8 @@ export const readManifest = (
   source: SourceDocument,
 ): Result.Result<Manifest, Arr.NonEmptyReadonlyArray<Refusal>> => {
   const { root } = source;
-  const paths = new Map(Array.from(walk(source), (visit) => [visit.element, visit.path]));
+  const visits = [...walk(source)];
+  const paths = new Map(visits.map((visit) => [visit.element, visit.path]));
   if (root.namespace !== manifestNamespace) {
     return Result.fail([
       refuse(source, "not-qti3-package", paths.get(root) ?? "", {
@@ -686,6 +979,8 @@ export const readManifest = (
   }
 
   const version = profile.success;
+  const parents = new Map(visits.map((visit) => [visit.element, visit.parent]));
+  const governing = governingTables(source, noQtiTables, packageTables.get(version));
   const walked = checkStructure(source, noQtiTables, packageTables.get(version)).map(
     (refusal) =>
       new Refusal({
@@ -700,8 +995,9 @@ export const readManifest = (
   const entries = resourcesOf(root, paths);
   const [first, ...rest] = [
     ...walked,
-    ...checkCounts(source, version, paths),
+    ...checkCounts(source, version, paths, parents, governing),
     ...checkResources(source, entries),
+    ...checkLearningResourceTypes(source, paths, parents, governing),
   ];
   if (first !== undefined) {
     return Result.fail([first, ...rest]);
@@ -720,19 +1016,6 @@ export const readManifest = (
     version,
   });
 };
-
-/**
- * Take an element's children in LOM's namespace with one local name.
- *
- * @param element The element.
- * @param local The children's local name.
- * @returns The children, in document order.
- */
-const lomChildren = (element: SourceElement, local: string): readonly SourceElement[] =>
-  element.children.filter(
-    (child): child is SourceElement =>
-      child.kind === "element" && child.namespace === lomNamespace && child.local === local,
-  );
 
 /**
  * Gather the values a LOM `general` gives through its children of one name: the text of each of
