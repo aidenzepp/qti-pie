@@ -12,11 +12,14 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { compareWithRecord } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
+import { readPackage } from "#pantry/package/read.ts";
 import {
   materializeMathml,
   mathmlNegatives,
   mathmlPositives,
 } from "#pantry/test/fixtures.mathml.ts";
+import { judge, ruleOf } from "#pantry/test/oracle.ts";
+import { grammar, laws } from "#pantry/test/probe.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 describe.skipIf(!hasLease)(
@@ -29,13 +32,32 @@ describe.skipIf(!hasLease)(
     })("the MathML fixtures through the importer", (it) => {
       for (const { name, rule } of mathmlNegatives) {
         it.effect(`refuses ${name} under ${rule}`, () =>
-          // Oracle: PostgreSQL, every law of the schema over the whole package, with the
-          // importer's rule the fixture's entry states.
+          // Oracle: PostgreSQL, every law of the schema over the whole package. The importer
+          // names the first object PostgreSQL refuses, so where the law oracle names several
+          // breaches the importer's rule is one of theirs; where it names exactly one, the
+          // importer's rule is the entry's.
           Effect.gen(function* refused() {
-            const failure = yield* Effect.flip(importPackage(yield* materializeMathml(name)));
+            const dir = yield* materializeMathml(name);
+            const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+            const rules = new Set<string>(
+              judgment._tag === "CodecRefusal"
+                ? [judgment.rule]
+                : judgment.breaches.map(({ law }) => ruleOf(law)),
+            );
+            const failure = yield* Effect.flip(importPackage(dir));
 
             assert.instanceOf(failure, ImportRefused);
-            assert.strictEqual(failure instanceof ImportRefused ? failure.rule : undefined, rule);
+
+            const given = failure instanceof ImportRefused ? failure.rule : undefined;
+
+            if (rules.size > 1) {
+              assert.isTrue(
+                given !== undefined && rules.has(given),
+                `${name}: the importer's ${given}, the oracle's ${[...rules].join(", ")}`,
+              );
+            } else {
+              assert.strictEqual(given, rule, `${name}: the oracle's ${[...rules].join(", ")}`);
+            }
           }),
         );
       }
