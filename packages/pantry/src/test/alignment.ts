@@ -1013,6 +1013,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    165,
+    {
+      owner:
+        "no row: `BindingFit` holds none of the order interaction (`typedFits`, `src/grammar/facets.ts`) and `RecordBindingFit` none, so it is one of `anyTypeKinds` and binds a response of any type (`src/qti/interactions.ts`), judged only by Binding declared and Binding unique; the law oracle's Binding unique, over every interaction (`src/test/oracle.ts`); held by `src/grammar/expression.test.ts` (the class descriptions' binding sentences), `src/qti/interactions.oracle.test.ts` (`anyTypeKinds`), `src/import/refusal.sources.test.ts` (every law source normative, with no exception) and `src/test/laws.oracle.test.ts` (Binding unique over choice, order and custom interactions)",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

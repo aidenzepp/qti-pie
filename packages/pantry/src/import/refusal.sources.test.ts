@@ -121,52 +121,6 @@ const sources: ReadonlyMap<string, string> = new Map([
   ),
 ]);
 
-/**
- * A violation the guard knows of: who owns it, the fix that clears it, and its offences exactly.
- */
-interface Known {
-  /**
-   * The change that clears it, which deletes the entry.
-   */
-  readonly fix: string;
-  /**
-   * Its offences, as {@link offencesOf} words them.
-   */
-  readonly offences: readonly string[];
-  /**
-   * Who owns the fix.
-   */
-  readonly owner: string;
-}
-
-/**
- * The violations the guard knows of, by law: each a law whose only carrier is a sentence of the
- * information model's §2, struck by the coordinator's ruling of 2026-11-07, whose source stands
- * until the schema change that strikes it lands. The list only shrinks: an entry whose law no
- * longer offends exactly as stated fails as stale.
- */
-const known: ReadonlyMap<string, Known> = new Map([
-  [
-    "BindingFit",
-    {
-      fix: "the schema change that drops the qti-order-interaction row, whose one carrier is §2.4.1.2 (§5.97 states no binding); every other row cites its class description's binding sentence",
-      offences: [
-        "BindingFit: #OrderInt stands in §2.4.1.2 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-        "BindingFit: §2.4.1.2 of the QTI 3.0 information model, which it marks NOT NORMATIVE",
-      ],
-      owner: "the coordinator",
-    },
-  ],
-]);
-
-/**
- * The law or record an offence is of: its words before the first `: `.
- *
- * @param offence - The offence.
- * @returns Its law's name.
- */
-const lawOf = (offence: string): string => offence.slice(0, offence.indexOf(": "));
-
 describe.skipIf(!held)("the law sources' citations", () => {
   it("are judged against the renderings they were read from", () => {
     for (const { document, read } of cached) {
@@ -217,23 +171,7 @@ describe.skipIf(!held)("the law sources' citations", () => {
   });
 
   it("each cite a heading that exists, in a section its specification marks normative", () => {
-    assert.deepStrictEqual(
-      offencesOf(sources, sections).filter((offence) => !known.has(lawOf(offence))),
-      [],
-    );
-  });
-
-  it("know only violations that still stand, exactly as stated", () => {
-    // Stale check: a known law that no longer offends, or offends otherwise, fails here, so its
-    // fix deletes the entry with the law.
-    const offences = offencesOf(sources, sections);
-    for (const [law, { offences: stated }] of known) {
-      assert.deepStrictEqual(
-        offences.filter((offence) => lawOf(offence) === law),
-        stated,
-        `${law}: a known violation that no longer stands as stated`,
-      );
-    }
+    assert.deepStrictEqual(offencesOf(sources, sections), []);
   });
 
   it("refuse a citation of a non-normative section, an anchor no heading holds, a line no section holds and an unread specification", () => {

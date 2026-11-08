@@ -3013,3 +3013,27 @@ against it. A reading that is not an information-model-over-XSD case says which 
      importer writes them by the same test (`statesLanguage`, `src/import/overlays/metadata.ts`). This binds pantry and
      plate alike. This is not a case of documents in conflict. (Decided 2026-11-08 by the coordinator, under the
      operator's standing ruling of 2026-11-05, from seat SWEEP-DELETELANG.)
+165. **An order interaction may be bound to a response variable of any base type and cardinality: its class
+     description states no binding.** The one sentence that binds it, "The qti-order-interaction must be bound to a
+     response variable with a base-type of identifier and ordered cardinality only" (section 2.4.1.2, `info.txt` line
+     8762, `info301.txt` line 9371), stands in section 2, Key Data Model Features, which both versions of the information
+     model mark "This Section is NOT NORMATIVE" (`info.txt` line 8350, `info301.txt` line 8791). So it states no
+     requirement, as reading 150 reads section 2.2.2.2's sentence on `duration`. The normative sources state none: the
+     OrderInteraction class description gives the candidate's task and nothing of the variable it is bound to (section
+     5.97, `info.txt` line 36011, `info301.txt` line 51523), where every other interaction class with a binding states
+     it in its own (section 5.30, ChoiceInteraction, "must be bound to a response variable with a base-type of
+     identifier and single or multiple cardinality", and the others `BindingFit`'s law source cites); the XML binding's
+     `OrderInteractionDType` states none (section 4.5.97, `bind.txt` line 328632); and the ASI XSDs' Schematron rules
+     for it state only the attributes it admits, the interactions it may not hold (8Aa) and its counts (8Ba). So an
+     order interaction binds a declared response variable of any base type and cardinality, as the custom and portable
+     custom interactions do (reading 75): neither `BindingFit` nor `RecordBindingFit` holds a row of it, which makes it
+     one of `anyTypeKinds` (`typedFits`, `src/grammar/facets.ts`; `src/qti/interactions.ts`), and "Binding declared" and
+     "Binding unique" judge it as any other interaction (readings 75 and 92). This sets aside `BindingFit`'s
+     (identifier, ordered, `qti-order-interaction`) row, under which an order interaction bound to a variable of another
+     type was refused under "BindingFit", and one bound to a record under "RecordBindingFit". With it, the law oracle's
+     "Binding unique", which read only the interactions a fit relation names, reads every interaction, the custom ones
+     among them, as the schema's key over `BoundVariable` does (`src/test/oracle.ts`). The corpus moves no verdict: each
+     of the 9 order interactions in the 5 zips that hold one binds an identifier response of ordered cardinality, by a
+     scan of their XML entries. This binds pantry and plate alike. This is not a case of documents in conflict: the
+     normative sources agree. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05,
+     from seat SWEEP-A1ORDER.)

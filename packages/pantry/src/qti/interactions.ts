@@ -277,8 +277,9 @@ export const cardinalityKinds = [
 
 /**
  * The interactions of any response type: those neither `BindingFit` nor `RecordBindingFit` names,
- * the custom and portable custom interactions, which bind a declared response variable of any base
- * type and cardinality (reading 75 binds them all).
+ * the custom, portable custom and order interactions, whose class descriptions (§5.36, §5.106 and
+ * §5.97) state no binding, so each binds a declared response variable of any base type and
+ * cardinality (reading 75 binds them all; reading 165 the order interaction).
  */
 export const anyTypeKinds: readonly Kind[] = interactionKinds.filter(
   (kind) =>

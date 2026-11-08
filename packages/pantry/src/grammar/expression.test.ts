@@ -166,11 +166,10 @@ describe.skipIf(!cached)("OperatorArity against the ASI XSDs", () => {
  * One interaction's binding as the information model states it, in its class description (section
  * 5, as https://www.imsglobal.org/spec/qti/v3p0/info#Data_ChoiceInteraction): the section, the base
  * types and cardinalities a typed response variable it is bound to may take, and whether it may be
- * bound to a record. Every interaction class with a binding sentence is here; the custom and
- * portable custom interactions (sections 5.36 and 5.106) state none, so they bind nothing. The
- * order interaction's class description (section 5.97) states none either: its row's one carrier
- * is section 2.4.1.2, which the information model marks not normative, and it stands until the
- * schema change that drops it (`#pantry/import/refusal.sources.test.ts` knows it).
+ * bound to a record. Every interaction class with a binding sentence is here; the custom, portable
+ * custom and order interactions (sections 5.36, 5.106 and 5.97) state none, so neither relation
+ * names them and they bind any type (spec reading 165: section 2.4.1.2's sentence on the order
+ * interaction stands in a section the information model marks not normative).
  */
 interface StatedBinding {
   readonly baseTypes: readonly string[];
@@ -192,14 +191,6 @@ const statedBindings: readonly StatedBinding[] = [
     kind: "qti-choice-interaction",
     record: false,
     section: "5.30",
-  },
-  // Section 2.4.1.2, not normative: "with a base-type of identifier and ordered cardinality only"
-  {
-    baseTypes: ["identifier"],
-    cardinalities: ["ordered"],
-    kind: "qti-order-interaction",
-    record: false,
-    section: "2.4.1.2",
   },
   // "with base-type pair and either single or multiple cardinality"
   {

@@ -192,11 +192,16 @@ describe("qti/interactions.ts, the closed data its laws read", () => {
   });
 
   it("lets the interactions no fit relation names bind any type, and no other", () => {
-    // Oracle: `BindingFit` and `RecordBindingFit`'s rows: the custom and portable custom
-    // interactions bind a response of any type (information model §5.36, §5.106).
+    // Oracle: the information model's class descriptions: the custom, portable custom and order
+    // interactions state no binding, so each binds a response of any type (§5.36, §5.106 and
+    // §5.97; spec reading 165).
     assert.deepStrictEqual(
       [...anyTypeKinds].toSorted(),
-      ["qti-custom-interaction", "qti-portable-custom-interaction"].toSorted(),
+      [
+        "qti-custom-interaction",
+        "qti-order-interaction",
+        "qti-portable-custom-interaction",
+      ].toSorted(),
     );
     for (const kind of anyTypeKinds) {
       assert.isFalse(
