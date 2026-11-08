@@ -936,6 +936,36 @@ describe("validateTextEntry", () => {
         );
       }),
   );
+
+  it.effect(
+    "[Q-20] judges no expected-length on any binding: a text longer than it gives no message, whatever validateResponses says, and it sets the Control's size only",
+    () =>
+      Effect.gen(function* expectedLengthUnjudged() {
+        const short: TextEntryInteraction = { ...city, expectedLength: Option.some(2n) };
+        const counted: TextEntryInteraction = { ...length, expectedLength: Option.some(2n) };
+
+        for (const validateResponses of [false, true]) {
+          const configuration = yield* configure({ validateResponses });
+
+          for (const [interaction, posted] of [
+            [short, "Constantinople"],
+            [counted, "12345.678"],
+          ] as const) {
+            const value = yield* decoded(interaction, [[name, posted]]);
+
+            assert.notInstanceOf(value, Malformed);
+            assert.deepStrictEqual(validateTextEntry(interaction, value, configuration), []);
+          }
+        }
+
+        assert.deepStrictEqual(
+          partsIn(yield* page(payloadOf([short])), "control").map(
+            (control) => control.attrs["size"],
+          ),
+          ["2"],
+        );
+      }),
+  );
 });
 
 describe("a Text Entry bound to a record response", () => {

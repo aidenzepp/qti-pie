@@ -114,8 +114,8 @@ export interface View {
   readonly seed?: string;
   /**
    * The value each response's controls show, such as its `defaultValue` or a value the author's
-   * flow recorded; NULL when absent. A record shows nothing: the control bound to it restores no
-   * text of it.
+   * flow recorded; NULL when absent. A record shows its `stringValue`, the text it was typed as,
+   * and a record without one shows an empty control.
    */
   readonly values: ReadonlyMap<string, ResponseValue>;
 }
@@ -658,16 +658,25 @@ export const identifyMessages = (
 /**
  * Give the values the view shows for a response.
  *
- * A record gives none, so the control bound to a record response restores no text of it.
+ * A record shows its `stringValue` field, the text it was typed as, which only the string control
+ * a text interaction binds to a record shows: the text the candidate typed comes back as typed,
+ * and a record without that field, such as the NULL record or a correct response that declares
+ * none, leaves the control empty. Restored text counts toward the output budget as any other.
  *
  * @param build The build.
  * @param response The response identifier.
- * @returns Its values, none when it is NULL, a record, or the view gives none.
+ * @returns Its values, a record's `stringValue` alone; none when it is NULL, a record without a
+ *   `stringValue`, or the view gives none.
  */
 const shown = (build: Pick<Build, "values">, response: string): readonly Single[] => {
   const value = build.values.get(response);
+  if (value === undefined) {
+    return [];
+  }
 
-  return value === undefined || isRecordValue(value) ? [] : value.values;
+  return isRecordValue(value)
+    ? value.fields.flatMap((field) => (field.identifier === "stringValue" ? [field.value] : []))
+    : value.values;
 };
 
 /**

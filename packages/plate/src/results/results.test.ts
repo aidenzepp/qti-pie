@@ -440,6 +440,31 @@ const recordedDefault: RecordValue = {
 const nullRecord: RecordValue = { cardinality: "record", fields: [] };
 
 /**
+ * An item written for this test whose one response, the record response `NUMBER`, is bound to a
+ * Text Entry with `pattern-mask="[0-9]+"`.
+ */
+const maskedXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="masked"',
+  ' title="Masked" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="NUMBER" cardinality="record"/>',
+  "<qti-item-body><p>Your number: ",
+  '<qti-text-entry-interaction response-identifier="NUMBER" pattern-mask="[0-9]+"/>',
+  "</p></qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
+ * Construct the record a candidate's text gives, holding only its `stringValue`, as a host may
+ * build it.
+ *
+ * @param text The text as typed, not empty.
+ * @returns The record.
+ */
+const typedRecord = (text: string): RecordValue => ({
+  cardinality: "record",
+  fields: [{ identifier: "stringValue", value: { baseType: "string", value: text } }],
+});
+
+/**
  * An item written for this test whose template processing sets `HIDDEN` to `B` and `BLOCK` to `Y`.
  * Its shuffled Choice bound to `RESPONSE` holds `A` to `D`, `B` hidden while `HIDDEN` holds `B`;
  * its template block `X`, shown only while `BLOCK` holds `X`, holds a shuffled Choice bound to
@@ -2205,6 +2230,26 @@ describe("results", () => {
         assert.deepStrictEqual(yield* written(nullRecord), ["presented", 0]);
         assert.deepStrictEqual(yield* written(recordedDefault), ["presented", 2]);
         assert.deepStrictEqual(yield* written(twoAndAHalf), ["answered", 6]);
+      }),
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "[I-1] [Q-20] gives attempted for a record response whose Text Entry's pattern-mask refuses its text as typed, and answered for one it accepts",
+    () =>
+      Effect.gen(function* maskedRecordStatus() {
+        const masked = yield* acceptItem("items/masked.xml", new TextEncoder().encode(maskedXml));
+        const status = Effect.fnUntraced(function* status(text: string) {
+          const record = yield* Effect.fromResult(score(masked, { NUMBER: typedRecord(text) }));
+          const { report, xml } = yield* reported(itemInputOf(masked, record));
+          yield* assertValid(xml);
+
+          return itemOf(report, "masked").responses["NUMBER"]?.attributes["answeredStatus"];
+        });
+
+        assert.strictEqual(yield* status("12.0"), "attempted");
+        assert.strictEqual(yield* status(" 12"), "attempted");
+        assert.strictEqual(yield* status("12"), "answered");
       }),
     { tags: ["results-xsd"] },
   );

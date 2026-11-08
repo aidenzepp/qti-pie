@@ -30,9 +30,9 @@ export interface Restored {
    */
   readonly record: ItemRecord;
   /**
-   * The record's responses by identifier, NULL included, to pass to `render` as its `values`. A
-   * record response's record is not among them yet: the record holds it under `records`, and no
-   * control shows one.
+   * The record's responses by identifier, NULL included, to pass to `render` as its `values`: its
+   * `responses`, and each record response's record from its `records`, which the control bound to
+   * it shows as its `stringValue`.
    */
   readonly values: Responses;
 }
@@ -63,12 +63,12 @@ export interface Restored {
  * @param document The document `check` accepted, the item the record is for.
  * @param record The record `begin` or the last `score` of the item returned, as the host stored it
  *   and handed it back.
- * @returns The decoded record and its responses as {@link Restored}; {@link InvalidRecord} at stage
- *   `decode` for a record the renderer could not have written: the version found when that is what
- *   does not fit, the first response, then the first outcome, then the first template value,
- *   correct response or default, that does not fit its declaration, or, for an item whose template
- *   processing runs, the first declared template variable it holds no value for; or
- *   {@link RecordMismatch} for another item's record.
+ * @returns The decoded record and its responses, record responses among them, as {@link Restored};
+ *   {@link InvalidRecord} at stage `decode` for a record the renderer could not have written: the
+ *   version found when that is what does not fit, the first response, then the first outcome, then
+ *   the first template value, correct response or default, that does not fit its declaration, or,
+ *   for an item whose template processing runs, the first declared template variable it holds no
+ *   value for; or {@link RecordMismatch} for another item's record.
  */
 export const restore = (
   document: Accepted,
@@ -79,5 +79,8 @@ export const restore = (
     Result.flatMap((decoded) => belonging(document.item, decoded)),
     Result.flatMap((decoded) => fitting(document.item, decoded)),
     Result.flatMap((decoded) => templatesHeld(document.item, decoded)),
-    Result.map((decoded) => ({ record: decoded, values: decoded.responses })),
+    Result.map((decoded) => ({
+      record: decoded,
+      values: { ...decoded.responses, ...decoded.records },
+    })),
   );

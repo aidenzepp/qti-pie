@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { message } from "#plate/messages.ts";
-import type { Item } from "#plate/model/item.ts";
+import type { ExtendedTextInteraction, Item, TextEntryInteraction } from "#plate/model/item.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { open } from "#plate/validate/open.ts";
@@ -136,27 +136,30 @@ describe("checkResponses and the printed variables of the item it judges", () =>
 });
 
 /**
- * An item built by hand, as the model builds no interaction bound to a record yet: one Text Entry,
- * for a string, with `pattern-mask="[0-9]+"`, bound to the record response `ANSWER`.
+ * A Text Entry bound to the record response `ANSWER`, the string control, with
+ * `pattern-mask="[0-9]+"` and `expected-length="2"`.
+ */
+const answerEntry: TextEntryInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  base: 10,
+  baseType: "string",
+  cardinality: "record",
+  class: "",
+  expectedLength: Option.some(2n),
+  kind: "text-entry",
+  path: "qti-assessment-item/qti-item-body/qti-text-entry-interaction",
+  patternMask: Option.some("[0-9]+"),
+  patternMaskMessage: Option.none(),
+  placeholder: Option.none(),
+  response: "ANSWER",
+};
+
+/**
+ * An item built by hand: {@link answerEntry} alone.
  */
 const answerItem: Item = {
-  body: [
-    {
-      ariaLabel: Option.none(),
-      ariaLabelledby: Option.none(),
-      base: 10,
-      baseType: "string",
-      cardinality: "single",
-      class: "",
-      expectedLength: Option.none(),
-      kind: "text-entry",
-      path: "qti-assessment-item/qti-item-body/qti-text-entry-interaction",
-      patternMask: Option.some("[0-9]+"),
-      patternMaskMessage: Option.none(),
-      placeholder: Option.none(),
-      response: "ANSWER",
-    },
-  ],
+  body: [answerEntry],
   document: "items/answer.xml",
   identifier: "answer",
   lang: Option.none(),
@@ -171,6 +174,27 @@ const answerItem: Item = {
   title: "Answer",
   unsupported: [],
 };
+
+/**
+ * Construct the record a candidate's text gives, holding only its `stringValue`, as a host may
+ * build it; the NULL record for empty text.
+ *
+ * @param text The text as typed.
+ * @returns The record.
+ */
+const typed = (text: string): RecordValue => ({
+  cardinality: "record",
+  fields:
+    text === "" ? [] : [{ identifier: "stringValue", value: { baseType: "string", value: text } }],
+});
+
+/**
+ * Give the message a mismatch on a response's `pattern-mask` earns, with no author's message.
+ *
+ * @param response The response identifier.
+ * @returns The validation message.
+ */
+const mismatch = (response: string) => ({ response, text: message("en", "patternMismatch") });
 
 describe("checkResponses and a record", () => {
   it.effect(
@@ -187,6 +211,77 @@ describe("checkResponses and a record", () => {
           checkResponses(acceptForTest(answerItem), { ANSWER: answer }, configuration),
           [],
         );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] [Q-5] restores the record's text to its checks: under validate-responses pattern-mask [0-9]+ judges a record's stringValue as typed, accepting 12 and refusing 12.0, and expected-length gives no message",
+    () =>
+      Effect.gen(function* judgesTypedText() {
+        const strict = yield* configure({ validateResponses: true });
+        const working: ExtendedTextInteraction = {
+          ...answerEntry,
+          expectedLength: Option.none(),
+          expectedLines: Option.none(),
+          format: "plain",
+          kind: "extended-text",
+          maxStrings: Option.none(),
+          minStrings: 0n,
+          path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
+          prompt: Option.none(),
+          response: "WORKING",
+        };
+        const both = acceptForTest({
+          ...answerItem,
+          body: [answerEntry, working],
+          records: new Map([
+            ...(answerItem.records ?? []),
+            [
+              "WORKING",
+              { correct: Option.none(), defaultValue: Option.none(), identifier: "WORKING" },
+            ],
+          ]),
+        });
+
+        assert.deepStrictEqual(checkResponses(both, { ANSWER: typed("12") }, strict), []);
+        assert.deepStrictEqual(
+          checkResponses(both, { ANSWER: typed("12345"), WORKING: typed("12345") }, strict),
+          [],
+        );
+        assert.deepStrictEqual(
+          checkResponses(both, { ANSWER: typed("12.0"), WORKING: typed("1 2") }, strict),
+          [mismatch("ANSWER"), mismatch("WORKING")],
+        );
+        assert.deepStrictEqual(checkResponses(both, { ANSWER: typed(" 12") }, strict), [
+          mismatch("ANSWER"),
+        ]);
+        assert.deepStrictEqual(
+          checkResponses(
+            both,
+            { ANSWER: typed("12.0"), WORKING: typed("1 2") },
+            yield* configure({}),
+          ),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] restores the record's text to its checks: the NULL record and a record without a stringValue are not judged against the pattern-mask",
+    () =>
+      Effect.gen(function* untypedRecords() {
+        const strict = yield* configure({ validateResponses: true });
+        const numbered: RecordValue = {
+          cardinality: "record",
+          fields: [{ identifier: "floatValue", value: { baseType: "float", value: 12.5 } }],
+        };
+
+        for (const answer of [typed(""), numbered]) {
+          assert.deepStrictEqual(
+            checkResponses(acceptForTest(answerItem), { ANSWER: answer }, strict),
+            [],
+          );
+        }
       }),
   );
 });

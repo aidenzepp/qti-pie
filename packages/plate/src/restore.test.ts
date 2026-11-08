@@ -160,7 +160,7 @@ describe("restore", { tags: ["corpus"] }, () => {
   );
 
   it.effect(
-    "[T-14] gives back a record holding a record response's record under records, its values the responses alone, and refuses one under an item that declares no record response: InvalidRecord",
+    "[T-14] [Q-20] restores the record: gives back a record holding a record response's record under records and among its values, and refuses one under an item that declares no record response: InvalidRecord",
     () =>
       Effect.gen(function* restoresRecords() {
         const { accepted } = yield* scored();
@@ -185,7 +185,7 @@ describe("restore", { tags: ["corpus"] }, () => {
         assert.deepStrictEqual(record.records, { RREC: answer });
         assert.deepStrictEqual(
           Result.getSuccess(restore(recorded, stored)),
-          Option.some({ record, values: { RESPONSE: chosen } }),
+          Option.some({ record, values: { RESPONSE: chosen, RREC: answer } }),
         );
         assert.deepStrictEqual(
           failureOf(restore(accepted, stored)),
