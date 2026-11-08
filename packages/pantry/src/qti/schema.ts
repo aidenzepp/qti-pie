@@ -9,6 +9,7 @@
  */
 import { schema } from "@bjornpagen/grizzle";
 import {
+  AttributeCountOf,
   AttributeGrammar,
   AttributeModel,
   AttributeModelOf,
@@ -42,6 +43,7 @@ import {
   ContentModelOf,
   ContentReference,
   CountedOf,
+  CountedSlot,
   DeclarationKind,
   Declares,
   DomainPrimitive,
@@ -266,6 +268,7 @@ const grammarRosters = {
  * a law or a generated field reads them.
  */
 const grammarRelations = {
+  AttributeCountOf,
   AttributeGrammar,
   AttributeModelOf,
   AttributeSlotOf,
@@ -286,6 +289,7 @@ const grammarRelations = {
   ContentModelOf,
   ContentReference,
   CountedOf,
+  CountedSlot,
   Declares,
   DoubleBound,
   Enters,

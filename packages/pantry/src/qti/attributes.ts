@@ -39,6 +39,10 @@
  *   fold's slot-0 pin and its empty family's end.
  * - **AL3** (`AL3_required`, a check on `Node`): every slot the element's governor requires is in its
  *   `attrs`.
+ * - **AL5** (`AL5_attribute_count`, a check on `Node`, rule `attribute-count`): an element whose
+ *   governor's model has an `AttributeCountOf` row carries from `min` to `max` of its `CountedSlot`
+ *   attributes, `|attrs ∩ CountedSlot.row(model)|` (spec readings 41 and 43); a model of no count
+ *   states nothing. `attrs` holds only the attributes written, so a defaulted one counts nothing.
  * - **AL4** (C14): an open-class attribute has exactly one `OpenAttributeName`, a closed one none
  *   (`AL4_open_names`); open names are distinct by expanded name on an element (`key(node, uri,
  *   local)`); and `Foreign_attribute_class` holds each open name's stored namespace to its class
@@ -100,12 +104,14 @@ import {
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import {
+  AttributeCountOf,
   AttributeGrammar,
   AttributeModelOf,
   AttributeName,
   AttributeSlot,
   AttributeSlotOf,
   boundedDomains,
+  CountedSlot,
   DoubleBound,
   emptyDomains,
   GoverningOf,
@@ -598,7 +604,8 @@ const textDomainOf = (n: NodeRow) => TextDomain.at("domain", n.version, nodeGove
  *   kind, and `Idref`'s of its document, riding their families' owner axes;
  * - **AL1** admission and its lexical half, **E1** the written slot and the IDREF tokens' agreement,
  *   **AL2** the fold and distinctness, **AL3** required, **AL4** open names, their key and the
- *   foreign attribute class, the prefix, and **TextDomain**, as the module's header states them.
+ *   foreign attribute class, **AL5** the attribute count, the prefix, and **TextDomain**, as the
+ *   module's header states them.
  */
 export const attributeLawsByName = {
   "AL1 admission": [check("AL1_admission", Attribute, admitted)],
@@ -695,6 +702,24 @@ export const attributeLawsByName = {
     check("AL4_open_names", Attribute, (a) =>
       a.or(a.and(open(a), a.eq(a.openName, 1n)), a.and(a.not(open(a)), a.eq(a.openName, 0n))),
     ),
+  ],
+  "AL5 attribute count": [
+    check("AL5_attribute_count", Node, (n) => {
+      const model = AttributeModelOf.at("model", n.version, nodeGovernorOf(n));
+      // attrs ∩ counted, written attrs ∖ (attrs ∖ counted): the same set, in the algebra the host
+      // judge reads (`#pantry/test/key-copies.ts` `computers`), which holds no intersection.
+      const held = Compute.cardinality(
+        Compute.difference(n.attrs, Compute.difference(n.attrs, CountedSlot.row(model))),
+      );
+
+      return n.or(
+        n.not(AttributeCountOf.has(model)),
+        n.and(
+          n.ge(held, AttributeCountOf.at("min", model)),
+          n.le(held, AttributeCountOf.at("max", model)),
+        ),
+      );
+    }),
   ],
   "Attribute prefix": [
     check("Attribute_prefix", Attribute, (a) =>

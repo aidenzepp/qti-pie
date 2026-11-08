@@ -225,9 +225,21 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   [38, { owner: "N6", status: "G" }],
   [39, { owner: "AL1 (`version.datatype`, reading 39)", status: "G" }],
   [40, { owner: "the automaton", status: "G" }],
-  [41, { owner: "AL5 attribute count (`attributeCounts`)", status: "G" }],
+  [
+    41,
+    {
+      owner: "AL5 attribute count (`AL5_attribute_count`, `#pantry/qti/attributes.ts`)",
+      status: "G",
+    },
+  ],
   [42, { owner: "AL1 (`languages.datatype`, reading 42)", status: "G" }],
-  [43, { owner: "AL5 attribute count (`attributeCounts`)", status: "G" }],
+  [
+    43,
+    {
+      owner: "AL5 attribute count (`AL5_attribute_count`, `#pantry/qti/attributes.ts`)",
+      status: "G",
+    },
+  ],
   [
     44,
     {
