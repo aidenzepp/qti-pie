@@ -24,18 +24,20 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
-import { assert, describe, it } from "@effect/vitest";
+import { NodeServices } from "@effect/platform-node";
+import { assert, describe, it, layer } from "@effect/vitest";
 import { drawn as drawnCase, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
 import { element as elementOf, int } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Effect, Formatter, Option } from "effect";
+import { Effect, Formatter, Option, Predicate } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { stepOf } from "#pantry/grammar/content.ts";
 import * as install from "#pantry/grammar/install.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
+import { readProgram } from "#pantry/import/program.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { endsOf, fold } from "#pantry/model/folds.ts";
@@ -44,13 +46,17 @@ import { shred } from "#pantry/model/shred.ts";
 import type { XdmDocument } from "#pantry/model/xdm.ts";
 import { EndCharacter, Node, nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
+import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
+import { hostRowsOf } from "#pantry/test/host-judge.ts";
+import type { HostRow } from "#pantry/test/host-judge.ts";
 import { judgedLaws } from "#pantry/test/judged-laws.ts";
-import { checkOf } from "#pantry/test/key-copies.ts";
+import { checkOf, checkValueOf, datumText } from "#pantry/test/key-copies.ts";
 import type { Datum } from "#pantry/test/key-copies.ts";
 import { documentBreaches, lawNames, lawsOf, oracleRules, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
+import { edit, item, itemResource, manifestOf, packageOf } from "#pantry/test/probe.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -1204,3 +1210,141 @@ describe("the memberships of a node's own position, by the host judge", () => {
     searchTimeout,
   );
 });
+
+/**
+ * The two content-order checks of a member, as PostgreSQL holds them: grizzle emits each as
+ * `CHECK ((…) IS TRUE)`, so a row passes only where the predicate is true, and a predicate that
+ * reads a closed read at a key no row holds, unknown on the host, is refused.
+ */
+const contentOrderChecks = (["N5 Follow", "N5 admitted"] as const).map((law) => ({
+  law,
+  value: Option.getOrThrowWith(
+    checkValueOf(Qti.statements, "Node", law.replaceAll(" ", "_")),
+    () => new Error(`Qti states no check ${law} on Node that the host reads.`),
+  ),
+}));
+
+/**
+ * A package whose item holds character data under a parent the grammar does not admit it under:
+ * the name of the fixture it stands for, the parent, the version, and the item's text.
+ */
+interface UnadmittedText {
+  readonly item: string;
+  readonly name: string;
+  readonly parent: string;
+  readonly version: Version;
+}
+
+/**
+ * The cases, each in both versions: `math-text-in-mfrac` (`fixtures.mathml.ts`), text before an
+ * `m:mfrac`'s two arguments, whose model is element-only (MathML 3, §3.2.1: character data only in
+ * token elements); and `pci-markup-text` (`fixtures.ts`), text in a PCI's `qti-interaction-markup`.
+ */
+const unadmittedTexts: readonly UnadmittedText[] = (["3.0.0", "3.0.1"] as const).flatMap(
+  (version) => [
+    {
+      item: edit(
+        edit(
+          item,
+          "<qti-assessment-item xmlns=",
+          '<qti-assessment-item xmlns:m="http://www.w3.org/1998/Math/MathML" xmlns=',
+        ),
+        '<p id="intro">Pick one.</p>',
+        '<p id="intro">Pick one.</p><m:math><m:mfrac>text<m:mi>a</m:mi><m:mi>b</m:mi></m:mfrac></m:math>',
+      ),
+      name: "math-text-in-mfrac",
+      parent: "m:mfrac",
+      version,
+    },
+    {
+      item: edit(
+        item,
+        '<qti-choice-interaction response-identifier="RESPONSE" max-choices="1">\n      <qti-simple-choice identifier="A">A</qti-simple-choice>\n      <qti-simple-choice identifier="B">B</qti-simple-choice>\n    </qti-choice-interaction>',
+        '<qti-portable-custom-interaction response-identifier="RESPONSE" module="m" custom-interaction-type-identifier="t"><qti-interaction-modules><qti-interaction-module id="m" primary-path="m.js"/></qti-interaction-modules><qti-interaction-markup>Tap</qti-interaction-markup></qti-portable-custom-interaction>',
+      ),
+      name: "pci-markup-text",
+      parent: "qti-interaction-markup",
+      version,
+    },
+  ],
+);
+
+/**
+ * Spell a member's slot in its family, its parent and its index, as a map key.
+ *
+ * @param parent - The member's parent.
+ * @param at - Its index.
+ * @returns The key.
+ */
+const slot = (parent: Datum | undefined, at: bigint): string =>
+  `${datumText(parent)} ${String(at)}`;
+
+/**
+ * Give each node its `was`, which grizzle accumulates and the host rows do not hold: its
+ * predecessor's state in its parent, `"0"` for the first member (`was: accumulated(…, "0")`, and
+ * N5 fold's containment of `was` at `at` in the state at `at - 1`). A member with no
+ * predecessor row reads none, which leaves its checks unknown and so refused.
+ *
+ * @param nodes - The import's `Node` rows.
+ * @returns The rows, each with its `was`.
+ */
+const withWas = (nodes: readonly HostRow[]): readonly HostRow[] => {
+  const states = new Map<string, Datum>();
+  for (const row of nodes) {
+    const { at, state } = row;
+    if (Predicate.isBigInt(at) && state !== undefined) {
+      states.set(slot(row["parent"], at), state);
+    }
+  }
+
+  return nodes.map((row) => {
+    const { at } = row;
+    const was =
+      !Predicate.isBigInt(at) || at === 0n ? "0" : states.get(slot(row["parent"], at - 1n));
+
+    return was === undefined ? row : { ...row, was };
+  });
+};
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "a member its parent does not admit, by the schema's content-order checks over the import's rows",
+  (judging) => {
+    for (const { item: text, name, parent, version } of unadmittedTexts) {
+      judging.effect(
+        `${name} at ${version} breaks N5 admitted alone, N5 Follow true on its text`,
+        () =>
+          // Oracle: the law oracle (`oracle.ts`, N5 Follow leaves a member with no Admission cell
+          // unjudged) and the spec: the text breaks admission and orders nothing.
+          Effect.scoped(
+            Effect.gen(function* unadmittedText() {
+              const files = {
+                "imsmanifest.xml": manifestOf(itemResource, version),
+                "item.xml": text,
+              };
+              const dir = yield* scopedPackage(
+                new Map(packageOf(files).map(({ bytes, path }) => [path, bytes] as const)),
+              );
+              const nodes = withWas(hostRowsOf((yield* readProgram(dir)).inputs).get("Node") ?? []);
+              const textRow = nodes.find(
+                (row) => row["kind"] === "text" && row["parentKind"] === parent,
+              );
+
+              assert.isDefined(textRow, `${name}: the import writes a text row under ${parent}`);
+              assert.strictEqual(
+                contentOrderChecks.find(({ law }) => law === "N5 Follow")?.value(textRow ?? {}),
+                true,
+                `${name}: N5 Follow on the text under ${parent}`,
+              );
+              assert.deepStrictEqual(
+                contentOrderChecks
+                  .filter(({ value }) => nodes.some((row) => value(row) !== true))
+                  .map(({ law }) => law),
+                ["N5 admitted"],
+                name,
+              );
+            }),
+          ),
+      );
+    }
+  },
+);
