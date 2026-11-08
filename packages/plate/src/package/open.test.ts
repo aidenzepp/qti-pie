@@ -1063,9 +1063,11 @@ const acceptsChain = (length: number) =>
 const floatDefaultXml = `<qti-template-default template-identifier="T">${oneFloat}</qti-template-default>`;
 
 /**
- * The P8 refusal of the section document's pre-condition over `NOPE`, which no test declares.
+ * The P8 refusal of the section document's pre-condition over `NOPE`, which no test declares, so
+ * the reaching test is its declarer.
  */
 const undeclaredNope = inSection("undeclared-variable", "qti-pre-condition/qti-variable", {
+  declarer: "test",
   element: "qti-variable",
   expected: "variable",
   identifier: "NOPE",
@@ -2123,20 +2125,11 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] a qti-correct of a dotted name read through an item ref is refused with that ref as its prefix and the item-ref sentence, and of a dotted name the test declares whole with no prefix and a sentence that names no item ref (dotted wording through a ref only)",
+      "[T-9] a qti-correct of a dotted name read through an item ref is refused with that ref as its prefix and the item-ref sentence (dotted wording through a ref only)",
       () =>
         Effect.gen(function* dottedWordingThroughRefOnly() {
           const through = refusalsIn(
             yield* openTestingNull('<qti-correct identifier="ITEM1.SCORE"/>'),
-          );
-          const whole = refusalsIn(
-            yield* openPackage(
-              location,
-              readingPackage(
-                `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="A.B" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="SEC" title="SEC" visible="true">${itemRefXml("ITEM1", "items/a.xml")}</qti-assessment-section></qti-test-part><qti-outcome-processing><qti-outcome-condition><qti-outcome-if><qti-is-null><qti-correct identifier="A.B"/></qti-is-null>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition></qti-outcome-processing></qti-assessment-test>`,
-                { "items/a.xml": reachedItemXml },
-              ),
-            ),
           );
 
           assert.deepStrictEqual(
@@ -2150,19 +2143,44 @@ describe("package/open.ts", () => {
               },
             ],
           );
-          assert.deepStrictEqual(
-            whole.map((refusal) => refusal.detail),
-            [{ element: "qti-correct", expected: "response", identifier: "A.B" }],
-          );
           assert.include(
             through.map((refusal) => describeRefusal(refusal)).join("\n"),
             "To make it valid: name a response the item declares, written `ITEMREF.RESPONSE`.",
           );
+        }),
+    );
+
+    it.effect(
+      "[T-9] a qti-correct of a dotted outcome the test declares whole is refused with no prefix and the test as the declarer, and its sentence says the test declares no response, claims no read through a ref, and gives an item's response through its item ref as the fix",
+      () =>
+        Effect.gen(function* wholeDottedTestDeclarer() {
+          const whole = refusalsIn(
+            yield* openPackage(
+              location,
+              readingPackage(
+                `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="A.B" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="SEC" title="SEC" visible="true">${itemRefXml("ITEM1", "items/a.xml")}</qti-assessment-section></qti-test-part><qti-outcome-processing><qti-outcome-condition><qti-outcome-if><qti-is-null><qti-correct identifier="A.B"/></qti-is-null>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition></qti-outcome-processing></qti-assessment-test>`,
+                { "items/a.xml": reachedItemXml },
+              ),
+            ),
+          );
+
+          assert.deepStrictEqual(
+            whole.map((refusal) => refusal.detail),
+            [{ declarer: "test", element: "qti-correct", expected: "response", identifier: "A.B" }],
+          );
 
           const sentence = whole.map((refusal) => describeRefusal(refusal)).join("\n");
-          assert.include(sentence, "`qti-correct` names `A.B`, and the");
-          assert.notInclude(sentence, "item ref");
-          assert.notInclude(sentence, "ITEMREF.RESPONSE");
+          assert.include(
+            sentence,
+            "`qti-correct` names `A.B`, and the test declares no response `A.B`; only an item declares responses.",
+          );
+          assert.include(
+            sentence,
+            "To make it valid: name a response an item declares, through its item ref, written `ITEMREF.RESPONSE`.",
+          );
+          assert.notInclude(sentence, "reads, through an item ref");
+          assert.notInclude(sentence, "the item declares");
+          assert.notInclude(sentence, "declare `A.B`");
         }),
     );
 

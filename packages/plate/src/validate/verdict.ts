@@ -1649,39 +1649,50 @@ const builtInIdentifiers: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Word an `undeclared-variable` refusal with no `check` whose `expected` is exactly `response` and
- * which has no `declarer`, when no declaration can give its name, so the sentence does not ask for
- * a declaration that would itself be wrong. `qti-map-response`, `qti-map-response-point` and
- * `qti-correct` read a declared response's mapping, area mapping or correct response, so a name
- * that is not one is refused there: by the item's rules (P8), and by `openPackage` for a test's
- * dotted name.
+ * The fix of a response a test names with no item ref: a test declares no response, so it reads an
+ * item's through that item's ref.
+ */
+const itemRefResponse = `name a response an item declares, through its item ref, written ${code("ITEMREF.RESPONSE")}`;
+
+/**
+ * Word an `undeclared-variable` refusal with no `check` whose `expected` is exactly `response`,
+ * when no declaration can give its name, so the sentence does not ask for a declaration that would
+ * itself be wrong. `qti-map-response`, `qti-map-response-point` and `qti-correct` read a declared
+ * response's mapping, area mapping or correct response, so a name that is not one is refused
+ * there: by the rules (P8), in an item and in a test, and by `openPackage` for a test's dotted name
+ * read through a ref.
  *
  * - A dotted name a test reads through an item ref, test part or section: "Identifiers containing the
  *   period character are reserved for use in prefixing" (`info.txt:10122`, reading 48).
  *   `openPackage` refuses it with the `prefix` its reading reads through, since what it reads is
  *   not a response its item declares, but an outcome, a template variable or a built-in. The fix is
- *   a response the item declares, written `ITEMREF.RESPONSE`. A dotted name with no `prefix` is one
- *   an item or a test declares whole (reading 37 admits a declared dotted identifier), refused by
- *   the rules; no item ref is read, so it takes the sentence that asks for a declared response.
+ *   a response the item declares, written `ITEMREF.RESPONSE`.
  * - A built-in ({@link builtInIdentifiers}): no declaration may take its name, so it has no mapping
  *   and no correct response. `numAttempts` and `duration` are "built-in response variables"
- *   (`info.txt:8466`), so the sentence calls each the built-in and never says it is no response.
+ *   (`info.txt:8466`), so the sentence calls each the built-in and never says it is no response. In
+ *   an item the fix is a declared response; with `declarer: "test"` it is an item's response read
+ *   through its item ref ({@link itemRefResponse}).
+ * - Any other name with `declarer: "test"`: a test declares outcomes and context variables, and only
+ *   its items declare responses, so the sentence says the test declares none and the fix is an
+ *   item's response read through its item ref, never a declaration. A dotted name the test declares
+ *   whole (reading 37), an outcome, takes it too.
+ *
+ * An item's dotted name with no `prefix`, one it declares whole, and every other name an item does
+ * not declare take the sentence that asks for a declared response.
  *
  * @param refusal The refusal.
  * @param subject The element, or the element's attribute, as the sentence names it.
- * @returns The sentence, or none for a name a declaration can give, or a dotted name read through
- *   no ref, whose sentence asks for a declared response.
+ * @returns The sentence, or none for a name an item's declaration can give, whose sentence asks for
+ *   a declared response.
  */
 const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<string> => {
-  if (
-    fact(refusal, "expected", "") !== "response" ||
-    Option.isSome(optionalFact(refusal, "declarer"))
-  ) {
+  if (fact(refusal, "expected", "") !== "response") {
     return Option.none();
   }
 
   const name = fact(refusal, "identifier", "");
   const identifier = code(name);
+  const test = fact(refusal, "declarer", "item") === "test";
 
   if (Option.isSome(optionalFact(refusal, "prefix"))) {
     return Option.some(
@@ -1693,12 +1704,22 @@ const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<
     );
   }
 
-  return builtInIdentifiers.has(name)
+  if (builtInIdentifiers.has(name)) {
+    return Option.some(
+      sentence(
+        refusal,
+        `${subject} names the built-in ${identifier}, which has no declaration, so no mapping or correct response.`,
+        test ? itemRefResponse : "name a declared response",
+      ),
+    );
+  }
+
+  return test
     ? Option.some(
         sentence(
           refusal,
-          `${subject} names the built-in ${identifier}, which has no declaration, so no mapping or correct response.`,
-          "name a declared response",
+          `${subject} names ${identifier}, and the test declares no response ${identifier}; only an item declares responses.`,
+          itemRefResponse,
         ),
       )
     : Option.none();
@@ -1715,11 +1736,13 @@ const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<
  *   citing the information model's line its `source` names.
  * - None (P8): a name the item declares no variable of the `expected` kind for. A template rule's
  *   target lists every kind the rule may set, space-separated, and the sentence offers them as
- *   alternatives (pantry's `DeclaredRefKind`). A test's printed variable carries `declarer:
- *   "test"`, and the sentence names the test as what declares no such variable (pantry's
- *   `binding-declared` for a test). A response that no declaration can give, a dotted name read
- *   through an item ref, test part or section or a built-in, is worded by
- *   {@link undeclarableResponse}, so the sentence never asks for it to be declared.
+ *   alternatives (pantry's `DeclaredRefKind`). A test's printed variable, and a name in a test's
+ *   processing or a section document a test reaches, carries `declarer: "test"`, and the sentence
+ *   names the test as what declares no such variable (pantry's `binding-declared` for a test); a
+ *   test may declare an outcome or a context variable, so the fix to declare it stands. A response
+ *   that no declaration can give, a dotted name read through an item ref, test part or section, a
+ *   built-in, or any response a test names, is worded by {@link undeclarableResponse}, so the
+ *   sentence never asks for it to be declared.
  *
  * Each names the element, or the element's attribute when a reference attribute names the
  * variable.

@@ -1136,16 +1136,38 @@ const itemBuiltIns: ReadonlyMap<string, NamedVariable> = new Map(
 );
 
 /**
- * What a reference resolves a name against beside the declarations: the document's built-ins and
- * the typer of a name neither answers, as a {@link Context} holds them.
+ * What a reference resolves a name against beside the declarations: the document's built-ins, the
+ * typer of a name neither answers, and the kind of document that declares the variables, which a
+ * refusal of a name nothing answers names ({@link declaredBy}), as a {@link Context} holds them.
  */
-type Names = Pick<Context, "builtIns" | "typeUnanswered">;
+type Names = Pick<Context, "builtIns" | "declarer" | "typeUnanswered">;
 
 /**
- * An item's {@link Names}: its built-ins, and no type for a name nothing answers, which is
- * `undeclared-variable`.
+ * An item's {@link Names}: its built-ins, no type for a name nothing answers, which is
+ * `undeclared-variable`, and the item as the declarer.
  */
-const itemNames: Names = { builtIns: itemBuiltIns, typeUnanswered: () => Option.none() };
+const itemNames: Names = {
+  builtIns: itemBuiltIns,
+  declarer: "item",
+  typeUnanswered: () => Option.none(),
+};
+
+/**
+ * Add the `declarer` fact to the facts of an `undeclared-variable` refusal when the document is a
+ * test, or a section document a test reaches, so the verdict's wording names the test, which
+ * declares outcomes and context variables, and never asks it to declare a response or a template
+ * variable. A printed variable's refusal, a processing expression's and a reference attribute's
+ * carry it ({@link printedUndeclared}, {@link undeclaredVariable}, {@link referenceRefusals}); an
+ * item's facts are left as they are.
+ *
+ * @param facts The refusal's facts.
+ * @param declarer The kind of document whose declarations the name was looked up in.
+ * @returns The facts, with `declarer: "test"` for a test.
+ */
+const declaredBy = (
+  facts: Readonly<Record<string, string>>,
+  declarer: VariableScope["declarer"],
+): Readonly<Record<string, string>> => (declarer === "item" ? facts : { ...facts, declarer });
 
 /**
  * Report whether a name, which no declaration answers, reads the built-in `duration` of an item
@@ -1463,9 +1485,12 @@ const variableType = (
  * `check: "built-in-target"` and the information model's line as `source` (pantry's P9).
  *
  * In a test a name its context's typer answers (`typeUnanswered`), a prefixed read, is never
- * refused here, nor is any name in a section ({@link processingRefusals}): the qti package types
- * the first through the test's reach (`reference` and `target` in
- * `packages/pantry/src/processing/check.ts`), which a package judges.
+ * refused here, nor is any name in a section on its own ({@link processingRefusals}): the qti
+ * package types the first through the test's reach (`reference` and `target` in
+ * `packages/pantry/src/processing/check.ts`), which a package judges. A name nothing answers in a
+ * test's processing, or in a section document a test reaches, is refused with `declarer: "test"`
+ * ({@link declaredBy}), so its wording names the test, which declares outcomes and context
+ * variables and no response, rather than an item.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1494,11 +1519,12 @@ const undeclaredVariable = (
 
   if (Option.isNone(variableType(reference.value, context))) {
     return [
-      refusal(source, "undeclared-variable", visit.path, {
-        element: visit.element.local,
-        expected,
-        identifier,
-      }),
+      refusal(
+        source,
+        "undeclared-variable",
+        visit.path,
+        declaredBy({ element: visit.element.local, expected, identifier }, context.declarer),
+      ),
     ];
   }
 
@@ -2434,7 +2460,9 @@ const namableBy = (
  * type does not agree with the entry's single base type, as the qti package's
  * `checkAttributeReference` judges the variable it resolves to. A string attribute's braced name
  * is such a read only when the typer types it other than `unknown` ({@link namableBy}). In a
- * section every name is typed `unknown`, so none is refused.
+ * section on its own every name is typed `unknown`, so none is refused. A name nothing answers in a
+ * test's processing, or in a section document a test reaches, carries `declarer: "test"`
+ * ({@link declaredBy}), so its wording names the test rather than an item.
  *
  * It reads only the facet entries it is given, so it judges any kind whose rule declares them.
  *
@@ -2443,8 +2471,8 @@ const namableBy = (
  * @param references The reference facet of the expression's kind.
  * @param declarations Every declaration of the document, by identifier.
  * @param processing The processing the expression lies in, response processing unless given.
- * @param names The document's built-ins and the typer of a name nothing else answers, an item's
- *   unless given.
+ * @param names The document's built-ins, the typer of a name nothing else answers and the kind of
+ *   document that declares the variables, an item's unless given.
  * @returns The refusals at the expression's path, one per value that names no variable, one of
  *   another kind or type, or one template processing may not read, and one more for each that
  *   names the `duration` an item that is not time dependent does not have.
@@ -2496,12 +2524,20 @@ export const referenceRefusals = (
           : Option.none();
       if (Option.exists(unanswered, Option.isNone)) {
         return [
-          refusal(source, "undeclared-variable", visit.path, {
-            attribute: entry.attribute,
-            element: visit.element.local,
-            expected: "variable",
-            identifier,
-          }),
+          refusal(
+            source,
+            "undeclared-variable",
+            visit.path,
+            declaredBy(
+              {
+                attribute: entry.attribute,
+                element: visit.element.local,
+                expected: "variable",
+                identifier,
+              },
+              names.declarer,
+            ),
+          ),
         ];
       }
 
@@ -2667,20 +2703,6 @@ const namedVariable = (identifier: string, scope: VariableScope): Option.Option<
  * @returns Whether it is `template` or `outcome`.
  */
 const printable = (kind: NamedKind): boolean => kind === "template" || kind === "outcome";
-
-/**
- * Add the `declarer` fact to the facts of a printed variable's refusal when the document is a test,
- * so the verdict's wording names the test and offers only what a test declares, an outcome; an
- * item's facts are left as they are.
- *
- * @param facts The refusal's facts.
- * @param declarer The kind of document whose declarations the name was looked up in.
- * @returns The facts, with `declarer: "test"` for a test.
- */
-const declaredBy = (
-  facts: Readonly<Record<string, string>>,
-  declarer: VariableScope["declarer"],
-): Readonly<Record<string, string>> => (declarer === "item" ? facts : { ...facts, declarer });
 
 /**
  * Construct the `undeclared-variable` refusal of a name a printed variable's attribute gives that
@@ -3318,8 +3340,9 @@ const processingScope = (
  * refused `undeclared-variable` here (reading 48 is a package's). A section document's names are
  * all typed `unknown` on its own, as its own verdict judges it; under a test that reaches it
  * (`reaching`), as a package judges it once for each such test, they resolve against that test's
- * scope, so a name the test neither declares nor holds as a built-in is `undeclared-variable` and
- * each prefixed read is typed by the reaching test's `typePrefixed` (pantry's
+ * scope, so a name the test neither declares nor holds as a built-in is `undeclared-variable`, with
+ * the test as its `declarer` as in a test ({@link declaredBy}), and each prefixed read is typed by
+ * the reaching test's `typePrefixed` (pantry's
  * `testProcessingRows`, `packages/pantry/src/import/reference.ts`). A template default is an
  * expression, so the template read rule (P26) and the template rules' targets do not judge it; its
  * own target is an item's template variable, which only a package can find, so its expression is
