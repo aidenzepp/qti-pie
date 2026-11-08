@@ -3205,3 +3205,19 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      (reading 110) are accepted. Between the two packages the stricter normative reading wins. This binds pantry and
      plate alike, as plate's readings 194, 195 and 196 hold. This is not a case of documents in conflict. (Decided
      2026-11-07 by the Mind, decisions 429 and 430 (1), on operator mails b4df4b29 and 526fbbd9.)
+
+     The same holds for a test's prefixed `qti-map-response-point` and for a map response of a built-in response
+     variable (decision 431). The information model states MapResponsePoint in section 6.9.46, the
+     `qti-map-response-point` attribute (https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-map-response-point):
+     "The mapResponsePoint expression looks up the value of a response variable that must be of base-type point, and
+     transforms it using the associated areaMapping." (`info.txt:53022`; section 2.11.1.6 says the same, "transforms it
+     using the associated qti-area-mapping", `info.txt:9314`). That text does not repeat section 7.22's "which must have
+     been declared", but the expression presupposes an area mapping exactly as a map response presupposes its mapping,
+     and pantry already refuses an unprefixed `qti-map-response-point` whose response holds no `qti-area-mapping` under
+     "Mapped response". So a test's `<qti-map-response-point identifier="I.POINT"/>` is held the same way: refused under
+     "Mapped response" where the item's `POINT` declares no `qti-area-mapping`, and so is one that reads a built-in
+     response. An unprefixed `qti-map-response` or `qti-map-response-point` that names a built-in response variable,
+     an item's `numAttempts` or `duration` or a test's `duration`, is refused under "Mapped response" too: a built-in
+     has no declaration, so no mapping or area mapping has been declared (section 7.22). A built-in of another kind,
+     such as `completionStatus`, stays "Variable kind"'s alone. A dotted map response point of a response with an area
+     mapping is accepted. (Decided 2026-11-07 by the Mind, decision 431.)

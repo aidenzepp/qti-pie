@@ -706,7 +706,10 @@ const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean]
       reference.attribute === "identifier" &&
       (reference.node.kind === "qti-map-response" ||
         reference.node.kind === "qti-map-response-point") &&
-      reference.resolution === "declared" &&
+      // A built-in response declares no table, so it holds none (decision 431, reading 163).
+      (reference.resolution === "declared" ||
+        (reference.resolution === "builtIn" &&
+          reference.declarationKind === "qti-response-declaration")) &&
       !(
         reference.declarationKind === "qti-response-declaration" &&
         ((reference.node.kind === "qti-map-response" && table === "qti-mapping") ||
