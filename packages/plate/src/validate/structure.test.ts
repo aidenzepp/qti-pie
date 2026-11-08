@@ -600,7 +600,8 @@ const mappable =
 /**
  * Where a `qti-area-mapping` must sit, as its placement row words it.
  */
-const pointed = "in a qti-response-declaration whose base type is point";
+const pointed =
+  "in a qti-response-declaration whose base type is point and whose cardinality is not record";
 
 /**
  * Construct an item whose catalog holds one card.
@@ -616,11 +617,6 @@ const carded = (...children: readonly SourceChild[]): SourceDocument =>
       [el("qti-catalog", [attr("id", "glossary")], [el("qti-card", [], children)])],
     ),
   ]);
-
-/**
- * The path of the card {@link carded} builds.
- */
-const card = "qti-assessment-item/qti-catalog-info/qti-catalog/qti-card";
 
 /**
  * Construct an item whose body holds one PCI with the given children.
@@ -1425,6 +1421,193 @@ const mistyped = (source: SourceDocument): readonly Location[] =>
     .filter((refusal) => refusal.rule === "attribute-type")
     .map((refusal) => refusal.location);
 
+/**
+ * Construct an item, whole by the generated tables, holding the given children: its root writes
+ * the three attributes the tables require of it.
+ *
+ * @param children The item's children.
+ * @returns The item as a source document.
+ */
+const wholeItem = (children: readonly SourceChild[]): SourceDocument =>
+  item(children, [
+    attr("identifier", "item"),
+    attr("title", "Item"),
+    attr("time-dependent", "false"),
+  ]);
+
+/**
+ * Check a document against the generated tables, keeping each refusal's rule, location and detail.
+ *
+ * @param source The document.
+ * @returns Its refusals, in the order found.
+ */
+const judged = (source: SourceDocument) =>
+  checkStructure(source, generatedTables).map(
+    (refusal) => [refusal.rule, refusal.location, refusal.detail] as const,
+  );
+
+/**
+ * An image, as a graphic interaction or a position object stage holds one.
+ */
+const picture = el("img", [attr("alt", "A map"), attr("src", "map.png")]);
+
+/**
+ * Construct a hotspot of a graphic interaction: a `qti-hotspot-choice`, or a
+ * `qti-associable-hotspot` with the `match-max` it requires.
+ *
+ * @param local The hotspot's local name.
+ * @param identifier Its `identifier`.
+ * @param geometry Its `shape`, as written.
+ * @returns The hotspot.
+ */
+const hotspot = (local: string, identifier: string, geometry: string): SourceElement =>
+  el(local, [
+    attr("identifier", identifier),
+    attr("shape", geometry),
+    attr("coords", "10,10,5"),
+    ...(local === "qti-associable-hotspot" ? [attr("match-max", "1")] : []),
+  ]);
+
+/**
+ * Construct a whole item whose body holds one graphic interaction with an image and the given
+ * children after it.
+ *
+ * @param interaction The interaction's local name.
+ * @param children The interaction's children after its image: hotspots, and text between them.
+ * @returns The item as a source document.
+ */
+const graphicItem = (interaction: string, ...children: readonly SourceChild[]): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-item-body",
+      [],
+      [el(interaction, [attr("response-identifier", "RESPONSE")], [picture, ...children])],
+    ),
+  ]);
+
+/**
+ * The detail of the refusal of a default hotspot out of its place (reading 80).
+ *
+ * @param local The hotspot's local name.
+ * @param context The interaction that holds it.
+ * @returns The detail.
+ */
+const defaultHotspot = (local: string, context: string) => ({
+  check: "default-hotspot",
+  context,
+  element: local,
+  reading: "80",
+});
+
+/**
+ * Construct a whole item whose body holds a position object stage with one position object
+ * interaction.
+ *
+ * @param attributes The interaction's attributes beside its `response-identifier`.
+ * @returns The item as a source document.
+ */
+const positioned = (...attributes: readonly SourceAttribute[]): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-item-body",
+      [],
+      [
+        el(
+          "qti-position-object-stage",
+          [],
+          [
+            picture,
+            el(
+              "qti-position-object-interaction",
+              [attr("response-identifier", "RESPONSE"), ...attributes],
+              [picture],
+            ),
+          ],
+        ),
+      ],
+    ),
+  ]);
+
+/**
+ * Construct a whole item with one outcome declaration holding a lookup table.
+ *
+ * @param identifier The outcome's `identifier`.
+ * @param cardinality Its `cardinality`, as written.
+ * @param base Its `base-type`, none for a record.
+ * @param table The lookup table.
+ * @returns The item as a source document.
+ */
+const lookedUp = (
+  identifier: string,
+  cardinality: string,
+  base: Option.Option<string>,
+  table: SourceElement,
+): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-outcome-declaration",
+      [
+        attr("identifier", identifier),
+        attr("cardinality", cardinality),
+        ...Option.match(base, {
+          onNone: () => [],
+          onSome: (written) => [attr("base-type", written)],
+        }),
+      ],
+      [table],
+    ),
+  ]);
+
+/**
+ * A match table with one entry, as the research probe `p100-multiple-table` writes it.
+ */
+const matchTable = el(
+  "qti-match-table",
+  [attr("default-value", "0")],
+  [el("qti-match-table-entry", [attr("source-value", "1"), attr("target-value", "1.5")])],
+);
+
+/**
+ * An interpolation table with one entry.
+ */
+const interpolationTable = el(
+  "qti-interpolation-table",
+  [],
+  [el("qti-interpolation-table-entry", [attr("source-value", "1"), attr("target-value", "1.5")])],
+);
+
+/**
+ * The location of the lookup table a {@link lookedUp} item's outcome holds.
+ *
+ * @param local The table's local name.
+ * @returns Its location.
+ */
+const lookupTable = (local: string): Location =>
+  at(`qti-assessment-item/qti-outcome-declaration/${local}`);
+
+/**
+ * The detail of the refusal of a lookup table under an outcome that is not single (reading 100).
+ *
+ * @param local The table's local name.
+ * @param identifier The outcome's identifier.
+ * @returns The detail.
+ */
+const lookupCardinality = (local: string, identifier: string) => ({
+  check: "lookup-cardinality",
+  element: local,
+  identifier,
+  reading: "100",
+});
+
+/**
+ * Check a document against the generated tables, keeping each refusal's rule and location.
+ *
+ * @param source The document.
+ * @returns Its refusals' rules and locations, in the order found.
+ */
+const ruled = (source: SourceDocument) =>
+  judgedMapping(source).map(({ location: where, rule }) => [rule, where]);
+
 describe("checkStructure", () => {
   describe("the six rules", () => {
     it("[I-0] refuses an element its parent's table does not admit as unknown-element", () => {
@@ -2045,7 +2228,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("readings 16, 17 and 18: the narrowed attributes", () => {
+  describe('readings 16 and 17, and reading 18 ("an order or graphic-order interaction\'s `min-choices`, where written, is from 1 to its number of choices"): the narrowed attributes', () => {
     it("[I-2] refuses normal-maximum 0, 0.0, -0 and 0e0 as attribute-type, and admits 1 (reading 16)", () => {
       const path = "qti-assessment-item/qti-outcome-declaration/@normal-maximum";
 
@@ -2068,7 +2251,7 @@ describe("checkStructure", () => {
       assert.deepStrictEqual(found(item([outcome(attr("view", "candidate"))])), []);
     });
 
-    it('[I-8] refuses min-choices="0" on an order interaction as attribute-type, and admits it on a choice interaction (reading 18)', () => {
+    it('[I-8] refuses min-choices="0" on an order interaction as attribute-type, and admits it on a choice interaction, by reading 18 ("an order or graphic-order interaction\'s `min-choices`, where written, is from 1 to its number of choices")', () => {
       const order = body(
         el("qti-order-interaction", [
           attr("response-identifier", "RESPONSE"),
@@ -2341,7 +2524,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("readings 20, 21 and 31, and single cardinality: child counts", () => {
+  describe("readings 20 and 21, and single cardinality: child counts", () => {
     it("[Q-31] refuses a PCI with no qti-interaction-markup, or two, as child-count (reading 20)", () => {
       const path = "qti-assessment-item/qti-item-body/qti-portable-custom-interaction";
       const none = customInteraction();
@@ -2381,36 +2564,6 @@ describe("checkStructure", () => {
               [],
               [el("qti-base-value", [attr("base-type", "integer")], [text("1")])],
             ),
-          ),
-        ),
-        [],
-      );
-    });
-
-    it("refuses a card or a card entry with no content as child-count (reading 31)", () => {
-      const empty = carded();
-      const emptyEntry = carded(el("qti-card-entry"));
-
-      assert.deepStrictEqual(found(empty), [["child-count", at(card)]]);
-      assert.deepStrictEqual(first(empty)?.detail, {
-        child: "qti-html-content or qti-file-href or qti-card-entry",
-        element: "qti-card",
-        required: "at least one",
-        source: "reading 31",
-      });
-      assert.deepStrictEqual(found(emptyEntry), [["child-count", at(`${card}/qti-card-entry`)]]);
-      assert.deepStrictEqual(first(emptyEntry)?.detail, {
-        child: "qti-html-content or qti-file-href",
-        element: "qti-card-entry",
-        required: "at least one",
-        source: "reading 31",
-      });
-      assert.deepStrictEqual(found(carded(el("qti-html-content", [], [text("A word.")]))), []);
-      assert.deepStrictEqual(
-        found(
-          carded(
-            el("qti-card-entry", [], [el("qti-file-href", [], [text("a.mp3")])]),
-            el("qti-card-entry", [], [el("qti-file-href", [], [text("b.mp3")])]),
           ),
         ),
         [],
@@ -3126,6 +3279,176 @@ describe("checkStructure", () => {
           kind,
         );
       }
+    });
+  });
+
+  describe("align-54 interaction rows: a default hotspot's place, a position object's least count, a lookup table's outcome, a declaration read as written, and an empty card (readings 80, 92, 100, 157 and 158, and P5)", () => {
+    it("align-54 interaction rows E5: refuses a default hotspot choice that is not the last hotspot of its hotspot or graphic order interaction as misplaced-element, and admits one last, before trailing text (reading 80)", () => {
+      for (const interaction of ["qti-hotspot-interaction", "qti-graphic-order-interaction"]) {
+        const path = `qti-assessment-item/qti-item-body/${interaction}/qti-hotspot-choice[1]`;
+
+        assert.deepStrictEqual(
+          judged(
+            graphicItem(
+              interaction,
+              hotspot("qti-hotspot-choice", "ELSEWHERE", "default"),
+              hotspot("qti-hotspot-choice", "TOWN", "circle"),
+            ),
+          ),
+          [["misplaced-element", at(path), defaultHotspot("qti-hotspot-choice", interaction)]],
+          interaction,
+        );
+        assert.deepStrictEqual(
+          judged(
+            graphicItem(
+              interaction,
+              hotspot("qti-hotspot-choice", "TOWN", "circle"),
+              hotspot("qti-hotspot-choice", "ELSEWHERE", "default"),
+              text("\n  "),
+            ),
+          ),
+          [],
+          `${interaction}, default last`,
+        );
+        assert.deepStrictEqual(
+          judged(
+            graphicItem(
+              interaction,
+              hotspot("qti-hotspot-choice", "ELSEWHERE", " default"),
+              hotspot("qti-hotspot-choice", "TOWN", "circle"),
+            ),
+          ).map(([rule, where]) => [rule, where]),
+          [["attribute-type", at(`${path}/@shape`)]],
+          `${interaction}, a shape that spells no shape`,
+        );
+      }
+    });
+
+    it("align-54 interaction rows E5: refuses a default associable hotspot in a graphic gap match interaction, last or not, as misplaced-element, and admits one anywhere in a graphic associate interaction (reading 80)", () => {
+      const interaction = "qti-graphic-gap-match-interaction";
+
+      assert.deepStrictEqual(
+        judged(
+          graphicItem(
+            interaction,
+            hotspot("qti-associable-hotspot", "TOWN", "circle"),
+            hotspot("qti-associable-hotspot", "ELSEWHERE", "default"),
+          ),
+        ),
+        [
+          [
+            "misplaced-element",
+            at(`qti-assessment-item/qti-item-body/${interaction}/qti-associable-hotspot[2]`),
+            defaultHotspot("qti-associable-hotspot", interaction),
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        judged(
+          graphicItem(
+            "qti-graphic-associate-interaction",
+            hotspot("qti-associable-hotspot", "ELSEWHERE", "default"),
+            hotspot("qti-associable-hotspot", "TOWN", "circle"),
+          ),
+        ),
+        [],
+      );
+    });
+
+    it('align-54 interaction rows E11b: refuses min-choices="0" on a position object interaction as attribute-type, and admits 1 and none written (reading 92)', () => {
+      const refusals = judged(positioned(attr("min-choices", "0")));
+
+      assert.deepStrictEqual(
+        refusals.map(([rule, where]) => [rule, where]),
+        [
+          [
+            "attribute-type",
+            at(
+              "qti-assessment-item/qti-item-body/qti-position-object-stage/qti-position-object-interaction/@min-choices",
+            ),
+          ],
+        ],
+      );
+      assert.strictEqual(refusals[0]?.[2]["reading"], "92");
+      assert.strictEqual(refusals[0]?.[2]["expected"], "an integer at least 1");
+      assert.deepStrictEqual(judged(positioned(attr("min-choices", "1"))), []);
+      assert.deepStrictEqual(judged(positioned()), []);
+    });
+
+    it("align-54 interaction rows E15: refuses a lookup table under an outcome that is not single as misplaced-element, the research probe p100-multiple-table among them, and leaves a cardinality that spells none to the value domain alone (reading 100)", () => {
+      assert.deepStrictEqual(
+        judged(lookedUp("SCORE", "multiple", Option.some("float"), matchTable)),
+        [
+          [
+            "misplaced-element",
+            lookupTable("qti-match-table"),
+            lookupCardinality("qti-match-table", "SCORE"),
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        judged(lookedUp("GRADE", "ordered", Option.some("float"), interpolationTable)),
+        [
+          [
+            "misplaced-element",
+            lookupTable("qti-interpolation-table"),
+            lookupCardinality("qti-interpolation-table", "GRADE"),
+          ],
+        ],
+      );
+      assert.deepStrictEqual(judged(lookedUp("GRADE", "record", Option.none(), matchTable)), [
+        [
+          "misplaced-element",
+          lookupTable("qti-match-table"),
+          lookupCardinality("qti-match-table", "GRADE"),
+        ],
+      ]);
+      assert.deepStrictEqual(
+        [matchTable, interpolationTable].map((held) =>
+          judged(lookedUp("SCORE", "single", Option.some("float"), held)),
+        ),
+        [[], []],
+      );
+      assert.deepStrictEqual(
+        judged(lookedUp("GRADE", " multiple", Option.some("float"), matchTable)).map(
+          ([rule, where]) => [rule, where],
+        ),
+        [["attribute-type", at("qti-assessment-item/qti-outcome-declaration/@cardinality")]],
+      );
+    });
+
+    it("align-54 interaction rows E40b: reads a response declaration's base-type and cardinality exactly as written for its mapping and area mapping, so one that spells nothing, or a base type unwritten, is refused alone (readings 157 and 158)", () => {
+      const declaration = "qti-assessment-item/qti-response-declaration";
+
+      assert.deepStrictEqual(ruled(mappingItem("single", Option.some(" file"), mapping)), [
+        ["attribute-type", at(`${declaration}/@base-type`)],
+      ]);
+      assert.deepStrictEqual(ruled(mappingItem(" record", Option.none(), mapping)), [
+        ["attribute-type", at(`${declaration}/@cardinality`)],
+      ]);
+      for (const base of [" point", "bogus"]) {
+        assert.deepStrictEqual(
+          ruled(mappingItem("single", Option.some(base), areaMapping)),
+          [["attribute-type", at(`${declaration}/@base-type`)]],
+          base,
+        );
+      }
+      assert.deepStrictEqual(ruled(mappingItem("single", Option.none(), areaMapping)), [
+        ["missing-attribute", at(declaration)],
+      ]);
+      assert.deepStrictEqual(ruled(mappingItem("record", Option.some("point"), areaMapping)), [
+        ["unknown-attribute", at(`${declaration}/@base-type`)],
+        ["misplaced-element", at(`${declaration}/qti-area-mapping`)],
+      ]);
+    });
+
+    it("align-54 interaction rows P5: admits a card and a card entry with no content, as the operator ruled", () => {
+      assert.deepStrictEqual(found(carded()), []);
+      assert.deepStrictEqual(found(carded(el("qti-card-entry"))), []);
+      assert.deepStrictEqual(
+        found(carded(el("qti-card-entry"), el("qti-html-content", [], [text("A word.")]))),
+        [],
+      );
     });
   });
 

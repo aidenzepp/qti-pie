@@ -77,6 +77,7 @@ import type {
   TypeEntry,
   Wildcard,
 } from "#plate/validate/xsd.ts";
+import { baseTypes } from "#plate/vocabulary.ts";
 
 /**
  * An attribute name QTI 3.0's schema spells differently from a name authors write: the element it
@@ -533,31 +534,26 @@ const modeOf = (
 };
 
 /**
- * Report whether a declaration gives an attribute in no namespace one of some values, read as
- * {@link modeOf} reads a row's condition. A response declaration's table declares no default for
- * `base-type` or `cardinality`, so only a value written counts.
+ * Report whether a declaration spells one of some values in an attribute in no namespace, compared
+ * exactly as written: the XSD types a declaration's `base-type` and `cardinality`, like a
+ * hotspot's `shape`, as enumerations of `xs:string`, whose whiteSpace is `preserve`, and declares
+ * no default for any of them. One that is unwritten, holds an unexpanded entity reference or
+ * spells no code, such as `base-type=" file"`, spells none of them, so no law over that attribute
+ * judges its declaration; its value domain, or the XSD's required attribute, refuses it alone
+ * (readings 157 and 158).
  *
- * @param declaration The declaration.
+ * @param declaration The declaration, or a hotspot.
  * @param local The attribute's local name.
  * @param values The values.
- * @returns Whether the declaration writes one of them; not when it writes none, or writes one that
- *   holds an unexpanded entity reference, whose value is unknown.
+ * @returns Whether the declaration's attribute is one of them.
  */
 const declares = (declaration: SourceElement, local: string, values: readonly string[]): boolean =>
-  Option.exists(modeOf(declaration, [], local), (value) => values.includes(value));
-
-/**
- * Report whether a declaration writes an attribute in no namespace whose value holds an unexpanded
- * entity reference, and so is unknown.
- *
- * @param declaration The declaration.
- * @param local The attribute's local name.
- * @returns Whether its value is unknown.
- */
-const unknownValue = (declaration: SourceElement, local: string): boolean =>
   declaration.attributes.some(
     (attribute) =>
-      attribute.namespace === "" && attribute.local === local && attribute.references.length > 0,
+      attribute.namespace === "" &&
+      attribute.local === local &&
+      attribute.references.length === 0 &&
+      values.includes(attribute.value),
   );
 
 /**
@@ -573,15 +569,23 @@ const holdsMapping = (declaration: SourceElement): boolean =>
   !declares(declaration, "cardinality", ["record"]);
 
 /**
+ * The base types other than `point`, whose declarations hold no `qti-area-mapping`.
+ */
+const otherThanPoint: readonly string[] = baseTypes.filter((name) => name !== "point");
+
+/**
  * Report whether a response declaration may hold a `qti-area-mapping`: its base type is `point`
- * (info.txt:39388), or is unknown, which is not refused. A record declaration writes no base type,
- * so it holds none.
+ * (info.txt:39388), and it is no record, which has no base type (reading 153). Each half reads one
+ * attribute and judges only where it spells a code (reading 158), so a base type unwritten, unknown
+ * or spelling nothing is not refused here: a record is refused by its cardinality alone, and
+ * another declaration that writes no base type is `missing-attribute` alone ({@link checkUntyped}).
  *
  * @param declaration The response declaration.
  * @returns Whether its area mapping is placed.
  */
 const holdsAreaMapping = (declaration: SourceElement): boolean =>
-  declares(declaration, "base-type", ["point"]) || unknownValue(declaration, "base-type");
+  !declares(declaration, "base-type", otherThanPoint) &&
+  !declares(declaration, "cardinality", ["record"]);
 
 /**
  * The declarations whose `qti-default-value` and `qti-correct-response` hold their values.
@@ -604,13 +608,7 @@ const declarations: ReadonlySet<string> = new Set([
  * @returns Whether its `cardinality` is one of them.
  */
 const spellsCardinality = (declaration: SourceElement, cardinalities: readonly string[]): boolean =>
-  declaration.attributes.some(
-    (attribute) =>
-      attribute.namespace === "" &&
-      attribute.local === "cardinality" &&
-      attribute.references.length === 0 &&
-      cardinalities.includes(attribute.value),
-  );
+  declares(declaration, "cardinality", cardinalities);
 
 /**
  * Report whether a parent is a declaration whose `cardinality` is `single`, compared exactly as
@@ -805,6 +803,15 @@ const toleranceTokens = (lexical: string): boolean =>
 const printfFormat = /^%[#0 +-]*(?:[1-9][0-9]*)?(?:\.[0-9]*)?[EefGgrRioXx]$/u;
 
 /**
+ * Report whether an integer count, already in its XSD type, is at least 1.
+ *
+ * @param lexical The count, collapsed.
+ * @returns Whether it is an integer of 1 or more.
+ */
+const atLeastOne = (lexical: string): boolean =>
+  integerLexical.test(lexical) && BigInt(lexical) >= 1n;
+
+/**
  * The shared readings this module applies over the XSD's rules, one row each.
  *
  * Every refusal a row gives carries the row's reading in its detail, as `reading`, which the
@@ -850,15 +857,29 @@ const readingRows: readonly ReadingRow[] = [
   },
   // Reading 18 ("an order or graphic-order interaction's `min-choices`, where written, is from 1
   // to its number of choices, and a `max-choices` written beside it is from `min-choices` to its
-  // number of choices"): `min-choices` is at least 1, where the XSD admits 0. `max-choices="0"`
-  // means unlimited, and no count is compared.
+  // number of choices"): `min-choices` is at least 1, where the XSD admits 0. This row holds that
+  // floor alone; the prose rules compare each count with the interaction's choices and the two
+  // counts with each other.
   {
     attribute: "min-choices",
     elements: ["qti-graphic-order-interaction", "qti-order-interaction"],
     expected: "an integer at least 1",
-    holds: (lexical) => integerLexical.test(lexical) && BigInt(lexical) >= 1n,
+    holds: atLeastOne,
     kind: "narrowed-attribute",
     settled: { reading: "18" },
+    whiteSpace: "collapse",
+  },
+  // Reading 92 ("the information model's binding and count sentences that no other reading
+  // restates hold as written"): a position object interaction's `min-choices`, where written, is
+  // at least 1, "If specified, min-choices must be 1 or greater" (section 5.107.2), where the XSD
+  // admits 0.
+  {
+    attribute: "min-choices",
+    elements: ["qti-position-object-interaction"],
+    expected: "an integer at least 1",
+    holds: atLeastOne,
+    kind: "narrowed-attribute",
+    settled: { reading: "92" },
     whiteSpace: "collapse",
   },
   // Reading 20 ("a PCI has exactly one `qti-interaction-markup`, which may be empty").
@@ -884,6 +905,8 @@ const readingRows: readonly ReadingRow[] = [
     required: "at least one",
     source: "reading 21",
   },
+  // No row counts a card's or a card entry's children: one with no content is accepted, as the
+  // operator ruled (P5, overseer `b7d702d6`), where the shared readings refuse it.
   // Reading 22 ("a `qti-template-constraint` is a direct child of `qti-template-processing`"),
   // where the XSD also admits it in the template conditions' branches.
   {
@@ -918,30 +941,6 @@ const readingRows: readonly ReadingRow[] = [
     requires: "inside qti-outcome-processing",
     roots: outsideTests,
     within: "ancestor",
-  },
-  // Reading 31 ("a card holds at least one of an HTML content node or file hrefs, and may hold
-  // both"; `CardDType`, XSD:26089-26104): a card holds at least one of an HTML content node, file
-  // hrefs or card entries.
-  {
-    applies: anywhere,
-    child: "qti-html-content or qti-file-href or qti-card-entry",
-    counted: ["qti-card-entry", "qti-file-href", "qti-html-content"],
-    elements: ["qti-card"],
-    kind: "child-count",
-    refuses: (count) => count === 0,
-    required: "at least one",
-    source: "reading 31",
-  },
-  // Reading 31 again: each card entry holds at least one of an HTML content node or file hrefs.
-  {
-    applies: anywhere,
-    child: "qti-html-content or qti-file-href",
-    counted: ["qti-file-href", "qti-html-content"],
-    elements: ["qti-card-entry"],
-    kind: "child-count",
-    refuses: (count) => count === 0,
-    required: "at least one",
-    source: "reading 31",
   },
   // Reading 38 ("a `qti-gap` appears only within a gap-match interaction, and a `qti-hottext` may
   // appear in any flow or inline content"): the row also refuses a gap in a graphic gap-match
@@ -983,7 +982,8 @@ const readingRows: readonly ReadingRow[] = [
     elements: ["qti-area-mapping"],
     kind: "placement",
     reading: Option.none(),
-    requires: "in a qti-response-declaration whose base type is point",
+    requires:
+      "in a qti-response-declaration whose base type is point and whose cardinality is not record",
     roots: anywhere,
     within: "parent",
   },
@@ -2155,6 +2155,123 @@ const checkPlacement = (
     );
 
 /**
+ * Report whether a hotspot is a default hotspot: its `shape` spells `default`, compared exactly as
+ * written ({@link declares}), for the XSD types it as an enumeration of `xs:string`, whose
+ * whiteSpace is `preserve`. A shape that spells no shape, such as `" default"`, is its value
+ * domain's alone.
+ *
+ * @param hotspot A `qti-hotspot-choice` or a `qti-associable-hotspot`.
+ * @returns Whether it is a default hotspot.
+ */
+const isDefaultHotspot = (hotspot: SourceElement): boolean =>
+  declares(hotspot, "shape", ["default"]);
+
+/**
+ * The interactions whose default hotspot choice comes last (reading 80): "The default hotspot, if
+ * defined, must appear last".
+ */
+const lastDefaultHotspot: ReadonlySet<string> = new Set([
+  "qti-graphic-order-interaction",
+  "qti-hotspot-interaction",
+]);
+
+/**
+ * The lookup tables an outcome declaration may hold (reading 100).
+ */
+const lookupTables: ReadonlySet<string> = new Set(["qti-interpolation-table", "qti-match-table"]);
+
+/**
+ * Report whether an element is its parent's last element child. Text, whitespace and entity
+ * references after it do not count, nor do comments and processing instructions, which the shared
+ * reader does not keep.
+ *
+ * @param element The element.
+ * @param parent Its parent.
+ * @returns Whether no element follows it in its parent.
+ */
+const isLastElement = (element: SourceElement, parent: SourceElement): boolean =>
+  parent.children.findLast((child) => child.kind === "element") === element;
+
+/**
+ * Check a hotspot's place by reading 80 ("a default hotspot is the last hotspot choice of its
+ * interaction, and a graphic gap match interaction has none"), where the XSD admits a default
+ * hotspot anywhere among its interaction's hotspots. A hotspot or graphic order interaction's
+ * default hotspot choice is its last element child, after its image and every other hotspot, and
+ * of a graphic gap match interaction's hotspots "The default hotspot must not be defined", last or
+ * not; either out of place is `misplaced-element`, `check: "default-hotspot"`, naming the
+ * interaction, its `context`. A graphic associate interaction's default hotspot may stand
+ * anywhere: of it the information model says nothing. A hotspot whose parent is of another name,
+ * an element an `xsi:type` gives an interaction's type, is not judged, plate's limit for an
+ * outlandish case (rule `db2ef322`).
+ *
+ * @param source The document.
+ * @param element The element.
+ * @param path The element's path.
+ * @param parent The element's parent, if it was walked.
+ * @returns Its `misplaced-element` refusal, or none.
+ */
+const checkDefaultHotspot = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  parent: SourceElement | undefined,
+): readonly Refusal[] =>
+  element.namespace === qtiNamespace &&
+  parent?.namespace === qtiNamespace &&
+  isDefaultHotspot(element) &&
+  ((element.local === "qti-hotspot-choice" &&
+    lastDefaultHotspot.has(parent.local) &&
+    !isLastElement(element, parent)) ||
+    (element.local === "qti-associable-hotspot" &&
+      parent.local === "qti-graphic-gap-match-interaction"))
+    ? [
+        refuse(source, "misplaced-element", path, {
+          check: "default-hotspot",
+          context: parent.local,
+          element: element.local,
+          reading: "80",
+        }),
+      ]
+    : [];
+
+/**
+ * Check a lookup table's outcome by reading 100 ("a lookup table sets a single outcome"): a
+ * `qti-match-table` or `qti-interpolation-table` belongs to an outcome declaration of single
+ * cardinality, so one under a declaration whose cardinality spells `multiple`, `ordered` or
+ * `record` is `misplaced-element`, `check: "lookup-cardinality"`, naming the outcome's collapsed
+ * `identifier`, empty where it writes none or one that holds an unexpanded entity reference. The
+ * law reads the cardinality alone, so it judges the declaration whatever its identifier spells
+ * (reading 157), and leaves one whose cardinality spells no cardinality to its value domain
+ * (reading 158).
+ *
+ * @param source The document.
+ * @param element The element.
+ * @param path The element's path.
+ * @param parent The element's parent, if it was walked.
+ * @returns Its `misplaced-element` refusal, or none.
+ */
+const checkLookupTable = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  parent: SourceElement | undefined,
+): readonly Refusal[] =>
+  element.namespace === qtiNamespace &&
+  lookupTables.has(element.local) &&
+  parent?.namespace === qtiNamespace &&
+  parent.local === "qti-outcome-declaration" &&
+  declares(parent, "cardinality", ["multiple", "ordered", "record"])
+    ? [
+        refuse(source, "misplaced-element", path, {
+          check: "lookup-cardinality",
+          element: element.local,
+          identifier: Option.getOrElse(modeOf(parent, [], "identifier"), () => ""),
+          reading: "100",
+        }),
+      ]
+    : [];
+
+/**
  * Check one element against the child-count rows that name it.
  *
  * @param source The document.
@@ -2297,9 +2414,11 @@ const namedType = (
  * entity reference, whose value is unknown, or it is a record's `base-type`, which is
  * `unknown-attribute` ({@link isRecordBaseType}). An undeclared one goes to {@link checkUndeclared}.
  * Non-whitespace text in an element whose table admits none is `text-not-allowed`. The placement
- * and child-count rows go to {@link checkPlacement} and {@link checkChildCounts}. The attributes and
- * the text are checked by the table that governs the element, and its `xsi:type` by the types its
- * name is declared with. The readings' rows name QTI's elements and attributes only.
+ * and child-count rows go to {@link checkPlacement} and {@link checkChildCounts}, and a default
+ * hotspot's place and a lookup table's outcome to {@link checkDefaultHotspot} and
+ * {@link checkLookupTable}. The attributes and the text are checked by the table that governs the
+ * element, and its `xsi:type` by the types its name is declared with. The readings' rows name QTI's
+ * elements and attributes only.
  *
  * @param source The document.
  * @param element The element.
@@ -2310,7 +2429,7 @@ const namedType = (
  * @param parents Each walked element's parent, for the declaration a padded value reads and the
  *   namespace declarations in scope.
  * @param schemas The tables by namespace, for the derivations an `xsi:type` follows.
- * @returns The element's refusals: its placement, missing attributes, its `xsi:type` and `xsi:nil`,
+ * @returns The element's refusals: its placements, missing attributes, its `xsi:type` and `xsi:nil`,
  *   then each other attribute's in document order, then its text, then its child counts.
  */
 const checkElement = (
@@ -2323,7 +2442,11 @@ const checkElement = (
   schemas: Schemas,
 ): readonly Refusal[] => {
   const { table } = governed;
-  const refusals: Refusal[] = [...checkPlacement(source, element, path, parents)];
+  const refusals: Refusal[] = [
+    ...checkPlacement(source, element, path, parents),
+    ...checkDefaultHotspot(source, element, path, parents.get(element)),
+    ...checkLookupTable(source, element, path, parents.get(element)),
+  ];
   const label = elementName(element);
   const declared = table.attributes.filter((declaration) => declaration.use !== "prohibited");
 

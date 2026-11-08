@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
-import { Config, ConfigProvider, Data, Duration, Effect, Option, Result } from "effect";
+import { Config, ConfigProvider, Data, Duration, Effect, Option } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
@@ -45,7 +45,6 @@ import type {
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { RecordValue, Value } from "#plate/model/values.ts";
-import { score as scoreItem } from "#plate/score.ts";
 import { rptemplatesDirectory } from "#plate/test/caches.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { acceptedOf, openCorpus } from "#plate/test/sweep.ts";
@@ -1251,6 +1250,38 @@ const lookupElement = (identifier: string, source: string): SourceElement =>
     [attr("identifier", identifier)],
     [el("qti-variable", [attr("identifier", source)])],
   );
+
+/**
+ * Construct an item whose response processing looks up the outcome `TARGET` from the integer
+ * response `RESPONSE`, `TARGET` holding a match table: an identifier outcome, or a record, which
+ * writes no base type.
+ *
+ * @param cardinality `TARGET`'s cardinality.
+ * @returns The document at `items/test.xml`.
+ */
+const lookedUpItem = (cardinality: string): SourceDocument => {
+  const table = el(
+    "qti-match-table",
+    [attr("default-value", "F")],
+    [el("qti-match-table-entry", [attr("source-value", "1"), attr("target-value", "A")])],
+  );
+
+  return item({
+    after: [el("qti-response-processing", [], [lookupElement("TARGET", "RESPONSE")])],
+    attributes: [attr("time-dependent", "false")],
+    body: [],
+    declarations: [
+      declaration("qti-response-declaration", "RESPONSE", "integer", "single"),
+      cardinality === "record"
+        ? el(
+            "qti-outcome-declaration",
+            [attr("cardinality", "record"), attr("identifier", "TARGET")],
+            [table],
+          )
+        : declaration("qti-outcome-declaration", "TARGET", "identifier", cardinality, [table]),
+    ],
+  });
+};
 
 describe("buildItem", () => {
   it.effect(
@@ -4094,74 +4125,63 @@ describe("buildItem", () => {
       }),
   );
 
-  it("[I-9a] marks a lookup into an outcome that is not single, so open accepts it with processing none and score does not fail: outcome-type for a multiple or an ordered outcome, as a template's, and variable for a record one, which the model does not hold", () => {
-    const processing = `${root}/qti-response-processing`;
-    const table = el(
-      "qti-match-table",
-      [attr("default-value", "F")],
-      [el("qti-match-table-entry", [attr("source-value", "1"), attr("target-value", "A")])],
-    );
-    const cases = [
-      {
-        marks: [{ feature: "outcome-type:TARGET", path: processing }],
-        outcome: declaration("qti-outcome-declaration", "TARGET", "identifier", "multiple", [
-          table,
-        ]),
-      },
-      {
-        marks: [{ feature: "outcome-type:TARGET", path: processing }],
-        outcome: declaration("qti-outcome-declaration", "TARGET", "identifier", "ordered", [table]),
-      },
-      {
-        // The control: the model holds no record outcome, so its lookup is an unheld variable's mark.
-        marks: [
-          { feature: 'cardinality="record"', path: `${root}/qti-outcome-declaration` },
-          { feature: "variable:TARGET", path: processing },
-        ],
-        outcome: el(
-          "qti-outcome-declaration",
-          [attr("cardinality", "record"), attr("identifier", "TARGET")],
-          [table],
-        ),
-      },
-    ] as const;
+  it("align-54 lookup refused for a non-single outcome E15: refuses a match table under a multiple, an ordered or a record outcome as misplaced-element, check lookup-cardinality, so check refuses the item (reading 100)", () => {
+    for (const cardinality of ["multiple", "ordered", "record"]) {
+      const verdict = check(lookedUpItem(cardinality), tables, Option.none());
 
-    for (const [index, { marks, outcome }] of cases.entries()) {
-      const label = `case ${index + 1}`;
-      const verdict = check(
-        item({
-          after: [el("qti-response-processing", [], [lookupElement("TARGET", "RESPONSE")])],
-          attributes: [attr("time-dependent", "false")],
-          body: [],
-          declarations: [
-            declaration("qti-response-declaration", "RESPONSE", "integer", "single"),
-            outcome,
-          ],
-        }),
-        tables,
-        Option.none(),
-      );
-      const accepted = Option.getOrElse(acceptedItem(verdict), () =>
-        assert.fail(`${label}: the item is ${verdict.verdict}, not accepted.`),
-      );
-
-      assert.strictEqual(verdict.verdict, "accepted-with-unsupported", label);
       assert.deepStrictEqual(
-        accepted.unsupported,
-        marks.map((mark) => ({ ...mark, shown: "mark" })),
-        label,
-      );
-      assert.deepStrictEqual(accepted.item.processing, Option.none(), label);
-      assert.strictEqual(
-        Result.match(scoreItem(accepted, { RESPONSE: integer(1n) }), {
-          onFailure: (failure) => failure._tag,
-          onSuccess: () => "scored",
-        }),
-        "scored",
-        label,
+        verdict.verdict === "refused"
+          ? verdict.refusals.map((refusal) => [refusal.rule, refusal.location, refusal.detail])
+          : verdict.verdict,
+        [
+          [
+            "misplaced-element",
+            { kind: "path", path: `${root}/qti-outcome-declaration/qti-match-table` },
+            {
+              check: "lookup-cardinality",
+              element: "qti-match-table",
+              identifier: "TARGET",
+              reading: "100",
+            },
+          ],
+        ],
+        cardinality,
       );
     }
   });
+
+  it.effect(
+    "[I-9a] marks a lookup into an outcome that is not single where buildItem reads the item without the structural walk, the one path that still reaches the mark: outcome-type for a multiple or an ordered outcome, and variable for a record one, which the model does not hold",
+    () =>
+      Effect.gen(function* marksUnwalkedLookup() {
+        const processing = `${root}/qti-response-processing`;
+        const cases = [
+          {
+            cardinality: "multiple",
+            marks: [{ feature: "outcome-type:TARGET", path: processing }],
+          },
+          { cardinality: "ordered", marks: [{ feature: "outcome-type:TARGET", path: processing }] },
+          {
+            cardinality: "record",
+            marks: [
+              { feature: 'cardinality="record"', path: `${root}/qti-outcome-declaration` },
+              { feature: "variable:TARGET", path: processing },
+            ],
+          },
+        ] as const;
+
+        for (const { cardinality, marks } of cases) {
+          const built = yield* buildItem(lookedUpItem(cardinality));
+
+          assert.deepStrictEqual(
+            built.unsupported,
+            marks.map((mark) => ({ ...mark, shown: "mark" })),
+            cardinality,
+          );
+          assert.deepStrictEqual(built.processing, Option.none(), cardinality);
+        }
+      }),
+  );
 
   it.effect('[Q-2] refuses max-choices="-1" as value-type, outside xs:nonNegativeInteger', () =>
     Effect.gen(function* refusesNegativeCount() {
