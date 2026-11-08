@@ -859,7 +859,7 @@ describe("README.md", () => {
     for (const fragment of [
       "the `duration` of a part, a section or an item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`",
       "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that does not start with a part, section or item ref of the test document itself",
-      "So do a `qti-variable`, `qti-correct` or `qti-default` of a `file` or `record` variable",
+      "So do a `qti-variable`, `qti-correct` or `qti-default` of a `file` variable, of a `record` variable other than a response, or of a `record` response with a `file` field",
       "A test's `qti-default` of its own `duration` gives NULL of a single duration",
       "A test reads an item's `numAttempts` as the number of attempts started, the count `results` writes",
       "`qti-number-correct` and `qti-number-incorrect` consider an item's `file` and `record` responses",
@@ -940,6 +940,118 @@ describe("README.md", () => {
       assert.include(outcomes, fragment);
     }
     assert.notInclude(outcomes, "plate holds no value of it *(pending)*");
+  });
+
+  it("says in Interactions how record answers post and decode, naming stringValue, floatValue and the six integer fields", () => {
+    const fields = [
+      "stringValue",
+      "floatValue",
+      "integerValue",
+      "leftDigits",
+      "rightDigits",
+      "ndp",
+      "nsf",
+      "exponent",
+    ];
+    const interactions = flatSectionOf("## Interactions");
+
+    assert.isTrue(
+      paragraphsOf("## Interactions").some((paragraph) =>
+        fields.every((field) => paragraph.includes(`\`${field}\``)),
+      ),
+      "a paragraph of Interactions names each field a record answer decodes to",
+    );
+    for (const fragment of [
+      "`postings` gives the response a `RecordBinding`",
+      "`decode` does not apply a Text Entry's `base` to a record",
+      "against its `stringValue` as typed",
+      "`expected-length` sets a text control's size only",
+    ]) {
+      assert.include(interactions, fragment);
+    }
+    assert.notInclude(interactions, "does not take `record` answers yet");
+  });
+
+  it("names in the Records rows where record answers are stored: records in StoredRecord and saved in StoredTestSession", () => {
+    const rows = sectionOf("## Records").split("\n");
+    const row = (record: string): string =>
+      rows.find((line) => line.startsWith(`| \`${record}\``)) ??
+      assert.fail(`the records table has no ${record} row`);
+
+    assert.include(row("StoredRecord"), "`record` answers in `records`");
+    assert.include(row("StoredTestSession"), "`record` answers in `saved`");
+  });
+
+  it("names RecordOperandError beside EngineFailure in the Functions table, and ResponseValue where a map holds record answers", () => {
+    const exported = readImports(packageFile("src/index.ts")).imports.flatMap(({ names }) =>
+      names.map(({ name }) => name),
+    );
+    const rows = sectionOf("## Functions")
+      .split("\n")
+      .filter((line) => line.startsWith("| `"));
+    const action = codeBlocks(sectionOf("### A plain server action")).map(scriptOf).join("\n");
+
+    for (const name of ["RecordOperandError", "ResponseValue", "RecordValue"]) {
+      assert.include(exported, name);
+    }
+    assert.isTrue(
+      rows.some((row) => row.includes("`EngineFailure`") && row.includes("`RecordOperandError`")),
+      "a row of the Functions table names RecordOperandError beside EngineFailure",
+    );
+    assert.isTrue(
+      rows.some(
+        (row) =>
+          row.includes("`decode`") &&
+          row.includes("`ResponseValue`") &&
+          row.includes("`RecordValue`"),
+      ),
+      "the Functions table's decode row names ResponseValue and RecordValue",
+    );
+    assert.include(action, "Record<string, ResponseValue>");
+  });
+
+  it("says in Scoring what score, advance and open refuse of record answers: not-a-value, cardinality and missing-attribute", () => {
+    const scoring = flatSectionOf("## Scoring");
+
+    for (const fragment of [
+      "`score` takes a `record` response's answer as a `RecordValue`",
+      "with the problem `not-a-value`",
+      "with the problem `cardinality`",
+      "with `StepResponseMisfit`",
+      "| A `qti-value` without `field-identifier` or `base-type` in the `qti-correct-response` or `qti-default-value` of a `record` declaration | `missing-attribute` |",
+    ]) {
+      assert.include(scoring, fragment);
+    }
+  });
+
+  it("states in Scoring the bound on decoding record answers and lists the record variables plate holds no value for among its marks", () => {
+    const scoring = flatSectionOf("## Scoring");
+
+    for (const fragment of [
+      "`decode` takes no step for a `record` answer that it does not take for an `integer` one",
+      "cap the request body",
+      "a `record` response with a `file` field, a `record` outcome or template variable, `QTI_CONTEXT` or another context variable",
+    ]) {
+      assert.include(scoring, fragment);
+    }
+  });
+
+  it("says how processing reads record answers: a template rule that sets one is marked, and a test reads one through an item ref", () => {
+    const template = flatSectionOf("## Template processing");
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    assert.include(template, "`record-set`");
+    assert.include(
+      template,
+      "a `record` response always keeps the correct response and default its declaration writes",
+    );
+    for (const fragment of [
+      "such as `ITEM1.RESPONSE`, gives the `record` answer that the item's record holds",
+      "A `record` response matches its correct response when the two hold the same fields",
+      "`qti-number-responded` counts an item whose `record` response differs from its declared default",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
   });
 
   it.effect("runs the plain server action on a base-16 Text Entry, which scores ff as 255", () =>
