@@ -32,7 +32,7 @@
  * @module
  */
 import { Option } from "effect";
-import { attributePath, qtiNamespace, walk, xincludeNamespace } from "#plate/document/source.ts";
+import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
   SourceDocument,
@@ -72,16 +72,6 @@ const identifiedParts: ReadonlySet<string> = new Set([
   "qti-assessment-section-ref",
   "qti-test-part",
 ]);
-
-/**
- * The children that make a section non-empty: "A Section must contain at least one other Section
- * or Item" (info.txt:9130, reading 26), a section ref standing for the section it names.
- */
-const sectionMembers = [
-  "qti-assessment-item-ref",
-  "qti-assessment-section",
-  "qti-assessment-section-ref",
-] as const;
 
 /**
  * The test content that holds no interaction and no template element (reading 25): a test's
@@ -345,45 +335,6 @@ const duplicateIdentifier = (
 };
 
 /**
- * Apply reading 26's `child-count` to a section: it holds at least one item ref, section or
- * section ref.
- *
- * A section with an XInclude child is not counted: the inclusion is not performed, and what it
- * would supply may be the member the count needs, so refusing it could refuse a valid section
- * (reading 1). The verdict accepts such a document: a test's include is marked `xi:include`, and a
- * section document carries its root's mark.
- *
- * @param source The document.
- * @param visit The element's visit.
- * @returns The refusal at the section's path, or none when it holds a member or is not a section.
- */
-const sectionChildCount = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
-  const { element } = visit;
-  if (!isQti(element, (local) => local === "qti-assessment-section")) {
-    return [];
-  }
-
-  const children = element.children.filter((child) => child.kind === "element");
-  const counted = children.some(
-    (child) =>
-      child.namespace === xincludeNamespace ||
-      isQti(child, (local) => sectionMembers.some((member) => member === local)),
-  );
-  if (counted) {
-    return [];
-  }
-
-  return [
-    refusal(source, "child-count", visit.path, {
-      child: sectionMembers.join(" or "),
-      element: element.local,
-      required: "at least one",
-      source: "reading 26",
-    }),
-  ];
-};
-
-/**
  * Apply readings 24 and 25's `misplaced-element` to an interaction or a template element: it does
  * not sit in a test's rubric block or test feedback.
  *
@@ -487,18 +438,21 @@ const expressionPlacement = (
 
 /**
  * Check a test or section document against the test prose rules: `duplicate-identifier` over its
- * parts, sections, item refs and section refs, reading 26's `child-count` on each section, readings
- * 24 and 25's `misplaced-element` for an interaction or a template element in a rubric block or
- * test feedback, reading 23's `expression-placement` for an outcome-only expression, or a weighted
- * `qti-variable`, outside outcome processing, and, in a test, `undeclared-variable` and
- * `expression-type` for what a `qti-printed-variable` names, judged as an item's are
- * (`printedVariableReferences`): its `identifier` names an outcome the test declares, and its
- * `base` and `index`, written as a name, a single integer outcome the test declares, where a
- * context variable or a built-in of the test (`QTI_CONTEXT`, `duration`) is refused by its kind. A
- * section document's printed variables are not judged, since a section declares nothing. A field of
- * a record declaration's value that lacks `field-identifier` or `base-type` is `missing-attribute`,
- * and one whose text is outside its own `base-type` is `value-type`, at the paths and with the
- * details an item's gets (`recordFieldRefusals`, `info.txt:73046`).
+ * parts, sections, item refs and section refs, readings 24 and 25's `misplaced-element` for an
+ * interaction or a template element in a rubric block or test feedback, reading 23's
+ * `expression-placement` for an outcome-only expression, or a weighted `qti-variable`, outside
+ * outcome processing, and, in a test, `undeclared-variable` and `expression-type` for what a
+ * `qti-printed-variable` names, judged as an item's are (`printedVariableReferences`): its
+ * `identifier` names an outcome the test declares, and its `base` and `index`, written as a name, a
+ * single integer outcome the test declares, where a context variable or a built-in of the test
+ * (`QTI_CONTEXT`, `duration`) is refused by its kind. A section document's printed variables are
+ * not judged, since a section declares nothing. A field of a record declaration's value that lacks
+ * `field-identifier` or `base-type` is `missing-attribute`, and one whose text is outside its own
+ * `base-type` is `value-type`, at the paths and with the details an item's gets
+ * (`recordFieldRefusals`, `info.txt:73046`).
+ *
+ * A section's parts are not counted: a section that holds a rubric block alone, or nothing, is
+ * valid, since reading 26 holds that "an assessment section may hold no part".
  *
  * Its expressions are judged by the item's processing rules (`processingRefusals`, the qti
  * package's P8, P20 to P24 and P29), with every prefixed read typed `unknown`
@@ -513,8 +467,9 @@ const expressionPlacement = (
  *   item's rules are `checkRules`'.
  * - A document whose judged elements hold an unexpanded entity reference anywhere gives no refusal,
  *   as `checkRules` gives none for such an item: `identifier="&id;"` on one item ref could equal
- *   any other's, and an entity among a section's children may be its only member. The verdict
- *   leaves such a document unchecked unless the structural walk refuses it.
+ *   any other's, and an entity among an element's children may stand for an item ref or a section
+ *   whose identifier repeats another's. The verdict leaves such a document unchecked unless the
+ *   structural walk refuses it.
  * - Only the elements the structural walk checks are visited, the keys of `governingTables` for the
  *   same tables (reading 57).
  *
@@ -550,7 +505,6 @@ export const checkTestRules = (source: SourceDocument, tables: Tables): readonly
 
     return [
       ...duplicateIdentifier(source, visit, seen),
-      ...sectionChildCount(source, visit),
       ...misplacedInTestContent(source, visit, parents),
       ...expressionPlacement(source, visit, parents),
       ...recordFieldRefusals(source, visit, parents),

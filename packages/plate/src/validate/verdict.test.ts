@@ -1517,13 +1517,17 @@ describe("check, every QTI 3 root", () => {
     { tags: ["corpus"] },
   );
 
-  it("refuses a hand-built empty section document with child-count, of kind section", () => {
+  it("align-54 empty section D1: accepts a hand-built section document whose root section holds nothing, marked as a section root (reading 26)", () => {
     const verdict = verdictOf(doc("section.xml", assessmentSection("S", [])));
 
-    assert.deepStrictEqual(refusalsOf(verdict), [
-      { location: { kind: "path", path: "qti-assessment-section" }, rule: "child-count" },
-    ]);
-    assert.strictEqual(verdict.kind, "section");
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+    assert.isTrue(verdict.kind === "section");
+    if (verdict.verdict === "accepted-with-unsupported" && verdict.kind === "section") {
+      assert.strictEqual(verdict.accepted.identifier, "S");
+      assert.deepStrictEqual(featuresOf(verdict.accepted.unsupported), [
+        "root:qti-assessment-section@qti-assessment-section",
+      ]);
+    }
   });
 
   it("accepts a section document with unsupported features, marked as a section root", () => {
