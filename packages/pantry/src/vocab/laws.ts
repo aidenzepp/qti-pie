@@ -134,6 +134,7 @@ export const precedence = [
   "key-text-bound",
   "href-form",
   "fragment-context",
+  "remote-section",
   "namespace-name",
   "well-formedness",
   "unmodeled-vocabulary",
@@ -758,6 +759,11 @@ export const lawTable = {
     rule: "P24",
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#Union_IntegerOrVariableRef (§9.3.3, §9.3.1 and §9.3.4: an integerOrVariableRef, floatOrVariableRef or stringOrVariableRef names a template or outcome variable of that base type, single) (expression.ts ReferenceBase; the old checker's P24)",
+  },
+  "Remote section ref": {
+    rule: "remote-section",
+    source:
+      "reading 170: https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentSectionRef (§7.5: a section ref 'functions as a facade for the qti-assessment-section to which it refers', and bans no remote one): a section ref whose href resolves outside the package (a scheme, a leading /, a climb above the root, reading 102) is refused, since pantry imports a package offline, never fetches a resource (reading 115) and assembles every test from its package's documents (readings 86 and 117), and a section ref's section is the test's own content, which an external include's fragment is not; a stated limit of the representation, not a law of the specification, which a fetch of the section at import would lift",
   },
   "Reserved type": {
     rule: "reserved-type",

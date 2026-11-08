@@ -498,9 +498,10 @@ export const SectionOrdering = relation(
  *   `ancestry`, `document`, `documentType`, `governs`, `kind`, `nearest`, `nearestKind`,
  *   `parentKind`, `start`, `version`), which also holds its {@link nodeRef} fields but `parent`;
  *   `parent`; `external`, whether its href resolves outside the package, which its href's
- *   `Reference` row proves (an include's then is stored as written and never fetched); and the
- *   scope it is placed in, its parent's: `part`, `replaced` (its parent section's `replacing`),
- *   `parentMixes` and `parentLooseChain`.
+ *   `Reference` row proves (an include's then is stored as written and never fetched, and a section
+ *   ref's is refused under the stated limit "Remote section ref", reading 170); and the scope it is
+ *   placed in, its parent's: `part`, `replaced` (its parent section's `replacing`), `parentMixes`
+ *   and `parentLooseChain`.
  *
  * Its `part` is the test part it sits in: its parent section's under a section, its parent under a
  * test part, and its own document under any other parent (an item's body or processing, a
@@ -547,7 +548,10 @@ export const Site = relation(
  *   names its own document, and names no document of the package then, so it has no row and
  *   "Include target" refuses it alone (spec reading 115); one whose href resolves outside the
  *   package has no row either, and its site is marked `external`, stored as written and never
- *   fetched; a section ref must write one, and AL3 refuses one that does not.
+ *   fetched; a section ref must write one, and AL3 refuses one that does not. A section ref whose
+ *   href resolves outside the package has no row and is marked `external` as well, and the stated
+ *   limit "Remote section ref" refuses it alone: pantry imports offline and never fetches the
+ *   section it names, which is the test's own content (reading 170).
  * - A path no entry holds is `entry` false, which `File_exists` refuses as the row is inserted,
  *   before any deferred key: an href naming an absent file is refused under "File exists" alone,
  *   whatever its site is, and the site's document laws read only paths an entry holds.
@@ -1120,9 +1124,12 @@ const headDocuments = select(Document, (d) => d.and(d.eq(d.assembled, true), d.e
 export const itemInstances = select(Instance, (i) => i.eq(i.assemblyKind, itemKind));
 
 /**
- * The sites that are section refs, each with its href (information model §7.5).
+ * The sites that are section refs whose href stays in the package, each with its href (information
+ * model §7.5). One whose href resolves outside it is "Remote section ref"'s alone (reading 170).
  */
-const sectionRefSites = select(Site, (s) => s.eq(s.kind, sectionRefKind));
+const sectionRefSites = select(Site, (s) =>
+  s.and(s.eq(s.kind, sectionRefKind), s.eq(s.external, false)),
+);
 
 /**
  * The hrefs of the sites that are section refs whose path an entry holds, each naming a section
@@ -1548,15 +1555,16 @@ const flagCopies = flagCarriers.map(flagCopy);
  *   ({@link requiredFold}), their flags and scope; reading 79's `Selection_bound`, `select ≤
  *   members` unless the selection is with replacement, and info §4.2.2's `Selection_required`,
  *   `required ≤ select`;
- * - **the hrefs:** each site that writes one ({@link SitePath}, a row of its own, every section
- *   ref's) has its href's `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`), an entry of the
- *   package, under the stated limit `Href_form`, but an include whose href resolves outside the
+ * - **the hrefs:** each site that writes one ({@link SitePath}, a row of its own, every section ref's
+ *   in the package) has its href's `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`), an entry
+ *   of the package, under the stated limit `Href_form`, but a site whose href resolves outside the
  *   package, marked `external` as its href's `Reference` proves; an item ref's is its target's
  *   (below);
  * - **the sites** ({@link Site}, {@link SiteTarget}): each names a document of the package, its
  *   target, a row of its own ("Include target", reading 115), but an external include, stored as
- *   written and never fetched; and each section ref and section-level include names a section
- *   document;
+ *   written and never fetched; each section ref and section-level include names a section document;
+ *   and no section ref is external (`Remote_section_ref`, reading 170: a stated limit of pantry,
+ *   which imports offline and cannot assemble a section it does not hold, not a law of QTI);
  * - **the branch rules** ({@link BranchRule}): each one that names no exit;
  * - **the mappings** ({@link VariableMapping}): no two of one item ref name one target, and none a
  *   session variable (reading 97, `Variable_mapping_target`);
@@ -2107,6 +2115,11 @@ export const testLawsByName = {
     ),
     key(on(itemDocuments, "node")),
     contained(on(ItemRefDocument, "document"), on(itemDocuments, "node")),
+  ],
+  "Remote section ref": [
+    check("Remote_section_ref", Site, (s) =>
+      s.or(s.ne(s.kind, sectionRefKind), s.eq(s.external, false)),
+    ),
   ],
   "Selection bound": [
     check("Selection_bound", SectionSelection, (s) =>

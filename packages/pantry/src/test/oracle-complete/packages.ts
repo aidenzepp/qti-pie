@@ -405,6 +405,17 @@ export const packageMutations = {
         ),
     over: "package",
   },
+  // Remote section ref (reading 170, a stated limit): the test's section ref of section.xml given an
+  // href that resolves outside the package, by a scheme, a leading slash or a climb above the root.
+  "Remote section ref": passageAt(
+    "test.xml",
+    '<qti-assessment-section-ref identifier="placement" href="section.xml"/>',
+    [
+      '<qti-assessment-section-ref identifier="placement" href="https://example.com/section.xml"/>',
+      '<qti-assessment-section-ref identifier="placement" href="/section.xml"/>',
+      '<qti-assessment-section-ref identifier="placement" href="../section.xml"/>',
+    ],
+  ),
   // RootOfType (P2): the usage data listed as an item, a test or a stimulus.
   RootOfType: passageAt(manifest, usageResource, [
     usageResource.replace("qtiusagedata/xml", "imsqti_item_xmlv3p0"),

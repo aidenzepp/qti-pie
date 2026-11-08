@@ -167,8 +167,10 @@ export const sitePackage = (box: SiteBox): PackageEntries => {
  * one: an href naming a file the package does not hold, "File exists", whatever its site; an
  * include naming no document of the package, by an entry it lists as none or no href, "Include
  * target", and none for one naming a file outside it, which is stored as written and never fetched
- * (reading 115); a section ref naming no section document, "Document entry", and one with no
- * href, AL3's required attribute.
+ * (reading 115); a section ref naming no section document, "Document entry", one with no href,
+ * AL3's required attribute, and one naming a file outside the package, the stated limit "Remote
+ * section ref" (reading 170): pantry imports offline and never fetches a section it does not
+ * hold, and a section ref's section is the test's own content, so none can be assembled.
  *
  * @param name - The site.
  * @param href - Its case.
@@ -185,6 +187,10 @@ export const ruleOfCase = (name: SiteName, href: HrefCase): string | undefined =
 
   if (sites[name].kind === "xi:include") {
     return href === "external" ? undefined : "include-target";
+  }
+
+  if (href === "external") {
+    return "remote-section";
   }
 
   return href === "missing" ? "required-attribute" : "entry-kind";
