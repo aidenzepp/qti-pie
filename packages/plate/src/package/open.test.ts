@@ -680,11 +680,11 @@ const openScoringPoints = (timeDependent: "false" | "true", expression: string) 
   openPackage(
     location,
     packageOf({
-      [manifestFile]: manifestXml(resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml")),
       "items/a.xml": pointsItemXml(
         timeDependent,
         `<qti-response-processing><qti-set-outcome-value identifier="SCORE">${expression}</qti-set-outcome-value></qti-response-processing>`,
       ),
+      [manifestFile]: manifestXml(resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml")),
     }),
   );
 
@@ -769,14 +769,14 @@ const sectionXml = (itemRef = "", more = ""): string =>
  * @returns The package's files, by path.
  */
 const referringFiles = (processing: string, sectionRefs: string, section: string) => ({
+  "items/a.xml": reachedItemXml,
+  "items/b.xml": otherItemXml,
   [manifestFile]: manifestXml(
     resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
     resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
     resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
     resourceXml("S", "imsqti_section_xmlv3p0", "sections/s2.xml"),
   ),
-  "items/a.xml": reachedItemXml,
-  "items/b.xml": otherItemXml,
   "sections/s2.xml": section,
   "test.xml": referringTestXml(processing, sectionRefs),
 });
@@ -941,6 +941,8 @@ const reachingFiles = (
   processing: string,
   ...sections: readonly (readonly [identifier: string, content: string])[]
 ) => ({
+  "items/a.xml": reachedItemXml,
+  "items/b.xml": otherItemXml,
   [manifestFile]: manifestXml(
     resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
     resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
@@ -949,8 +951,6 @@ const reachingFiles = (
       resourceXml(identifier, "imsqti_section_xmlv3p0", `sections/${identifier}.xml`),
     ),
   ),
-  "items/a.xml": reachedItemXml,
-  "items/b.xml": otherItemXml,
   ...Object.fromEntries(
     sections.map(([identifier, content]) => [
       `sections/${identifier}.xml`,
@@ -1012,6 +1012,8 @@ const chainPackage = (length: number): ReadonlyMap<string, Uint8Array> => {
   const indices = Array.from({ length }, (_, index) => index);
 
   return packageOf({
+    "items/a.xml": reachedItemXml,
+    "items/b.xml": otherItemXml,
     [manifestFile]: manifestXml(
       resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
       resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
@@ -1020,8 +1022,6 @@ const chainPackage = (length: number): ReadonlyMap<string, Uint8Array> => {
         resourceXml(`S${index}`, "imsqti_section_xmlv3p0", `sections/s${index}.xml`),
       ),
     ),
-    "items/a.xml": reachedItemXml,
-    "items/b.xml": otherItemXml,
     ...Object.fromEntries(
       indices.map((index) => [
         `sections/s${index}.xml`,
