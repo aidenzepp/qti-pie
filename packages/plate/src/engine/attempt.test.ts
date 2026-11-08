@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
+import { decodeRecord } from "#plate/codec/record.ts";
 import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/evaluate.ts";
 import { drawBelow, drawStream, responseLabel, templateLabel } from "#plate/engine/random.ts";
@@ -11,7 +12,9 @@ import type { Item } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
+import { score as scoreItem } from "#plate/score.ts";
+import { acceptForTest } from "#plate/validate/verdict.ts";
 
 /**
  * Construct a single identifier value.
@@ -1312,6 +1315,105 @@ describe("firstAttempt with an item ref's template defaults", () => {
             identifier: "T",
           }),
         );
+      }),
+  );
+});
+
+/**
+ * Construct a record's `qti-value`: one field, of a base type, from its text.
+ *
+ * @param identifier The `field-identifier`.
+ * @param baseType The field's `base-type`.
+ * @param written The value's text.
+ * @returns The `qti-value` element.
+ */
+const fieldElement = (identifier: string, baseType: string, written: string): SourceElement =>
+  el(
+    "qti-value",
+    [attr("base-type", baseType), attr("field-identifier", identifier)],
+    [text(written)],
+  );
+
+/**
+ * The record `R` declares as its default: the text `2.5` read into its `stringValue` and
+ * `floatValue`, as a Text Entry bound to a record would post it.
+ */
+const declaredRecord: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "stringValue", value: { baseType: "string", value: "2.5" } },
+    { identifier: "floatValue", value: { baseType: "float", value: 2.5 } },
+  ],
+};
+
+/**
+ * An item with the record response `R`, which declares {@link declaredRecord} as its default, the
+ * record response `BARE`, which declares none, and response processing that sets the float `SCORE`
+ * to `R`'s `floatValue`.
+ */
+const recordDefaults = itemDocument(
+  el(
+    "qti-response-declaration",
+    [attr("cardinality", "record"), attr("identifier", "R")],
+    [
+      el(
+        "qti-default-value",
+        [],
+        [fieldElement("stringValue", "string", "2.5"), fieldElement("floatValue", "float", "2.5")],
+      ),
+    ],
+  ),
+  el("qti-response-declaration", [attr("cardinality", "record"), attr("identifier", "BARE")]),
+  declaration("qti-outcome-declaration", "SCORE", "float"),
+  el(
+    "qti-response-processing",
+    [],
+    [
+      el(
+        "qti-set-outcome-value",
+        [attr("identifier", "SCORE")],
+        [
+          el(
+            "qti-field-value",
+            [attr("field-identifier", "floatValue")],
+            [el("qti-variable", [attr("identifier", "R")])],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+describe("firstAttempt with a record response", () => {
+  it.effect(
+    "[I-1] record default at the first attempt: firstAttempt writes a record response's declared default into records, and nothing for one that declares none",
+    () =>
+      Effect.gen(function* writesRecordDefault() {
+        const item = yield* buildItem(recordDefaults);
+
+        const record = yield* Effect.fromResult(firstAttempt(item, { instance, seed: "7" }));
+
+        assert.deepStrictEqual([...(item.records?.keys() ?? [])], ["R", "BARE"]);
+        assert.deepStrictEqual(record, {
+          ...fresh(item, instance),
+          records: { R: declaredRecord },
+          seed: "7",
+        });
+      }),
+  );
+
+  it.effect(
+    "[I-1] record default at the first attempt: score with no record stores the default of a record response the post leaves out, and scores it",
+    () =>
+      Effect.gen(function* scoresRecordDefault() {
+        const item = yield* buildItem(recordDefaults);
+
+        const stored = yield* Effect.fromResult(scoreItem(acceptForTest(item), {}));
+        const after = yield* Effect.fromResult(decodeRecord(stored));
+
+        assert.deepStrictEqual(item.unsupported, []);
+        assert.deepStrictEqual(after.records, { R: declaredRecord });
+        assert.deepStrictEqual(after.outcomes["SCORE"], floatValue(2.5));
       }),
   );
 });

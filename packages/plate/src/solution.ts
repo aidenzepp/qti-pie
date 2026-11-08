@@ -9,10 +9,10 @@
  */
 import { Option } from "effect";
 import type { TemplateRule } from "#plate/model/expression.ts";
-import type { Item, ResponseDeclaration } from "#plate/model/item.ts";
+import type { Item, RecordDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
 import type { SolutionRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { RecordValue, Value } from "#plate/model/values.ts";
 import type { Responses } from "#plate/session/session.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
@@ -27,6 +27,20 @@ const correctOf = (declaration: ResponseDeclaration): Value =>
   Option.getOrElse(declaration.correct, () =>
     nullOf(declaration.baseType, declaration.cardinality),
   );
+
+/**
+ * The NULL record: a record of no field.
+ */
+const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+/**
+ * Give a record response declaration's correct response.
+ *
+ * @param declaration The record response declaration.
+ * @returns Its `qti-correct-response`, or the NULL record when it declares none.
+ */
+const recordCorrectOf = (declaration: RecordDeclaration): RecordValue =>
+  Option.getOrElse(declaration.correct, () => nullRecord);
 
 /**
  * Give the identifiers of the responses whose correct response a `qti-set-correct-response` among
@@ -94,25 +108,36 @@ const recorded = (record: SolutionRecord | undefined, identifier: string): Optio
  * in it targets, at any depth, since that value is drawn only when the record starts; every other
  * response gives its declaration's correct response, or NULL. An item whose template processing
  * does not run, which its `unsupported` then marks, gives its declarations' correct responses.
+ * Each record response gives its declaration's `qti-correct-response`, else the NULL record (a
+ * record of no field), with or without a record: template processing that would set one is
+ * marked `record-set` and does not run, so no record holds one.
  *
  * It takes `check`'s {@link Accepted}, never `redact`'s output, which holds no correct response.
  *
  * @param document The accepted item.
  * @param record The item's record, of which it reads only the correct responses template
  *   processing set.
- * @returns A value for every response the item declares, each value of base type integer an exact
- *   `bigint`.
+ * @returns A value for every response the item declares, a record response's a record, each value
+ *   of base type integer an exact `bigint`.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_CorrectResponse
  */
 export const solution = (document: Accepted, record?: SolutionRecord): Responses => {
   const withheld = record === undefined ? templateCorrectTargets(document.item) : new Set<string>();
 
-  return Object.fromEntries(
-    [...document.item.responses].map(([identifier, declaration]) => [
-      identifier,
-      withheld.has(identifier)
-        ? nullOf(declaration.baseType, declaration.cardinality)
-        : Option.getOrElse(recorded(record, identifier), () => correctOf(declaration)),
-    ]),
-  );
+  return {
+    ...Object.fromEntries(
+      [...document.item.responses].map(([identifier, declaration]) => [
+        identifier,
+        withheld.has(identifier)
+          ? nullOf(declaration.baseType, declaration.cardinality)
+          : Option.getOrElse(recorded(record, identifier), () => correctOf(declaration)),
+      ]),
+    ),
+    ...Object.fromEntries(
+      [...(document.item.records?.values() ?? [])].map((declaration) => [
+        declaration.identifier,
+        recordCorrectOf(declaration),
+      ]),
+    ),
+  };
 };

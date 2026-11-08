@@ -4,11 +4,12 @@
  *
  * {@link firstAttempt} starts the record: it runs the item's template processing under the record's
  * seed, from the declared state with any template defaults the test gives, and sets every response
- * and outcome to its default. {@link runAttempt} sets the responses, counts the attempt, resets the
- * declared outcomes, carries the built-in `completionStatus` over, and runs the item's rules with
- * the evaluator over the record's template values and overrides. Both are pure and return the
- * engine's failure rather than throw it. The author's flow decides whether an attempt may run (rule
- * `a9d04969`); this module only runs it.
+ * and outcome to its default, and each record response that declares a default to that default.
+ * {@link runAttempt} sets the responses, counts the attempt, resets the declared outcomes, carries
+ * the built-in `completionStatus` over, and runs the item's rules with the evaluator over the
+ * record's template values and overrides. Both are pure and return the engine's failure rather
+ * than throw it. The author's flow decides whether an attempt may run (rule `a9d04969`); this
+ * module only runs it.
  *
  * Value imports point one way: here to the template interpreter (`#plate/engine/template.ts`), and
  * both to the evaluator.
@@ -69,6 +70,25 @@ const responseStart = (item: Item, defaults: ItemRecord["defaults"]): ItemRecord
         () => nullOf(response.baseType, response.cardinality),
       ),
     ]),
+  );
+
+/**
+ * Give each record response of an item that declares a default that default (D4-11 for a record),
+ * by identifier. Template processing never sets a record response's default (a rule that would is
+ * marked `record-set` and does not run), so the declaration's is the only one, and a record
+ * response that declares none has no entry.
+ *
+ * @param item The item.
+ * @returns The record responses' values, keyed by identifier.
+ */
+const recordStart = (item: Item): ItemRecord["records"] =>
+  Object.fromEntries(
+    [...(item.records?.values() ?? [])].flatMap((declared) =>
+      Option.match(declared.defaultValue, {
+        onNone: () => [],
+        onSome: (record) => [[declared.identifier, record] as const],
+      }),
+    ),
   );
 
 /**
@@ -184,8 +204,8 @@ export const runAttempt = (
 };
 
 /**
- * Start the record of an item's first attempt: template processing, then the response and outcome
- * defaults (D4-11).
+ * Start the record of an item's first attempt: template processing, then the response, record
+ * response and outcome defaults (D4-11).
  *
  * The record is {@link fresh}'s for the instance, under the given seed, with:
  *
@@ -209,6 +229,8 @@ export const runAttempt = (
  *     (`variable:<identifier>` at `qti-template-processing` for a name the engine does not hold).
  * - `responses`: each at its default, the one template processing set, else the declared one, else
  *   NULL of its type, before any response is given.
+ * - `records`: each record response that declares a default at that default, before any response is
+ *   given, and no entry for one that declares none ({@link recordStart}).
  * - `outcomes`: each declared outcome at its default, the one template processing set, else its
  *   starting value (`startingValue` in `#plate/model/record.ts`), and the built-in
  *   `completionStatus` at `not_attempted`, as {@link fresh} writes it.
@@ -265,6 +287,7 @@ export const firstAttempt = (
       correct: values.correct,
       defaults: values.defaults,
       outcomes: outcomeStart(item, values.defaults),
+      records: recordStart(item),
       responses: responseStart(item, values.defaults),
       seed: start.seed,
       templates: values.templates,
