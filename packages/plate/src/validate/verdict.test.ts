@@ -2806,6 +2806,54 @@ describe("describeRefusal", () => {
     );
   });
 
+  it("names a built-in a mapping or correct response reads as the built-in, which has no declaration (built-in or dotted response wording)", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      for (const identifier of ["numAttempts", "duration"]) {
+        const sentence = describeRefusal(
+          refusalOf("undeclared-variable", { element, expected: "response", identifier }),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` names the built-in \`${identifier}\`, which has no declaration, so no mapping or correct response.`,
+        );
+        assert.include(sentence, "To make it valid: name a declared response.");
+        assert.notInclude(sentence, `declare \`${identifier}\``);
+      }
+    }
+  });
+
+  it("names a dotted name a mapping or correct response reads as a read through an item ref, test part or section (built-in or dotted response wording)", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      for (const identifier of ["I1.numAttempts", "I1.SCORE"]) {
+        const sentence = describeRefusal(
+          refusalOf("undeclared-variable", { element, expected: "response", identifier }),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` names \`${identifier}\`, which reads, through an item ref, test part or section, a variable that is not a response its item declares.`,
+        );
+        assert.include(
+          sentence,
+          "To make it valid: name a response the item declares, written `ITEMREF.RESPONSE`.",
+        );
+        assert.notInclude(sentence, `declare \`${identifier}\``);
+      }
+    }
+  });
+
+  it("keeps the declaration fix for an undotted name that is no built-in (built-in or dotted response wording, control)", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      const sentence = describeRefusal(
+        refusalOf("undeclared-variable", { element, expected: "response", identifier: "SCORE" }),
+      );
+
+      assert.include(sentence, "the item declares no response `SCORE`.");
+      assert.include(sentence, "To make it valid: declare `SCORE`, or name a declared response.");
+    }
+  });
+
   it("names the base type of a weighted qti-test-variables that is not float", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {
