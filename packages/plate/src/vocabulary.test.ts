@@ -232,7 +232,7 @@ describe("the closed value sets", () => {
       [
         "notices",
         renders.notices.map((notice) => notice.feature),
-        ["pattern-mask", 'cardinality="record"', "qti-inline-choice-interaction"],
+        ["pattern-mask", "qti-inline-choice-interaction"],
       ],
       [
         "controlNotices",
@@ -379,6 +379,19 @@ describe("the closed value sets", () => {
         when: { kind: "integer-above", limit: 100n, name: "min-strings" },
       },
     ]);
+  });
+
+  it("[Q-20] [Q-5] shows no notice in place of a record-bound control: no notice rule names a cardinality, so a text interaction bound to a record response renders", () => {
+    assert.notInclude(
+      [...renders.notices, ...renders.controlNotices].map((notice) => notice.feature),
+      'cardinality="record"',
+    );
+    assert.deepStrictEqual(
+      [...renders.notices, ...renders.controlNotices].flatMap((notice) =>
+        "cardinality" in notice.when ? [notice.feature] : [],
+      ),
+      [],
+    );
   });
 
   it("puts every notice on a rendered interaction", () => {

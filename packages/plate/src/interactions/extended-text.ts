@@ -2,14 +2,16 @@
  * Extended Text (Q-5): its parts, its connect function and its response validation, on Choice's
  * module shape.
  *
- * {@link renderExtendedText} emits this structure: a `qti-extended-text-interaction`
- * Root holding the Prompt, when there is one, then the payload's `n` Controls, each a native
- * `textarea` whose only child is the text to restore. A `single` binding has one Control; a
- * `multiple` or `ordered` one has as many as the payload counts (Q9), every one posting under the
- * response's one name, and with more than one the Root is a group (Q10). The connect function
- * computes every attribute of every part once, and `applyPart` places each one, through the
- * embedder's replacement when there is one (ruling `fb4fe744` S1, S2). The browser's own textarea
- * keys apply: Enter adds a line and Tab leaves, so each Control is one tab stop, in order.
+ * {@link renderExtendedText} emits this structure: a `qti-extended-text-interaction` Root holding
+ * the Prompt, when there is one, then the payload's `n` Controls, each a native `textarea` whose
+ * only child is the text to restore. A `single` binding has one Control, and so has a record one, a
+ * string control whose text gives the record's fields, whatever its `max-strings` and
+ * `min-strings`; a `multiple` or `ordered` one has as many as the payload counts (Q9), every one
+ * posting under the response's one name, and with more than one the Root is a group (Q10). The
+ * connect function computes every attribute of every part once, and `applyPart` places each one,
+ * through the embedder's replacement when there is one (ruling `fb4fe744` S1, S2). The browser's
+ * own textarea keys apply: Enter adds a line and Tab leaves, so each Control is one tab stop, in
+ * order.
  * In review and solution every Control is `readonly`, so it shows its text, stays a tab stop and
  * posts that text with the form, but takes no input; it is `disabled` only when the author
  * finished the item.

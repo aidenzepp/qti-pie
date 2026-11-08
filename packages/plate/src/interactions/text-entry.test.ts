@@ -6,6 +6,7 @@ import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { authoredId, partForSlot, resolveOverrides, rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
+import { toHtml } from "#plate/emit/serialise.ts";
 import { Malformed, decode, entryName } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
 import { renderExtendedText } from "#plate/interactions/extended-text.ts";
@@ -933,6 +934,35 @@ describe("validateTextEntry", () => {
           validateTextEntry(hex, yield* decoded(hex, [[name, "fg"]]), yield* configure({})),
           [{ response, text: message("en", "malformedNumber") }],
         );
+      }),
+  );
+});
+
+describe("a Text Entry bound to a record response", () => {
+  it.effect(
+    "[Q-20] renders a record-bound control: the string input, byte-equal to the single string one's, posting under the response's one name",
+    () =>
+      Effect.gen(function* rendersRecordBoundControl() {
+        const answer: TextEntryInteraction = { ...masked, cardinality: "record" };
+        const single = itemOf([masked]);
+        const recorded: Item = {
+          ...single,
+          body: itemOf([answer]).body,
+          records: new Map([
+            [
+              response,
+              { correct: Option.none(), defaultValue: Option.none(), identifier: response },
+            ],
+          ]),
+          responses: new Map(),
+        };
+        const tree = yield* page(payload(redactItem(recorded), answering));
+
+        assert.deepStrictEqual(
+          partsIn(tree, "control").map((control) => [control.tag, control.attrs["name"]]),
+          [["input", name]],
+        );
+        assert.strictEqual(toHtml(tree), toHtml(yield* page(payloadOf([masked]))));
       }),
   );
 });

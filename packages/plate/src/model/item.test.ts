@@ -32,6 +32,7 @@ import type {
   Branch,
   ChoiceInteraction,
   Expression,
+  ExtendedTextInteraction,
   InlineChoiceInteraction,
   Item,
   RecordDeclaration,
@@ -2997,15 +2998,135 @@ describe("buildItem", () => {
         assert.deepStrictEqual(built.records, expected);
         assert.deepStrictEqual([...built.responses.keys()], []);
         assert.isUndefined(built.unheld);
-        // The Text Entry keeps its notice, and the processing that reads ANSWER through qti-is-null
-        // runs, since the engine holds its record there; the declaration itself carries no mark.
+        // The Text Entry is the string control bound to the record, and the processing that reads
+        // ANSWER through qti-is-null runs, since the engine holds its record there; neither the
+        // declaration nor the Text Entry carries a feature.
+        assert.deepStrictEqual(
+          built.body.map((node) =>
+            node.kind === "text-entry" ? [node.baseType, node.cardinality] : node.kind,
+          ),
+          [["string", "record"]],
+        );
         assert.isTrue(Option.isSome(built.processing), "the processing runs");
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[Q-20] [Q-5] builds a record-bound control: a Text Entry and an Extended Text bound to a record response the model holds are the string control of cardinality record, their attributes held as for a string binding, with no notice",
+    () =>
+      Effect.gen(function* buildsRecordBoundControls() {
+        const built = yield* buildItem(
+          item({
+            body: [
+              el(
+                "p",
+                [],
+                [
+                  el("qti-text-entry-interaction", [
+                    attr("base", "16"),
+                    attr("expected-length", "8"),
+                    attr("pattern-mask", "[0-9]+"),
+                    attr("placeholder-text", "a number"),
+                    attr("response-identifier", "NUMBER"),
+                  ]),
+                ],
+              ),
+              el(
+                "qti-extended-text-interaction",
+                [
+                  attr("expected-lines", "3"),
+                  attr("max-strings", "4"),
+                  attr("min-strings", "1"),
+                  attr("response-identifier", "WORKING"),
+                ],
+                [el("qti-prompt", [], [text("Show your working.")])],
+              ),
+            ],
+            declarations: [
+              el("qti-response-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "NUMBER"),
+              ]),
+              el("qti-response-declaration", [
+                attr("cardinality", "record"),
+                attr("identifier", "WORKING"),
+              ]),
+            ],
+          }),
+        );
+        const entry: TextEntryInteraction = {
+          ariaLabel: Option.none(),
+          ariaLabelledby: Option.none(),
+          base: 16,
+          baseType: "string",
+          cardinality: "record",
+          class: "",
+          expectedLength: Option.some(8n),
+          kind: "text-entry",
+          path: `${body}/p/qti-text-entry-interaction`,
+          patternMask: Option.some("[0-9]+"),
+          patternMaskMessage: Option.none(),
+          placeholder: Option.some("a number"),
+          response: "NUMBER",
+        };
+        const working: ExtendedTextInteraction = {
+          ariaLabel: Option.none(),
+          ariaLabelledby: Option.none(),
+          base: 10,
+          baseType: "string",
+          cardinality: "record",
+          class: "",
+          expectedLength: Option.none(),
+          expectedLines: Option.some(3n),
+          format: "plain",
+          kind: "extended-text",
+          maxStrings: Option.some(4n),
+          minStrings: 1n,
+          path: `${body}/qti-extended-text-interaction`,
+          patternMask: Option.none(),
+          patternMaskMessage: Option.none(),
+          placeholder: Option.none(),
+          prompt: Option.some([{ kind: "text", text: "Show your working." }]),
+          response: "WORKING",
+        };
+
+        assert.deepStrictEqual(childrenOf(built.body[0]), [entry]);
+        assert.deepStrictEqual(built.body[1], working);
+        assert.deepStrictEqual([...(built.records?.keys() ?? [])], ["NUMBER", "WORKING"]);
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    '[Q-20] builds no record-bound control for a record response the model does not hold, one with a file field: its Text Entry is the notice cardinality="record"',
+    () =>
+      Effect.gen(function* fileRecordIsNotice() {
+        const built = yield* buildItem(
+          item({
+            body: [el("qti-text-entry-interaction", [attr("response-identifier", "UPLOAD")])],
+            declarations: [
+              el(
+                "qti-response-declaration",
+                [attr("cardinality", "record"), attr("identifier", "UPLOAD")],
+                [el("qti-correct-response", [], [recordField("content", "file", "a.txt")])],
+              ),
+            ],
+          }),
+        );
+        const path = `${body}/qti-text-entry-interaction`;
+
+        assert.isUndefined(built.records);
+        assert.deepStrictEqual(built.body, [
+          { feature: 'cardinality="record"', kind: "unsupported", path },
+        ]);
         assert.deepStrictEqual(built.unsupported, [
           {
             feature: 'cardinality="record"',
-            path: `${body}/qti-text-entry-interaction`,
-            shown: "notice",
+            path: `${root}/qti-response-declaration`,
+            shown: "mark",
           },
+          { feature: 'cardinality="record"', path, shown: "notice" },
         ]);
       }),
   );

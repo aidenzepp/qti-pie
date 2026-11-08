@@ -114,7 +114,8 @@ export interface View {
   readonly seed?: string;
   /**
    * The value each response's controls show, such as its `defaultValue` or a value the author's
-   * flow recorded; NULL when absent. A record shows nothing: no interaction is bound to one yet.
+   * flow recorded; NULL when absent. A record shows nothing: the control bound to it restores no
+   * text of it.
    */
   readonly values: ReadonlyMap<string, ResponseValue>;
 }
@@ -379,11 +380,11 @@ export interface ExtendedTextPayload extends TextControlPayload {
   readonly format: ExtendedTextInteraction["format"];
   readonly kind: "extended-text";
   /**
-   * The number of Controls (Q9): 1 for a `single` binding; for a container, `max-strings` when it
-   * is from 1 to 10, else the greater of 10 and `min-strings`, so `max-strings="0"` and an absent
-   * one give at least 10 (reading 53). It also covers every member of the value or post it
-   * restores, up to a nonzero `max-strings`. At most 100 (Q23), and 0 when `min-strings` exceeds
-   * 100.
+   * The number of Controls (Q9): 1 for a `single` or a `record` binding; for a container,
+   * `max-strings` when it is from 1 to 10, else the greater of 10 and `min-strings`, so
+   * `max-strings="0"` and an absent one give at least 10 (reading 53). It also covers every member
+   * of the value or post it restores, up to a nonzero `max-strings`. At most 100 (Q23), and 0 when
+   * `min-strings` exceeds 100.
    */
   readonly n: number;
   /**
@@ -657,7 +658,7 @@ export const identifyMessages = (
 /**
  * Give the values the view shows for a response.
  *
- * A record gives none: no interaction is bound to a record response yet, so none can show one.
+ * A record gives none, so the control bound to a record response restores no text of it.
  *
  * @param build The build.
  * @param response The response identifier.
@@ -954,11 +955,13 @@ interface Controls {
 /**
  * Count the Controls an Extended Text renders.
  *
- * Q9 gives a container `max-strings` Controls when it is from 1 to 10, else the greater of 10 and
- * `min-strings`; `max-strings="0"` restricts nothing (reading 53). So restoring drops no answer
- * silently, `n` also covers each member the restored or posted value holds, up to `max-strings`
- * when it restricts and up to the cap of 100 (Q23). Over the cap, the first 100 show beside the
- * cap's notice; a `min-strings` above 100 leaves no Control, the notice in their place.
+ * A `single` binding and a record one have one Control, the string control a record's text is
+ * typed in. Q9 gives a container `max-strings` Controls when it is from 1 to 10, else the greater
+ * of 10 and `min-strings`; `max-strings="0"` restricts nothing (reading 53). So restoring drops no
+ * answer silently, `n` also covers each member the restored or posted value holds, up to
+ * `max-strings` when it restricts and up to the cap of 100 (Q23). Over the cap, the first 100 show
+ * beside the cap's notice; a `min-strings` above 100 leaves no Control, the notice in their place,
+ * for any binding.
  *
  * @param interaction The Extended Text.
  * @param members How many members the value or post to restore holds.
@@ -969,7 +972,7 @@ const controlsOf = (interaction: ExtendedTextInteraction, members: number): Cont
     return { n: 0, overCap: true };
   }
 
-  if (interaction.cardinality === "single") {
+  if (interaction.cardinality === "single" || interaction.cardinality === "record") {
     return { n: 1, overCap: false };
   }
 

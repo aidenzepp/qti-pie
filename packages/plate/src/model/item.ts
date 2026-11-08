@@ -523,6 +523,9 @@ export interface TextEntryInteraction {
    * The number base of an integer response, `base`, an `xs:int`, 10 when absent.
    */
   readonly base: number;
+  /**
+   * The bound response's base type; `string` for a record response, which has none of its own.
+   */
   readonly baseType: "float" | "integer" | "string";
   /**
    * The bound response's cardinality: `single`, or `record` for a record response, whose fields
@@ -829,6 +832,11 @@ interface Build extends ModelWalk {
    * {@link record} finds a repeat without scanning the features recorded so far.
    */
   readonly recorded: Map<string, Set<string>>;
+  /**
+   * The record responses the model holds, keyed by identifier, filled as their declarations are
+   * read. The declarations precede the item body, so a text interaction bound to one finds it here.
+   */
+  readonly records: Map<string, RecordDeclaration>;
   readonly unsupported: UnsupportedFeature[];
 }
 
@@ -961,16 +969,6 @@ const holds = (build: Build, condition: Condition, element: SourceElement): bool
         Result.getSuccess(parseLexical("integer", trimXmlSpace(written))),
         (single) => integerOf(build, single) > condition.limit,
       ),
-    );
-  }
-
-  if (condition.kind === "cardinality") {
-    return (
-      Option.getOrUndefined(
-        Option.flatMap(boundDeclaration(build, element), (declaration) =>
-          valueOf(declaration, "cardinality"),
-        ),
-      ) === condition.cardinality
     );
   }
 
@@ -1843,6 +1841,35 @@ const bind = <const B extends string, const C extends string>(
 };
 
 /**
+ * Bind a Text Entry or an Extended Text: to a record response the model holds as the string
+ * control of cardinality `record`, since a record has no base type of its own and the text typed
+ * gives its fields; to any other response as {@link bind} binds it. A record response the model
+ * does not hold, one of base type `file` or with a field of it, is outside the binding, so the
+ * interaction is the notice `cardinality="record"`.
+ *
+ * @param build The build, which holds the record responses read so far.
+ * @param binding The base types and cardinalities the interaction renders with otherwise.
+ * @param declaration The declaration it names.
+ * @returns The bound base type and cardinality, or the feature key {@link bind} gives.
+ */
+const bindText = <const C extends string>(
+  build: Build,
+  binding: {
+    readonly baseTypes: readonly TextEntryInteraction["baseType"][];
+    readonly cardinalities: readonly C[];
+  },
+  declaration: SourceElement,
+): Result.Result<
+  { readonly baseType: TextEntryInteraction["baseType"]; readonly cardinality: C | "record" },
+  string
+> =>
+  Option.exists(valueOf(declaration, "identifier"), (identifier) =>
+    build.records.has(identifierOf(identifier)),
+  )
+    ? Result.succeed({ baseType: "string", cardinality: "record" })
+    : bind(binding, declaration);
+
+/**
  * Read the fields Text Entry and Extended Text share.
  *
  * @param build The build.
@@ -2020,10 +2047,12 @@ const inlineChoiceInteraction = (
 
 /**
  * Read one of the four interactions plate renders: its model when its binding is in `renders` and
- * it carries no notice feature, otherwise its notice. An Inline Choice whose choices hold content a
- * native `option` cannot show is the notice `qti-inline-choice-interaction`. An Extended Text that
- * carries a feature of `renders.controlNotices`, such as `min-strings>100`, is still built, and the
- * feature is recorded as a notice that stands in place of its Controls.
+ * it carries no notice feature, otherwise its notice. A Text Entry or an Extended Text bound to a
+ * record response the model holds is the string control of cardinality `record` ({@link bindText}).
+ * An Inline Choice whose choices hold content a native `option` cannot show is the notice
+ * `qti-inline-choice-interaction`. An Extended Text that carries a feature of
+ * `renders.controlNotices`, such as `min-strings>100`, is still built, and the feature is recorded
+ * as a notice that stands in place of its Controls.
  *
  * @param build The build.
  * @param interaction The interaction.
@@ -2067,7 +2096,7 @@ const interactionNode = (
     }
 
     if (name === "qti-text-entry-interaction") {
-      const bound = bind(renders.bindings[name], declaration.value);
+      const bound = bindText(build, renders.bindings[name], declaration.value);
       if (Result.isFailure(bound)) {
         return yield* notice(build, bound.failure, path);
       }
@@ -2076,7 +2105,7 @@ const interactionNode = (
 
       const fields = yield* textFields(build, interaction, bound.success.baseType);
 
-      return { ...fields, cardinality: "single", kind: "text-entry" };
+      return { ...fields, cardinality: bound.success.cardinality, kind: "text-entry" };
     }
 
     if (name === "qti-inline-choice-interaction") {
@@ -2091,7 +2120,7 @@ const interactionNode = (
     }
 
     const binding = renders.bindings[name];
-    const bound = bind(binding, declaration.value);
+    const bound = bindText(build, binding, declaration.value);
     if (Result.isFailure(bound)) {
       return yield* notice(build, bound.failure, path);
     }
@@ -3609,40 +3638,41 @@ const recordResponseNames = (
  * Build the item model of a valid `qti-assessment-item`.
  *
  * The body keeps text and HTML elements as written. Choice, Inline Choice, Text Entry and Extended
- * Text become their models when their binding is one `renders` lists and they carry no notice
- * feature; a `qti-printed-variable` becomes its model, and a `qti-template-block` or
- * `qti-template-inline` its model with its content; any other `qti-*` element in the body becomes a
- * notice, its subtree dropped. Each `renders` mark adds an unsupported feature, and so does each
- * `qti-*` element outside the body that the model does not read. Response processing is a rule
- * tree: a built-in template resolves to the tree its text gives, and inline rules become their tree
- * when every element is in the engine. The tree is kept only when the engine holds every identifier
- * it names, the item provides every declaration a built-in template's tree needs, every outcome a
- * lookup sets is single, and it maps no point through an area mapping with a `%` coordinate; each
- * identifier it does not hold is the mark `variable:<identifier>` at the processing element's path,
- * each such need unmet its mark there (`mapping:<identifier>`, `area-mapping:<identifier>` or
- * `outcome-type:<identifier>`), such a point mapping the mark `area-coords-percent` there, and the
- * processing is then none. A response declaration of cardinality `record` is held in `records`,
- * with no mark, whatever interaction binds it: its `qti-correct-response` and `qti-default-value`
- * are read field by field ({@link recordResponse}). The engine holds its record beside response
- * processing, read whole as an operand of `qti-field-value`, `qti-is-null` or `qti-match`
- * ({@link unheldIdentifiers}); a processing that reads it anywhere else is marked
- * `variable:<identifier>`, a template rule that sets its default or its correct response is marked
- * `record-set`, and a text interaction bound to one keeps its notice. A declaration of base type
- * `file`, an outcome or template declaration of cardinality
- * `record`, and a record response of base type `file` or with a field of it, are held in `unheld`,
- * beside their mark. `records` and `unheld` are each absent when empty. Template declarations of
- * modelled types are read into `templates`, and a `qti-template-processing` into
- * `templateProcessing` through `templateRules` in `#plate/model/template.ts`, which marks what the
- * engine does not run as response processing's reader does. Its rules are kept only when the engine
- * holds every name they read and set while they run: each name {@link unheldIdentifiers} finds,
- * such as `QTI_CONTEXT`, a context variable, or a template variable, response or outcome the model
- * does not hold, is the mark `variable:<identifier>` at the `qti-template-processing` element's
- * path, and the template processing is then none. Nothing is refused: such an item is accepted with
- * that mark. A template variable the model holds is one the engine holds, unless the item's
- * `qti-template-processing` does not run: then no template variable is held, so a tree that reads
- * one is marked `variable:<identifier>`, and the item has no processing, whatever the tree, since
- * that template processing may set a template variable, a default value or a correct response, so a
- * score computed without it could be wrong.
+ * Text become their models when their binding is one `renders` lists, or for a text interaction a
+ * record response the model holds, and they carry no notice feature; a `qti-printed-variable`
+ * becomes its model, and a `qti-template-block` or `qti-template-inline` its model with its
+ * content; any other `qti-*` element in the body becomes a notice, its subtree dropped. Each
+ * `renders` mark adds an unsupported feature, and so does each `qti-*` element outside the body
+ * that the model does not read. Response processing is a rule tree: a built-in template resolves to
+ * the tree its text gives, and inline rules become their tree when every element is in the engine.
+ * The tree is kept only when the engine holds every identifier it names, the item provides every
+ * declaration a built-in template's tree needs, every outcome a lookup sets is single, and it maps
+ * no point through an area mapping with a `%` coordinate; each identifier it does not hold is the
+ * mark `variable:<identifier>` at the processing element's path, each such need unmet its mark
+ * there (`mapping:<identifier>`, `area-mapping:<identifier>` or `outcome-type:<identifier>`), such
+ * a point mapping the mark `area-coords-percent` there, and the processing is then none. A response
+ * declaration of cardinality `record` is held in `records`, with no mark, whatever interaction
+ * binds it: its `qti-correct-response` and `qti-default-value` are read field by field
+ * ({@link recordResponse}). The engine holds its record beside response processing, read whole as
+ * an operand of `qti-field-value`, `qti-is-null` or `qti-match` ({@link unheldIdentifiers}); a
+ * processing that reads it anywhere else is marked `variable:<identifier>`, a template rule that
+ * sets its default or its correct response is marked `record-set`, and a Text Entry or an Extended
+ * Text bound to one is the string control of cardinality `record`. A declaration of base type
+ * `file`, an outcome or template declaration of cardinality `record`, and a record response of base
+ * type `file` or with a field of it, are held in `unheld`, beside their mark. `records` and
+ * `unheld` are each absent when empty. Template declarations of modelled types are read into
+ * `templates`, and a `qti-template-processing` into `templateProcessing` through `templateRules` in
+ * `#plate/model/template.ts`, which marks what the engine does not run as response processing's
+ * reader does. Its rules are kept only when the engine holds every name they read and set while
+ * they run: each name {@link unheldIdentifiers} finds, such as `QTI_CONTEXT`, a context variable,
+ * or a template variable, response or outcome the model does not hold, is the mark
+ * `variable:<identifier>` at the `qti-template-processing` element's path, and the template
+ * processing is then none. Nothing is refused: such an item is accepted with that mark. A template
+ * variable the model holds is one the engine holds, unless the item's `qti-template-processing`
+ * does not run: then no template variable is held, so a tree that reads one is marked
+ * `variable:<identifier>`, and the item has no processing, whatever the tree, since that template
+ * processing may set a template variable, a default value or a correct response, so a score
+ * computed without it could be wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
@@ -3658,8 +3688,10 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       names: declaredNames(source.root),
       paths: pathsOf(source),
       recorded: new Map(),
+      records: new Map(),
       unsupported: [],
     };
+    const { records } = build;
     const { root } = source;
     markElement(build, root, false);
 
@@ -3668,7 +3700,6 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     const responses = new Map<string, ResponseDeclaration>();
     const outcomes = new Map<string, OutcomeDeclaration>();
     const templateDeclarations = new Map<string, TemplateDeclaration>();
-    const records = new Map<string, RecordDeclaration>();
     const unheld = new Map<string, UnheldDeclaration>();
     const holdUnheld = (
       declaration: SourceElement,

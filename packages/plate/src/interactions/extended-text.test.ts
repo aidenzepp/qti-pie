@@ -1708,3 +1708,41 @@ describe("an Extended Text the renderer does not support", () => {
       }),
   );
 });
+
+describe("an Extended Text bound to a record response", () => {
+  it.effect(
+    "[Q-5] renders a record-bound control: one textarea, byte-equal to the single string one's whatever its max-strings and min-strings, posting under the response's one name, with no group and no notice",
+    () =>
+      Effect.gen(function* rendersRecordBoundControl() {
+        const counted: ExtendedTextInteraction = {
+          ...essay,
+          maxStrings: Option.some(4n),
+          minStrings: 2n,
+        };
+        const working: ExtendedTextInteraction = { ...counted, cardinality: "record" };
+        const recorded: Item = {
+          ...itemOf(),
+          body: [working],
+          records: new Map([
+            [
+              response,
+              { correct: Option.none(), defaultValue: Option.none(), identifier: response },
+            ],
+          ]),
+        };
+        const built = payload(redactItem(recorded), answering);
+        const shown = extendedTextIn(built);
+        const root = yield* render(built);
+
+        assert.deepStrictEqual(
+          [shown.cardinality, shown.baseType, shown.n, shown.notice, shown.restores],
+          ["record", "string", 1, Option.none(), [""]],
+        );
+        assert.deepStrictEqual(
+          partsIn(root, "control").map((control) => [control.tag, control.attrs["name"]]),
+          [["textarea", name]],
+        );
+        assert.strictEqual(toHtml(root), toHtml(yield* render(payloadOf([counted]))));
+      }),
+  );
+});

@@ -194,7 +194,6 @@ export interface FormattedBindingRule extends BindingRule {
  * - `attribute-value`: the element's attribute `name` has the value `value`.
  * - `attribute-true`: the element's `xs:boolean` attribute `name` is true: `true` or `1` once its
  *   outer whitespace goes, as XSD reads it (reading Q8).
- * - `cardinality`: the response declaration the interaction binds has this cardinality.
  * - `integer-above`: the element's attribute `name`, its outer whitespace gone, reads as an integer
  *   greater than `limit`. A value that is not an integer never is.
  * - `not-text-safe`: some descendant of one of the element's `qti-inline-choice` children is neither
@@ -212,7 +211,6 @@ export type Condition =
   | { readonly kind: "attribute"; readonly name: string }
   | { readonly kind: "attribute-value"; readonly name: string; readonly value: string }
   | { readonly kind: "attribute-true"; readonly name: string }
-  | { readonly cardinality: Cardinality; readonly kind: "cardinality" }
   | { readonly kind: "integer-above"; readonly limit: bigint; readonly name: string }
   | { readonly elements: readonly string[]; readonly kind: "not-text-safe" }
   | { readonly kind: "refused-pattern"; readonly name: string }
@@ -237,7 +235,9 @@ export interface FeatureRule {
  */
 export interface Renders {
   /**
-   * The interactions plate renders, each with the binding it renders with.
+   * The interactions plate renders, each with the binding it renders with. A Text Entry or an
+   * Extended Text also renders bound to a record response the item model holds, as the string
+   * control, since a record has no base type of its own: the text typed gives its fields.
    */
   readonly bindings: {
     readonly "qti-choice-interaction": BindingRule;
@@ -402,11 +402,6 @@ export const renders = {
       feature: "pattern-mask",
       on: textInteractions,
       when: { kind: "refused-pattern", name: "pattern-mask" },
-    },
-    {
-      feature: 'cardinality="record"',
-      on: textInteractions,
-      when: { cardinality: "record", kind: "cardinality" },
     },
     // An Inline Choice with a choice a native option cannot show is shown whole as this notice
     // (I8); nothing is refused for it.
