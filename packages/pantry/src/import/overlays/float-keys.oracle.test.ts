@@ -12,10 +12,12 @@
  *   where they are equal or identical (Part 1 §3.11.4): -0 equals 0, and NaN is identical to itself
  *   (Part 2 §3.3.5.1). Where a key has at most 20 significant digits the reference is held to
  *   ECMAScript's `Number`, which ECMA-262 rounds exactly there (RoundMVResult).
- * - **The import** decides which keys have a typed `MapKeyFloat` row; PostgreSQL generates each row's
+ * - **The import** writes every key's typed `MapKeyFloat` row, and tests no key's form: `FloatKey`'s
+ *   pattern law refuses a row outside the lexical space, and PostgreSQL generates each other row's
  *   value by grizzle's `Compute.parseDouble`, which grizzle proves and tests, so a row's value is
- *   read here as the reference reads its key, and two keys repeat for the import where they are one
- *   text (`key(mapping, key)`) or both have a row of one value (`key(mapping, value)`).
+ *   read here as the reference reads its key, none outside the space, and two keys repeat for the
+ *   import where they are one text (`key(mapping, key)`) or both have a row of one value
+ *   (`key(mapping, value)`).
  * - **The oracle** names `Map key` where the second key repeats the first.
  *
  * The search draws keys at the edges of grizzle's former bounded form of `double precision` (15
@@ -23,8 +25,9 @@
  * digits, exponents from 294 to 400 and far beyond, overflow and underflow, -0 against 0, and each
  * special spelling. Two plants restate the deleted fallback, under which a key outside the bounded
  * form had no typed value and was distinct by its text alone: in the import, a typed row only for
- * a key of that form, and in the oracle, a lexical value for any other key. The search must catch
- * each.
+ * a key of that form, and in the oracle, a lexical value for any other key. A third restates the
+ * deleted gate, a typed row only for a key in the lexical space, which the database's laws judge
+ * now. The search must catch each.
  */
 import { lexicalForm, pg } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
@@ -600,6 +603,7 @@ const pairs: Gen<KeyPair> = weighted<KeyPair>([
  */
 type Situation =
   | "caught: the import's bounded form"
+  | "caught: the import's lexical gate"
   | "caught: the oracle's bounded form"
   | "distinct"
   | "exponent past 293"
@@ -659,8 +663,8 @@ const valued = (name: Option.Option<string>, other: Option.Option<string>): bool
 
 /**
  * Judge a case: the import, the oracle and the reference agree on whether the two keys repeat, the
- * import types exactly the keys in the lexical space, the reference agrees with `Number` where
- * ECMA-262 rounds exactly, and each plant that disagrees is caught.
+ * import writes every key's typed row, the reference agrees with `Number` where ECMA-262 rounds
+ * exactly, and each plant that disagrees is caught.
  *
  * @param pair - The case.
  * @param note - Where to note its situations.
@@ -682,9 +686,9 @@ const judged = ({ keys }: KeyPair, note: (situation: Situation) => void) =>
       [first, second],
     );
     assert.deepStrictEqual(
-      entries.map(({ node }) => rows.MapKeyFloat.has(node)),
-      keys.map((key) => Option.isSome(referenceOf(key))),
-      "a typed row for every key in the lexical space, and none for another",
+      entries.map(({ key, node }) => rows.MapKeyFloat.get(node)?.key === key),
+      [true, true],
+      "a typed row for every key, in the lexical space or not",
     );
 
     const repeatsWhere = (typed: (at: 0 | 1) => boolean): boolean =>
@@ -733,6 +737,10 @@ const judged = ({ keys }: KeyPair, note: (situation: Situation) => void) =>
       note(situation);
     }
 
+    if (keys.some((key) => Option.isNone(referenceOf(key)))) {
+      note("caught: the import's lexical gate");
+    }
+
     const plantedImport = repeatsWhere(
       (at) => boundedForm.test(keys[at]) && Option.isSome(referenceOf(keys[at])),
     );
@@ -765,6 +773,7 @@ const situations: readonly [Situation | AdversarialName, ...(Situation | Adversa
   "negative zero",
   "outside the lexical space",
   "caught: the import's bounded form",
+  "caught: the import's lexical gate",
   "caught: the oracle's bounded form",
   ...adversarial.map(({ name }) => name),
 ];

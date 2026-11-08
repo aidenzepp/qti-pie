@@ -2,13 +2,13 @@
  * The mapping overlays' laws on the lease, PostgreSQL itself the judge (testing doctrine, rule 3):
  * each refused state is one the law's model refuses, named by the law it breaks.
  *
- * Every case writes rows no stored node or declaration names, through the author role
- * (`db.apply`), and breaks a law PostgreSQL judges as the row is inserted: a row CHECK, a
- * containment into a closed relation (a CHECK on the row's table), or a key, whose UNIQUE is never
- * deferred. Every foreign key into `Node`, `Declaration` and the overlays is deferred, so it never
- * speaks first. The outcome is `invariant-rejected` with the expected law among its `laws`
- * (membership, since a merged native names several, C22); whether the host or PostgreSQL's
- * UNIQUE finds a key's repeat is outside the contract.
+ * Every case writes rows no stored node or declaration names, through the author role (`db.apply`),
+ * and breaks a law PostgreSQL judges as the row is inserted: a field type's text domain, a row
+ * CHECK, a containment into a closed relation (a CHECK on the row's table), or a key, whose UNIQUE
+ * is never deferred. Every foreign key into `Node`, `Declaration` and the overlays is deferred, so
+ * it never speaks first. The outcome is `invariant-rejected` with the expected law among its `laws`
+ * (membership, since a merged native names several, C22); whether the host or PostgreSQL's UNIQUE
+ * finds a key's repeat is outside the contract.
  *
  * The cases over a whole imported item need the importer's ChangeSet (Q5.15), and are stated in
  * Q5.11's report for the network seat's probe: accepted, a string mapping keyed `York` and `york`
@@ -20,9 +20,10 @@
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { Addition, Fact, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { lawNameOf } from "#pantry/import/refusal.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import {
   AreaMappingCardinality,
@@ -94,6 +95,35 @@ const checkNamed =
   (relation: string, name: string) =>
   (law: Law): boolean =>
     law.kind === "check" && law.relation === relation && law.name === name;
+
+/**
+ * Pick the pattern law of one relation's field: its type's text domain, which PostgreSQL judges as
+ * the statement casts the field's value.
+ *
+ * @param relation - The relation.
+ * @param field - The field.
+ * @returns The predicate.
+ */
+const patternOf =
+  (relation: string, field: string) =>
+  (law: Law): boolean =>
+    law.kind === "pattern" && law.relation === relation && law.field === field;
+
+/**
+ * The name of the law an outcome refuses under that the predicate picks: none where the outcome is
+ * not `invariant-rejected` or names no such law.
+ *
+ * @param outcome - The apply's outcome.
+ * @param picks - Picks the expected law.
+ * @returns The law's name in the refusal table.
+ */
+const refusedNameOf = (
+  outcome: { readonly kind: string; readonly refused?: { readonly laws: readonly Law[] } },
+  picks: (law: Law) => boolean,
+) =>
+  outcome.kind === "invariant-rejected"
+    ? Option.flatMap(Option.fromUndefinedOr(outcome.refused?.laws.find(picks)), lawNameOf)
+    : Option.none();
 
 /**
  * Pick a containment by the relations of its two sides.
@@ -488,6 +518,63 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
                 `${baseType} ${value}`,
               );
             }
+          }),
+      );
+
+      it.effect(
+        "refuses a float key outside xs:double's lexical space and a pair's item holding a C0 control by its type's pattern law, named Typed attribute value",
+        () =>
+          // Oracle: PostgreSQL, the text domain of `FloatKey` and of `Item` as the statement casts
+          // each value, before any row CHECK, and grizzle's pattern law of the field, named by its
+          // type's row of `textLaws`. The import writes these rows whatever the key's form
+          // (`#pantry/import/overlays/mapping.ts`), so the domain judges the form, as
+          // `Typed_attribute_value` judges the same key on `MapKeyType` above (readings 7 and 154).
+          // Bound: float keys with a comma, a space before, a word and XML Schema 1.1's +INF, and
+          // 1.5, which the domain holds; a pair and a directed pair whose first item holds U+0001,
+          // which an XML 1.1 document writes as `&#x1;`, and whose second item holds none.
+          Effect.gen(function* untypedKeys() {
+            const db = yield* Db.open(AuthorApp.roles.author, {});
+            for (const key of ["1,5", " 1", "abc", "+INF"] as const) {
+              const outcome = yield* db.apply(
+                ChangeSet.empty(Author).insert(MapKeyFloat, [{ key, ...at(0) }]),
+                {},
+              );
+
+              assert.deepStrictEqual(
+                refusedNameOf(outcome, patternOf("MapKeyFloat", "key")),
+                Option.some("Typed attribute value"),
+                key,
+              );
+            }
+
+            const lawful = yield* db.apply(
+              ChangeSet.empty(Author).insert(MapKeyFloat, [{ key: "1.5", ...at(0) }]),
+              {},
+            );
+            const pair = yield* db.apply(
+              ChangeSet.empty(Author).insert(MapKeyPair, [
+                { ...at(0), first: "A\u{1}", gap: " ", key: "A\u{1} B", second: "B" },
+              ]),
+              {},
+            );
+            const directed = yield* db.apply(
+              ChangeSet.empty(Author).insert(MapKeyDirectedPair, [
+                { ...at(0), gap: " ", key: "A\u{1} B", source: "A\u{1}", target: "B" },
+              ]),
+              {},
+            );
+
+            assert.isFalse(rejectedBy(lawful, patternOf("MapKeyFloat", "key")), "1.5");
+            assert.deepStrictEqual(
+              refusedNameOf(pair, patternOf("MapKeyPair", "first")),
+              Option.some("Typed attribute value"),
+            );
+            assert.isFalse(rejectedBy(pair, patternOf("MapKeyPair", "second")));
+            assert.deepStrictEqual(
+              refusedNameOf(directed, patternOf("MapKeyDirectedPair", "source")),
+              Option.some("Typed attribute value"),
+            );
+            assert.isFalse(rejectedBy(directed, patternOf("MapKeyDirectedPair", "target")));
           }),
       );
 

@@ -480,8 +480,12 @@ export const namedPatternLaws = (
  *   reads with saxes's `xmlns` on, which refuses a name that is no QName (Namespaces in XML 1.0,
  *   §4); a foreign namespace name is `Char`s because crust reads no other; an entry path begins
  *   with no `/` because the directory reader lists paths relative to the package root and `zip.ts`
- *   refuses an absolute name; a typed float map key is an `xs:double` lexical form because the
- *   import writes its row only for one (`doublePattern`);
+ *   refuses an absolute name;
+ * - A typed float map key and a pair's or a directed pair's item are "Typed attribute value": the
+ *   import writes every float key's row and every pair key's split whatever its form, so `FloatKey`
+ *   (the float row of `BaseTypePattern` written exactly) and `Item` (wider than an identifier)
+ *   refuse only a key `Typed_attribute_value` refuses on its `MapKeyType` row. A float key past
+ *   `FloatKey`'s bound breaks `MapKey`'s `keyText` too, whose insert grizzle runs first;
  * - An unbounded XML production (a node's or an attribute's `Char*`, a comment, an instruction, a
  *   doctype, an encoding name, a version number, an NCName) is "XML production", which crust
  *   refuses before any row exists;
@@ -499,7 +503,7 @@ export const textLaws: ReadonlyMap<TextType, LawName> = new Map<TextType, LawNam
   [NamespacePrefix, "Key text bound"],
   [ForeignNamespace, "Key text bound"],
   [EntryPath, "Key text bound"],
-  [FloatKey, "Key text bound"],
+  [FloatKey, "Typed attribute value"],
   [NamespaceUri, "Namespace name"],
   [Chars, "XML production"],
   [Lexical, "XML production"],
@@ -517,7 +521,7 @@ export const textLaws: ReadonlyMap<TextType, LawName> = new Map<TextType, LawNam
   [Digits, "E1 derived"],
   [Negative, "E1 derived"],
   [Gap, "E1 derived"],
-  [Item, "E1 derived"],
+  [Item, "Typed attribute value"],
   [Affix, "E1 derived"],
   [Separator, "E1 derived"],
   [HrefParams, "E1 derived"],

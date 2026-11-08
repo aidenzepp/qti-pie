@@ -22,7 +22,7 @@ import {
   rowsOf,
 } from "#pantry/import/overlays/mapping.ts";
 import type { MappingIds } from "#pantry/import/overlays/mapping.ts";
-import { integerKeyPattern, pairKeyPattern, pointKeyPattern } from "#pantry/qti/mapping.ts";
+import { integerKeyPattern, Item, pairKeyPattern, pointKeyPattern } from "#pantry/qti/mapping.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
 import type {
@@ -229,7 +229,7 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
     (ctx) =>
       // Oracle: a second implementation, a direct walk of the XDM tree that numbers its entries in
       // document order, against the builder's read of the flat rows; each integer key's selection
-      // by the deleted `xsInteger`, and each float key's by the deleted `xsDouble`.
+      // by the deleted `xsInteger`, and every float key, whose row `FloatKey`'s pattern law judges.
       // Bound: every mapping of 3 base types with at most 4 entries over 3 keys and 2 values,
       // 4,665.
       searched(
@@ -287,11 +287,7 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
               );
               assert.deepStrictEqual(
                 [...rows.MapKeyFloat].map(([node, row]) => [node, row.key]),
-                input.baseType === "float"
-                  ? [...walked].flatMap(([node, { key }]) =>
-                      xsDouble.test(key) ? [[node, key]] : [],
-                    )
-                  : [],
+                input.baseType === "float" ? [...walked].map(([node, { key }]) => [node, key]) : [],
               );
               assert.deepStrictEqual([...rows.Mapping.keys()], [ids.idOf(3)]);
               assert.strictEqual(rows.Mapping.get(ids.idOf(3))?.baseTypes, 1n);
@@ -382,9 +378,19 @@ describe("import/overlays/mapping.ts, an integer key's split", { timeout: search
 
 /**
  * The keys a two-item mapping draws from: a pair and its reverse, the pair with a tab between, a
- * point and its spelling with a zero and a sign, and two items one of which is past U+FFFF.
+ * point and its spelling with a zero and a sign, two items one of which is past U+FFFF, and two
+ * items the first of which holds U+0001, which an XML 1.1 document writes as `&#x1;` and no `Item`
+ * holds.
  */
-const twoItemKeys = ["A B", "B A", "A\tB", "1 2", "01 +2", "\u{10000} \u{E000}"] as const;
+const twoItemKeys = [
+  "A B",
+  "B A",
+  "A\tB",
+  "1 2",
+  "01 +2",
+  "\u{10000} \u{E000}",
+  "A\u{1} B",
+] as const;
 
 /**
  * Every mapping of one of the three two-item base types holding at most 3 entries over
@@ -428,9 +434,21 @@ type SplitRow = readonly [string, readonly string[]];
 
 /**
  * A situation the two-item box must reach: a key its base type splits, a key it does not (a pair
- * of letters in a point mapping), and a mapping with no entry.
+ * of letters in a point mapping), a mapping with no entry, and a case that catches the deleted
+ * gate, under which a pair or directed pair key had its row only where `pairKeyPattern` held it.
  */
-type TwoItemSituation = "split" | "unsplit" | "no entry";
+type TwoItemSituation = "split" | "unsplit" | "no entry" | "caught: the pair gate";
+
+/**
+ * `pairKeyPattern` as JavaScript's engine reads it, the deleted gate's test.
+ */
+const pairKey = new RegExp(pairKeyPattern, "u");
+
+/**
+ * `Item`'s pattern, the type of a pair's and a directed pair's items, as JavaScript's engine reads
+ * it.
+ */
+const item = new RegExp(Item.pattern.source, "u");
 
 /**
  * The characters a typed key's parse and its pattern are drawn over: the signs, two digits, a
@@ -447,13 +465,14 @@ type ParseSituation = "integer" | "point" | "pair" | "pair past its pattern" | "
 
 describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTimeout }, () => {
   it.effect(
-    "parses an integer or a point key exactly where its pattern holds it, and splits a pair key past its pattern only on a character no item of it holds",
+    "parses an integer or a point key exactly where its pattern holds it, and splits a pair key past its pattern only where an item of the split is no Item",
     (ctx) =>
       // Oracle: the schema's selection patterns, `integerKeyPattern`, `pointKeyPattern` and
-      // `pairKeyPattern`, which select the keys whose typed row the database mirrors, read by
-      // JavaScript's engine. The integer and point parses are the one test the builder makes, so
-      // each holds a key exactly where its pattern does; the pair split is wider, so the builder
-      // tests the pattern first, and the two part exactly on a key that holds U+0001.
+      // `pairKeyPattern`, which select the keys whose typed row the database mirrors, and `Item`'s,
+      // the type of a pair's items, read by JavaScript's engine. The integer and point parses
+      // decide whether the builder writes a typed row, so each holds a key exactly where its
+      // pattern does; the pair split is wider, and the two part exactly on a key that holds
+      // U+0001, whose row `Item`'s pattern law refuses, as `Typed_attribute_value` refuses the key.
       // Bound: every key of 1 to 4 characters over `keyCharacters`, 4,680; residual: longer keys,
       // which repeat these shapes.
       searched(
@@ -481,7 +500,8 @@ describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTim
               const integer = new RegExp(integerKeyPattern, "u").test(key);
               const point = new RegExp(pointKeyPattern, "u").test(key);
               const pair = new RegExp(pairKeyPattern, "u").test(key);
-              const split = pairPartsOf(key) !== undefined;
+              const items = pairPartsOf(key);
+              const split = items !== undefined;
               const situations: readonly [ParseSituation, boolean][] = [
                 ["integer", integer],
                 ["point", point],
@@ -494,6 +514,11 @@ describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTim
               assert.strictEqual(pointPartsOf(key) !== undefined, point, key);
               assert.isTrue(!pair || split, key);
               assert.strictEqual(split && !pair, split && key.includes("\u{1}"), key);
+              assert.strictEqual(
+                split && !pair,
+                items !== undefined && !(item.test(items.first) && item.test(items.second)),
+                key,
+              );
             }),
         ),
       ),
@@ -502,22 +527,29 @@ describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTim
 
 describe("import/overlays/mapping.ts, two-item keys", { timeout: searchTimeout }, () => {
   it.effect(
-    "writes each point, pair and directed pair key's typed row, its split the second reading's items",
+    "writes each point, pair and directed pair key's typed row wherever the split holds it, its split the second reading's items, and catches the deleted pair gate",
     (ctx) =>
       // Oracle: a second implementation, a split at the one XML whitespace character, a point's
       // items each an xs:integer, against the builder's split, which E1_derived holds to the key
-      // and PostgreSQL generates each value from (§8.13).
-      // Bound: every mapping of point, pair or directedPair with at most 3 entries over 6 keys,
-      // 777.
+      // and PostgreSQL generates each value from (§8.13). A pair key whose item no `Item` holds
+      // has its row too, which `Item`'s pattern law refuses; the plant restates the deleted gate,
+      // a row only where `pairKeyPattern` holds the key, and the search must catch it.
+      // Bound: every mapping of point, pair or directedPair with at most 3 entries over 7 keys,
+      // 1,200.
       searched(
         ctx,
         exhaust(
           {
-            box: "every mapping of point, pair or directedPair with at most 3 entries over 6 keys",
+            box: "every mapping of point, pair or directedPair with at most 3 entries over 7 keys",
             caseHang: Duration.seconds(10),
-            coverage: requiredInSpace<TwoItemSituation>(["split", "unsplit", "no entry"]),
+            coverage: requiredInSpace<TwoItemSituation>([
+              "split",
+              "unsplit",
+              "no entry",
+              "caught: the pair gate",
+            ]),
             generator: twoItemCases,
-            limit: 1000,
+            limit: 1500,
             literal: (input) =>
               `${input.baseType}: ${input.entries.map(({ key }) => JSON.stringify(key)).join(" ")}`,
             oracle: { kind: "second-implementation", name: "a whitespace split" },
@@ -551,17 +583,25 @@ describe("import/overlays/mapping.ts, two-item keys", { timeout: searchTimeout }
                   ],
                 ]),
               };
-              const expected = [...walkedKeys(input)].flatMap(([node, { key }]) =>
+              const splits = [...walkedKeys(input)].flatMap(([node, { key }]) =>
                 Option.toArray(
-                  Option.map(
-                    Option.fromNullishOr(twoItemsOf(input.baseType, key)),
-                    (items): SplitRow => [node, items],
-                  ),
+                  Option.map(Option.fromNullishOr(twoItemsOf(input.baseType, key)), (items) => ({
+                    key,
+                    row: [node, items] satisfies SplitRow,
+                  })),
                 ),
               );
+              const expected = splits.map(({ row }) => row);
 
               for (const [baseType, held] of Object.entries(typed)) {
                 assert.deepStrictEqual(held, baseType === input.baseType ? expected : [], baseType);
+              }
+
+              const gated = splits.filter(
+                ({ key }) => input.baseType === "point" || pairKey.test(key),
+              );
+              if (gated.length !== expected.length) {
+                c.note("caught: the pair gate");
               }
             }),
         ),
