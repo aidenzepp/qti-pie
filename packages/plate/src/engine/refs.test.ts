@@ -166,10 +166,10 @@ describe("variableValue", () => {
 });
 
 describe("builtInType", () => {
-  it("[I-9a] names the type of each built-in the engine holds: completionStatus a single identifier, numAttempts a single integer", () => {
+  it("[I-9a] names the type of each built-in an item's run holds: completionStatus a single identifier, numAttempts a single integer, and no duration", () => {
     assert.deepStrictEqual(
       ["completionStatus", "numAttempts", "duration", "QTI_CONTEXT", "constructor"].map((name) =>
-        builtInType(name),
+        builtInType(variables, name),
       ),
       [
         Option.some({ baseType: "identifier", cardinality: "single" }),
@@ -595,6 +595,28 @@ describe("a test's run reads a prefixed name through its item ref [T-9]", () => 
         }),
       ),
       nullOf("float", "single"),
+    );
+  });
+});
+
+describe("builtInType in a test's run [T-9]", () => {
+  it("[T-9] names the test's own duration a single duration in a test's run, timed or untimed, beside completionStatus and numAttempts: a built-in declares no default, so its qti-default is NULL of that type", () => {
+    const untimed: Variables = { ...testRun, test: { ...testScope, duration: Option.none() } };
+
+    assert.deepStrictEqual(
+      [
+        ...["duration", "completionStatus", "numAttempts", "QTI_CONTEXT"].map((name) =>
+          builtInType(testRun, name),
+        ),
+        builtInType(untimed, "duration"),
+      ],
+      [
+        Option.some({ baseType: "duration", cardinality: "single" }),
+        Option.some({ baseType: "identifier", cardinality: "single" }),
+        Option.some({ baseType: "integer", cardinality: "single" }),
+        Option.none(),
+        Option.some({ baseType: "duration", cardinality: "single" }),
+      ],
     );
   });
 });
