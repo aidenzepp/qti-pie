@@ -346,7 +346,7 @@ const builtInResponse = (identifier: string, single: ResultSingle): Element =>
   ]);
 
 /**
- * Give an own entry of a record of values.
+ * Give the own entry for an identifier in values keyed by identifier.
  *
  * @param values The values, by identifier.
  * @param identifier The identifier.
@@ -988,10 +988,7 @@ const sessionItemReport = (
     );
     const document = yield* deliveredItem(items, entry);
     const limit = itemConfiguration(judging, control).maxAttempts;
-    const saved: Pick<ItemRecord, "records" | "responses"> = Option.match(entry.saved, {
-      onNone: () => ({ records: {}, responses: {} }),
-      onSome: splitResponses,
-    });
+    const saved = splitResponses(Option.getOrElse(entry.saved, () => ({})));
     const hidden = hiddenOnlyResponses(document.item, entry.record);
 
     return {
@@ -1121,10 +1118,10 @@ const testResults = (
  * `numAttempts`, `duration` (in a test) and `completionStatus`, the session status, every
  * declared response with its answered status (a record response with cardinality `record`, no base
  * type and one `value` per field, each with its `fieldIdentifier` and `baseType`), every declared
- * template variable with the value its
- * record holds (none where it holds none) and every declared outcome, never a correct response. In
- * a test, a presented shuffled Choice's or Inline Choice's response carries the order it was
- * presented in as `choiceSequence`, the choices its template values hid left out.
+ * template variable with the value its record holds (none where it holds none) and every declared
+ * outcome, never a correct response. In a test, a presented shuffled Choice's or Inline Choice's
+ * response carries the order it was presented in as `choiceSequence`, the choices its template
+ * values hid left out.
  *
  * @example
  *   results({ context: { sourcedId: "candidate-1" }, datestamp: new Date(), document, kind: "item", record });
