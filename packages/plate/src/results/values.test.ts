@@ -1,8 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { parseLexical } from "#plate/model/values.ts";
-import type { Single, Value } from "#plate/model/values.ts";
-import { resultValue, resultValues } from "#plate/results/values.ts";
+import type { RecordValue, Single, Value } from "#plate/model/values.ts";
+import { resultFields, resultValue, resultValues } from "#plate/results/values.ts";
 
 /**
  * Doubles that stress the shortest round trip: decimals a double cannot hold exactly, an exponent
@@ -204,5 +204,34 @@ describe("resultValues", () => {
       ],
     };
     assert.deepStrictEqual(resultValues(floats), ["2.5", "-INF"]);
+  });
+});
+
+describe("resultFields", () => {
+  it("[I-1] writes a record response in results as one entry per field, in the record's order, each with its field identifier, base type and lexical form", () => {
+    const record: RecordValue = {
+      cardinality: "record",
+      fields: [
+        { identifier: "stringValue", value: { baseType: "string", value: "-1.5e3" } },
+        { identifier: "floatValue", value: { baseType: "float", value: -1500 } },
+        { identifier: "ndp", value: { baseType: "integer", value: -2n } },
+        { identifier: "exponent", value: { baseType: "integer", value: 3n } },
+      ],
+    };
+
+    assert.deepStrictEqual(resultFields(record), [
+      { baseType: "string", identifier: "stringValue", lexical: "-1.5e3" },
+      {
+        baseType: "float",
+        identifier: "floatValue",
+        lexical: resultValue({ baseType: "float", value: -1500 }),
+      },
+      { baseType: "integer", identifier: "ndp", lexical: "-2" },
+      { baseType: "integer", identifier: "exponent", lexical: "3" },
+    ]);
+  });
+
+  it("[I-1] writes a NULL record response in results as no entry", () => {
+    assert.deepStrictEqual(resultFields({ cardinality: "record", fields: [] }), []);
   });
 });

@@ -375,6 +375,71 @@ const defaultingXml = [
 ].join("");
 
 /**
+ * An item written for this test with a single identifier response `RESPONSE`, bound to a Choice,
+ * and a record response `NUMBER`, bound to no interaction, whose declared default holds the fields
+ * `stringValue` "0" and `integerValue` 0.
+ */
+const recordedXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="recorded"',
+  ' title="Recorded" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>',
+  '<qti-response-declaration identifier="NUMBER" cardinality="record">',
+  "<qti-default-value>",
+  '<qti-value field-identifier="stringValue" base-type="string">0</qti-value>',
+  '<qti-value field-identifier="integerValue" base-type="integer">0</qti-value>',
+  "</qti-default-value>",
+  "</qti-response-declaration>",
+  '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+  '<qti-simple-choice identifier="A">Yes</qti-simple-choice>',
+  '<qti-simple-choice identifier="B">No</qti-simple-choice>',
+  "</qti-choice-interaction></qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
+ * The record a candidate's "2.5" gives: its text and the fields read from it as a number.
+ */
+const twoAndAHalf: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "stringValue", value: { baseType: "string", value: "2.5" } },
+    { identifier: "floatValue", value: { baseType: "float", value: 2.5 } },
+    { identifier: "leftDigits", value: { baseType: "integer", value: 1n } },
+    { identifier: "rightDigits", value: { baseType: "integer", value: 1n } },
+    { identifier: "ndp", value: { baseType: "integer", value: 1n } },
+    { identifier: "nsf", value: { baseType: "integer", value: 2n } },
+  ],
+};
+
+/**
+ * The `value` elements a result writes for {@link twoAndAHalf}, each its attributes and its text.
+ */
+const twoAndAHalfWritten: (readonly [Readonly<Record<string, string>>, string])[] = [
+  [{ baseType: "string", fieldIdentifier: "stringValue" }, "2.5"],
+  [{ baseType: "float", fieldIdentifier: "floatValue" }, "2.5"],
+  [{ baseType: "integer", fieldIdentifier: "leftDigits" }, "1"],
+  [{ baseType: "integer", fieldIdentifier: "rightDigits" }, "1"],
+  [{ baseType: "integer", fieldIdentifier: "ndp" }, "1"],
+  [{ baseType: "integer", fieldIdentifier: "nsf" }, "2"],
+];
+
+/**
+ * {@link recordedXml}'s declared default, its fields in another order than declared, which a record
+ * does not count.
+ */
+const recordedDefault: RecordValue = {
+  cardinality: "record",
+  fields: [
+    { identifier: "integerValue", value: { baseType: "integer", value: 0n } },
+    { identifier: "stringValue", value: { baseType: "string", value: "0" } },
+  ],
+};
+
+/**
+ * The NULL record: no field.
+ */
+const nullRecord: RecordValue = { cardinality: "record", fields: [] };
+
+/**
  * An item written for this test whose template processing sets `HIDDEN` to `B` and `BLOCK` to `Y`.
  * Its shuffled Choice bound to `RESPONSE` holds `A` to `D`, `B` hidden while `HIDDEN` holds `B`;
  * its template block `X`, shown only while `BLOCK` holds `X`, holds a shuffled Choice bound to
@@ -746,6 +811,41 @@ const assertValid = Effect.fnUntraced(function* assertValid(xml: string) {
   const verdict = yield* validateAgainst(resultsXsd, xml);
 
   assert.isTrue(verdict.valid, verdict.messages.join("\n"));
+});
+
+/**
+ * Give the `value` elements of one response variable's candidate response, as written.
+ *
+ * @param xml The result's text.
+ * @param item The identifier of the item result that holds the variable.
+ * @param identifier The response variable's identifier.
+ * @returns Each value's attributes in no namespace and its text, in order; the result holds
+ *   exactly one candidate response for the variable.
+ */
+const candidateOf = Effect.fnUntraced(function* candidateOf(
+  xml: string,
+  item: string,
+  identifier: string,
+) {
+  const { root } = yield* readSource("result.xml", new TextEncoder().encode(xml));
+  const variable =
+    childrenNamed(root, "itemResult")
+      .filter((result) => attributesOf(result)["identifier"] === item)
+      .flatMap((result) => childrenNamed(result, "responseVariable"))
+      .find((entry) => attributesOf(entry)["identifier"] === identifier) ??
+    assert.fail(`The item result ${item} has no responseVariable ${identifier}.`);
+  const candidates = childrenNamed(variable, "candidateResponse");
+  assert.lengthOf(candidates, 1);
+
+  return candidates.flatMap((candidate) =>
+    childrenNamed(candidate, "value").map(
+      (value) =>
+        [
+          attributesOf(value),
+          value.children.map((child) => (child.kind === "text" ? child.text : "")).join(""),
+        ] as const,
+    ),
+  );
 });
 
 /**
@@ -2051,6 +2151,116 @@ describe("results", () => {
         );
         assert.deepStrictEqual(failureTag(itemInputOf(plain, good)), Option.some("InvalidRecord"));
       }),
+  );
+
+  it.effect(
+    "[I-1] writes a record response in results after the other responses: cardinality record, no baseType, a value per field with its fieldIdentifier and baseType, valid against the Results XSD",
+    () =>
+      Effect.gen(function* recordResponseWritten() {
+        const recorded = yield* acceptItem(
+          "items/recorded.xml",
+          new TextEncoder().encode(recordedXml),
+        );
+        const record = yield* Effect.fromResult(
+          score(recorded, { NUMBER: twoAndAHalf, RESPONSE: identifiers("A") }),
+        );
+        const { report, xml } = yield* reported(itemInputOf(recorded, record));
+        const item = itemOf(report, "recorded");
+
+        yield* assertValid(xml);
+        assert.deepStrictEqual(item.responses["NUMBER"]?.attributes, {
+          answeredStatus: "answered",
+          cardinality: "record",
+          identifier: "NUMBER",
+        });
+        assert.deepStrictEqual(yield* candidateOf(xml, "recorded", "NUMBER"), twoAndAHalfWritten);
+        assert.deepStrictEqual(
+          item.order.filter(([local]) => local === "responseVariable").map(([, name]) => name),
+          ["numAttempts", "RESPONSE", "NUMBER"],
+        );
+        assert.notInclude(xml, "correctResponse");
+      }),
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "[I-1] writes a NULL record response in results as an empty candidateResponse, and gives answered for a record that differs from its declared default and presented for one equal to it in any field order",
+    () =>
+      Effect.gen(function* recordResponseStatus() {
+        const recorded = yield* acceptItem(
+          "items/recorded.xml",
+          new TextEncoder().encode(recordedXml),
+        );
+        const written = Effect.fnUntraced(function* written(answer: RecordValue) {
+          const record = yield* Effect.fromResult(score(recorded, { NUMBER: answer }));
+          const { report, xml } = yield* reported(itemInputOf(recorded, record));
+          yield* assertValid(xml);
+
+          return [
+            itemOf(report, "recorded").responses["NUMBER"]?.attributes["answeredStatus"],
+            (yield* candidateOf(xml, "recorded", "NUMBER")).length,
+          ] as const;
+        });
+
+        assert.deepStrictEqual(yield* written(nullRecord), ["presented", 0]);
+        assert.deepStrictEqual(yield* written(recordedDefault), ["presented", 2]);
+        assert.deepStrictEqual(yield* written(twoAndAHalf), ["answered", 6]);
+      }),
+    { tags: ["results-xsd"] },
+  );
+
+  it.effect(
+    "[I-1] writes a test session's record response in results from its saved responses over its record's, and a NULL record for an item never presented, valid against the Results XSD",
+    () =>
+      Effect.gen(function* sessionRecordResponse() {
+        const recorded = yield* acceptItem(
+          "items/recorded.xml",
+          new TextEncoder().encode(recordedXml),
+        );
+        const test = yield* acceptTest("recording", [
+          part("P1", individual, [
+            ref("saved", "recorded.xml"),
+            ref("kept", "recorded.xml"),
+            ref("unseen", "recorded.xml"),
+          ]),
+        ]);
+        const savedItem = sessionItem(recorded, "saved", 1);
+        const keptItem = sessionItem(recorded, "kept", 2);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([
+            ["saved", recorded],
+            ["kept", recorded],
+            ["unseen", recorded],
+          ]),
+          kind: "test",
+          session: storedSession(test, [
+            sessionItem(recorded, "saved", 1, {
+              ...saving({ NUMBER: twoAndAHalf }),
+              record: yield* scored(recorded, savedItem.record, { NUMBER: recordedDefault }),
+            }),
+            sessionItem(recorded, "kept", 2, {
+              presented: true,
+              record: yield* scored(recorded, keptItem.record, { NUMBER: twoAndAHalf }),
+            }),
+            sessionItem(recorded, "unseen", 3),
+          ]),
+          test,
+        });
+
+        yield* assertValid(xml);
+        assert.deepStrictEqual(
+          ["saved", "kept", "unseen"].map(
+            (identifier) =>
+              itemOf(report, identifier).responses["NUMBER"]?.attributes["answeredStatus"],
+          ),
+          ["answered", "answered", "notpresented"],
+        );
+        assert.deepStrictEqual(yield* candidateOf(xml, "saved", "NUMBER"), twoAndAHalfWritten);
+        assert.deepStrictEqual(yield* candidateOf(xml, "kept", "NUMBER"), twoAndAHalfWritten);
+        assert.deepStrictEqual(yield* candidateOf(xml, "unseen", "NUMBER"), []);
+      }),
+    { tags: ["results-xsd"] },
   );
 
   it.effect("refuses a session whose item record does not fit the item's declarations", () =>
