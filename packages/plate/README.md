@@ -436,13 +436,24 @@ field, with the problem `not-a-value`. It refuses a record for any other respons
 a `record` response, with the problem `cardinality`. `advance` refuses a step that carries either
 with `StepResponseMisfit`.
 
+`qti-match` compares two records as wholes, so they match only when they hold the same fields with
+the same values *(pending)*. A record-bound text interaction's answer holds every field its text
+gives: a typed `12` holds `floatValue`, `integerValue` and the digit counts beside `stringValue`.
+A correct response that writes only `stringValue` therefore never matches a typed `12`. To judge
+such an answer, compare one field instead: the `qti-field-value` of `stringValue` with
+`qti-match`, or that of `floatValue` with `qti-equal`.
+
 `open` accepts a rule that sets a variable from `qti-field-value`, whatever the field, as pantry
 does. A `record` declaration types none of its fields, so neither `open` nor pantry knows a field's
-base type before the candidate answers. When the field's base type is not the variable's, `score`
-returns `OutcomeMismatchError` and does not throw. For example, a rule that sets the `float`
-`SCORE` from `integerValue` fails when the candidate types `12`, and sets `SCORE` to NULL for
-`abc`, which has no `integerValue`. Read the field whose base type is the variable's, such as
-`floatValue` for a `float`.
+base type before the candidate answers. The same holds for an expression whose type follows a
+field's, such as a `qti-sum` or `qti-max` over the field. When the field's base type, or the type
+of such an expression, is not the variable's, `score` returns `OutcomeMismatchError` and does not
+throw. For example, a rule that sets the `float` `SCORE` from `integerValue` fails when the
+candidate types `12`, and sets `SCORE` to NULL for `abc`, which has no `integerValue`. A rule that
+sets the `integer` `COUNT` from the `qti-sum` of `integerValue` and `2.0` also fails for `12`,
+because that sum is a `float`. Read the field whose base type is the variable's, such as
+`floatValue` for a `float`. Keep the type of an expression over a field fixed: for example, set a
+`float` from a sum that includes a `float`.
 
 A value that two or more entries of a `qti-mapping` match maps by the first entry listed, as a
 point that two areas of a `qti-area-mapping` hold maps by the first area listed.
@@ -575,8 +586,10 @@ test's outcomes as the session holds them then, may read an item's variable by a
 `startTest` fails with `EngineFailure` when a default of its first part names no template variable
 of its item or gives a value of another base type or cardinality. `advance` fails with it when it
 shows a later item or starts a later part. `openPackage` refuses such a default, so only a test and
-items you `open` one at a time reach that failure. The one exception is a default that reads a
-field through `qti-field-value`, which [Outcome processing](#outcome-processing) describes. A
+items you `open` one at a time reach that failure. The one exception is a default whose type
+follows a field that `qti-field-value` reads. `openPackage` accepts it, and `startTest` or
+`advance` returns `OutcomeMismatchError` when its type is not the template variable's, as
+[Outcome processing](#outcome-processing) describes. A
 default that reads a variable plate holds no value for in a test, one that
 [Outcome processing](#outcome-processing) names, is marked and not applied, so its variable starts
 at its declared default *(pending)*. A default that reads the test's own `duration` reads NULL
@@ -718,10 +731,14 @@ fails at that read with `UnknownIdentifierError`. `open` accepts these, as pantr
 
 `openPackage` accepts a test that sets a variable from `qti-field-value` of an item's `record`
 response, whatever the field, in its outcome processing or in an item ref's template default.
-When the field's base type is not the variable's, `advance` returns `OutcomeMismatchError` for the
-step that runs the rule or applies the default, and does not throw. For example, a `float`
-`T_SCORE` set from the `integerValue` of `ITEM1.RESPONSE` fails once the candidate types `12`. As
-in an item ([Scoring](#scoring)), read the field whose base type is the variable's.
+When the field's base type, or the type of an expression over it such as a `qti-sum`, is not the
+variable's, `startTest` or `advance` returns `OutcomeMismatchError` and does not throw.
+`startTest` returns it for a default that it applies as the first part starts, since a default can
+read a field of the record an item's declaration writes, through `qti-default` or `qti-correct`,
+before anyone answers. `advance` returns it for the step that runs the rule or applies a later
+default. For example, a `float` `T_SCORE` set from the `integerValue` of `ITEM1.RESPONSE` fails
+once the candidate types `12`. As in an item ([Scoring](#scoring)), read the field whose base type
+is the variable's, and keep the type of an expression over a field fixed.
 
 Where QTI 3.0 leaves a choice open, plate makes one. A choice marked *(pending)* awaits approval
 and can change.
@@ -735,9 +752,12 @@ and can change.
   plate may refuse a package that pantry accepts, but only one that would fail at run time.
 - A read through an item ref gives NULL of the variable's declared type and cardinality when the
   item's record holds no value for it, such as a template variable of an item not yet shown. So do
-  a `qti-variable`, `qti-correct` or `qti-default` of a `file` variable, of a `record` variable
-  other than a response, or of a `record` response with a `file` field, and a read of an item's
-  second or later occurrence, such as `ITEM1.2.SCORE` *(pending)*.
+  a `qti-variable`, `qti-correct` or `qti-default` of a `file` variable, of a `record` outcome or
+  template variable, or of a `record` response with a `file` field, and a read of an item's second
+  or later occurrence, such as `ITEM1.2.SCORE` *(pending)*. plate never reads a context variable
+  through an item ref. `openPackage` marks the processing that reads one, or leaves out the
+  template default. When you `open` a test and its items one at a time, that read fails with
+  `UnknownIdentifierError`.
 - A read through an item ref of an item's `record` response, such as `ITEM1.RESPONSE`, gives the
   `record` answer that the item's record holds, or the NULL record when it holds none or the name
   reads a second occurrence. Its `qti-correct` and `qti-default` give the record its declaration

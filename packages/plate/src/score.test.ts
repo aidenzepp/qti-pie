@@ -1613,6 +1613,23 @@ const integerFieldDocument = `<?xml version="1.0" encoding="UTF-8"?>
 `;
 
 /**
+ * A hand-built item document like {@link integerFieldDocument}, whose rule sets the integer outcome
+ * `COUNT` from the `qti-sum` of `R`'s field `integerValue` and the float 2.0. `open` accepts it:
+ * the sum's base type follows the field's, which a `record` declaration does not type, so the check
+ * cannot see that the sum of an integer and a float is a float.
+ */
+const integerSumDocument = `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="field-typed" title="Field typed" time-dependent="false" adaptive="false">
+  <qti-response-declaration identifier="R" cardinality="record"/>
+  <qti-outcome-declaration identifier="COUNT" cardinality="single" base-type="integer"/>
+  <qti-item-body><p>How many? <qti-text-entry-interaction response-identifier="R"/></p></qti-item-body>
+  <qti-response-processing>
+    <qti-set-outcome-value identifier="COUNT"><qti-sum><qti-field-value field-identifier="integerValue"><qti-variable identifier="R"/></qti-field-value><qti-base-value base-type="float">2.0</qti-base-value></qti-sum></qti-set-outcome-value>
+  </qti-response-processing>
+</qti-assessment-item>
+`;
+
+/**
  * Decode a Text Entry's posted text into the record `R` takes, as a host's `decode` does.
  *
  * @param text The text the candidate typed.
@@ -1654,6 +1671,34 @@ describe("score over a record field set into a variable", () => {
           cardinality: "single",
           values: [],
         });
+      }),
+  );
+
+  it.effect(
+    "[I-9a] type follows a field: an integer COUNT set from the qti-sum of integerValue and 2.0, which open accepts, returns OutcomeMismatchError for 12, never a throw",
+    () =>
+      Effect.gen(function* sumOverField() {
+        const verdict = yield* open(
+          "items/field-typed.xml",
+          new TextEncoder().encode(integerSumDocument),
+        );
+        const opened = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`The item is ${verdict.verdict}, not accepted.`),
+        );
+        const returned = Result.getOrElse(
+          Result.try(() => score(opened, { R: typedRecord("12") })),
+          () => assert.fail("score threw instead of returning its failure"),
+        );
+        const mismatch = Option.getOrElse(failureOf(returned), () =>
+          assert.fail("score succeeded on 12"),
+        );
+
+        assert.deepStrictEqual(
+          mismatch._tag === "OutcomeMismatchError"
+            ? [mismatch._tag, mismatch.identifier, mismatch.actual, mismatch.expected]
+            : [mismatch._tag],
+          ["OutcomeMismatchError", "COUNT", "float single", "integer single"],
+        );
       }),
   );
 });

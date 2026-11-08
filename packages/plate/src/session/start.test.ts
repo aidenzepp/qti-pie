@@ -2808,3 +2808,84 @@ describe("a package whose test sets an outcome from a field of an item's record 
       }),
   );
 });
+
+/**
+ * Write the text of a hand-built item whose `record` response `R`, which a Text Entry binds,
+ * declares the default record holding the one field `floatValue`, 5, so a test reads that record
+ * through `qti-default` with no answer given.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const declaredRecordXml = (identifier: string): string =>
+  [
+    `<qti-assessment-item xmlns="${qtiNamespace}" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-response-declaration identifier="R" cardinality="record"><qti-default-value>',
+    '<qti-value field-identifier="floatValue" base-type="float">5</qti-value>',
+    "</qti-default-value></qti-response-declaration>",
+    '<qti-item-body><p><qti-text-entry-interaction response-identifier="R"/></p></qti-item-body>',
+    "</qti-assessment-item>",
+  ].join("");
+
+/**
+ * The item refs of a hand-built one-part test: `first`, {@link declaredRecordXml}, with no default,
+ * then `second`, {@link doublingXml}, whose template default gives its integer `T` the field
+ * `floatValue` of `first.R`'s declared default record. `openPackage` accepts it: a `record`
+ * declaration types none of its fields, so the check cannot see that the field is a float.
+ */
+const fieldDefaultRefs: readonly DefaultedRef[] = [
+  ["first", "", declaredRecordXml("first")],
+  [
+    "second",
+    defaultXml(
+      "T",
+      '<qti-field-value field-identifier="floatValue"><qti-default identifier="first.R"/></qti-field-value>',
+    ),
+    doublingXml("second"),
+  ],
+];
+
+describe("a package whose item ref's template default reads a field of an item's declared record", () => {
+  it.effect(
+    "[T-9] type follows a field: a nonlinear part whose template default gives the integer T first.R's declared floatValue, which openPackage accepts, returns startTest's OutcomeMismatchError for T, never a throw",
+    () =>
+      Effect.gen(function* nonlinearFieldDefault() {
+        const delivery = packagedDelivery(yield* onePartPackage("nonlinear", fieldDefaultRefs));
+        const mismatch = failureTagged(yield* startedOrFailed(delivery), "OutcomeMismatchError");
+
+        assert.deepStrictEqual(
+          [mismatch.identifier, mismatch.actual, mismatch.expected],
+          ["T", "float single", "integer single"],
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-9] type follows a field: a linear part whose template default gives the integer T first.R's declared floatValue, which openPackage accepts, starts, and advance's next, which shows second, returns OutcomeMismatchError for T, never a throw",
+    () =>
+      Effect.gen(function* linearFieldDefault() {
+        const delivery = packagedDelivery(yield* onePartPackage("linear", fieldDefaultRefs));
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration, "defaults");
+        const returned = Result.getOrElse(
+          Result.try(() =>
+            advance(
+              delivery.test,
+              delivery.items,
+              session,
+              { intent: { kind: "next" } },
+              configuration,
+              { now: after(1000) },
+            ),
+          ),
+          () => assert.fail("advance threw instead of returning its failure"),
+        );
+        const mismatch = failureTagged(returned, "OutcomeMismatchError");
+
+        assert.deepStrictEqual(
+          [mismatch.identifier, mismatch.actual, mismatch.expected],
+          ["T", "float single", "integer single"],
+        );
+      }),
+  );
+});
