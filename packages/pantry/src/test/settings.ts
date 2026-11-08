@@ -49,17 +49,17 @@ export const leaseTestTimeoutMs = 49_000;
 /**
  * The timeout, in milliseconds, for the `layer` hook that builds `AuthorAppLayer`.
  *
- * The hook decodes the 120 MB migrations snapshot and compiles the login, and with no
- * `timeout` option it falls to vitest's 10 s `hookTimeout`, which the parallel leased full suite
- * exceeded under load averages of 8 to 15 on 14 CPUs (merges `8b3f2a65`, `1a3d4f4c`, `998fe309`
- * and `655ddd9f`). Measured on 2026-11-02 at `ae520e6` with the snapshot at 120,065,687 bytes
- * and no database: five quiet builds had a median of 7.35 s, and six concurrent builds, one per
- * test file that builds the layer, had a maximum of 9.29 s at load averages of 4 to 6, each
- * process peaking near 1.5 GB resident. The budget is the larger of twice that maximum
- * (18.6 s) and 20 s, the floor being twice the default.
+ * The hook reads and decodes the migrations snapshot and builds grizzle's `DbLayer`, which compiles
+ * every program of the login's workloads and opens its pool, so it is CPU-bound and slows with the
+ * machine's load. Measured 2026-11-07 at `4e82dde5`, the snapshot at 21,856,162 bytes, on the lease
+ * with the other lanes running: a cold build, the first in its process as each lease file's hook
+ * is, took 32.1 s at a load average of 31 to 36 (0.6 s of it the snapshot), and 31.3, 25.0, 14.5
+ * and 12.7 s at a load average of 28 to 33. The 20 s this held before, twice a build at a load of 4
+ * to 6 on 2026-11-02, timed out `qti/interactions.db.test.ts`'s hook in the database run of
+ * `88946fff` and again run alone. The value is twice the slowest, rounded up to the next 1,000.
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
-export const authorLayerHookTimeoutMs = 20_000;
+export const authorLayerHookTimeoutMs = 65_000;
 
 /**
  * The timeout, in milliseconds, for one test that spawns the CLI as a child process.
