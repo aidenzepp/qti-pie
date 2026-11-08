@@ -436,6 +436,14 @@ field, with the problem `not-a-value`. It refuses a record for any other respons
 a `record` response, with the problem `cardinality`. `advance` refuses a step that carries either
 with `StepResponseMisfit`.
 
+`open` accepts a rule that sets a variable from `qti-field-value`, whatever the field, as pantry
+does. A `record` declaration types none of its fields, so neither `open` nor pantry knows a field's
+base type before the candidate answers. When the field's base type is not the variable's, `score`
+returns `OutcomeMismatchError` and does not throw. For example, a rule that sets the `float`
+`SCORE` from `integerValue` fails when the candidate types `12`, and sets `SCORE` to NULL for
+`abc`, which has no `integerValue`. Read the field whose base type is the variable's, such as
+`floatValue` for a `float`.
+
 A value that two or more entries of a `qti-mapping` match maps by the first entry listed, as a
 point that two areas of a `qti-area-mapping` hold maps by the first area listed.
 
@@ -451,7 +459,10 @@ The verdict marks each of these, and `score` runs no processing that holds one:
   that does not run
 
 The item's outcomes then stay at their defaults. The verdict also marks `qti-custom-operator`, but
-its processing runs, and the operator's value is NULL.
+its processing runs, and the operator's value is NULL. A `qti-multiple`, `qti-ordered` or
+`qti-repeat` built over a `qti-field-value` is NULL too, even when the field holds a value, so
+`qti-container-size` of one is 0. To collect a field's value, set a variable from the field and
+build the container from that variable.
 
 `open` refuses the following, each as pantry does:
 
@@ -564,10 +575,12 @@ test's outcomes as the session holds them then, may read an item's variable by a
 `startTest` fails with `EngineFailure` when a default of its first part names no template variable
 of its item or gives a value of another base type or cardinality. `advance` fails with it when it
 shows a later item or starts a later part. `openPackage` refuses such a default, so only a test and
-items you `open` one at a time reach that failure. A default that reads a variable plate holds no
-value for in a test, one that [Outcome processing](#outcome-processing) names, is marked and not
-applied, so its variable starts at its declared default *(pending)*. A default that reads the test's
-own `duration` reads NULL *(pending)*.
+items you `open` one at a time reach that failure. The one exception is a default that reads a
+field through `qti-field-value`, which [Outcome processing](#outcome-processing) describes. A
+default that reads a variable plate holds no value for in a test, one that
+[Outcome processing](#outcome-processing) names, is marked and not applied, so its variable starts
+at its declared default *(pending)*. A default that reads the test's own `duration` reads NULL
+*(pending)*.
 
 The seed is a string, and it is the record's secret: it keys every value that template and
 response processing draw. A seed someone can guess, such as `"7"` or `""`, lets anyone who sees
@@ -703,6 +716,13 @@ declares `CTX` in a `qti-context-declaration`: the item marks that declaration, 
 value of it. A test checked apart from its items cannot see this, so there its processing runs and
 fails at that read with `UnknownIdentifierError`. `open` accepts these, as pantry does.
 
+`openPackage` accepts a test that sets a variable from `qti-field-value` of an item's `record`
+response, whatever the field, in its outcome processing or in an item ref's template default.
+When the field's base type is not the variable's, `advance` returns `OutcomeMismatchError` for the
+step that runs the rule or applies the default, and does not throw. For example, a `float`
+`T_SCORE` set from the `integerValue` of `ITEM1.RESPONSE` fails once the candidate types `12`. As
+in an item ([Scoring](#scoring)), read the field whose base type is the variable's.
+
 Where QTI 3.0 leaves a choice open, plate makes one. A choice marked *(pending)* awaits approval
 and can change.
 
@@ -768,6 +788,11 @@ and can change.
 | A `qti-outcome-if` or `qti-outcome-else-if` whose condition is not a single `boolean` | `expression-type` | P21 |
 | A `qti-base-value` whose text is not of its base type | `value-type` | P7 |
 | A `qti-test-variables` with a `weight-identifier` and a `base-type` other than `float` | `expression-type` | P29 |
+
+`open` refuses a test's `record` outcome declaration as it refuses an item's. It refuses with
+`missing-attribute` a `qti-value` in the declaration's `qti-default-value` that has no
+`field-identifier` or no `base-type`, and with `value-type` one whose text is not of its own
+`base-type`.
 
 A dotted name the test declares whole, such as an outcome named `S.TOTAL`, is that declaration,
 and the table judges it as it judges an undotted name. A `qti-correct` of `S.TOTAL` is refused,

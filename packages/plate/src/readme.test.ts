@@ -1050,6 +1050,34 @@ describe("README.md", () => {
     }
   });
 
+  it("states gate round 10g in the README: OutcomeMismatchError for a field whose base type is not its variable's, NULL containers over qti-field-value, and a test's record outcome refused as an item's", () => {
+    const scoring = flatSectionOf("## Scoring");
+
+    for (const fragment of [
+      "`open` accepts a rule that sets a variable from `qti-field-value`, whatever the field, as pantry does.",
+      "When the field's base type is not the variable's, `score` returns `OutcomeMismatchError` and does not throw.",
+      "Read the field whose base type is the variable's, such as `floatValue` for a `float`.",
+      "A `qti-multiple`, `qti-ordered` or `qti-repeat` built over a `qti-field-value` is NULL too, even when the field holds a value",
+    ]) {
+      assert.include(scoring, fragment);
+    }
+    assert.include(
+      flatSectionOf("## Template processing"),
+      "The one exception is a default that reads a field through `qti-field-value`",
+    );
+
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "in its outcome processing or in an item ref's template default",
+      "When the field's base type is not the variable's, `advance` returns `OutcomeMismatchError`",
+      "`open` refuses a test's `record` outcome declaration as it refuses an item's.",
+      "and with `value-type` one whose text is not of its own `base-type`",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
+  });
+
   it.effect("runs the plain server action on a base-16 Text Entry, which scores ff as 255", () =>
     Effect.gen(function* runsServerAction() {
       const step = yield* serverAction();
