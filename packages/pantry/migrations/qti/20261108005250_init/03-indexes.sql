@@ -114,10 +114,6 @@ CREATE INDEX "__declaration_identifier_ix_node_wmg_2_sk_5_kn_2_yw7idbxny2" ON "q
 
 CREATE INDEX "__declaration_identifier_ix_node_z_6_xuk_7_itel_3bbjfpaz5i" ON "qti"."declaration_identifier" USING btree ("__node_z6xuk7itel");
 
-CREATE INDEX "__declared_value_ix_declaration_base_type_xue4f3btzc" ON "qti"."declared_value" USING btree ("declaration", "base_type");
-
-CREATE INDEX "__declared_value_ix_declaration_cardinality_hwafdqttyh" ON "qti"."declared_value" USING btree ("declaration", "cardinality");
-
 CREATE INDEX "__dependency_ix_resource_package_txdc5xfn7z" ON "qti"."dependency" USING btree ("resource", "package");
 
 CREATE INDEX "__dependency_target_ix_package_ref_target_2iifdwtrng" ON "qti"."dependency_target" USING btree ("package", "ref", "target");
@@ -669,6 +665,10 @@ CREATE INDEX "__test_token_ix_node_l_7_omvxv_2_od_tskzgdxw2x" ON "qti"."test_tok
 CREATE INDEX "__text_idref_ix_document_token_r43v6t4zvp" ON "qti"."text_idref" USING btree ("document", "token");
 
 CREATE INDEX "__typed_href_ix_package_tydw_4_wv_6_km_path_kcbijnm_gest4ish2j" ON "qti"."typed_href" USING btree ("__package_tydw4wv6km", "__path_kcbijnm36h", "__type_izv7wmxts7");
+
+CREATE INDEX "__typed_value_ix_declaration_base_type_wcvi77nmqz" ON "qti"."typed_value" USING btree ("declaration", "base_type");
+
+CREATE INDEX "__typed_value_ix_declaration_cardinality_vqkwinouls" ON "qti"."typed_value" USING btree ("declaration", "cardinality");
 
 CREATE INDEX "__value_ix_node_qlzux_26_h_3_u_3geqgrisfy" ON "qti"."value" USING btree ("__node_qlzux26h3u");
 
