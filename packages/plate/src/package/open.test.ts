@@ -14,6 +14,7 @@ import type {
 } from "#plate/package/open.ts";
 import { fileLocation, manifestFile } from "#plate/package/store.ts";
 import type { Location, Refusal } from "#plate/validate/refusal.ts";
+import { describeRefusal } from "#plate/validate/verdict.ts";
 import { manifestNamespace } from "#plate/vocabulary.ts";
 
 /**
@@ -72,6 +73,16 @@ const seen = (refusal: Refusal): Seen => ({
  */
 const refusalsOf = (verdict: PackageVerdict): Seen[] =>
   verdict.verdict === "refused" ? verdict.refusals.map((refusal) => seen(refusal)) : [];
+
+/**
+ * Take every refusal of a package verdict whole, none when it is not refused, for a test that
+ * words it.
+ *
+ * @param verdict The package verdict.
+ * @returns The refusals, in order.
+ */
+const refusalsIn = (verdict: PackageVerdict): readonly Refusal[] =>
+  verdict.verdict === "refused" ? verdict.refusals : [];
 
 /**
  * Take the accepted package of an accepting verdict; the test fails when it does not accept.
@@ -1719,7 +1730,7 @@ describe("package/open.ts", () => {
               refusalsOf(verdict),
               [
                 {
-                  detail: { element, expected: "response", identifier: reference },
+                  detail: { element, expected: "response", identifier: reference, prefix: "ITEM1" },
                   document: fileLocation(location, "test.xml"),
                   location: { kind: "path", path: `${expressionAt(element)}/@identifier` },
                   rule: "undeclared-variable",
@@ -1786,14 +1797,14 @@ describe("package/open.ts", () => {
       () =>
         Effect.gen(function* builtInMapsNothing() {
           const cases = [
-            ["qti-map-response-point", "ITEM1.numAttempts", "false"],
-            ["qti-map-response", "ITEM1.duration", "true"],
-            ["qti-map-response", "ITEM1.1.numAttempts", "false"],
-            ["qti-map-response", "P.duration", "false"],
-            ["qti-map-response", "SEC.duration", "false"],
+            ["qti-map-response-point", "ITEM1.numAttempts", "false", "ITEM1"],
+            ["qti-map-response", "ITEM1.duration", "true", "ITEM1"],
+            ["qti-map-response", "ITEM1.1.numAttempts", "false", "ITEM1"],
+            ["qti-map-response", "P.duration", "false", "P"],
+            ["qti-map-response", "SEC.duration", "false", "SEC"],
           ] as const;
 
-          for (const [element, reference, timeDependent] of cases) {
+          for (const [element, reference, timeDependent, prefix] of cases) {
             const verdict = yield* openSettingThroughPoints(
               timeDependent,
               `<${element} identifier="${reference}"/>`,
@@ -1802,7 +1813,7 @@ describe("package/open.ts", () => {
               refusalsOf(verdict),
               [
                 {
-                  detail: { element, expected: "response", identifier: reference },
+                  detail: { element, expected: "response", identifier: reference, prefix },
                   document: fileLocation(location, "test.xml"),
                   location: { kind: "path", path: `${expressionAt(element)}/@identifier` },
                   rule: "undeclared-variable",
@@ -1844,6 +1855,7 @@ describe("package/open.ts", () => {
                 element: "qti-map-response",
                 expected: "response",
                 identifier: "ITEM1.duration",
+                prefix: "ITEM1",
               },
             },
           ]);
@@ -1895,7 +1907,12 @@ describe("package/open.ts", () => {
               refusalsOf(verdict),
               [
                 {
-                  detail: { element: "qti-correct", expected: "response", identifier: reference },
+                  detail: {
+                    element: "qti-correct",
+                    expected: "response",
+                    identifier: reference,
+                    prefix: "ITEM1",
+                  },
                   document: fileLocation(location, "test.xml"),
                   location: { kind: "path", path: `${nullTestedAt("qti-correct")}/@identifier` },
                   rule: "undeclared-variable",
@@ -1930,6 +1947,50 @@ describe("package/open.ts", () => {
               },
             ],
           );
+        }),
+    );
+
+    it.effect(
+      "[T-9] a qti-correct of a dotted name read through an item ref is refused with that ref as its prefix and the item-ref sentence, and of a dotted name the test declares whole with no prefix and a sentence that names no item ref (dotted wording through a ref only)",
+      () =>
+        Effect.gen(function* dottedWordingThroughRefOnly() {
+          const through = refusalsIn(
+            yield* openTestingNull('<qti-correct identifier="ITEM1.SCORE"/>'),
+          );
+          const whole = refusalsIn(
+            yield* openPackage(
+              location,
+              readingPackage(
+                `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="A.B" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="SEC" title="SEC" visible="true">${itemRefXml("ITEM1", "items/a.xml")}</qti-assessment-section></qti-test-part><qti-outcome-processing><qti-outcome-condition><qti-outcome-if><qti-is-null><qti-correct identifier="A.B"/></qti-is-null>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition></qti-outcome-processing></qti-assessment-test>`,
+                { "items/a.xml": reachedItemXml },
+              ),
+            ),
+          );
+
+          assert.deepStrictEqual(
+            through.map((refusal) => refusal.detail),
+            [
+              {
+                element: "qti-correct",
+                expected: "response",
+                identifier: "ITEM1.SCORE",
+                prefix: "ITEM1",
+              },
+            ],
+          );
+          assert.deepStrictEqual(
+            whole.map((refusal) => refusal.detail),
+            [{ element: "qti-correct", expected: "response", identifier: "A.B" }],
+          );
+          assert.include(
+            through.map((refusal) => describeRefusal(refusal)).join("\n"),
+            "To make it valid: name a response the item declares, written `ITEMREF.RESPONSE`.",
+          );
+
+          const sentence = whole.map((refusal) => describeRefusal(refusal)).join("\n");
+          assert.include(sentence, "`qti-correct` names `A.B`, and the");
+          assert.notInclude(sentence, "item ref");
+          assert.notInclude(sentence, "ITEMREF.RESPONSE");
         }),
     );
 

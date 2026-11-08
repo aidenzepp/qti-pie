@@ -405,7 +405,7 @@ const readers = {
  * decide: it types `qti-value` as `xs:normalizedString` and `qti-base-value` as `xs:string`. The
  * information model does: its boolean base type is "the same as the set of values defined by the
  * boolean primitiveType" (`info.txt:72950`), the primitive "with permitted values of "true" and
- * "false"" (`info.txt:74910`). XML Schema's `1` and `0` belong only to the attributes the XSD types
+ * "false"" (`info.txt:74908`). XML Schema's `1` and `0` belong only to the attributes the XSD types
  * `xs:boolean`, which `xsBooleanOf` in `#plate/model/attributes.ts` reads.
  *
  * @param baseType The base type to read.

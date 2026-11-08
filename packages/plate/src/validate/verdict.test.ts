@@ -2827,7 +2827,12 @@ describe("describeRefusal", () => {
     for (const element of ["qti-map-response", "qti-correct"]) {
       for (const identifier of ["I1.numAttempts", "I1.SCORE"]) {
         const sentence = describeRefusal(
-          refusalOf("undeclared-variable", { element, expected: "response", identifier }),
+          refusalOf("undeclared-variable", {
+            element,
+            expected: "response",
+            identifier,
+            prefix: "I1",
+          }),
         );
 
         assert.include(
@@ -2851,6 +2856,63 @@ describe("describeRefusal", () => {
 
       assert.include(sentence, "the item declares no response `SCORE`.");
       assert.include(sentence, "To make it valid: declare `SCORE`, or name a declared response.");
+    }
+  });
+
+  it("gives a dotted name no ref is read through, one an item or a test declares whole, the sentence that names no item ref (dotted wording through a ref only)", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      for (const identifier of ["X.Y", "A.B"]) {
+        const sentence = describeRefusal(
+          refusalOf("undeclared-variable", { element, expected: "response", identifier }),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` names \`${identifier}\`, and the item declares no response \`${identifier}\`.`,
+          `${element} ${identifier}`,
+        );
+        assert.notInclude(sentence, "item ref", `${element} ${identifier}`);
+        assert.notInclude(sentence, "ITEMREF.RESPONSE", `${element} ${identifier}`);
+      }
+    }
+  });
+
+  it("keeps the item-ref sentence for a dotted name read through a ref, the built-in sentence and the declaration fix (dotted wording through a ref only, control)", () => {
+    for (const element of ["qti-map-response", "qti-correct"]) {
+      for (const [identifier, prefix] of [
+        ["I1.SCORE", "I1"],
+        ["I1.numAttempts", "I1"],
+        ["X.Y", "X"],
+      ] as const) {
+        const sentence = describeRefusal(
+          refusalOf("undeclared-variable", { element, expected: "response", identifier, prefix }),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` names \`${identifier}\`, which reads, through an item ref, test part or section, a variable that is not a response its item declares.`,
+          `${element} ${identifier}`,
+        );
+        assert.include(
+          sentence,
+          "To make it valid: name a response the item declares, written `ITEMREF.RESPONSE`.",
+          `${element} ${identifier}`,
+        );
+      }
+
+      const builtIn = describeRefusal(
+        refusalOf("undeclared-variable", {
+          element,
+          expected: "response",
+          identifier: "numAttempts",
+        }),
+      );
+      const undotted = describeRefusal(
+        refusalOf("undeclared-variable", { element, expected: "response", identifier: "SCORE" }),
+      );
+
+      assert.include(builtIn, `names the built-in \`numAttempts\`, which has no declaration`);
+      assert.include(undotted, "To make it valid: declare `SCORE`, or name a declared response.");
     }
   });
 

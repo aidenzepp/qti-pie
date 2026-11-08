@@ -1109,9 +1109,12 @@ const referencesOf = (
  * - In a `qti-correct`, `qti-map-response` or `qti-map-response-point`, a variable that is not a
  *   response (an outcome, a template or context variable, a mapping target, which reads an outcome,
  *   or a built-in) is `undeclared-variable` at the attribute with `expected: "response"`, the
- *   detail the rules give an item's expression of a name that is no response: a `qti-correct`
- *   "looks up the declaration of a response variable" (`info.txt:9302`), and each mapping "looks up
- *   the value of a response variable" (`:9306`, `:9314`). Pantry does not judge what a prefixed
+ *   detail the rules give an item's expression of a name that is no response, with the `prefix` the
+ *   reading reads through: a `qti-correct` "looks up the declaration of a response variable"
+ *   (`info.txt:9302`), and each mapping "looks up the value of a response variable" (`:9306`,
+ *   `:9314`). The `prefix` is what tells the wording a read through an item ref, part or section
+ *   from a dotted name a document declares whole, which the rules refuse with no `prefix` (a name
+ *   the test declares whole never reaches this judgement). Pantry does not judge what a prefixed
  *   name reads there, so this is an agreement difference (G-R3, pending).
  * - In a `qti-map-response` or `qti-map-response-point`, a response its item declares without the
  *   mapping or the area mapping the expression needs is `template-requirements`, as an item's
@@ -1174,7 +1177,13 @@ const judgeReference = (
       ? [refuse(document, "undeclared-variable", path, { ...named, check: "untimed-duration" })]
       : []),
     ...(byIdentifier && isQti(visit.element, responseExpressions) && !response
-      ? [refuse(document, "undeclared-variable", path, { ...named, expected: "response" })]
+      ? [
+          refuse(document, "undeclared-variable", path, {
+            ...named,
+            expected: "response",
+            prefix: first.prefix,
+          }),
+        ]
       : []),
     ...(variable.namable
       ? []
