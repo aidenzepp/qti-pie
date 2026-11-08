@@ -714,9 +714,12 @@ const membersOf = (view: View, flag: FlagOf): ReadonlyMap<string, Addition<typeo
   );
 
 /**
- * Write a document's selections, each with its `select` split around its integer and its
- * section's count of parts. A selection whose `select` is absent or holds no integer has no row:
- * AL3 or AL1 refuses it, and `SectionSelection`'s mirror names it too.
+ * Write a document's selections, each with its `select` split around its collapsed value and its
+ * section's count of parts. A selection that writes no `select` has no row: AL3 refuses it, and
+ * `SectionSelection`'s mirror names it too. One whose `select` names no integer has its row all
+ * the same, its form as written: `SelectForm`'s pattern law refuses the form as PostgreSQL casts it
+ * into its column, and the attribute's value domain refuses the attribute, so the database judges
+ * the form and this builder never does.
  *
  * @param view - The document.
  * @param flag - Each node's flags.
@@ -730,29 +733,25 @@ const selectionsOf = (
     view.rows.nodes
       .filter(({ kind }) => kind === selectionKind)
       .flatMap((node) =>
-        Option.toArray(valueOf(view, node, "select")).flatMap((lexical) => {
+        Option.toArray(valueOf(view, node, "select")).map((lexical) => {
           const pieces = piecesOf(lexical);
           const parts = childrenOf(view, node.parent).filter((child) =>
             among(sectionParts, child.kind),
           );
 
-          return /^[+-]?[0-9]+$/u.test(pieces.value)
-            ? [
-                [
-                  node.id,
-                  {
-                    ...tupleOf(view, node),
-                    members: BigInt(parts.length),
-                    required: BigInt(parts.filter((part) => flagOr(flag, part, "required")).length),
-                    selectForm: pieces.value,
-                    selectLead: pieces.lead,
-                    selectLexical: lexical,
-                    selectTrail: pieces.trail,
-                    withReplacement: flagOr(flag, node, "with-replacement"),
-                  },
-                ] as const,
-              ]
-            : [];
+          return [
+            node.id,
+            {
+              ...tupleOf(view, node),
+              members: BigInt(parts.length),
+              required: BigInt(parts.filter((part) => flagOr(flag, part, "required")).length),
+              selectForm: pieces.value,
+              selectLead: pieces.lead,
+              selectLexical: lexical,
+              selectTrail: pieces.trail,
+              withReplacement: flagOr(flag, node, "with-replacement"),
+            },
+          ] as const;
         }),
       ),
   );

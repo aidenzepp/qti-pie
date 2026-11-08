@@ -6,6 +6,8 @@
  * - **Parts** (C15): each section's `SectionMember` rows are its direct part children, and its
  *   selection's counts are theirs.
  * - **Pieces**: a lexical form's split restates it, its value collapsed.
+ * - **Selections**: a selection that writes a `select` has its row whatever the form, the form
+ *   collapsed; the database, never the builder, judges whether it names an integer.
  * - **The assembly** (reading 85, 86): over every small package of a test and two section documents,
  *   the instance trees hold one child per site exactly where the inclusion graph has no cycle and
  *   no dangling site, each site has its target exactly where its href names a listed document, each
@@ -521,6 +523,125 @@ describe("import/overlays/tests.ts, pieces", () => {
           }),
       ),
     ),
+  );
+});
+
+/**
+ * The characters a `select` is written over in the selections box: whitespace, a sign, a digit, a
+ * point and a letter, so the box holds integers, bare and padded, and forms that name none.
+ */
+const selectAlphabet = [" ", "\t", "+", "1", ".", "a"] as const;
+
+/**
+ * A test of one part holding one section of one item ref, under a `qti-selection` that writes a
+ * `select` or none.
+ *
+ * @param select - The `select` as written, none for a selection that writes none.
+ * @returns The document.
+ */
+const selectionDocument = (select: Option.Option<string>): XdmDocument<Composed> =>
+  documentOf(
+    el(
+      "qti-assessment-test",
+      [["identifier", "T"]],
+      [
+        el(
+          "qti-test-part",
+          [
+            ["identifier", "P"],
+            ["navigation-mode", "linear"],
+            ["submission-mode", "individual"],
+          ],
+          [
+            el(
+              "qti-assessment-section",
+              [
+                ["identifier", "S"],
+                ["visible", "true"],
+              ],
+              [
+                el(
+                  "qti-selection",
+                  Option.toArray(select).map((form) => ["select", form] as const),
+                ),
+                el("qti-assessment-item-ref", [
+                  ["identifier", "I"],
+                  ["href", "i.xml"],
+                ]),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+describe("import/overlays/tests.ts, selections", () => {
+  it.effect(
+    "writes a SectionSelection row for every selection that writes a select, whatever the form, so the database judges the form",
+    (ctx) =>
+      // Oracle: a universal one, the row restating the attribute as written: one row exactly
+      // where a `select` is written (AL3 refuses one that writes none), its lexical form the
+      // attribute's, its form that form with XML Schema Part 2 §4.3.6's collapse taken off its
+      // ends, and `lead ‖ form ‖ trail = lexical` (`E1_derived`). Whether the form names an
+      // integer is `SelectForm`'s pattern law's to judge, and the attribute's value domain's, so
+      // a form that names none has its row too.
+      // Bound: a selection that writes no select, and every select of at most 3 characters over
+      // space, tab, plus, 1, point and a, 260.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "a selection's select, unwritten or of at most 3 characters over space, tab, +, 1, . and a",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<"unwritten" | "integer" | "no integer">([
+              "unwritten",
+              "integer",
+              "no integer",
+            ]),
+            generator: option(array(element(selectAlphabet), { max: 3, min: 0 })),
+            limit: 300,
+            literal: Formatter.format,
+            oracle: {
+              kind: "universal",
+              name: "the selection's row restating its select as written, with collapse's ends",
+            },
+            suite: "import/overlays-tests-selections",
+          },
+          (characters: Option.Option<readonly string[]>, c) =>
+            Effect.sync(() => {
+              const select = characters.pipe(Option.map((written) => written.join("")));
+              const [rows] = rowsOfPackage([["t.xml", selectionDocument(select)]]);
+              assert.isDefined(rows);
+
+              const selections = [...(rows?.SectionSelection.values() ?? [])];
+              Option.match(select, {
+                onNone: () => {
+                  c.note("unwritten");
+                  assert.lengthOf(selections, 0);
+                },
+                onSome: (lexical) => {
+                  const form = lexical.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "");
+                  // xs:integer's lexical space (XML Schema Part 2 §3.3.13.1), which `select`'s
+                  // xs:int narrows: the class the builder once wrote rows for, and the class it
+                  // dropped.
+                  c.note(/^[+-]?[0-9]+$/u.test(form) ? "integer" : "no integer");
+                  assert.lengthOf(selections, 1, JSON.stringify(lexical));
+                  for (const row of selections) {
+                    assert.strictEqual(row.selectLexical, lexical);
+                    assert.strictEqual(row.selectForm, form);
+                    assert.strictEqual(
+                      `${row.selectLead}${row.selectForm}${row.selectTrail}`,
+                      lexical,
+                    );
+                    assert.match(row.selectLead, /^[\t\n\r ]*$/u);
+                    assert.match(row.selectTrail, /^[\t\n\r ]*$/u);
+                  }
+                },
+              });
+            }),
+        ),
+      ),
   );
 });
 
