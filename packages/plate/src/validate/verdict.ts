@@ -108,7 +108,8 @@ export type Accepted = Brand.Branded<AcceptedFields, "Accepted">;
 const accept = Brand.nominal<Accepted>();
 
 /**
- * The fields of an accepted test, which only {@link check} and {@link acceptTestForTest} brand.
+ * The fields of an accepted test, which only {@link check}, {@link acceptMarkedTest} and
+ * {@link acceptTestForTest} brand.
  */
 interface AcceptedTestFields {
   /**
@@ -139,6 +140,21 @@ export type AcceptedTest = Brand.Branded<AcceptedTestFields, "AcceptedTest">;
  * The brand's constructor, kept to this module.
  */
 const acceptTest = Brand.nominal<AcceptedTest>();
+
+/**
+ * Construct the {@link AcceptedTest} `openPackage` delivers for a test {@link check} accepted whose
+ * model the package marked: `openPackage`'s constructor, which nothing else calls. A package reads
+ * the test's items, so it may mark processing the test document's own verdict cannot, such as a
+ * read of an item's context variable through its item ref (`withUnheldReads` in
+ * `#plate/model/test.ts`). The test document's own verdict keeps `accepted` as {@link check} gave
+ * it.
+ *
+ * @param accepted The test as {@link check} accepted it.
+ * @param test Its model, as the package marked it.
+ * @returns The test accepted with the marked model, its `unsupported` the model's.
+ */
+export const acceptMarkedTest = (accepted: AcceptedTest, test: Test): AcceptedTest =>
+  acceptTest({ document: accepted.document, test, unsupported: test.unsupported });
 
 /**
  * What M2 holds of a section or a stimulus document it accepts: valid, and delivered alone by no

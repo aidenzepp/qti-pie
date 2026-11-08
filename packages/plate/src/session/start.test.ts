@@ -25,6 +25,7 @@ import {
   startTest,
 } from "#plate/session/start.ts";
 import type { Current, ItemView } from "#plate/session/start.ts";
+import { submitItem } from "#plate/session/submit.ts";
 import { open } from "#plate/validate/open.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { acceptedItem, acceptForTest } from "#plate/validate/verdict.ts";
@@ -1736,13 +1737,14 @@ const nonlinearDelivery = (
 ) => onePartDelivery(identifier, "nonlinear", refs, declarations);
 
 /**
- * Open a hand-built linear test and its items as one package, as {@link linearDelivery} writes
+ * Open a hand-built one-part test and its items as one package, as {@link onePartDelivery} writes
  * them, the test at `package/test.xml` and each item beside it at `package/<ref>.xml`.
  *
+ * @param navigation The part's navigation mode.
  * @param refs The item refs, in document order.
  * @returns The package's verdict.
  */
-const linearPackage = (refs: readonly DefaultedRef[]) => {
+const onePartPackage = (navigation: NavigationMode, refs: readonly DefaultedRef[]) => {
   const encoder = new TextEncoder();
   const manifest = [
     `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema>`,
@@ -1756,7 +1758,7 @@ const linearPackage = (refs: readonly DefaultedRef[]) => {
   ].join("");
   const texts: readonly (readonly [path: string, text: string])[] = [
     [manifestFile, manifest],
-    ["package/test.xml", onePartTestXml("defaults", "linear", refs, [])],
+    ["package/test.xml", onePartTestXml("defaults", navigation, refs, [])],
     ...refs.map(([ref, , xml]) => [`package/${ref}.xml`, xml] as const),
   ];
 
@@ -1765,6 +1767,15 @@ const linearPackage = (refs: readonly DefaultedRef[]) => {
     new Map(texts.map(([path, text]) => [path, encoder.encode(text)] as const)),
   );
 };
+
+/**
+ * Open a hand-built linear test and its items as one package, as {@link linearDelivery} writes
+ * them ({@link onePartPackage}).
+ *
+ * @param refs The item refs, in document order.
+ * @returns The package's verdict.
+ */
+const linearPackage = (refs: readonly DefaultedRef[]) => onePartPackage("linear", refs);
 
 /**
  * Read a session item's template values, failing the test when the session lacks the item.
@@ -2616,6 +2627,104 @@ describe("a package whose test collects an item variable with no base-type", () 
             },
           ],
         );
+      }),
+  );
+});
+
+/**
+ * The text of a hand-built item a test reads through its item ref in the context read cases below:
+ * the single integer context variable `CTX`, defaulting to 4, beside one Choice bound to the single
+ * identifier `RESPONSE`, whose correct response is `A`.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const contextItemXml = (identifier: string): string =>
+  [
+    `<qti-assessment-item xmlns="${qtiNamespace}" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-context-declaration identifier="CTX" cardinality="single" base-type="integer">',
+    "<qti-default-value><qti-value>4</qti-value></qti-default-value></qti-context-declaration>",
+    '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+    "<qti-correct-response><qti-value>A</qti-value></qti-correct-response></qti-response-declaration>",
+    '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+    '<qti-simple-choice identifier="A">Choice A</qti-simple-choice>',
+    '<qti-simple-choice identifier="B">Choice B</qti-simple-choice></qti-choice-interaction>',
+    "</qti-item-body></qti-assessment-item>",
+  ].join("");
+
+/**
+ * Take the one test of an accepted package with its items, failing the test when the package is
+ * not accepted.
+ *
+ * @param verdict The package's verdict.
+ * @returns The test and its items, as the package resolved them.
+ */
+const packagedDelivery = (verdict: PackageVerdict): Delivery => {
+  if (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") {
+    return assert.fail(`the package is ${verdict.verdict}`);
+  }
+
+  const [delivery] = verdict.accepted.tests.values();
+
+  return delivery ?? assert.fail("the package holds no test");
+};
+
+/**
+ * {@link contextItemXml}'s choice `A`, as a single identifier.
+ */
+const choiceA: Value = {
+  baseType: "identifier",
+  cardinality: "single",
+  values: [{ baseType: "identifier", value: "A" }],
+};
+
+describe("a package whose test reads an item's context variable", () => {
+  it.effect(
+    "[T-9] context read through an item ref: a package whose test sets ALL from I1.CTX, which I1 declares in a qti-context-declaration, starts, and submitItem succeeds with outcomeRuns 0 and ALL at its declared default 1",
+    () =>
+      Effect.gen(function* contextInProcessing() {
+        const delivery = yield* unheldPackage({
+          declarations:
+            '<qti-outcome-declaration identifier="ALL" cardinality="single" base-type="integer"><qti-default-value><qti-value>1</qti-value></qti-default-value></qti-outcome-declaration>',
+          defaults: "",
+          item: contextItemXml("I1"),
+          rules: `<qti-set-outcome-value identifier="ALL">${read("I1.CTX")}</qti-set-outcome-value>`,
+        });
+        const configuration = yield* configure({});
+        const submitted = Result.getOrElse(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            started(delivery, configuration, "context"),
+            { intent: { kind: "submit-item" }, responses: { RESPONSE: choiceA } },
+            configuration,
+            { now: after(1000) },
+          ),
+          (failure) => assert.fail(`submitItem failed: ${failure._tag}: ${failure.message}`),
+        );
+
+        assert.deepStrictEqual(
+          [submitted.outcomeRuns, submitted.outcomes["ALL"]],
+          [0, integer(1n)],
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-9] context read through an item ref: a package whose nonlinear part gives item ref second's T the template default first.CTX starts, applies none, and presents second with T at its declared default 3",
+    () =>
+      Effect.gen(function* contextInDefault() {
+        const delivery = packagedDelivery(
+          yield* onePartPackage("nonlinear", [
+            ["first", "", contextItemXml("first")],
+            ["second", defaultXml("T", read("first.CTX")), doublingXml("second")],
+          ]),
+        );
+        const session = started(delivery, yield* configure({}), "context");
+        const templates = templatesAt(presentedAt(delivery, session, 2, after(1000)), 2);
+
+        assert.deepStrictEqual(session.items[1]?.templateDefaults, Option.none());
+        assert.deepStrictEqual([templates["T"], templates["DOUBLED"]], [integer(3n), integer(6n)]);
       }),
   );
 });

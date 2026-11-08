@@ -177,7 +177,8 @@ export type OutcomeProcessing =
  * item model holds an item's, and `outcomeProcessing` its outcome processing in one of three
  * states. `unsupported` lists every feature not delivered, in document order, each once per feature
  * and path: the keys of `testMarks`, the marks the item model gives an outcome declaration it does
- * not hold, and the marks of outcome processing the engine cannot run.
+ * not hold, and the marks of outcome processing the engine cannot run. A package's test may follow
+ * them with the marks only its items show ({@link withUnheldReads}).
  */
 export interface Test {
   /**
@@ -1545,3 +1546,123 @@ export const buildTest = (source: SourceDocument): Effect.Effect<Test, Refusal> 
       unsupported: marksOf(source, placed),
     };
   });
+
+/**
+ * A read by a test's processing of a variable the engine holds no value of, which the test model
+ * cannot see from the test document alone: an item's context variable read through its item ref
+ * (`ITEMREF.VAR` naming the item's `qti-context-declaration`), which the item marks. A package,
+ * which reads the test's items, finds each one.
+ *
+ * It lies in the test's outcome processing, or in a template default of one of the test's own item
+ * refs, named by the item ref's identifier. `name` is the name read, as written, and `path` the
+ * path of the `qti-outcome-processing` or the `qti-template-default` it lies in.
+ */
+export type UnheldRead =
+  | { readonly kind: "outcome-processing"; readonly name: string; readonly path: string }
+  | {
+      readonly itemRef: string;
+      readonly kind: "template-default";
+      readonly name: string;
+      readonly path: string;
+    };
+
+/**
+ * Report whether an expression or one of its operands reads a variable, its value or its default
+ * (`qti-variable` or `qti-default`), by one of some names.
+ *
+ * @param expression The expression.
+ * @param names The names.
+ * @returns Whether it reads one of them.
+ */
+const readsAny = (expression: Expression, names: ReadonlySet<string>): boolean =>
+  ((expression.kind === "variable" || expression.kind === "default") &&
+    names.has(expression.identifier)) ||
+  expression.operands.some((operand) => readsAny(operand, names));
+
+/**
+ * Give a test whose processing marks the reads a package found it cannot run, so none runs: the
+ * marks the test model would give, had it seen what the package sees.
+ *
+ * When the outcome processing reads one, it is `marked`, as {@link outcomeProcessingOf} marks an
+ * unheld read. Each template default of an item ref whose expression reads one, by a `qti-variable`
+ * or a `qti-default`, is left out of the item ref's `templateDefaults`, as
+ * {@link templateDefaultOf} leaves out one the engine cannot apply, so its template variable starts
+ * at its item's declared default. Each read is the mark `variable:<name>` at its path, and the
+ * marks follow the test's own in `unsupported`, each once per feature and path. A test with no
+ * reads is returned unchanged.
+ *
+ * @param test The test model, as {@link buildTest} gives it.
+ * @param reads The reads, in document order.
+ * @returns The test with its processing marked where it reads one.
+ */
+export const withUnheldReads = (test: Test, reads: readonly UnheldRead[]): Test => {
+  if (reads.length === 0) {
+    return test;
+  }
+
+  const byItemRef = new Map<string, Set<string>>();
+  for (const read of reads) {
+    if (read.kind === "template-default") {
+      const names = byItemRef.get(read.itemRef) ?? new Set<string>();
+      names.add(read.name);
+      byItemRef.set(read.itemRef, names);
+    }
+  }
+
+  /**
+   * Give a section with each template default of its item refs, nested sections' included, that
+   * reads one left out.
+   *
+   * @param held The section.
+   * @returns The section.
+   */
+  const sectionWith = (held: Section): Section => ({
+    ...held,
+    // oxlint-disable-next-line eslint/no-use-before-define -- `sectionWith` and `childWith` are mutually recursive, as sections nest; the call runs only after both are defined.
+    children: held.children.map(childWith),
+  });
+
+  /**
+   * Give a section's child with each template default of an item ref that reads one left out.
+   *
+   * @param child The section's child.
+   * @returns The child.
+   */
+  const childWith = (child: SectionChild): SectionChild => {
+    if (child.kind === "section") {
+      return sectionWith(child);
+    }
+
+    const names = byItemRef.get(child.identifier);
+
+    return names === undefined
+      ? child
+      : {
+          ...child,
+          templateDefaults: child.templateDefaults.filter(
+            ({ expression }) => !readsAny(expression, names),
+          ),
+        };
+  };
+
+  const marked = new Set(test.unsupported.map(markKey));
+  const added: MarkedFeature[] = [];
+  for (const { name, path } of reads) {
+    const mark: MarkedFeature = { feature: `variable:${name}`, path, shown: "mark" };
+    if (!marked.has(markKey(mark))) {
+      marked.add(markKey(mark));
+      added.push(mark);
+    }
+  }
+
+  return {
+    ...test,
+    outcomeProcessing:
+      test.outcomeProcessing.kind === "runs" &&
+      reads.some((read) => read.kind === "outcome-processing")
+        ? { kind: "marked" }
+        : test.outcomeProcessing,
+    parts: test.parts.map((part) => ({ ...part, children: part.children.map(sectionWith) })),
+    unsupported: [...test.unsupported, ...added],
+  };
+};

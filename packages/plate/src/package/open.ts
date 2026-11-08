@@ -42,6 +42,10 @@
  *     references against the test's reach and its expressions in the test's processing scope
  *     (`undeclared-variable`, `expression-type`; reading 5), each refusal at the section document and
  *     given once however many tests give it;
+ *   - Each read in the test document's outcome processing or in one of its item refs' template defaults
+ *     of a variable the item declares in a `qti-context-declaration`, through its item ref, is found:
+ *     the item marks that declaration, so the engine holds no value of it, and the delivered test
+ *     marks the processing that reads it (see below);
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
  *   62).
@@ -50,8 +54,13 @@
  * holds, so nothing of it is read. The package's verdict follows from its parts: `refused` when
  * anything is refused, `unchecked` when nothing is and some document is, then
  * `accepted-with-unsupported` when some document is, and `accepted` otherwise. Only an accepting
- * package's documents are delivered. Like `open`, it runs over the shared reader and the Schema-
- * decoded tables, so it stays server-side.
+ * package's documents are delivered. A test is delivered with the model its document's own verdict
+ * holds, except that one whose processing reads an item's context variable through its item ref is
+ * delivered with that processing marked, `variable:<name>` at it: its outcome processing `marked`,
+ * and each template default that reads one left out, so its template variable starts at its
+ * declared default. The test document's own verdict cannot carry those marks, since the document is
+ * judged without its items, and it keeps its own. Like `open`, it runs over the shared reader and
+ * the Schema-decoded tables, so it stays server-side.
  *
  * @module
  * @see https://www.imsglobal.org/content/packaging/cpv1p2pd2/imscp_infov1p2pd2.html
@@ -83,6 +92,8 @@ import type {
 } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import { itemRefsIn } from "#plate/model/item-refs.ts";
+import { withUnheldReads } from "#plate/model/test.ts";
+import type { UnheldRead } from "#plate/model/test.ts";
 import { isNcName, trimXmlSpace } from "#plate/model/values.ts";
 import { readManifest, resourceLom } from "#plate/package/manifest.ts";
 import type { LomGeneral, LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
@@ -97,7 +108,7 @@ import {
 } from "#plate/validate/rules.ts";
 import type { CollectedTyper, PrefixedTyper } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
-import { acceptedItem, check } from "#plate/validate/verdict.ts";
+import { acceptMarkedTest, acceptedItem, check } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedStimulus, AcceptedTest, Verdict } from "#plate/validate/verdict.ts";
 import { resourceRoots, resourceTypes } from "#plate/vocabulary.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
@@ -128,6 +139,13 @@ export interface PackageTest {
    * removed, and its query and fragment set aside.
    */
   readonly items: ReadonlyMap<string, Accepted>;
+  /**
+   * The test, as its document's own verdict accepts it, or, when its processing reads an item's
+   * context variable through its item ref, with that processing marked: the outcome processing
+   * `marked` and each template default that reads one left out, each read `variable:<name>` at the
+   * processing element, after the document's own marks. The test document is judged without its
+   * items, so its own verdict cannot carry those marks, and keeps its own.
+   */
   readonly test: AcceptedTest;
 }
 
@@ -388,6 +406,24 @@ const responseExpressions: ReadonlySet<string> = new Set(["qti-correct", ...mapp
  * template processing, by local name in QTI's namespace.
  */
 const templateDefaultElements: ReadonlySet<string> = new Set(["qti-template-default"]);
+
+/**
+ * A test's outcome processing, by local name in QTI's namespace.
+ */
+const processingElements: ReadonlySet<string> = new Set(["qti-outcome-processing"]);
+
+/**
+ * The expressions that read a variable by its `identifier`, its value or its default, by local name
+ * in QTI's namespace: those a read of an item's context variable through its item ref is found in
+ * ({@link contextReadsIn}).
+ */
+const contextReadElements: ReadonlySet<string> = new Set(["qti-default", "qti-variable"]);
+
+/**
+ * The declaration of an item's context variable, by local name in QTI's namespace, which the item
+ * marks: the engine holds no value of it.
+ */
+const contextDeclarations: ReadonlySet<string> = new Set(["qti-context-declaration"]);
 
 /**
  * The item ref, the one element of a test that references an item document, by local name in
@@ -1762,14 +1798,69 @@ const repeatsIn = (
 };
 
 /**
+ * Give each read of an item's context variable through its item ref in a test document's
+ * processing: a `qti-variable` or a `qti-default` ({@link contextReadElements}) that lies in the
+ * test's `qti-outcome-processing` or in a `qti-template-default` of one of its item refs, and whose
+ * `identifier` is a name the predicate takes. The test model, built from the document alone, holds
+ * such a read and would run it; the engine holds no value of it, since the item marks the
+ * declaration.
+ *
+ * @param source The test's source.
+ * @param visits The visits of its elements, in document order.
+ * @param readsContext Whether a name reads an item's context variable through its item ref.
+ * @returns The reads, in document order, each with the item ref and the path of the processing
+ *   element it lies in.
+ */
+const contextReadsIn = (
+  source: SourceDocument,
+  visits: readonly Visit[],
+  readsContext: (name: string) => boolean,
+): readonly UnheldRead[] => {
+  const places = new Map<SourceElement, (name: string) => UnheldRead>();
+  const reads: UnheldRead[] = [];
+  for (const { element, parent, path } of visits) {
+    const above = Option.getOrUndefined(parent);
+    const itemRef =
+      above !== undefined && isQti(above, itemRefElements) ? identifierOf(above) : Option.none();
+    const inherited = above === undefined ? undefined : places.get(above);
+    if (above === source.root && isQti(element, processingElements)) {
+      places.set(element, (name) => ({ kind: "outcome-processing", name, path }));
+    } else if (Option.isSome(itemRef) && isQti(element, templateDefaultElements)) {
+      places.set(element, (name) => ({
+        itemRef: itemRef.value,
+        kind: "template-default",
+        name,
+        path,
+      }));
+    } else if (inherited !== undefined) {
+      places.set(element, inherited);
+
+      const name = Option.getOrUndefined(identifierOf(element));
+      if (name !== undefined && isQti(element, contextReadElements) && readsContext(name)) {
+        reads.push(inherited(name));
+      }
+    }
+  }
+
+  return reads;
+};
+
+/**
  * What judging one test gives: each of its own item refs' item path, keyed by the item ref's
  * identifier, in document order; the section documents it reaches; the test's refusals: the item
  * refs', their variable mappings', their template defaults', the references', then those of the
- * test's processing that only its typed reach gives, each in document order; and the refusals of
- * the section documents it reaches, judged under it.
+ * test's processing that only its typed reach gives, each in document order; the reads of an item's
+ * context variable through its item ref in the test document's processing; and the refusals of the
+ * section documents it reaches, judged under it.
  */
 interface TestJudgement {
   readonly reached: readonly ReachedSection[];
+  /**
+   * Each read of an item's context variable through its item ref in the test document's outcome
+   * processing or in a template default of one of its item refs ({@link contextReadsIn}), which
+   * the delivered test marks.
+   */
+  readonly reads: readonly UnheldRead[];
   readonly refs: ReadonlyMap<string, string>;
   readonly refusals: readonly Refusal[];
   /**
@@ -1825,13 +1916,21 @@ interface TestJudgement {
  * refusal is at the section document. As for the test, only what that run adds is reported: the
  * same rules over the section alone, every name unknown, are the section document's own verdict's.
  *
+ * Last, it finds each read in the test document's processing, its outcome processing and its item
+ * refs' template defaults, of a variable an item declares in a `qti-context-declaration`, through
+ * its item ref ({@link contextReadsIn}): a name the test does not declare whole whose one resolving
+ * reading names such a declaration, directly or in the occurrence form. The item marks that
+ * declaration and the engine holds no value of it, so the delivered test marks the processing that
+ * reads it. A read in a reached section document is left alone: a session delivers none of its
+ * items, and the test model marks a read through one.
+ *
  * @param source The test's source.
  * @param testPath The test's path.
  * @param itemPaths The path of every item resource's document.
  * @param sectionPaths The path of every section resource's document.
  * @param documents The package's documents.
  * @returns Its own item refs' item paths, the section documents it reaches, its refusals and theirs
- *   under it.
+ *   under it, and its reads of an item's context variable.
  */
 const judgeTest = (
   source: SourceDocument,
@@ -1977,8 +2076,33 @@ const judgeTest = (
     ];
   });
 
+  /**
+   * Report whether a name the test's processing reads names an item's context variable through its
+   * item ref: the test does not declare it whole, and its one resolving reading names a
+   * `qti-context-declaration`.
+   *
+   * @param name The name.
+   * @returns Whether it does.
+   */
+  const readsContext = (name: string): boolean => {
+    if (whole.has(name)) {
+      return false;
+    }
+
+    const [only, ...others] = readingsOf(scope, name);
+
+    return (
+      only !== undefined &&
+      others.length === 0 &&
+      Option.exists(only.variable.declaration, (declaration) =>
+        isQti(declaration, contextDeclarations),
+      )
+    );
+  };
+
   return {
     reached,
+    reads: contextReadsIn(source, own.visits, readsContext),
     refs: new Map([...refs].map(([identifier, itemRef]) => [identifier, itemRef.path] as const)),
     refusals: [
       ...own.unresolved,
@@ -2098,16 +2222,22 @@ const byDocument = <A>(
 /**
  * Build the contents of an accepted package from its judged documents.
  *
+ * Each test is delivered as its document's own verdict accepted it, unless the test document's
+ * processing reads an item's context variable through its item ref: then it is delivered with that
+ * processing marked (`withUnheldReads` in `#plate/model/test.ts`), the outcome processing `marked`
+ * and each template default that reads one left out.
+ *
  * @param manifest The manifest.
  * @param documents The package's documents, every judged one accepted.
- * @param tests Each test's item paths, by item ref identifier, keyed by the test's path.
+ * @param tests What judging each test gave, its item paths, by item ref identifier, and its reads
+ *   of an item's context variable, keyed by the test's path.
  * @param location The package's location.
  * @returns The contents.
  */
 const contentsOf = (
   manifest: Manifest,
   documents: ReadonlyMap<string, Document>,
-  tests: ReadonlyMap<string, ReadonlyMap<string, string>>,
+  tests: ReadonlyMap<string, Pick<TestJudgement, "reads" | "refs">>,
   location: string,
 ): PackageContents => {
   /**
@@ -2149,17 +2279,24 @@ const contentsOf = (
       (path) =>
         verdictAt(documents, path).pipe(
           Option.flatMap(acceptedTest),
-          Option.map((test): PackageTest => ({
-            items: new Map(
-              [...(tests.get(path) ?? new Map<string, string>())].flatMap(
-                ([identifier, itemPath]) =>
-                  Option.toArray(
-                    itemAt(itemPath).pipe(Option.map((item) => [identifier, item] as const)),
-                  ),
+          Option.map((test): PackageTest => {
+            const reads = tests.get(path)?.reads ?? [];
+
+            return {
+              items: new Map(
+                [...(tests.get(path)?.refs ?? new Map<string, string>())].flatMap(
+                  ([identifier, itemPath]) =>
+                    Option.toArray(
+                      itemAt(itemPath).pipe(Option.map((item) => [identifier, item] as const)),
+                    ),
+                ),
               ),
-            ),
-            test,
-          })),
+              test:
+                reads.length === 0
+                  ? test
+                  : acceptMarkedTest(test, withUnheldReads(test.test, reads)),
+            };
+          }),
         ),
       (entry) => entry.test.document,
     ),
@@ -2189,7 +2326,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
   const documents = yield* readDocuments(manifest, held, location);
   const itemPaths = new Set(pathsOfType(manifest, "imsqti_item_xmlv3p0"));
   const sectionPaths = new Set(pathsOfType(manifest, "imsqti_section_xmlv3p0"));
-  const tests = new Map<string, ReadonlyMap<string, string>>();
+  const tests = new Map<string, Pick<TestJudgement, "reads" | "refs">>();
   const testRefusals: Refusal[] = [];
   const underTests: Refusal[] = [];
   const reached = new Map<string, ReachedSection>();
@@ -2202,7 +2339,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
       source.success.root.local === "qti-assessment-test"
     ) {
       const judged = judgeTest(source.success, path, itemPaths, sectionPaths, documents);
-      tests.set(path, judged.refs);
+      tests.set(path, judged);
       testRefusals.push(...judged.refusals);
       underTests.push(...notHeld(judged.sections, underTests));
       for (const section of judged.reached) {

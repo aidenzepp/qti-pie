@@ -15,6 +15,7 @@ import type {
 import { fileLocation, manifestFile } from "#plate/package/store.ts";
 import type { Location, Refusal } from "#plate/validate/refusal.ts";
 import { describeRefusal } from "#plate/validate/verdict.ts";
+import type { AcceptedTest } from "#plate/validate/verdict.ts";
 import { manifestNamespace } from "#plate/vocabulary.ts";
 
 /**
@@ -1112,6 +1113,106 @@ const openMatching = (pattern: string) =>
   openTestingNull(
     `<qti-pattern-match pattern="${pattern}">${variableXml("ITEM2.S")}</qti-pattern-match>`,
   );
+
+/**
+ * The item the context read cases' item ref `first` names: `I1`, which declares the single float
+ * context variable `CTX`, defaulting to 4.5, and the single float outcome `SCORE`.
+ */
+const contextItemXml = `<qti-assessment-item xmlns="${qti}" identifier="I1" title="I1" adaptive="false" time-dependent="false"><qti-context-declaration identifier="CTX" cardinality="single" base-type="float"><qti-default-value><qti-value>4.5</qti-value></qti-default-value></qti-context-declaration><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>I1</p></qti-item-body></qti-assessment-item>`;
+
+/**
+ * The item the context read cases' item ref `second` names: `I2`, which declares the single float
+ * template variables `T` and `U` and the single float outcome `SCORE`.
+ */
+const templatedItemXml = `<qti-assessment-item xmlns="${qti}" identifier="I2" title="I2" adaptive="false" time-dependent="false"><qti-template-declaration identifier="T" cardinality="single" base-type="float"/><qti-template-declaration identifier="U" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>I2</p></qti-item-body></qti-assessment-item>`;
+
+/**
+ * Open a package of the probe's shape: a test whose outcome processing sets `TOTAL` to an
+ * expression, with the item ref `first` to {@link contextItemXml} and the item ref `second`, holding
+ * the given children, to {@link templatedItemXml}.
+ *
+ * @param expression The expression `TOTAL` is set to, as written.
+ * @param defaults What `second` holds, as written.
+ * @returns The package's verdict.
+ */
+const openContextReading = (expression: string, defaults = "") =>
+  openPackage(
+    location,
+    readingPackage(
+      readingTestXml(
+        expression,
+        "",
+        itemRefXml("first", "items/i1.xml"),
+        itemRefXml("second", "items/i2.xml", defaults),
+      ),
+      { "items/i1.xml": contextItemXml, "items/i2.xml": templatedItemXml },
+    ),
+  );
+
+/**
+ * The path of the outcome processing of a test `readingTestXml` writes.
+ */
+const processingPath = "qti-assessment-test/qti-outcome-processing";
+
+/**
+ * The test of a package `readingPackage` writes, as the package delivers it, and the test its
+ * document's own verdict accepts, as `open` gives it alone.
+ */
+interface DeliveredAndAlone {
+  readonly alone: AcceptedTest;
+  readonly delivered: AcceptedTest;
+}
+
+/**
+ * Take the test of a package `readingPackage` writes, as the package delivers it, and the test its
+ * document's own verdict accepts, as `open` gives it alone; the test fails when either is missing.
+ *
+ * @param verdict The package verdict.
+ * @returns The delivered test and the document's own.
+ */
+const deliveredAndAlone = (verdict: PackageVerdict): DeliveredAndAlone => {
+  const alone = Option.getOrUndefined(resourceOf(verdict, "T").verdict);
+  if (
+    alone === undefined ||
+    alone.kind !== "test" ||
+    (alone.verdict !== "accepted" && alone.verdict !== "accepted-with-unsupported")
+  ) {
+    return assert.fail("the test document's own verdict accepts it");
+  }
+
+  return {
+    alone: alone.accepted,
+    delivered: testOf(acceptedOf(verdict), fileLocation(location, "test.xml")).test,
+  };
+};
+
+/**
+ * Give the `variable:` marks of a test, each its feature and path.
+ *
+ * @param test The test.
+ * @returns The marks, in order.
+ */
+const variableMarks = (test: AcceptedTest): readonly (readonly [string, string])[] =>
+  test.unsupported.flatMap(({ feature, path: at }) =>
+    feature.startsWith("variable:") ? [[feature, at] as const] : [],
+  );
+
+/**
+ * Give the template defaults the item ref `second` of a test `openContextReading` writes holds,
+ * each the template variable it sets.
+ *
+ * @param test The test.
+ * @returns The variables, in order.
+ */
+const defaultsOfSecond = (test: AcceptedTest): readonly string[] =>
+  test.test.parts
+    .flatMap((part) => part.children)
+    .flatMap((section) => section.children)
+    .flatMap((child) =>
+      child.kind === "item-ref" && child.identifier === "second"
+        ? child.templateDefaults.map((each) => each.templateIdentifier)
+        : [],
+    );
 
 describe("package/open.ts", () => {
   describe("openPackage", () => {
@@ -3189,6 +3290,84 @@ describe("package/open.ts", () => {
           ]);
         }),
       { tags: ["corpus"] },
+    );
+  });
+
+  describe("openPackage, a test that reads an item's context variable", () => {
+    it.effect(
+      "[T-9] context read through an item ref: a test whose outcome processing reads first.CTX, first.1.CTX or the qti-default of first.CTX, which item I1 declares in a qti-context-declaration, is delivered with its processing marked, variable:<name> at the processing",
+      () =>
+        Effect.gen(function* contextInProcessing() {
+          for (const [name, expression] of [
+            ["first.CTX", variableXml("first.CTX")],
+            ["first.1.CTX", variableXml("first.1.CTX")],
+            ["first.CTX", '<qti-default identifier="first.CTX"/>'],
+          ] as const) {
+            const verdict = yield* openContextReading(expression);
+            const { delivered } = deliveredAndAlone(verdict);
+
+            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", expression);
+            assert.deepStrictEqual(
+              delivered.test.outcomeProcessing,
+              { kind: "marked" },
+              expression,
+            );
+            assert.deepStrictEqual(
+              variableMarks(delivered),
+              [[`variable:${name}`, processingPath]],
+              expression,
+            );
+            assert.deepStrictEqual(delivered.unsupported, delivered.test.unsupported, expression);
+          }
+        }),
+    );
+
+    it.effect(
+      "[T-9] context read through an item ref: item ref second's template default of T that reads first.CTX is left out, marked at the default, while its default of U and the processing, which reads first.SCORE, run",
+      () =>
+        Effect.gen(function* contextInDefault() {
+          const verdict = yield* openContextReading(
+            variableXml("first.SCORE"),
+            [
+              `<qti-template-default template-identifier="T">${variableXml("first.CTX")}</qti-template-default>`,
+              '<qti-template-default template-identifier="U"><qti-base-value base-type="float">2.5</qti-base-value></qti-template-default>',
+            ].join(""),
+          );
+          const { alone, delivered } = deliveredAndAlone(verdict);
+
+          assert.deepStrictEqual(
+            [defaultsOfSecond(delivered), defaultsOfSecond(alone)],
+            [["U"], ["T", "U"]],
+          );
+          assert.deepStrictEqual(variableMarks(delivered), [
+            [
+              "variable:first.CTX",
+              "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[2]/qti-template-default[1]",
+            ],
+          ]);
+          assert.strictEqual(delivered.test.outcomeProcessing.kind, "runs");
+        }),
+    );
+
+    it.effect(
+      "[T-9] context read through an item ref, controls: a read of first.SCORE delivers the test document's own test, the document's own verdict on a read of first.CTX keeps its processing running, and a qti-test-variables of CTX is not marked",
+      () =>
+        Effect.gen(function* contextControls() {
+          const outcome = deliveredAndAlone(yield* openContextReading(variableXml("first.SCORE")));
+          const context = deliveredAndAlone(yield* openContextReading(variableXml("first.CTX")));
+          const collected = deliveredAndAlone(
+            yield* openContextReading(
+              '<qti-sum><qti-test-variables variable-identifier="CTX" base-type="float"/></qti-sum>',
+            ),
+          );
+
+          assert.strictEqual(outcome.delivered, outcome.alone);
+          assert.deepStrictEqual(variableMarks(outcome.delivered), []);
+          assert.strictEqual(context.alone.test.outcomeProcessing.kind, "runs");
+          assert.deepStrictEqual(variableMarks(context.alone), []);
+          assert.strictEqual(collected.delivered, collected.alone);
+          assert.strictEqual(collected.delivered.test.outcomeProcessing.kind, "runs");
+        }),
     );
   });
 
