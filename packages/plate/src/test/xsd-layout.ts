@@ -179,7 +179,7 @@ export class LayoutUnlinkable extends Schema.TaggedError<LayoutUnlinkable>()("La
  * @param cache The XSD cache the links point into, such as the real one under `HOME`.
  * @param files The paths to link.
  * @returns The home folder; {@link LayoutUnlinkable} when it cannot be built, and a `ConfigError`
- *   when `TMPDIR` is unset.
+ *   when `TMPDIR` is unset or empty.
  */
 export const linkedHome = Effect.fnUntraced(function* linkedHome(
   cache: string,

@@ -395,9 +395,9 @@ const viewLine = (
  * declares, in declaration order: its identifier, then one `dd` per value in the lexical form
  * results write (`resultValues`), or the catalog's word for NULL when it holds none; an outcome the
  * session does not hold, which a session `decodeSession` checked against the test never lacks, is
- * left out. When the test has outcome processing the engine cannot run, the heading and the
- * sentence that it did not run, so no starting value reads as a score. When the test has none, or
- * declares no outcome, nothing.
+ * left out, and when that leaves no outcome the part is nothing. When the test has outcome
+ * processing the engine cannot run, the heading and the sentence that it did not run, so no
+ * starting value reads as a score. When the test has none, nothing.
  *
  * @param test The test the session was started from.
  * @param session The closed session, which holds the outcomes the last run left.

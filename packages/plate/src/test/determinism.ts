@@ -771,7 +771,7 @@ export const pinnedOutcomeDraws: OutcomeDraws = [
  *
  * @param seed The processing seed the runs' streams are keyed by, {@link determinismSeed} by
  *   default.
- * @returns The outcomes after each run, or the first run's failure.
+ * @returns The outcomes after each run, or the first failure.
  */
 export const observeOutcomes = (
   seed: string = determinismSeed,

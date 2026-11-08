@@ -88,9 +88,9 @@ import type { ItemNotInSession, ItemView } from "#plate/session/start.ts";
  *
  * `configuration` is the playground's decoded configuration: every session starts and advances
  * with it, and `current` writes each item's session control into it. It is the configuration the
- * review routes read, so one object serves both. Its `seed` is each session's shuffle seed. `seed`
- * is the playground's own seed, which every sitting's record begins under: each session is started
- * with it as its processing seed, and with none `startTest` draws one for each session.
+ * review routes read, so one object serves both, and its own `seed` is each session's shuffle
+ * seed. `seed` is the playground's seed, which every sitting's record begins under: each session
+ * is started with it as its processing seed, and with none `startTest` draws one for each session.
  */
 export interface SessionPlayground {
   readonly configuration: Configuration;
