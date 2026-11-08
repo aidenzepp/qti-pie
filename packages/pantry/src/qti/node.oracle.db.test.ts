@@ -289,16 +289,16 @@ const countPerName = (names: readonly string[]): readonly (readonly [string, num
     .toSorted(([left], [right]) => Order.String(left, right));
 
 /**
- * The foreign keys a schema's statements put on `Node`'s table into another stored relation, as
- * the count per target relation: one for each containment from `Node` (or a selection of it), one
- * for the `Node` half of each mirrors, and one for the proof key into its last member of each
- * family `Node` owns.
+ * The foreign keys a schema's laws put on `Node`'s table into another stored relation, as the count
+ * per target relation: one for each containment law from `Node` (or a selection of it), a mirrors'
+ * `Node` half among them, and one for the proof key into its last member of each family `Node`
+ * owns.
  *
- * @param statements - The schema's statements.
+ * @param schema - The schema, `Qti`.
  * @returns Each target relation and how many of Node's keys it takes.
  */
-const outOfNode = (statements: readonly unknown[]) => {
-  const keys = keysOf(statements);
+const outOfNode = (schema: typeof Qti) => {
+  const keys = keysOf(schema);
 
   return countPerName([
     ...keys.laws.filter(({ from, to }) => from === "Node" && to !== "Node").map(({ to }) => to),
@@ -1574,7 +1574,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
               countPerName(
                 foreign.filter(({ target }) => target !== "qti.node").map(targetRelationOf),
               ),
-              outOfNode(Qti.statements),
+              outOfNode(Qti),
             );
 
             const owner = intoNode.find((constraint) => roleOf(constraint) === "owner axis");

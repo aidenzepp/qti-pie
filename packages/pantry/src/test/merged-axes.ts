@@ -3,29 +3,20 @@
  * merges them ({@link mergedAxes}): the laws one `some` refusal of a family's axis names together.
  */
 import type { AnySchema, Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
-import { Option, Schema } from "effect";
 import type { Array as Arr } from "effect";
 
 /**
- * The primary key of every stored relation of a schema, as its law.
+ * The primary key of every stored relation of a schema, as its law, read off each relation's typed
+ * `kind`, `name` and `primaryKey`.
  *
  * @param relations - The schema's `relations`.
  * @returns The laws.
  */
 export const primaryKeysOf = (relations: AnySchema["relations"]): readonly Law[] =>
-  Object.values(relations).flatMap((value) =>
-    Option.toArray(
-      Option.map(
-        Schema.decodeUnknownOption(
-          Schema.Struct({
-            kind: Schema.Literal("relation"),
-            name: Schema.String,
-            primaryKey: Schema.Array(Schema.String),
-          }),
-        )(value),
-        ({ name, primaryKey }): Law => ({ fields: primaryKey, kind: "primaryKey", relation: name }),
-      ),
-    ),
+  Object.values(relations).flatMap((relation): readonly Law[] =>
+    relation.kind === "relation"
+      ? [{ fields: relation.primaryKey, kind: "primaryKey", relation: relation.name }]
+      : [],
   );
 
 /**
