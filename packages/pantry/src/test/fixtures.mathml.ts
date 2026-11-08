@@ -929,7 +929,7 @@ const negativeEntries = [
     rule: "binding-fit",
   },
   {
-    block: annotationOf('<div><p><qti-gap identifier="G"/></p></div>'),
+    block: annotationOf('<div><p><qti-gap identifier="GAP"/></p></div>'),
     law: "N6 ancestry",
     name: "math-annotation-xml-gap",
     owner: "phase-6",
