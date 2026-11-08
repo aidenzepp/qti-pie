@@ -246,7 +246,7 @@ export const lawTable = {
   "Binding cardinality": {
     rule: "binding-fit",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_max-choices (§5.30.2: 'If max-choices is greater than 1 (or 0) then the interaction must be bound to a response with multiple cardinality'), and the same sentence of max-choices (§5.66.1, §5.68.2, §5.107.3, §5.128.2) and max-associations (§5.8.2, §5.57.3, §5.59.2, §5.60.2, §5.89.2), reading 92; the Schematron's RESPONSEDEC rule 2 is the choice interaction's case; a most left unwritten reads its XSD default",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_max-choices (§5.30.2: 'If max-choices is greater than 1 (or 0) then the interaction must be bound to a response with multiple cardinality'), and the same sentence of max-choices (§5.66.1, §5.68.2, §5.107.3, §5.128.2) and max-associations (§5.8.2, §5.57.3, §5.59.2, §5.60.2, §5.89.2), reading 92; the Schematron's RESPONSEDEC rule 2 is the choice interaction's case; a most left unwritten reads its XSD default; reading 169: https://www.imsglobal.org/spec/qti/v3p0/info#Data_GapMatchInteraction (§5.57: 'The GapMatchInteraction must be bound to a response variable with base-type directedPair and either single or multiple cardinality, depending on the number of gaps'): a gap match with two or more gaps, its own and an included fragment's, binds a response of multiple cardinality",
   },
   "Binding declared": {
     rule: "binding-declared",

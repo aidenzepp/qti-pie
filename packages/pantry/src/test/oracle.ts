@@ -4262,16 +4262,42 @@ const overlayLaws: readonly ((
     );
     const cardinality =
       response === undefined ? "" : Option.getOrElse(cardinalityOf(overlay, response), () => "");
+    if (cardinality !== "single") {
+      return [];
+    }
 
-    return Option.exists(most, (count) => count === 0n || count > 1n) && cardinality === "single"
+    // Reading 169: "The GapMatchInteraction must be bound to a response variable with base-type
+    // directedPair and either single or multiple cardinality, depending on the number of gaps"
+    // (info §5.57): each gap takes a pair of its own, so two or more gaps take a multiple response.
+    // The gaps are the ones the interaction is nearest to, an included fragment's among them, as
+    // the spliced view holds them, each with its identifier, which a choice is read by.
+    const gaps =
+      node.kind === "qti-gap-match-interaction"
+        ? overlay.view.members.filter(
+            (member) =>
+              member.kind === "qti-gap" &&
+              member.nearest === node.id &&
+              Option.isSome(valueOf(overlay.view, member.id, "identifier")),
+          ).length
+        : 0;
+    if (Option.exists(most, (count) => count === 0n || count > 1n)) {
+      return [
+        {
+          keys: {
+            attribute,
+            cardinality,
+            identifier: bound.value,
+            most: Option.match(most, { onNone: () => "", onSome: String }),
+          },
+          law: "Binding cardinality",
+        },
+      ];
+    }
+
+    return gaps > 1
       ? [
           {
-            keys: {
-              attribute,
-              cardinality,
-              identifier: bound.value,
-              most: Option.match(most, { onNone: () => "", onSome: String }),
-            },
+            keys: { cardinality, gaps: String(gaps), identifier: bound.value },
             law: "Binding cardinality",
           },
         ]
@@ -6948,7 +6974,9 @@ const ownLaws = {
   },
   "Binding cardinality": {
     explain: (keys) =>
-      `${field(keys, "kind")}'s ${field(keys, "attribute")} is ${field(keys, "most")}, so it binds a response of multiple cardinality, and ${field(keys, "identifier")} is ${field(keys, "cardinality")}`,
+      keys["gaps"] === undefined
+        ? `${field(keys, "kind")}'s ${field(keys, "attribute")} is ${field(keys, "most")}, so it binds a response of multiple cardinality, and ${field(keys, "identifier")} is ${field(keys, "cardinality")}`
+        : `the gap match interaction holds ${field(keys, "gaps")} gaps, each taking a pair of its own, so it binds a response of multiple cardinality, and ${field(keys, "identifier")} is ${field(keys, "cardinality")}`,
   },
   "Binding declared": {
     explain: (keys) =>

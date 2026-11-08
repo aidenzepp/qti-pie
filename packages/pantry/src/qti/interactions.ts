@@ -16,9 +16,10 @@
  * overlays below read `InteractionAttribute` and never `Attribute`.
  *
  * - {@link Interaction}: every interaction element, in every document, owning its choices'
- *   {@link ChoiceInteraction} rows as a counted family (C15). A stimulus body holds interactions
- *   too (information model §5.137, StimulusBody: "The stimulus body contains the text, graphics,
- *   media objects and interactions"), so the item-only laws read {@link BoundVariable}.
+ *   {@link ChoiceInteraction} rows as a counted family (C15), and its gaps' {@link GapInteraction}
+ *   rows as another, which "Binding cardinality" reads (spec reading 169). A stimulus body holds
+ *   interactions too (information model §5.137, StimulusBody: "The stimulus body contains the text,
+ *   graphics, media objects and interactions"), so the item-only laws read {@link BoundVariable}.
  * - {@link Binding}: every interaction with a `response-identifier`, its optional part: an
  *   interaction that writes none has no row, and AL3 refuses it.
  * - {@link PciModuleForm}: each form in which a portable custom interaction names its module, its
@@ -274,7 +275,8 @@ export const bindingAttributes = [
  * multiple cardinality", of the `max-choices` of the choice (§5.30.2), hottext (§5.66.1), hotspot
  * (§5.68.2), position object (§5.107.3) and select point (§5.128.2) interactions, and the same
  * sentence of `max-associations` on the associate (§5.8.2), gap match (§5.57.3), graphic associate
- * (§5.59.2), graphic gap match (§5.60.2) and match (§5.89.2) interactions.
+ * (§5.59.2), graphic gap match (§5.60.2) and match (§5.89.2) interactions. A gap match's gaps
+ * decide it too ({@link gapMatchKind}, spec reading 169).
  */
 export const cardinalityKinds = [
   "qti-choice-interaction",
@@ -288,6 +290,20 @@ export const cardinalityKinds = [
   "qti-graphic-gap-match-interaction",
   "qti-match-interaction",
 ] as const satisfies readonly Kind[];
+
+/**
+ * The gap match interaction's kind, whose response cardinality its count of gaps decides beside its
+ * most, spec reading 169: "The GapMatchInteraction must be bound to a response variable with
+ * base-type directedPair and either single or multiple cardinality, depending on the number of
+ * gaps" (§5.57). Each gap takes a pair of its own and a single response holds one pair, so a gap
+ * match with two or more gaps binds a response of multiple cardinality.
+ */
+export const gapMatchKind = "qti-gap-match-interaction" satisfies Kind;
+
+/**
+ * The gap's kind: the {@link Choice} rows of this kind are the ones `Interaction.gaps` counts.
+ */
+export const gapKind = "qti-gap" satisfies Kind;
 
 /**
  * The interactions of any response type: those neither `BindingFit` nor `RecordBindingFit` names,
@@ -452,8 +468,9 @@ export const InteractionAttribute = relation(
  * An interaction element, in any document, keyed by its node: its {@link nodeRef} tuple and its
  * count of {@link ChoiceInteraction} rows, the choices whose nearest interaction it is, which the
  * family draws, and its count of {@link PciModuleForm} rows, the forms of a portable custom
- * interaction's module, which the second family draws. Every interaction has one, whether or not it
- * writes a `response-identifier`, so its choices' family always has its owner and a missing
+ * interaction's module, which the second family draws, and its count of {@link GapInteraction} rows,
+ * the gaps among its choices, which the third family draws. Every interaction has one, whether or
+ * not it writes a `response-identifier`, so its choices' family always has its owner and a missing
  * response identifier is AL3's alone.
  */
 export const Interaction = relation(
@@ -461,6 +478,7 @@ export const Interaction = relation(
   {
     choices: drawn(natural),
     document: uuid,
+    gaps: drawn(natural),
     kind: closedId(NodeKind),
     moduleForms: drawn(natural),
     nearest: uuid,
@@ -563,7 +581,9 @@ export const BindingDeclaration = relation(
  * - `cardinality`, the declaration's {@link DeclarationCardinality}'s;
  * - `mosts`, its interaction's count of most values, its {@link CountBound}'s `mosts` where
  *   `ChoiceBound` pairs the kind's counts, and 0 on any other kind, which has none: "Binding
- *   cardinality" judges a binding only where its interaction's most has a value.
+ *   cardinality" judges a binding only where its interaction's most has a value;
+ * - `gaps`, its interaction's count of gaps, its {@link Interaction}'s: "Binding cardinality" refuses
+ *   a gap match with two or more bound to a single response (spec reading 169).
  */
 export const BindingCardinality = relation(
   "BindingCardinality",
@@ -572,6 +592,7 @@ export const BindingCardinality = relation(
     baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
+    gaps: natural,
     kind: closedId(NodeKind),
     mosts: natural,
     node: uuid,
@@ -660,7 +681,7 @@ export const PlacedBindingDeclaration = relation(
  * {@link PlacedBindingDeclaration} is, where the declaration has one, as
  * {@link BindingCardinality} is an item's own binding's: `instance`, `node`, `attribute`, `kind`,
  * `declaration` and `baseTypes`, its declaration row's; `cardinality`, the declaration's
- * {@link DeclarationCardinality}'s; and `mosts`, as {@link BindingCardinality}'s.
+ * {@link DeclarationCardinality}'s; and `mosts` and `gaps`, as {@link BindingCardinality}'s.
  */
 export const PlacedBindingCardinality = relation(
   "PlacedBindingCardinality",
@@ -669,6 +690,7 @@ export const PlacedBindingCardinality = relation(
     baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
+    gaps: natural,
     instance: uuid,
     kind: closedId(NodeKind),
     mosts: natural,
@@ -800,6 +822,23 @@ export const choiceFamily = counted(
 );
 
 /**
+ * A gap's interaction, keyed by the gap's node: a copy of its {@link ChoiceInteraction} row, held
+ * both ways to the {@link Choice} rows of kind `qti-gap`, so a gap an include places counts under
+ * the interaction that encloses it, as its choice does, and no gap text or other choice counts.
+ * `Interaction.choices` counts a gap match's gap texts beside its gaps; "Binding cardinality" reads
+ * the gaps alone (spec reading 169). It owns no sequence.
+ */
+export const GapInteraction = relation("GapInteraction", { interaction: uuid, node: uuid }, [
+  "node",
+]);
+
+/**
+ * Each interaction's gaps, counted by `Interaction.gaps`: a flat row whose group, `interaction`,
+ * names its owner.
+ */
+export const gapFamily = counted(on(GapInteraction, "interaction"), fin(Interaction, "gaps"));
+
+/**
  * One form in which a portable custom interaction names its module, keyed by the interaction's node
  * and the form: `element` is false for the `module` attribute and true for the
  * `qti-interaction-modules` child (information model §5.106.2: "If this characteristic is provided
@@ -852,6 +891,11 @@ const moduleAttributes = select(Attribute, (a) =>
 const moduleElements = select(Node, (n) =>
   n.and(n.eq(n.kind, modulesKind), n.eq(n.parentKind, pciKind)),
 );
+
+/**
+ * The gaps among the {@link Choice} rows, each of which has its {@link GapInteraction}.
+ */
+const gapChoices = select(Choice, (c) => c.eq(c.kind, gapKind));
 
 /**
  * The attribute forms among the {@link PciModuleForm} rows.
@@ -1650,6 +1694,7 @@ export const interactionRelations = {
   FeedbackRef,
   FeedbackRefCardinality,
   FeedbackRefDeclaration,
+  GapInteraction,
   Hotspot,
   Hottext,
   Interaction,
@@ -2392,6 +2437,43 @@ const contentReferenceLaws = ({
 ];
 
 /**
+ * The fields of a bound variable's cardinality row that the gap half of "Binding cardinality"
+ * reads, which {@link BindingCardinality} and {@link PlacedBindingCardinality} share.
+ */
+const gapCardinalityFields = {
+  attribute: closedId(AttributeName),
+  cardinality: closedId(Cardinality),
+  gaps: natural,
+  kind: closedId(NodeKind),
+};
+
+/**
+ * A bound variable's cardinality row, an item's own or one in place, as the gap half of "Binding
+ * cardinality" reads it.
+ */
+type GapCardinalityRow = RowScalars<{
+  readonly heading: typeof gapCardinalityFields;
+  readonly name: string;
+}>;
+
+/**
+ * Whether a binding holds to spec reading 169: a gap match's response is single only where it has
+ * at most one gap, its own and those an include places in it ("The GapMatchInteraction must be
+ * bound to a response variable with base-type directedPair and either single or multiple
+ * cardinality, depending on the number of gaps", §5.57).
+ *
+ * @param r - The binding's cardinality row.
+ * @returns The predicate.
+ */
+const singleGap = (r: GapCardinalityRow) =>
+  r.or(
+    r.ne(r.attribute, "response-identifier"),
+    r.ne(r.kind, gapMatchKind),
+    r.ne(r.cardinality, "single"),
+    r.le(r.gaps, 1n),
+  );
+
+/**
  * The bindings whose variable has a cardinality and a base type: each has its
  * {@link BindingBaseType}, and only these do.
  */
@@ -2445,15 +2527,18 @@ const identifierTyped = on(
  *   `BindingFit` or `RecordBindingFit` admits, the custom and portable custom interactions of any
  *   type, and a string binding's of base type string ("BindingFit"), each fit law over the
  *   cardinality and base type rows alone; "Binding unique" (`key(document, identifier)`); "Binding
- *   cardinality" (a single response takes a most of 1, where its interaction's most has a value);
- *   `max-strings-required`, which carries `kind` beside `node` so that its containment into
- *   `CountBound` is a statement of its own, not "Binding cardinality"'s: a refusal names a law by
- *   its relations and terms, never its selection (C22); and "AdaptiveFeedback", an interaction
- *   inside feedback is in an adaptive item.
+ *   cardinality" (a single response takes a most of 1, where its interaction's most has a value,
+ *   and a gap match of at most one gap, its cardinality row's `gaps` copied from `Interaction`,
+ *   spec reading 169); `max-strings-required`, which carries `kind` beside `node` so that its
+ *   containment into `CountBound` is a statement of its own, not "Binding cardinality"'s: a refusal
+ *   names a law by its relations and terms, never its selection (C22); and "AdaptiveFeedback", an
+ *   interaction inside feedback is in an adaptive item.
  * - **choices:** each choice's {@link ChoiceInteraction}, which every choice has ("N8 nearest"), its
- *   interaction the choice's nearest, the counted family under `Interaction`; its identifier
- *   distinct among its document's choices of its kind; each hottext's nearest kind, and its
- *   identifier distinct among its document's hottexts (reading 104); and in place (spec reading
+ *   interaction the choice's nearest, the counted family under `Interaction`; each gap's
+ *   {@link GapInteraction}, which every gap has ("N8 nearest" too, so a gap no interaction encloses
+ *   breaks that law alone), a copy of its choice interaction counted under `Interaction`; its
+ *   identifier distinct among its document's choices of its kind; each hottext's nearest kind, and
+ *   its identifier distinct among its document's hottexts (reading 104); and in place (spec reading
  *   117), under each instance of each assembly, as many {@link PlacedChoice} and
  *   {@link PlacedHottext} rows as its document has choices and hottexts, each its document's, their
  *   identifiers distinct over the assembly. Across the classes, `Choice_identifier_key` holds each
@@ -2567,6 +2652,8 @@ export const interactionLawsByName = {
         "node",
       ),
     ),
+    check("Binding_cardinality", BindingCardinality, singleGap),
+    check("Binding_cardinality", PlacedBindingCardinality, singleGap),
   ],
   "Binding declared": [
     contained(
@@ -2808,6 +2895,12 @@ export const interactionLawsByName = {
     contained(on(moduleElements, "parent"), on(elementForms, "node")),
     contained(on(elementForms, "node"), on(moduleElements, "parent")),
     pciModuleFamily,
+    contained(on(GapInteraction, "node"), on(gapChoices, "node")),
+    contained(
+      on(GapInteraction, "node", "interaction"),
+      on(ChoiceInteraction, "node", "interaction"),
+    ),
+    gapFamily,
     contained(on(Binding, "node"), on(Interaction, "node")),
     key(on(responseIdentifiers, "node")),
     mirrors(on(responseIdentifiers, "node"), on(Binding, "node")),
@@ -3085,6 +3178,8 @@ export const interactionLawsByName = {
     check("E1_derived", PlacedBindingCardinality, (r) =>
       r.or(r.in(r.kind, boundKinds), r.eq(r.mosts, 0n)),
     ),
+    contained(on(BindingCardinality, "node", "gaps"), on(Interaction, "node", "gaps")),
+    contained(on(PlacedBindingCardinality, "node", "gaps"), on(Interaction, "node", "gaps")),
     contained(
       on(readOf(["lower-bound"], [sliderKind]), "node", "value"),
       on(Slider, "node", "lower"),
@@ -3322,6 +3417,7 @@ export const interactionLawsByName = {
     contained(on(Choice, "node"), on(ChoiceInteraction, "node")),
     contained(on(ChoiceInteraction, "node", "interaction"), on(Choice, "node", "nearest")),
     choiceFamily,
+    contained(on(gapChoices, "node"), on(GapInteraction, "node")),
     contained(
       on(
         select(Hottext, (h) => h.in(h.nearestKind, interactionKinds)),

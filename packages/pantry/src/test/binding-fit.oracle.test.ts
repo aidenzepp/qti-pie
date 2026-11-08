@@ -33,6 +33,11 @@
  *   readings 158 and 159: a missing value is a row of its own relation, never a sentinel).
  *
  * The database's own verdict over the same scope is `src/import/binding-fit.db.test.ts`'s.
+ *
+ * A gap match interaction with two or more gaps binds a response of multiple cardinality (spec
+ * reading 169, information model §5.57): the law oracle and the schema's laws over the import's
+ * rows (`#pantry/test/host-judge.ts`) break "Binding cardinality" together exactly where a gap
+ * match of two gaps binds a single response, whatever its `max-associations`.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
@@ -40,10 +45,13 @@ import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import type { Addition } from "@bjornpagen/grizzle";
+import type { Addition, Law } from "@bjornpagen/grizzle";
 import { Duration, Effect, Option } from "effect";
+import { Qti } from "#pantry/qti/schema.ts";
 import { BindingFit, grammar, RecordBindingFit } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
+import { lawNameOf } from "#pantry/import/refusal.ts";
+import { readPackage } from "#pantry/package/read.ts";
 import { anyTypeKinds } from "#pantry/qti/interactions.ts";
 import type {
   BindingBaseType,
@@ -63,6 +71,9 @@ import {
 } from "#pantry/test/binding-cases.ts";
 import type { BindingSite, BindingState } from "#pantry/test/binding-cases.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
+import { hostRowsOf, judge as judgeHost } from "#pantry/test/host-judge.ts";
+import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { Breach, LawName } from "#pantry/test/oracle.ts";
@@ -338,6 +349,141 @@ describe("the bindings the fit laws judge", () => {
           ),
         ),
       testTimeoutMs,
+    );
+  });
+});
+
+/**
+ * One gap match case: its gaps, its `max-associations` where written, the cardinality of the
+ * response it binds, and whether "Binding cardinality" breaks, by hand from reading 169 and
+ * reading 92.
+ */
+interface GapCase {
+  readonly breaks: boolean;
+  readonly cardinality: "multiple" | "single";
+  readonly gaps: number;
+  readonly most: Option.Option<string>;
+}
+
+/**
+ * The gap match cases: two gaps bound single, with `max-associations` unwritten (its default 1)
+ * and with it 2; two gaps bound multiple; one gap bound single.
+ */
+const gapCases: readonly GapCase[] = [
+  { breaks: true, cardinality: "single", gaps: 2, most: Option.none() },
+  { breaks: false, cardinality: "multiple", gaps: 2, most: Option.none() },
+  { breaks: false, cardinality: "single", gaps: 1, most: Option.none() },
+  { breaks: true, cardinality: "single", gaps: 2, most: Option.some("2") },
+];
+
+/**
+ * The QTI 3.0 namespace.
+ */
+const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
+
+/**
+ * Write an XML document: its declaration, then its text.
+ *
+ * @param text - The document's root element.
+ * @returns The document's bytes.
+ */
+const xml = (text: string): Uint8Array =>
+  new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8"?>\n${text}\n`);
+
+/**
+ * Build a gap match case's package: a manifest and an item that declares the directed pair response
+ * `R` and binds it to a gap match interaction of one gap text and the case's gaps.
+ *
+ * @param drawn - The case.
+ * @returns The package's entries.
+ */
+const gapPackageOf = (drawn: GapCase): PackageEntries => {
+  const most = Option.match(drawn.most, {
+    onNone: () => "",
+    onSome: (value) => ` max-associations="${value}"`,
+  });
+  const gaps = Array.from(
+    { length: drawn.gaps },
+    (_, at) => `<qti-gap identifier="G${String(at + 1)}"/>`,
+  ).join(" and ");
+
+  return new Map([
+    [
+      "imsmanifest.xml",
+      xml(
+        '<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata><organizations/><resources><resource identifier="R0" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>',
+      ),
+    ],
+    [
+      "item.xml",
+      xml(
+        `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" adaptive="false" time-dependent="false"><qti-response-declaration identifier="R" cardinality="${drawn.cardinality}" base-type="directedPair"/><qti-item-body><qti-gap-match-interaction response-identifier="R"${most}><qti-gap-text identifier="T" match-max="2">word</qti-gap-text><p>Put it at ${gaps}.</p></qti-gap-match-interaction></qti-item-body></qti-assessment-item>`,
+      ),
+    ],
+  ]);
+};
+
+/**
+ * Name the laws a host judgment lists, each by its law's name.
+ *
+ * @param held - The broken or skipped laws.
+ * @returns Their names.
+ */
+const named = (held: readonly { readonly law: Law }[]): ReadonlySet<string> =>
+  new Set(held.flatMap(({ law }) => Option.toArray(lawNameOf(law))));
+
+describe("a gap match interaction's gaps", () => {
+  layer(NodeServices.layer, { excludeTestServices: true })("over a one-item package", (it) => {
+    it.effect(
+      "break Binding cardinality where two or more bind a single response, the law oracle and the import's rows alike",
+      () =>
+        // Oracle: two implementations side by side, the law oracle's binding laws and the schema's
+        // laws over the import's rows, and reading 169's verdict written by hand. Bound: a gap
+        // match of one or two gaps bound single or multiple, with max-associations unwritten or 2.
+        Effect.forEach(
+          gapCases,
+          (drawn) =>
+            Effect.scoped(
+              Effect.gen(function* gapCaseHolds() {
+                const label = `${String(drawn.gaps)} gaps bound ${drawn.cardinality}, max-associations ${Option.getOrElse(drawn.most, () => "unwritten")}`;
+                const dir = yield* scopedPackage(gapPackageOf(drawn));
+                const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+                assert.strictEqual(judgment._tag, "Judged", label);
+
+                const breaches = judgment._tag === "Judged" ? judgment.breaches : [];
+                const oracle = new Set<string>(breaches.map(({ law }) => law));
+                const program = yield* readProgram(dir);
+                const host = judgeHost(hostRowsOf(program.inputs), judgedLaws(Qti));
+                const broken = named(host.broken);
+                const unjudged = named(host.skipped);
+                const shown = [
+                  ...[...broken]
+                    .filter((law) => !oracle.has(law))
+                    .map((law) => `import-only-law: ${law}`),
+                  ...[...oracle]
+                    .filter((law) => !broken.has(law) && !unjudged.has(law))
+                    .map((law) => `oracle-only-law: ${law}`),
+                ].toSorted();
+
+                assert.deepStrictEqual(
+                  shown,
+                  [],
+                  `${label}: the oracle breaks ${[...oracle].toSorted().join(", ") || "no law"}; the import's rows break ${[...broken].toSorted().join(", ") || "no law"}`,
+                );
+                assert.strictEqual(
+                  breaches.filter(({ law }) => law === "Binding cardinality").length,
+                  drawn.breaks ? 1 : 0,
+                  `${label}: the oracle's Binding cardinality breaches`,
+                );
+                assert.strictEqual(
+                  broken.has("Binding cardinality"),
+                  drawn.breaks,
+                  `${label}: the import's rows break ${[...broken].toSorted().join(", ") || "no law"}`,
+                );
+              }),
+            ),
+          { discard: true },
+        ),
     );
   });
 });
