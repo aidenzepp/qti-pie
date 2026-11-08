@@ -203,7 +203,7 @@ const matchCorrect = el(
  * @param source The document.
  * @returns Its verdict.
  */
-const verdictOf = (source: SourceDocument): Verdict => check(source, tables);
+const verdictOf = (source: SourceDocument): Verdict => check(source, tables, Option.none());
 
 /**
  * Read the accepted item of a verdict that must accept an item.

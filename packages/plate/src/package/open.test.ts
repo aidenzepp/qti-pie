@@ -13,6 +13,7 @@ import type {
   PackageVerdict,
 } from "#plate/package/open.ts";
 import { fileLocation, manifestFile } from "#plate/package/store.ts";
+import { open as openDocument } from "#plate/validate/open.ts";
 import type { Location, Refusal } from "#plate/validate/refusal.ts";
 import { describeRefusal } from "#plate/validate/verdict.ts";
 import type { AcceptedTest } from "#plate/validate/verdict.ts";
@@ -1213,6 +1214,12 @@ const defaultsOfSecond = (test: AcceptedTest): readonly string[] =>
         ? child.templateDefaults.map((each) => each.templateIdentifier)
         : [],
     );
+
+/**
+ * An item whose body holds a `qti-custom-interaction` bound to its declared response, which a
+ * QTI 3.0.0 package refuses (P2).
+ */
+const customItemXml = `<qti-assessment-item xmlns="${qti}" identifier="custom" title="Custom" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-item-body><qti-custom-interaction response-identifier="RESPONSE"/></qti-item-body></qti-assessment-item>`;
 
 describe("package/open.ts", () => {
   describe("openPackage", () => {
@@ -3290,6 +3297,47 @@ describe("package/open.ts", () => {
           ]);
         }),
       { tags: ["corpus"] },
+    );
+
+    it.effect(
+      "align-54 version seam P2: refuses a 3.0.0 package's item that holds a qti-custom-interaction, which the same item opened alone keeps (OD-A54-3)",
+      () =>
+        Effect.gen(function* customInPackage() {
+          const files = packageOf({
+            "items/custom.xml": customItemXml,
+            [manifestFile]: manifestXml(
+              resourceXml("CUSTOM", "imsqti_item_xmlv3p0", "items/custom.xml"),
+            ),
+          });
+          const document = fileLocation(location, "items/custom.xml");
+          const verdict = yield* openPackage(location, files);
+          const alone = yield* openDocument(
+            document,
+            files.get("items/custom.xml") ?? new Uint8Array(),
+          );
+
+          assert.deepStrictEqual(
+            documentVerdict(resourceOf(verdict, "CUSTOM")),
+            Option.some("refused"),
+          );
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                check: "custom-interaction",
+                element: "qti-custom-interaction",
+                parent: "qti-item-body",
+                version: "3.0.0",
+              },
+              document,
+              location: {
+                kind: "path",
+                path: "qti-assessment-item/qti-item-body/qti-custom-interaction",
+              },
+              rule: "unknown-element",
+            },
+          ]);
+          assert.strictEqual(alone.verdict, "accepted-with-unsupported");
+        }),
     );
   });
 

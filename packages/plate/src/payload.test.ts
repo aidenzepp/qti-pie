@@ -1020,6 +1020,7 @@ describe("redactItem on printed variables", () => {
         ),
       ),
       tables,
+      Option.none(),
     );
     const accepted = Option.getOrThrow(acceptedItem(verdict));
     const withheld = redact(accepted, { outcomes: {}, templates: {} });
@@ -1676,6 +1677,7 @@ describe("redactItem on template blocks, inlines and choices", () => {
                 ),
               ),
               tables,
+              Option.none(),
             ),
           ),
         );
@@ -1859,7 +1861,9 @@ describe("redactItem on template blocks, inlines and choices", () => {
 
   for (const promptLast of [true, false]) {
     it(`[I-5] names no notice from inside a template block the page does not see, whatever the order check lists it in, and the rest in document order, with the Choice's prompt ${promptLast ? "after" : "before"} its choices`, () => {
-      const accepted = Option.getOrThrow(acceptedItem(check(linkedItem(promptLast), tables)));
+      const accepted = Option.getOrThrow(
+        acceptedItem(check(linkedItem(promptLast), tables, Option.none())),
+      );
       const choiceLink = `${bodyPath}/qti-choice-interaction/qti-simple-choice[1]/a`;
       const promptLink = `${bodyPath}/qti-choice-interaction/qti-prompt/a`;
       const mailto = "url-scheme:mailto";
@@ -2026,7 +2030,7 @@ const respondedTo = (redaction: Redacted): readonly string[] =>
 
 describe("redactItem on responses only hidden content binds", () => {
   it("[I-5] lists no response only a template block the record hides binds, in the redacted item or its JSON, and names that response as hidden-only", () => {
-    const accepted = Option.getOrThrow(acceptedItem(check(blockAnswers, tables)));
+    const accepted = Option.getOrThrow(acceptedItem(check(blockAnswers, tables, Option.none())));
     const showingA = holding({ T: identifierValue("A") });
     const shown = redact(accepted, showingA);
 
@@ -3328,7 +3332,9 @@ describe("redactItem on param-variable parameters", () => {
     "[I-5] gives a param whose value names a param-variable template variable that variable's value from the record, which render writes: an integer by %i, a float by %G, a point x then y, a pair and a directed pair as their identifiers, a boolean as true or false (R§4.4)",
     () =>
       Effect.gen(function* rendersParameterValues() {
-        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(parameterDocument, tables, Option.none())),
+        );
         const expanded = redact(accepted, parameterValues);
         const configuration = yield* configure({});
         const rendered = yield* Effect.fromResult(render(expanded, configuration, { instance }));
@@ -3349,7 +3355,7 @@ describe("redactItem on param-variable parameters", () => {
     () =>
       Effect.gen(function* passesContainersAndNull() {
         const accepted = yield* Effect.fromOption(
-          acceptedItem(check(containerParameterDocument, tables)),
+          acceptedItem(check(containerParameterDocument, tables, Option.none())),
         );
         const expanded = redact(accepted, containerParameterValues);
         const configuration = yield* configure({});
@@ -3375,7 +3381,9 @@ describe("redactItem on param-variable parameters", () => {
     "[I-5] keeps the written value of a param that names a template variable not declared param-variable, or names none",
     () =>
       Effect.gen(function* keepsWrittenValues() {
-        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(parameterDocument, tables, Option.none())),
+        );
         const kept = parametersOf(objectChildren(redact(accepted, parameterValues).body));
 
         assert.deepStrictEqual(kept.slice(-2), [
@@ -3389,7 +3397,9 @@ describe("redactItem on param-variable parameters", () => {
     "[I-5] with no record, withholds each param-variable param of an item whose template processing runs behind its notice, param at its path, named among the notices in document order (H3)",
     () =>
       Effect.gen(function* withholdsParameters() {
-        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(parameterDocument, tables, Option.none())),
+        );
         const withheld = redact(accepted);
         const [count, ratio, spot, link, arrow, flag, ...rest] = objectChildren(accepted.item.body);
 
@@ -3408,7 +3418,9 @@ describe("redactItem on param-variable parameters", () => {
     "[I-5] withholds a param-variable param whose template variable the record holds no value of, as with no record (0.13 decision 15)",
     () =>
       Effect.gen(function* withholdsUnheldParameter() {
-        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(parameterDocument, tables, Option.none())),
+        );
         const { N: _held, ...unheld } = parameterValues.templates;
         const gap = redact(accepted, holding(unheld));
         const [count] = objectChildren(accepted.item.body);
@@ -3426,7 +3438,9 @@ describe("redactItem on param-variable parameters", () => {
     "[I-5] with no record, gives an item without template processing's param-variable params their declared defaults, the values its first record holds (H3)",
     () =>
       Effect.gen(function* givesDeclaredDefaults() {
-        const accepted = yield* Effect.fromOption(acceptedItem(check(parameterDocument, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(parameterDocument, tables, Option.none())),
+        );
         const started = redactItem({ ...accepted.item, templateProcessing: Option.none() });
 
         assert.deepStrictEqual(parametersOf(objectChildren(started.body)), [
@@ -3547,7 +3561,9 @@ describe("redactItem on a printed variable whose text passes 1,000,000 character
     () =>
       Effect.gen(function* recordsOversizedText() {
         for (const [document, value] of oversizedPrinting) {
-          const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
+          const accepted = yield* Effect.fromOption(
+            acceptedItem(check(document, tables, Option.none())),
+          );
           const emptied = redactItem(accepted.item, holding({ S: value }));
 
           assert.deepStrictEqual(paragraphOf(emptied), [text("Value: ")]);
@@ -3565,7 +3581,9 @@ describe("redactItem on a printed variable whose text passes 1,000,000 character
     () =>
       Effect.gen(function* recordsWidenedConversion() {
         const document = repeatedDocument("integer", "5", 1, [attr("format", "%1000001i")]);
-        const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(document, tables, Option.none())),
+        );
         const emptied = redactItem(accepted.item, holding({ S: orderedIntegers([5n]) }));
 
         assert.deepStrictEqual(paragraphOf(emptied), [text("Value: ")]);
@@ -3581,7 +3599,9 @@ describe("redactItem on a printed variable whose text passes 1,000,000 character
     () =>
       Effect.gen(function* printsWithinBound() {
         const document = repeatedDocument("integer", "1", 3, [attr("format", "%2i")]);
-        const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(document, tables, Option.none())),
+        );
         const shown = redactItem(accepted.item, holding({ S: orderedIntegers([1n, 1n, 1n]) }));
 
         assert.deepStrictEqual(paragraphOf(shown), texts("Value: ", " 1; 1; 1"));
@@ -3615,7 +3635,7 @@ const shownParts = (
  * @returns The item.
  */
 const acceptedFrom = (document: SourceDocument): Item =>
-  Option.getOrElse(acceptedItem(check(document, tables)), () =>
+  Option.getOrElse(acceptedItem(check(document, tables, Option.none())), () =>
     assert.fail(`${document.location} is not accepted.`),
   ).item;
 

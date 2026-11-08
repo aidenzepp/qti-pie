@@ -98,6 +98,7 @@ const accepted = (identifier: string, ...parts: readonly SourceElement[]): Accep
       ),
     ),
     tables,
+    Option.none(),
   );
 
   return Option.getOrElse(acceptedItem(verdict), () =>

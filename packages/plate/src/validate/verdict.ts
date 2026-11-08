@@ -4,7 +4,8 @@
  * author.
  *
  * {@link check} refuses a root outside QTI's namespace, then runs the structural validator, the
- * item prose rules and the test prose rules together, then leaves unchecked what it cannot judge.
+ * item prose rules, the test prose rules and the refusals its QTI version decides together, then
+ * leaves unchecked what it cannot judge.
  * Every verdict carries the kind of its document's root. On an item it accepts it secures the
  * source before it builds the item: it removes every attribute only a wildcard admits (E3) and
  * passes every URL attribute through `url.ts`, keeping each value in its parsed form or dropping it
@@ -57,9 +58,10 @@ import {
   tableOf,
 } from "#plate/validate/structure.ts";
 import { checkTestRules } from "#plate/validate/test-rules.ts";
+import { checkVersion } from "#plate/validate/versions.ts";
 import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
 import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
-import type { TestMark } from "#plate/vocabulary.ts";
+import type { CpVersion, TestMark } from "#plate/vocabulary.ts";
 
 /**
  * Why a valid document is left unchecked: it holds MathML (reading 2) or SSML (reading 3), whose
@@ -974,9 +976,11 @@ const checkUndelivered = (source: SourceDocument, kind: "section" | "stimulus"):
  * Give the verdict on a document, in order:
  *
  * 1. A root outside QTI's namespace is `refused`, of kind `none`, with `not-qti-root` alone.
- * 2. The structural validator's refusals, the item prose rules' and the test prose rules', together
- *    and in that order, with no short-circuit: any one makes the document `refused`, with all of
- *    them. Each rule set judges only its own roots.
+ * 2. The structural validator's refusals, the item prose rules' and the test prose rules', then those
+ *    the document's version decides (`#plate/validate/versions.ts`, which reads the others),
+ *    together and in that order, with no short-circuit: any one makes the document `refused`, with
+ *    all of them. Each rule set judges only its own roots, and a document of no stated version
+ *    earns none of the version's.
  * 3. A document holding MathML, SSML, an unexpanded entity reference, an XInclude `include` in
  *    anything but a test or a section, or a root other than an item, a test, a section or a
  *    stimulus, is `unchecked`, with every reason. It is never rendered.
@@ -996,21 +1000,28 @@ const checkUndelivered = (source: SourceDocument, kind: "section" | "stimulus"):
  *
  * @param source The document, as the reader adapter built it.
  * @param tables The tables generated from the QTI XSD.
+ * @param version The document's QTI version as its package's manifest states it, or none for a
+ *   document opened alone, which states none (OD-A54-3).
  * @returns The verdict. A refusal is a verdict, never a failure. A defect of the item or test
  *   builder, which a checked document cannot cause, is thrown.
  */
-export const check = (source: SourceDocument, tables: Tables): Verdict => {
+export const check = (
+  source: SourceDocument,
+  tables: Tables,
+  version: Option.Option<CpVersion>,
+): Verdict => {
   const document = source.location;
   if (source.root.namespace !== qtiNamespace) {
     return { document, kind: "none", refusals: [notQtiRoot(source)], verdict: "refused" };
   }
 
   const kind = kindOf(source.root);
-  const refusals = [
+  const judged = [
     ...checkStructure(source, tables),
     ...checkRules(source, tables),
     ...checkTestRules(source, tables),
   ];
+  const refusals = [...judged, ...checkVersion(source, version, judged)];
   if (Arr.isReadonlyArrayNonEmpty(refusals)) {
     return { document, kind, refusals, verdict: "refused" };
   }

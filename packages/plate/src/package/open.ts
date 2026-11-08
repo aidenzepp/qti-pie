@@ -611,21 +611,27 @@ const resolveReference = (base: string, reference: string): Option.Option<string
     : Option.map(resolveInside(base.split("/"), reference), (segments) => segments.join("/"));
 
 /**
- * Give the verdict `open` gives a document from its reading: the reader's refusal as a refused
- * verdict of kind `none`, or `check`'s verdict against the committed tables.
+ * Give the verdict on a document of the package from its reading: the reader's refusal as a
+ * refused verdict of kind `none`, or `check`'s verdict against the committed tables under the
+ * package's QTI version, which `open` cannot know of a document alone.
  *
  * @param location The document's location.
  * @param source Its reading.
+ * @param version The package's version, as its manifest states it.
  * @returns The verdict on it.
  */
-const judge = (location: string, source: Result.Result<SourceDocument, Refusal>): Verdict =>
+const judge = (
+  location: string,
+  source: Result.Result<SourceDocument, Refusal>,
+  version: CpVersion,
+): Verdict =>
   Result.isFailure(source)
     ? { document: location, kind: "none", refusals: [source.failure], verdict: "refused" }
-    : check(source.success, tables);
+    : check(source.success, tables, Option.some(version));
 
 /**
  * Read each document the manifest's QTI resources name, once, and judge each one a resource of a
- * judged type names.
+ * judged type names, under the version the manifest states.
  *
  * @param manifest The manifest.
  * @param files The package's files, keyed by normal form.
@@ -655,7 +661,9 @@ const readDocuments = Effect.fnUntraced(function* readDocuments(
       const source = yield* Effect.result(readSource(documentLocation, bytes));
       documents.set(path, {
         source,
-        verdict: isJudged ? Option.some(judge(documentLocation, source)) : Option.none(),
+        verdict: isJudged
+          ? Option.some(judge(documentLocation, source, manifest.version))
+          : Option.none(),
       });
     }
   }

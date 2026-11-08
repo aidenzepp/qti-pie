@@ -4139,6 +4139,7 @@ describe("buildItem", () => {
           ],
         }),
         tables,
+        Option.none(),
       );
       const accepted = Option.getOrElse(acceptedItem(verdict), () =>
         assert.fail(`${label}: the item is ${verdict.verdict}, not accepted.`),
@@ -4751,7 +4752,7 @@ describe("buildItem", () => {
 
   it("[I-5] marks template processing that reads or sets a name the engine does not hold while it runs, at the qti-template-processing, and runs neither processing", () => {
     for (const { declarations, marks, rule, unheld } of unheldTemplating) {
-      const verdict = check(templatingItem(declarations, rule), tables);
+      const verdict = check(templatingItem(declarations, rule), tables, Option.none());
       const accepted = Option.getOrElse(acceptedItem(verdict), () =>
         assert.fail(`${unheld}: the item is ${verdict.verdict}, not accepted.`),
       );
@@ -4782,6 +4783,7 @@ describe("buildItem", () => {
         variableElement("B"),
       ),
       tables,
+      Option.none(),
     );
     const accepted = Option.getOrElse(acceptedItem(verdict), () =>
       assert.fail(`the item is ${verdict.verdict}, not accepted.`),
@@ -4827,6 +4829,7 @@ describe("buildItem", () => {
         variableElement("B"),
       ),
       tables,
+      Option.none(),
     );
     const accepted = Option.getOrElse(acceptedItem(verdict), () =>
       assert.fail(`the item is ${verdict.verdict}, not accepted.`),
