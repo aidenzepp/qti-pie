@@ -65,16 +65,18 @@
  *   built-in one its root holds (spec reading 29: an item's `completionStatus` is no test's), so
  *   each reference carries the root kind it resolves under. A reference that names neither has no
  *   declaration row, and its law refuses it (lane NIL's NS2: never the nil uuid).
- * - A section document's feedback and printed variables ({@link SectionFeedbackName},
- *   {@link SectionPrintedName}) resolve once per test that places it ({@link SectionFeedbackRef},
- *   {@link SectionPrintedRef}, A45, each with its declaration row where it names a declaration, as
- *   an own reference has), every one of them under each placement ({@link SectionScope}, whose
- *   counts of resolutions are its document's counts of references, {@link ReferringDocument}). An
- *   included fragment's feedback, printed variables, template variables
- *   ({@link SectionTemplateName}) and context variables ({@link SectionContextName}) resolve so
- *   once per placement in each item or test that places it, a test placing it where the test or a
- *   section document splices it (spec reading 117), the same relations holding them: a fragment
- *   declares nothing, as a section does.
+ * - A section document's feedback, printed and template variables ({@link SectionFeedbackName},
+ *   {@link SectionPrintedName}, {@link SectionTemplateName}) resolve once per test that places it
+ *   ({@link SectionFeedbackRef}, {@link SectionPrintedRef}, {@link SectionTemplateRef}, A45 and
+ *   spec reading 5, each with its declaration row where it names a declaration, as an own reference
+ *   has), every one of them under each placement ({@link SectionScope}, whose counts of resolutions
+ *   are its document's counts of references, {@link ReferringDocument}). A test declares no
+ *   template variable, so a section document's template reference names none, and "Template
+ *   reference" refuses it as it refuses the test's own (§2.7.2). An included fragment's feedback,
+ *   printed, template and context variables ({@link SectionContextName}) resolve so once per
+ *   placement in each item or test that places it, a test placing it where the test or a section
+ *   document splices it (spec reading 117), the same relations holding them: a fragment declares
+ *   nothing, as a section does.
  *
  * A row a builder gets wrong is refused, never accepted: each overlay's node is its node's, through
  * `nodeRef`, and of its kinds, and each value that relaxes a law (a count written, an item
@@ -136,7 +138,7 @@ import {
 } from "#pantry/qti/declarations.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
-import { Instance, itemInstances, itemKind, sectionKind, testKind } from "#pantry/qti/tests.ts";
+import { Instance, itemInstances, itemKind, testKind } from "#pantry/qti/tests.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
 /**
@@ -167,18 +169,6 @@ const namePattern = `^${ncNamePattern}$`;
  * declarations, an included fragment's in each item's or test's (spec reading 117).
  */
 export const referringRoots = [itemKind, testKind] as const satisfies readonly Kind[];
-
-/**
- * The root kinds of the documents that are no included fragment's content: an item, a test, and a
- * section document, which a section ref or an include places as a section. Every other document a
- * reference stands in is a fragment (spec reading 117), whose template and context variable
- * references resolve once per item that places it, as its feedback and printed variables do.
- */
-export const unfragmentedRoots = [
-  itemKind,
-  testKind,
-  sectionKind,
-] as const satisfies readonly Kind[];
 
 /**
  * The choices: the kinds whose `identifier` names a value of their interaction's response, each a
@@ -1245,8 +1235,9 @@ export const SectionPrintedName = relation("SectionPrintedName", sectionNameFiel
 ]);
 
 /**
- * An included fragment's template variable reference, a template element's or a choice's
- * `template-identifier`, keyed by its node and attribute (spec reading 117).
+ * A section document's or an included fragment's template variable reference, a template
+ * element's or a choice's `template-identifier`, keyed by its node and attribute (spec readings 5
+ * and 117).
  */
 export const SectionTemplateName = relation("SectionTemplateName", sectionNameFields, [
   "node",
@@ -1254,8 +1245,8 @@ export const SectionTemplateName = relation("SectionTemplateName", sectionNameFi
 ]);
 
 /**
- * An included fragment's context variable reference, a `qti-context-variable`'s `identifier`,
- * keyed by its node and attribute (spec reading 117).
+ * A section document's or an included fragment's context variable reference, a
+ * `qti-context-variable`'s `identifier`, keyed by its node and attribute (spec readings 5 and 117).
  */
 export const SectionContextName = relation("SectionContextName", sectionNameFields, [
   "node",
@@ -1297,7 +1288,8 @@ export const sectionPrintedNameFamily = counted(
 );
 
 /**
- * Each fragment's template variable references, counted by `ReferringDocument.templates`.
+ * Each section document's and fragment's template variable references, counted by
+ * `ReferringDocument.templates`.
  */
 export const sectionTemplateNameFamily = counted(
   on(SectionTemplateName, "document"),
@@ -1305,7 +1297,8 @@ export const sectionTemplateNameFamily = counted(
 );
 
 /**
- * Each fragment's context variable references, counted by `ReferringDocument.contexts`.
+ * Each section document's and fragment's context variable references, counted by
+ * `ReferringDocument.contexts`.
  */
 export const sectionContextNameFamily = counted(
   on(SectionContextName, "document"),
@@ -1395,8 +1388,8 @@ export const SectionPrintedRef = relation("SectionPrintedRef", sectionReferenceF
 ]);
 
 /**
- * A fragment's template variable reference resolved under one placement, keyed as
- * {@link SectionFeedbackRef} is ("Template reference").
+ * A section document's or a fragment's template variable reference resolved under one placement,
+ * keyed as {@link SectionFeedbackRef} is ("Template reference").
  */
 export const SectionTemplateRef = relation("SectionTemplateRef", sectionReferenceFields, [
   "instance",
@@ -1405,8 +1398,8 @@ export const SectionTemplateRef = relation("SectionTemplateRef", sectionReferenc
 ]);
 
 /**
- * A fragment's context variable reference resolved under one placement, keyed as
- * {@link SectionFeedbackRef} is ("Context variable reference").
+ * A section document's or a fragment's context variable reference resolved under one placement,
+ * keyed as {@link SectionFeedbackRef} is ("Context variable reference").
  */
 export const SectionContextRef = relation("SectionContextRef", sectionReferenceFields, [
   "instance",
@@ -1964,41 +1957,20 @@ const referenceSources = {
 };
 
 /**
- * The read attributes a section document's or a fragment's feedback references are: its feedback
- * elements' outcomes, where they name a variable.
- */
-const sectionFeedbackSource = select(InteractionAttribute, (v) =>
-  v.and(
-    v.not(v.in(v.rootKind, referringRoots)),
-    v.in(v.name, references.feedback.attributes),
-    v.in(v.kind, references.feedback.kinds),
-    Compute.matches(v.value, namePattern),
-  ),
-);
-
-/**
- * The read attributes a section document's or a fragment's printed variable references are:
- * printed variables' names, bases and indices, where they name a variable.
- */
-const sectionPrintedSource = select(InteractionAttribute, (v) =>
-  v.and(v.not(v.in(v.rootKind, referringRoots)), printedReference(v)),
-);
-
-/**
- * Select the read attributes a fragment's references of one class are (spec reading 117): the
- * class's attributes on its kinds that name a variable, in a document that is no item, test or
- * section.
+ * Select the read attributes a section document's or a fragment's references of one class are: the
+ * class's attributes on its kinds that name a variable ({@link namePattern}), in a document that is
+ * no item or test, so each resolves once per assembly that places it (spec readings 5 and 117).
  *
  * @param reference - The class's attributes and kinds.
- * @returns The selection.
+ * @returns The selection of `InteractionAttribute`.
  */
-const fragmentReferenceOf = (reference: {
+const sectionReferenceOf = (reference: {
   readonly attributes: readonly Name[];
   readonly kinds: readonly Kind[];
 }) =>
   select(InteractionAttribute, (v) =>
     v.and(
-      v.not(v.in(v.rootKind, unfragmentedRoots)),
+      v.not(v.in(v.rootKind, referringRoots)),
       v.in(v.name, reference.attributes),
       v.in(v.kind, reference.kinds),
       Compute.matches(v.value, namePattern),
@@ -2006,11 +1978,17 @@ const fragmentReferenceOf = (reference: {
   );
 
 /**
- * The read attributes a fragment's template and context variable references are.
+ * The read attributes each section name relation holds: a section document's or a fragment's
+ * references of each class, its printed variables' names, bases and indices among them, where they
+ * name a variable.
  */
-const fragmentSources = {
-  context: fragmentReferenceOf(references.context),
-  template: fragmentReferenceOf(references.template),
+const sectionSources = {
+  context: sectionReferenceOf(references.context),
+  feedback: sectionReferenceOf(references.feedback),
+  printed: select(InteractionAttribute, (v) =>
+    v.and(v.not(v.in(v.rootKind, referringRoots)), printedReference(v)),
+  ),
+  template: sectionReferenceOf(references.template),
 };
 
 /**
@@ -2985,19 +2963,19 @@ export const interactionLawsByName = {
       on(ContextRef, "node", "attribute", "kind", "document", "assemblyKind", "identifier"),
     ),
     contained(
-      on(sectionFeedbackSource, "node", "name", "kind", "document", "value"),
+      on(sectionSources.feedback, "node", "name", "kind", "document", "value"),
       on(SectionFeedbackName, "node", "attribute", "kind", "document", "identifier"),
     ),
     contained(
-      on(sectionPrintedSource, "node", "name", "kind", "document", "value"),
+      on(sectionSources.printed, "node", "name", "kind", "document", "value"),
       on(SectionPrintedName, "node", "attribute", "kind", "document", "identifier"),
     ),
     contained(
-      on(fragmentSources.template, "node", "name", "kind", "document", "value"),
+      on(sectionSources.template, "node", "name", "kind", "document", "value"),
       on(SectionTemplateName, "node", "attribute", "kind", "document", "identifier"),
     ),
     contained(
-      on(fragmentSources.context, "node", "name", "kind", "document", "value"),
+      on(sectionSources.context, "node", "name", "kind", "document", "value"),
       on(SectionContextName, "node", "attribute", "kind", "document", "identifier"),
     ),
     sectionFeedbackNameFamily,

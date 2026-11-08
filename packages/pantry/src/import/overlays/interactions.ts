@@ -45,7 +45,6 @@ import {
   references,
   referringRoots,
   sliderKind,
-  unfragmentedRoots,
 } from "#pantry/qti/interactions.ts";
 import type {
   AriaElement,
@@ -1125,24 +1124,22 @@ const referencesOf = (
 /**
  * Build a section document's or an included fragment's references of one class: each read
  * attribute of the class's names and kinds that names a variable ({@link isNcName}), unresolved,
- * since neither declares anything; each resolves once per assembly that places the document.
+ * since neither declares anything; each resolves once per assembly that places the document (spec
+ * readings 5 and 117).
  *
  * @param context - The document.
  * @param read - The document's read attributes.
  * @param classes - The class's attributes and kinds.
- * @param resolving - The root kinds of the documents that make no such reference of their own:
- *   {@link referringRoots}, whose references resolve in their own declarations, or
- *   {@link unfragmentedRoots} for a class only a fragment's references are.
- * @returns The rows, keyed by (node, attribute), none in a document `resolving` names.
+ * @returns The rows, keyed by (node, attribute), none in an item or a test
+ *   ({@link referringRoots}), whose references resolve in their own declarations.
  */
 const sectionNamesOf = (
   context: Context,
   read: ReturnType<typeof interactionAttributesOf>,
   classes: readonly (typeof references)[keyof typeof references][],
-  resolving: readonly string[],
 ): ReadonlyMap<string, Addition<typeof SectionFeedbackName>> =>
   new Map(
-    resolving.every((root) => root !== context.rootKind)
+    referringRoots.every((root) => root !== context.rootKind)
       ? [...read.values()].flatMap((row) =>
           isNcName(row.value) &&
           classes.some(
@@ -1173,13 +1170,14 @@ const sectionNamesOf = (
 const sectionFeedbacks = [references.feedback] as const;
 
 /**
- * A fragment's template variable references: its template elements' and choices'
- * `template-identifier`.
+ * A section document's or a fragment's template variable references: its template elements' and
+ * choices' `template-identifier`.
  */
 const sectionTemplates = [references.template] as const;
 
 /**
- * A fragment's context variable references: its `qti-context-variable`s' `identifier`.
+ * A section document's or a fragment's context variable references: its
+ * `qti-context-variable`s' `identifier`.
  */
 const sectionContexts = [references.context] as const;
 
@@ -1258,10 +1256,10 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
         ? [[context.document, { document: context.document }]]
         : [],
     ),
-    SectionContextName: sectionNamesOf(context, read, sectionContexts, unfragmentedRoots),
-    SectionFeedbackName: sectionNamesOf(context, read, sectionFeedbacks, referringRoots),
-    SectionPrintedName: sectionNamesOf(context, read, sectionPrints, referringRoots),
-    SectionTemplateName: sectionNamesOf(context, read, sectionTemplates, unfragmentedRoots),
+    SectionContextName: sectionNamesOf(context, read, sectionContexts),
+    SectionFeedbackName: sectionNamesOf(context, read, sectionFeedbacks),
+    SectionPrintedName: sectionNamesOf(context, read, sectionPrints),
+    SectionTemplateName: sectionNamesOf(context, read, sectionTemplates),
     Slider: slidersOf(context),
     TemplateRef: templates.references,
     TemplateRefDeclaration: templates.declarations,
@@ -1503,8 +1501,8 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
  *   `DeclarationBaseType` rows).
  * @param input.cardinalities - Every declaration's cardinality, where it has one (Q5.08's
  *   `DeclarationCardinality` rows).
- * @param input.contexts - Every fragment's context variable references ({@link rowsOf}'s
- *   `SectionContextName`).
+ * @param input.contexts - Every section document's and fragment's context variable references
+ *   ({@link rowsOf}'s `SectionContextName`).
  * @param input.declarations - Every named declaration of the package (Q5.08's
  *   `DeclarationIdentifier` rows).
  * @param input.feedbacks - Every section document's and fragment's feedback references
@@ -1513,8 +1511,8 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
  *   `assembledRowsOf`).
  * @param input.prints - Every section document's and fragment's printed variable references
  *   ({@link rowsOf}'s `SectionPrintedName`).
- * @param input.templates - Every fragment's template variable references ({@link rowsOf}'s
- *   `SectionTemplateName`).
+ * @param input.templates - Every section document's and fragment's template variable references
+ *   ({@link rowsOf}'s `SectionTemplateName`).
  * @returns The rows.
  */
 export const sectionRowsOf = (input: {
