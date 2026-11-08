@@ -917,6 +917,146 @@ const twoSectionFiles = (inS2: string, inS3: string) => ({
 });
 
 /**
+ * Write a section document of one section, `title` its identifier, holding what is given.
+ *
+ * @param identifier The section's identifier.
+ * @param content What the section holds, as written.
+ * @returns The section document's text.
+ */
+const sectionDocumentXml = (identifier: string, content: string): string =>
+  `<qti-assessment-section xmlns="${qti}" identifier="${identifier}" title="${identifier}" visible="true">${content}</qti-assessment-section>`;
+
+/**
+ * The files of a package whose test `T`, {@link referringTestXml} with the given outcome
+ * processing, reaches each given section document through a section ref of its own, in order: each
+ * at `sections/<identifier>.xml` and listed as a section resource, beside the items `items/a.xml`
+ * ({@link reachedItemXml}) and `items/b.xml` ({@link otherItemXml}).
+ *
+ * @param processing What the test's outcome processing holds, as written.
+ * @param sections Each section document's identifier and what its section holds, as written.
+ * @returns The package's files, by path.
+ */
+const reachingFiles = (
+  processing: string,
+  ...sections: readonly (readonly [identifier: string, content: string])[]
+) => ({
+  [manifestFile]: manifestXml(
+    resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+    resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+    resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+    ...sections.map(([identifier]) =>
+      resourceXml(identifier, "imsqti_section_xmlv3p0", `sections/${identifier}.xml`),
+    ),
+  ),
+  "items/a.xml": reachedItemXml,
+  "items/b.xml": otherItemXml,
+  ...Object.fromEntries(
+    sections.map(([identifier, content]) => [
+      `sections/${identifier}.xml`,
+      sectionDocumentXml(identifier, content),
+    ]),
+  ),
+  "test.xml": referringTestXml(
+    processing,
+    sections
+      .map(([identifier]) => sectionRefXml(`R${identifier}`, `sections/${identifier}.xml`))
+      .join(""),
+  ),
+});
+
+/**
+ * The `duplicate-identifier` refusal of an identifier a section document gives again after the
+ * test, or a section document reached before it, gave it.
+ *
+ * @param file The section document's path.
+ * @param element The path of the element whose `identifier` repeats it, from the section document's
+ *   root.
+ * @param identifier The identifier.
+ * @returns The refusal's facts.
+ */
+const duplicateIn = (file: string, element: string, identifier: string): Seen => ({
+  detail: { identifier },
+  document: fileLocation(location, file),
+  location: { kind: "path", path: `${element}/@identifier` },
+  rule: "duplicate-identifier",
+});
+
+/**
+ * Write an outcome processing that sets `TOTAL` to 1 when a part's or a section's `duration` is
+ * NULL, so that the duration may be read whatever its type.
+ *
+ * @param scope The part's or section's identifier.
+ * @returns The outcome processing's text.
+ */
+const testingDuration = (scope: string): string =>
+  `<qti-outcome-condition><qti-outcome-if><qti-is-null>${variableXml(`${scope}.duration`)}</qti-is-null>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition>`;
+
+/**
+ * Each long chain of section refs gets this bound, as its own: opening 8,000 section documents
+ * takes about a second here, and the bound leaves room for a slow machine.
+ */
+const chainTimeoutMs = 120_000;
+
+/**
+ * The files of a package whose test `T`, {@link referringTestXml}, reaches a chain of section
+ * documents: its section ref names `sections/s0.xml`, and each section document `X<n>`, at
+ * `sections/s<n>.xml`, holds one item ref `I<n>` to `items/a.xml` and, but the last, a section ref
+ * to the next. The test's outcome processing reads the last item ref's `SCORE`, which only the end
+ * of the chain holds.
+ *
+ * @param length How many section documents the chain holds.
+ * @returns The package's files.
+ */
+const chainPackage = (length: number): ReadonlyMap<string, Uint8Array> => {
+  const indices = Array.from({ length }, (_, index) => index);
+
+  return packageOf({
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+      ...indices.map((index) =>
+        resourceXml(`S${index}`, "imsqti_section_xmlv3p0", `sections/s${index}.xml`),
+      ),
+    ),
+    "items/a.xml": reachedItemXml,
+    "items/b.xml": otherItemXml,
+    ...Object.fromEntries(
+      indices.map((index) => [
+        `sections/s${index}.xml`,
+        sectionDocumentXml(
+          `X${index}`,
+          `${itemRefXml(`I${index}`, "../items/a.xml")}${index + 1 < length ? sectionRefXml(`R${index + 1}`, `s${index + 1}.xml`) : ""}`,
+        ),
+      ]),
+    ),
+    "test.xml": referringTestXml(
+      settingTotal(variableXml(`I${length - 1}.SCORE`)),
+      sectionRefXml("R0", "sections/s0.xml"),
+    ),
+  });
+};
+
+/**
+ * Open a {@link chainPackage} and check that its test is accepted, reading the chain's last item
+ * ref with its processing marked.
+ *
+ * @param length How many section documents the chain holds.
+ * @returns Nothing; the test fails when the package is not accepted so.
+ */
+const acceptsChain = (length: number) =>
+  Effect.gen(function* chainAccepted() {
+    const verdict = yield* openPackage(location, chainPackage(length));
+    const { test } = testOf(acceptedOf(verdict), fileLocation(location, "test.xml"));
+
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+    assert.deepStrictEqual(
+      test.unsupported.map((feature) => feature.feature),
+      ["qti-assessment-section-ref", `variable:I${length - 1}.SCORE`],
+    );
+  });
+
+/**
  * The template default of the section document's integer template variable `T` to the float 1,
  * whose type is not its target's.
  */
@@ -2300,6 +2440,180 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(
             refusalsOf(verdict).map((refusal) => [refusal.rule, refusal.document]),
             [["undeclared-variable", fileLocation(location, "sections/s2.xml")]],
+          );
+        }),
+    );
+
+    it.effect(
+      "gives a verdict for a long chain of section refs, 8,000 section documents each naming the next, and does not throw (R5)",
+      () => acceptsChain(8000),
+      chainTimeoutMs,
+    );
+
+    it.effect(
+      "gives the same verdict for a long chain of section refs of 3,000 section documents, the control",
+      () => acceptsChain(3000),
+      chainTimeoutMs,
+    );
+
+    it.effect(
+      "refuses ITEM0, a duplicate across the reach of the test's own item ref, once at the section document's item ref, however many tests reach it, as pantry's structure-identifier does (info.txt:10759)",
+      () =>
+        Effect.gen(function* duplicateOfTheTest() {
+          const section = sectionDocumentXml("S2", itemRefXml("ITEM0", "../items/a.xml"));
+          const at = "qti-assessment-section/qti-assessment-item-ref";
+
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                packageOf(
+                  reachingFiles(settingTotal(oneFloat), [
+                    "S2",
+                    itemRefXml("ITEM0", "../items/a.xml"),
+                  ]),
+                ),
+              ),
+            ),
+            [duplicateIn("sections/S2.xml", at, "ITEM0")],
+          );
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                packageOf({
+                  ...twoReachingFiles(""),
+                  "sections/s2.xml": section,
+                }),
+              ),
+            ),
+            [duplicateIn("sections/s2.xml", at, "ITEM0")],
+          );
+        }),
+    );
+
+    it.effect(
+      "refuses ITEMQ, a duplicate across the reach of two section documents, once at the second, the first kept",
+      () =>
+        Effect.gen(function* duplicateOfASection() {
+          const verdict = yield* openPackage(
+            location,
+            packageOf(
+              reachingFiles(
+                settingTotal(variableXml("ITEMQ.SCORE")),
+                ["S2", itemRefXml("ITEMQ", "../items/a.xml")],
+                ["S3", itemRefXml("ITEMQ", "../items/b.xml")],
+              ),
+            ),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            duplicateIn(
+              "sections/S3.xml",
+              "qti-assessment-section/qti-assessment-item-ref",
+              "ITEMQ",
+            ),
+          ]);
+        }),
+    );
+
+    it.effect(
+      "refuses a section document's item ref named like the test's part P or section SEC as a duplicate across the reach, and reads P.duration and SEC.duration as the test's own",
+      () =>
+        Effect.gen(function* duplicateOfAScope() {
+          for (const scope of ["P", "SEC"]) {
+            assert.deepStrictEqual(
+              refusalsOf(
+                yield* openPackage(
+                  location,
+                  packageOf(
+                    reachingFiles(testingDuration(scope), [
+                      "S2",
+                      itemRefXml(scope, "../items/a.xml"),
+                    ]),
+                  ),
+                ),
+              ),
+              [
+                duplicateIn(
+                  "sections/S2.xml",
+                  "qti-assessment-section/qti-assessment-item-ref",
+                  scope,
+                ),
+              ],
+              scope,
+            );
+          }
+
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                packageOf(
+                  reachingFiles(testingDuration("SEC"), [
+                    "SEC",
+                    itemRefXml("ITEMQ", "../items/a.xml"),
+                  ]),
+                ),
+              ),
+            ),
+            [duplicateIn("sections/SEC.xml", "qti-assessment-section", "SEC")],
+          );
+        }),
+    );
+
+    it.effect(
+      "gives no duplicate across the reach for one section document reached by two refs, or two with distinct identifiers, and leaves a duplicate within one document to its own verdict",
+      () =>
+        Effect.gen(function* noDuplicate() {
+          acceptedOf(
+            yield* openPackage(
+              location,
+              packageOf(
+                referringFiles(
+                  settingTotal(oneFloat),
+                  `${sectionRefXml("R1", "sections/s2.xml")}${sectionRefXml("R2", "./sections/s2.xml")}`,
+                  sectionXml(),
+                ),
+              ),
+            ),
+          );
+          acceptedOf(
+            yield* openPackage(
+              location,
+              packageOf(
+                reachingFiles(
+                  settingTotal(oneFloat),
+                  ["S2", itemRefXml("ITEMQ", "../items/a.xml")],
+                  ["S3", itemRefXml("ITEMR", "../items/b.xml")],
+                ),
+              ),
+            ),
+          );
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                packageOf(
+                  reachingFiles(settingTotal(oneFloat), [
+                    "S2",
+                    `${itemRefXml("ITEM0", "../items/a.xml")}${itemRefXml("ITEM0", "../items/b.xml")}`,
+                  ]),
+                ),
+              ),
+            ),
+            [
+              duplicateIn(
+                "sections/S2.xml",
+                "qti-assessment-section/qti-assessment-item-ref[1]",
+                "ITEM0",
+              ),
+              duplicateIn(
+                "sections/S2.xml",
+                "qti-assessment-section/qti-assessment-item-ref[2]",
+                "ITEM0",
+              ),
+            ],
           );
         }),
     );
