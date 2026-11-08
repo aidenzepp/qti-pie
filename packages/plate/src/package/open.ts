@@ -30,7 +30,10 @@
  *   variable, a `qti-correct` only a response, and a mapping expression only a response with the
  *   mapping it needs; and the test's expressions are typed through its reach, so the item's
  *   processing rules judge what it reads there and what each template default sets
- *   (`expression-type`);
+ *   (`expression-type`). Each section document a test reaches is judged under that test as the test
+ *   is, its dotted references against the test's reach and its expressions in the test's processing
+ *   scope (`undeclared-variable`, `expression-type`; reading 5), each refusal at the section
+ *   document and given once however many tests give it;
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
  *   62).
@@ -1581,14 +1584,21 @@ const variablesThrough = (
 
 /**
  * What judging one test gives: each of its own item refs' item path, keyed by the item ref's
- * identifier, in document order; the section documents it reaches; and the test's refusals: the
- * item refs', their variable mappings', their template defaults', the references', then those of
- * the test's processing that only its typed reach gives, each in document order.
+ * identifier, in document order; the section documents it reaches; the test's refusals: the item
+ * refs', their variable mappings', their template defaults', the references', then those of the
+ * test's processing that only its typed reach gives, each in document order; and the refusals of
+ * the section documents it reaches, judged under it.
  */
 interface TestJudgement {
   readonly reached: readonly ReachedSection[];
   readonly refs: ReadonlyMap<string, string>;
   readonly refusals: readonly Refusal[];
+  /**
+   * The refusals of each section document the test reaches, judged under the test, in the order
+   * the walk reaches them: its references', then those of its expressions that only the test's
+   * scope and typed reach give, each at the section document, in its document order.
+   */
+  readonly sections: readonly Refusal[];
 }
 
 /**
@@ -1618,12 +1628,24 @@ interface TestJudgement {
  * document's own verdict's, and a refusal the references already gave is not given again. A
  * reached section document's item refs are judged once for the package ({@link judgeReached}).
  *
+ * Each section document the test reaches is then judged under the test, as pantry judges one once
+ * under each test that reaches it (`testProcessingRows` in
+ * `packages/pantry/src/import/reference.ts`), since its references "resolve once for each test
+ * that includes the section, not once for the section on its own" (reading 5): its dotted
+ * references by {@link judgeReference} against the test's reach, a name the test declares whole or
+ * holds as a built-in never split, and its expressions by the item's processing rules under the
+ * test's processing scope, its declarations and built-ins, with the test's typed reach and each of
+ * the section document's template defaults judged against the template variable it sets. Each
+ * refusal is at the section document. As for the test, only what that run adds is reported: the
+ * same rules over the section alone, every name unknown, are the section document's own verdict's.
+ *
  * @param source The test's source.
  * @param testPath The test's path.
  * @param itemPaths The path of every item resource's document.
  * @param sectionPaths The path of every section resource's document.
  * @param documents The package's documents.
- * @returns Its own item refs' item paths, the section documents it reaches and the refusals.
+ * @returns Its own item refs' item paths, the section documents it reaches, its refusals and theirs
+ *   under it.
  */
 const judgeTest = (
   source: SourceDocument,
@@ -1680,13 +1702,24 @@ const judgeTest = (
     ),
   ]);
   const held = (name: string): boolean => whole.has(name) || readingsOf(scope, name).length > 0;
-  const references = own.visits.flatMap((visit) =>
-    referencesOf(visit.element, held).flatMap((reference) =>
-      whole.has(reference.identifier) || !reference.identifier.includes(".")
-        ? []
-        : judgeReference(source.location, visit, reference, scope),
-    ),
-  );
+
+  /**
+   * Judge each dotted reference of a test or section document's elements that the test does not
+   * hold whole by reading 48 against the test's reach.
+   *
+   * @param document The document's location.
+   * @param visits The visits of its elements, in document order.
+   * @returns The refusals, in document order.
+   */
+  const judgeReferences = (document: string, visits: readonly Visit[]): readonly Refusal[] =>
+    visits.flatMap((visit) =>
+      referencesOf(visit.element, held).flatMap((reference) =>
+        whole.has(reference.identifier) || !reference.identifier.includes(".")
+          ? []
+          : judgeReference(document, visit, reference, scope),
+      ),
+    );
+  const references = judgeReferences(source.location, own.visits);
 
   /**
    * Type a prefixed read by the variable its one resolving reading reads.
@@ -1705,11 +1738,34 @@ const judgeTest = (
     ),
     [...processingRefusals(source, tables, () => unknownType), ...references],
   );
+  const sections = reached.flatMap(({ source: section, structure }) => {
+    const sectionReferences = judgeReferences(section.location, structure.visits);
+    const { targets } = judgeTemplateDefaults(
+      section.location,
+      structure.visits,
+      variablesThrough(structure.itemRefs, documents),
+    );
+
+    return [
+      ...sectionReferences,
+      ...notHeld(
+        processingRefusals(
+          section,
+          tables,
+          typed,
+          (templateDefault) => Option.fromUndefinedOr(targets.get(templateDefault)),
+          Option.some(source),
+        ),
+        [...processingRefusals(section, tables, () => unknownType), ...sectionReferences],
+      ),
+    ];
+  });
 
   return {
     reached,
     refs: new Map([...refs].map(([identifier, itemRef]) => [identifier, itemRef.path] as const)),
     refusals: [...own.unresolved, ...mapped, ...defaults.refusals, ...references, ...processing],
+    sections,
   };
 };
 
@@ -1913,6 +1969,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
   const sectionPaths = new Set(pathsOfType(manifest, "imsqti_section_xmlv3p0"));
   const tests = new Map<string, ReadonlyMap<string, string>>();
   const testRefusals: Refusal[] = [];
+  const underTests: Refusal[] = [];
   const reached = new Map<string, ReachedSection>();
   for (const path of pathsOfType(manifest, "imsqti_test_xmlv3p0")) {
     const source = documents.get(path)?.source;
@@ -1925,6 +1982,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
       const judged = judgeTest(source.success, path, itemPaths, sectionPaths, documents);
       tests.set(path, judged.refs);
       testRefusals.push(...judged.refusals);
+      underTests.push(...notHeld(judged.sections, underTests));
       for (const section of judged.reached) {
         if (!reached.has(section.path)) {
           reached.set(section.path, section);
@@ -1956,6 +2014,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
     ...checkLom(manifest, lom, documents, fileLocation(location, manifestFile)),
     ...testRefusals,
     ...sectionRefusals,
+    ...underTests,
     ...verdicts.flatMap((verdict) => (verdict.verdict === "refused" ? verdict.refusals : [])),
   ];
   if (first !== undefined) {

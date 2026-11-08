@@ -3218,18 +3218,59 @@ const unknownTyping: PrefixedTyper = () => ({ baseType: "unknown", cardinality: 
  * @param typePrefixed The typer of its prefixed reads.
  * @param templateDefaultType The typer of its template defaults' targets, none for every default
  *   unless given.
+ * @param reaching For a section, the test it is judged under, none unless given.
  * @returns The refusals, reduced to their rule, path and detail.
  */
 const processed = (
   source: SourceDocument,
   typePrefixed: PrefixedTyper,
   templateDefaultType?: (templateDefault: SourceElement) => Option.Option<ExpressionType>,
+  reaching?: SourceDocument,
 ) =>
-  processingRefusals(source, tables, typePrefixed, templateDefaultType).map((refusal) => ({
+  processingRefusals(
+    source,
+    tables,
+    typePrefixed,
+    templateDefaultType,
+    Option.fromUndefinedOr(reaching),
+  ).map((refusal) => ({
     detail: refusal.detail,
     path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
     rule: refusal.rule,
   }));
+
+/**
+ * Construct a hand-built section document `S` with the item ref `ITEM1`, whose pre-condition is an
+ * expression.
+ *
+ * @param condition The pre-condition's expression.
+ * @returns The section as a source document.
+ */
+const conditionedSection = (condition: SourceElement): SourceDocument =>
+  doc(
+    "tests/section.xml",
+    el(
+      "qti-assessment-section",
+      [attr("identifier", "S"), attr("title", "S"), attr("visible", "true")],
+      [
+        el("qti-pre-condition", [], [condition]),
+        el("qti-assessment-item-ref", [
+          attr("href", "items/ITEM1.xml"),
+          attr("identifier", "ITEM1"),
+        ]),
+      ],
+    ),
+  );
+
+/**
+ * Construct a `qti-gt` of a variable over the float 1, whose operands must each be a single integer
+ * or float.
+ *
+ * @param identifier The variable's name.
+ * @returns The expression.
+ */
+const greaterThanOne = (identifier: string): SourceElement =>
+  el("qti-gt", [], [variable(identifier), baseValue("float", "1")]);
 
 /**
  * Construct a {@link scoringTest} that sets `SCORE` to itself rounded to `ITEM1.N` decimal places,
@@ -3524,6 +3565,53 @@ describe("processingRefusals", () => {
             rule: "undeclared-variable",
           },
         ],
+        [],
+      ],
+    );
+  });
+
+  it("[T-9] judges a section document under a test that reaches it when given one: NOPE refused as undeclared-variable, a prefixed read by the reaching test's typer, the test's SCORE accepted, and with none every name unknown, as the section alone", () => {
+    const reaching = scoringTest(baseValue("float", "1"));
+    const conditionPath = "qti-assessment-section/qti-pre-condition";
+
+    assert.deepStrictEqual(
+      [
+        processed(conditionedSection(variable("NOPE")), unknownTyping, undefined, reaching),
+        processed(
+          conditionedSection(greaterThanOne("ITEM1.STR")),
+          typing("ITEM1.STR", "string"),
+          undefined,
+          reaching,
+        ),
+        processed(conditionedSection(greaterThanOne("SCORE")), unknownTyping, undefined, reaching),
+        processed(conditionedSection(variable("NOPE")), unknownTyping),
+        processed(conditionedSection(greaterThanOne("ITEM1.STR")), typing("ITEM1.STR", "string")),
+      ],
+      [
+        [
+          {
+            detail: { element: "qti-variable", expected: "variable", identifier: "NOPE" },
+            path: `${conditionPath}/qti-variable`,
+            rule: "undeclared-variable",
+          },
+        ],
+        [
+          {
+            detail: {
+              acceptsBaseTypes: "integer float",
+              acceptsCardinalities: "single",
+              check: "operand",
+              element: "qti-gt",
+              expressionBaseType: "string",
+              expressionCardinality: "single",
+              operand: "1",
+            },
+            path: `${conditionPath}/qti-gt`,
+            rule: "expression-type",
+          },
+        ],
+        [],
+        [],
         [],
       ],
     );

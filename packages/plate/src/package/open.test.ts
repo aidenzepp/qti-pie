@@ -765,6 +765,122 @@ const atSection = (
   rule: "undeclared-variable",
 });
 
+/**
+ * Write a `qti-pre-condition` of an expression.
+ *
+ * @param expression The expression, as written.
+ * @returns The pre-condition's text.
+ */
+const preConditionXml = (expression: string): string =>
+  `<qti-pre-condition>${expression}</qti-pre-condition>`;
+
+/**
+ * Write a `qti-gt` of a variable over the float 1, whose operands must each be a single integer or
+ * float.
+ *
+ * @param identifier The variable's name.
+ * @returns The expression's text.
+ */
+const greaterXml = (identifier: string): string =>
+  `<qti-gt>${variableXml(identifier)}${oneFloat}</qti-gt>`;
+
+/**
+ * The refusal of an element beneath the section document's item ref `I1`.
+ *
+ * @param rule The refusal's rule.
+ * @param step The element's path from the item ref.
+ * @param detail The refusal's detail.
+ * @returns The refusal's facts.
+ */
+const inSection = (rule: string, step: string, detail: Readonly<Record<string, string>>): Seen => ({
+  detail,
+  document: fileLocation(location, "sections/s2.xml"),
+  location: { kind: "path", path: sectionRefChildAt(step) },
+  rule,
+});
+
+/**
+ * The files of a package whose tests `T`, at `test.xml`, and `T2`, at `test2.xml`, each reach the
+ * section document `S2` through one section ref, each with {@link referringTestXml}'s float `TOTAL`
+ * and an outcome processing that sets it to 1.
+ *
+ * @param itemRef What the section document's item ref `I1` holds, as written.
+ * @returns The package's files, by path.
+ */
+const twoReachingFiles = (itemRef: string) => ({
+  ...referringFiles(
+    settingTotal(oneFloat),
+    sectionRefXml("R", "sections/s2.xml"),
+    sectionXml(itemRef),
+  ),
+  [manifestFile]: manifestXml(
+    resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+    resourceXml("T2", "imsqti_test_xmlv3p0", "test2.xml"),
+    resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+    resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+    resourceXml("S", "imsqti_section_xmlv3p0", "sections/s2.xml"),
+  ),
+  "test2.xml": referringTestXml(
+    settingTotal(oneFloat),
+    sectionRefXml("R", "sections/s2.xml"),
+  ).replace('identifier="T" title="T"', 'identifier="T2" title="T2"'),
+});
+
+/**
+ * The template default of the section document's integer template variable `T` to the float 1,
+ * whose type is not its target's.
+ */
+const floatDefaultXml = `<qti-template-default template-identifier="T">${oneFloat}</qti-template-default>`;
+
+/**
+ * The P8 refusal of the section document's pre-condition over `NOPE`, which no test declares.
+ */
+const undeclaredNope = inSection("undeclared-variable", "qti-pre-condition/qti-variable", {
+  element: "qti-variable",
+  expected: "variable",
+  identifier: "NOPE",
+});
+
+/**
+ * The P20 refusal of {@link floatDefaultXml}.
+ */
+const floatDefaultRefused = inSection("expression-type", "qti-template-default", {
+  element: "qti-template-default",
+  expressionBaseType: "float",
+  expressionCardinality: "single",
+  identifier: "T",
+  outcomeBaseType: "integer",
+  outcomeCardinality: "single",
+  targetKind: "template",
+});
+
+/**
+ * Open a {@link reachPackage} whose outcome processing sets `ITEM1.SCORE` by a
+ * `qti-lookup-outcome-value` of an expression.
+ *
+ * @param expression The expression, as written.
+ * @returns The package's verdict.
+ */
+const openLookingUp = (expression: string) =>
+  openPackage(
+    location,
+    reachPackage(
+      `<qti-lookup-outcome-value identifier="ITEM1.SCORE">${expression}</qti-lookup-outcome-value>`,
+    ),
+  );
+
+/**
+ * Open an {@link openTestingNull} package whose tested expression is a `qti-pattern-match` of
+ * `ITEM2.S`, a string, against a pattern.
+ *
+ * @param pattern The `pattern`, as written.
+ * @returns The package's verdict.
+ */
+const openMatching = (pattern: string) =>
+  openTestingNull(
+    `<qti-pattern-match pattern="${pattern}">${variableXml("ITEM2.S")}</qti-pattern-match>`,
+  );
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -1908,6 +2024,193 @@ describe("package/open.ts", () => {
             refusalsOf(verdict).map((refusal) => [refusal.rule, refusal.document]),
             [["undeclared-variable", fileLocation(location, "sections/s2.xml")]],
           );
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a section document's pre-condition over NOPE, judged under the reaching test, as undeclared-variable at the section document, as pantry's P8 does",
+      () =>
+        Effect.gen(function* sectionUndeclared() {
+          const verdict = yield* openReferring(
+            settingTotal(oneFloat),
+            preConditionXml(variableXml("NOPE")),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [undeclaredNope]);
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a section document's qti-gt over ITEM0.S, a string, or I1.CORRECT, a boolean, judged under the reaching test, as expression-type with check operand, pantry's P23",
+      () =>
+        Effect.gen(function* sectionOperand() {
+          const cases = [
+            ["ITEM0.S", "string"],
+            ["I1.CORRECT", "boolean"],
+          ] as const;
+
+          for (const [reference, expressionBaseType] of cases) {
+            const verdict = yield* openReferring(
+              settingTotal(oneFloat),
+              preConditionXml(greaterXml(reference)),
+            );
+
+            assert.deepStrictEqual(
+              refusalsOf(verdict).map(({ detail, document, location: at, rule }) => [
+                rule,
+                detail["check"],
+                detail["element"],
+                detail["operand"],
+                detail["expressionBaseType"],
+                document,
+                at,
+              ]),
+              [
+                [
+                  "expression-type",
+                  "operand",
+                  "qti-gt",
+                  "1",
+                  expressionBaseType,
+                  fileLocation(location, "sections/s2.xml"),
+                  { kind: "path", path: sectionRefChildAt("qti-pre-condition/qti-gt") },
+                ],
+              ],
+              reference,
+            );
+          }
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a section document's template default of its integer T from a float, judged under the reaching test, as expression-type at the default, pantry's P20",
+      () =>
+        Effect.gen(function* sectionDefault() {
+          const verdict = yield* openReferring(settingTotal(oneFloat), floatDefaultXml);
+
+          assert.deepStrictEqual(refusalsOf(verdict), [floatDefaultRefused]);
+        }),
+    );
+
+    it.effect(
+      "[T-9] refuses a dotted name in a section document that none of the reaching test's readings resolve, judged under the reaching test, as undeclared-variable at the section document (reading 48)",
+      () =>
+        Effect.gen(function* sectionUnread() {
+          const verdict = yield* openReferring(
+            settingTotal(oneFloat),
+            preConditionXml(variableXml("I9.SCORE")),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            atSection("qti-pre-condition/qti-variable", "identifier", {
+              check: "reading",
+              element: "qti-variable",
+              identifier: "I9.SCORE",
+              reading: "48",
+            }),
+          ]);
+        }),
+    );
+
+    it.effect(
+      "[T-9] controls for a section judged under the reaching test: reached by no test it keeps its own verdict, under two tests each refusal is given once, and a pre-condition over TOTAL or I1.SCORE is accepted",
+      () =>
+        Effect.gen(function* sectionControls() {
+          const unreached = yield* openPackage(
+            location,
+            packageOf(
+              referringFiles(
+                settingTotal(oneFloat),
+                "",
+                sectionXml(
+                  `${preConditionXml(variableXml("NOPE"))}${preConditionXml(greaterXml("I9.SCORE"))}${floatDefaultXml}`,
+                ),
+              ),
+            ),
+          );
+          acceptedOf(unreached);
+          assert.isTrue(
+            Option.exists(
+              documentVerdict(resourceOf(unreached, "S")),
+              (alone) => alone === "accepted" || alone === "accepted-with-unsupported",
+            ),
+            "the section document alone is accepted",
+          );
+
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                packageOf(
+                  twoReachingFiles(`${preConditionXml(variableXml("NOPE"))}${floatDefaultXml}`),
+                ),
+              ),
+            ),
+            [undeclaredNope, floatDefaultRefused],
+          );
+
+          for (const reference of ["TOTAL", "I1.SCORE"]) {
+            acceptedOf(
+              yield* openReferring(settingTotal(oneFloat), preConditionXml(greaterXml(reference))),
+            );
+          }
+        }),
+    );
+
+    it.effect(
+      "[T-9] dotted lookup and pattern through the package: the lookup of ITEM1.SCORE from a string is refused once, as expression-type with reading 28, and an integer is accepted",
+      () =>
+        Effect.gen(function* lookupThroughPackage() {
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openLookingUp('<qti-base-value base-type="string">x</qti-base-value>'),
+            ).map(({ detail, document, location: at, rule }) => [
+              rule,
+              detail["element"],
+              detail["identifier"],
+              detail["reading"],
+              detail["table"],
+              document,
+              at,
+            ]),
+            [
+              [
+                "expression-type",
+                "qti-lookup-outcome-value",
+                "ITEM1.SCORE",
+                "28",
+                undefined,
+                fileLocation(location, "test.xml"),
+                { kind: "path", path: ruleAt("qti-lookup-outcome-value") },
+              ],
+            ],
+          );
+          acceptedOf(
+            yield* openLookingUp('<qti-base-value base-type="integer">1</qti-base-value>'),
+          );
+        }),
+    );
+
+    it.effect(
+      "[T-9] dotted lookup and pattern through the package: pattern {ITEM2.N}, an integer, is refused once as expression-type with check reference, pantry's P24, and {ITEM2.S}, a string, and {ITEM9.X}, a literal (ruling R1), are accepted",
+      () =>
+        Effect.gen(function* patternThroughPackage() {
+          assert.deepStrictEqual(refusalsOf(yield* openMatching("{ITEM2.N}")), [
+            {
+              detail: {
+                attribute: "pattern",
+                check: "reference",
+                element: "qti-pattern-match",
+                expectedBaseType: "string",
+                identifier: "ITEM2.N",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: { kind: "path", path: nullTestedAt("qti-pattern-match") },
+              rule: "expression-type",
+            },
+          ]);
+          acceptedOf(yield* openMatching("{ITEM2.S}"));
+          acceptedOf(yield* openMatching("{ITEM9.X}"));
         }),
     );
 
