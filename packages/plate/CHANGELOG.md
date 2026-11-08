@@ -51,10 +51,16 @@ and both of its entry points are unstable until M3.
   (Response Processing: Full) as `limited`.
 - `open` accepts a rule that sets a variable from `qti-field-value`, whatever the field, and
   `openPackage` accepts such a rule or template default in a test, because a `record` declaration
-  types none of its fields. When the field's base type is not the variable's, `score` and
-  `advance` return `OutcomeMismatchError` and do not throw. For example, a `float` `SCORE` set from
-  `integerValue` fails when the candidate types `12`. Read the field whose base type is the
-  variable's, such as `floatValue` for a `float`.
+  types none of its fields. So neither knows the type of an expression whose type follows a
+  field's, such as a `qti-sum` or `qti-max` over the field. When the field's base type, or the type
+  of such an expression, is not the variable's, `score`, `startTest` and `advance` return
+  `OutcomeMismatchError` and do not throw. For example, a `float` `SCORE` set from `integerValue`
+  fails when the candidate types `12`, and so does an `integer` `COUNT` set from the `qti-sum` of
+  `integerValue` and `2.0`, which is a `float`. `startTest` returns it for a template default of
+  the first part that reads a field of a declared record, through `qti-default` or `qti-correct`,
+  before anyone answers. Read the field whose base type is the variable's, such as `floatValue` for
+  a `float`. Keep the type of an expression over a field fixed, such as a `float` set from a sum
+  that includes a `float`.
 - A `qti-multiple`, `qti-ordered` or `qti-repeat` built over a `qti-field-value` is NULL, as one
   built over `qti-custom-operator` is, even when the field holds a value. So `qti-container-size`
   of one is 0.
@@ -66,8 +72,10 @@ and both of its entry points are unstable until M3.
   `ITEM1.RESPONSE`, as the answer the item's record holds, or the NULL record when it holds none.
   Before, it read NULL. `qti-number-correct` and `qti-number-incorrect` match it against its
   declared correct response as `qti-match` compares two records, and `qti-number-responded` counts
-  it when it differs from its declared default. A `record` outcome, template or context variable
-  still reads NULL.
+  it when it differs from its declared default. A `record` outcome or template variable still
+  reads NULL. plate never reads a context variable through an item ref. `openPackage` marks the
+  processing that reads one, or leaves out the template default. When you `open` a test and its
+  items one at a time, that read fails with `UnknownIdentifierError`.
 - `Accepted`'s `item` gains `records`: its `record` response declarations, each with its declared
   correct response and default, absent when the item declares none. `unheld` no longer lists a
   `record` response, unless it or one of its fields has base type `file`.
@@ -110,8 +118,9 @@ and both of its entry points are unstable until M3.
   - `qti-field-value` gives NULL for a field the record lacks, a NULL record and an operand that is
     not a record.
   - plate holds no value of a `record` outcome, template or context variable, `QTI_CONTEXT` among
-    them. The verdict marks processing that reads one, and a test reads one through an item ref as
-    NULL. No printed variable prints a record.
+    them. The verdict marks processing that reads one. A test reads a `record` outcome or template
+    variable through an item ref as NULL, and `openPackage` marks a test's processing that reads an
+    item's context variable that way. No printed variable prints a record.
   - A rule that sets a `record` response is marked `record-set`, so the response keeps the correct
     response and default its declaration writes.
   - `results` writes a NULL record as an empty `candidateResponse`.

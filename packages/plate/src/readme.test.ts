@@ -855,7 +855,7 @@ describe("README.md", () => {
     for (const fragment of [
       "the `duration` of a part, a section or an item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`",
       "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that does not start with a part, section or item ref of the test document itself",
-      "So do a `qti-variable`, `qti-correct` or `qti-default` of a `file` variable, of a `record` variable other than a response, or of a `record` response with a `file` field",
+      "So do a `qti-variable`, `qti-correct` or `qti-default` of a `file` variable, of a `record` outcome or template variable, or of a `record` response with a `file` field",
       "A test's `qti-default` of its own `duration` gives NULL of a single duration",
       "A test reads an item's `numAttempts` as the number of attempts started, the count `results` writes",
       "`qti-number-correct` and `qti-number-incorrect` consider an item's `file` and `record` responses",
@@ -1055,7 +1055,7 @@ describe("README.md", () => {
 
     for (const fragment of [
       "`open` accepts a rule that sets a variable from `qti-field-value`, whatever the field, as pantry does.",
-      "When the field's base type is not the variable's, `score` returns `OutcomeMismatchError` and does not throw.",
+      "When the field's base type, or the type of such an expression, is not the variable's, `score` returns `OutcomeMismatchError` and does not throw.",
       "Read the field whose base type is the variable's, such as `floatValue` for a `float`.",
       "A `qti-multiple`, `qti-ordered` or `qti-repeat` built over a `qti-field-value` is NULL too, even when the field holds a value",
     ]) {
@@ -1063,18 +1063,45 @@ describe("README.md", () => {
     }
     assert.include(
       flatSectionOf("## Template processing"),
-      "The one exception is a default that reads a field through `qti-field-value`",
+      "that `qti-field-value` reads. `openPackage` accepts it, and `startTest` or `advance` returns `OutcomeMismatchError` when its type is not the template variable's",
     );
 
     const outcomes = flatSectionOf("## Outcome processing");
 
     for (const fragment of [
       "in its outcome processing or in an item ref's template default",
-      "When the field's base type is not the variable's, `advance` returns `OutcomeMismatchError`",
+      "is not the variable's, `startTest` or `advance` returns `OutcomeMismatchError` and does not throw.",
       "`open` refuses a test's `record` outcome declaration as it refuses an item's.",
       "and with `value-type` one whose text is not of its own `base-type`",
     ]) {
       assert.include(outcomes, fragment);
+    }
+  });
+
+  it("states repair round 10r in the README: a record outcome or template variable read through an item ref is NULL and a context variable is never read, an aggregate over a field fails as the field does, startTest returns it, and two records match as wholes", () => {
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "plate never reads a context variable through an item ref. `openPackage` marks the processing that reads one, or leaves out the template default. When you `open` a test and its items one at a time, that read fails with `UnknownIdentifierError`.",
+      "When the field's base type, or the type of an expression over it such as a `qti-sum`, is not the variable's, `startTest` or `advance` returns `OutcomeMismatchError` and does not throw.",
+      "`startTest` returns it for a default that it applies as the first part starts, since a default can read a field of the record an item's declaration writes, through `qti-default` or `qti-correct`, before anyone answers.",
+      "read the field whose base type is the variable's, and keep the type of an expression over a field fixed.",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
+    assert.notInclude(outcomes, "of a `record` variable other than a response");
+
+    const scoring = flatSectionOf("## Scoring");
+
+    for (const fragment of [
+      "such as a `qti-sum` or `qti-max` over the field.",
+      "A rule that sets the `integer` `COUNT` from the `qti-sum` of `integerValue` and `2.0` also fails for `12`, because that sum is a `float`.",
+      "Keep the type of an expression over a field fixed: for example, set a `float` from a sum that includes a `float`.",
+      "`qti-match` compares two records as wholes, so they match only when they hold the same fields with the same values *(pending)*.",
+      "A correct response that writes only `stringValue` therefore never matches a typed `12`.",
+      "compare one field instead: the `qti-field-value` of `stringValue` with `qti-match`, or that of `floatValue` with `qti-equal`.",
+    ]) {
+      assert.include(scoring, fragment);
     }
   });
 
