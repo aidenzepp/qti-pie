@@ -1647,17 +1647,21 @@ const builtInIdentifiers: ReadonlySet<string> = new Set([
  * that is not one is refused there: by the item's rules (P8), and by `openPackage` for a test's
  * dotted name.
  *
- * - A dotted name: "Identifiers containing the period character are reserved for use in prefixing"
- *   (`info.txt:10122`), and a test reads such a name through an item ref, test part or section
- *   (reading 48). What it reads is not a response its item declares: an outcome, a template
- *   variable or a built-in. The fix is a response the item declares, written `ITEMREF.RESPONSE`.
+ * - A dotted name a test reads through an item ref, test part or section: "Identifiers containing the
+ *   period character are reserved for use in prefixing" (`info.txt:10122`, reading 48).
+ *   `openPackage` refuses it with the `prefix` its reading reads through, since what it reads is
+ *   not a response its item declares, but an outcome, a template variable or a built-in. The fix is
+ *   a response the item declares, written `ITEMREF.RESPONSE`. A dotted name with no `prefix` is one
+ *   an item or a test declares whole (reading 37 admits a declared dotted identifier), refused by
+ *   the rules; no item ref is read, so it takes the sentence that asks for a declared response.
  * - A built-in ({@link builtInIdentifiers}): no declaration may take its name, so it has no mapping
  *   and no correct response. `numAttempts` and `duration` are "built-in response variables"
  *   (`info.txt:8466`), so the sentence calls each the built-in and never says it is no response.
  *
  * @param refusal The refusal.
  * @param subject The element, or the element's attribute, as the sentence names it.
- * @returns The sentence, or none for a name a declaration can give, whose sentence asks for it.
+ * @returns The sentence, or none for a name a declaration can give, or a dotted name read through
+ *   no ref, whose sentence asks for a declared response.
  */
 const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<string> => {
   if (
@@ -1670,7 +1674,7 @@ const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<
   const name = fact(refusal, "identifier", "");
   const identifier = code(name);
 
-  if (name.includes(".")) {
+  if (Option.isSome(optionalFact(refusal, "prefix"))) {
     return Option.some(
       sentence(
         refusal,
@@ -1704,9 +1708,9 @@ const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<
  *   target lists every kind the rule may set, space-separated, and the sentence offers them as
  *   alternatives (pantry's `DeclaredRefKind`). A test's printed variable carries `declarer:
  *   "test"`, and the sentence names the test as what declares no such variable (pantry's
- *   `binding-declared` for a test). A response that no declaration can give, a dotted name or a
- *   built-in, is worded by {@link undeclarableResponse}, so the sentence never asks for it to be
- *   declared.
+ *   `binding-declared` for a test). A response that no declaration can give, a dotted name read
+ *   through an item ref, test part or section or a built-in, is worded by
+ *   {@link undeclarableResponse}, so the sentence never asks for it to be declared.
  *
  * Each names the element, or the element's attribute when a reference attribute names the
  * variable.

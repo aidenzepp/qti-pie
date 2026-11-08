@@ -1049,7 +1049,7 @@ const textBaseType = (visit: Visit, context: Context): Option.Option<ModelledBas
  * `0` (reading 34). The XSD does not decide, typing `qti-value` as `xs:normalizedString` and
  * `qti-base-value` as `xs:string`; the information model's boolean base type is the boolean
  * primitive's set (`info.txt:72950`), "with permitted values of "true" and "false""
- * (`info.txt:74910`). XML Schema's `1` and `0` belong only to the attributes the XSD types
+ * (`info.txt:74908`). XML Schema's `1` and `0` belong only to the attributes the XSD types
  * `xs:boolean`.
  *
  * @param source The document.

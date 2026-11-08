@@ -194,8 +194,9 @@ and both of its entry points are unstable until M3.
 - The refusal of a `qti-map-response`, `qti-map-response-point` or `qti-correct` that names a
   built-in, such as `numAttempts`, or a dotted name that reads anything but a response, says why
   and what to write instead: a built-in has no declaration, so no mapping or correct response, and
-  the fix is a declared response, written `ITEMREF.RESPONSE` for a dotted name. Before, it said to
-  declare the name, which no declaration can give. The rule and the verdict do not change.
+  the fix is a declared response, written `ITEMREF.RESPONSE` for a dotted name read through an item
+  ref, test part or section. Before, it said to declare the name, which no declaration can give.
+  The rule and the verdict do not change.
 
 ### Template processing (M3)
 
