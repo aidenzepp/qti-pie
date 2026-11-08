@@ -783,7 +783,7 @@ describe("qti/expressions.ts, an LTI item ref", () => {
         "variable",
         "declaration",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ],
       [
@@ -792,7 +792,7 @@ describe("qti/expressions.ts, an LTI item ref", () => {
         "target",
         "declaration",
         "declarationKind",
-        "declCardinality",
+        "declCardinalities",
         "declBaseTypes",
       ],
     );
