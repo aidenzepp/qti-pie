@@ -45,7 +45,8 @@ export const documentLayer = {
 };
 
 /**
- * Order relation names by their code points, the order the merge reports its first conflict in.
+ * Order relation names by their code points, the order each list here is kept in, so
+ * `roster.test.ts` compares each as one set with the relations a real import writes.
  *
  * @param names - The names.
  * @returns The names, sorted.
@@ -71,15 +72,19 @@ export const documentLayerNames = sorted(Struct.keys(documentLayer));
  * `writtenNames`. A const of its own: given to `Struct.omit` as a nested call, `Struct.pick`'s
  * result is inferred with no keys, and the names omitted from it are refused.
  */
-const writtenRelations = Struct.pick(Qti.relations, writtenNames);
+export const writtenRelations = Struct.pick(Qti.relations, writtenNames);
 
 /**
  * Every overlay's relation, by its name: each written relation but the two roots, `Node` and
  * `Package`, and the document layer's. A record read from the schema's own, so a relation a module
- * adds joins it with no edit here, and its keys are names the type checker knows: `overlayRowsOf`
- * (`#pantry/import/overlays/index.ts`) unions `OverlayRows` at exactly these.
+ * adds joins it with no edit here; `overlayRowsOf` (`#pantry/import/overlays/index.ts`) unions
+ * `OverlayRows` over it, which the type checker holds to name every relation of `OverlayRows`.
  */
-const overlayRelations = Struct.omit(writtenRelations, ["Node", "Package", ...documentLayerNames]);
+export const overlayRelations = Struct.omit(writtenRelations, [
+  "Node",
+  "Package",
+  ...documentLayerNames,
+]);
 
 /**
  * Every overlay's relation name, the keys of `overlayRelations`, in code point order.

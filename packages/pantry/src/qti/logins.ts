@@ -12,10 +12,9 @@
  * Description.
  */
 import { login, workload } from "@bjornpagen/grizzle";
-import { Result } from "effect";
+import { pipe, Record as Rec } from "effect";
 import { documentScan, documentsOf, entriesOf } from "#pantry/export/scan.ts";
-import { unionsOf } from "#pantry/import/overlays/index.ts";
-import { writtenNames } from "#pantry/import/roster.ts";
+import { writtenRelations } from "#pantry/import/roster.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { Author } from "#pantry/qti/roles.ts";
@@ -29,12 +28,11 @@ import { Qti } from "#pantry/qti/schema.ts";
 export const exportWork = workload(Author, { documentScan, documentsOf, entriesOf });
 
 /**
- * A package's inputs with no row: each written relation's empty keyed set, the union of no part,
- * which has no two rows to conflict.
+ * A package's inputs with no row: each written relation's empty keyed set.
  */
-const noInputs = Result.getOrThrowWith(
-  unionsOf<PackageInputs>(writtenNames, []),
-  (conflict) => conflict,
+const noInputs: PackageInputs = pipe(
+  writtenRelations,
+  Rec.map(() => new Map<string, never>()),
 );
 
 /**

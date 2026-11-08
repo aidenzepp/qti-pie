@@ -15,7 +15,7 @@
  * (`#pantry/qti/schema.ts`): a ChangeSet over the author role writes only the relations the schema
  * holds.
  */
-import { Equal, Formatter, Result, Schema } from "effect";
+import { Equal, Formatter, Option, Result, Schema, Struct } from "effect";
 import { rowsOf as declarationRowsOf } from "#pantry/import/overlays/declarations.ts";
 import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
 import {
@@ -77,7 +77,7 @@ import { assembledRowsOf, rowsOf as testRowsOf } from "#pantry/import/overlays/t
 import type { AssembledRows, TestRows } from "#pantry/import/overlays/tests.ts";
 import type { PlacedDocument } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { overlayNames } from "#pantry/import/roster.ts";
+import { overlayRelations } from "#pantry/import/roster.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 
 /**
@@ -206,45 +206,47 @@ export const unionOf = <Row>(
 };
 
 /**
- * Union every part's keyed sets, relation by relation: {@link unionOf} of each relation `names`
- * lists, in their order, over the parts that hold it, so a relation no part holds is its empty
- * set. The relations are a set of
- * keys of one record type, `OverlayRows` or the document layer's, each of which
- * `#pantry/import/roster.ts` reads from the schema, so a relation the schema gains is unioned with
- * no edit here.
- *
- * @param names - The record's relation names, each once.
- * @param parts - The builders' rows, each holding some of the relations.
- * @returns Every relation's union; or the {@link OverlayConflict} of the first relation, in
- *   `names`' order, met with two different rows at one key.
+ * The union of one relation's keyed sets over every part ({@link unionOf}), as a type-level
+ * function of the relation, so `Struct.map` gives each relation of `Rows` its own row type. The
+ * relation's name, its key in the record mapped over, picks its keyed set out of each part.
  */
-export const unionsOf = <R extends { readonly [K in keyof R]: ReadonlyMap<string, unknown> }>(
-  names: readonly (keyof R & string)[],
-  parts: readonly Partial<R>[],
-): Result.Result<R, OverlayConflict> =>
-  Result.map(
-    Result.all(
-      Object.fromEntries(
-        names.map(
-          (name) =>
-            [
-              name,
-              unionOf(
-                name,
-                parts.flatMap((part) => {
-                  const set = part[name];
+interface UnionAt<Rows> extends Struct.Lambda {
+  <Name extends keyof Rows & string>(relation: {
+    readonly name: Name;
+  }): Result.Result<ReadonlyMap<string, Rows[Name]>, OverlayConflict>;
+  readonly "~lambda.out": this["~lambda.in"] extends {
+    readonly name: infer Name extends keyof Rows;
+  }
+    ? Result.Result<ReadonlyMap<string, Rows[Name]>, OverlayConflict>
+    : never;
+}
 
-                  return set === undefined ? [] : [set];
-                }),
-              ),
-            ] as const,
+/**
+ * Union every part's keyed sets, relation by relation: {@link unionOf} of each relation of
+ * `relations` over the parts that hold it, so a relation no part holds is its empty set.
+ * `relations` is a record of the relations themselves, each under its own name, the overlays' or
+ * the document layer's, which `#pantry/import/roster.ts` reads from the schema, so a relation the
+ * schema gains is unioned with no edit here. `Rows`, each relation's row type, is read from the
+ * parts alone, and `Struct.map` over `relations` ({@link UnionAt}) gives each union those rows.
+ *
+ * @param relations - The relations, each under its own name: at least every relation of `Rows`.
+ * @param parts - The builders' rows, each holding some of the relations' keyed sets.
+ * @returns Every relation's union; or the {@link OverlayConflict} of the first relation, in
+ *   `relations`' order, met with two different rows at one key.
+ */
+export const unionsOf = <Rows>(
+  relations: NoInfer<{ readonly [Name in keyof Rows]: { readonly name: Name } }>,
+  parts: readonly { readonly [Name in keyof Rows]?: ReadonlyMap<string, Rows[Name]> }[],
+) =>
+  Result.all(
+    Struct.map(
+      Struct.lambda<UnionAt<Rows>>(({ name }) =>
+        unionOf(
+          name,
+          parts.flatMap((part) => Option.toArray(Option.fromUndefinedOr(part[name]))),
         ),
       ),
-    ),
-    // SAFETY: the record holds one union at each of `names`, the keys of `R`, each a keyed set of
-    // the rows the parts give that relation, which are `R`'s rows there.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-    (unions) => unions as R,
+    )(relations),
   );
 
 /**
@@ -374,7 +376,7 @@ export const overlayPartsOf = (
  * LOM languages' witnesses from every document's identity rows (`languageRowsOf`), and in place
  * under each item's assembly (`placedLanguageRowsOf`). The results are merged into one keyed set
  * per relation by {@link unionsOf}, over the overlay relations `#pantry/import/roster.ts` reads from
- * the schema.
+ * the schema (`overlayRelations`).
  *
  * @param documents - The package's documents, each listed and under its ids; the manifest is the
  *   one no resource names (resource type `none`).
@@ -387,4 +389,4 @@ export const overlayRowsOf = (
   documents: readonly PlacedDocument[],
   mint: () => NodeId,
 ): Result.Result<OverlayRows, OverlayConflict> =>
-  unionsOf<OverlayRows>(overlayNames, overlayPartsOf(documents, mint));
+  unionsOf(overlayRelations, overlayPartsOf(documents, mint));

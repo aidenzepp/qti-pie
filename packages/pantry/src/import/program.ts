@@ -26,12 +26,11 @@ import { overlayRowsOf, unionsOf } from "#pantry/import/overlays/index.ts";
 import { namedDocuments, rowsOf as packageRowsOf } from "#pantry/import/overlays/package.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
-import { documentLayerNames } from "#pantry/import/roster.ts";
+import { documentLayer } from "#pantry/import/roster.ts";
 import { ruleOfError } from "#pantry/import/refusal.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type {
-  DocumentLayerRows,
   ListedDocument,
   NodeMember,
   NodeRoot,
@@ -224,9 +223,7 @@ export const readProgram = Effect.fn("import.readProgram")(function* readProgram
   const placed = ids.documents;
   const overlays = yield* Effect.orDie(Effect.fromResult(overlayRowsOf(placed, mint)));
   const layers = placed.map(({ ids: held, listed }) => documentRowsOf(listed, held));
-  const layer = yield* Effect.orDie(
-    Effect.fromResult(unionsOf<DocumentLayerRows>(documentLayerNames, layers)),
-  );
+  const layer = yield* Effect.orDie(Effect.fromResult(unionsOf(documentLayer, layers)));
   const roots = new Map<string, NodeRoot>(
     placed.map(({ ids: held, listed }) => {
       const root = rootInsertOf(listed.tree, held);
