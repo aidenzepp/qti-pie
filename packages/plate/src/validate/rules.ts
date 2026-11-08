@@ -1045,7 +1045,12 @@ const textBaseType = (visit: Visit, context: Context): Option.Option<ModelledBas
  * Reading 1 and the value model's lexical spaces (research `ea422814` §3): a `qti-value` in a
  * declaration's `qti-correct-response` or `qti-default-value` parses under the declaration's base
  * type, and a `qti-base-value` under its own `base-type`, after reading 7's trim of element text,
- * which the value model's `parseElementText` applies. A boolean is `true` or `false` (reading 34).
+ * which the value model's `parseElementText` applies. A boolean is `true` or `false`, never `1` or
+ * `0` (reading 34). The XSD does not decide, typing `qti-value` as `xs:normalizedString` and
+ * `qti-base-value` as `xs:string`; the information model's boolean base type is the boolean
+ * primitive's set (`info.txt:72950`), "with permitted values of "true" and "false""
+ * (`info.txt:74910`). XML Schema's `1` and `0` belong only to the attributes the XSD types
+ * `xs:boolean`.
  *
  * @param source The document.
  * @param visit The element's visit.
