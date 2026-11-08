@@ -104,7 +104,7 @@ const law = "MathML cn form";
 const rule = "attribute-lexical";
 
 describe.skipIf(!hasLease)(
-  "qti/mathml-cn.db.test.ts, on the lease",
+  "qti/mathml-cn.oracle.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {

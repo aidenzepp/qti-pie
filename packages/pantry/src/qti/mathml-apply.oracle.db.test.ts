@@ -176,7 +176,7 @@ const applied = (stated: bigint | undefined, members: number): readonly Stated[]
 };
 
 describe.skipIf(!hasLease)(
-  "qti/mathml-apply.db.test.ts, on the lease",
+  "qti/mathml-apply.oracle.db.test.ts, on the lease",
   { timeout: leaseTestTimeoutMs },
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
