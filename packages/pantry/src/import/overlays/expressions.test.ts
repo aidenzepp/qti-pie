@@ -1056,8 +1056,11 @@ const packageRowsOf = (
         })),
     };
 
+    const declared = declarationRowsOf(tree, ids);
+
     return {
-      cardinalities: declarationRowsOf(tree, ids).DeclarationCardinality,
+      cardinalities: declared.DeclarationCardinality,
+      declarations: declared.DeclarationIdentifier,
       expressions: rowsOf(tree, ids),
       ids,
       tests: testRowsOf(tree, ids),
@@ -2073,7 +2076,8 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
       // declares and which tables each declaration holds, against the lookups the builder writes
       // (M2): a reference that names no declaration has an absent row, every row says what the
       // document declares, every test variables' unwritten `base-type` is `unknown`, and every
-      // table slot a map response or a lookup reads is the table its declaration holds.
+      // table a map response claims is the table its declaration holds, `none` where it holds
+      // none.
       // Bound: every fixture, 37 documents.
       Effect.gen(function* claimsProved() {
         for (const { file } of frozen) {
@@ -2113,21 +2117,17 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
           }
 
           for (const reference of rows.VariableRef.values()) {
-            const declaration = rows.VariableRefDeclaration.get(
-              JSON.stringify([reference.node, reference.attribute]),
-            );
-            const table =
-              declaration === undefined
-                ? undefined
-                : rows.DeclarationTable.get(declaration.declaration);
             const holds = declared.get(reference.identifier) ?? new Set<string>();
             if (
               reference.resolution === "declared" &&
               reference.attribute === "identifier" &&
               reference.kind === "qti-map-response"
             ) {
-              assert.strictEqual(table?.mapping, holds.has("qti-mapping") ? "qti-mapping" : "none");
-              assert.strictEqual(reference.table, table?.mapping, file);
+              assert.strictEqual(
+                reference.table,
+                holds.has("qti-mapping") ? "qti-mapping" : "none",
+                file,
+              );
             }
           }
         }

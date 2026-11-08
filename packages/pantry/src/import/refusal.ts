@@ -51,7 +51,6 @@ import {
 import {
   Affix,
   AssembledReference,
-  DeclarationTable,
   Expression,
   ExpressionAttribute,
   expressionLawsByName,
@@ -836,7 +835,6 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
   [generatedOf(MapKeyDirectedPair, "value"), "E1 derived"],
   ...[
     AssembledReference,
-    DeclarationTable,
     Expression,
     ExpressionAttribute,
     HeldType,

@@ -88,7 +88,6 @@ const hanging: ReadonlySet<string> = new Set([
   "AreaMapping",
   "BindingDeclaration",
   "ContextRefDeclaration",
-  "DeclarationTable",
   "FeedbackRefDeclaration",
   "LookupTable",
   "LookupValue",
@@ -107,7 +106,6 @@ const hanging: ReadonlySet<string> = new Set([
   "TemplateDefaultTarget",
   "TemplateRefDeclaration",
   "Value",
-  "VariableLookup",
   "VariableRefDeclaration",
 ]);
 

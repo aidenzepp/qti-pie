@@ -20,11 +20,11 @@
  *   to a declaration of its document (`declarationIdentifierRef`, whatever the declaration's
  *   cardinality spells: spec reading 159), a built-in variable (the installed `BuiltInVariable`,
  *   A63), or nothing, which only a document that is no item may hold; a claim of no declaration is
- *   proved by {@link VariableLookup}, and a table it reads by {@link DeclarationTable} (M2). The
- *   type a setter or a lookup sets its variable to is a row of its own, {@link HeldType}, and so is
- *   the cardinality of each declaration a reference reads one of, where it has one
- *   ({@link VariableRefCardinality}, {@link TemplateDefaultCardinality},
- *   {@link ReadingCardinality}).
+ *   proved by {@link VariableLookup} (M2), and a table it reads by that table's own row, which
+ *   hangs from its declaration (`Mapping`, `AreaMapping`, `LookupTable`). The type a setter or a
+ *   lookup sets its variable to is a row of its own, {@link HeldType}, and so is the cardinality of
+ *   each declaration a reference reads one of, where it has one ({@link VariableRefCardinality},
+ *   {@link TemplateDefaultCardinality}, {@link ReadingCardinality}).
  * - **{@link ExpressionAttribute}** carries the attributes an expression's type follows from
  *   (`base-type`, `name`, `weight-identifier`), an unwritten one included, {@link Literal} a base
  *   value's text, and {@link ProcessingTemplate} a response processing's published template.
@@ -580,49 +580,19 @@ export const ProcessingTemplate = relation(
 );
 
 /**
- * The tables a declaration holds, keyed by its node: the null object `none` in each slot it leaves
- * empty, so a reference that reads a mapping, an area mapping or a lookup table reads whether its
- * declaration holds one (M2, `representation-gaps.md` §1). A row exists for every declaration that
- * holds a table, forced by each table's containment, and for every declaration a map response or a
- * lookup names; a slot says a table only where one hangs from the declaration.
- *
- * - `mapping`: `qti-mapping` or `none`; `areaMapping`: `qti-area-mapping` or `none`, a response's two
- *   optional tables;
- * - `lookup`: `qti-match-table`, `qti-interpolation-table` or `none`, an outcome's one optional
- *   lookup table.
- */
-export const DeclarationTable = relation(
-  "DeclarationTable",
-  {
-    areaMapping: closedId(ReferencedTable),
-    declaration: uuid,
-    lookup: closedId(ReferencedTable),
-    mapping: closedId(ReferencedTable),
-  },
-  ["declaration"],
-);
-
-/**
- * Whether a document declares a name, keyed by the document and the name (M2): each name a
- * document declares is forced in, `declared`, whatever its declaration's cardinality spells (spec
- * reading 159), its row naming a declaration of that name with its kind and its counts of
- * cardinalities and base types, the one `Declaration key` allows; every other row is a probe of a
- * name the document does not declare, its declaration the document itself, its kind the null
- * object `qti-outcome-declaration`, and no cardinality and no base type. The key leaves no room for
- * an absent row where a declaration is, so a probe reads the truth: a reference's claim that it
- * names no declaration, a reading's variable, a mapping target.
+ * Whether a document declares a name, keyed by the document and the name (M2,
+ * `representation-gaps.md` §4.3): each name a document declares is forced in, `declared`, whatever
+ * its declaration's cardinality spells (spec reading 159), and justified by its
+ * `DeclarationIdentifier`; every other row is a probe of a name the document does not declare. The
+ * key leaves no room for an absent row where a declaration is, so a probe reads the truth: a
+ * reference's claim that it names no declaration, a reading's variable, a mapping target. The
+ * verdict is the row's one datum: a declared name's declaration, its kind and its counts of
+ * cardinalities and base types are its `DeclarationIdentifier`'s, which a reading of it reads
+ * through `declarationIdentifierRef`, so a probe holds no declaration it does not have.
  */
 export const VariableLookup = relation(
   "VariableLookup",
-  {
-    baseTypes: natural,
-    cardinalities: natural,
-    declaration: uuid,
-    declarationKind: closedId(DeclarationKind),
-    declared: pg.boolean,
-    document: uuid,
-    name: keyText,
-  },
+  { declared: pg.boolean, document: uuid, name: keyText },
   ["document", "name"],
 );
 
@@ -1010,7 +980,6 @@ export const ReadingCardinality = relation(
  */
 export const referenceRelations = {
   AssembledReference,
-  DeclarationTable,
   HeldType,
   MappingLookup,
   MappingSourceDeclaration,
@@ -1342,43 +1311,23 @@ const tableClaimed = (v: VariableRefRow) =>
 const claimedTables = select(VariableRef, (v) => v.ne(v.table, "none"));
 
 /**
- * The references that read their declaration's table of one slot: a map response's mapping, a map
- * response point's area mapping and a lookup's lookup table, where the reference names a declared
- * variable by its `identifier`. Each reads the slot of its declaration's {@link DeclarationTable}.
+ * The references that claim one table of their declaration: a map response's mapping, a map
+ * response point's area mapping, and a lookup's match or interpolation table. A reference claims a
+ * table only where it names a declared variable by its `identifier` ({@link tableClaimed}), so each
+ * has its {@link VariableRefDeclaration}, and its claim is a containment into the table's own row,
+ * keyed by its declaration: a declaration that holds no such table has none, so no reference claims
+ * it. A map response, a map response point or a lookup that claims no table is refused by
+ * `Mapped_response` or `Lookup_type`.
  *
- * @param kind - The referring kind.
+ * @param table - The table claimed.
  * @returns The selection.
  */
-const tableReaders = (kind: (typeof NodeKind.handles)[number]) =>
-  select(VariableRefDeclaration, (d) => d.and(d.eq(d.kind, kind), d.eq(d.attribute, "identifier")));
+const tableClaims = (table: Exclude<(typeof ReferencedTable.handles)[number], "none">) =>
+  select(VariableRefDeclaration, (d) => d.eq(d.table, table));
 
 /**
- * The declarations whose table slot holds one table: each a containment into that table's overlay
- * and back, by its declaration.
- */
-const mappedDeclarations = select(DeclarationTable, (d) => d.eq(d.mapping, "qti-mapping"));
-
-/**
- * The declarations that hold an area mapping.
- */
-const areaMappedDeclarations = select(DeclarationTable, (d) =>
-  d.eq(d.areaMapping, "qti-area-mapping"),
-);
-
-/**
- * The declarations that hold a match table.
- */
-const matchedDeclarations = select(DeclarationTable, (d) => d.eq(d.lookup, "qti-match-table"));
-
-/**
- * The declarations that hold an interpolation table.
- */
-const interpolatedDeclarations = select(DeclarationTable, (d) =>
-  d.eq(d.lookup, "qti-interpolation-table"),
-);
-
-/**
- * The lookup tables that are match tables, each keyed by its declaration as its slot is.
+ * The lookup tables that are match tables, each keyed by its declaration, which a lookup that
+ * claims one reads.
  */
 const matchTables = select(LookupTable, (t) => t.eq(t.kind, "qti-match-table"));
 
@@ -1849,8 +1798,8 @@ export const readingFamily = counted(
  *
  * - **the lookups:** `VariableLookup`, `NameLookup` and `MappingLookup`, each with its facts forced
  *   in and its found rows justified, every named declaration's name whatever its cardinality spells
- *   (spec reading 159); `VariableLookup`'s and `NameLookup`'s absent rows' null objects
- *   (`E1_derived`); `MappingLookup` holds its verdict alone;
+ *   (spec reading 159); `NameLookup`'s absent rows' null objects (`E1_derived`); `VariableLookup`
+ *   and `MappingLookup` each hold their verdict alone;
  * - **an item ref's declarations,** each a row of its own that every template default and every
  *   mapping must have, so a name its item declares nothing under is refused by that law alone: a
  *   template default's {@link TemplateDefaultTarget}, a template declaration
@@ -1881,40 +1830,19 @@ export const referenceLawsByName = {
   ],
   "E1 derived": [
     // VariableLookup: every declared name forced in, whatever its declaration's cardinality spells
-    // (spec reading 159), each found one justified, the absent null objects. The force-in reads a
-    // declaration's name, never its node: the lookup is keyed by the document and the name, so a
-    // force-in of each declaration's node would state Declaration key again, and a second
-    // declaration of a name would break both. Declaration key alone says a name's declaration is
-    // one, and the justification makes a found row that one, with its kind and counts.
+    // (spec reading 159), and each found one justified. Both read a declaration's name, never its
+    // node: the lookup is keyed by the document and the name, so a force-in of each declaration's
+    // node would state Declaration key again, and a second declaration of a name would break both.
+    // Declaration key alone says a name's declaration is one.
     contained(
       on(DeclarationIdentifier, "document", "identifier", constant(true)),
       on(VariableLookup, "document", "name", "declared"),
     ),
     contained(
-      on(
-        declaredNames,
-        "declaration",
-        "document",
-        "name",
-        "declarationKind",
-        "cardinalities",
-        "baseTypes",
-      ),
-      declarationIdentifierRef,
+      on(declaredNames, "document", "name"),
+      on(DeclarationIdentifier, "document", "identifier"),
     ),
     key(on(absentNames, "document", "name")),
-    check("E1_derived", VariableLookup, (l) =>
-      l.or(
-        l.and(l.eq(l.declared, true), l.ne(l.declaration, l.document)),
-        l.and(
-          l.eq(l.declared, false),
-          l.eq(l.declaration, l.document),
-          l.eq(l.declarationKind, "qti-outcome-declaration"),
-          l.eq(l.baseTypes, 0n),
-          l.eq(l.cardinalities, 0n),
-        ),
-      ),
-    ),
     // NameLookup: every written element of an assembly forced in, each found one justified.
     contained(
       on(AssembledName, "assembly", "identifier", "node", "placements"),
@@ -2223,22 +2151,14 @@ export const referenceLawsByName = {
     contained(
       on(
         declaredReadings,
+        "declaration",
         "lookupDocument",
         "variable",
-        "declaration",
         "declarationKind",
         "declCardinalities",
         "declBaseTypes",
       ),
-      on(
-        VariableLookup,
-        "document",
-        "name",
-        "declaration",
-        "declarationKind",
-        "cardinalities",
-        "baseTypes",
-      ),
+      declarationIdentifierRef,
     ),
     check("E1_derived", Reading, (r) =>
       r.and(
@@ -2747,40 +2667,18 @@ export const expressionLawsByName = {
       ),
       on(absentNames, "document", "name"),
     ),
-    // DeclarationTable: each declaration's tables, both ways, and each table a reference reads.
+    // A declaration's tables, each a row of its own keyed by the declaration, at most one of each
+    // slot, and each table a reference claims, its declaration's: a slot the declaration leaves
+    // empty has no row, so no reference claims it.
     key(on(Mapping, "declaration")),
     key(on(AreaMapping, "declaration")),
     key(on(LookupTable, "declaration")),
-    key(on(mappedDeclarations, "declaration")),
-    key(on(areaMappedDeclarations, "declaration")),
-    key(on(matchedDeclarations, "declaration")),
-    key(on(interpolatedDeclarations, "declaration")),
-    contained(on(Mapping, "declaration"), on(mappedDeclarations, "declaration")),
-    contained(on(mappedDeclarations, "declaration"), on(Mapping, "declaration")),
-    contained(on(AreaMapping, "declaration"), on(areaMappedDeclarations, "declaration")),
-    contained(on(areaMappedDeclarations, "declaration"), on(AreaMapping, "declaration")),
-    contained(on(matchTables, "declaration"), on(matchedDeclarations, "declaration")),
-    contained(on(matchedDeclarations, "declaration"), on(matchTables, "declaration")),
-    contained(on(interpolationTables, "declaration"), on(interpolatedDeclarations, "declaration")),
-    contained(on(interpolatedDeclarations, "declaration"), on(interpolationTables, "declaration")),
-    check("E1_derived", DeclarationTable, (d) =>
-      d.and(
-        d.in(d.mapping, ["none", "qti-mapping"]),
-        d.in(d.areaMapping, ["none", "qti-area-mapping"]),
-        d.in(d.lookup, ["none", "qti-match-table", "qti-interpolation-table"]),
-      ),
-    ),
+    contained(on(tableClaims("qti-mapping"), "declaration"), on(Mapping, "declaration")),
+    contained(on(tableClaims("qti-area-mapping"), "declaration"), on(AreaMapping, "declaration")),
+    contained(on(tableClaims("qti-match-table"), "declaration"), on(matchTables, "declaration")),
     contained(
-      on(tableReaders("qti-map-response"), "declaration", "table"),
-      on(DeclarationTable, "declaration", "mapping"),
-    ),
-    contained(
-      on(tableReaders("qti-map-response-point"), "declaration", "table"),
-      on(DeclarationTable, "declaration", "areaMapping"),
-    ),
-    contained(
-      on(tableReaders(lookupKindHandle), "declaration", "table"),
-      on(DeclarationTable, "declaration", "lookup"),
+      on(tableClaims("qti-interpolation-table"), "declaration"),
+      on(interpolationTables, "declaration"),
     ),
     contained(on(claimedTables, "kind", "table"), on(TableReader, "kind", "table")),
     check("E1_derived", VariableRef, (v) =>

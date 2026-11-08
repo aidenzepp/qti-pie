@@ -713,46 +713,6 @@ export const fixed = {
     fix: "FB-META: an assessment object's identifier and title are rows of their own (ObjectIdentifier, ObjectTitle), so a root that writes neither still has its AssessmentObject, and a record whose document writes no identifier or title has no witness row (spec reading 148)",
     owner: "FB-META",
   },
-  "import-only-law: E1 derived, contained DeclarationIdentifier(document, identifier, node, declarationKind, cardinalities, baseTypes) in VariableLookup(document, name, declaration, declarationKind, cardinalities, baseTypes)":
-    {
-      files: [
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata>
-        
-        <schemaversion>3.0.0</schemaversion>
-        
-    </metadata><resources>
-        
-        <resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml">
-            
-        </resource>
-        
-        
-        
-    </resources></manifest>`,
-        ],
-        [
-          "rtest01/rtest01-set01.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <qti-response-declaration identifier="RESPONSE" cardinality="single">
-        
-    </qti-response-declaration><qti-response-declaration identifier="RESPONSE" cardinality="single">
-        
-    </qti-response-declaration>
-    
-    
-    
-</qti-assessment-item>`,
-        ],
-      ],
-      fix: "reading 74, FIX-DUPDECL: VariableLookup forces in each name a document declares, never each declaration's node, so a second declaration of a name is one lookup row and Declaration key alone refuses it",
-      owner: "OL",
-    },
   "import-only-law: E1 derived, contained Expression(kind, baseType) in ResultBase(kind, base)": {
     files: [
       [

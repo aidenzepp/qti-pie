@@ -276,6 +276,7 @@ export const overlayPartsOf = (
   const referenced = assembledExpressionRowsOf(
     built.map(({ document, rows }) => ({
       cardinalities: rows.declarations.DeclarationCardinality,
+      declarations: rows.declarations.DeclarationIdentifier,
       expressions: rows.expressions,
       ids: document.ids,
       tests: rows.tests,
