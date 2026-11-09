@@ -1130,6 +1130,19 @@ export const generatedRecorded: readonly Recorded[] = [
     rule: "attribute-lexical",
   },
   {
+    class: "attribute-value",
+    detail:
+      /^value domain at \S+: (?:mime-type|type): "(?:[^"\\]|\\.)*" is outside MimeTypeDType \(reading 135\)/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 135,
+      says: "A MIME type is RFC 2045's type and subtype: two tokens joined by a slash.",
+      why: "a MIME type is two RFC 2045 tokens joined by a slash, and a token holds no space; the XSD's MimeTypeDType pattern admits a space",
+    },
+    rule: "attribute-lexical",
+  },
+  {
     class: "content",
     detail:
       /^N6 ancestry at \S*\/qti-template-block(?:\.rubric)?\[\d+\]\/\S*: \S+ sits in \{[^}]*\btmpl\b[^}]*\}: Banned holds \{[^}]*\btmpl\b[^}]*\}/u,
@@ -1196,6 +1209,28 @@ export const generatedRecorded: readonly Recorded[] = [
     rule: "attribute-lexical",
   },
   {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 124,
+      says: "A `source` in a `picture` carries `srcset`, and one in an `audio` or a `video` carries `src`.",
+      why: "a source in an audio or a video carries src, as the HTML Standard decides the information model's 5.135.1; the XSD makes src optional",
+    },
+    rule: "source-src",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 124,
+      says: "A `source` in a `picture` carries `srcset`, and one in an `audio` or a `video` carries `src`.",
+      why: "a source in a picture carries srcset, which the information model requires there (5.135.3); the XSD makes srcset optional",
+    },
+    rule: "source-srcset",
+  },
+  {
     class: "content",
     detail:
       /^codec at \/: The element \S+ in \S+ is in the MathML namespace, and its parent admits no MathML element of that name, while MathML content stands only inside an m:math element/u,
@@ -1257,6 +1292,20 @@ export const generatedRecorded: readonly Recorded[] = [
       why: "a qti-gap lies in a gap-match interaction, its nearest; the XSD admits it in any phrasing container, where it may lie in no interaction",
     },
     rule: "owner-copy",
+  },
+  {
+    class: "identity",
+    detail:
+      /^DocumentId key at \/\S*\/qti-context-declaration\[\d+\]: a second element purports the id [\s\S]*, which \/\S* already holds$/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 74,
+      says: "For a context's identifier among the document's IDs it is one, and the information model is followed over the XSD.",
+      why: "a context declaration's identifier is unique among its document's IDs as a response declaration's is; 3.0.1's XSD types it IdentifierDType, no xs:ID, so xmllint keys nothing there",
+    },
+    rule: "document-key",
+    versions: ["3.0.1"],
   },
   {
     class: "beyond",
