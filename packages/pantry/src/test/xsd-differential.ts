@@ -19,11 +19,13 @@ import { Effect, Option, Result } from "effect";
 import type { FileSystem } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
+import { governorOf } from "#pantry/grammar/attributes.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { fragmentRoots } from "#pantry/grammar/facets.ts";
 import { isForeignKind } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { noType } from "#pantry/grammar/xsi.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
@@ -45,6 +47,7 @@ import {
   asiNamespace,
   xlinkNamespace,
   xmlNamespace,
+  xsNamespace,
   xsiNamespace,
 } from "#pantry/vocab/namespaces.ts";
 import { foreignRoots } from "#pantry/vocab/open.ts";
@@ -337,6 +340,35 @@ const invalidIdRecord: Recorded = {
 };
 
 /**
+ * The content libxml2 skips: libxml2 2.9.13 assesses nothing more of an element once it refuses the
+ * element's type, cvc-type clause 1 ("The type definition is absent.": an `xsi:type` that names no
+ * type of the document's schema set, or none at all) or cvc-type clause 3.1.2 ("Element content is
+ * not allowed, because the type definition is simple.": an element child of an element a simple
+ * type governs). `xmlSchemaValidateElem` sets `skipDepth` on the first, and
+ * `xmlSchemaValidateChildElem` on the second, after which the element's remaining content, its
+ * descendants and its simple value are never assessed. XML Schema assesses them all (Part 1,
+ * 3.3.4, Schema-Validity Assessment (Element), clause 2: every child, laxly where no type governs
+ * its parent, as spec reading 60 reads it), and so does the law oracle, so each law refusal there
+ * is the law oracle's alone: one of a node below such an element, of the element itself under
+ * cvc-type clause 1, and of its simple value under clause 3.1.2.
+ *
+ * Only an element a wildcard or the codec leaves to lax assessment reaches such a refusal, since
+ * the codec refuses a strictly assessed element whose `xsi:type` names no type, so the detail is a
+ * law refusal at a node within a foreign element. The corpus matches it by that alone; a generated
+ * document's difference matches it only at the places the document's rows show libxml2 skipped
+ * ({@link isSkippedContent}).
+ */
+export const skippedContentRecord: Recorded = {
+  detail:
+    /^.+? at \/\S*?(?:foreign-element|no-namespace-element|own-namespace-element)\[\d+\]\S*: /u,
+  direction: "oracle-only",
+  reason: {
+    _tag: "libxml2",
+    why: "libxml2 assesses nothing more of an element once cvc-type clause 1 or 3.1.2 refuses its type: not its remaining content, its descendants or its simple value (xmlSchemaValidateElem and xmlSchemaValidateChildElem set skipDepth in v2.9.13)",
+  },
+};
+
+/**
  * The classes of disagreement libxml2's validator shows wherever they apply, on corpus and
  * generated documents alike, each shown by a control test below. Each run counts them; none goes
  * stale.
@@ -353,6 +385,7 @@ export const libxml2Records: readonly Recorded[] = [
   invalidIdRecord,
   paddedTypeRecord,
   widenedOtherRecord,
+  skippedContentRecord,
 ];
 
 /**
@@ -645,6 +678,29 @@ export const isPaddedTypeLaw = (
     difference.direction === paddedTypeLaw.direction &&
     place !== undefined &&
     paddedPaths.has(place)
+  );
+};
+
+/**
+ * Decide whether a difference is {@link skippedContentRecord}'s: a law refusal at a place whose
+ * every refusal libxml2 skipped, or of the text at a place whose simple value it skipped.
+ *
+ * @param difference - The difference.
+ * @param names - The document's names, whose `skippedPaths` and `skippedValues` hold those places
+ *   as the law oracle writes a node's place.
+ * @returns Whether it is.
+ */
+export const isSkippedContent = (
+  difference: Difference,
+  names: Pick<ForeignNames, "skippedPaths" | "skippedValues">,
+): boolean => {
+  const place = breachDetail.exec(difference.detail)?.groups?.["path"];
+
+  return (
+    difference.direction === skippedContentRecord.direction &&
+    place !== undefined &&
+    (names.skippedPaths.has(place) ||
+      (difference.class === "text-value" && names.skippedValues.has(place)))
   );
 };
 
@@ -1563,6 +1619,18 @@ export interface ForeignNames {
    */
   readonly paddedPaths: ReadonlySet<string>;
   readonly set: ReadonlySet<string>;
+  /**
+   * The places, as the law oracle writes them, of the nodes libxml2 assesses nothing of
+   * ({@link skippedContentRecord}): each element whose `xsi:type` names no type of the schema set
+   * (cvc-type clause 1), and every node below it or below an element a simple type governs that
+   * holds an element child (clause 3.1.2).
+   */
+  readonly skippedPaths: ReadonlySet<string>;
+  /**
+   * The places of the elements a simple type governs that hold an element child, whose simple
+   * value libxml2 never assesses (cvc-type clause 3.1.2).
+   */
+  readonly skippedValues: ReadonlySet<string>;
 }
 
 /**
@@ -1607,6 +1675,8 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
       outside: new Set(),
       paddedPaths: new Set(),
       set: new Set(),
+      skippedPaths: new Set(),
+      skippedValues: new Set(),
     };
   }
 
@@ -1640,6 +1710,47 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
     ),
   );
   const typed = rows.nodes.filter((node) => padded.has(node.id));
+  // libxml2 skips an element whose xsi:type its schema set resolves to no type (cvc-type clause 1):
+  // a foreign element the codec left ungoverned, or any element whose QName's prefix binds no
+  // namespace, or one neither XML Schema's nor the set's. It skips the content of an element a
+  // simple type governs that holds an element child (clause 3.1.2).
+  const declared = Map.groupBy(rows.namespaces, ({ node }) => node);
+  const boundBy = (node: (typeof rows.nodes)[number], prefix: string): string | undefined => {
+    for (let at = byId.get(node.id); at !== undefined && at.start > 0n; at = byId.get(at.parent)) {
+      const bound = declared.get(at.id)?.find((row) => row.prefix === prefix);
+      if (bound !== undefined) {
+        return bound.uri;
+      }
+    }
+
+    return prefix === "" ? "" : undefined;
+  };
+  const xsiTypes = new Map(
+    rows.attributes.flatMap(({ lexical, name, node }) =>
+      name === "xsi:type" ? [[node, lexical] as const] : [],
+    ),
+  );
+  const typeAbsent = rows.nodes.filter((node) => {
+    const lexical = xsiTypes.get(node.id);
+    if (lexical === undefined) {
+      return false;
+    }
+
+    const prefix = lexical.includes(":") ? lexical.slice(0, lexical.indexOf(":")) : "";
+    const namespace = boundBy(node, prefix);
+
+    return (
+      (isForeignKind(node.kind) && node.governs === noType) ||
+      namespace === undefined ||
+      (namespace !== xsNamespace && !set.has(namespace))
+    );
+  });
+  const parents = new Set(rows.nodes.map(({ parent }) => parent));
+  const simpleHeld = rows.nodes.filter(
+    (node) => Option.isSome(governorOf(grammar.attributes, node)) && parents.has(node.id),
+  );
+  const below = (anchors: readonly (typeof rows.nodes)[number][]) =>
+    rows.nodes.filter((node) => anchors.some((at) => at.start < node.start && node.end <= at.end));
 
   return {
     lax: new Set(opened.values()),
@@ -1667,6 +1778,8 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
         .map(placeOf),
     ),
     set,
+    skippedPaths: new Set([...typeAbsent, ...below([...typeAbsent, ...simpleHeld])].map(placeOf)),
+    skippedValues: new Set(simpleHeld.map(placeOf)),
   };
 });
 
@@ -2169,7 +2282,8 @@ export interface GeneratedContext {
  * reading 6's nested roots on `xmllint`'s side and on the law oracle's, reading 61's ordering slot,
  * reading 81's schema set by the rows or by an edit the codec refused, reading 60's lax
  * `xsi:type`, and then the corpus's, libxml2's and the generated records, libxml2's unchecked
- * nillability only where the document holds an `xsi:nil` that is no `xs:boolean`.
+ * nillability only where the document holds an `xsi:nil` that is no `xs:boolean`, and its skipped
+ * content only at the places its rows show libxml2 skipped.
  *
  * @param difference - The difference.
  * @param context - What the classes read of the document.
@@ -2211,11 +2325,14 @@ export const generatedRecordOf = (
     return laxXsiType;
   }
 
-  const record = recordOf(context.document, context.version, difference, [
-    ...recorded,
-    ...libxml2Records,
-    ...generatedRecorded,
-  ]);
+  const record = recordOf(
+    context.document,
+    context.version,
+    difference,
+    [...recorded, ...libxml2Records, ...generatedRecorded].filter(
+      (held) => held !== skippedContentRecord || isSkippedContent(difference, names),
+    ),
+  );
 
   return record === nilValueRecord && !holdsNilValue(difference, root) ? undefined : record;
 };
