@@ -1,6 +1,8 @@
 /**
  * Every law of the catalog (`lawTable` of `#pantry/vocab/laws.ts`) is stated somewhere: by a module
- * that names its statements (`namedLaws`), by a law the importer writes out (`statedLaws`: primary
+ * that names its statements (`namedLaws`), by a single-CDN install's policy (`cdnLawsByName` of
+ * `#pantry/qti/cdn.ts`, which states nothing for this package's own install, so a probe policy's
+ * laws stand for every install's), by a law the importer writes out (`statedLaws`: primary
  * keys, patterns and generated fields, among them the stated limits' bounds), by a part of a
  * statement the oracle states in parts (`statedInParts`), or by a statement grizzle gives its own
  * structure, listed below with why. A law the catalog names that none of these states is a rule the
@@ -8,9 +10,19 @@
  * attribute count").
  */
 import { assert, describe, it } from "@effect/vitest";
+import { Option } from "effect";
+import type { CdnPolicy } from "#pantry/db/install.ts";
 import { lawNames, namedLaws, statedLaws } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
+import { cdnLawsByName } from "#pantry/qti/cdn.ts";
 import { statedInParts } from "#pantry/test/oracle-laws.ts";
+
+/**
+ * A single-CDN install's policy, whose schema states the CDN laws: `CDN data`, `CDN foreign`,
+ * `CDN origin` and `CDN style`, each over its origin. This package's own install has no policy and
+ * states none of them, so they are counted as stated where a policy states them.
+ */
+const probePolicy: CdnPolicy = { cdn: "https://cdn.example.test/" };
 
 /**
  * The laws no module names a statement of, each stated by grizzle's own structure: the statement
@@ -45,13 +57,14 @@ const unstated = (stated: ReadonlySet<string>): readonly LawName[] =>
   lawNames.filter((name) => !stated.has(name));
 
 /**
- * The laws a module names a statement of, the importer writes, or the oracle states a part of.
+ * The laws a module or a probe policy names a statement of, the importer writes, or the oracle
+ * states a part of.
  *
  * @returns The laws.
  */
 const statedByModules = (): ReadonlySet<string> =>
   new Set([
-    ...namedLaws.flatMap((byName) =>
+    ...[...namedLaws, cdnLawsByName(Option.some(probePolicy))].flatMap((byName) =>
       Object.entries(byName).flatMap(([name, statements]) => (statements.length > 0 ? [name] : [])),
     ),
     ...statedLaws().map(([, name]) => name),
