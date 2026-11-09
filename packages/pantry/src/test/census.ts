@@ -1,7 +1,7 @@
 import path from "node:path";
 import { schemaNameOf } from "@bjornpagen/grizzle";
 import { Effect, FileSystem } from "effect";
-import { QtiBase } from "#pantry/qti/base.ts";
+import { QtiBase } from "#pantry/qti/own.ts";
 
 /**
  * The folder of the Qti schema's committed migrations, one subfolder per migration: grizzle names

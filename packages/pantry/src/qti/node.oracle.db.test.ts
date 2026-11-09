@@ -63,7 +63,7 @@ import {
   universalDomains,
   vocabularyTermKinds,
 } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   accumulatorOf,

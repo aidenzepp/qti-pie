@@ -24,7 +24,7 @@ import { Effect, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { lawNameOf } from "#pantry/import/refusal.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 import {
   AreaMappingCardinality,
   LookupTableCardinality,
@@ -39,7 +39,6 @@ import {
   MappingBaseType,
   MappingCardinality,
 } from "#pantry/qti/mapping.ts";
-import { Author } from "#pantry/qti/roles.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**

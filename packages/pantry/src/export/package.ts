@@ -21,9 +21,9 @@ import type { AssembleError } from "#pantry/model/assemble.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { writeZip } from "#pantry/package/zip.ts";
 import type { ZipEntry } from "#pantry/package/zip.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { AuthorApp } from "#pantry/qti/own-login.ts";
 import { Package } from "#pantry/qti/package.ts";
-import type { Author } from "#pantry/qti/roles.ts";
+import type { Author } from "#pantry/qti/own-login.ts";
 import type { EncodeError } from "@qti-pie/crust/errors.ts";
 
 /**

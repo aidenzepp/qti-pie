@@ -21,7 +21,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect, Formatter, Predicate } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import type { HostRow, HostRows } from "#pantry/test/host-judge.ts";

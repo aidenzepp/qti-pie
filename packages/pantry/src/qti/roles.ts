@@ -3,8 +3,7 @@
  * writing every one of them (plan §1.8; the W5 amendment's A, the privilege ruling).
  */
 import { role, wholeEntriesOf, writableNamesOf } from "@bjornpagen/grizzle";
-import { Function as Fn } from "effect";
-import { Qti } from "#pantry/qti/schema.ts";
+import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
  * Build the author role over a `Qti` schema: a full role, holding every stored relation and every
@@ -14,17 +13,17 @@ import { Qti } from "#pantry/qti/schema.ts";
  * codes. Its write list is `writableNamesOf`, the stored relations in the schema's order. No
  * relation is `mutable`, so the role holds no UPDATE: each package is inserted once.
  *
- * Built once per schema value, since grizzle puts a role in one login only.
+ * Each call builds a role of its own, and grizzle puts a role in one login only, so the author
+ * login builds it (`#pantry/qti/logins.ts` `authorAppOf`) and every reader takes it from there.
  *
  * @param qti - The `Qti` schema, built for an install's policy or none
  *   (`#pantry/qti/schema.ts` `qtiSchema`).
  * @returns The role.
  */
-export const authorRoleOf = Fn.memoize((qti: typeof Qti) =>
-  role(qti, "author", wholeEntriesOf(qti), { write: writableNamesOf(qti) }),
-);
+export const authorRoleOf = (qti: QtiSchema) =>
+  role(qti, "author", wholeEntriesOf(qti), { write: writableNamesOf(qti) });
 
 /**
- * The author role over the `Qti` this process opens.
+ * The author role, over whatever schema it was built.
  */
-export const Author = authorRoleOf(Qti);
+export type AuthorRole = ReturnType<typeof authorRoleOf>;

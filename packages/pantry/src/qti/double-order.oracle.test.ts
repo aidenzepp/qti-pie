@@ -56,7 +56,7 @@ import { Slider } from "#pantry/qti/interactions.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { breaks, checksOf, closedOf, doubleNamed } from "#pantry/test/predicates.ts";
 import type { ReadCheck, Row } from "#pantry/test/predicates.ts";
 

@@ -65,7 +65,7 @@ const snapshotPath = Option.match(installed, {
  * (`#pantry/db/connection.ts`), with the password of the role grizzle installs for the login, its
  * pool, and its install's migrations snapshot, read from disk.
  *
- * The login (`#pantry/qti/logins.ts`) is a resource of this layer, loaded once the settings, the
+ * The login (`#pantry/qti/own-login.ts`) is a resource of this layer, loaded once the settings, the
  * CA and the snapshot are read, and only then given to the connection: grizzle builds its workload
  * when that module is evaluated, so a build that fails on its settings never pays for the
  * workload. Nothing this module imports statically may reach the login (`src/cli/startup.test.ts`).
@@ -87,7 +87,7 @@ export const AuthorAppLayer = Layer.unwrap(
       Effect.flatMap(Schema.decodeUnknownEffect(SnapshotText)),
       Effect.mapError((reason) => new SnapshotLoadError({ path: snapshotPath, reason })),
     );
-    const { AuthorApp } = yield* Effect.promise(() => import("#pantry/qti/logins.ts"));
+    const { AuthorApp } = yield* Effect.promise(() => import("#pantry/qti/own-login.ts"));
 
     return DbLayer.make({
       ...connectionOf(AuthorApp),

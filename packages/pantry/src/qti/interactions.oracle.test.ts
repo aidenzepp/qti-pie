@@ -32,7 +32,7 @@ import {
   readAttributes,
   references,
 } from "#pantry/qti/interactions.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { contentLawOf, judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";

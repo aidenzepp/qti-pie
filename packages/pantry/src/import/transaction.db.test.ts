@@ -32,8 +32,8 @@ import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage, WrapApply } from "#pantry/import/package.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
+import { AuthorApp } from "#pantry/qti/own-login.ts";
 import {
   everyRelationPackage,
   scopedPackage,

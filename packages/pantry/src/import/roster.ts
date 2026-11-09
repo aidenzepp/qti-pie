@@ -28,7 +28,7 @@ import {
 } from "#pantry/qti/chardata.ts";
 import { ElementType } from "#pantry/qti/node.ts";
 import { ResourceDocument } from "#pantry/qti/package.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 
 /**
  * The document layer's relations, which `documentRowsOf` of `#pantry/import/write.ts` writes for

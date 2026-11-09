@@ -87,16 +87,14 @@ import {
 import { DayForm, metadataLawsByName, metadataRelations } from "#pantry/qti/metadata.ts";
 import { Chars, EndCharacter, nodeLawsByName, Prefix } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
-import { installedCdnLawsByName } from "#pantry/qti/cdn.ts";
 import { htmlLawsByName, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLawsByName } from "#pantry/qti/identity.ts";
 import { operatorLawsByName, operatorRelations } from "#pantry/qti/operators.ts";
 import { HrefParams, packageLawsByName } from "#pantry/qti/package.ts";
-import { queryLawsByName } from "#pantry/qti/queries.ts";
 import { quotationLawsByName, quotationRelations } from "#pantry/qti/quotation.ts";
 import { SelectForm, testLawsByName } from "#pantry/qti/tests.ts";
 import type { testRelations } from "#pantry/qti/tests.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { builtLawsByName, Qti } from "#pantry/qti/own.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
 import type { ZipRefusal } from "#pantry/package/zip.ts";
 import type { Source } from "#pantry/vocab/inventory/types.ts";
@@ -674,10 +672,10 @@ type LawsByName = { readonly [Name in LawName]?: readonly Statement[] };
 
 /**
  * The modules that name their laws where they state them, each a {@link LawsByName}: the stored
- * level's, then each domain's rules over the queries (`#pantry/qti/queries.ts`).
+ * level's, then the groups built with `Qti` (`#pantry/qti/own.ts` `builtLawsByName`), its policy's
+ * and each domain's rules over the queries (`#pantry/qti/queries.ts`).
  */
 export const namedLaws: readonly LawsByName[] = [
-  installedCdnLawsByName,
   nodeLawsByName,
   chardataLawsByName,
   attributeLawsByName,
@@ -693,7 +691,7 @@ export const namedLaws: readonly LawsByName[] = [
   quotationLawsByName,
   operatorLawsByName,
   testLawsByName,
-  ...queryLawsByName,
+  ...builtLawsByName,
 ];
 
 /**

@@ -63,10 +63,9 @@ import {
   Slider,
   PrintedVariableRef,
 } from "#pantry/qti/interactions.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Qti } from "#pantry/qti/own.ts";
+import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
-import { Author } from "#pantry/qti/roles.ts";
-import { Qti } from "#pantry/qti/schema.ts";
 import {
   assertVerdict,
   foreignKeysBetween,

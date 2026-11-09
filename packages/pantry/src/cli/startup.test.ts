@@ -22,11 +22,11 @@ const startupForbidden = [
 ];
 
 /**
- * The author login, whose workload (the export scan) grizzle's builders build when the module is
- * evaluated: the dry run never needs it, and the database layer loads it only once its settings
- * resolve, so neither may reach it statically.
+ * This package's own install's author login, whose workload (the export scan) grizzle's builders
+ * build when the module is evaluated (`#pantry/qti/own-login.ts`): the dry run never needs it, and
+ * the database layer loads it only once its settings resolve, so neither may reach it statically.
  */
-const loginForbidden = ["#pantry/qti/logins.ts"];
+const loginForbidden = ["#pantry/qti/own-login.ts"];
 
 /**
  * `@effect/platform-node`'s barrel, which loads every module of the package, the Redis client's 648

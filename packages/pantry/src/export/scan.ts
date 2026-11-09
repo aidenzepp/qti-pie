@@ -1,7 +1,7 @@
 /**
  * The export's reads (fin.md §4.6, trees.md §3, plan N11; the W5 amendment's C20): one ordered
  * scan per document, and the documents and entries of a package. The author login's workload
- * (`#pantry/qti/logins.ts`, `exportWork`) holds all three, so each is compiled once per pool and
+ * (`#pantry/qti/logins.ts` `authorAppOf`) holds all three, so each is compiled once per pool and
  * its indexes are planned by `grizzle generate`.
  *
  * `documentScan` reads one document's `Node` rows by T1's key, `(document, start)`: filtered by
@@ -16,7 +16,6 @@
  * attachment over a union is never paged.
  */
 import { query, uuid, v } from "@bjornpagen/grizzle";
-import { Function as Fn } from "effect";
 import { Attribute, AttributeEntity, OpenAttributeName } from "#pantry/qti/attributes.ts";
 import {
   Comment,
@@ -32,7 +31,7 @@ import {
 } from "#pantry/qti/chardata.ts";
 import { ElementType, Node } from "#pantry/qti/node.ts";
 import { Entry } from "#pantry/qti/package.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
  * Build the export's reads over a `Qti` schema, each a query over the schema itself: a role that
@@ -40,13 +39,14 @@ import { Qti } from "#pantry/qti/schema.ts";
  * author role's (`#pantry/qti/logins.ts`) or an install's own app role, over a schema that extends
  * `Qti`.
  *
- * Built once per schema value, so every workload of one schema holds the very same queries.
+ * Each call builds queries of its own: the author login builds them for its workload
+ * (`#pantry/qti/logins.ts` `authorAppOf`), and every reader takes them from there.
  *
  * @param qti - The `Qti` schema, built for an install's policy or none
  *   (`#pantry/qti/schema.ts` `qtiSchema`).
  * @returns The scan of one document, the documents of a package and a package's record.
  */
-export const exportQueriesOf = Fn.memoize((qti: typeof Qti) => {
+export const exportQueriesOf = (qti: QtiSchema) => {
   /**
    * The scan of one document: its `Node` rows where `document = $document`, ordered by `start`,
    * each with what its node owns attached (`#pantry/export/pages.ts` `ScanRow`).
@@ -283,9 +283,4 @@ export const exportQueriesOf = Fn.memoize((qti: typeof Qti) => {
     .orderBy(["at", "asc"]);
 
   return { documentScan, documentsOf, entriesOf };
-});
-
-/**
- * The export's reads over the `Qti` this process opens, which the author login's workload holds.
- */
-export const { documentScan, documentsOf, entriesOf } = exportQueriesOf(Qti);
+};

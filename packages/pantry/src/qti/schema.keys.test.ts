@@ -19,7 +19,7 @@ import { lawsOf } from "@bjornpagen/grizzle";
 import type { Law, LawSide } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Array as Arr, Equal } from "effect";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 
 /**
  * How long reading `Qti`'s laws may take: `lawsOf` compiles its law model.

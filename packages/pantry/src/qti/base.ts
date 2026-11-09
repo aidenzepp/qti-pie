@@ -5,6 +5,9 @@
  * where its policy states them (`#pantry/qti/cdn.ts`). `Qti` (`#pantry/qti/schema.ts`) is the level
  * over it that names the queries its rules read (`#pantry/qti/queries.ts`).
  *
+ * Loading this module builds no schema: {@link qtiBaseOf} builds one where it is called, each call
+ * its own, and the caller holds it (`#pantry/qti/own.ts` for this package's own install).
+ *
  * No relation is `mutable`: qti-pie writes each package once, every owner inserted with its whole
  * family in one ChangeSet step (the W5 amendment's A). A module joins the composition when it
  * lands; `schema.test.ts` lists the modules composed and checks each law array is here once.
@@ -516,9 +519,10 @@ const moduleLaws: readonly (readonly QtiStatement[])[] = [
 
 /**
  * The relations of the QTI 3.0 schema: the grammar's rosters and closed relations, then each
- * module's relations, each under its own name.
+ * module's relations, each under its own name. A scratch schema of a test reads them here, with no
+ * schema built.
  */
-const qtiRelations = {
+export const qtiRelations = {
   ...grammarRosters,
   ...grammarRelations,
   ...nodeRelations,
@@ -549,8 +553,7 @@ export const qtiBaseOf = (cdnLaws: readonly QtiStatement[]) =>
   schema("Qti", qtiRelations, [...moduleLaws, cdnLaws].flat());
 
 /**
- * The stored level of this package's own install: no policy, so its statements are exactly the
- * modules'. Every query `Qti` names is over it (`#pantry/qti/queries.ts`), and a policy's stored
- * level holds the same relations, so each of those queries reads its tables as well.
+ * The stored level of the QTI 3.0 schema, whatever policy built it: every policy's holds the same
+ * relations, and its statements are every module's, then the policy's.
  */
-export const QtiBase = qtiBaseOf([]);
+export type QtiBase = ReturnType<typeof qtiBaseOf>;

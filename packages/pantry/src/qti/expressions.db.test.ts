@@ -63,11 +63,9 @@ import {
   VariableRefDeclaration,
   VariableRefTable,
 } from "#pantry/qti/expressions.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
-import { DeclaredTarget, HeldType } from "#pantry/qti/queries.ts";
-import { Author } from "#pantry/qti/roles.ts";
-import { Qti } from "#pantry/qti/schema.ts";
 import {
   assertVerdict,
   constraintDescribed,
@@ -84,6 +82,11 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { itemRefPackageEntries } from "#pantry/test/gen/item-ref-declarations.ts";
 import type { ItemRefPackage, ItemTarget } from "#pantry/test/gen/item-ref-declarations.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+
+/**
+ * The queries `DeclaredTarget` and `HeldType` as `Qti` holds them (`#pantry/qti/queries.ts`).
+ */
+const { DeclaredTarget, HeldType } = Qti.relations;
 
 /**
  * A node no stored row holds, the parent and document every case's rows name.

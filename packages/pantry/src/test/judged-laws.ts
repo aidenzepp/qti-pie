@@ -13,7 +13,7 @@ import { Function as Fn } from "effect";
 import { containmentsIn, statedAs } from "#pantry/test/host-judge.ts";
 import type { Containment } from "#pantry/test/host-judge.ts";
 import { schemaLawsOf, statementLawsOf } from "#pantry/import/refusal.ts";
-import type { Qti } from "#pantry/qti/schema.ts";
+import type { Qti } from "#pantry/qti/own.ts";
 
 /**
  * Read every containment the schema states from one relation (`containmentsIn` of

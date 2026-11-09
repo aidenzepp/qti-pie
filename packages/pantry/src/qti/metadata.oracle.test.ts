@@ -50,7 +50,7 @@ import {
 } from "#pantry/qti/metadata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
-import { QtiBase } from "#pantry/qti/base.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
@@ -178,8 +178,8 @@ const trimmed = new RegExp(trimmedPattern, "u");
 const identifierForm = new RegExp(identifierPattern, "u");
 
 describe("qti/metadata.ts, declared", () => {
-  it("builds a schema of QtiBase's relations and the metadata overlays with the layers' laws, each statement once", () => {
-    const built = schema("MetadataLayer", { ...QtiBase.relations, ...metadataRelations }, [
+  it("builds a schema of the schema's relations and the metadata overlays with the layers' laws, each statement once", () => {
+    const built = schema("MetadataLayer", { ...qtiRelations, ...metadataRelations }, [
       ...nodeLaws,
       ...chardataLaws,
       ...attributeLaws,

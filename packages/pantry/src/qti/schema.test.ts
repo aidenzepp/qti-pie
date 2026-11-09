@@ -2,15 +2,17 @@
  * The composition of `Qti`, `Author` and `AuthorApp` against the W5 amendment's §C table, the
  * specification of which module exports which law array and which relations: each law array is in
  * the schema once, nothing else is, no relation is `mutable`, and the author role holds and writes
- * every stored relation.
+ * every stored relation; and the modules an install outside this package loads build no schema, and
+ * this package builds its own once (`#pantry/qti/own.ts`).
  */
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import type { Statement } from "@bjornpagen/grizzle";
-import { Predicate } from "effect";
+import { Predicate, Schema } from "effect";
 import * as install from "#pantry/grammar/install.ts";
 import * as attributes from "#pantry/qti/attributes.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
-import { installedCdnLawsByName } from "#pantry/qti/cdn.ts";
 import * as chardata from "#pantry/qti/chardata.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import * as declarations from "#pantry/qti/declarations.ts";
@@ -24,7 +26,6 @@ import * as identity from "#pantry/qti/identity.ts";
 import { identityLaws } from "#pantry/qti/identity.ts";
 import * as interactions from "#pantry/qti/interactions.ts";
 import { interactionLaws } from "#pantry/qti/interactions.ts";
-import { AuthorApp, exportWork, importWork } from "#pantry/qti/logins.ts";
 import * as mapping from "#pantry/qti/mapping.ts";
 import { mappingLaws } from "#pantry/qti/mapping.ts";
 import * as metadata from "#pantry/qti/metadata.ts";
@@ -35,14 +36,13 @@ import * as operators from "#pantry/qti/operators.ts";
 import { operatorLaws } from "#pantry/qti/operators.ts";
 import * as pkg from "#pantry/qti/package.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
-import * as queries from "#pantry/qti/queries.ts";
-import { queryLaws } from "#pantry/qti/queries.ts";
 import * as quotation from "#pantry/qti/quotation.ts";
 import { quotationLaws } from "#pantry/qti/quotation.ts";
-import { Author } from "#pantry/qti/roles.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { builtLawsByName, Qti } from "#pantry/qti/own.ts";
+import { Author, AuthorApp, exportWork, importWork } from "#pantry/qti/own-login.ts";
 import * as tests from "#pantry/qti/tests.ts";
 import { testLaws } from "#pantry/qti/tests.ts";
+import { moduleImports } from "#pantry/test/module-imports.ts";
 
 /**
  * Each §C module composed so far, with the law array it exports, by the name §C gives it.
@@ -62,8 +62,12 @@ const composedLaws: readonly (readonly [string, readonly Statement[]])[] = [
   ["src/qti/html.ts htmlLaws", htmlLaws],
   ["src/qti/quotation.ts quotationLaws", quotationLaws],
   ["src/qti/operators.ts operatorLaws", operatorLaws],
-  ["src/qti/cdn.ts installedCdnLawsByName", Object.values(installedCdnLawsByName).flat()],
-  ["src/qti/queries.ts queryLaws", queryLaws],
+  [
+    "src/qti/own.ts builtLawsByName, the policy's and the queries' built with Qti",
+    builtLawsByName.flatMap((byName: Readonly<Partial<Record<string, readonly Statement[]>>>) =>
+      Object.values(byName).flatMap((statements) => statements ?? []),
+    ),
+  ],
 ];
 
 /**
@@ -87,7 +91,6 @@ const composedModules = [
   ["src/qti/html.ts", html],
   ["src/qti/quotation.ts", quotation],
   ["src/qti/operators.ts", operators],
-  ["src/qti/queries.ts", queries],
 ] as const;
 
 /**
@@ -186,5 +189,96 @@ describe("qti/logins.ts, the author application", () => {
 
   it("owns the export scan and the import's write program as its workload", () => {
     assert.deepStrictEqual(AuthorApp.workload, [exportWork, importWork]);
+  });
+});
+
+/**
+ * The source folder, every module of which is read for what it imports.
+ */
+const sourceRoot = path.resolve(import.meta.dirname, "..");
+
+/**
+ * Read the modules one module loads, each by its path under the source folder: every import,
+ * re-export and dynamic import of a `#pantry/` module that is no type
+ * (`#pantry/test/module-imports.ts`).
+ *
+ * @param module - The module's path under the source folder.
+ * @returns The modules it imports.
+ */
+const importsOf = (module: string): readonly string[] =>
+  moduleImports(readFileSync(path.join(sourceRoot, module), "utf-8")).flatMap(
+    ({ form, specifier }) =>
+      form !== "type" && specifier.startsWith("#pantry/")
+        ? [specifier.slice("#pantry/".length)]
+        : [],
+  );
+
+/**
+ * Every module one module loads, itself among them, by its path under the source folder.
+ *
+ * @param entry - The module's path under the source folder.
+ * @returns The modules it loads.
+ */
+const loadedBy = (entry: string): ReadonlySet<string> => {
+  const loaded = new Set<string>();
+  const pending = [entry];
+  for (let module = pending.pop(); module !== undefined; module = pending.pop()) {
+    if (!loaded.has(module)) {
+      loaded.add(module);
+      pending.push(...importsOf(module));
+    }
+  }
+
+  return loaded;
+};
+
+/**
+ * A `package.json` as this test reads it: its `exports` map, each subpath to its target.
+ */
+const ManifestSchema = Schema.fromJsonString(
+  Schema.Struct({ exports: Schema.Record(Schema.String, Schema.String) }),
+);
+
+/**
+ * The modules this package exports to an install outside it, by their paths under the source
+ * folder, as its `package.json` `exports` map lists them.
+ */
+const exportedModules: readonly string[] = Object.values(
+  Schema.decodeUnknownSync(ManifestSchema)(
+    readFileSync(path.join(sourceRoot, "..", "package.json"), "utf-8"),
+  ).exports,
+).flatMap((target) => (target.startsWith("./src/") ? [target.slice("./src/".length)] : []));
+
+describe("qti/own.ts and qti/own-login.ts, this package's own install", () => {
+  it("is loaded by no module an install outside this package loads, so loading one builds no schema", () => {
+    // Bound: every module the exports map lists, and every module each loads.
+    assert.isNotEmpty(exportedModules);
+    for (const module of exportedModules) {
+      const loaded = loadedBy(module);
+
+      assert.isFalse(loaded.has("qti/own.ts"), `${module} loads qti/own.ts`);
+      assert.isFalse(loaded.has("qti/own-login.ts"), `${module} loads qti/own-login.ts`);
+    }
+  });
+
+  it("builds the schema this process opens, and its login, once: no other module of the package builds one", () => {
+    // Bound: every module of the source folder but the tests, the test support and the builders'
+    // own modules, read for a call of each builder.
+    const callers = (builder: RegExp, own: string): readonly string[] =>
+      readdirSync(sourceRoot, { recursive: true, withFileTypes: true }).flatMap((entry) => {
+        const module = path.relative(sourceRoot, path.join(entry.parentPath, entry.name));
+
+        return entry.isFile() &&
+          module.endsWith(".ts") &&
+          !module.endsWith(".test.ts") &&
+          !module.startsWith("test/") &&
+          module !== own &&
+          builder.test(readFileSync(path.join(sourceRoot, module), "utf-8"))
+          ? [module]
+          : [];
+      });
+
+    assert.deepStrictEqual(callers(/\bqti(?:LevelsOf|Schema)\(/u, "qti/schema.ts"), ["qti/own.ts"]);
+    assert.deepStrictEqual(callers(/\bauthorAppOf\(/u, "qti/logins.ts"), ["qti/own-login.ts"]);
   });
 });

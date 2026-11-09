@@ -5,7 +5,7 @@
  * A single-CDN install's folder holds `policy.json`, its policy, and `migrations/`, the migrations
  * a grizzle config outside this package generated for it, `migrations/qti/snapshot.json` among
  * them. The setting tells this package's runtime and command line two things and nothing else: the
- * policy the `Qti` schema is built with (`#pantry/qti/schema.ts`), and the snapshot
+ * policy the `Qti` schema is built with (`#pantry/qti/own.ts`), and the snapshot
  * `AuthorAppLayer` opens (`#pantry/db/layer.ts`). Its migrations are never this package's to
  * generate or apply: grizzle.config.ts installs the default `Qti` whatever the setting says.
  */
@@ -114,7 +114,7 @@ export const readInstall = Effect.gen(function* readInstall() {
 
 /**
  * The install this process opens, read once, when this module loads, through the process's own
- * settings: the schema module builds `Qti` with its policy, and `AuthorAppLayer` opens its
+ * settings: `#pantry/qti/own.ts` builds `Qti` with its policy, and `AuthorAppLayer` opens its
  * snapshot, so the two never disagree. A policy file it refuses fails the load, naming the file.
  */
 export const installed: Option.Option<QtiInstall> = await Effect.runPromise(

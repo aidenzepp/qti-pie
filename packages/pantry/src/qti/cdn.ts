@@ -35,7 +35,6 @@ import { check, Compute } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import { Array as Arr, Option } from "effect";
 import type { CdnPolicy } from "#pantry/db/install.ts";
-import { installedPolicy } from "#pantry/db/install.ts";
 import { grammar, TextDomain } from "#pantry/grammar/install.ts";
 import { foreignKinds, openClasses } from "#pantry/grammar/kinds.ts";
 import { admitted, Attribute, domainOf } from "#pantry/qti/attributes.ts";
@@ -291,41 +290,13 @@ const lawsOfOrigin = (origin: string) => {
 type CdnLaws = ReturnType<typeof lawsOfOrigin>;
 
 /**
- * The laws built for each origin so far, by origin.
- */
-const builtLaws = new Map<string, CdnLaws>();
-
-/**
- * Build the laws one origin states, once per origin, so every schema built for a policy holds the
- * very statements the importer names its refusals by (`#pantry/import/refusal.ts`), which knows a
- * statement by its identity.
- *
- * @param origin - The policy's origin.
- * @returns The statements by law.
- */
-const lawsByOrigin = (origin: string): CdnLaws => {
-  const known = builtLaws.get(origin);
-  if (known !== undefined) {
-    return known;
-  }
-
-  const laws = lawsOfOrigin(origin);
-  builtLaws.set(origin, laws);
-
-  return laws;
-};
-
-/**
- * The laws a policy states, by name, or none for no policy.
+ * Build the laws a policy states, by name, or none for no policy: each call its own statements,
+ * which the schema built of them holds, and which the importer names its refusals by through that
+ * build (`#pantry/qti/schema.ts` `qtiLevelsOf`). None for this package's own install, which is why
+ * its schema, migrations and snapshot are the same whether the mode exists or not.
  *
  * @param policy - The install's policy, none for this package's own install.
  * @returns The statements by law; empty for none.
  */
 export const cdnLawsByName = (policy: Option.Option<CdnPolicy>): Partial<CdnLaws> =>
-  Option.match(policy, { onNone: () => ({}), onSome: ({ cdn }) => lawsByOrigin(cdn) });
-
-/**
- * The laws this process's install states, by name: none for this package's own install, which is
- * why its schema, migrations and snapshot are the same whether the mode exists or not.
- */
-export const installedCdnLawsByName = cdnLawsByName(installedPolicy);
+  Option.match(policy, { onNone: () => ({}), onSome: ({ cdn }) => lawsOfOrigin(cdn) });

@@ -330,7 +330,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
       // of the error object.
       Effect.gen(function* json() {
         const { checkNameOf } = yield* Effect.promise(() => import("#pantry/import/refusal.ts"));
-        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/schema.ts"));
+        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
         const [first] = refusedLaws(checkNameOf("AL1 admission"));
         const { stderr, stdout } = yield* captureCli(["--json"], { command: refusing });
         const error = errorLine(stderr);
@@ -452,7 +452,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
           () => import("#pantry/import/refusal.ts"),
         );
         const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
-        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/schema.ts"));
+        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
         const { rule, source } = lawTable["AL1 admission"];
         const law = {
           kind: "check",

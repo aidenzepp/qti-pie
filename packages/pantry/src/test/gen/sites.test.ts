@@ -24,7 +24,7 @@ import { readProgram } from "#pantry/import/program.ts";
 import { ruleOfLaw } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { datumText } from "#pantry/test/predicates.ts";

@@ -75,7 +75,9 @@ const databaseSide = [
 
 /**
  * Where the sides meet: the PostgreSQL side's modules the XML side may import, pantry's `exports`
- * of §2.1 at today's paths. They are the schema, which will hold `PackageRows`, the installed
+ * of §2.1 at today's paths. They are the schema's builders and this package's own install's schema
+ * (`qti/own.ts`, which holds what `qti/schema.ts` held before it built nothing at load), which will
+ * hold `PackageRows`, the installed
  * constants and rosters, the inventory data, the scan, and the database layer the command line
  * provides. S10 adds `ingest` when it splits it out of `import/package.ts`.
  *
@@ -86,6 +88,7 @@ const handoff = [
   "db/layer.ts",
   "export/scan.ts",
   "grammar/install.ts",
+  "qti/own.ts",
   "qti/schema.ts",
   "vocab/inventory/*.ts",
   "vocab/laws.ts",
@@ -159,16 +162,14 @@ const crossings: ByStep = [
       "cli/output.ts: #pantry/package/refusal-origin.ts",
       "cli/refused.ts: #pantry/package/refusal-origin.ts",
       "export/package.ts: #pantry/export/pages.ts",
-      "export/package.ts: #pantry/qti/logins.ts",
+      "export/package.ts: #pantry/qti/own-login.ts",
       "export/package.ts: #pantry/qti/package.ts",
-      "export/package.ts: #pantry/qti/roles.ts",
       "export/pages.ts: #pantry/model/assemble.ts",
       "export/pages.ts: #pantry/model/xdm.ts",
       "export/render.ts: #pantry/export/pages.ts",
       "import/package.ts: #pantry/import/refusal.ts",
-      "import/package.ts: #pantry/qti/logins.ts",
+      "import/package.ts: #pantry/qti/own-login.ts",
       "import/package.ts: #pantry/qti/package.ts",
-      "import/package.ts: #pantry/qti/roles.ts",
       "import/program.ts: #pantry/import/refusal.ts",
       "import/refusal.ts: #pantry/model/shred.ts",
       "import/refusal.ts: #pantry/package/read.ts",
@@ -176,7 +177,6 @@ const crossings: ByStep = [
       "import/refusal.ts: @qti-pie/crust/errors.ts",
       "import/write.ts: #pantry/qti/roles.ts",
       "qti/attributes.ts: #pantry/model/xdm.ts",
-      "qti/logins.ts: #pantry/import/roster.ts",
       "qti/logins.ts: #pantry/import/write.ts",
       "vocab/open.ts: @qti-pie/crust/tree.ts",
     ],
