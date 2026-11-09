@@ -1383,6 +1383,45 @@ const cycleRefused = (file: string, identifier: string, href: string, chain: str
   rule: "inclusion-cycle",
 });
 
+/**
+ * The files of a package whose test `T`, {@link referringTestXml}, places `sections/s0.xml` once,
+ * where each section document `X<n>`, at `sections/s<n>.xml`, holds one item ref `I<n>` to
+ * `items/a.xml` and, but the last, two section refs to the next: so the last is placed
+ * `2^(length - 1)` times. The test's outcome processing reads the last item ref's `SCORE`.
+ *
+ * @param length How many section documents the chain holds.
+ * @returns The package's files.
+ */
+const doublingPackage = (length: number): ReadonlyMap<string, Uint8Array> => {
+  const indices = Array.from({ length }, (_, index) => index);
+
+  return packageOf({
+    "items/a.xml": reachedItemXml,
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+      ...indices.map((index) =>
+        resourceXml(`S${index}`, "imsqti_section_xmlv3p0", `sections/s${index}.xml`),
+      ),
+    ),
+    ...Object.fromEntries(
+      indices.map((index) => [
+        `sections/s${index}.xml`,
+        sectionDocumentXml(
+          `X${index}`,
+          `${itemRefXml(`I${index}`, "../items/a.xml")}${index + 1 < length ? `${sectionRefXml(`R${index + 1}A`, `s${index + 1}.xml`)}${sectionRefXml(`R${index + 1}B`, `s${index + 1}.xml`)}` : ""}`,
+        ),
+      ]),
+    ),
+    "test.xml": referringTestXml(
+      settingTotal(variableXml(`I${length - 1}.SCORE`)),
+      sectionRefXml("R0", "sections/s0.xml"),
+    ),
+  });
+};
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -3803,6 +3842,31 @@ describe("package/open.ts", () => {
               }),
             ],
           );
+        }),
+    );
+
+    it.effect(
+      "align-54 test assembly B6: a chain of 40 section documents, each placing the next twice, opens within the default timeout, and the test's reference through the last one's item ref is still refused as ambiguous-reference (reading 86 (\"a section document a test places twice is written once\"))",
+      () =>
+        Effect.gen(function* doublingChain() {
+          assert.deepStrictEqual(refusalsOf(yield* openPackage(location, doublingPackage(40))), [
+            {
+              detail: {
+                firstPrefix: "I39",
+                firstVariable: "SCORE",
+                reading: "86",
+                reference: "I39.SCORE",
+                secondPrefix: "I39",
+                secondVariable: "SCORE",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: {
+                kind: "path",
+                path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-variable/@identifier",
+              },
+              rule: "ambiguous-reference",
+            },
+          ]);
         }),
     );
 

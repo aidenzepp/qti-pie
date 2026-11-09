@@ -978,11 +978,11 @@ interface ReferenceScope {
   /**
    * The placements a reading through an item ref, part or section of the reach reads from where the
    * reference stands, each with whether a selection with replacement can repeat the item ref there:
-   * the one that holds the reference, when the element's document is the reference's own or lies
-   * above it, and otherwise every placement of the element's document (reading 86, "a reference
-   * that names an item ref or a section through such a document, or one of their variables,
-   * resolves once for each placement"). A numbered reading counts only through a placement that can
-   * repeat its item ref (reading 88).
+   * the placement being judged, when the element is the reference's own document's, and otherwise
+   * every placement of the element's document, counted up to 2 for each answer (reading 86, "a
+   * reference that names an item ref or a section through such a document, or one of their
+   * variables, resolves once for each placement"). A numbered reading counts only through a
+   * placement that can repeat its item ref (reading 88).
    */
   readonly placements: (identifier: string) => readonly boolean[];
   /**
@@ -2257,45 +2257,60 @@ interface ReachedSection {
 }
 
 /**
- * One placement of a test or section document in a test's assembled test, an instance of the
- * document, as pantry's `Instance` is one (`packages/pantry/src/qti/tests.ts`): the test document
- * itself, or a section document a section ref places. A section document placed by two section refs
- * has two placements.
+ * What a placement of a document in a test's assembled test is placed under, the few facts its
+ * judgement reads: its test part, none for the test; whether a section whose `qti-selection` has
+ * `with-replacement` true lies above it, anywhere above it in the assembled test, so a selection
+ * with replacement can repeat each item ref it holds (reading 88); and whether the order of the
+ * section that places it is drawn at delivery, so its loose content is mixed into that order
+ * ({@link OrderScope}).
  */
-interface Placement extends ReachedSection {
-  readonly layout: DocumentLayout;
-  /**
-   * Whether the order of the section that places it is drawn at delivery, so its loose content is
-   * mixed into that order ({@link OrderScope}).
-   */
+interface PlacementContext {
   readonly mixes: boolean;
-  /**
-   * The placement whose document holds the section ref that places it; none for the test.
-   */
-  readonly parent: Placement | undefined;
-  /**
-   * The test part it lies in, none for the test.
-   */
   readonly part: Option.Option<SourceElement>;
-  /**
-   * Whether a section whose `qti-selection` has `with-replacement` true lies above it, anywhere
-   * above it in the assembled test, so a selection with replacement can repeat each item ref it
-   * holds.
-   */
   readonly replaced: boolean;
-  /**
-   * The pre-order index, in its parent's document, of the section ref that places it; 0 for the
-   * test.
-   */
-  readonly siteStart: number;
 }
 
 /**
- * What placing a test's section documents gives: each placement, the test's first, in pre-order,
- * and the `inclusion-cycle` refusal of each section ref that returns to a document on its chain.
+ * The placements of one test or section document in a test's assembled test under one
+ * {@link PlacementContext}, as pantry's `Instance` is one placement
+ * (`packages/pantry/src/qti/tests.ts`): the test document itself, or a section document the section
+ * refs place. Every placement of a document under one context is judged alike, so it stands for
+ * them all, and the assembly counts how many it stands for.
+ */
+interface Placement extends PlacementContext, ReachedSection {
+  readonly layout: DocumentLayout;
+}
+
+/**
+ * One section ref of a placement that places a section document, with the placement it places.
+ */
+interface PlacedBy {
+  readonly placement: Placement;
+  readonly site: SectionPlacement;
+}
+
+/**
+ * What placing a test's section documents gives ({@link assemble}).
  */
 interface Assembly {
+  /**
+   * Each placement's section refs that place a document, in document order, with the placement
+   * each places.
+   */
+  readonly children: ReadonlyMap<Placement, readonly PlacedBy[]>;
+  /**
+   * How many times the assembled test places each placement's document under its context, counted
+   * up to 2: once, or more than once.
+   */
+  readonly counts: ReadonlyMap<Placement, number>;
+  /**
+   * The `inclusion-cycle` refusal of each section ref the walk finds returning to a document on its
+   * chain.
+   */
   readonly cycles: readonly Refusal[];
+  /**
+   * Each placement, the test's first, in the order the walk first meets each.
+   */
   readonly placements: readonly Placement[];
 }
 
@@ -2324,39 +2339,91 @@ const sectionDocumentAt = (
 };
 
 /**
+ * Give the context a section ref of a placement places its document under: its test part, the
+ * section ref's own where it lies under a test part, else the placement's; whether a selection with
+ * replacement lies above it, in its own document or above the placement; and whether its order is
+ * drawn, as reading 87 reads a site (`placedName` in
+ * `packages/pantry/src/test/oracle-laws/assembly.ts`).
+ *
+ * @param placement The placement whose document holds the section ref.
+ * @param site The section ref.
+ * @returns The context of what it places.
+ */
+const contextUnder = (placement: Placement, site: SectionPlacement): PlacementContext => {
+  const scope = placement.layout.sites.get(site.element);
+
+  return {
+    mixes: (scope?.parentMixes ?? false) || ((scope?.parentLooseChain ?? false) && placement.mixes),
+    part: Option.orElse(scope?.part ?? Option.none(), () => placement.part),
+    replaced: site.replaced || placement.replaced,
+  };
+};
+
+/**
+ * Count how many times the assembled test places each placement, up to 2, from the test's one:
+ * each placement's count is the sum, over the section refs that place it, of the count of the
+ * placement that holds the section ref, so the work is one pass over the section refs however many
+ * times a chain of documents multiplies the placements.
+ *
+ * @param test The test's placement.
+ * @param children Each placement's section refs, with what each places.
+ * @param finished The placements in the order the walk finished each, each after every placement
+ *   it places.
+ * @returns Each placement's count.
+ */
+const countsOf = (
+  test: Placement,
+  children: ReadonlyMap<Placement, readonly PlacedBy[]>,
+  finished: readonly Placement[],
+): ReadonlyMap<Placement, number> => {
+  const counts = new Map<Placement, number>([[test, 1]]);
+  for (const placement of finished.toReversed()) {
+    const count = counts.get(placement) ?? 0;
+    for (const child of children.get(placement) ?? []) {
+      counts.set(child.placement, Math.min(2, (counts.get(child.placement) ?? 0) + count));
+    }
+  }
+
+  return counts;
+};
+
+/**
  * Place a test's section documents, as the qti package's assembled test places them (its `Instance`
  * tree, `packages/pantry/src/qti/tests.ts`): a section ref "functions as a facade for the
  * qti-assessment-section to which it refers", so the test places the section document each of its
  * section refs names ({@link sectionDocumentAt}), and, before the ref after it, the ones that
  * document's own section refs name, depth first in document order. A ref whose `href` names no
- * section document the reader read places nothing.
+ * section document the reader read places nothing. Each section ref places its document once, so
+ * two refs to one document place it twice (reading 86, "a section document a test places twice is
+ * written once").
  *
- * Each section ref places its document once, so two refs to one document place it twice (reading
- * 86, "a section document a test places twice is written once"). A ref to a document already on its
- * own chain, the documents from the test down to it, would merge that document into itself without
- * end, which no aggregated document is (reading 85, "an inclusion never reaches itself"): it is
- * `inclusion-cycle` at the section ref, its detail the section ref's `identifier` when it writes
- * one, its `href` as written, the `chain` of document paths from the test through the repeated one,
- * space-separated, and `reading: "85"`, given once for each such section ref of the test, and it
- * places nothing, as pantry's law "Inclusion cycle" refuses it alone. An `xi:include` is never
- * fetched here (S-6), so a loop through includes is not seen, a recorded limit (rule `db2ef322`).
+ * The walk keeps one {@link Placement} for each document under each {@link PlacementContext} it
+ * meets, and walks a placement's section refs only the first time it meets it: a later section ref
+ * to the same document under the same context places it again, which {@link countsOf} counts up to
+ * 2, but adds nothing new to judge. So the work is bounded by the documents, their section refs and
+ * the few contexts each may be placed under, however many placements a chain of documents that
+ * each place the next twice multiplies, and no limit is set on it. The walk keeps the placements
+ * still open in a list of its own rather than on the call stack, so no length of a chain of refs
+ * overflows the stack either.
  *
- * Each placement carries whether a section whose selection has replacement lies above it, in the
- * document of any placement above it, so a numbered reading through one of its item refs counts
- * there (reading 88: "anywhere above it in the assembled test"); its test part; and whether its
- * section's order is drawn at delivery, as reading 87 reads them.
- *
- * The walk keeps the placements still open in a list of its own rather than on the call stack, so
- * no length of a chain of refs, each document naming the next, overflows the stack, and no limit is
- * set on it. The work grows with the number of placements, which documents that each place the
- * next more than once multiply; no bound is set on that either, a recorded limit (rule
- * `db2ef322`), as pantry's assembled test holds one instance per placement.
+ * A ref to a document already on the walk's chain, the documents from the test down to the
+ * placement that holds it, would merge that document into itself without end, which no aggregated
+ * document is (reading 85, "an inclusion never reaches itself"): it is `inclusion-cycle` at the
+ * section ref, its detail the section ref's `identifier` when it writes one, its `href` as written,
+ * the `chain` of document paths from the test through the repeated one, space-separated, and
+ * `reading: "85"`, given once for each section ref of the test the walk finds so, and it places
+ * nothing, as pantry's law "Inclusion cycle" refuses it alone. The walk finds every loop the test
+ * reaches at one section ref at least; a ref that closes a loop only on a chain the walk does not
+ * take, since it walks each placement once, is not refused again: whether some chain of documents
+ * through a given one leads to a ref is not decidable in polynomial time in general, so plate
+ * refuses the loop at the refs its own walk meets. An `xi:include` is never fetched here (S-6), so
+ * a loop through includes is not seen, a recorded limit (rule `db2ef322`).
  *
  * @param test The test's own placement.
  * @param sectionPaths The path of every section resource's document.
  * @param itemPaths The path of every item resource's document.
  * @param documents The package's documents.
- * @returns The placements, the test's first, in pre-order, and the cycles' refusals.
+ * @returns The placements, the cycles' refusals, and how the placements place one another.
  */
 const assemble = (
   test: Placement,
@@ -2364,10 +2431,7 @@ const assemble = (
   itemPaths: ReadonlySet<string>,
   documents: ReadonlyMap<string, Document>,
 ): Assembly => {
-  const read = new Map<
-    string,
-    Option.Option<Omit<ReachedSection, "path"> & Pick<Placement, "layout">>
-  >();
+  const read = new Map<string, Option.Option<Omit<Placement, keyof PlacementContext | "path">>>();
   /**
    * Read the section document at a path once, with what it holds.
    *
@@ -2389,37 +2453,53 @@ const assemble = (
 
     return found;
   };
+  const parts = new Map<SourceElement, number>();
+  /**
+   * Key a document's placement under a context.
+   *
+   * @param path The document's path.
+   * @param context The context.
+   * @returns The key.
+   */
+  const keyOf = (path: string, { mixes, part, replaced }: PlacementContext): string => {
+    const partKey = Option.match(part, {
+      onNone: () => -1,
+      onSome: (element) => {
+        const known = parts.get(element) ?? parts.size;
+        parts.set(element, known);
+
+        return known;
+      },
+    });
+
+    return JSON.stringify([path, partKey, mixes, replaced]);
+  };
 
   const placements: Placement[] = [test];
+  const byKey = new Map<string, Placement>([[keyOf(test.path, test), test]]);
+  const children = new Map<Placement, PlacedBy[]>();
+  const finished: Placement[] = [];
   const cycles: Refusal[] = [];
   const refused = new Set<SourceElement>();
-  const onChain = new Set<string>([test.path]);
-  // Each open placement with the index of its next section ref, the innermost last.
+  // Each open placement with the index of its next section ref, the innermost last; their
+  // documents are the chain.
   const open: { readonly placement: Placement; next: number }[] = [{ next: 0, placement: test }];
+  const onChain = new Set<string>([test.path]);
   for (let frame = open.at(-1); frame !== undefined; frame = open.at(-1)) {
     const { placement } = frame;
     const site = placement.structure.sectionRefs.at(frame.next);
     frame.next += 1;
+    const found = site === undefined ? Option.none() : readAt(site.path);
     if (site === undefined) {
       open.pop();
       onChain.delete(placement.path);
-    } else {
-      const found = readAt(site.path);
-      if (Option.isSome(found) && onChain.has(site.path) && !refused.has(site.element)) {
+      finished.push(placement);
+    } else if (Option.isSome(found) && onChain.has(site.path)) {
+      if (!refused.has(site.element)) {
         refused.add(site.element);
-
-        const chain = [site.path];
-        for (
-          let above: Placement | undefined = placement;
-          above !== undefined;
-          above = above.parent
-        ) {
-          chain.unshift(above.path);
-        }
-
         cycles.push(
           refuse(placement.source.location, "inclusion-cycle", site.at, {
-            chain: chain.join(" "),
+            chain: [...open.map((one) => one.placement.path), site.path].join(" "),
             href: site.href,
             ...Option.match(identifierOf(site.element), {
               onNone: () => ({}),
@@ -2428,19 +2508,17 @@ const assemble = (
             reading: "85",
           }),
         );
-      } else if (Option.isSome(found) && !onChain.has(site.path)) {
-        const scope = placement.layout.sites.get(site.element);
-        const child: Placement = {
-          ...found.value,
-          mixes:
-            (scope?.parentMixes ?? false) ||
-            ((scope?.parentLooseChain ?? false) && placement.mixes),
-          parent: placement,
-          part: Option.orElse(scope?.part ?? Option.none(), () => placement.part),
-          path: site.path,
-          replaced: site.replaced || placement.replaced,
-          siteStart: scope?.start ?? 0,
-        };
+      }
+    } else if (Option.isSome(found)) {
+      const context = contextUnder(placement, site);
+      const key = keyOf(site.path, context);
+      const known = byKey.get(key);
+      const child = known ?? { ...found.value, ...context, path: site.path };
+      const placed = children.get(placement) ?? [];
+      placed.push({ placement: child, site });
+      children.set(placement, placed);
+      if (known === undefined) {
+        byKey.set(key, child);
         placements.push(child);
         onChain.add(site.path);
         open.push({ next: 0, placement: child });
@@ -2448,7 +2526,7 @@ const assemble = (
     }
   }
 
-  return { cycles, placements };
+  return { children, counts: countsOf(test, children, finished), cycles, placements };
 };
 
 /**
@@ -2583,117 +2661,45 @@ const holdsPoint = (name: BranchName, point: number): boolean =>
   name.start <= point && point < name.end;
 
 /**
- * A branch rule's target resolved in one placement ({@link resolveTarget}): the rule's owner as a
- * name, the placement that holds the target, its index on the chain, and the target as a name.
+ * A branch rule's target as one placement of the rule reads it: the target, the context of the
+ * placement that holds it and that placement's document's layout, the rule's owner, the rule's test
+ * part, and, when the target lies in a document above the rule's, the point in that document the
+ * rule's placement descends through.
  */
-interface ResolvedTarget {
-  readonly holder: Placement;
-  readonly holderAt: number;
+interface TargetView {
+  readonly holder: PlacementContext;
+  readonly layout: DocumentLayout;
   readonly owner: BranchName;
-  readonly placement: Placement;
+  readonly ownerPart: SourceElement | undefined;
+  /**
+   * None when the target lies in the rule's own placement; otherwise the pre-order index, in the
+   * holder's document, of the section ref through which the rule's placement descends.
+   */
+  readonly point: Option.Option<number>;
   readonly target: BranchName;
 }
 
 /**
- * Resolve a branch rule's target in one placement, as reading 87 resolves it: to the element its
- * identifier names in the rule's own placement or one above it, the outermost where several do,
- * since from outside a section document a ref places no target lies inside it (branch rules "treat
- * referred sections as leaf nodes", section 7.5).
- *
- * One that names no such element is `unknown`, unless a section document that two section refs
- * place writes it, so two placements supply it: then it is `ambiguous` (reading 87, "one that two
- * placements of a section document supply twice ... is refused as ambiguous", which the operator's
- * comment on PR #46 asks to apply only to a rule outside that document). A rule whose owner writes
- * no identifier resolves from no source, and is `unknown` beside the owner's own refusal (reading
- * 147).
- *
- * @param chain The placements from the test down to the rule's, the rule's last.
- * @param rule The rule.
- * @param names Each name of the reach by identifier, each document that writes it in the order the
- *   walk reaches them.
- * @param placedAt Each document's placements, by path.
- * @returns The resolved target, or the reason it does not resolve.
- */
-const resolveTarget = (
-  chain: readonly Placement[],
-  rule: BranchRule,
-  names: ReadonlyMap<string, readonly WrittenName[]>,
-  placedAt: ReadonlyMap<string, readonly Placement[]>,
-): Result.Result<ResolvedTarget, string> => {
-  const placement = chain.at(-1);
-  const owner = placement?.layout.names.get(rule.owner);
-  const written = names.get(rule.target) ?? [];
-  const holderAt = chain.findIndex(({ path }) => written.some((one) => one.path === path));
-  const holder = holderAt === -1 ? undefined : chain.at(holderAt);
-  const target = written.find((one) => one.path === holder?.path)?.name;
-  if (placement === undefined || owner === undefined) {
-    return Result.fail("unknown");
-  }
-
-  if (holder === undefined || target === undefined) {
-    return Result.fail(
-      written.some(({ path }) => (placedAt.get(path)?.length ?? 0) > 1) ? "ambiguous" : "unknown",
-    );
-  }
-
-  return Result.succeed({ holder, holderAt, owner, placement, target });
-};
-
-/**
- * Give why a resolved target is not one its rule may name, in this order, one fault, one reason: on
- * a test part, the target is a test part, and on an item ref or a section, an item ref, section or
- * section ref of the same test part, else `outside-part`; it is no item ref under a section whose
- * `qti-selection` has `with-replacement` true, anywhere above it in the assembled test, else
- * `repeatable`; it is not the rule's own owner, else `self` (reading 87).
- *
- * @param rule The rule.
- * @param resolved Its target, resolved.
- * @returns The reason, none when the target is one the rule may name.
- */
-const namingFault = (
-  rule: BranchRule,
-  { holder, owner, placement, target }: ResolvedTarget,
-): Option.Option<string> => {
-  const ownsPart = isQti(rule.owner, partElements);
-  const isPart = isQti(target.element, partElements);
-  const ownerPart = Option.getOrUndefined(Option.orElse(owner.part, () => placement.part));
-  const targetPart = Option.getOrUndefined(Option.orElse(target.part, () => holder.part));
-  if (ownsPart ? !isPart : isPart || ownerPart !== targetPart) {
-    return Option.some("outside-part");
-  }
-
-  if (isQti(target.element, itemRefElements) && (target.replaced || holder.replaced)) {
-    return Option.some("repeatable");
-  }
-
-  return holder === placement && target.element === rule.owner
-    ? Option.some("self")
-    : Option.none();
-};
-
-/**
- * Report whether a resolved target lies after its rule's source, as pantry's law "Branch forward"
- * reads it: in the owner's document, at or after the owner's end; in a document above, after the
- * section ref the rule's placement descends through. A target before it is still accepted when the
- * rule is no test part's, the two do not nest, and the nearest name above the target that holds the
- * source draws its children's order at delivery (it shuffles, or a loose section mixes its children
- * into one that does, {@link OrderScope}), the target under a child of it that does not hold the
+ * Report whether a target lies after its rule's source, as pantry's law "Branch forward" reads it:
+ * in the rule's own placement, at or after the owner's end; in a document above, after the section
+ * ref the rule's placement descends through. A target before it is still accepted when the rule is
+ * no test part's, the two do not nest, and the nearest name above the target that holds the source
+ * draws its children's order at delivery (it shuffles, or a loose section mixes its children into
+ * one that does, {@link OrderScope}), the target under a child of it that does not hold the
  * source: "their order is drawn at delivery and is not judged here, in either direction" (reading
  * 87). A `fixed` choice, which holds some orders under a shuffle, is not read, so a pair it would
  * hold backward is accepted, a recorded limit, as reading 87 records it.
  *
- * @param chain The placements from the test down to the rule's, the rule's last.
  * @param rule The rule.
- * @param resolved Its target, resolved.
+ * @param view Its target, as the rule's placement reads it.
  * @returns Whether the target lies after the source, or their order is drawn.
  */
 const isForward = (
-  chain: readonly Placement[],
   rule: BranchRule,
-  { holder, holderAt, owner, placement, target }: ResolvedTarget,
+  { holder, layout, owner, point: through, target }: TargetView,
 ): boolean => {
-  const same = holder === placement;
-  const point = same ? owner.start : (chain.at(holderAt + 1)?.siteStart ?? owner.start);
+  const same = Option.isNone(through);
+  const point = Option.getOrElse(through, () => owner.start);
   if (same ? target.start >= owner.end : target.start > point) {
     return true;
   }
@@ -2708,7 +2714,7 @@ const isForward = (
    */
   const above = (name: BranchName): BranchName | undefined =>
     name.parent.pipe(
-      Option.flatMap((parent) => Option.fromUndefinedOr(holder.layout.names.get(parent))),
+      Option.flatMap((parent) => Option.fromUndefinedOr(layout.names.get(parent))),
       Option.getOrUndefined,
     );
   let branch = target;
@@ -2728,62 +2734,241 @@ const isForward = (
 };
 
 /**
- * Give why reading 87 refuses one branch rule's target in one placement, as pantry's laws "Branch
- * target" and "Branch forward" judge an instance's rule (`packages/pantry/src/qti/tests.ts`): one
- * that does not resolve ({@link resolveTarget}), one the rule may not name ({@link namingFault}),
- * or one before its source whose order is not drawn ({@link isForward}), `backward`.
+ * Give why reading 87 refuses a resolved target, as pantry's laws "Branch target" and "Branch
+ * forward" judge it, in this order, one fault, one reason: on a test part, the target is a test
+ * part, and on an item ref or a section, an item ref, section or section ref of the same test part,
+ * else `outside-part`; it is no item ref under a section whose `qti-selection` has
+ * `with-replacement` true, anywhere above it in the assembled test, else `repeatable`; it is not
+ * the rule's own owner, else `self`; and it lies after the source ({@link isForward}), else
+ * `backward`.
  *
- * @param chain The placements from the test down to the rule's, the rule's last.
  * @param rule The rule.
- * @param names Each name of the reach by identifier, each document that writes it in the order the
- *   walk reaches them.
- * @param placedAt Each document's placements, by path.
+ * @param view Its target, as the rule's placement reads it.
  * @returns The reason, none when the target holds.
  */
-const branchFault = (
-  chain: readonly Placement[],
-  rule: BranchRule,
-  names: ReadonlyMap<string, readonly WrittenName[]>,
-  placedAt: ReadonlyMap<string, readonly Placement[]>,
-): Option.Option<string> =>
-  Result.match(resolveTarget(chain, rule, names, placedAt), {
-    onFailure: (reason) => Option.some(reason),
-    onSuccess: (resolved) =>
-      Option.orElse(namingFault(rule, resolved), () =>
-        isForward(chain, rule, resolved) ? Option.none() : Option.some("backward"),
-      ),
-  });
+const viewFault = (rule: BranchRule, view: TargetView): Option.Option<string> => {
+  const { holder, ownerPart, point, target } = view;
+  const ownsPart = isQti(rule.owner, partElements);
+  const isPart = isQti(target.element, partElements);
+  const targetPart = Option.getOrUndefined(Option.orElse(target.part, () => holder.part));
+  if (ownsPart ? !isPart : isPart || ownerPart !== targetPart) {
+    return Option.some("outside-part");
+  }
+
+  if (isQti(target.element, itemRefElements) && (target.replaced || holder.replaced)) {
+    return Option.some("repeatable");
+  }
+
+  if (Option.isNone(point) && target.element === rule.owner) {
+    return Option.some("self");
+  }
+
+  return isForward(rule, view) ? Option.none() : Option.some("backward");
+};
 
 /**
- * Judge the branch rules of one placement over the assembled test (reading 87, {@link branchFault}),
- * as the qti package judges each instance's rules: each target that does not hold is
- * `branch-target` at its `target`, its detail the `target`, the `reason` and `reading: "87"`.
+ * How the placements of a test's assembly place one another, which the branch rules read: the
+ * test's placement, each placement's section refs with what each places, and each placement's
+ * placements above it, one step up.
+ */
+interface PlacementGraph {
+  readonly children: ReadonlyMap<Placement, readonly PlacedBy[]>;
+  readonly counts: ReadonlyMap<Placement, number>;
+  readonly parents: ReadonlyMap<Placement, readonly Placement[]>;
+  readonly placements: readonly Placement[];
+  readonly test: Placement;
+}
+
+/**
+ * Give the placements from which some of a set of placements can be reached, each of the set
+ * included.
  *
- * @param chain The placements from the test down to the one judged, it last.
+ * @param graph The assembly's placements.
+ * @param targets The set.
+ * @returns The placements that reach it.
+ */
+const reachingAny = (
+  graph: PlacementGraph,
+  targets: readonly Placement[],
+): ReadonlySet<Placement> => {
+  const reaching = new Set<Placement>(targets);
+  const pending = [...targets];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    for (const parent of graph.parents.get(next) ?? []) {
+      if (!reaching.has(parent)) {
+        reaching.add(parent);
+        pending.push(parent);
+      }
+    }
+  }
+
+  return reaching;
+};
+
+/**
+ * Give the placements the test reaches through placements outside a set: every one but those a
+ * placement of the set lies above on every way down to it, and the set itself.
+ *
+ * @param graph The assembly's placements.
+ * @param avoided The set.
+ * @returns The placements reached.
+ */
+const reachedAvoiding = (
+  graph: PlacementGraph,
+  avoided: ReadonlySet<Placement>,
+): ReadonlySet<Placement> => {
+  const reached = new Set<Placement>(avoided.has(graph.test) ? [] : [graph.test]);
+  const pending = [...reached];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    for (const { placement } of graph.children.get(next) ?? []) {
+      if (!avoided.has(placement) && !reached.has(placement)) {
+        reached.add(placement);
+        pending.push(placement);
+      }
+    }
+  }
+
+  return reached;
+};
+
+/**
+ * Give the reasons reading 87 refuses a branch rule of a document for, over every placement of the
+ * document, when its target lies in no placement of the rule's own document: from outside a section
+ * document a ref places, no target lies inside it, since branch rules "treat referred sections as
+ * leaf nodes" (section 7.5), so the target resolves only in a placement above the rule's.
+ *
+ * - Where the test reaches a placement of the rule's document through no placement of a document that
+ *   writes the target, the target is `unknown`, or `ambiguous` when the documents that write it are
+ *   placed more than once, so two placements supply it (reading 87, "one that two placements of a
+ *   section document supply twice ... is refused as ambiguous", which the operator's comment on PR
+ *   #46 asks to apply only to a rule outside that document).
+ * - Where a placement of a document that writes it lies above, the target is judged as that placement
+ *   holds it, from the section ref through which the rule's placement descends
+ *   ({@link viewFault}).
+ *
+ * Each placement of a document under one context and each section ref of it is read once, so the
+ * work is bounded by the assembly's placements and section refs.
+ *
+ * @param graph The assembly's placements.
+ * @param rule The rule.
+ * @param owner The rule's owner.
+ * @param written Each document that writes the target, none of them the rule's own.
+ * @param ruled The placements of the rule's document.
+ * @returns The reasons, each once, in the order found.
+ */
+const acrossFaults = (
+  graph: PlacementGraph,
+  rule: BranchRule,
+  owner: BranchName,
+  written: readonly WrittenName[],
+  ruled: readonly Placement[],
+): readonly string[] => {
+  const writers = graph.placements.filter(({ path }) => written.some((one) => one.path === path));
+  const reasons = new Set<string>();
+  const outside = reachedAvoiding(graph, new Set(writers));
+  if (ruled.some((placement) => outside.has(placement))) {
+    let supplied = 0;
+    for (const writer of writers) {
+      supplied += graph.counts.get(writer) ?? 0;
+    }
+
+    reasons.add(supplied > 1 ? "ambiguous" : "unknown");
+  }
+
+  const reaching = reachingAny(graph, ruled);
+  for (const holder of writers) {
+    const target = written.find(({ path }) => path === holder.path)?.name;
+    for (const { placement, site } of graph.children.get(holder) ?? []) {
+      if (target !== undefined && reaching.has(placement)) {
+        for (const reason of Option.toArray(
+          viewFault(rule, {
+            holder,
+            layout: holder.layout,
+            owner,
+            ownerPart: Option.getOrUndefined(Option.orElse(owner.part, () => placement.part)),
+            point: Option.fromUndefinedOr(holder.layout.sites.get(site.element)?.start),
+            target,
+          }),
+        )) {
+          reasons.add(reason);
+        }
+      }
+    }
+  }
+
+  return [...reasons];
+};
+
+/**
+ * Judge the branch rules of one placement over the assembled test (reading 87), as the qti package
+ * judges each instance's rules: each target that does not hold is `branch-target` at its `target`,
+ * its detail the `target`, the `reason` and `reading: "87"`.
+ *
+ * A target its own document writes resolves in the rule's own placement, judged under this
+ * placement's context ({@link viewFault}). Any other target resolves in a placement above, or
+ * nowhere, and is judged once for the document over all its placements, at its first placement
+ * ({@link acrossFaults}). A rule whose owner writes no identifier resolves from no source, and is
+ * `unknown` beside the owner's own refusal (reading 147).
+ *
+ * @param graph The assembly's placements.
+ * @param here The placement judged.
+ * @param first Whether it is its document's first placement.
  * @param names Each name of the reach by identifier, each document that writes it in the order the
  *   walk reaches them.
- * @param placedAt Each document's placements, by path.
  * @returns The refusals, in document order.
  */
 const judgeBranches = (
-  chain: readonly Placement[],
+  graph: PlacementGraph,
+  here: Placement,
+  first: boolean,
   names: ReadonlyMap<string, readonly WrittenName[]>,
-  placedAt: ReadonlyMap<string, readonly Placement[]>,
-): readonly Refusal[] => {
-  const placement = chain.at(-1);
+): readonly Refusal[] =>
+  here.layout.rules.flatMap((rule) => {
+    const owner = here.layout.names.get(rule.owner);
+    const written = names.get(rule.target) ?? [];
+    const own = written.find(({ path }) => path === here.path)?.name;
+    /**
+     * Give the reasons the rule is refused for here.
+     *
+     * @returns The reasons.
+     */
+    const reasons = (): readonly string[] => {
+      if (owner === undefined) {
+        return first ? ["unknown"] : [];
+      }
 
-  return (placement?.layout.rules ?? []).flatMap((rule) =>
-    Option.toArray(
-      Option.map(branchFault(chain, rule, names, placedAt), (reason) =>
-        refuse(placement?.source.location ?? "", "branch-target", rule.at, {
-          reading: "87",
-          reason,
-          target: rule.target,
-        }),
-      ),
-    ),
-  );
-};
+      if (own !== undefined) {
+        return Option.toArray(
+          viewFault(rule, {
+            holder: here,
+            layout: here.layout,
+            owner,
+            ownerPart: Option.getOrUndefined(Option.orElse(owner.part, () => here.part)),
+            point: Option.none(),
+            target: own,
+          }),
+        );
+      }
+
+      return first
+        ? acrossFaults(
+            graph,
+            rule,
+            owner,
+            written,
+            graph.placements.filter(({ path }) => path === here.path),
+          )
+        : [];
+    };
+
+    return reasons().map((reason) =>
+      refuse(here.source.location, "branch-target", rule.at, {
+        reading: "87",
+        reason,
+        target: rule.target,
+      }),
+    );
+  });
 
 /**
  * Give the refusals of the verdict on the document at a path: what its own check already gives,
@@ -2820,15 +3005,17 @@ interface Reach {
    */
   readonly durations: ReadonlySet<string>;
   /**
+   * The placements of each document, by path, as a reading through one of its elements from
+   * outside it reads them: whether a selection with replacement lies above each, true and false
+   * each given as often as the assembled test places the document so, counted up to 2.
+   */
+  readonly flags: ReadonlyMap<string, readonly boolean[]>;
+  /**
    * Each item ref of the reach, by identifier: the test's own, then each reached section
    * document's that no document before it gave.
    */
   readonly itemRefs: ReadonlyMap<string, ResolvedItemRef>;
   readonly names: ReadonlyMap<string, readonly WrittenName[]>;
-  /**
-   * Each document's placements, by path, in the order the walk places them.
-   */
-  readonly placedAt: ReadonlyMap<string, readonly Placement[]>;
   /**
    * Each section document the test places, at its first placement, in the order the walk places
    * them.
@@ -2839,22 +3026,38 @@ interface Reach {
 }
 
 /**
- * Gather what a test's placements give its references and branch rules: each document's
- * placements; the section documents placed, each once; the identifiers a document gives again
- * across the reach ({@link repeatsIn}), which are left out of it, so the first wins; each item ref,
- * part and section identifier, where it is written; and each name a branch rule may name, with
- * each document that writes it.
+ * Gather what a test's placements give its references and branch rules: the section documents
+ * placed, each once; the identifiers a document gives again across the reach ({@link repeatsIn}),
+ * which are left out of it, so the first wins; each item ref, part and section identifier, where it
+ * is written; each document's placements as a reading from outside it reads them; and each name a
+ * branch rule may name, with each document that writes it.
  *
  * @param test The test's own placement.
- * @param placements Every placement, the test's first, in pre-order.
+ * @param assembly The test's assembly.
  * @returns What they give.
  */
-const reachOf = (test: Placement, placements: readonly Placement[]): Reach => {
+const reachOf = (test: Placement, { counts, placements }: Assembly): Reach => {
   const placedAt = new Map<string, Placement[]>();
   for (const placement of placements) {
     placedAt.set(placement.path, [...(placedAt.get(placement.path) ?? []), placement]);
   }
 
+  const flags = new Map(
+    [...placedAt].map(([path, placed]) => {
+      const counted = [true, false].flatMap((replaced) => {
+        let count = 0;
+        for (const placement of placed) {
+          if (placement.replaced === replaced) {
+            count += counts.get(placement) ?? 0;
+          }
+        }
+
+        return Array.from({ length: Math.min(2, count) }, () => replaced);
+      });
+
+      return [path, counted] as const;
+    }),
+  );
   const reached = [...placedAt.values()].flatMap(([first]) =>
     first === undefined || first === test ? [] : [first],
   );
@@ -2893,7 +3096,7 @@ const reachOf = (test: Placement, placements: readonly Placement[]): Reach => {
     }
   }
 
-  return { durations, itemRefs, names, placedAt, reached, repeats, written };
+  return { durations, flags, itemRefs, names, reached, repeats, written };
 };
 
 /**
@@ -3008,12 +3211,14 @@ interface TestJudgement {
  * a name the test declares whole, as an outcome or context variable (reading 37 lets an identifier
  * hold `.`), or holds as a built-in, is its unsplit reading, which counts beside every other
  * (reading 48, "the unsplit reading counts among them"). A reading through an item ref, part or
- * section reads one placement of its document: from inside that document, or a document it places,
- * the placement that holds the reference, and from anywhere else each placement, so a reference
- * from outside a section document placed twice reads it twice and is `ambiguous-reference` (reading
- * 86; pantry refuses a reading through a name two placements give wherever the reference stands,
- * `Prefixed_reference`, an agreement difference). An item ref a selection with replacement can
- * repeat in that placement, in its own document or above the section ref that places it, is
+ * section reads one placement of its document: from inside that document, the placement being
+ * judged, and from any other document each placement, so a reference from outside a section
+ * document placed twice reads it twice and is `ambiguous-reference` (reading 86; pantry refuses a
+ * reading through a name two placements give wherever the reference stands, `Prefixed_reference`,
+ * an agreement difference). Another document's placements are counted up to 2, once or more than
+ * once, which is all reading 48 asks of them, so a document that places one of its own placements'
+ * documents twice reads that document's names twice too. An item ref a selection with replacement
+ * can repeat in that placement, in its own document or above the section ref that places it, is
  * repeatable there, and only through one does a numbered reading count (reading 88). A name with no
  * `.` is the test's own check's; every other is judged by {@link judgeReference}. An item ref
  * resolves a reading only through an item whose document the package holds and the reader read, so
@@ -3032,8 +3237,9 @@ interface TestJudgement {
  * and a refusal the references already gave is not given again. A reached section document's item
  * refs are judged once for the package ({@link judgeReached}).
  *
- * Each placement of a section document is then judged under the test, as the qti package places a
- * test or section document once per instance of every test that places it (its law
+ * Each placement of a section document, one for each context the test places it under
+ * ({@link assemble}), is then judged under the test, as the qti package places a test or section
+ * document once per instance of every test that places it (its law
  * `Prefixed_reference` and its `Instance` tree, `packages/pantry/src/qti/expressions.ts` and
  * `packages/pantry/src/qti/tests.ts`), since its references "resolve once for each test that
  * includes the section, not once for the section on its own" (reading 5) and a fragment a section
@@ -3076,28 +3282,33 @@ const judgeTest = (
   const test: Placement = {
     layout: layoutOf(own.visits),
     mixes: false,
-    parent: undefined,
     part: Option.none(),
     path: testPath,
     replaced: false,
-    siteStart: 0,
     source,
     structure: own,
   };
-  const { cycles, placements } = assemble(test, sectionPaths, itemPaths, documents);
-  const { durations, itemRefs, names, placedAt, reached, repeats, written } = reachOf(
-    test,
-    placements,
-  );
+  const assembly = assemble(test, sectionPaths, itemPaths, documents);
+  const { children, counts, cycles, placements } = assembly;
+  const { durations, flags, itemRefs, names, reached, repeats, written } = reachOf(test, assembly);
+  const parents = new Map<Placement, Placement[]>();
+  for (const [parent, placed] of children) {
+    for (const { placement } of placed) {
+      const above = parents.get(placement) ?? [];
+      above.push(parent);
+      parents.set(placement, above);
+    }
+  }
+
+  const graph: PlacementGraph = { children, counts, parents, placements, test };
   const items = itemsOf(itemRefs, documents);
   const variablesFor = variablesThrough(own.targets, documents);
   const mappingRefusals = judgeMappings(source.location, own.visits, variablesFor);
   const defaults = judgeTemplateDefaults(source.location, own.visits, variablesFor);
   const whole = wholeOf(source);
-  // The placements from the test down to the one being judged, it last, and each by its document's
-  // path: the scope reads them, so it is read only while that placement is judged.
-  const chain: Placement[] = [test];
-  const chainAt = new Map<string, Placement>([[testPath, test]]);
+  // The placement being judged: the scope reads it, so it is read only while that placement is
+  // judged, the test's first.
+  let here = test;
   const scope: ReferenceScope = {
     durations,
     items,
@@ -3107,10 +3318,8 @@ const judgeTest = (
         return [];
       }
 
-      const holder = chainAt.get(at.document);
-
-      return (holder === undefined ? (placedAt.get(at.document) ?? []) : [holder]).map(
-        (placement) => at.replaced || placement.replaced,
+      return (at.document === here.path ? [here.replaced] : (flags.get(at.document) ?? [])).map(
+        (replaced) => at.replaced || replaced,
       );
     },
     whole,
@@ -3174,7 +3383,10 @@ const judgeTest = (
     ),
     [...processingRefusals(source, tables, () => unknownType), ...references],
   );
-  const branches = notHeld(judgeBranches(chain, names, placedAt), ownRefusals(documents, testPath));
+  const branches = notHeld(
+    judgeBranches(graph, test, true, names),
+    ownRefusals(documents, testPath),
+  );
 
   /**
    * Report whether a name the test's processing reads names an item's context variable through its
@@ -3206,15 +3418,16 @@ const judgeTest = (
     }
   >();
   /**
-   * Judge one placement of a section document under the test, the placement last on the chain:
-   * at its document's first placement, the identifiers it gives again across the reach; its
-   * references', those of its expressions that only the test's scope and typed reach give, and its
-   * branch rules', beyond those its own verdict already gives.
+   * Judge one placement of a section document under the test, the placement being judged: at its
+   * document's first placement, the identifiers it gives again across the reach; its references',
+   * those of its expressions that only the test's scope and typed reach give, and its branch
+   * rules', beyond those its own verdict already gives.
    *
    * @param placement The placement.
    * @returns The refusals, at the section document, in its document order.
    */
-  const judgePlacement = ({ path, source: section, structure }: Placement): readonly Refusal[] => {
+  const judgePlacement = (placement: Placement): readonly Refusal[] => {
+    const { path, source: section, structure } = placement;
     const known = once.get(path);
     const { alone, targets } = known ?? {
       alone: processingRefusals(section, tables, () => unknownType),
@@ -3246,17 +3459,15 @@ const judgeTest = (
         ),
         [...alone, ...sectionReferences],
       ),
-      ...notHeld(judgeBranches(chain, names, placedAt), ownRefusals(documents, path)),
+      ...notHeld(
+        judgeBranches(graph, placement, known === undefined, names),
+        ownRefusals(documents, path),
+      ),
     ];
   };
   const sections: Refusal[] = [...cycles];
   for (const placement of placements.slice(1)) {
-    while (chain.length > 0 && chain.at(-1) !== placement.parent) {
-      chainAt.delete(chain.pop()?.path ?? "");
-    }
-
-    chain.push(placement);
-    chainAt.set(placement.path, placement);
+    here = placement;
     sections.push(...notHeld(judgePlacement(placement), sections));
   }
 
