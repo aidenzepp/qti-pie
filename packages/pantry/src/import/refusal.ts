@@ -377,6 +377,7 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
     "E1 derived",
     "XmlLang",
     "DocumentLang",
+    "GeneralNamed",
     "GeneralObject",
     "DocumentGenerals",
     "GeneralLang",
