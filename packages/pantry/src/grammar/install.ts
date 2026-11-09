@@ -41,6 +41,7 @@ import { Array as Arr, Option, Result } from "effect";
 import type { Flag as FlagHandle } from "#pantry/grammar/ancestry.ts";
 import { attributeCounts } from "#pantry/grammar/attributes.ts";
 import type { AttributeCount } from "#pantry/grammar/attributes.ts";
+import type { Roster as GeneratedRoster } from "#pantry/grammar/closed.ts";
 import { int8Max, rowsAt } from "#pantry/grammar/closed.ts";
 import { composed, recordCardinality } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
@@ -90,22 +91,52 @@ const nonEmpty = <H extends string>(name: string, handles: readonly H[]): readon
 };
 
 /**
- * Read a generated row's value as a handle of the roster its field ranges over, the type grizzle's
- * declared rows hold. It checks nothing: grizzle refuses a closed id outside its roster when this
- * module declares the relation (`closedRows`, grizzle's `schema/relation.ts`), naming the row and
- * the field, and the composition's tests check every generated row against its field's roster
- * (`faultOf`, `compose.test.ts`). The generators type their rows by the IR's strings, so the
- * roster's handle type is stated here, once.
+ * Narrow a generator's value to a handle of one of its rosters: the generators type their rows by
+ * the IR's strings, and grizzle's declared rows hold each roster's handle type, which this test of
+ * the roster proves. A value outside the roster is a fault of the generated rows, which the
+ * composition's tests find (`faultOf`, `compose.test.ts`) and grizzle's `closedRows` refuses too.
  *
- * @param _roster - The roster the value's field ranges over, a generated one or one this module
- *   declares, which types the handle.
+ * @param roster - The generated roster the value's field ranges over.
  * @param value - The value a generated row holds.
- * @returns The value, as the roster's handle.
+ * @returns The value as the roster's handle.
+ * @throws {Error} When the roster lacks it: a defect of the generator that stated the row.
  */
-const handleOf = <H extends string>(
-  _roster: { readonly handles: readonly H[] },
-  value: string,
-): H => value as H;
+const memberOf = <H extends string>(roster: GeneratedRoster<H>, value: string): H => {
+  if (roster.has(value)) {
+    return value;
+  }
+
+  throw new Error(
+    `A generated row names ${value}, which the ${roster.name} roster does not hold. The generator's closed relation should have refused the row; correct the generator.`,
+  );
+};
+
+/**
+ * Narrow generators' values to the handles of a roster this module declares, through one keyed
+ * lookup of the roster's handles, built once.
+ *
+ * @param name - The roster's name, for the defect's message.
+ * @param handles - The roster's handles.
+ * @returns The lookup: a value a generated row holds, as the roster's handle.
+ * @throws {Error} From the lookup, when the roster lacks the value, which no generator's row does.
+ */
+const handleLookup = <H extends string>(
+  name: string,
+  handles: readonly H[],
+): ((value: string) => H) => {
+  const byValue = new Map<string, H>(handles.map((handle) => [handle, handle]));
+
+  return (value) => {
+    const found = byValue.get(value);
+    if (found !== undefined) {
+      return found;
+    }
+
+    throw new Error(
+      `A generated row names ${value}, which the ${name} roster this module declares does not hold. Add the handle to the roster, or correct the generator.`,
+    );
+  };
+};
 
 /**
  * The text type of a closed relation's open text payloads: any text, as XML Schema's `xs:string`
@@ -134,7 +165,7 @@ export const nonElementKinds = [
  * (N8), `in(parentKind, interactionKinds)`.
  */
 export const interactionKinds: readonly Kind[] = grammar.kinds.interaction.rows.map(({ kind }) =>
-  handleOf(grammar.kinds.nodeKind, kind),
+  memberOf(grammar.kinds.nodeKind, kind),
 );
 
 /**
@@ -206,12 +237,9 @@ export const TypeName = closed("TypeName", nonEmpty("TypeName", grammar.xsi.type
 export const BaseType = closed("BaseType", nonEmpty("BaseType", grammar.baseTypes.handles));
 
 /**
- * A generated value as a `BaseType` handle ({@link handleOf}).
- *
- * @param value - The value.
- * @returns It, as the handle.
+ * A generated value as a `BaseType` handle ({@link handleLookup}).
  */
-const asBaseType = (value: string) => handleOf(BaseType, value);
+const asBaseType = handleLookup("BaseType", BaseType.handles);
 
 /**
  * The `Cardinality` roster: the cardinalities of a typed variable, each spelled as its lexical
@@ -224,12 +252,9 @@ export const Cardinality = closed(
 );
 
 /**
- * A generated value as a `Cardinality` handle ({@link handleOf}).
- *
- * @param value - The value.
- * @returns It, as the handle.
+ * A generated value as a `Cardinality` handle ({@link handleLookup}).
  */
-const asCardinality = (value: string) => handleOf(Cardinality, value);
+const asCardinality = handleLookup("Cardinality", Cardinality.handles);
 
 /**
  * The `ResourceType` roster: the 21 types a `cp:resource` may name, each spelled as its lexical
@@ -302,12 +327,9 @@ export const ValueDomain = closed(
 );
 
 /**
- * A generated value as a `ValueDomain` handle ({@link handleOf}).
- *
- * @param value - The value.
- * @returns It, as the handle.
+ * A generated value as a `ValueDomain` handle ({@link handleLookup}).
  */
-const asValueDomain = (value: string) => handleOf(ValueDomain, value);
+const asValueDomain = handleLookup("ValueDomain", ValueDomain.handles);
 
 /**
  * The `Use` roster: whether an element of a kind must carry an attribute.
@@ -361,12 +383,9 @@ export const Governor = closed(
 );
 
 /**
- * A generated value as a `Governor` handle ({@link handleOf}).
- *
- * @param value - The value.
- * @returns It, as the handle.
+ * A generated value as a `Governor` handle ({@link handleLookup}).
  */
-const asGovernor = (value: string) => handleOf(Governor, value);
+const asGovernor = handleLookup("Governor", Governor.handles);
 
 /**
  * The `DeclarationKind` roster: the kinds that declare a variable (`references.ts`).
@@ -438,7 +457,7 @@ export const ContentModelOf = closed.relation(
   ["version", "parent"],
   grammar.content.contentModelOf.rows.map(({ model, parent, version }) => ({
     model,
-    parent: handleOf(grammar.kinds.nodeKind, parent),
+    parent: memberOf(grammar.kinds.nodeKind, parent),
     version,
   })),
 );
@@ -501,8 +520,8 @@ export const ChildGrammar = closed.relation(
   },
   ["version", "parent", "child"],
   grammar.admission.rows.map(({ child, parent, position, version }) => ({
-    child: handleOf(grammar.kinds.nodeKind, child),
-    parent: handleOf(grammar.kinds.nodeKind, parent),
+    child: memberOf(grammar.kinds.nodeKind, child),
+    parent: memberOf(grammar.kinds.nodeKind, parent),
     position,
     version,
   })),
@@ -563,7 +582,7 @@ export const SharedModelOf = closed.relation(
   ["version", "parent"],
   grammar.content.sharedModelOf.rows.map(({ model, parent, version }) => ({
     model,
-    parent: handleOf(grammar.kinds.nodeKind, parent),
+    parent: memberOf(grammar.kinds.nodeKind, parent),
     version,
   })),
 );
@@ -578,7 +597,7 @@ export const Symbol = closed.relation(
   { kind: closedId(NodeKind), model: closedId(SharedModel), position: modelPosition },
   ["model", "kind", "position"],
   grammar.content.symbol.rows.map(({ kind, model, position }) => ({
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
     model,
     position,
   })),
@@ -694,7 +713,7 @@ export const CountedOf = closed.relation(
   [...countedByFamily.values()].map(({ max, min, parent, position, version }) => ({
     max: naturalOf(max),
     min: naturalOf(min),
-    parent: handleOf(grammar.kinds.nodeKind, parent),
+    parent: memberOf(grammar.kinds.nodeKind, parent),
     position,
     version,
   })),
@@ -718,7 +737,7 @@ export const Capped = closed.relation(
   },
   ["version", "parent", "position"],
   grammar.content.counted.rows.filter(atMostOnce).map(({ parent, position, version }) => ({
-    parent: handleOf(grammar.kinds.nodeKind, parent),
+    parent: memberOf(grammar.kinds.nodeKind, parent),
     position,
     version,
   })),
@@ -748,7 +767,7 @@ export const BarredOf = closed.relation(
   },
   ["version", "parent"],
   [...barredByFamily.values()].map(({ name, parent, position, version }) => ({
-    parent: handleOf(grammar.kinds.nodeKind, parent),
+    parent: memberOf(grammar.kinds.nodeKind, parent),
     position,
     slot: barringSlot({ name, parent, version }),
     version,
@@ -769,8 +788,8 @@ export const StrictlyHeld = closed.relation(
   },
   ["version", "parent", "child"],
   grammar.content.strictlyHeld.rows.map(({ child, parent, version }) => ({
-    child: handleOf(grammar.kinds.nodeKind, child),
-    parent: handleOf(grammar.kinds.nodeKind, parent),
+    child: memberOf(grammar.kinds.nodeKind, child),
+    parent: memberOf(grammar.kinds.nodeKind, parent),
     version,
   })),
 );
@@ -784,7 +803,7 @@ export const StrictlyHeld = closed.relation(
  * @returns Its (kind, flag) rows.
  */
 const kindFlags = (set: ComposedGrammar["ancestry"]["enters"]) =>
-  set.rows.map(({ flag, kind }) => ({ flag, kind: handleOf(grammar.kinds.nodeKind, kind) }));
+  set.rows.map(({ flag, kind }) => ({ flag, kind: memberOf(grammar.kinds.nodeKind, kind) }));
 
 /**
  * `Enters`: the set of (kind, flag) where an element of the kind enters the flag for its
@@ -828,7 +847,7 @@ export const XsiType = closed.relation(
   { kind: closedId(NodeKind), type: closedId(TypeName), version: closedId(SchemaVersion) },
   ["version", "kind", "type"],
   grammar.xsi.xsiType.rows.map(({ kind, type, version }) => ({
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
     type,
     version,
   })),
@@ -844,7 +863,7 @@ export const AnonymousType = closed.relation(
   { kind: closedId(NodeKind), version: closedId(SchemaVersion) },
   ["version", "kind"],
   grammar.xsi.anonymousType.rows.map(({ kind, version }) => ({
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
     version,
   })),
 );
@@ -906,7 +925,7 @@ const governingRows = () => {
     rows.set(at, row);
   };
   for (const { kind, type, version } of grammar.xsi.xsiType.rows) {
-    add(version, handleOf(grammar.kinds.nodeKind, kind), type);
+    add(version, memberOf(grammar.kinds.nodeKind, kind), type);
   }
 
   for (const version of grammar.kinds.versions.handles) {
@@ -963,18 +982,18 @@ export const attributeRows = [
   ...grammar.attributes.admission.rows.map(({ domain, kind, name, position, use, version }) => ({
     domain,
     governor: asGovernor(kind),
-    name: handleOf(grammar.kinds.attributeName, name),
+    name: memberOf(grammar.kinds.attributeName, name),
     position,
     use,
-    version: handleOf(grammar.kinds.versions, version),
+    version: memberOf(grammar.kinds.versions, version),
   })),
   ...grammar.attributes.governed.rows.map(({ domain, governor, name, position, use, version }) => ({
     domain,
     governor: asGovernor(governor),
-    name: handleOf(grammar.kinds.attributeName, name),
+    name: memberOf(grammar.kinds.attributeName, name),
     position,
     use,
-    version: handleOf(grammar.kinds.versions, version),
+    version: memberOf(grammar.kinds.versions, version),
   })),
 ];
 
@@ -1033,12 +1052,9 @@ export const AttributeModel = closed(
 );
 
 /**
- * A generated value as a `AttributeModel` handle ({@link handleOf}).
- *
- * @param value - The value.
- * @returns It, as the handle.
+ * A generated value as a `AttributeModel` handle ({@link handleLookup}).
  */
-const asAttributeModel = (value: string) => handleOf(AttributeModel, value);
+const asAttributeModel = handleLookup("AttributeModel", AttributeModel.handles);
 
 /**
  * `AttributeModelOf`: (version, governor) → model, total, the attribute grammar an element under
@@ -1353,7 +1369,7 @@ export const KindByNameUnder = closed.relation(
   ["version", "parent"],
   grammar.kindByNameUnder.rows.map(({ names, parent, version }) => ({
     names,
-    parent: handleOf(grammar.kinds.nodeKind, parent),
+    parent: memberOf(grammar.kinds.nodeKind, parent),
     version,
   })),
 );
@@ -1375,7 +1391,7 @@ export const HeldRootsUnder = closed.relation(
   ["version", "parent"],
   grammar.heldRootsUnder.rows.map(({ names, parent, version }) => ({
     names,
-    parent: handleOf(grammar.kinds.nodeKind, parent),
+    parent: memberOf(grammar.kinds.nodeKind, parent),
     version,
   })),
 );
@@ -1423,8 +1439,8 @@ export const ReferenceAttribute = closed.relation(
   ["version", "kind", "name"],
   grammar.references.referenceAttribute.rows.map(({ form, kind, name, version }) => ({
     form,
-    kind: handleOf(grammar.kinds.nodeKind, kind),
-    name: handleOf(grammar.kinds.attributeName, name),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
+    name: memberOf(grammar.kinds.attributeName, name),
     version,
   })),
 );
@@ -1440,7 +1456,7 @@ export const OperatorArity = closed.relation(
   { kind: closedId(NodeKind), max: natural, min: natural },
   ["kind"],
   grammar.operatorArity.rows.map(({ kind, max, min }) => ({
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
     max,
     min,
   })),
@@ -1453,12 +1469,9 @@ export const OperatorArity = closed.relation(
 export const CnType = closed("CnType", nonEmpty("CnType", [...cnForms.keys()]));
 
 /**
- * A generated value as a `CnType` handle ({@link handleOf}).
- *
- * @param value - The value.
- * @returns It, as the handle.
+ * A generated value as a `CnType` handle ({@link handleLookup}).
  */
-const asCnType = (value: string) => handleOf(CnType, value);
+const asCnType = handleLookup("CnType", CnType.handles);
 
 /**
  * The `CnPartForm` roster: the forms a part of a `cn`'s content takes ({@link cnForms}), in the
@@ -1470,12 +1483,9 @@ export const CnPartForm = closed(
 );
 
 /**
- * A generated value as a `CnPartForm` handle ({@link handleOf}).
- *
- * @param value - The value.
- * @returns It, as the handle.
+ * A generated value as a `CnPartForm` handle ({@link handleLookup}).
  */
-const asCnPartForm = (value: string) => handleOf(CnPartForm, value);
+const asCnPartForm = handleLookup("CnPartForm", CnPartForm.handles);
 
 /**
  * The `CnPart` roster: a part's place among the parts of a `cn`'s content, the numerals 0 to the
@@ -1506,7 +1516,7 @@ export const MathArity = closed.relation(
   { kind: closedId(NodeKind), max: natural, min: natural },
   ["kind"],
   [...mathArities].map(([kind, { max, min }]) => ({
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
     max: naturalOf(max),
     min: naturalOf(min),
   })),
@@ -1520,7 +1530,7 @@ export const MathHeadOperator = closed.relation(
   "MathHeadOperator",
   { kind: closedId(NodeKind) },
   ["kind"],
-  [...mathHeadOperators].map((kind) => ({ kind: handleOf(grammar.kinds.nodeKind, kind) })),
+  [...mathHeadOperators].map((kind) => ({ kind: memberOf(grammar.kinds.nodeKind, kind) })),
 );
 
 /**
@@ -1532,8 +1542,8 @@ export const HeadQualifier = closed.relation(
   { head: closedId(NodeKind), qualifier: closedId(NodeKind) },
   ["head", "qualifier"],
   mathHeadQualifiers.map(({ head, qualifier }) => ({
-    head: handleOf(grammar.kinds.nodeKind, head),
-    qualifier: handleOf(grammar.kinds.nodeKind, qualifier),
+    head: memberOf(grammar.kinds.nodeKind, head),
+    qualifier: memberOf(grammar.kinds.nodeKind, qualifier),
   })),
 );
 
@@ -1609,7 +1619,7 @@ export const BindingFit = closed.relation(
   grammar.bindingFit.rows.map(({ baseType, cardinality, kind }) => ({
     baseType,
     cardinality,
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
   })),
 );
 
@@ -1621,7 +1631,7 @@ export const RecordBindingFit = closed.relation(
   { kind: closedId(NodeKind) },
   ["kind"],
   grammar.recordBindingFit.rows.map(({ kind }) => ({
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
   })),
 );
 
@@ -1647,7 +1657,7 @@ export const RootOfType = closed.relation(
   { root: closedId(NodeKind), type: closedId(ResourceType) },
   ["type", "root"],
   grammar.package.rootOfType.rows.map(({ root, type }) => ({
-    root: handleOf(grammar.kinds.nodeKind, root),
+    root: memberOf(grammar.kinds.nodeKind, root),
     type,
   })),
 );
@@ -1673,7 +1683,7 @@ export const IncludeParentKind = closed.relation(
   { kind: closedId(NodeKind), parent: closedId(IncludeParent) },
   ["parent"],
   grammar.include.includeParentKind.rows.map(({ kind, parent }) => ({
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
     parent,
   })),
 );
@@ -1691,7 +1701,7 @@ export const IncludeRoot = closed.relation(
   },
   ["version", "parent", "kind"],
   grammar.include.includeRoot.rows.map(({ kind, parent, version }) => ({
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
     parent,
     version,
   })),
@@ -1715,7 +1725,7 @@ export const Declares = closed.relation(
   ["kind"],
   grammar.references.declares.rows.map(({ declaration, kind }) => ({
     declaration,
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
   })),
 );
 
@@ -1740,7 +1750,7 @@ export const BuiltInVariable = closed.relation(
   grammar.references.builtIn.rows.map(({ cardinality, declaration, root, variable }) => ({
     cardinality: asCardinality(cardinality),
     declaration,
-    root: handleOf(grammar.kinds.nodeKind, root),
+    root: memberOf(grammar.kinds.nodeKind, root),
     variable,
   })),
 );
@@ -1758,7 +1768,7 @@ export const builtInBaseTypes: readonly {
   readonly variable: (typeof BuiltIn.handles)[number];
 }[] = grammar.references.builtInBaseType.rows.map(({ baseType, root, variable }) => ({
   baseType: asBaseType(baseType),
-  root: handleOf(grammar.kinds.nodeKind, root),
+  root: memberOf(grammar.kinds.nodeKind, root),
   variable,
 }));
 
@@ -1775,8 +1785,8 @@ export const VariableReference = closed.relation(
   },
   ["kind", "attribute"],
   grammar.references.variableReference.rows.map(({ attribute, kind, spelling }) => ({
-    attribute: handleOf(grammar.kinds.attributeName, attribute),
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    attribute: memberOf(grammar.kinds.attributeName, attribute),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
     spelling,
   })),
 );
@@ -1794,9 +1804,9 @@ export const ContentReference = closed.relation(
   },
   ["kind", "attribute", "declaration"],
   grammar.references.contentReference.rows.map(({ attribute, declaration, kind }) => ({
-    attribute: handleOf(grammar.kinds.attributeName, attribute),
+    attribute: memberOf(grammar.kinds.attributeName, attribute),
     declaration,
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
   })),
 );
 
@@ -1814,9 +1824,9 @@ export const ChoiceBound = closed.relation(
   },
   ["kind"],
   grammar.references.choiceBound.rows.map(({ kind, max, min, zero }) => ({
-    kind: handleOf(grammar.kinds.nodeKind, kind),
-    max: handleOf(grammar.kinds.attributeName, max),
-    min: handleOf(grammar.kinds.attributeName, min),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
+    max: memberOf(grammar.kinds.attributeName, max),
+    min: memberOf(grammar.kinds.attributeName, min),
     zero,
   })),
 );
@@ -1828,8 +1838,8 @@ export const ChoiceBound = closed.relation(
  */
 export const lastWhereRules = grammar.lastWhere.map(({ kind, parents, ...rule }) => ({
   ...rule,
-  kind: handleOf(grammar.kinds.nodeKind, kind),
-  parents: parents.map((parent) => handleOf(grammar.kinds.nodeKind, parent)),
+  kind: memberOf(grammar.kinds.nodeKind, kind),
+  parents: parents.map((parent) => memberOf(grammar.kinds.nodeKind, parent)),
 }));
 
 /**
@@ -1841,8 +1851,8 @@ export const ChoiceCount = closed.relation(
   { choice: closedId(NodeKind), kind: closedId(NodeKind) },
   ["kind"],
   grammar.references.choiceCount.rows.map(({ choice, kind }) => ({
-    choice: handleOf(grammar.kinds.nodeKind, choice),
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    choice: memberOf(grammar.kinds.nodeKind, choice),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
   })),
 );
 
@@ -1854,7 +1864,7 @@ export const SectionPart = closed.relation(
   { kind: closedId(NodeKind) },
   ["kind"],
   grammar.references.sectionPart.rows.map(({ kind }) => ({
-    kind: handleOf(grammar.kinds.nodeKind, kind),
+    kind: memberOf(grammar.kinds.nodeKind, kind),
   })),
 );
 
