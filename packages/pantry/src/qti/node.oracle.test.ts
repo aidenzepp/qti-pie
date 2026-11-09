@@ -53,6 +53,7 @@ import { datumText } from "#pantry/test/predicates.ts";
 import type { Datum } from "#pantry/test/predicates.ts";
 import { hostRowsOf, judgedLaws } from "#pantry/test/host-judge.ts";
 import type { HostRow } from "#pantry/test/host-judge.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 import { checkOf, checkValueOf } from "#pantry/test/key-copies.ts";
 import { documentBreaches, lawNames, lawsOf, oracleRules, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
@@ -110,7 +111,8 @@ const scratchSchema = () =>
       Banned: install.Banned,
       BarredOf: install.BarredOf,
       Capped: install.Capped,
-      ChildGrammar: install.ChildGrammar,
+      AdmissionIn: install.AdmissionIn,
+      AdmissionMap: install.AdmissionMap,
       ContentModel: install.ContentModel,
       ContentModelOf: install.ContentModelOf,
       CountedOf: install.CountedOf,
@@ -338,11 +340,16 @@ describe("Node's declarations", () => {
 const familyKey = (version: string, parent: string): string => `${version} ${parent}`;
 
 /**
- * `ChildGrammar`'s rows as installed, by family, each kind's position.
+ * The installed admission maps spelled out as (version, parent, child) → position rows.
+ */
+const admitted = admittedOf(install.ContentModelOf, install.AdmissionIn);
+
+/**
+ * The admission maps' rows as installed (`admittedOf`), by family, each kind's position.
  */
 const childGrammar: ReadonlyMap<string, ReadonlyMap<string, string>> = (() => {
   const byFamily = new Map<string, Map<string, string>>();
-  for (const { child, parent, position, version } of install.ChildGrammar.rows) {
+  for (const { child, parent, position, version } of admitted) {
     const key = familyKey(version, parent);
     byFamily.set(key, (byFamily.get(key) ?? new Map<string, string>()).set(child, position));
   }
@@ -461,17 +468,17 @@ interface Family {
 }
 
 /**
- * Every family `ChildGrammar` admits a child under, in its rows' order.
+ * Every family whose admission map admits a child, in `ContentModelOf`'s order.
  */
 const families: readonly [Family, ...Family[]] = (() => {
   const seen = new Map<string, Family>();
-  for (const { parent, version } of install.ChildGrammar.rows) {
+  for (const { parent, version } of admitted) {
     seen.set(familyKey(version, parent), { parent, version });
   }
 
   const [first, ...rest] = [...seen.values()];
   if (first === undefined) {
-    throw new Error("The installed ChildGrammar admits no child, so N5 has no family to judge.");
+    throw new Error("The installed admission maps admit no child, so N5 has no family to judge.");
   }
 
   return [first, ...rest];

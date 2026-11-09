@@ -8,7 +8,7 @@ import { followPairsOf } from "#pantry/grammar/content.ts";
 import { documentRoots, fragmentRoots } from "#pantry/grammar/facets.ts";
 import { includeKind } from "#pantry/grammar/include.ts";
 import {
-  ChildGrammar,
+  AdmissionIn,
   ContentModelOf,
   FollowMember,
   FollowSetOf,
@@ -18,6 +18,7 @@ import {
   SharedModelOf,
   Symbol as ContentSymbol,
 } from "#pantry/grammar/install.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -69,7 +70,10 @@ const symbols = Map.groupBy(ContentSymbol.rows, (row) => `${row.model} ${row.kin
 /**
  * Each family's admitted children with their position cells, by `version parent`.
  */
-const admitted = Map.groupBy(ChildGrammar.rows, (row) => `${row.version} ${row.parent}`);
+const admitted = Map.groupBy(
+  admittedOf(ContentModelOf, AdmissionIn),
+  (row) => `${row.version} ${row.parent}`,
+);
 
 /**
  * The (version, include parent) families `IncludeRoot` holds, each with its parent's kind.

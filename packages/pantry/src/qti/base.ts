@@ -14,6 +14,8 @@
  */
 import { schema } from "@bjornpagen/grizzle";
 import {
+  AdmissionIn,
+  AdmissionMap,
   AnonymousType,
   AttributeCountOf,
   AttributeGrammar,
@@ -35,7 +37,6 @@ import {
   Capped,
   Cardinality,
   CardinalityLexical,
-  ChildGrammar,
   ChoiceBound,
   ChoiceCount,
   CnBase,
@@ -238,6 +239,7 @@ import { testLaws, testRelations } from "#pantry/qti/tests.ts";
  * The rosters `install.ts` declares: each a closed id's code space, read as codes, never a table.
  */
 const grammarRosters = {
+  AdmissionMap,
   AttributeModel,
   AttributeName,
   AttributeSlot,
@@ -276,6 +278,7 @@ const grammarRosters = {
  * a law or a generated field reads them.
  */
 const grammarRelations = {
+  AdmissionIn,
   AnonymousType,
   AttributeCountOf,
   AttributeGrammar,
@@ -289,7 +292,6 @@ const grammarRelations = {
   BuiltInVariable,
   Capped,
   CardinalityLexical,
-  ChildGrammar,
   ChoiceBound,
   ChoiceCount,
   CnForm,

@@ -14,6 +14,7 @@ import {
 } from "#pantry/grammar/expression.ts";
 import * as install from "#pantry/grammar/install.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * The composed grammar, the generators' rows every declaration is compared with.
@@ -196,14 +197,27 @@ const governed: ReadonlyMap<string, { readonly governs: string; readonly kind: s
  * generator's rows: each the second implementation of its declaration.
  */
 const comparisons: readonly Comparison[] = [
-  {
-    expected: () => grammar.admission.rows,
-    name: "ChildGrammar",
-  },
   { expected: () => grammar.content.strictlyHeld.rows, name: "StrictlyHeld" },
   // The content grammar is keyed by automaton where it is generated, so each relation is its
   // generator's rows one to one, and nothing regroups families into models here.
-  { expected: () => grammar.content.contentModelOf.rows, name: "ContentModelOf" },
+  {
+    // Each family's admission map is the installed one: the map's own rows are held to
+    // `Admission`'s by the admission test below.
+    expected: () => {
+      const installed = new Map(
+        install.ContentModelOf.rows.map(({ admission, parent, version }) => [
+          `${version} ${parent}`,
+          admission,
+        ]),
+      );
+
+      return grammar.content.contentModelOf.rows.map((row) => ({
+        ...row,
+        admission: installed.get(`${row.version} ${row.parent}`),
+      }));
+    },
+    name: "ContentModelOf",
+  },
   {
     expected: () =>
       grammar.content.modelPositions.rows.map(({ model, positions }) => ({
@@ -611,6 +625,19 @@ describe("the installed relations", () => {
     },
     searchTimeout,
   );
+
+  it("state Admission, ChildGrammar once, as each family's admission map and each map's children: every (version, parent, child) at its position, and no other", () => {
+    // Oracle: the generator's `Admission` rows, against the installed `ContentModelOf.admission`
+    // and `AdmissionIn` spelled out (`admittedOf`). N5 reads `AdmissionIn` at the family's map
+    // where it read ChildGrammar at the family, so the two agree exactly when these sets do.
+    const key = ["version", "parent", "child"];
+
+    assert.deepStrictEqual(
+      keyedSet("the admission maps", key, admittedOf(install.ContentModelOf, install.AdmissionIn)),
+      keyedSet("Admission", key, grammar.admission.rows),
+    );
+    assert.isBelow(install.AdmissionIn.rows.length, grammar.admission.rows.length);
+  });
 
   it("make ContentModelOf total, CountedOf and BarredOf exactly today's Counted but its caps and ChildBarredBy, SharedModelOf exactly the shared families, and Capped exactly Counted's caps", () => {
     const keys = new Set(families.map(({ parent, version }) => `${version} ${parent}`));

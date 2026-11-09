@@ -53,12 +53,12 @@ import {
 import type { RowScalars } from "@bjornpagen/grizzle";
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import {
+  AdmissionIn,
   AnonymousType,
   AttributeSlot,
   Banned,
   BarredOf,
   Capped,
-  ChildGrammar,
   ContentModelOf,
   CountedOf,
   DocumentType,
@@ -322,14 +322,22 @@ const namedlyTyped = (n: NodeRow) =>
   n.and(vocabularyElement(n), n.not(AnonymousType.has(n.version, n.kind)));
 
 /**
- * Read a member's position in its parent's content model, `ChildGrammar`'s cell: a position above
- * 0 where one particle names its kind, 0 for character data and for a kind several particles name,
- * and nothing where the parent does not admit the kind.
+ * Read the admission map of a member's parent's family (`ContentModelOf`'s `admission`).
  *
  * @param n - The row.
  * @returns The closed read.
  */
-const positionOf = (n: NodeRow) => ChildGrammar.at("position", n.version, n.parentKind, n.kind);
+const admissionOf = (n: NodeRow) => ContentModelOf.at("admission", n.version, n.parentKind);
+
+/**
+ * Read a member's position in its parent's content model, its family's admission map's cell
+ * (`AdmissionIn`): a position above 0 where one particle names its kind, 0 for character data and
+ * for a kind several particles name, and nothing where the parent does not admit the kind.
+ *
+ * @param n - The row.
+ * @returns The closed read.
+ */
+const positionOf = (n: NodeRow) => AdmissionIn.at("position", admissionOf(n), n.kind);
 
 /**
  * State that a member steps its parent's automaton: a kind its parent admits, and an element, or
@@ -339,7 +347,7 @@ const positionOf = (n: NodeRow) => ChildGrammar.at("position", n.version, n.pare
  *
  * The split is by position, not by kind, because `placedStep` steps every child whose position is
  * not 0, character data included. A kind its parent does not admit steps nothing (`stepOf` is
- * none), and {@link positionOf} reads nothing there, so the `ChildGrammar.has` guard states that
+ * none), and {@link positionOf} reads nothing there, so the `AdmissionIn.has` guard states that
  * false outright rather than leaving it unknown, which a check refuses (decision 440):
  * `N5_admitted` alone refuses such a member, as the oracle judges it.
  *
@@ -347,10 +355,7 @@ const positionOf = (n: NodeRow) => ChildGrammar.at("position", n.version, n.pare
  * @returns The predicate.
  */
 const positioned = (n: NodeRow) =>
-  n.and(
-    ChildGrammar.has(n.version, n.parentKind, n.kind),
-    n.or(element(n), n.ne(positionOf(n), "0")),
-  );
+  n.and(AdmissionIn.has(admissionOf(n), n.kind), n.or(element(n), n.ne(positionOf(n), "0")));
 
 /**
  * The value domains that check nothing: those whose pattern is `xs:anySimpleType`'s, every string

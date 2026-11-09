@@ -10,7 +10,7 @@
 import { Option } from "effect";
 import { admits as admitsIn } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry, AncestrySets, IndexedFlagSet } from "#pantry/grammar/ancestry.ts";
-import { indexed, indexedSourced } from "#pantry/grammar/closed.ts";
+import { indexed, indexedSourced, rowsAt } from "#pantry/grammar/closed.ts";
 import type { Admission } from "#pantry/grammar/admission.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { contentModelOf, stepOf } from "#pantry/grammar/content.ts";
@@ -156,3 +156,42 @@ export const ancestryIndexesOf = (
  */
 export const admits = (sets: AncestrySets, parent: Ancestry, kind: string): boolean =>
   admitsIn(ancestryIndexesOf(sets), parent, kind);
+
+/**
+ * Spell the admission maps `install.ts` declares out as the (version, parent, child) → position
+ * rows they state, ChildGrammar's once: each family's map (`ContentModelOf`'s `admission`) with
+ * each of its children (`AdmissionIn`).
+ *
+ * @param contentModelOf - `ContentModelOf`, as installed.
+ * @param contentModelOf.rows - Its rows.
+ * @param admissionIn - `AdmissionIn`, as installed.
+ * @param admissionIn.rows - Its rows.
+ * @returns The rows, by family in `ContentModelOf`'s order.
+ */
+export const admittedOf = <Parent extends string, Child extends string, Version extends string>(
+  contentModelOf: {
+    readonly rows: readonly {
+      readonly admission: string;
+      readonly parent: Parent;
+      readonly version: Version;
+    }[];
+  },
+  admissionIn: {
+    readonly rows: readonly {
+      readonly child: Child;
+      readonly map: string;
+      readonly position: string;
+    }[];
+  },
+): readonly {
+  readonly child: Child;
+  readonly parent: Parent;
+  readonly position: string;
+  readonly version: Version;
+}[] => {
+  const members = Map.groupBy(admissionIn.rows, ({ map }) => map);
+
+  return contentModelOf.rows.flatMap(({ admission, parent, version }) =>
+    rowsAt(members, admission).map(({ child, position }) => ({ child, parent, position, version })),
+  );
+};
