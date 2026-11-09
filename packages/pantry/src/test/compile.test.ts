@@ -15,6 +15,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { Qti } from "#pantry/qti/own.ts";
 
 /**
  * The package directory, where `grizzle.config.ts` lives and where grizzle is run from.
@@ -73,9 +74,10 @@ it.effect(
       // Oracle: grizzle's `compileSchema` and program compilation, as `grizzle check` runs them.
       // Bound: the one schema, every login and every program; residual none.
       assert.isTrue(code === 0 || code === 1, `grizzle check exited ${String(code)}:\n${output}`);
+      // grizzle check names each schema by its declared name, the top level's (`QtiQueries`).
       assert.isTrue(
-        lines.some((line) => line.startsWith("Qti: ")),
-        `grizzle check printed no Qti line:\n${output}`,
+        lines.some((line) => line.startsWith(`${Qti.name}: `)),
+        `grizzle check printed no ${Qti.name} line:\n${output}`,
       );
       assert.deepStrictEqual(
         lines.filter((line) => line.includes("does not compile")),
