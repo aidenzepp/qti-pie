@@ -64,9 +64,12 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    - A record file (`resourcemetadata/xml`) whose root is a `cp:manifest` and whose `cp:resource` owns a LOM record
      also breaks "E1 derived", which the law oracle does not raise: the import writes a `LomResource` for the package
      manifest's resources alone, while the record that resource owns is still read, and is held to a `LomResource`.
-     "RootOfType" refuses the file on both sides, since such a file's root is a `lom:lom`, so the rule stays
-     "RootOfType". Outlandish and absent from the official packages; lifted by reading no record a record file's
-     `cp:resource` owns (decision 449, stated here).
+     A learning resource type the LOM vocabulary forbids in that record also breaks "LOM learning resource type",
+     which the law oracle does not raise either: it reads a type only in a record's document, and a record file whose
+     root is a `cp:manifest` is none (reading 122). "RootOfType" refuses the file on both sides, since such a file's
+     root is a `lom:lom`, so the rule stays "RootOfType". Outlandish and absent from the official packages; lifted by
+     reading no record a record file's `cp:resource` owns (decision 449, stated here; decision 460, on the learning
+     resource type).
    - An inclusion cycle closed only by an include that may not stand for its target's root breaks "Inclusion cycle"
      in the law oracle and not in the import: XInclude still recurses through such an include (reading 85), but the
      import places a child instance only at a site that places its target. Both refuse the package under "Include
@@ -2257,11 +2260,15 @@ against it. A reading that is not an information-model-over-XSD case says which 
      reads the first. A `value` of another LOM vocabulary (an interactivity type's `exam`) and an element of another
      namespace inside the type are not read. The law is `lom-learning-resource-type` (`src/qti/metadata.ts`,
      `LomResourceType` and `LomResourceTypeSource`): a type whose value collapses to a forbidden one has a source naming
-     another vocabulary. It holds over every document's LOM, a resource's metadata, the manifest's own and an external
-     record. The 1EdTech corpus holds 18 `learningResourceType`s, every one of source `RDNLTSNType`, so no verdict
-     moves. Main refused the two values whatever the source; this reading refuses only the LOM vocabulary's. This binds
-     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by RV seat M, on the
-     review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     another vocabulary. It holds over the records: a resource's metadata and the manifest's own, in the package
+     manifest, and an external record file. A `cp:metadata` of any other document describes no part of the package, so
+     a `learningResourceType` there is no record's and is not read (the ruling of `170356bd`; `recordDocumentTypes`,
+     `src/qti/metadata.ts`). The 1EdTech corpus holds 18 `learningResourceType`s, every one of source `RDNLTSNType`,
+     so no verdict moves. Main refused the two values whatever the source; this reading refuses only the LOM
+     vocabulary's. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06
+     by RV seat M, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     (Amended 2026-11-09 by the Mind, decision 460, on gr2-close's class B: the records the law reads stated, as the
+     import already read them; nothing the import refuses changed.)
 123. **A `bdo` carries `dir`, and its value is `ltr` or `rtl`.** The information model says of BDO "Authors must
      specify the dir attribute on this tag, with the value ltr to specify a left-to-right override and with the value
      rtl to specify a right-to-left override. The auto value must not be specified" (section 5.11, in both versions).
