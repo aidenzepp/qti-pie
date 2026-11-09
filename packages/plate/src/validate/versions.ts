@@ -4,7 +4,12 @@
  * `check` calls {@link checkVersion} after the structural validator and the prose rules, with
  * their refusals in hand, under the version its caller gives: a package's own, as its manifest's
  * `schemaversion` states it, or none for a document opened alone (OD-A54-3), which no rule here
- * judges. Each rule judges one version:
+ * judges. Like the prose rules, these judge exactly the elements the structural walk checks, the
+ * keys of `governingTables`: reading 57, "In lax wildcard content, every prose rule judges the QTI
+ * elements the structural walk checks there, as it judges them anywhere else". So in a
+ * `qti-custom-interaction`'s lax content a global QTI element the walk checks is judged here, and
+ * what the walk passes over earns nothing: a QTI element the XSD declares only locally, and a
+ * nested QTI root with all it holds (reading 6). Each rule judges one version:
  *
  * - QTI 3.0.0: a `qti-custom-interaction` is refused (the operator's P2), as 3.0.0 deprecates it for
  *   a Portable Custom Interaction.
@@ -18,10 +23,17 @@
  */
 import { Option } from "effect";
 import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
-import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
+import type {
+  SourceAttribute,
+  SourceDocument,
+  SourceElement,
+  Visit,
+} from "#plate/document/source.ts";
 import { readIeeeDouble, trimXmlSpace } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
+import { governingTables } from "#plate/validate/structure.ts";
+import type { Tables } from "#plate/validate/xsd.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
 
 /**
@@ -67,6 +79,22 @@ const attributeOf = (element: SourceElement, local: string): Option.Option<Sourc
   );
 
 /**
+ * List the elements this module's rules judge, in document order: exactly those the structural
+ * walk checks, the keys of `governingTables` (reading 57), as `judgedVisits` in
+ * `#plate/validate/rules.ts` lists them for the prose rules. That module imports this one, so this
+ * one reads the same admission here rather than import it, which would close a cycle.
+ *
+ * @param source The document.
+ * @param tables The tables generated from the QTI XSD, the ones the structural walk checks it by.
+ * @returns Each judged element, with the path and the parent `walk` gives it.
+ */
+const judgedVisits = (source: SourceDocument, tables: Tables): readonly Visit[] => {
+  const governing = governingTables(source, tables);
+
+  return [...walk(source)].filter((visit) => governing.has(visit.element));
+};
+
+/**
  * Give the tool attributes an item root lacks, in the order a `label-tool` refusal lists them
  * (reading 128): this module's E31b for a QTI 3.0.1 root's own `label`, and E31a for a body
  * element's (`labelTool` in `#plate/validate/rules.ts`).
@@ -82,13 +110,17 @@ export const missingToolAttributes = (root: SourceElement): readonly string[] =>
  * deprecates it and requires a `qti-portable-custom-interaction` in its place. Plate keeps the
  * operator's ruling (overseer `b7d702d6`), which main now shares as R10-b ("A 3.0.0 document holds
  * no `qti-custom-interaction`; a 3.0.1 document may"): main and pantry refuse it too (pantry's
- * `Custom interaction version` law, `packages/pantry/src/qti/interactions.ts`).
+ * `Custom interaction version` law, `packages/pantry/src/qti/interactions.ts`). Only a custom
+ * interaction the structural walk checks is judged (reading 57). The XSD declares it only locally,
+ * so one inside another's lax content has no declaration the walk can find there: the walk passes
+ * it over, and it earns nothing.
  *
+ * @param visits The document's judged elements, as {@link judgedVisits} lists them.
  * @param source The document.
- * @returns One `unknown-element` refusal at each custom interaction, in document order.
+ * @returns One `unknown-element` refusal at each judged custom interaction, in document order.
  */
-const customInteractions = (source: SourceDocument): readonly Refusal[] =>
-  [...walk(source)]
+const customInteractions = (visits: readonly Visit[], source: SourceDocument): readonly Refusal[] =>
+  visits
     .filter(
       ({ element }) =>
         element.namespace === qtiNamespace && element.local === "qti-custom-interaction",
@@ -160,13 +192,17 @@ const rootLabel = (source: SourceDocument, refusals: readonly Refusal[]): readon
  * Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1 holds a mastery value at least the normal minimum.
  * The value is compared by its IEEE double (reading 144); one outside xs:double's lexical space is
  * the structural validator's to refuse, and earns nothing here. A declaration that writes its
- * `normal-minimum` is not judged here: its written bounds are E42a's.
+ * `normal-minimum` is not judged here: its written bounds are E42a's. Only a declaration the
+ * structural walk checks is judged (reading 57). The walk checks one in a custom interaction's lax
+ * content as QTI, so it is judged as anywhere else, while one inside a nested QTI root there
+ * (reading 6) is passed over and earns nothing.
  *
+ * @param visits The document's judged elements, as {@link judgedVisits} lists them.
  * @param source The document, an item's or a test's outcome declarations alike.
  * @returns One `attribute-type` refusal at each such `mastery-value`, in document order.
  */
-const masteryFloor = (source: SourceDocument): readonly Refusal[] =>
-  [...walk(source)].flatMap(({ element, path }) => {
+const masteryFloor = (visits: readonly Visit[], source: SourceDocument): readonly Refusal[] =>
+  visits.flatMap(({ element, path }) => {
     if (
       element.namespace !== qtiNamespace ||
       element.local !== "qti-outcome-declaration" ||
@@ -199,15 +235,19 @@ const masteryFloor = (source: SourceDocument): readonly Refusal[] =>
  * Give the refusals a document's QTI version decides, after the structural validator and the prose
  * rules gave theirs: under 3.0.0 each `qti-custom-interaction` (P2), and under 3.0.1 an item root's
  * own `label` without its tools (E31b) and a `mastery-value` below the default `normal-minimum`
- * (E42b). A document of no stated version, opened alone, earns none (OD-A54-3).
+ * (E42b). A document of no stated version, opened alone, earns none (OD-A54-3). P2 and E42b judge
+ * only the elements the structural walk checks, the keys of `governingTables` (reading 57), as the
+ * prose rules do.
  *
  * @param source The document, its root in QTI's namespace.
+ * @param tables The tables generated from the QTI XSD, the ones the structural walk checks it by.
  * @param version Its version as its package's manifest states it, or none.
  * @param refusals The refusals the validators already gave it, which E31b reads.
  * @returns The refusals, in the order above, each rule's in document order.
  */
 export const checkVersion = (
   source: SourceDocument,
+  tables: Tables,
   version: Option.Option<CpVersion>,
   refusals: readonly Refusal[],
 ): readonly Refusal[] =>
@@ -216,10 +256,13 @@ export const checkVersion = (
     onSome: (stated) => {
       switch (stated) {
         case "3.0.0": {
-          return customInteractions(source);
+          return customInteractions(judgedVisits(source, tables), source);
         }
         case "3.0.1": {
-          return [...rootLabel(source, refusals), ...masteryFloor(source)];
+          return [
+            ...rootLabel(source, refusals),
+            ...masteryFloor(judgedVisits(source, tables), source),
+          ];
         }
         default: {
           return stated satisfies never;

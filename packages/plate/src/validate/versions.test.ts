@@ -143,6 +143,72 @@ const masteryTest = (attributes: readonly SourceAttribute[]): SourceDocument =>
   );
 
 /**
+ * A namespace no table holds. The structural walk passes over its elements laxly and assesses
+ * their children in turn (reading 57).
+ */
+const foreignNamespace = "urn:example:foreign";
+
+/**
+ * Construct an item that declares `RESPONSE` and the given outcomes, and whose body holds one
+ * `qti-custom-interaction` bound to `RESPONSE` around one element of {@link foreignNamespace}
+ * holding `content`.
+ *
+ * @param outcomes The item's own outcome declarations, after its response declaration.
+ * @param content What the foreign element holds.
+ * @returns The item.
+ */
+const wildcardItem = (
+  outcomes: readonly SourceElement[],
+  content: readonly SourceElement[],
+): SourceDocument =>
+  item([
+    el("qti-response-declaration", [
+      attr("base-type", "identifier"),
+      attr("cardinality", "single"),
+      attr("identifier", "RESPONSE"),
+    ]),
+    ...outcomes,
+    el(
+      "qti-item-body",
+      [],
+      [
+        el(
+          "qti-custom-interaction",
+          [attr("response-identifier", "RESPONSE")],
+          [el("div", [], content, foreignNamespace)],
+        ),
+      ],
+    ),
+  ]);
+
+/**
+ * The path of {@link wildcardItem}'s foreign element.
+ */
+const foreignPath = `${customPath}/{${foreignNamespace}}div`;
+
+/**
+ * An outcome declaration `Z` whose `mastery-value` is below 0.0 and that writes no
+ * `normal-minimum`, which E42b refuses under 3.0.1 wherever the structural walk checks it.
+ */
+const belowFloor = el("qti-outcome-declaration", [
+  attr("base-type", "float"),
+  attr("cardinality", "single"),
+  attr("identifier", "Z"),
+  attr("mastery-value", "-1"),
+]);
+
+/**
+ * A nested `qti-assessment-item` holding {@link belowFloor}. Under a lax wildcard a nested QTI root
+ * stays foreign content (reading 6), so the structural walk checks nothing in it: what it holds is
+ * opaque.
+ */
+const nestedRoot = el(
+  "qti-assessment-item",
+  [attr("identifier", "nested"), attr("time-dependent", "false"), attr("title", "Nested")],
+  [belowFloor],
+);
+
+/**
  * One refusal as these tests compare it: its rule, location and detail.
  */
 interface Seen {
@@ -283,9 +349,9 @@ describe("validate/versions.ts", () => {
         suggestion: Option.none(),
       });
 
-    assert.deepStrictEqual(checkVersion(source, v301, [heldAt(root)]), []);
+    assert.deepStrictEqual(checkVersion(source, tables, v301, [heldAt(root)]), []);
     assert.deepStrictEqual(
-      checkVersion(source, v301, [heldAt(`${root}/qti-item-body`)]).map(
+      checkVersion(source, tables, v301, [heldAt(`${root}/qti-item-body`)]).map(
         ({ detail, location, rule }) => ({
           detail,
           location,
@@ -324,13 +390,60 @@ describe("validate/versions.ts", () => {
     assert.isTrue(accepts(check(below, tables, unversioned)));
   });
 
+  it("align-54 r11 versions over judged visits E42b: under 3.0.1 an outcome declaration a custom interaction carries opaquely, in a nested QTI root, earns no mastery-range, and the item's own still does (readings 57 and 6)", () => {
+    assert.isTrue(accepts(check(wildcardItem([], [nestedRoot]), tables, v301)));
+    assert.deepStrictEqual(
+      refusalsOf(
+        check(
+          wildcardItem([scoreDeclaration([attr("mastery-value", "-1")])], [nestedRoot]),
+          tables,
+          v301,
+        ),
+      ),
+      [masteryFloor(`${root}/qti-outcome-declaration`, "-1")],
+    );
+  });
+
+  it("align-54 r11 versions over judged visits E42b: under 3.0.1 an outcome declaration the walk checks in a custom interaction's lax content is judged as anywhere else (reading 57)", () => {
+    assert.deepStrictEqual(refusalsOf(check(wildcardItem([], [belowFloor]), tables, v301)), [
+      masteryFloor(`${foreignPath}/qti-outcome-declaration`, "-1"),
+    ]);
+  });
+
+  it("align-54 r11 versions over judged visits P2: under 3.0.0 a qti-custom-interaction inside another's opaque content earns no custom-interaction, and the body's own still does (reading 57)", () => {
+    assert.deepStrictEqual(
+      refusalsOf(
+        check(
+          wildcardItem(
+            [],
+            [el("qti-custom-interaction", [attr("response-identifier", "RESPONSE")])],
+          ),
+          tables,
+          v300,
+        ),
+      ),
+      [
+        {
+          detail: {
+            check: "custom-interaction",
+            element: "qti-custom-interaction",
+            parent: "qti-item-body",
+            version: "3.0.0",
+          },
+          location: { kind: "path", path: customPath },
+          rule: "unknown-element",
+        },
+      ],
+    );
+  });
+
   it("align-54 version seam: gives no refusal of its own to a document of no stated version", () => {
     for (const source of [
       customItem,
       labelledItem([attr("label", "L")]),
       masteryItem([attr("mastery-value", "-1")]),
     ]) {
-      assert.deepStrictEqual(checkVersion(source, unversioned, []), []);
+      assert.deepStrictEqual(checkVersion(source, tables, unversioned, []), []);
     }
   });
 });

@@ -1135,7 +1135,7 @@ export const check = (
     ...checkStimulusRules(source, tables),
     ...checkCatalogs(source, tables),
   ];
-  const refusals = [...judged, ...checkVersion(source, version, judged)];
+  const refusals = [...judged, ...checkVersion(source, tables, version, judged)];
   if (Arr.isReadonlyArrayNonEmpty(refusals)) {
     return { document, kind, refusals, verdict: "refused" };
   }
