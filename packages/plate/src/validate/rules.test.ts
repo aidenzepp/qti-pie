@@ -5984,6 +5984,35 @@ describe("processingRefusals", () => {
       ],
     );
   });
+  it("align-54 R3 declared built-in: refuses a qti-correct of the outcome numAttempts a test declares, which takes the built-in's place, as undeclared-variable expecting a response with declared outcome, and keeps the built-in response numAttempts in a test that declares none (reading 168)", () => {
+    const correct = setScore(variable("numAttempts", "qti-correct"));
+
+    assert.deepStrictEqual(
+      [
+        processed(
+          ruledTest([outcome("SCORE", "integer"), outcome("numAttempts", "integer")], [correct]),
+          unknownTyping,
+        ),
+        processed(ruledTest([outcome("SCORE", "integer")], [correct]), unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: {
+              declared: "outcome",
+              declarer: "test",
+              element: "qti-correct",
+              expected: "response",
+              identifier: "numAttempts",
+            },
+            path: `${outcomeRulePath("qti-set-outcome-value")}/qti-correct`,
+            rule: "undeclared-variable",
+          },
+        ],
+        [],
+      ],
+    );
+  });
 
   it("[T-9] judges a section document under a test that reaches it when given one: NOPE refused as undeclared-variable, a prefixed read by the reaching test's typer, the test's SCORE accepted, and with none every name unknown, as the section alone", () => {
     const reaching = scoringTest(baseValue("float", "1"));
