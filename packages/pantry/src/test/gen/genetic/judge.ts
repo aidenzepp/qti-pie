@@ -113,13 +113,16 @@ export type Disagreement = (
 ) & { readonly limit?: Limit };
 
 /**
- * A stated limit of spec reading 1 a package can fall under, each refused on both sides by a law
- * the oracle raises or a shape the package manifest writes ({@link limitOf}).
+ * A limit a package can fall under ({@link limitOf}): a stated limit of spec reading 1, refused on
+ * both sides by a law the oracle raises or a shape the package manifest writes, or an oracle defect
+ * deferred to the issue the limit names.
  */
 export type Limit =
   | "a forbidden ancestor"
   | "a record file whose root is a cp:manifest"
+  | "a resource href the oracle reads unresolved (#65)"
   | "an inclusion cycle"
+  | "content outside xi:fallback (#66)"
   | "xml:base on a cp:resource";
 
 /**
@@ -133,6 +136,16 @@ const cpNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
 const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
 
 /**
+ * The namespace of IEEE LOM's elements, a resource's metadata record's.
+ */
+const lomNamespace = "http://ltsc.ieee.org/xsd/LOM";
+
+/**
+ * The namespace of XInclude's elements, `xi:include` and `xi:fallback`.
+ */
+const xincludeNamespace = "http://www.w3.org/2001/XInclude";
+
+/**
  * Tell whether an element is a Content Packaging element of a local name.
  *
  * @param element - The element.
@@ -143,6 +156,45 @@ const isCp = (element: Element, local: string): boolean =>
   element.namespace === cpNamespace && element.local === local;
 
 /**
+ * Write an href in normal form (RFC 3986 §6.2.2): each percent-escape of an unreserved character or
+ * a space decoded, and each `.` segment dropped.
+ *
+ * @param href - The href as written.
+ * @returns Its normal form.
+ */
+const normalHref = (href: string): string =>
+  href
+    .replaceAll(/%(?<hex>[0-9A-Fa-f]{2})/gu, (written, hex: string) => {
+      const decoded = String.fromCodePoint(Number.parseInt(hex, 16));
+
+      return /^[\w .~-]$/u.test(decoded) ? decoded : written;
+    })
+    .split("/")
+    .filter((segment) => segment !== ".")
+    .join("/");
+
+/**
+ * Tell whether a `cp:resource`'s own `cp:metadata` holds a LOM `general` title, the record the
+ * title law reads.
+ *
+ * @param resource - The `cp:resource`.
+ * @returns Whether its metadata holds a LOM title.
+ */
+const lomTitled = (resource: Element): boolean =>
+  resource.children.some(
+    (metadata) =>
+      metadata.kind === "element" &&
+      isCp(metadata, "metadata") &&
+      elementsOf(metadata).some(
+        ({ element, parent }) =>
+          element.namespace === lomNamespace &&
+          element.local === "title" &&
+          parent?.namespace === lomNamespace &&
+          parent.local === "general",
+      ),
+  );
+
+/**
  * Name the stated limit a package falls under: the first of these, in this order, that holds.
  *
  * 1. `a record file whose root is a cp:manifest`: the oracle raises "RootOfType" at a document whose
@@ -151,14 +203,23 @@ const isCp = (element: Element, local: string): boolean =>
  * 2. `a forbidden ancestor`: the oracle raises "N5 admitted" (decision 452's kin);
  * 3. `an inclusion cycle`: the oracle raises "Inclusion cycle" (decision 451's kin);
  * 4. `xml:base on a cp:resource`: the package manifest writes `xml:base` on a `cp:resource` (reading
- *    1's family I).
+ *    1's family I);
+ * 5. `a resource href the oracle reads unresolved (#65)`: a `cp:resource` whose own `cp:metadata`
+ *    holds a LOM `general` title has an href, its query and fragment aside, that is not in normal
+ *    form (a `.` segment, or a percent-escape of an unreserved character or a space, RFC 3986
+ *    §6.2.2) and whose normal form names a document of the package; the oracle's title law matches
+ *    the raw href to a document's path, so it reads no object for the record (decision 469);
+ * 6. `content outside xi:fallback (#66)`: an `xi:include` whose href, in normal form, names a document
+ *    of the package holds an element child that is no `xi:fallback`, which reading 118 assesses
+ *    laxly and the law oracle ignores (decision 469).
  *
- * A class under one of them is refused on both sides by the law that names it, so its rows' laws
- * decide no verdict.
+ * A class under one of the first four is refused on both sides by the law that names it, so its
+ * rows' laws decide no verdict. The last two are oracle defects their issues defer, so a fixed
+ * cause they would hide stays keyed plain wherever neither holds.
  *
  * @param breaches - The oracle's breaches, none where it did not judge every law.
  * @param genome - The package.
- * @returns The limit, none where the package falls under none of the four.
+ * @returns The limit, none where the package falls under none of the six.
  */
 export const limitOf = (breaches: readonly Breach[], genome: Genome): Option.Option<Limit> => {
   const manifest = genome.find(({ path }) => path === manifestPath);
@@ -182,6 +243,22 @@ export const limitOf = (breaches: readonly Breach[], genome: Genome): Option.Opt
     );
   };
   const raised = (law: string): boolean => breaches.some((breach) => breach.law === law);
+  const names = (from: string, href: string): boolean =>
+    genome.some(({ path }) => path === resolvedPath(from, normalHref(href)));
+  const unresolvedHref = (resource: Element): boolean => {
+    const href = (attributeValue(resource, "href") ?? "").replace(/[?#].*$/su, "");
+
+    return lomTitled(resource) && normalHref(href) !== href && names(manifestPath, href);
+  };
+  const outsideFallback = (path: string, include: Element): boolean =>
+    include.namespace === xincludeNamespace &&
+    include.local === "include" &&
+    names(path, attributeValue(include, "href") ?? "") &&
+    include.children.some(
+      (child) =>
+        child.kind === "element" &&
+        !(child.namespace === xincludeNamespace && child.local === "fallback"),
+    );
   const tests: readonly (readonly [Limit, () => boolean])[] = [
     [
       "a record file whose root is a cp:manifest",
@@ -199,6 +276,16 @@ export const limitOf = (breaches: readonly Breach[], genome: Genome): Option.Opt
           resource.attributes.some(
             ({ local, namespace }) => namespace === xmlNamespace && local === "base",
           ),
+        ),
+    ],
+    ["a resource href the oracle reads unresolved (#65)", () => resources.some(unresolvedHref)],
+    [
+      "content outside xi:fallback (#66)",
+      () =>
+        genome.some(
+          ({ body, path }) =>
+            body.kind === "xml" &&
+            elementsOf(body.doc.root).some(({ element }) => outsideFallback(path, element)),
         ),
     ],
   ];
