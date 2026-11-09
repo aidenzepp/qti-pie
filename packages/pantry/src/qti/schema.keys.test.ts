@@ -137,24 +137,8 @@ const textOf = (key: Key): string => {
  * site and holder and how many share the text: the list only shrinks.
  */
 const owed = {
-  "Document(package, path) where 1 conjunct": [
-    "lane E: package.ts, stimulusDocuments, held by Document's key (package, path)",
-    1,
-  ],
-  "FileHref(package, path) where 1 conjunct": [
-    "lane E: package.ts, entryFileHrefs, held by FileHref's primary key, its scope fixed",
-    1,
-  ],
   "MappingLookup(itemRef, name) where 1 conjunct": [
     "lane G: expressions.ts, mappedNames, held by MappingLookup's primary key (R7)",
-    1,
-  ],
-  "Reference(node, name) where 1 conjunct": [
-    "lane E: package.ts, entryReferences, held by Reference's primary key",
-    1,
-  ],
-  "ReferencePath(node) where 1 conjunct": [
-    "lane E: package.ts, hrefPaths, held by ReferencePath's primary key, its name fixed",
     1,
   ],
   "VariableLookup(document, name) where 1 conjunct": [

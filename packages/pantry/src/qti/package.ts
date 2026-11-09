@@ -525,7 +525,7 @@ export const namedHrefFamily = counted(
  * a containment's source columns whose entry is bounded (`plannedReverse`), and no pattern bounds
  * `Attribute.lexical`. An element holds one attribute of a closed name (AL2), and every name here
  * is closed, so a key over `node` states that again, and grizzle asks one only of a containment's
- * target (`laws/model/plan.ts` `#targetKeyed`). The `type`, the `cp:file` `href` and the
+ * target (`laws/model/plan.ts` `#keyedTarget`). The `type`, the `cp:file` `href` and the
  * `identifierref` are required (AL3), and each overlay's row is its node's, so the copy alone makes
  * the row's field the attribute's: those selections are no target and state no key. A resource's
  * `href` is optional, and its {@link ResourceHref} stands only where it is written, a containment
@@ -578,9 +578,9 @@ const fileHrefs = attributesOf("cp:file", "href");
 const dependencyRefs = attributesOf("cp:dependency", "identifierref");
 
 /**
- * Select the nodes of one kind, a constant selection: a containment into it carries the constant,
- * so every such containment references the one `UNIQUE (id, kind)` on `Node` that the document
- * layer's arms share (`laws/model/plan.ts` `#constantTarget`).
+ * Select the nodes of one kind: a containment into it on `id` is a fixed target, its source meeting
+ * the kind by a constant column, so every such containment references the one `UNIQUE (id, kind)`
+ * on `Node` that the document layer's arms share (`laws/model/plan.ts` `#fixedTarget`).
  *
  * @param kind - The kind.
  * @returns The selection.
@@ -639,8 +639,8 @@ const typedResourceHrefs = select(ResourceHref, (h) =>
 const entryFiles = select(File, (f) => f.eq(f.scope, "entry"));
 
 /**
- * The paths a package's files name in the package, a constant selection keyed by its
- * `(package, path)`: every entry but the manifest is one of them (`file-listed`).
+ * The paths a package's files name in the package, one per `(package, path)` by `FileHref`'s
+ * primary key, its scope fixed: every entry but the manifest is one of them (`file-listed`).
  */
 const entryFileHrefs = select(FileHref, (h) => h.eq(h.scope, "entry"));
 
@@ -653,7 +653,7 @@ const listedEntries = select(Entry, (e) => e.ne(e.path, manifestPath));
  * The attributes of the reference census (`ReferenceAttribute`, spec reading 103): each an
  * attribute by which an element of its kind names a file under its version, of either form. Each is
  * a {@link Reference}'s copy (C18), and every {@link Reference} is one's, a containment into this
- * selection that grizzle admits only under a key over it (`laws/model/plan.ts` `#targetKeyed`): the
+ * selection that grizzle admits only under a key over it (`laws/model/plan.ts` `#keyedTarget`): the
  * key over its `(node, name)`, which holds already, since an element holds one attribute of a
  * closed name (AL2).
  */
@@ -662,8 +662,8 @@ const censusAttributes = select(Attribute, (a) =>
 );
 
 /**
- * The references the importer resolved in the package, a constant selection keyed by its
- * `(node, name)`: each has its {@link ReferencePath}, and every {@link ReferencePath} is one's.
+ * The references the importer resolved in the package, one per `(node, name)` by `Reference`'s
+ * primary key: each has its {@link ReferencePath}, and every {@link ReferencePath} is one's.
  */
 const entryReferences = select(Reference, (r) => r.eq(r.scope, "entry"));
 
@@ -673,14 +673,15 @@ const entryReferences = select(Reference, (r) => r.eq(r.scope, "entry"));
 const stimulusPaths = select(ReferencePath, (p) => p.eq(p.kind, "qti-assessment-stimulus-ref"));
 
 /**
- * The documents whose root is a stimulus, the documents a stimulus ref names: a constant
- * selection, keyed by its `(package, path)`.
+ * The documents whose root is a stimulus, the documents a stimulus ref names: one per
+ * `(package, path)` by `Document`'s key over it ("Document entry").
  */
 const stimulusDocuments = select(Document, (d) => d.eq(d.rootKind, "qti-assessment-stimulus"));
 
 /**
- * The resolved references of `href` attributes, one per element: the side Q5.13's item refs,
- * section refs, stimulus refs and includes resolve through.
+ * The resolved references of `href` attributes, one per element by `ReferencePath`'s primary key,
+ * its name fixed: the side Q5.13's item refs, section refs, stimulus refs and includes resolve
+ * through.
  */
 export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
 
@@ -753,7 +754,6 @@ export const packageLawsByName = {
       on(ResourceDocument, "package", "path", "type"),
     ),
     key(on(ResourceDocument, "package", "path")),
-    key(on(stimulusDocuments, "package", "path")),
   ],
   "DocumentId key": [key(on(ResourceId, "package", "identifier")), key(on(resourceHrefs, "node"))],
   "E1 derived": [
@@ -822,7 +822,6 @@ export const packageLawsByName = {
   "File listed": [
     fileHrefFamily,
     check("File_listed", FileHref, (h) => h.gt(h.files, 0n)),
-    key(on(entryFileHrefs, "package", "path")),
     contained(on(listedEntries, "package", "path"), on(entryFileHrefs, "package", "path")),
   ],
   "Href form": [
@@ -918,7 +917,6 @@ export const packageLawsByName = {
       on(Reference, "node", "name", "lexical", "document", "kind"),
     ),
     contained(on(Reference, "node", "name"), on(censusAttributes, "node", "name")),
-    key(on(entryReferences, "node", "name")),
     contained(
       on(entryReferences, "node", "name", "document", "kind"),
       on(ReferencePath, "node", "name", "document", "kind"),
@@ -927,7 +925,6 @@ export const packageLawsByName = {
       on(ReferencePath, "node", "name", "document", "kind"),
       on(entryReferences, "node", "name", "document", "kind"),
     ),
-    key(on(hrefPaths, "node")),
     contained(on(ReferencePath, "document", "package"), on(Document, "node", "package")),
   ],
   RootOfType: [
