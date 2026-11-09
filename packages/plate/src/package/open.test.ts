@@ -1783,6 +1783,78 @@ const missingReference = (
 const itemBody = "qti-assessment-item/qti-item-body";
 
 /**
+ * The refusal of a file reference an element's text makes that names a file the package neither
+ * holds nor lists (R9-b, "Card files and resource icons are file references").
+ *
+ * @param at The path of the element whose text is the reference.
+ * @param element The element's local name, `qti-file-href` or `qti-resource-icon`.
+ * @param target The path it resolves to.
+ * @param source The line of QTI's information model that settles it.
+ * @returns The refusal's facts.
+ */
+const missingFile = (at: string, element: string, target: string, source: string): Seen => ({
+  detail: { check: "reference", document: "items/a.xml", element, path: target, source },
+  document: fileLocation(location, "items/a.xml"),
+  location: { kind: "path", path: at },
+  rule: "package-file-missing",
+});
+
+/**
+ * The information model's line on a card's files (section 6.6, CardSelection, "these files MUST
+ * be contained in the corresponding QTI content package").
+ */
+const cardFileSource = "info.txt:21151";
+
+/**
+ * The information model's line on a resource icon (section 5.80.4, "This file MUST be contained
+ * within the correponding QTI content package").
+ */
+const iconSource = "info.txt:33266";
+
+/**
+ * Write the item `a`, whose head holds what is given and whose catalog `c` holds one card.
+ *
+ * @param card The catalog's card, as written.
+ * @param head What the item holds before its body, as written.
+ * @returns The item's text.
+ */
+const cardItemXml = (card: string, head = ""): string =>
+  `<qti-assessment-item xmlns="${qti}" identifier="a" title="a" adaptive="false" time-dependent="false">${head}<qti-item-body><p>a</p></qti-item-body><qti-catalog-info><qti-catalog id="c">${card}</qti-catalog></qti-catalog-info></qti-assessment-item>`;
+
+/**
+ * Write a card's or card entry's `qti-file-href` of an image.
+ *
+ * @param href Its text, as written.
+ * @returns The element's text.
+ */
+const cardFileXml = (href: string): string =>
+  `<qti-file-href mime-type="image/png">${href}</qti-file-href>`;
+
+/**
+ * Write the item `a` whose one card holds one card entry under the given `xml:base`, whose
+ * `qti-file-href` names `a.png`.
+ *
+ * @param base The entry's `xml:base`, as written.
+ * @returns The item's text.
+ */
+const basedCardItemXml = (base: string): string =>
+  cardItemXml(
+    `<qti-card support="glossary-on-screen"><qti-card-entry xml:base="${base}">${cardFileXml("a.png")}</qti-card-entry></qti-card>`,
+  );
+
+/**
+ * Write an item's companion materials: a calculator whose information's `qti-file-href` names
+ * `calculators/missing.html`, which no package these tests open holds, then one digital material
+ * whose `qti-file-href` and `qti-resource-icon` name the given files.
+ *
+ * @param file The material's `qti-file-href`, as written.
+ * @param icon Its `qti-resource-icon`, as written.
+ * @returns The companion materials' text.
+ */
+const materialXml = (file: string, icon: string): string =>
+  `<qti-companion-materials-info><qti-calculator><qti-calculator-type>basic</qti-calculator-type><qti-description>A calculator</qti-description><qti-calculator-info><qti-file-href>calculators/missing.html</qti-file-href></qti-calculator-info></qti-calculator><qti-digital-material><qti-file-href>${file}</qti-file-href><qti-resource-icon>${icon}</qti-resource-icon></qti-digital-material></qti-companion-materials-info>`;
+
+/**
  * Write an item whose portable custom interaction's modules name a primary configuration.
  *
  * @param configuration The `primary-configuration`.
@@ -4724,6 +4796,119 @@ describe("package/open.ts", () => {
               undeclaredBase,
             ],
           );
+        }),
+    );
+
+    it.effect(
+      'align-54 R3 card files and icons F4: a card whose qti-file-href names images/missing.png, which the package neither holds nor lists, is refused package-file-missing, check reference, at the qti-file-href, its path resolved against the item\'s own; held and listed, it is accepted, and one whose text holds an unexpanded entity reference is not read (R9-b, "Card files and resource icons are file references": "these files MUST be contained in the corresponding QTI content package")',
+      () =>
+        Effect.gen(function* cardFile() {
+          const item = cardItemXml(
+            `<qti-card support="glossary-on-screen">${cardFileXml(" images/missing.png ")}</qti-card>`,
+          );
+
+          assert.deepStrictEqual(refusalsOf(yield* openReferencing(item)), [
+            missingFile(
+              "qti-assessment-item/qti-catalog-info/qti-catalog/qti-card/qti-file-href",
+              "qti-file-href",
+              "items/images/missing.png",
+              cardFileSource,
+            ),
+          ]);
+          acceptedOf(yield* openReferencing(item, { "items/images/missing.png": "a" }));
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openReferencing(
+                `<!DOCTYPE qti-assessment-item SYSTEM "a.dtd">${cardItemXml(
+                  `<qti-card support="glossary-on-screen">${cardFileXml("images/&missing;.png")}</qti-card>`,
+                )}`,
+              ),
+            ),
+            [],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 R3 card files and icons F4: a card entry whose second qti-file-href names a missing file is refused at that qti-file-href, and its first, naming a held file, is not; held, both are accepted (R9-b, "Card files and resource icons are file references")',
+      () =>
+        Effect.gen(function* cardEntryFile() {
+          const item = cardItemXml(
+            `<qti-card support="glossary-on-screen"><qti-card-entry default="true">${cardFileXml("images/a.png")}${cardFileXml("images/missing.png")}</qti-card-entry></qti-card>`,
+          );
+
+          assert.deepStrictEqual(
+            refusalsOf(yield* openReferencing(item, { "items/images/a.png": "a" })),
+            [
+              missingFile(
+                "qti-assessment-item/qti-catalog-info/qti-catalog/qti-card/qti-card-entry/qti-file-href[2]",
+                "qti-file-href",
+                "items/images/missing.png",
+                cardFileSource,
+              ),
+            ],
+          );
+          acceptedOf(
+            yield* openReferencing(item, {
+              "items/images/a.png": "a",
+              "items/images/missing.png": "a",
+            }),
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 R3 card files and icons F4: a card entry\'s qti-file-href under the entry\'s xml:base resolves through it, so media/ names items/media/a.png, and one under an xml:base outside the package names no path and is not looked for; the item is refused for the xml:base itself all the same, which a card entry\'s wildcard leaves to extensions (R9-b, "Card files and resource icons are file references"; reading 103 ("an xml:base is a base, resolved and never a file reference"); reading 90 ("an attribute its XSD does not declare is a data- attribute, or the document is refused"))',
+      () =>
+        Effect.gen(function* basedCardFile() {
+          const entry = "qti-assessment-item/qti-catalog-info/qti-catalog/qti-card/qti-card-entry";
+          const undeclaredBase: Seen = {
+            detail: { attribute: "xml:base", element: "qti-card-entry", reading: "90" },
+            document: fileLocation(location, "items/a.xml"),
+            location: { kind: "path", path: `${entry}/@xml:base` },
+            rule: "unknown-attribute",
+          };
+
+          assert.deepStrictEqual(refusalsOf(yield* openReferencing(basedCardItemXml("media/"))), [
+            missingFile(
+              `${entry}/qti-file-href`,
+              "qti-file-href",
+              "items/media/a.png",
+              cardFileSource,
+            ),
+            undeclaredBase,
+          ]);
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openReferencing(basedCardItemXml("media/"), { "items/media/a.png": "a" }),
+            ),
+            [undeclaredBase],
+          );
+          assert.deepStrictEqual(
+            refusalsOf(yield* openReferencing(basedCardItemXml("https://example.org/media/"))),
+            [undeclaredBase],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 R3 card files and icons F4: a digital material\'s qti-resource-icon naming a missing file is refused package-file-missing, check reference, at the qti-resource-icon; its own qti-file-href naming a missing file is left out and accepted, as is a calculator\'s; held, the icon is accepted (section 5.80.4, "This file MUST be contained within the correponding QTI content package"; R9-b, "The ItemFileInfo qti-file-href of a calculator or digital material is left out")',
+      () =>
+        Effect.gen(function* resourceIcon() {
+          const item = cardItemXml(
+            `<qti-card support="glossary-on-screen"><qti-html-content><p>a</p></qti-html-content></qti-card>`,
+            materialXml("materials/missing.pdf", "icons/missing.png"),
+          );
+
+          assert.deepStrictEqual(refusalsOf(yield* openReferencing(item)), [
+            missingFile(
+              "qti-assessment-item/qti-companion-materials-info/qti-digital-material/qti-resource-icon",
+              "qti-resource-icon",
+              "items/icons/missing.png",
+              iconSource,
+            ),
+          ]);
+          acceptedOf(yield* openReferencing(item, { "items/icons/missing.png": "a" }));
         }),
     );
 
