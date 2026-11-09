@@ -2044,3 +2044,113 @@ describe("checkTestRules", () => {
     });
   });
 });
+
+/**
+ * Construct a paragraph whose `span` carries the given `data-ssml`.
+ *
+ * @param value The `span`'s `data-ssml`, as the XML reader gives it.
+ * @returns The `p`.
+ */
+const spokenParagraph = (value: string): SourceElement =>
+  el(
+    "p",
+    [],
+    [text("Our word is "), el("span", [attr("data-ssml", value)], [text("mRNA")]), text(".")],
+  );
+
+/**
+ * The documents whose `data-ssml` these rules judge, each with the paths of its `data-ssml`
+ * attributes: a test whose section's rubric block holds {@link spokenParagraph}'s paragraph, a test
+ * whose test feedback does, and a section document whose rubric block carries the value itself and
+ * holds the paragraph.
+ *
+ * @param value Every `data-ssml`'s value.
+ * @returns The documents.
+ */
+const spokenDocuments = (value: string) =>
+  [
+    {
+      paths: [`${sectionPath}/qti-rubric-block/qti-content-body/p/span/@data-ssml`],
+      source: oneSection([rubricBlock(spokenParagraph(value)), itemRef("I1")]),
+    },
+    {
+      paths: ["qti-assessment-test/qti-test-feedback/qti-content-body/p/span/@data-ssml"],
+      source: assessmentTest([
+        feedbackOutcome,
+        part("P", [section("S", [itemRef("I1")])]),
+        testFeedback(spokenParagraph(value)),
+      ]),
+    },
+    {
+      paths: [
+        "qti-assessment-section/qti-rubric-block/@data-ssml",
+        "qti-assessment-section/qti-rubric-block/qti-content-body/p/span/@data-ssml",
+      ],
+      source: sectionDocument("S", [
+        el(
+          "qti-rubric-block",
+          [attr("data-ssml", value), attr("view", "candidate")],
+          [el("qti-content-body", [], [spokenParagraph(value)])],
+        ),
+        itemRef("I1"),
+      ]),
+    },
+  ] as const;
+
+describe("checkTestRules, align-54 Data-SSML everywhere: a data-ssml value is Data-SSML JSON in a test and a section (the operator's P3)", () => {
+  it("align-54 Data-SSML everywhere P3: refuses data-ssml=\"hello\" in a test's rubric block, its test feedback and a section's rubric block, as attribute-type data-ssml with problem json at each attribute", () => {
+    assert.deepStrictEqual(
+      spokenDocuments("hello").map(({ source }) => judged(source)),
+      spokenDocuments("hello").map(({ paths }) =>
+        paths.map((path) => ({
+          detail: {
+            attribute: "data-ssml",
+            check: "data-ssml",
+            element: path.includes("/span/") ? "span" : "qti-rubric-block",
+            problem: "json",
+          },
+          path,
+          rule: "attribute-type",
+        })),
+      ),
+    );
+  });
+
+  it("align-54 Data-SSML everywhere P3: names an unknown property, a value of the wrong type and a value outside its list as the problem", () => {
+    assert.deepStrictEqual(
+      [
+        '{"speak":{"alias":"messenger RNA"}}',
+        '{"sub":{"alias":3}}',
+        '{"say-as":{"interpret-as":"spell-out"}}',
+      ].map((value) =>
+        spokenDocuments(value).flatMap(({ source }) =>
+          judged(source).map(({ detail }) => detail["problem"]),
+        ),
+      ),
+      [
+        ["name", "name", "name", "name"],
+        ["type", "type", "type", "type"],
+        ["value", "value", "value", "value"],
+      ],
+    );
+  });
+
+  it("align-54 Data-SSML everywhere P3: accepts a data-ssml that is Data-SSML JSON in each document", () => {
+    assert.deepStrictEqual(
+      spokenDocuments('{"sub":{"alias":"messenger RNA"}}').map(({ source }) => judged(source)),
+      [[], [], []],
+    );
+  });
+
+  it("align-54 Data-SSML everywhere P3: does not judge a data-ssml an attribute wildcard admits on a kind that does not declare it (rule 5b8ee08b)", () => {
+    assert.deepStrictEqual(
+      judged(
+        oneSection([
+          rubricBlock(el("ul", [], [el("li", [attr("data-ssml", "hello")], [text("mRNA")])])),
+          itemRef("I1"),
+        ]),
+      ),
+      [],
+    );
+  });
+});

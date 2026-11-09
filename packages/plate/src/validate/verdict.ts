@@ -4,8 +4,8 @@
  * author.
  *
  * {@link check} refuses a root outside QTI's namespace, then runs the structural validator, the
- * item prose rules, the test prose rules and the refusals its QTI version decides together, then
- * leaves unchecked what it cannot judge.
+ * item prose rules, the test prose rules, a stimulus's rules and the refusals its QTI version
+ * decides together, then leaves unchecked what it cannot judge.
  * Every verdict carries the kind of its document's root. On an item it accepts it secures the
  * source before it builds the item: it removes every attribute only a wildcard admits (E3) and
  * passes every URL attribute through `url.ts`, keeping each value in its parsed form or dropping it
@@ -58,7 +58,7 @@ import {
   isInstanceAttribute,
   tableOf,
 } from "#plate/validate/structure.ts";
-import { checkTestRules } from "#plate/validate/test-rules.ts";
+import { checkTestRules, dataSsml } from "#plate/validate/test-rules.ts";
 import { checkVersion } from "#plate/validate/versions.ts";
 import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
 import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
@@ -1018,14 +1018,45 @@ const checkUndelivered = (source: SourceDocument, kind: "section" | "stimulus"):
 };
 
 /**
+ * Check a stimulus document against the prose rules that judge it: a `data-ssml` value that is not
+ * Data-SSML JSON is `attribute-type`, `check: "data-ssml"` (`dataSsml`, the operator's P3), as an
+ * item's, a test's and a section's are. Neither `checkRules` nor `checkTestRules` judges a
+ * stimulus, and nothing else here does.
+ *
+ * It judges as they do: only the elements the structural walk checks, the keys of
+ * `governingTables` (reading 57), and nothing in a document whose judged elements hold an
+ * unexpanded entity reference, which the verdict leaves unchecked unless the structural walk
+ * refuses it.
+ *
+ * @param source The document.
+ * @param tables The tables generated from the QTI XSD.
+ * @returns The refusals in document order; none for a root other than a QTI stimulus.
+ */
+const checkStimulusRules = (source: SourceDocument, tables: Tables): readonly Refusal[] => {
+  if (kindOf(source.root) !== "stimulus") {
+    return [];
+  }
+
+  const governing = governingTables(source, tables);
+  const visits = [...walk(source)].filter((visit) => governing.has(visit.element));
+  const unexpanded = visits.some(
+    ({ element }) =>
+      element.attributes.some((attribute) => attribute.references.length > 0) ||
+      element.children.some((child) => child.kind === "entity"),
+  );
+
+  return unexpanded ? [] : visits.flatMap((visit) => dataSsml(source, visit, tables));
+};
+
+/**
  * Give the verdict on a document, in order:
  *
  * 1. A root outside QTI's namespace is `refused`, of kind `none`, with `not-qti-root` alone.
- * 2. The structural validator's refusals, the item prose rules' and the test prose rules', then those
- *    the document's version decides (`#plate/validate/versions.ts`, which reads the others),
- *    together and in that order, with no short-circuit: any one makes the document `refused`, with
- *    all of them. Each rule set judges only its own roots, and a document of no stated version
- *    earns none of the version's.
+ * 2. The structural validator's refusals, the item prose rules', the test prose rules' and a
+ *    stimulus's ({@link checkStimulusRules}), then those the document's version decides
+ *    (`#plate/validate/versions.ts`, which reads the others), together and in that order, with no
+ *    short-circuit: any one makes the document `refused`, with all of them. Each rule set judges
+ *    only its own roots, and a document of no stated version earns none of the version's.
  * 3. A document holding MathML, SSML, an unexpanded entity reference, an XInclude `include` (E23,
  *    whatever its form), or a root other than an item, a test, a section or a stimulus, is
  *    `unchecked`, with every reason. It is never rendered.
@@ -1066,6 +1097,7 @@ export const check = (
     ...checkStructure(source, tables),
     ...checkRules(source, tables),
     ...checkTestRules(source, tables),
+    ...checkStimulusRules(source, tables),
   ];
   const refusals = [...judged, ...checkVersion(source, version, judged)];
   if (Arr.isReadonlyArrayNonEmpty(refusals)) {
