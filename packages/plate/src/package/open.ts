@@ -4454,13 +4454,17 @@ const viewFault = (rule: BranchRule, view: TargetView): Option.Option<string> =>
 
 /**
  * How the placements of a test's assembly place one another, which the branch rules read: the
- * test's placement, each placement's section refs with what each places, and each placement's
- * placements above it, one step up.
+ * test's placement, each placement's section refs with what each places, each placement's
+ * placements above it, one step up, and each document's placements, by path.
  */
 interface PlacementGraph {
   readonly children: ReadonlyMap<Placement, readonly PlacedBy[]>;
   readonly counts: ReadonlyMap<Placement, number>;
   readonly parents: ReadonlyMap<Placement, readonly Placement[]>;
+  /**
+   * Each document's placements, by path, in the order the walk places them.
+   */
+  readonly placedAt: ReadonlyMap<string, readonly Placement[]>;
   readonly placements: readonly Placement[];
   readonly test: Placement;
 }
@@ -4518,6 +4522,479 @@ const reachedAvoiding = (
 };
 
 /**
+ * Which placements of a test's assembly lie on every way down from the test to which
+ * ({@link dominanceOf}).
+ */
+interface Dominance {
+  /**
+   * Give the deepest placement that lies on every way down to each of two.
+   *
+   * @param one A placement.
+   * @param other Another.
+   * @returns The deepest placement on every way down to both, either of them included.
+   */
+  readonly deepestCommon: (one: Placement, other: Placement) => Placement;
+  /**
+   * Report whether one placement lies on every way down from the test to another.
+   *
+   * @param above The one.
+   * @param below The other.
+   * @returns Whether `above` lies on every way down to `below`, `below` itself included.
+   */
+  readonly dominates: (above: Placement, below: Placement) => boolean;
+}
+
+/**
+ * Give which placements of a test's assembly lie on every way down from the test to which. The
+ * placements form no cycle ({@link assemble}), so they are met in an order that puts each after
+ * every placement one step above it, and the nearest placement on every way down to a placement is
+ * the deepest one on every way down to each placement one step above it. Each placement keeps the
+ * placements 1, 2, 4 and so on steps up that chain, so the deepest common one of two placements,
+ * and whether one lies on the chain of another, takes a step for each doubling of the chain's
+ * length rather than one for each placement on it: the whole costs a few such steps for each
+ * section ref that places a placement, however long a chain of documents is.
+ *
+ * @param graph The assembly's placements.
+ * @returns Which placements lie on every way down to which.
+ */
+const dominanceOf = (graph: PlacementGraph): Dominance => {
+  const depths = new Map<Placement, number>([[graph.test, 0]]);
+  // Each placement's chain, the placements 1, 2, 4 and so on steps up it, none past the test.
+  const chains = new Map<Placement, readonly Placement[]>([[graph.test, []]]);
+  /**
+   * Give how many steps a placement's chain takes up to the test.
+   *
+   * @param placement The placement.
+   * @returns The steps.
+   */
+  const depthOf = (placement: Placement): number => depths.get(placement) ?? 0;
+  /**
+   * Give the placement 2 to the power of a level steps up a placement's chain.
+   *
+   * @param placement The placement.
+   * @param level The level.
+   * @returns The placement there, the test when the chain is shorter.
+   */
+  const upOf = (placement: Placement, level: number): Placement =>
+    chains.get(placement)?.[level] ?? graph.test;
+  /**
+   * Give the placement some steps up a placement's chain.
+   *
+   * @param placement The placement.
+   * @param steps The steps, at most its chain's.
+   * @returns The placement there.
+   */
+  const lift = (placement: Placement, steps: number): Placement => {
+    let lifted = placement;
+    for (let left = steps, level = 0; left > 0; left = Math.floor(left / 2), level += 1) {
+      if (left % 2 === 1) {
+        lifted = upOf(lifted, level);
+      }
+    }
+
+    return lifted;
+  };
+  /**
+   * Give the deepest placement on the chains of two placements.
+   *
+   * @param one A placement.
+   * @param other Another.
+   * @returns The deepest placement on both chains, each placement's chain including itself.
+   */
+  const deepestCommon = (one: Placement, other: Placement): Placement => {
+    let lower = lift(one, Math.max(0, depthOf(one) - depthOf(other)));
+    let upper = lift(other, Math.max(0, depthOf(other) - depthOf(one)));
+    for (let level = (chains.get(lower)?.length ?? 0) - 1; level >= 0; level -= 1) {
+      const lowerUp = upOf(lower, level);
+      const upperUp = upOf(upper, level);
+      if (lowerUp !== upperUp) {
+        lower = lowerUp;
+        upper = upperUp;
+      }
+    }
+
+    return lower === upper ? lower : upOf(lower, 0);
+  };
+
+  const waiting = new Map<Placement, number>();
+  for (const [placement, above] of graph.parents) {
+    waiting.set(placement, above.length);
+  }
+
+  const met = [graph.test];
+  for (const placement of met) {
+    for (const { placement: below } of graph.children.get(placement) ?? []) {
+      const left = (waiting.get(below) ?? 1) - 1;
+      waiting.set(below, left);
+      if (left === 0) {
+        const [first = graph.test, ...rest] = graph.parents.get(below) ?? [];
+        let nearest = first;
+        for (const parent of rest) {
+          nearest = deepestCommon(nearest, parent);
+        }
+
+        const depth = depthOf(nearest) + 1;
+        const chain = [nearest];
+        for (let level = 1; 2 ** level <= depth; level += 1) {
+          chain.push(upOf(chain.at(-1) ?? graph.test, level - 1));
+        }
+
+        depths.set(below, depth);
+        chains.set(below, chain);
+        met.push(below);
+      }
+    }
+  }
+
+  return {
+    deepestCommon,
+    dominates: (above, below) =>
+      depthOf(above) <= depthOf(below) && lift(below, depthOf(below) - depthOf(above)) === above,
+  };
+};
+
+/**
+ * The most section refs {@link reachesAbove} reads before it gives up: a walk that settles within
+ * it costs little, and one that does not costs no more than this before the placements are walked
+ * once for the target instead ({@link reachedAvoiding}).
+ */
+const reachBudget = 64;
+
+/**
+ * Report whether a placement can be reached from a placement on every way down to it through
+ * placements outside a set, walking up from it, one way at a time, through the placements one step
+ * above each. A placement above it that `from` does not lie on every way down to lies above `from`
+ * too, and every way up to it passes `from`, so the walk, which ends at `from`, reads only
+ * placements `from` lies above.
+ *
+ * @param graph The assembly's placements.
+ * @param below The placement.
+ * @param from A placement on every way down to it, not in the set.
+ * @param avoided The set.
+ * @returns Whether a way up from `below` through placements outside the set reaches `from`, none
+ *   when it read {@link reachBudget} section refs without settling it.
+ */
+const reachesAbove = (
+  graph: PlacementGraph,
+  below: Placement,
+  from: Placement,
+  avoided: ReadonlySet<Placement>,
+): Option.Option<boolean> => {
+  const met = new Set<Placement>([below]);
+  // The walk's way up, each placement with the index of the next placement above it to read.
+  const way: { readonly placement: Placement; next: number }[] = [{ next: 0, placement: below }];
+  let read = 0;
+  for (let step = way.at(-1); step !== undefined; step = way.at(-1)) {
+    if (step.placement === from) {
+      return Option.some(true);
+    }
+
+    if (read === reachBudget) {
+      return Option.none();
+    }
+
+    const parent = graph.parents.get(step.placement)?.[step.next];
+    step.next += 1;
+    read += 1;
+    if (parent === undefined) {
+      way.pop();
+    } else if (!avoided.has(parent) && !met.has(parent)) {
+      met.add(parent);
+      way.push({ next: 0, placement: parent });
+    }
+  }
+
+  return Option.some(false);
+};
+
+/**
+ * Where a branch rule's target is written across a test's reach, read once for the reach and the
+ * target ({@link BranchIndex}): each document that writes it, by path, with the name it writes;
+ * the placements of those documents, in the order the walk places them; and whether the test
+ * places them more than once, so two placements supply it.
+ */
+interface TargetWriters {
+  readonly byPath: ReadonlyMap<string, BranchName>;
+  readonly suppliedTwice: boolean;
+  readonly writers: readonly Placement[];
+}
+
+/**
+ * One section ref of a placement that writes a branch rule's target, through which a placement of
+ * the rule's document descends: the placement that writes it, the target as that placement holds
+ * it, the placement the ref places, and the ref's pre-order index in the writer's document, none
+ * when its document has no site for it.
+ */
+interface WriterView {
+  readonly holder: Placement;
+  readonly placed: Placement;
+  readonly point: Option.Option<number>;
+  readonly target: BranchName;
+}
+
+/**
+ * What the branch rules of one document read of a target that other documents write, read once
+ * for the document and the target ({@link BranchIndex}): whether the test reaches a placement of
+ * the document through no placement of a writer, `unknown`, or `ambiguous` when the writers are
+ * placed more than once, and each section ref of a writer through which a placement of the
+ * document descends, in the order of the writers' placements.
+ */
+interface TargetAcross {
+  /**
+   * The reasons found for the document's rules, by whether a rule's owner is a test part and by
+   * its owner's test part, which are all of a rule that a view through a section ref reads
+   * ({@link acrossFaults}); none when a view's section ref has no site, which reads the owner's
+   * own place.
+   */
+  readonly faults: Option.Option<Map<boolean, Map<SourceElement | undefined, readonly string[]>>>;
+  readonly unresolved: Option.Option<string>;
+  readonly views: readonly WriterView[];
+}
+
+/**
+ * What the branch rules of a test's reach read of its placements, each part indexed once for the
+ * reach rather than again for each rule ({@link branchIndex}).
+ */
+interface BranchIndex {
+  /**
+   * Give what one document's branch rules read of a target that other documents write.
+   *
+   * @param path The rule's document's path.
+   * @param identifier The target.
+   * @returns What they read of it.
+   */
+  readonly across: (path: string, identifier: string) => TargetAcross;
+  /**
+   * Give where a target is written across the reach.
+   *
+   * @param identifier The target.
+   * @returns Its writers.
+   */
+  readonly writersOf: (identifier: string) => TargetWriters;
+}
+
+/**
+ * Index what a test's branch rules read of its placements, each part computed once, when a rule
+ * first reads it: each target's writers by path, from the placements indexed by path; the
+ * placements from which a document's placements can be reached ({@link reachingAny}), once for
+ * each document; and what a document's rules read of a target written elsewhere, once for each
+ * document and target, from those of its writers that reach it, its holders. Whether the test
+ * reaches a placement of the document through no writer needs no walk of the placements when it
+ * has no holder, or one, which reaches it so unless it lies on every way down to it
+ * ({@link dominanceOf}, built once, when first needed); only two or more holders that may lie
+ * above one placement, none of which alone lies so, walk up from it ({@link reachesAbove}), and,
+ * when that walk does not settle it, the placements the test reaches through none of the writers
+ * ({@link reachedAvoiding}), once for each target. So the rules cost each one its own judgement,
+ * not a scan of every placement and every writer: rules whose target many documents write cost no
+ * more than one written once, and rules whose distinct targets each document writes its own of no
+ * more than rules to one target.
+ *
+ * @param graph The assembly's placements.
+ * @param names Each name of the reach by identifier, each document that writes it in the order the
+ *   walk reaches them.
+ * @returns The index.
+ */
+const branchIndex = (
+  graph: PlacementGraph,
+  names: ReadonlyMap<string, readonly WrittenName[]>,
+): BranchIndex => {
+  const order = new Map(graph.placements.map((placement, index) => [placement, index] as const));
+  /**
+   * Order two placements as the walk places them.
+   *
+   * @param one A placement.
+   * @param other Another.
+   * @returns Negative when `one` is placed first.
+   */
+  const placedFirst = (one: Placement, other: Placement): number =>
+    (order.get(one) ?? 0) - (order.get(other) ?? 0);
+  const targets = new Map<string, TargetWriters>();
+  // The placements the test reaches through no writer, by target, walked only for a target two or
+  // more holders write, none of which alone lies on every way down to a placement of a document,
+  // when a walk up from that placement does not settle it.
+  const outsides = new Map<string, ReadonlySet<Placement>>();
+  let dominance: Dominance | undefined;
+  let partitioned: boolean | undefined;
+  const reachers = new Map<string, ReadonlySet<Placement>>();
+  const acrosses = new Map<string, Map<string, TargetAcross>>();
+  /**
+   * Give where a target is written across the reach, indexed when first asked.
+   *
+   * @param identifier The target.
+   * @returns Its writers.
+   */
+  const writersOf = (identifier: string): TargetWriters => {
+    const known = targets.get(identifier);
+    if (known !== undefined) {
+      return known;
+    }
+
+    const byPath = new Map<string, BranchName>();
+    for (const { name, path } of names.get(identifier) ?? []) {
+      if (!byPath.has(path)) {
+        byPath.set(path, name);
+      }
+    }
+
+    const writers = [...byPath.keys()]
+      .flatMap((path) => graph.placedAt.get(path) ?? [])
+      .toSorted(placedFirst);
+    let supplied = 0;
+    for (const writer of writers) {
+      supplied += graph.counts.get(writer) ?? 0;
+    }
+
+    const found = { byPath, suppliedTwice: supplied > 1, writers };
+    targets.set(identifier, found);
+
+    return found;
+  };
+  /**
+   * Report whether the test reaches some placement of a document through no placement that writes
+   * a target. Only the writers' placements that reach one of the document's, its holders, lie on a
+   * way down to one, and of those only the ones that may lie above that one: a placement's
+   * replacement holds for every placement below it ({@link contextUnder}), and, when no section
+   * document places what it places under a test part of its own, a placement under a test part is
+   * placed only by the test and placements under that part. With none above it, the test reaches
+   * it; with one, unless that one lies on every way down to it ({@link dominanceOf}); with more,
+   * unless one of them alone lies so, when a way up from it through no writer reaches the deepest
+   * placement on every way down to it and to each of them, which the test reaches through no
+   * writer since none lies above that one ({@link reachesAbove}), or, when that walk does not
+   * settle it, when it is among the placements the test reaches through no writer, walked once for
+   * the target.
+   *
+   * @param identifier The target.
+   * @param writers Its writers' placements.
+   * @param ruled The document's placements, none of which writes it.
+   * @param holders The writers' placements that reach one of the document's.
+   * @returns Whether the test reaches one of the document's placements through no writer.
+   */
+  const reachedOutside = (
+    identifier: string,
+    writers: readonly Placement[],
+    ruled: readonly Placement[],
+    holders: readonly Placement[],
+  ): boolean => {
+    if (holders.length === 0) {
+      return ruled.length > 0;
+    }
+
+    const known = dominance ?? dominanceOf(graph);
+    dominance = known;
+    const { deepestCommon, dominates } = known;
+    const byPart =
+      partitioned ??
+      [...graph.placedAt.values()].every(
+        ([first]) =>
+          first === undefined ||
+          first === graph.test ||
+          [...first.layout.sites.values()].every((site) => Option.isNone(site.part)),
+      );
+    partitioned = byPart;
+    /**
+     * Give the test part a placement lies under, as far as it tells which placements lie above it.
+     *
+     * @param placement The placement.
+     * @returns Its test part, undefined for the test, or for every placement when a section
+     *   document places under a test part of its own.
+     */
+    const partOf = (placement: Placement): SourceElement | undefined =>
+      byPart ? Option.getOrUndefined(placement.part) : undefined;
+    const groups = new Map<SourceElement | undefined, Placement[]>();
+    for (const holder of holders) {
+      const group = groups.get(partOf(holder)) ?? [];
+      group.push(holder);
+      groups.set(partOf(holder), group);
+    }
+
+    return ruled.some((placement) => {
+      const part = partOf(placement);
+      const above = [
+        ...(groups.get(partOf(graph.test)) ?? []),
+        ...(part === partOf(graph.test) ? [] : (groups.get(part) ?? [])),
+      ].filter((holder) => placement.replaced || !holder.replaced);
+      if (above.some((holder) => dominates(holder, placement))) {
+        return false;
+      }
+
+      if (above.length <= 1) {
+        return true;
+      }
+
+      let from = placement;
+      for (const holder of above) {
+        from = deepestCommon(from, holder);
+      }
+
+      return Option.getOrElse(reachesAbove(graph, placement, from, new Set(above)), () => {
+        const outside = outsides.get(identifier) ?? reachedAvoiding(graph, new Set(writers));
+        outsides.set(identifier, outside);
+
+        return outside.has(placement);
+      });
+    });
+  };
+  /**
+   * Give what one document's branch rules read of a target that other documents write, read when
+   * first asked.
+   *
+   * @param path The rule's document's path.
+   * @param identifier The target.
+   * @returns What they read of it.
+   */
+  const across = (path: string, identifier: string): TargetAcross => {
+    const byTarget = acrosses.get(path) ?? new Map<string, TargetAcross>();
+    acrosses.set(path, byTarget);
+
+    const known = byTarget.get(identifier);
+    if (known !== undefined) {
+      return known;
+    }
+
+    const { byPath, suppliedTwice, writers } = writersOf(identifier);
+    const ruled = graph.placedAt.get(path) ?? [];
+    const reaching = reachers.get(path) ?? reachingAny(graph, ruled);
+    reachers.set(path, reaching);
+
+    // A writer one of whose section refs places a placement that reaches the document reaches it
+    // too, so only the writers among the placements that reach it are read, from the smaller side.
+    const holders =
+      reaching.size < writers.length
+        ? [...reaching].filter((one) => byPath.has(one.path)).toSorted(placedFirst)
+        : writers.filter((one) => reaching.has(one));
+    const views: WriterView[] = [];
+    for (const holder of holders) {
+      const target = byPath.get(holder.path);
+      for (const { placement, site } of graph.children.get(holder) ?? []) {
+        if (target !== undefined && reaching.has(placement)) {
+          views.push({
+            holder,
+            placed: placement,
+            point: Option.fromUndefinedOr(holder.layout.sites.get(site.element)?.start),
+            target,
+          });
+        }
+      }
+    }
+
+    const found: TargetAcross = {
+      faults: views.every((view) => Option.isSome(view.point))
+        ? Option.some(new Map())
+        : Option.none(),
+      unresolved: reachedOutside(identifier, writers, ruled, holders)
+        ? Option.some(suppliedTwice ? "ambiguous" : "unknown")
+        : Option.none(),
+      views,
+    };
+    byTarget.set(identifier, found);
+
+    return found;
+  };
+
+  return { across, writersOf };
+};
+
+/**
  * Give the reasons reading 87 refuses a branch rule of a document for, over every placement of the
  * document, when its target lies in no placement of the rule's own document: from outside a section
  * document a ref places, no target lies inside it, since branch rules "treat referred sections as
@@ -4532,57 +5009,63 @@ const reachedAvoiding = (
  *   holds it, from the section ref through which the rule's placement descends
  *   ({@link viewFault}).
  *
- * Each placement of a document under one context and each section ref of it is read once, so the
- * work is bounded by the assembly's placements and section refs.
+ * What the document reads of the target is indexed once for the document and the target
+ * ({@link BranchIndex}), so each rule judges only the section refs through which its document's
+ * placements descend from a writer. Through a section ref, a view reads of the rule only whether
+ * its owner is a test part and the owner's test part, so the reasons are found once for each of
+ * those and given again to every other rule of the document that shares them: rules to a target
+ * that many documents above them write cost each one its share, not a judgement of every writer.
  *
- * @param graph The assembly's placements.
  * @param rule The rule.
  * @param owner The rule's owner.
- * @param written Each document that writes the target, none of them the rule's own.
- * @param ruled The placements of the rule's document.
+ * @param across What the rule's document reads of the target.
  * @returns The reasons, each once, in the order found.
  */
 const acrossFaults = (
-  graph: PlacementGraph,
   rule: BranchRule,
   owner: BranchName,
-  written: readonly WrittenName[],
-  ruled: readonly Placement[],
+  { faults, unresolved, views }: TargetAcross,
 ): readonly string[] => {
-  const writers = graph.placements.filter(({ path }) => written.some((one) => one.path === path));
-  const reasons = new Set<string>();
-  const outside = reachedAvoiding(graph, new Set(writers));
-  if (ruled.some((placement) => outside.has(placement))) {
-    let supplied = 0;
-    for (const writer of writers) {
-      supplied += graph.counts.get(writer) ?? 0;
-    }
+  const ownsPart = isQti(rule.owner, partElements);
+  const ownerPart = Option.getOrUndefined(owner.part);
+  const byPart = faults.pipe(
+    Option.map((known) => {
+      const found = known.get(ownsPart) ?? new Map<SourceElement | undefined, readonly string[]>();
+      known.set(ownsPart, found);
 
-    reasons.add(supplied > 1 ? "ambiguous" : "unknown");
+      return found;
+    }),
+  );
+  const shared = byPart.pipe(
+    Option.flatMap((known) => Option.fromUndefinedOr(known.get(ownerPart))),
+    Option.getOrUndefined,
+  );
+  if (shared !== undefined) {
+    return shared;
   }
 
-  const reaching = reachingAny(graph, ruled);
-  for (const holder of writers) {
-    const target = written.find(({ path }) => path === holder.path)?.name;
-    for (const { placement, site } of graph.children.get(holder) ?? []) {
-      if (target !== undefined && reaching.has(placement)) {
-        for (const reason of Option.toArray(
-          viewFault(rule, {
-            holder,
-            layout: holder.layout,
-            owner,
-            ownerPart: Option.getOrUndefined(Option.orElse(owner.part, () => placement.part)),
-            point: Option.fromUndefinedOr(holder.layout.sites.get(site.element)?.start),
-            target,
-          }),
-        )) {
-          reasons.add(reason);
-        }
-      }
+  const reasons = new Set<string>(Option.toArray(unresolved));
+  for (const { holder, placed, point, target } of views) {
+    for (const reason of Option.toArray(
+      viewFault(rule, {
+        holder,
+        layout: holder.layout,
+        owner,
+        ownerPart: Option.getOrUndefined(Option.orElse(owner.part, () => placed.part)),
+        point,
+        target,
+      }),
+    )) {
+      reasons.add(reason);
     }
   }
 
-  return [...reasons];
+  const found = [...reasons];
+  for (const known of Option.toArray(byPart)) {
+    known.set(ownerPart, found);
+  }
+
+  return found;
 };
 
 /**
@@ -4596,23 +5079,15 @@ const acrossFaults = (
  * ({@link acrossFaults}). A rule whose owner writes no identifier resolves from no source, and is
  * `unknown` beside the owner's own refusal (reading 147).
  *
- * @param graph The assembly's placements.
+ * @param index What the test's branch rules read of its placements.
  * @param here The placement judged.
  * @param first Whether it is its document's first placement.
- * @param names Each name of the reach by identifier, each document that writes it in the order the
- *   walk reaches them.
  * @returns The refusals, in document order.
  */
-const judgeBranches = (
-  graph: PlacementGraph,
-  here: Placement,
-  first: boolean,
-  names: ReadonlyMap<string, readonly WrittenName[]>,
-): readonly Refusal[] =>
+const judgeBranches = (index: BranchIndex, here: Placement, first: boolean): readonly Refusal[] =>
   here.layout.rules.flatMap((rule) => {
     const owner = here.layout.names.get(rule.owner);
-    const written = names.get(rule.target) ?? [];
-    const own = written.find(({ path }) => path === here.path)?.name;
+    const own = index.writersOf(rule.target).byPath.get(here.path);
     /**
      * Give the reasons the rule is refused for here.
      *
@@ -4636,15 +5111,7 @@ const judgeBranches = (
         );
       }
 
-      return first
-        ? acrossFaults(
-            graph,
-            rule,
-            owner,
-            written,
-            graph.placements.filter(({ path }) => path === here.path),
-          )
-        : [];
+      return first ? acrossFaults(rule, owner, index.across(here.path, rule.target)) : [];
     };
 
     return reasons().map((reason) =>
@@ -4703,6 +5170,10 @@ interface Reach {
   readonly itemRefs: ReadonlyMap<string, ResolvedItemRef>;
   readonly names: ReadonlyMap<string, readonly WrittenName[]>;
   /**
+   * Each document's placements, by path, in the order the walk places them.
+   */
+  readonly placedAt: ReadonlyMap<string, readonly Placement[]>;
+  /**
    * Each section document the test places, at its first placement, in the order the walk places
    * them.
    */
@@ -4712,11 +5183,11 @@ interface Reach {
 }
 
 /**
- * Gather what a test's placements give its references and branch rules: the section documents
- * placed, each once; the identifiers a document gives again across the reach ({@link repeatsIn}),
- * which are left out of it, so the first wins; each item ref, part and section identifier, where it
- * is written; each document's placements as a reading from outside it reads them; and each name a
- * branch rule may name, with each document that writes it.
+ * Gather what a test's placements give its references and branch rules: each document's placements,
+ * by path; the section documents placed, each once; the identifiers a document gives again across
+ * the reach ({@link repeatsIn}), which are left out of it, so the first wins; each item ref, part
+ * and section identifier, where it is written; each document's placements as a reading from outside
+ * it reads them; and each name a branch rule may name, with each document that writes it.
  *
  * @param test The test's own placement.
  * @param assembly The test's assembly.
@@ -4780,11 +5251,13 @@ const reachOf = (test: Placement, { counts, placements }: Assembly): Reach => {
     }
 
     for (const [identifier, name] of layout.byIdentifier) {
-      names.set(identifier, [...(names.get(identifier) ?? []), { name, path }]);
+      const writing = names.get(identifier) ?? [];
+      writing.push({ name, path });
+      names.set(identifier, writing);
     }
   }
 
-  return { durations, flags, itemRefs, names, reached, repeats, written };
+  return { durations, flags, itemRefs, names, placedAt, reached, repeats, written };
 };
 
 /**
@@ -5012,7 +5485,10 @@ const judgeTest = (
   };
   const assembly = assemble(test, sectionPaths, refTargets, documents);
   const { children, counts, cycles, placements } = assembly;
-  const { durations, flags, itemRefs, names, reached, repeats, written } = reachOf(test, assembly);
+  const { durations, flags, itemRefs, names, placedAt, reached, repeats, written } = reachOf(
+    test,
+    assembly,
+  );
   const parents = new Map<Placement, Placement[]>();
   for (const [parent, placed] of children) {
     for (const { placement } of placed) {
@@ -5022,19 +5498,13 @@ const judgeTest = (
     }
   }
 
-  const graph: PlacementGraph = { children, counts, parents, placements, test };
+  const graph: PlacementGraph = { children, counts, parents, placedAt, placements, test };
+  const branching = branchIndex(graph, names);
   const items = itemsOf(itemRefs, documents);
   const variablesFor = variablesThrough(own.targets, documents);
   const mappingRefusals = judgeMappings(source.location, own.visits, variablesFor);
   const defaults = judgeTemplateDefaults(source.location, own.visits, variablesFor);
   const whole = wholeOf(source);
-  const placedAt = new Map<string, Placement[]>();
-  for (const placement of placements) {
-    const placed = placedAt.get(placement.path) ?? [];
-    placed.push(placement);
-    placedAt.set(placement.path, placed);
-  }
-
   const avoiding = new Map<string, ReadonlySet<Placement>>();
   const reachers = new Map<Placement, ReadonlySet<Placement>>();
   // The placement being judged, the test's first, and the view each reading takes of each document
@@ -5257,10 +5727,7 @@ const judgeTest = (
     ),
     [...processingRefusals(source, tables, () => unknownType), ...references],
   );
-  const branches = notHeld(
-    judgeBranches(graph, test, true, names),
-    ownRefusals(documents, testPath),
-  );
+  const branches = notHeld(judgeBranches(branching, test, true), ownRefusals(documents, testPath));
 
   /**
    * Report whether a name the test's processing reads names, through an item ref, a variable the
@@ -5401,7 +5868,7 @@ const judgeTest = (
       ...sectionReferences,
       ...sectionProcessing,
       ...notHeld(
-        judgeBranches(graph, placement, known === undefined, names),
+        judgeBranches(branching, placement, known === undefined),
         ownRefusals(documents, path),
       ),
     ];
