@@ -1,7 +1,7 @@
 /**
- * The export on the lease: the three corpus packages the import accepts and the SSML phase's
- * positive fixtures, imported, exported and compared with their record, and the scan's plan read
- * back through `db.explain`.
+ * The export on the lease: the three corpus packages the import accepts and the SSML and `data-*`
+ * phases' positive fixtures, imported, exported and compared with their record, and the scan's plan
+ * read back through `db.explain`.
  *
  * - **The round trip.** Every entry of each package's export is held to canonical equality with the
  *   record its import wrote, and byte equality is reported, per package, as the test's annotation.
@@ -49,8 +49,8 @@ const workDirectory = path.resolve(import.meta.dirname, "../../work");
 /**
  * The packages the import accepts, each materialized as the import reads it: the corpus packages
  * (`verdicts/qti-examples-0a92fbb.tsv`), `simple` and `sharedMedia` as directories and `svg` as
- * its zip, then the SSML phase's positive fixtures (held by `fixtures.ssml.oracle.test.ts`) as
- * directories.
+ * its zip, then the SSML phase's positive fixtures (held by `fixtures.ssml.oracle.test.ts`) and the
+ * `data-*` phase's (held by `fixtures.data.oracle.test.ts`) as directories.
  */
 const accepted = [
   { name: "simple", source: materialize("simple") },
@@ -65,6 +65,10 @@ const accepted = [
   { name: "ssml-two-speaks", source: materialize("ssml-two-speaks") },
   { name: "data-ssml-custom", source: materialize("data-ssml-custom") },
   { name: "data-ssml", source: materialize("data-ssml") },
+  { name: "cut-data-dash", source: materialize("cut-data-dash") },
+  { name: "cut-data-attributes", source: materialize("cut-data-attributes") },
+  { name: "data-custom", source: materialize("data-custom") },
+  { name: "data-entity", source: materialize("data-entity") },
 ] as const;
 
 /**
