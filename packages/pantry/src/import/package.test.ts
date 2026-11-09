@@ -37,13 +37,13 @@ import {
   settleCommitUnknown,
   WrapApply,
 } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 import { Package } from "#pantry/qti/package.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { importAgreesWithOracle } from "#pantry/test/oracle-verdict.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 

@@ -33,7 +33,6 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
@@ -47,6 +46,7 @@ import {
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { asi, item, manifestOf } from "#pantry/test/probe.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * Replace the one occurrence of a passage in a text.

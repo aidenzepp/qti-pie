@@ -19,10 +19,10 @@ import { Effect, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { materialize, negativeNames } from "#pantry/test/fixtures.ts";
 import { expectations } from "#pantry/test/negatives.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The negatives that witness audit C 62'': a test document whose LOM record states another

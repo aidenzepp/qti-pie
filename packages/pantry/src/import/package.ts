@@ -22,11 +22,11 @@ import type { FileSystem, PlatformError } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
-import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { AuthorApp } from "#pantry/qti/own-login.ts";
 import { Package } from "#pantry/qti/package.ts";
 import type { Author } from "#pantry/qti/own-login.ts";
+import type { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The longest the retries of one database call run, in total.

@@ -47,16 +47,12 @@ import {
   contractNames,
   explain,
   generatedNames,
-  ImportRefused,
-  ImportRule,
   keyNames,
   lawNameOf,
-  limitRules,
   owedRules,
   patternNameIn,
   patternTypeOf,
   refusalOf,
-  ruleOfError,
   ruleOfLaw,
   rulesOf,
   schemaLawsOf,
@@ -68,7 +64,7 @@ import { Qti } from "#pantry/qti/own.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { beginsWith, mergedAxes } from "#pantry/test/merged-axes.ts";
 import type { Axis } from "#pantry/test/merged-axes.ts";
-import type { LawName, ReadRefusal, Rule } from "#pantry/import/refusal.ts";
+import type { LawName } from "#pantry/import/refusal.ts";
 import {
   NotQti3,
   notQti3Reasons,
@@ -77,6 +73,8 @@ import {
 } from "#pantry/model/shred.ts";
 import { PackageReadError } from "#pantry/package/read.ts";
 import { ZipRefusal } from "#pantry/package/zip.ts";
+import { ImportRefused, ImportRule, limitRules, ruleOfError } from "#pantry/import/rules.ts";
+import type { ReadRefusal, Rule } from "#pantry/import/rules.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

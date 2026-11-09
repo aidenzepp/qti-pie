@@ -4,10 +4,10 @@ import { Effect, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import type { Rule } from "#pantry/import/refusal.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import type { Rule } from "#pantry/import/rules.ts";
 
 /**
  * The packaging fixtures of the retired guards, each with the rules its refusal may name: the

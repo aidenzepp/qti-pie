@@ -17,7 +17,6 @@ import { Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { keyTextBytes } from "#pantry/qti/limits.ts";
 import { ObjectIdentifier } from "#pantry/qti/metadata.ts";
 import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
@@ -26,6 +25,7 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 import { testKind } from "#pantry/vocab/terms/tests.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The test documents of a package whose root writes an identifier, by the package and that

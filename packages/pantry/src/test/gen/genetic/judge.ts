@@ -37,7 +37,7 @@ import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ImportRefused, refusalOf } from "#pantry/import/refusal.ts";
+import { refusalOf } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
@@ -53,6 +53,7 @@ import { filledKeyTextFields, keyCopies } from "#pantry/test/key-copies.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { boundBroken, judge, ruleOf } from "#pantry/test/oracle.ts";
 import type { Breach, LawName, Judgment as OracleJudgment, Laws } from "#pantry/test/oracle.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * One way the import and the oracle disagree on a package:

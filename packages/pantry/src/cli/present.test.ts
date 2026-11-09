@@ -461,9 +461,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
       // kind of `RefusedKind` and of `WitnessKind`, exhausted, each in text and JSON; residual
       // none.
       Effect.gen(function* everyOrigin() {
-        const { checkNameOf, ImportRefused, refusalOf } = yield* Effect.promise(
+        const { checkNameOf, refusalOf } = yield* Effect.promise(
           () => import("#pantry/import/refusal.ts"),
         );
+        const { ImportRefused } = yield* Effect.promise(() => import("#pantry/import/rules.ts"));
         const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
         const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
         const { rule, source } = lawTable["AL1 admission"];

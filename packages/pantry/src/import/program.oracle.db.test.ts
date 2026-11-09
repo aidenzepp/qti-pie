@@ -27,7 +27,6 @@ import { composed } from "#pantry/grammar/compose.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage, WrapApply } from "#pantry/import/package.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import type { NodeMember, NodeRoot, PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
@@ -40,6 +39,7 @@ import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
 import { resourceTypeCases } from "#pantry/test/resource-type-cases.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 const fixtures = inject("fixtures");
 

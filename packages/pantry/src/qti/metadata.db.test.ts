@@ -47,7 +47,6 @@ import { ownContext } from "#pantry/import/fold.ts";
 import { rowsOf } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataIds } from "#pantry/import/overlays/metadata.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
@@ -67,6 +66,7 @@ import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The grammar shred reads every document through.

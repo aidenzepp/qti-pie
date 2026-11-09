@@ -27,8 +27,6 @@ import { namedDocuments, rowsOf as packageRowsOf } from "#pantry/import/overlays
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
 import { documentLayer } from "#pantry/import/roster.ts";
-import { ruleOfError } from "#pantry/import/refusal.ts";
-import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type {
   ListedDocument,
@@ -44,6 +42,8 @@ import { PackageReadError, readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { cpNamespace } from "#pantry/vocab/namespaces.ts";
 import { manifestPath } from "#pantry/vocab/terms/package.ts";
+import { ruleOfError } from "#pantry/import/rules.ts";
+import type { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * One document of the package as the import writes it: as listed, and under its ids.

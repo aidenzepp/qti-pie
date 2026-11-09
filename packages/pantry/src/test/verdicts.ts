@@ -1,7 +1,7 @@
 import path from "node:path";
 import { Array as Arr, Effect, Schema } from "effect";
-import { ImportRule, ruleOrder } from "#pantry/import/refusal.ts";
-import type { Rule } from "#pantry/import/refusal.ts";
+import { ImportRule, ruleOrder } from "#pantry/import/rules.ts";
+import type { Rule } from "#pantry/import/rules.ts";
 
 /**
  * One corpus zip's verdict: the tarball member it came from, whether the importer accepted it, and

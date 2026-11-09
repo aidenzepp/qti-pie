@@ -10,10 +10,10 @@ import { previewPackage } from "#pantry/import/preview.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { NodeMember } from "#pantry/import/write.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 const fixtures = inject("fixtures");
 

@@ -9,11 +9,11 @@ import { assert } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The oracle's tables over the installed grammar, built once.

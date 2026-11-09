@@ -22,8 +22,7 @@ import { describe } from "vitest";
 import { composed } from "#pantry/grammar/compose.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import type { LawName, Rule } from "#pantry/import/refusal.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
+import type { LawName } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { MathAction, MathAlignScope } from "#pantry/qti/mathml-align.ts";
 import { assertVerdict, judged, loginSession, statedInserts } from "#pantry/test/direct-sql.ts";
@@ -34,6 +33,8 @@ import { materializeMathml, mathmlNegatives, mathmlSpecOf } from "#pantry/test/f
 import type { MathmlFixtureName } from "#pantry/test/fixtures.mathml.ts";
 import { judge, lawsOf, ruleOf, verdictOf } from "#pantry/test/oracle.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import type { Rule } from "#pantry/import/rules.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The spec of a formula item: the MathML base item the free fixtures are cut from, with the

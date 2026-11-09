@@ -18,10 +18,10 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { swarm, swarmChoice } from "@grizzle/testing/swarm";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Result } from "effect";
-import { ImportRule } from "#pantry/import/refusal.ts";
-import type { Rule } from "#pantry/import/refusal.ts";
 import { parseVerdicts, renderVerdicts, verdictsPath } from "#pantry/test/verdicts.ts";
 import type { VerdictRow } from "#pantry/test/verdicts.ts";
+import { ImportRule } from "#pantry/import/rules.ts";
+import type { Rule } from "#pantry/import/rules.ts";
 
 const HEADER = "file\tverdict\trule";
 

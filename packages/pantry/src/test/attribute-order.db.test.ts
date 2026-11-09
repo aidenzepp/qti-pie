@@ -26,7 +26,6 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { exportEntries } from "#pantry/export/package.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { names } from "#pantry/model/names.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import {
@@ -42,6 +41,7 @@ import {
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * How long the search may run: each case imports its package twice and exports what it accepts,

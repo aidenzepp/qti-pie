@@ -23,13 +23,13 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materialize, pciNames, pciNegativeNames, pciVerdicts } from "#pantry/test/fixtures.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { importAgreesWithOracle, oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { base, contextPci, edit, item, itemResource, manifestOf } from "#pantry/test/probe.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The folder the positives are exported under, `packages/pantry/work/pci-db`, one scoped folder

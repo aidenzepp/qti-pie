@@ -9,11 +9,11 @@ import { Effect, Option, Result } from "effect";
 import type { PlatformError } from "effect";
 import { inject } from "vitest";
 import { readProgram } from "#pantry/import/program.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { oracleCodecRule, packagingFixtures } from "#pantry/test/oracle-verdict.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 const fixtures = inject("fixtures");
 

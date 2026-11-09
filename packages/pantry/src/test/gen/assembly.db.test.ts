@@ -24,7 +24,6 @@ import { Duration, Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import {
   assemblyLiteral,
   assemblyPackage,
@@ -36,6 +35,7 @@ import {
 import type { Assembly, RuleFault } from "#pantry/test/gen/assembly.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The rule a fault of reading 87's model is refused under: a target that resolves nowhere, or to a

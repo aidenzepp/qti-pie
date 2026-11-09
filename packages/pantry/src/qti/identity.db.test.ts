@@ -36,7 +36,6 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { Flag } from "#pantry/grammar/install.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { governorOf } from "#pantry/import/fold.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
@@ -70,6 +69,7 @@ import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * Read a foreign key's referencing and referenced columns from the catalogue.

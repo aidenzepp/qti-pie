@@ -22,12 +22,12 @@ import { Effect, Formatter, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 import { Quotation, quotationMarks } from "#pantry/qti/quotation.ts";
 import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import type { TextEdit } from "#pantry/test/fixtures.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * A uuid no stored row holds: the document, parent and nearest interaction every stray row names.

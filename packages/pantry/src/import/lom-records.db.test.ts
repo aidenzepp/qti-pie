@@ -12,12 +12,12 @@ import { Effect, FileSystem, Layer } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { fileRecords, namings, recordPackageOf, rulesOf } from "#pantry/test/lom-records.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 describe.skipIf(!hasLease)(
   "import/lom-records.db.test.ts, on the lease",

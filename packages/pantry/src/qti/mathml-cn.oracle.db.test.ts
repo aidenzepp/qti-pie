@@ -17,13 +17,13 @@ import { describe } from "vitest";
 import { composed } from "#pantry/grammar/compose.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materializeSpec } from "#pantry/test/fixtures.ts";
 import type { FixtureSpec } from "#pantry/test/fixtures.ts";
 import { mathmlSpecOf } from "#pantry/test/fixtures.mathml.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * The spec of a formula item: the MathML base item the free fixtures are cut from, with the

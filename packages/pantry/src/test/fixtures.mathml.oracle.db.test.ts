@@ -11,7 +11,6 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { compareWithRecord } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import {
   materializeMathml,
@@ -21,6 +20,7 @@ import {
 import { judge, ruleOf } from "#pantry/test/oracle.ts";
 import { grammar, laws } from "#pantry/test/probe.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 describe.skipIf(!hasLease)(
   "fixtures.mathml.db.test.ts, on the lease",

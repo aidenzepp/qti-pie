@@ -1,9 +1,8 @@
 /**
  * The import's read, held to evaluate no schema module: the dry run's whole program
  * (`#pantry/import/preview.ts`), which reads a package, shreds its documents and builds every row
- * the import writes, reaches the schema's modules only where this test lists the import, and the
- * list only shrinks. The database layer opens the author login from its committed workload, so a
- * read that evaluates no schema module starts without building `Qti`.
+ * the import writes, imports no module that builds a relation, a law or the schema, so it starts
+ * without building `Qti`.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -26,35 +25,6 @@ const schemaPrefix = "#pantry/qti/";
  * schema share.
  */
 const dataModules: ReadonlySet<string> = new Set(["#pantry/qti/limits.ts"]);
-
-/**
- * The read's imports of a schema module today, each `module: specifier`. The list only shrinks: a
- * module that starts importing one fails the test, and so does an entry whose import is gone, until
- * the entry goes too.
- *
- * - `import/refusal.ts` names a database refusal by the schema's statements and law model, and the
- *   read reaches it for the reader's refusal rules (`ruleOfError`).
- */
-const pendingReads: readonly string[] = [
-  "import/refusal.ts: #pantry/qti/attributes.ts",
-  "import/refusal.ts: #pantry/qti/catalog.ts",
-  "import/refusal.ts: #pantry/qti/chardata.ts",
-  "import/refusal.ts: #pantry/qti/data-ssml.ts",
-  "import/refusal.ts: #pantry/qti/declarations.ts",
-  "import/refusal.ts: #pantry/qti/expressions.ts",
-  "import/refusal.ts: #pantry/qti/html.ts",
-  "import/refusal.ts: #pantry/qti/identity.ts",
-  "import/refusal.ts: #pantry/qti/interactions.ts",
-  "import/refusal.ts: #pantry/qti/mapping.ts",
-  "import/refusal.ts: #pantry/qti/mathml.ts",
-  "import/refusal.ts: #pantry/qti/metadata.ts",
-  "import/refusal.ts: #pantry/qti/node.ts",
-  "import/refusal.ts: #pantry/qti/operators.ts",
-  "import/refusal.ts: #pantry/qti/own.ts",
-  "import/refusal.ts: #pantry/qti/package.ts",
-  "import/refusal.ts: #pantry/qti/quotation.ts",
-  "import/refusal.ts: #pantry/qti/tests.ts",
-];
 
 /**
  * Test whether a specifier names a schema module: one under {@link schemaPrefix} that is no
@@ -111,13 +81,13 @@ const readSourceModule = (file: string): string =>
   readFileSync(path.join(sourceRoot, file), "utf-8");
 
 describe("the import's read", () => {
-  it("evaluates no schema module but where the list says it still does", () => {
+  it("evaluates no schema module", () => {
     // Oracle: the module graph itself, read by the one reader of a module's imports. Bound: every
     // module the dry run loads, the static and the dynamic imports of each.
     assert.deepStrictEqual(
       schemaReads("import/preview.ts", readSourceModule),
-      pendingReads,
-      "A module of the import's read that imports a schema module evaluates Qti: read the term from vocab/terms/ or the relation by name instead. An entry whose import is gone is deleted.",
+      [],
+      "A module of the import's read imports a schema module, so the read evaluates Qti: read the term from vocab/terms/, the relation by its name (import/roster.ts), or the reader's rule from import/rules.ts instead.",
     );
   });
 

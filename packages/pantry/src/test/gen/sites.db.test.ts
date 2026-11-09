@@ -17,7 +17,6 @@ import { Duration, Effect, Layer, Result } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import {
@@ -30,6 +29,7 @@ import {
 import type { SiteBox } from "#pantry/test/gen/sites.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { ImportRefused } from "#pantry/import/rules.ts";
 
 /**
  * Import one package of the box and hold the database's verdict to the case table's
