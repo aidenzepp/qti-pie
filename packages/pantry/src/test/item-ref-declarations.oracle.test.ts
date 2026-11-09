@@ -34,7 +34,7 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import type { Case } from "@grizzle/testing/explore";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Option } from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { lawOfCheck, ruleOfLaw, statedLaws } from "#pantry/import/refusal.ts";
@@ -123,8 +123,10 @@ interface HostBreach {
 }
 
 /**
- * A side of a statement this file restates: its relation, then the fields its terms read, in the
- * order the law pairs them.
+ * A side of a statement this file restates: its relation, then the fields its terms read. A key is
+ * its fields as a set, and a containment its two sides' fields paired in order, the pairs a set:
+ * a law is the pairs it holds, whatever order its statement writes them in, so the restatement
+ * follows the schema when a statement reorders its terms.
  */
 type RestatedSide = readonly [relation: string, ...fields: string[]];
 
@@ -139,20 +141,47 @@ type Restated =
   | { readonly kind: "key"; readonly side: RestatedSide };
 
 /**
- * Whether a law side reads a restated side: the same relation, and a field term for each field, in
- * order.
+ * Read a law side's fields, where each of its terms is a field.
  *
  * @param side - A side of a law the schema states.
- * @param restated - The restated side.
- * @returns Whether it reads it.
+ * @returns Its fields in order, none where a term is a `pred` one, which no restated side holds.
  */
-const readsAs = (side: LawSide, [relation, ...fields]: RestatedSide): boolean =>
-  side.relation === relation &&
-  side.terms.length === fields.length &&
-  side.terms.every((term, at) => term.kind === "field" && term.field === fields[at]);
+const fieldsOf = (side: LawSide): Option.Option<readonly string[]> =>
+  Option.all(
+    side.terms.map((term) =>
+      term.kind === "field" ? Option.some(term.field) : Option.none<string>(),
+    ),
+  );
 
 /**
- * Whether a law the schema states is a restated statement's.
+ * Whether two lists hold one set of texts, each once.
+ *
+ * @param left - One list.
+ * @param right - The other.
+ * @returns Whether they are one set.
+ */
+const sameSet = (left: readonly string[], right: readonly string[]): boolean => {
+  const held = new Set(right);
+
+  return (
+    left.length === right.length && held.size === right.length && left.every((at) => held.has(at))
+  );
+};
+
+/**
+ * Pair two sides' fields in order, each pair one text.
+ *
+ * @param from - The source's fields.
+ * @param to - The target's fields.
+ * @returns The pairs.
+ */
+const pairsOf = (from: readonly string[], to: readonly string[]): readonly string[] =>
+  Arr.zip(from, to).map(([source, target]) => `${source}\u001F${target}`);
+
+/**
+ * Whether a law the schema states is a restated statement's: a check by its name, a key by its
+ * relation and its fields as a set, a containment by its two relations and its pairs as a set
+ * ({@link RestatedSide}).
  *
  * @param law - The law, as grizzle's `lawsOf` names it.
  * @param restated - The restated statement.
@@ -164,11 +193,25 @@ const restates = (law: Law, restated: Restated): boolean => {
   }
 
   if (restated.kind === "key") {
-    return law.kind === "key" && readsAs(law.side, restated.side);
+    const [relation, ...fields] = restated.side;
+
+    return (
+      law.kind === "key" &&
+      law.side.relation === relation &&
+      Option.exists(fieldsOf(law.side), (held) => sameSet(held, fields))
+    );
   }
 
+  const [fromRelation, ...fromFields] = restated.from;
+  const [toRelation, ...toFields] = restated.to;
+
   return (
-    law.kind === "contained" && readsAs(law.from, restated.from) && readsAs(law.to, restated.to)
+    law.kind === "contained" &&
+    law.from.relation === fromRelation &&
+    law.to.relation === toRelation &&
+    Option.exists(Option.all([fieldsOf(law.from), fieldsOf(law.to)]), ([from, to]) =>
+      sameSet(pairsOf(from, to), pairsOf(fromFields, toFields)),
+    )
   );
 };
 
