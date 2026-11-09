@@ -41,7 +41,7 @@ import { expressionTypings } from "#pantry/grammar/expression.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { ruleOfLaw } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
-import { OperatorArity } from "#pantry/grammar/install.ts";
+import { Flag, OperatorArity } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { DeclarationIdentifier } from "#pantry/qti/declarations.ts";
 import {
@@ -76,6 +76,7 @@ import {
   tableOf,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { bitsText } from "#pantry/test/bits.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { itemRefPackageEntries } from "#pantry/test/gen/item-ref-declarations.ts";
@@ -327,7 +328,9 @@ const referenceFacts = (
   const rows = referenceRowsOf(reference, declaration, held, table);
 
   return [
-    { fact: documentOf(reference), relation: Document },
+    // A direct writer states every column, the accumulated `context` among them: no site names
+    // the manifest, so its context is the empty union.
+    { fact: { ...documentOf(reference), context: bitsText(Flag, []) }, relation: Document },
     { fact: reference, relation: VariableRef },
     ...rows.held.map((fact) => ({ fact, relation: Expression })),
     ...rows.declarations.map((fact) => ({ fact, relation: VariableRefDeclaration })),
