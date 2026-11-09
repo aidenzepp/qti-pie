@@ -17,8 +17,8 @@
  *   its bound included, and no row names a uuid the program did not mint.
  * - **The oracle raises only what the rows break.** A law the oracle raises whose every statement the
  *   host evaluated over the rows, and found held, is a law the database would not raise; and a key
- *   text the oracle finds past its bound in a field of a relation the import writes, no fold's end,
- *   is in that field's rows.
+ *   text the oracle finds past its bound in a field of a relation the import writes, no field the
+ *   database fills, is in that field's rows.
  */
 import { Cause, Effect, Exit, FileSystem, Formatter, Option, Result } from "effect";
 import type { Path, PlatformError } from "effect";
@@ -40,7 +40,7 @@ import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import type { HostVerdict } from "#pantry/test/gen/genetic/host-laws.ts";
 import type { Noise } from "#pantry/test/gen/genetic/noise.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
-import { keyCopies } from "#pantry/test/key-copies.ts";
+import { filledKeyTextFields, keyCopies } from "#pantry/test/key-copies.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { boundBroken, judge, ruleOf } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment as OracleJudgment, Laws } from "#pantry/test/oracle.ts";
@@ -504,12 +504,15 @@ const codecDisagreements = (oracle: OracleSide, side: ImportSide): readonly Disa
 };
 
 /**
- * The `keyText` fields a fold of the document tree fills, an owner's end the database computes and
- * the import never writes: a key text the oracle bounds there has no row of the import to be in.
+ * The `keyText` fields the database fills and the import never writes: an owner's end a fold of the
+ * document tree computes, and every accumulator's or generated field's of type `keyText`, such as
+ * `Attribute.idrefText`. A key text the oracle bounds there has no row of the import to be in, so
+ * no field the database fills is held on the host.
  */
-const foldFields: ReadonlySet<string> = new Set(
-  keyCopies.flatMap((copy) => (copy.by === "fold" ? [copy.field] : [])),
-);
+const filledFields: ReadonlySet<string> = new Set([
+  ...keyCopies.flatMap((copy) => (copy.by === "fold" ? [copy.field] : [])),
+  ...filledKeyTextFields,
+]);
 
 /**
  * Compare the laws the import's rows break on the host with the laws the oracle raises: each law
@@ -546,7 +549,7 @@ const rowDisagreements = (
     const bound = breach.law === "Key text bound";
     const held = bound
       ? host.written.has(field.split(".")[0] ?? "") &&
-        !foldFields.has(field) &&
+        !filledFields.has(field) &&
         !host.overLong.has(field)
       : host.held.has(breach.law);
     const key = bound ? `${breach.law} ${field}` : breach.law;
