@@ -436,7 +436,7 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * the search had no record of the rule (`value-cardinality` in `generatedRecorded`), and the law's
  * explanation named the absent cardinality `""`.
  *
- * The last three are drawn seeds of rotating streams, each reduced to its one difference. The empty
+ * The next three are drawn seeds of rotating streams, each reduced to its one difference. The empty
  * tolerance is TEST_SEED=555's drawn seed #59's, a `qti-equal` with `tolerance=""`: xmllint accepts
  * it, since the XSD's list of a union of xs:string and xs:double admits an empty list, and the law
  * oracle refuses it under `P36`, as reading 121 reads every tolerance as one or two values; the
@@ -447,6 +447,11 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * law oracle refuses it, a list of no item where the type's minLength is 1, and libxml2 accepts it,
  * as it does a blank `xs:NMTOKENS` or `xs:IDREFS` element (`blankListRecord`), whose pattern named
  * those two types alone.
+ *
+ * The last is the genetic repair's R-X1: an interaction in a modal feedback's content body, which
+ * the law oracle refuses under N6 (§5.93: the content of a modal feedback contains no interaction)
+ * and xmllint accepts, as the XSD does not state the ban; its `specification` record sits beside
+ * the template block's.
  */
 const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
   {
@@ -520,6 +525,10 @@ const keptDocuments: readonly { readonly name: string; readonly text: string }[]
   {
     name: "an xs:ENTITIES element holding no item, in a LOM root's lax content",
     text: '<lom xmlns="http://ltsc.ieee.org/xsd/LOM"><widget xmlns="urn:w" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:ENTITIES"/></lom>',
+  },
+  {
+    name: "an interaction in a modal feedback's division",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-modal-feedback outcome-identifier="FEEDBACK" identifier="f" show-hide="show"><qti-content-body><div><qti-text-entry-interaction response-identifier="R"/></div></qti-content-body></qti-modal-feedback></qti-assessment-item>',
   },
 ];
 
