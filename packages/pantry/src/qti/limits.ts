@@ -22,15 +22,7 @@
  * @see {@link https://github.com/postgres/postgres/blob/REL_19_STABLE/src/include/access/nbtree.h | PostgreSQL, nbtree.h BTMaxItemSize}
  */
 import { closedId, keyTextBytes as bytesBeside, natural, str, uuid } from "@bjornpagen/grizzle";
-import { Position } from "#pantry/grammar/install.ts";
-
-/**
- * Any text, line ends included: the language every byte-bounded text of this module cuts, and the
- * type of a text no law reads. Its pattern is a tautology, so grizzle installs a field of it as
- * plain text, with no domain and no pattern law (`physical/ddl/domains.ts` `structuralRegex` of
- * the vendored engine).
- */
-export const anyText = str.regex("^.*$", "su");
+import { anyText, Position } from "#pantry/grammar/install.ts";
 
 /**
  * The widest key any slice puts a key text in, its other fields as grizzle types them: the tree's

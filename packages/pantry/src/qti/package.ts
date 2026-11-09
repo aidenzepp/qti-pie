@@ -67,6 +67,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import {
+  anyText,
   AttributeName,
   DocumentType,
   NodeKind,
@@ -80,7 +81,7 @@ import {
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
-import { anyText, keyText } from "#pantry/qti/limits.ts";
+import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 
 /**

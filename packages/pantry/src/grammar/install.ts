@@ -139,10 +139,13 @@ const handleLookup = <H extends string>(
 };
 
 /**
- * The text type of a closed relation's open text payloads: any text, as XML Schema's `xs:string`
- * reads one, line terminators included.
+ * Any text, line ends included, as XML Schema's `xs:string` reads one: the type of a closed
+ * relation's open text payloads, of every text no law reads, and the language every byte-bounded
+ * text cuts (`#pantry/qti/limits.ts`). Its pattern is a tautology, so grizzle installs a field of
+ * it as plain text, with no domain and no pattern law (`physical/ddl/domains.ts` `structuralRegex`
+ * of the vendored engine). It is declared once, here, so grizzle analyzes the pattern once.
  */
-const anyText = str.regex("^.*$", "su");
+export const anyText = str.regex("^.*$", "su");
 
 // Handle lists (C8): membership is `Compute.in`, so these sets are lists, never installed.
 

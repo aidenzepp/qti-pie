@@ -14,7 +14,7 @@
  * holds no set (C16), so each per-kind operand rule is a set relation keyed (kind, code) and read
  * by `.row(kind)`.
  */
-import { closed, closedId, str } from "@bjornpagen/grizzle";
+import { closed, closedId } from "@bjornpagen/grizzle";
 import { Array as Arr, Option } from "effect";
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import type { Kind, Name } from "#pantry/grammar/compose.ts";
@@ -42,6 +42,7 @@ import {
 } from "#pantry/grammar/expression.ts";
 import type { ExpressionTyping } from "#pantry/grammar/expression.ts";
 import {
+  anyText,
   AttributeName,
   BaseType,
   Cardinality,
@@ -51,11 +52,6 @@ import {
   ValueDomainOf,
 } from "#pantry/grammar/install.ts";
 import type { ValueDomain } from "#pantry/grammar/install.ts";
-
-/**
- * The text type of a closed relation's pattern payloads: any text, the pattern grammar's own.
- */
-const patternText = str.regex("^.*$", "su");
 
 /**
  * The `NodeKind` handles, to narrow a generator's kind to one.
@@ -300,7 +296,7 @@ export const ValueCardinalityOf = closed.relation(
  */
 export const ValueBaseForm = closed.relation(
   "ValueBaseForm",
-  { base: closedId(ValueBase), pattern: patternText },
+  { base: closedId(ValueBase), pattern: anyText },
   ["base"],
   valueBases
     .filter((base) => base !== "any" && base !== "unknown")
@@ -434,7 +430,7 @@ const patternOfBaseType = (baseType: (typeof BaseType.handles)[number]): string 
  */
 export const BaseTypePattern = closed.relation(
   "BaseTypePattern",
-  { baseType: closedId(BaseType), pattern: patternText },
+  { baseType: closedId(BaseType), pattern: anyText },
   ["baseType"],
   BaseType.handles.map((baseType) => ({ baseType, pattern: patternOfBaseType(baseType) })),
 );

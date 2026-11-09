@@ -123,8 +123,11 @@ export const charsPattern =
   "^[\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*$";
 
 /**
- * The text type of a node's characters. Exported for `src/import/refusal.ts`, which names its
- * pattern law.
+ * The text type of a node's characters, and of an attribute's lexical form, the record (U1,
+ * `#pantry/qti/attributes.ts`): the value as attribute-value normalization leaves it, each
+ * unexpanded entity reference kept as `&name;`, so any run of XML `Char`s. One declaration, so
+ * grizzle analyzes the pattern once. Exported for `src/import/refusal.ts`, which names its pattern
+ * law.
  */
 export const Chars = str.regex(charsPattern);
 

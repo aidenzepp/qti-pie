@@ -130,7 +130,7 @@ import { openClasses } from "#pantry/grammar/kinds.ts";
 import { handlePrefixes } from "#pantry/model/xdm.ts";
 import { NamespacePrefix, OpenElementName } from "#pantry/qti/chardata.ts";
 import { keyText, localNameBytes, namespaceText } from "#pantry/qti/limits.ts";
-import { charsPattern, holdsCheckedText, Node, universalDomains } from "#pantry/qti/node.ts";
+import { Chars, holdsCheckedText, Node, universalDomains } from "#pantry/qti/node.ts";
 import { dataName } from "#pantry/vocab/open.ts";
 
 /**
@@ -154,15 +154,6 @@ const ncStart =
  * @see {@link https://www.w3.org/TR/xml/#NT-NameChar | XML 1.0, NameChar}
  */
 const ncChar = `\\-.0-9\\u{B7}\\u{300}-\\u{36F}\\u{203F}-\\u{2040}${ncStart}`;
-
-/**
- * An attribute's lexical form, the record (U1): the value as attribute-value normalization leaves
- * it, each unexpanded entity reference kept as `&name;`, so any run of XML `Char`s, character
- * references to tabs and line breaks included. Its domain's pattern, not its type, judges it (AL1).
- * It is free text, in no key: a law that compares it across rows reads a bounded copy.
- * Exported for `src/import/refusal.ts`, which names its pattern law.
- */
-export const Lexical = str.regex(charsPattern);
 
 /**
  * XML whitespace `S`, possibly none: what a lexical form holds around its token or value, an
@@ -232,7 +223,7 @@ export const Attribute = relation(
     idrefText: accumulated(keyText, ""),
     idrefs: drawn(natural),
     kind: accumulated(closedId(NodeKind), "document"),
-    lexical: Lexical,
+    lexical: Chars,
     name: closedId(AttributeName),
     node: uuid,
     openName: drawn(natural),

@@ -43,13 +43,7 @@ import { followPairsOf } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { NotQti3, UnmodeledVocabulary } from "#pantry/model/shred.ts";
-import {
-  attributeLawsByName,
-  EntityName,
-  Lexical,
-  OpenLocal,
-  Space,
-} from "#pantry/qti/attributes.ts";
+import { attributeLawsByName, EntityName, OpenLocal, Space } from "#pantry/qti/attributes.ts";
 import {
   Affix,
   expressionLawsByName,
@@ -620,7 +614,6 @@ export const textLaws: ReadonlyMap<RegexText<string>, LawName> = new Map<
   [EntryPath, "Key text bound"],
   [NamespaceUri, "Namespace name"],
   [Chars, "XML production"],
-  [Lexical, "XML production"],
   [CommentText, "XML production"],
   [PiTarget, "XML production"],
   [PiData, "XML production"],
