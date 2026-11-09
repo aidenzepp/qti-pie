@@ -80,6 +80,7 @@ import type {
   Operand,
   PlacedDocument,
   PlacedReference,
+  PlacedReferenceType,
   PlacedVariableRef,
   PlacedVariableRefDeclaration,
   Processing,
@@ -109,7 +110,11 @@ import {
   testKind,
 } from "#pantry/qti/tests.ts";
 import type { ItemRefDocument, ItemRefHref, ItemRefTarget } from "#pantry/qti/tests.ts";
-import type { DeclarationCardinality, DeclarationIdentifier } from "#pantry/qti/declarations.ts";
+import type {
+  DeclarationBaseType,
+  DeclarationCardinality,
+  DeclarationIdentifier,
+} from "#pantry/qti/declarations.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
@@ -2744,9 +2749,11 @@ export const resolvingReadingsOf = (
 
 /**
  * A package's variable references placed under each instance of an item's assembly (spec reading
- * 117), and the declaration lookups their claims of no declaration read.
+ * 117), each declared one's type in the item where its declaration has one, and the declaration
+ * lookups their claims of no declaration read.
  */
 export interface PlacedVariableRows {
+  readonly PlacedReferenceType: ReadonlyMap<string, Addition<typeof PlacedReferenceType>>;
   readonly PlacedVariableRef: ReadonlyMap<string, Addition<typeof PlacedVariableRef>>;
   readonly PlacedVariableRefDeclaration: ReadonlyMap<
     string,
@@ -2778,27 +2785,48 @@ const placedResolutionOf = (
  * item's assembly, every `VariableRef` of the instance's document, its name resolved as an item's
  * own is, among the item's declarations, whatever their cardinality spells (spec reading 159),
  * else to one of an item's built-in variables, else to nothing, which "Variable declared" refuses;
- * and for each name that resolves to no declaration, the item's absent lookup that proves it.
+ * each declared one's type in the item, its declaration's base type and cardinality beside its
+ * element's parent's kind, where the declaration has both ("Condition type"); and for each name
+ * that resolves to no declaration, the item's absent lookup that proves it.
  *
  * @param input - The package's rows the placed references read.
+ * @param input.baseTypes - Every declaration's base type, where it has one (Q5.08's
+ *   `DeclarationBaseType` rows).
+ * @param input.cardinalities - Every declaration's cardinality, where it has one (Q5.08's
+ *   `DeclarationCardinality` rows).
  * @param input.declarations - Every named declaration of the package, with its counts of
  *   cardinalities and base types (Q5.08's `DeclarationIdentifier` rows).
+ * @param input.elements - Every document's expression and processing elements, each with its
+ *   parent's kind ({@link rowsOf}'s `Expression` and `Processing`): a reference's element is one.
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
  *   `assembledRowsOf`).
  * @param input.references - Every document's references ({@link rowsOf}'s `VariableRef`).
  * @returns The rows.
  */
 export const placedVariableRowsOf = (input: {
+  readonly baseTypes: Iterable<Addition<typeof DeclarationBaseType>>;
+  readonly cardinalities: Iterable<Addition<typeof DeclarationCardinality>>;
   readonly declarations: Iterable<Addition<typeof DeclarationIdentifier>>;
+  readonly elements: Iterable<Pick<Addition<typeof Expression>, "node" | "parentKind">>;
   readonly instances: Iterable<InstanceRoot>;
   readonly references: Iterable<Addition<typeof VariableRef>>;
 }): PlacedVariableRows => {
   const declared = new Map(
     [...input.declarations].map((row) => [keyOf([row.document, row.identifier]), row] as const),
   );
+  const declaredBaseType = new Map(
+    [...input.baseTypes].map(({ baseType, node }) => [node, baseType] as const),
+  );
+  const declaredCardinality = new Map(
+    [...input.cardinalities].map(({ cardinality, node }) => [node, cardinality] as const),
+  );
+  const elementParentKind = new Map(
+    [...input.elements].map(({ node, parentKind }) => [node, parentKind] as const),
+  );
   const referencesOf = Map.groupBy(input.references, ({ document }) => document);
   const placed = new Map<string, Addition<typeof PlacedVariableRef>>();
   const placedDeclarations = new Map<string, Addition<typeof PlacedVariableRefDeclaration>>();
+  const placedTypes = new Map<string, Addition<typeof PlacedReferenceType>>();
   const lookups = new Map<string, Addition<typeof VariableLookup>>();
   for (const root of input.instances) {
     for (const instance of root.assemblyKind === itemKind ? instancesIn(root) : []) {
@@ -2837,12 +2865,29 @@ export const placedVariableRowsOf = (input: {
             kind: reference.kind,
             node: reference.node,
           });
+
+          const baseType = declaredBaseType.get(declaration.node);
+          const cardinality = declaredCardinality.get(declaration.node);
+          const parentKind = elementParentKind.get(reference.node);
+          if (baseType !== undefined && cardinality !== undefined && parentKind !== undefined) {
+            placedTypes.set(at, {
+              attribute: reference.attribute,
+              baseType,
+              cardinality,
+              declaration: declaration.node,
+              instance: instance.id,
+              kind: reference.kind,
+              node: reference.node,
+              parentKind,
+            });
+          }
         }
       }
     }
   }
 
   return {
+    PlacedReferenceType: placedTypes,
     PlacedVariableRef: placed,
     PlacedVariableRefDeclaration: placedDeclarations,
     VariableLookup: lookups,

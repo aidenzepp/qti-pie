@@ -493,6 +493,41 @@ export const PlacedVariableRefDeclaration = relation(
 );
 
 /**
+ * A declared {@link PlacedVariableRef}'s type in its item, keyed as the placed reference, where its
+ * declaration has a cardinality and a base type: `kind` and `declaration`, its
+ * {@link PlacedVariableRefDeclaration}'s; `parentKind`, its element's parent's kind, its `Node`'s;
+ * and `baseType` and `cardinality`, the declaration's {@link DeclarationBaseType}'s and
+ * {@link DeclarationCardinality}'s, as `PlacedBindingBaseType`'s are a placed binding's
+ * (`#pantry/qti/interactions.ts`). A reference in an included rules fragment is typed in the
+ * fragment's own document, where its name is undeclared, so its {@link VariableRef}'s type is
+ * `unknown`; this row types it in the item (spec reading 117), and "Condition type" reads it. A
+ * declaration's type is never silent: neither field holds `any`, `unknown` or an unknown
+ * cardinality. The item's own document is an instance too, so an inline reference has a row as
+ * well, and an inline condition is held twice, here and over its {@link Expression}, under the one
+ * law.
+ *
+ * A row of its own (lane NIL's NS1, spec reading 159): a declaration whose cardinality spells
+ * nothing, or a record, which has no base type, has none, and no law reads a type it does not
+ * have. Every field is proved by a copy, but no law forces the row in, as {@link HeldType}'s doc
+ * says of itself: the import writes it (`placedVariableRowsOf`), and the genetic differential holds
+ * it to the oracle's "Condition type".
+ */
+export const PlacedReferenceType = relation(
+  "PlacedReferenceType",
+  {
+    attribute: closedId(AttributeName),
+    baseType: closedId(BaseType),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    instance: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
+    parentKind: closedId(NodeKind),
+  },
+  ["instance", "node", "attribute"],
+);
+
+/**
  * Each document's variable references, counted by `Document.variables`.
  */
 export const documentVariableFamily = counted(
@@ -1064,6 +1099,7 @@ export const referenceRelations = {
   NameLookup,
   PlacedDocument,
   PlacedReference,
+  PlacedReferenceType,
   PlacedVariableRef,
   PlacedVariableRefDeclaration,
   Reading,
@@ -1804,6 +1840,28 @@ const prefixedTableReaders = (kind: "qti-map-response" | "qti-map-response-point
   );
 
 /**
+ * An item's placed references by a table reader's `identifier` that resolve to a declaration among
+ * its item's declarations: the {@link PlacedVariableRefDeclaration} of a `qti-map-response`'s or a
+ * `qti-map-response-point`'s `identifier`, under every instance of the item's assembly. The placed
+ * twin of {@link prefixedTableReaders}: a reference in an included response rules fragment names
+ * nothing in the fragment's own document, so its only declaration is its item's, where "the
+ * content of the fragment must satisfy the requirements of the specification in the context of the
+ * item in which it is being included" (spec reading 117). Each reads its declaration's mapping or
+ * area mapping (reading 166), so each is a containment into {@link mappedDeclarations} or
+ * {@link areaMappedDeclarations}. It keeps every declaration kind: one that names an outcome finds
+ * no mapping and breaks the law, as the in-place check refuses it. The item's own document is an
+ * instance too, so an inline map response is held twice, here and by the in-place check over
+ * {@link VariableRefDeclaration}, under the one law.
+ *
+ * @param kind - The reader's kind.
+ * @returns The selection.
+ */
+const placedTableReaders = (kind: "qti-map-response" | "qti-map-response-point") =>
+  select(PlacedVariableRefDeclaration, (d) =>
+    d.and(d.eq(d.kind, kind), d.eq(d.attribute, "identifier")),
+  );
+
+/**
  * The built-in response variables, each with the root it is built into: a numAttempts or duration
  * of an item, the duration of a test. None has a declaration, so none holds a mapping or an area
  * mapping (decision 431, spec reading 166).
@@ -2536,10 +2594,13 @@ export const referenceLawsByName = {
     check("Prefixed_reference", Reading, (r) => r.or(r.not(resolves(r)), r.eq(r.placements, 1n))),
   ],
   "Reference type": [
+    // A reading through an LTI item ref has no declaration to type it by, and is accepted
+    // unchecked ({@link linkHeld}, spec reading 110), as it resolves and as `mappedReadings` drops it.
     check("Reference_type", Reading, (r) =>
       r.or(
         r.eq(r.attribute, "identifier"),
         r.not(resolves(r)),
+        linkHeld(r),
         r.and(
           r.in(r.source, ["declared", "mapped"]),
           r.in(r.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
@@ -2740,6 +2801,18 @@ export const expressionLawsByName = {
           e.in(e.baseType, ["boolean", ...silentBases]),
           e.in(e.cardinality, ["single", "unknown"]),
         ),
+      ),
+    ),
+
+    // The placed twin, per placement (spec reading 117): a variable, correct or default reference
+    // that is a whole condition is typed as its item's declaration, never silent, since the row
+    // exists only where the declaration has a base type and a cardinality. A composite condition
+    // over a fragment's references stays reading 117's stated limit.
+    check("Condition_type", PlacedReferenceType, (r) =>
+      r.or(
+        r.not(r.in(r.kind, declaredKinds)),
+        r.not(r.in(r.parentKind, conditionKindHandles)),
+        r.and(r.eq(r.baseType, "boolean"), r.eq(r.cardinality, "single")),
       ),
     ),
   ],
@@ -3110,6 +3183,20 @@ export const expressionLawsByName = {
       ),
       on(PlacedVariableRef, "instance", "node", "attribute", "assembly", "identifier", "kind"),
     ),
+    // PlacedReferenceType: a declared placed reference's type in its item, each field a copy.
+    contained(
+      on(PlacedReferenceType, "instance", "node", "attribute", "kind", "declaration"),
+      on(PlacedVariableRefDeclaration, "instance", "node", "attribute", "kind", "declaration"),
+    ),
+    contained(on(PlacedReferenceType, "node", "parentKind"), on(Node, "id", "parentKind")),
+    contained(
+      on(PlacedReferenceType, "declaration", "baseType"),
+      on(DeclarationBaseType, "node", "baseType"),
+    ),
+    contained(
+      on(PlacedReferenceType, "declaration", "cardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
+    ),
     // ExpressionAttribute and Literal: the attributes and text an expression's type follows from.
     key(on(typingAttributes, "node", "name")),
     contained(
@@ -3258,6 +3345,16 @@ export const expressionLawsByName = {
     ),
     contained(
       on(prefixedTableReaders("qti-map-response-point"), "declaration"),
+      on(areaMappedDeclarations, "declaration"),
+    ),
+    // A placed one, an included rules fragment's or the item's own, reads the mapping or area
+    // mapping of the declaration it names among its item's (readings 117 and 166).
+    contained(
+      on(placedTableReaders("qti-map-response"), "declaration"),
+      on(mappedDeclarations, "declaration"),
+    ),
+    contained(
+      on(placedTableReaders("qti-map-response-point"), "declaration"),
       on(areaMappedDeclarations, "declaration"),
     ),
     // An unprefixed one never names a built-in response, which declares no table (reading 166).
