@@ -493,6 +493,41 @@ export const PlacedVariableRefDeclaration = relation(
 );
 
 /**
+ * A declared {@link PlacedVariableRef}'s type in its item, keyed as the placed reference, where its
+ * declaration has a cardinality and a base type: `kind` and `declaration`, its
+ * {@link PlacedVariableRefDeclaration}'s; `parentKind`, its element's parent's kind, its `Node`'s;
+ * and `baseType` and `cardinality`, the declaration's {@link DeclarationBaseType}'s and
+ * {@link DeclarationCardinality}'s, as `PlacedBindingBaseType`'s are a placed binding's
+ * (`#pantry/qti/interactions.ts`). A reference in an included rules fragment is typed in the
+ * fragment's own document, where its name is undeclared, so its {@link VariableRef}'s type is
+ * `unknown`; this row types it in the item (spec reading 117), and "Condition type" reads it. A
+ * declaration's type is never silent: neither field holds `any`, `unknown` or an unknown
+ * cardinality. The item's own document is an instance too, so an inline reference has a row as
+ * well, and an inline condition is held twice, here and over its {@link Expression}, under the one
+ * law.
+ *
+ * A row of its own (lane NIL's NS1, spec reading 159): a declaration whose cardinality spells
+ * nothing, or a record, which has no base type, has none, and no law reads a type it does not
+ * have. Every field is proved by a copy, but no law forces the row in, as {@link HeldType}'s doc
+ * says of itself: the import writes it (`placedVariableRowsOf`), and the genetic differential holds
+ * it to the oracle's "Condition type".
+ */
+export const PlacedReferenceType = relation(
+  "PlacedReferenceType",
+  {
+    attribute: closedId(AttributeName),
+    baseType: closedId(BaseType),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    instance: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
+    parentKind: closedId(NodeKind),
+  },
+  ["instance", "node", "attribute"],
+);
+
+/**
  * Each document's variable references, counted by `Document.variables`.
  */
 export const documentVariableFamily = counted(
@@ -1064,6 +1099,7 @@ export const referenceRelations = {
   NameLookup,
   PlacedDocument,
   PlacedReference,
+  PlacedReferenceType,
   PlacedVariableRef,
   PlacedVariableRefDeclaration,
   Reading,
@@ -2764,6 +2800,18 @@ export const expressionLawsByName = {
         ),
       ),
     ),
+
+    // The placed twin, per placement (spec reading 117): a variable, correct or default reference
+    // that is a whole condition is typed as its item's declaration, never silent, since the row
+    // exists only where the declaration has a base type and a cardinality. A composite condition
+    // over a fragment's references stays reading 117's stated limit.
+    check("Condition_type", PlacedReferenceType, (r) =>
+      r.or(
+        r.not(r.in(r.kind, declaredKinds)),
+        r.not(r.in(r.parentKind, conditionKindHandles)),
+        r.and(r.eq(r.baseType, "boolean"), r.eq(r.cardinality, "single")),
+      ),
+    ),
   ],
   "DocumentId key": [
     // ProcessingTemplate: the published template a response processing's URI names.
@@ -3131,6 +3179,20 @@ export const expressionLawsByName = {
         "kind",
       ),
       on(PlacedVariableRef, "instance", "node", "attribute", "assembly", "identifier", "kind"),
+    ),
+    // PlacedReferenceType: a declared placed reference's type in its item, each field a copy.
+    contained(
+      on(PlacedReferenceType, "instance", "node", "attribute", "kind", "declaration"),
+      on(PlacedVariableRefDeclaration, "instance", "node", "attribute", "kind", "declaration"),
+    ),
+    contained(on(PlacedReferenceType, "node", "parentKind"), on(Node, "id", "parentKind")),
+    contained(
+      on(PlacedReferenceType, "declaration", "baseType"),
+      on(DeclarationBaseType, "node", "baseType"),
+    ),
+    contained(
+      on(PlacedReferenceType, "declaration", "cardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
     ),
     // ExpressionAttribute and Literal: the attributes and text an expression's type follows from.
     key(on(typingAttributes, "node", "name")),
