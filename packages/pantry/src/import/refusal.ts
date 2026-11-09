@@ -23,7 +23,7 @@
  *   grammar's rows; for a content-order law it names the positions `Follow` allows next, each with
  *   its XSD particle. There is no catalog of messages.
  */
-import { constraintNameOf, lawsByStatement, lawsOf, sameLaw } from "@bjornpagen/grizzle";
+import { constraintNamesOf, lawsByStatement, lawsOf, sameLaw } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, Refused, RegexText, Statement, Witness } from "@bjornpagen/grizzle";
 import {
   Array as Arr,
@@ -1344,16 +1344,16 @@ const CheckStatement = Schema.Struct({
 const checkKey = (relation: string, name: string): string => JSON.stringify([relation, name]);
 
 /**
- * Read the installed name of each check a schema states: grizzle's `constraintNameOf(schema,
- * law)`, the one constraint or trigger that discharges it, a row check's CHECK by its declared
+ * Read the installed name of each check a schema states: grizzle's `constraintNamesOf(schema)`
+ * lookup, the one constraint or trigger that discharges it, a row check's CHECK by its declared
  * name and a check over a derived relation's triggers by a digest (grizzle `b34dfbf9`).
  *
- * `constraintNameOf` throws for a law that is no check of the schema, and a refusal may name one:
+ * The lookup throws for a law that is no check of the schema, and a refusal may name one:
  * a CDN install's stored level states checks the default `Qti` does not (`#pantry/qti/cdn.ts`),
  * so a refusal read against another schema than the one the database installed names a check this
  * one lacks. Such a check has no installed name here, so the refusal still prints, with its text
  * and the name and rule the table gives it. Only a check the schema states is asked for.
- * `constraintNameOf` compiles the schema's law model on every call, so each check's name is read
+ * `constraintNamesOf` compiles the schema's law model on every call, so each check's name is read
  * once per process, on the first refusal by it, and kept.
  *
  * @param schema - The schema the import ran against, `Qti`.
@@ -1382,7 +1382,7 @@ const installedNamesOf = Fn.memoize((schema: typeof Qti) => {
       return Option.some(known);
     }
 
-    const installed = constraintNameOf(schema, law);
+    const installed = constraintNamesOf(schema)(law);
     read.set(key, installed);
 
     return Option.some(installed);

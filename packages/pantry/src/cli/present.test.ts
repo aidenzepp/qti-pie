@@ -1,5 +1,5 @@
 import path from "node:path";
-import { constraintNameOf } from "@bjornpagen/grizzle";
+import { constraintNamesOf } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
@@ -213,7 +213,7 @@ const matchesCommittedError = matchesCommitted("error");
 
 /**
  * The timeout, in milliseconds, of this file's tests that read a check's installed name: grizzle's
- * `constraintNameOf` compiles `Qti`'s law model on every call, once for the refusal
+ * `constraintNamesOf` compiles `Qti`'s law model on every call, once for the refusal
  * (`#pantry/import/refusal.ts` `installedNamesOf`, kept for the process) and once for the oracle. A
  * hang guard, never a budget. Measured 2026-11-08: 18.1 s, its slowest such test.
  */
@@ -324,7 +324,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
     () =>
       // Oracle: the law table, read directly by the name each law was built from: its text, the law
       // as grizzle names a check, written by Effect's Formatter, its installed name as grizzle's
-      // `constraintNameOf` names the check `Qti` states, and the name and rule the table gives it; a
+      // `constraintNamesOf` names the check `Qti` states, and the name and rule the table gives it; a
       // check of no law, which `Qti` does not state, has its text alone, and carries no rule. The
       // outcome's `some` and the witness kind the refusal was built under, and the committed schema
       // of the error object.
@@ -344,7 +344,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
         assert.strictEqual(error.refused_kind, "some");
         assert.deepStrictEqual(error.laws, [
           {
-            installed: constraintNameOf(Qti, first),
+            installed: constraintNamesOf(Qti)(first),
             name: "AL1 admission",
             rule: "attribute-admission",
             text: Formatter.format(first),
@@ -460,7 +460,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
           relation: "Attribute",
         } as const;
         const lawFact = {
-          installed: constraintNameOf(Qti, law),
+          installed: constraintNamesOf(Qti)(law),
           name: "AL1 admission",
           rule,
           text: Formatter.format(law),

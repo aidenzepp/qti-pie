@@ -56,7 +56,7 @@ export const RefusedKind = Schema.Literals(Object.values(refusedKinds));
 /**
  * One law a database refusal names: its `text`, the law as grizzle's outcome names it, written by
  * Effect's `Formatter.format` for a person to read; its `installed` name, the name PostgreSQL holds
- * a check's CHECK constraint under (grizzle's `constraintNameOf`), absent for every other kind of
+ * a check's CHECK constraint under (grizzle's `constraintNamesOf`), absent for every other kind of
  * law, which grizzle names no installed object of at the vendored commit; and the `name` and `rule`
  * the law table gives it, absent for a law the table does not hold. A program reads which law broke
  * by its `name`, or by its `installed` name where the table names none.

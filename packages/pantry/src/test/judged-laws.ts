@@ -7,7 +7,7 @@
  * It reads grizzle's values, so the law oracle reaches it from none of its modules: the oracle is a
  * second implementation, and reads no value of grizzle's (`src/grammar/purity.test.ts`).
  */
-import { constraintNameOf } from "@bjornpagen/grizzle";
+import { constraintNamesOf } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { Function as Fn } from "effect";
 import { containmentsIn, statedAs } from "#pantry/test/host-judge.ts";
@@ -51,15 +51,15 @@ const checksOf = Fn.memoize(
 
 /**
  * The name PostgreSQL holds a check under, which a direct SQL writer's refusal by it names
- * (SQLSTATE 23514): grizzle's `constraintNameOf(schema, law)` of the check the schema states on a
- * relation under a declared name, as `lawsOf` names it, a row check's CHECK constraint or a check
+ * (SQLSTATE 23514): grizzle's `constraintNamesOf(schema)` lookup of the check the schema states on
+ * a relation under a declared name, as `lawsOf` names it, a row check's CHECK constraint or a check
  * over a derived relation's triggers, so a test takes the name from the installation's own naming
  * and never spells it.
  *
  * Each call compiles the schema's law model, and the first another (`schemaLawsOf` of
- * `#pantry/import/refusal.ts`, then grizzle's `constraintNameOf`, which compiles on every call), so
- * a test calls this in its body, under its own timeout, never where a run without the lease loads
- * the file.
+ * `#pantry/import/refusal.ts`, then grizzle's `constraintNamesOf`, which compiles on every call),
+ * so a test calls this in its body, under its own timeout, never where a run without the lease
+ * loads the file.
  *
  * @param schema - The schema, `Qti`.
  * @param relation - The relation the check is declared on, by name.
@@ -76,5 +76,5 @@ export const checkConstraintOf = (schema: typeof Qti, relation: string, name: st
     );
   }
 
-  return constraintNameOf(schema, law);
+  return constraintNamesOf(schema)(law);
 };
