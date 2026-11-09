@@ -149,14 +149,6 @@ const owed = {
     "lane G: expressions.ts, mappedNames, held by MappingLookup's primary key (R7)",
     1,
   ],
-  "Node(id) where 2 conjuncts": [
-    'lane F: metadata.ts, a "Node key" selection, held by Node\'s id',
-    1,
-  ],
-  "Node(id) where 3 conjuncts": [
-    'lane F: metadata.ts, three "Node key" selections, held by Node\'s id',
-    3,
-  ],
   "Reference(node, name) where 1 conjunct": [
     "lane E: package.ts, entryReferences, held by Reference's primary key",
     1,

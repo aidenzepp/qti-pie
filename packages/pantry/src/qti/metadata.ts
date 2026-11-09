@@ -1154,12 +1154,6 @@ export const metadataLawsByName = {
       ),
     ),
   ],
-  "Node key": [
-    key(on(entryNodes, "id")),
-    key(on(titleStringNodes, "id")),
-    key(on(resourceTypeValues, "id")),
-    key(on(resourceTypeSources, "id")),
-  ],
   "Usage typed value": [
     check("Usage_typed_value", UsageValue, (u) =>
       u.or(
