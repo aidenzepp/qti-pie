@@ -1858,6 +1858,159 @@ describe("check, every QTI 3 root", () => {
 });
 
 /**
+ * Construct a paragraph whose `span` carries the given `data-ssml`.
+ *
+ * @param value The `span`'s `data-ssml`, as the XML reader gives it.
+ * @returns The `p`.
+ */
+const spokenParagraph = (value: string): SourceElement =>
+  el(
+    "p",
+    [],
+    [text("Our word is "), el("span", [attr("data-ssml", value)], [text("mRNA")]), text(".")],
+  );
+
+/**
+ * Construct a candidate rubric block holding {@link spokenParagraph}'s paragraph.
+ *
+ * @param value The `span`'s `data-ssml`.
+ * @returns The `qti-rubric-block`.
+ */
+const spokenRubric = (value: string): SourceElement =>
+  el(
+    "qti-rubric-block",
+    [attr("view", "candidate")],
+    [el("qti-content-body", [], [spokenParagraph(value)])],
+  );
+
+/**
+ * The three documents `checkRules` does not judge whose `span` carries a `data-ssml`: a stimulus,
+ * a test whose section's rubric block holds it, and a section document whose rubric block does,
+ * each with its kind and the `span`'s path.
+ *
+ * @param value The `span`'s `data-ssml`.
+ * @returns The documents.
+ */
+const spokenDocuments = (value: string) =>
+  [
+    {
+      kind: "stimulus",
+      path: "qti-assessment-stimulus/qti-stimulus-body/p/span",
+      source: stimulus([spokenParagraph(value)]),
+    },
+    {
+      kind: "test",
+      path: "qti-assessment-test/qti-test-part/qti-assessment-section/qti-rubric-block/qti-content-body/p/span",
+      source: assessmentTest([spokenRubric(value), itemRef("q1")]),
+    },
+    {
+      kind: "section",
+      path: "qti-assessment-section/qti-rubric-block/qti-content-body/p/span",
+      source: doc("section.xml", assessmentSection("S", [spokenRubric(value), itemRef("q1")])),
+    },
+  ] as const;
+
+/**
+ * Reduce a verdict that must refuse to its refusals' rules, paths and details.
+ *
+ * @param verdict The verdict.
+ * @returns One entry per refusal, in order.
+ */
+const refusedFacts = (verdict: Verdict) =>
+  verdict.verdict === "refused"
+    ? verdict.refusals.map((refusal) => ({
+        detail: refusal.detail,
+        path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
+        rule: refusal.rule,
+      }))
+    : assert.fail(`The verdict is ${verdict.verdict}, not refused.`);
+
+describe("check, align-54 Data-SSML everywhere: a data-ssml value is Data-SSML JSON in every document (the operator's P3)", () => {
+  it("align-54 Data-SSML everywhere P3: refuses data-ssml=\"hello\" in a stimulus, a test's rubric block and a section's rubric block, as attribute-type data-ssml with problem json at the attribute", () => {
+    for (const { kind, path, source } of spokenDocuments("hello")) {
+      const verdict = verdictOf(source);
+
+      assert.strictEqual(verdict.kind, kind);
+      assert.deepStrictEqual(refusedFacts(verdict), [
+        {
+          detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem: "json" },
+          path: `${path}/@data-ssml`,
+          rule: "attribute-type",
+        },
+      ]);
+    }
+  });
+
+  it("align-54 Data-SSML everywhere P3: names an unknown property, a value of the wrong type and a value outside its list as the problem in each document", () => {
+    const values = [
+      ["name", '{"speak":{"alias":"messenger RNA"}}'],
+      ["type", '{"sub":{"alias":3}}'],
+      ["value", '{"say-as":{"interpret-as":"spell-out"}}'],
+    ] as const;
+
+    for (const [problem, value] of values) {
+      assert.deepStrictEqual(
+        spokenDocuments(value).map(({ source }) =>
+          refusedFacts(verdictOf(source)).map((refusal) => refusal.detail["problem"]),
+        ),
+        [[problem], [problem], [problem]],
+      );
+    }
+  });
+
+  it("align-54 Data-SSML everywhere P3: accepts a data-ssml that is Data-SSML JSON in each document, with its notice", () => {
+    assert.deepStrictEqual(
+      spokenDocuments('{"sub":{"alias":"messenger RNA"}}').map(({ source }) => {
+        const verdict = verdictOf(source);
+
+        return [
+          verdict.verdict,
+          verdict.kind,
+          verdict.verdict === "accepted-with-unsupported"
+            ? featuresOf(verdict.accepted.unsupported)
+            : [],
+        ];
+      }),
+      [
+        [
+          "accepted-with-unsupported",
+          "stimulus",
+          ["root:qti-assessment-stimulus@qti-assessment-stimulus"],
+        ],
+        [
+          "accepted-with-unsupported",
+          "test",
+          [
+            "qti-rubric-block@qti-assessment-test/qti-test-part/qti-assessment-section/qti-rubric-block",
+          ],
+        ],
+        [
+          "accepted-with-unsupported",
+          "section",
+          ["root:qti-assessment-section@qti-assessment-section"],
+        ],
+      ],
+    );
+  });
+
+  it("align-54 Data-SSML everywhere P3: does not judge a stimulus's data-ssml an attribute wildcard admits on a kind that does not declare it (rule 5b8ee08b)", () => {
+    const verdict = verdictOf(
+      stimulus([el("ul", [], [el("li", [attr("data-ssml", "hello")], [text("mRNA")])])]),
+    );
+
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+    assert.strictEqual(verdict.kind, "stimulus");
+  });
+
+  it("align-54 Data-SSML everywhere P3: leaves a stimulus holding an unexpanded entity reference unchecked, judging none of its data-ssml, as an item's rules do", () => {
+    const verdict = verdictOf(stimulus([spokenParagraph("hello"), el("p", [], [entity("more")])]));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "stimulus");
+  });
+});
+
+/**
  * Construct an item whose paragraph holds an Inline Choice bound to `RESPONSE`: a choice `A` of
  * text, then a choice `B` of the given content.
  *
