@@ -1442,8 +1442,10 @@ const uncheckedType = (refusal: Refusal, element: string, expression: string): s
  * the attribute holds. The facts the detail carries select the sentence, in this order:
  *
  * - `expectedCardinalities`: the attribute is a `template-identifier`, which names a template
- *   variable of base type identifier, single or multiple (pantry's `template-ref`). The sentence
- *   offers the cardinalities as alternatives and cites the element's line ({@link settled}).
+ *   variable of base type identifier, single or multiple (pantry's `template-ref`), or, with the
+ *   `expectedKind` `outcome`, a feedback element's `outcome-identifier`, which names such an
+ *   outcome variable (pantry's `Feedback reference`). The sentence offers the cardinalities as
+ *   alternatives and cites the element's line ({@link settled}).
  * - `declarer` of `test`: the attribute is a test's printed variable's, and a test declares no
  *   template variable, so the sentence names and offers only an outcome the test declares.
  * - `variableKind`, in an item or a test: the attribute is a printed variable's `identifier`, which
@@ -1464,7 +1466,8 @@ const referenceType = (refusal: Refusal, element: string, identifier: string): s
 
   const cardinalities = optionalFact(refusal, "expectedCardinalities");
   if (Option.isSome(cardinalities)) {
-    const wanted = `a template variable of base type ${expected}, ${alternatives(cardinalities.value, (one) => one)}`;
+    const kind = variableKind(fact(refusal, "expectedKind", "template"));
+    const wanted = `${withArticle(kind)} of base type ${expected}, ${alternatives(cardinalities.value, (one) => one)}`;
 
     return sentence(
       refusal,

@@ -3185,6 +3185,97 @@ const templateIdentifierReference = (
 };
 
 /**
+ * The elements of an item that carry an `outcome-identifier` naming the outcome that shows or hides
+ * them, each with the line of QTI's information model that types it: "The identifier of an outcome
+ * variable that must have a base-type of identifier and be of either single or multiple
+ * cardinality" (FeedbackBlock, section 5.49.1; FeedbackInline, 5.52.1; ModalFeedback, 5.93.1). A
+ * feedback block inside a template block is a TemplateBlockFeedbackBlock, whose line (5.148.1,
+ * `info.txt:45190`) says the same.
+ */
+const feedbackSources: ReadonlyMap<string, string> = new Map([
+  ["qti-feedback-block", "info.txt:25704"],
+  ["qti-feedback-inline", "info.txt:26184"],
+  ["qti-modal-feedback", "info.txt:35049"],
+]);
+
+/**
+ * Report whether a variable is one a feedback element's `outcome-identifier` may name: an outcome
+ * variable of base type identifier and of single or multiple cardinality, the built-in
+ * `completionStatus` among them (reading 77). A declaration whose own type is not judged
+ * ({@link declarationType}) is not refused; one with no base type of its own, such as a record, is.
+ *
+ * @param variable The variable the name names.
+ * @returns Whether it is an outcome variable that is not of another type.
+ */
+const controlsFeedback = ({ kind, type }: NamedVariable): boolean =>
+  kind === "outcome" &&
+  Option.match(type, {
+    onNone: () => true,
+    onSome: ({ baseType, cardinality }) =>
+      baseType === "identifier" && (cardinality === "single" || cardinality === "multiple"),
+  });
+
+/**
+ * Apply `undeclared-variable` and `expression-type` to the outcome a feedback element names in its
+ * `outcome-identifier`, as pantry refuses it under its laws `Feedback reference` and `Feedback
+ * outcome type` (reading 77). plate shows or hides the element by that outcome's value, so it
+ * judges every `qti-feedback-block`, `qti-feedback-inline` and `qti-modal-feedback` of an item, in
+ * the body, a template block or a rubric block alike.
+ *
+ * A name that nothing declares or builds in is `undeclared-variable` with `expected: "outcome"`. A
+ * name of another kind, or an outcome of another type, is `expression-type` with `check:
+ * "reference"`, the `expectedKind` `outcome`, the `expectedBaseType` `identifier`, the
+ * `expectedCardinalities` `single multiple`, which select the verdict's sentence for this check,
+ * and the element's line as `source` ({@link feedbackSources}). Each refusal is at the attribute's
+ * path. A missing `outcome-identifier`, or one whose text is no NCName, is the structural
+ * validator's refusal and is passed over.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations.
+ * @returns The refusal of its `outcome-identifier`; none for an element that carries none, and for
+ *   one naming an identifier outcome, single or multiple.
+ */
+const feedbackReference = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  const line = qtiEntry(feedbackSources, visit.element);
+  const written = Option.filter(attributeOf(visit.element, "outcome-identifier"), (attribute) =>
+    isNcName(identifierOf(attribute)),
+  );
+
+  return Option.match(Option.all([line, written]), {
+    onNone: () => [],
+    onSome: ([cited, attribute]) => {
+      const identifier = identifierOf(attribute);
+      const path = attributePath(visit.path, attribute);
+      const facts = { attribute: "outcome-identifier", element: visit.element.local, identifier };
+
+      return Option.match(namedVariable(identifier, context), {
+        onNone: () => [
+          refusal(source, "undeclared-variable", path, { ...facts, expected: "outcome" }),
+        ],
+        onSome: (variable) =>
+          controlsFeedback(variable)
+            ? []
+            : [
+                refusal(source, "expression-type", path, {
+                  ...facts,
+                  check: "reference",
+                  expectedBaseType: "identifier",
+                  expectedCardinalities: "single multiple",
+                  expectedKind: "outcome",
+                  source: cited,
+                }),
+              ],
+      });
+    },
+  });
+};
+
+/**
  * The declarations whose variables a `qti-variable` may read. Where two share an identifier, the
  * later kind here wins; the duplicate is `duplicate-identifier`'s refusal.
  */
@@ -3365,6 +3456,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...weightPlacement(source, visit),
       ...printedVariableReferences(source, visit, context),
       ...templateIdentifierReference(source, visit, context),
+      ...feedbackReference(source, visit, context),
       ...setType(source, visit, context),
       ...conditionType(source, visit, context),
       ...lookupTableRequirements(source, visit, context),
