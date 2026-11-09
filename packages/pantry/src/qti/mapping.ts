@@ -19,12 +19,12 @@
  *   `Attribute` (C18), one row per entry, so two entries with one key are two facts the key law
  *   refuses rather than one fact that set semantics collapses (rows-first §0), and
  *   {@link MapKeyType} holds it beside its mapping's base type, where it has one;
- * - {@link MapKeyFloat}, {@link MapKeyPoint}, {@link MapKeyPair} and {@link MapKeyDirectedPair} hold
- *   a map key's typed value where it differs from its lexical form, each a row of its own relation
- *   keyed by the entry's node and mirrored with the map keys of its base type, its `value` a field
- *   PostgreSQL generates from the key's text; an integer key's typed value is no stored row but the
- *   query `MapKeyInteger` (`#pantry/qti/queries.ts`), PostgreSQL's parse of the key's text, of
- *   which the import writes nothing;
+ * - {@link MapKeyPoint}, {@link MapKeyPair} and {@link MapKeyDirectedPair} hold a map key's typed
+ *   value where it differs from its lexical form, each a row of its own relation keyed by the
+ *   entry's node and mirrored with the map keys of its base type, its `value` a field PostgreSQL
+ *   generates from the key's text; an integer key's and a float key's typed values are no stored
+ *   rows but the queries `MapKeyInteger` and `MapKeyFloat` (`#pantry/qti/queries.ts`), PostgreSQL's
+ *   parses of the key's text, of which the import writes nothing;
  * - {@link LookupValue} copies each table entry's `target-value` and each table's `default-value`
  *   with its table's declaration, and {@link LookupValueType} holds it beside the declaration's
  *   base type, where it has one.
@@ -86,9 +86,8 @@ import {
   declarationRef,
 } from "#pantry/qti/declarations.ts";
 import { BaseTypePattern } from "#pantry/qti/expression-types.ts";
-import { keyText, keyTextBytes } from "#pantry/qti/limits.ts";
+import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
-import { doublePattern } from "#pantry/qti/operators.ts";
 
 /**
  * `xs:integer`'s lexical space, an optional sign and digits: the map keys of an integer mapping
@@ -233,39 +232,6 @@ export const Gap = str.regex("^[\\t\\n\\r ]$");
  * which names its pattern law.
  */
 export const Item = str.regex("^[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+$");
-
-/**
- * The text type of a float map key: `xs:double`'s lexical space as an attribute writes it
- * (`doublePattern` of `#pantry/qti/operators.ts`, XML Schema 1.0's, reading 71's edition, so `+INF`
- * is outside it), every key of which has the value {@link MapKeyFloat} holds (reading 154), and
- * whose language lies inside grizzle's `doubleText`, so `Compute.parseDouble` reads it total; of at
- * most {@link keyTextBytes} UTF-8 bytes, as the {@link MapKeyType} copy it mirrors is, since the
- * key sits in the mirror's UNIQUE. Exported for `src/import/refusal.ts`, which names its pattern
- * law.
- */
-export const FloatKey = str.bytes(keyTextBytes, str.regex(doublePattern));
-
-/**
- * A float map key's typed value, keyed by its entry's node: `value`, the double its key names,
- * which PostgreSQL generates by grizzle's `Compute.parseDouble`, XML Schema 1.1's doubleLexicalMap
- * (Part 2 §3.3.5.2, reading 144): the decimal rounded once to the nearest double, ties to even, of
- * any digits and any exponent, an infinity of its sign at or past the overflow threshold and a zero
- * of its sign at or below half the least subnormal.
- *
- * Every key of a float mapping in the lexical space has one (reading 154), so `key(mapping, value)`
- * compares every float key by its value: `1`, `1.0` and `10e-1` are one value, `1e400`, `2e400`
- * and `INF` another, and `0`, `-0` and `1e-400` a third. PostgreSQL's `float8` equality, which the
- * key's UNIQUE compares by, holds -0 equal to 0 and NaN equal to NaN, as an identity constraint
- * compares two keys "equal or identical" (XML Schema 1.1 Part 1 §3.11.4).
- */
-export const MapKeyFloat = relation.generated(
-  "MapKeyFloat",
-  { key: FloatKey, mapping: uuid, node: uuid },
-  ["node"],
-  (r) => ({
-    value: generated(pg["double precision"], Compute.parseDouble(r.key)),
-  }),
-);
 
 /**
  * A point map key's typed value, keyed by its entry's node: its key split into each of its two
@@ -564,14 +530,6 @@ const typedMapKeys = select(MapKey, (k) => k.eq(k.baseTypes, 1n));
 const typedLookupValues = select(LookupValue, (v) => v.eq(v.baseTypes, 1n));
 
 /**
- * The map keys of float mappings in `xs:double`'s lexical space: each has its {@link MapKeyFloat}
- * row, and no other key does.
- */
-const floatKeys = select(MapKeyType, (k) =>
-  k.and(k.eq(k.baseType, "float"), Compute.matches(k.key, doublePattern)),
-);
-
-/**
  * The map keys of point mappings written as two integers: each has its {@link MapKeyPoint} row,
  * and no other key does.
  */
@@ -631,8 +589,9 @@ const lookupAttributes = select(Attribute, (a) =>
  *   has one;
  * - **map keys:** the entry's mapping's `baseTypes`, its `map-key` copy, the lexical key, each typed
  *   relation mirrored with its typed keys, `E1_derived` its split, and its typed key over the value
- *   PostgreSQL generates, and `Typed_attribute_value` its lexical form; an integer key's typed key
- *   is a rule over the query `MapKeyInteger` (`#pantry/qti/queries.ts`);
+ *   PostgreSQL generates, and `Typed_attribute_value` its lexical form; an integer key's and a
+ *   float key's typed keys are rules over the queries `MapKeyInteger` and `MapKeyFloat`
+ *   (`#pantry/qti/queries.ts`);
  * - **`Lookup_table_cardinality`:** a match or interpolation table's outcome is single, judged where
  *   it has a cardinality;
  * - **lookup values:** each copies its node's tuple, its attribute and its table's declaration, and
@@ -697,7 +656,6 @@ export const mappingLawsByName = {
   ],
   "Map key": [
     key(on(MapKey, "mapping", "key")),
-    key(on(MapKeyFloat, "mapping", "value")),
     key(on(MapKeyPoint, "mapping", "value")),
     key(on(MapKeyPair, "mapping", "value")),
     key(on(MapKeyDirectedPair, "mapping", "value")),
@@ -765,7 +723,6 @@ export const mappingLawsByName = {
       ),
       on(caseAttributes, "node"),
     ),
-    mirrors(on(floatKeys, "node", "mapping", "key"), on(MapKeyFloat, "node", "mapping", "key")),
     mirrors(on(pointKeys, "node", "mapping", "key"), on(MapKeyPoint, "node", "mapping", "key")),
     mirrors(on(pairKeys, "node", "mapping", "key"), on(MapKeyPair, "node", "mapping", "key")),
     mirrors(

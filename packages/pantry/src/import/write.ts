@@ -480,8 +480,8 @@ const specialDoubles: ReadonlyMap<string, number> = new Map([
 ]);
 
 /**
- * Read an `xs:double` literal's value, the reader of an attribute's or a text's double (a map
- * key's is grizzle's `Compute.parseDouble`, `#pantry/qti/mapping.ts` `MapKeyFloat`): its
+ * Read an `xs:double` literal's value, the reader of an attribute's or a text's double (a map key's
+ * is grizzle's `Compute.parseDouble`, the query `MapKeyFloat` of `#pantry/qti/queries.ts`): its
  * whitespace collapsed, then a special literal's value, else the IEEE double nearest the decimal it
  * writes, which JavaScript's `Number` rounds to as XML Schema 1.1 Part 2 §3.3.5.2 does, a magnitude
  * below 2^-1075 rounding to a zero of its sign.

@@ -10,11 +10,11 @@
  * (membership, since a merged native names several, C22); whether the host or PostgreSQL's UNIQUE
  * finds a key's repeat is outside the contract.
  *
- * The key over the query `MapKeyInteger` (`#pantry/qti/queries.ts`) is a deferred constraint
- * trigger, which `db.apply` would judge at COMMIT behind the stray rows' foreign keys, so its case
- * is judged by a direct SQL writer (`#pantry/test/direct-sql.ts`, README "Direct SQL access"): the
- * `MapKeyType` rows the query reads, every deferrable constraint deferred and rolled back
- * unchecked but the rule's trigger, set immediate alone.
+ * The keys over the queries `MapKeyInteger` and `MapKeyFloat` (`#pantry/qti/queries.ts`) are
+ * deferred constraint triggers, which `db.apply` would judge at COMMIT behind the stray rows'
+ * foreign keys, so their cases are judged by a direct SQL writer (`#pantry/test/direct-sql.ts`,
+ * README "Direct SQL access"): the `MapKeyType` rows each query reads, every deferrable constraint
+ * deferred and rolled back unchecked but the rule's trigger, set immediate alone.
  *
  * The cases over a whole imported item need the importer's ChangeSet (Q5.15), and are stated in
  * Q5.11's report for the network seat's probe: accepted, a string mapping keyed `York` and `york`
@@ -37,7 +37,6 @@ import {
   LookupValueType,
   MapKey,
   MapKeyDirectedPair,
-  MapKeyFloat,
   MapKeyPair,
   MapKeyPoint,
   MapKeyType,
@@ -186,44 +185,46 @@ const mapKeyRow = (at: number, key: string, baseType = "string"): Fact<typeof Ma
 });
 
 /**
- * The name of the trigger the key over the query `MapKeyInteger` (`#pantry/qti/queries.ts`) is on
- * `MapKeyType`, the one table the query reads: a rule over a query is a deferred constraint
- * trigger on each table its query reads, which grizzle names from a digest and describes by its
- * comment, `trigger of rule` and the rule as its law spells it (grizzle's `lawsOf`), and grizzle's
- * `constraintNamesOf` names a check alone.
+ * The name of the trigger the key over a typed key's query (`#pantry/qti/queries.ts`,
+ * `MapKeyInteger` or `MapKeyFloat`) is on `MapKeyType`, the one table the query reads: a rule over
+ * a query is a deferred constraint trigger on each table its query reads, which grizzle names from
+ * a digest and describes by its comment, `trigger of rule` and the rule as its law spells it
+ * (grizzle's `lawsOf`), and grizzle's `constraintNamesOf` names a check alone.
  *
  * @param client - The session.
+ * @param query - The query's name.
  * @returns The trigger's name, the constraint `SET CONSTRAINTS` sets immediate; none or several
  *   fail the case.
  */
-const integerKeyRule = (client: Parameters<typeof rowsOf>[0]) =>
+const typedKeyRule = (
+  client: Parameters<typeof rowsOf>[0],
+  query: typeof Qti.relations.MapKeyInteger.name | typeof Qti.relations.MapKeyFloat.name,
+) =>
   rowsOf<{ readonly tgname: string }>(
     client,
     `SELECT t.tgname FROM pg_catalog.pg_trigger t
       WHERE t.tgrelid = pg_catalog.to_regclass($1)
         AND pg_catalog.obj_description(t.oid, 'pg_trigger') LIKE $2`,
-    [
-      `${qtiSchema}.${tableOf(MapKeyType.name)}`,
-      `trigger of rule key ${Qti.relations.MapKeyInteger.name}(mapping, value)%`,
-    ],
+    [`${qtiSchema}.${tableOf(MapKeyType.name)}`, `trigger of rule key ${query}(mapping, value)%`],
   ).pipe(
     Effect.map((rows) => {
-      assert.lengthOf(rows, 1, "the key over MapKeyInteger(mapping, value)");
+      assert.lengthOf(rows, 1, `the key over ${query}(mapping, value)`);
 
       return rows[0]?.tgname ?? "";
     }),
   );
 
 /**
- * A stray map key of an integer mapping, entry `at`, beside its base type: the row the query
- * `MapKeyInteger` reads.
+ * A stray map key of a mapping of a base type, entry `at`, beside its base type: the row a typed
+ * key's query reads.
  *
+ * @param baseType - The mapping's base type.
  * @param at - The entry's number.
  * @param key - Its key.
  * @returns The fact, of `MapKeyType`.
  */
-const integerKeyFact = (at: number, key: string) => ({
-  fact: { baseType: "integer", key, mapping: stray, node: strayNode(at) },
+const typedKeyFact = (baseType: "float" | "integer", at: number, key: string) => ({
+  fact: { baseType, key, mapping: stray, node: strayNode(at) },
   relation: MapKeyType,
 });
 
@@ -309,7 +310,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
           // 1.0.
           Effect.gen(function* integerKeys() {
             const client = yield* loginSession;
-            const rule = yield* integerKeyRule(client);
+            const rule = yield* typedKeyRule(client, Qti.relations.MapKeyInteger.name);
             for (const { keys, refused } of [
               { keys: ["1", "01"], refused: true },
               { keys: ["-0", "+0"], refused: true },
@@ -320,9 +321,11 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               { keys: ["1", "1.0"], refused: false },
             ] as const) {
               assertVerdict(
-                yield* judged(client, statedInserts(keys.map((key, n) => integerKeyFact(n, key))), [
-                  rule,
-                ]),
+                yield* judged(
+                  client,
+                  statedInserts(keys.map((key, n) => typedKeyFact("integer", n, key))),
+                  [rule],
+                ),
                 rule,
                 refused,
                 keys.join(" "),
@@ -334,80 +337,58 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses two float keys of one mapping that name one double, by the key on (mapping, value)",
+        "refuses two float keys of one mapping that name one double, by the key over the query MapKeyFloat, and keeps two that name two doubles",
         () =>
-          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyFloat, "mapping", "value")) over the
-          // value it generates, grizzle's `Compute.parseDouble`, XML Schema 1.1's doubleLexicalMap
-          // (readings 144 and 154), and `float8` equality, -0 equal to 0 and NaN to NaN.
+          // Oracle: PostgreSQL, the key over the query `MapKeyFloat` (`src/qti/queries.ts`; README,
+          // "Rules over queries"): a deferred constraint trigger on `MapKeyType`, set immediate
+          // alone, which raises 23505 under the rule's name where two entries of one mapping hold
+          // one value, the double grizzle's `Compute.parseDouble` reads each key's text as, XML
+          // Schema 1.1's doubleLexicalMap (readings 144 and 154), and `float8` equality, -0 equal to
+          // 0 and NaN to NaN; the controls name two doubles, or hold a key the query's
+          // `doublePattern` does not select (`+INF`, XML Schema 1.1's), which no row holds.
           // Bound: 1 and 1.0, 1 and 10e-1, 0 and -0, 0.1 and .10, and past grizzle's former
           // bounded form: two overflows, an overflow and INF, an underflow and 0, a 17-digit key
           // and the 18-digit one that rounds with it, a tie to even, a 15-digit mantissa at 293
-          // and the 1e+307 it spells, and two NaNs.
-          Effect.gen(function* floatRepeat() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const [first, second] of [
-              ["1", "1.0"],
-              ["1", "10e-1"],
-              ["0", "-0"],
-              ["0.1", ".10"],
-              ["1e400", "2e400"],
-              ["INF", "1e400"],
-              ["0", "1e-400"],
-              ["1.2345678901234567", "1.23456789012345671"],
-              ["9007199254740993", "9007199254740992"],
-              ["100000000000000e293", "1e+307"],
-              ["NaN", "NaN"],
+          // and the 1e+307 it spells, and two NaNs; against 1 and 2, 0.1 and 0.100000000000001
+          // (apart in the fifteenth digit), 1 and the double one ulp above it, the greatest finite
+          // double and INF, the least subnormal and 0, INF and -INF, and INF and +INF.
+          Effect.gen(function* floatKeys() {
+            const client = yield* loginSession;
+            const rule = yield* typedKeyRule(client, Qti.relations.MapKeyFloat.name);
+            for (const { keys, refused } of [
+              { keys: ["1", "1.0"], refused: true },
+              { keys: ["1", "10e-1"], refused: true },
+              { keys: ["0", "-0"], refused: true },
+              { keys: ["0.1", ".10"], refused: true },
+              { keys: ["1e400", "2e400"], refused: true },
+              { keys: ["INF", "1e400"], refused: true },
+              { keys: ["0", "1e-400"], refused: true },
+              { keys: ["1.2345678901234567", "1.23456789012345671"], refused: true },
+              { keys: ["9007199254740993", "9007199254740992"], refused: true },
+              { keys: ["100000000000000e293", "1e+307"], refused: true },
+              { keys: ["NaN", "NaN"], refused: true },
+              { keys: ["1", "2"], refused: false },
+              { keys: ["0.1", "0.100000000000001"], refused: false },
+              { keys: ["1", "1.0000000000000002"], refused: false },
+              { keys: ["1.7976931348623157e308", "1e309"], refused: false },
+              { keys: ["4.9e-324", "0"], refused: false },
+              { keys: ["INF", "-INF"], refused: false },
+              { keys: ["INF", "+INF"], refused: false },
             ] as const) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(MapKeyFloat, [
-                  { key: first, ...at(0) },
-                  { key: second, ...at(1) },
-                ]),
-                {},
-              );
-
-              assert.isTrue(
-                rejectedBy(outcome, keyOver("MapKeyFloat", ["mapping", "value"])),
-                `${first} ${second}`,
+              assertVerdict(
+                yield* judged(
+                  client,
+                  statedInserts(keys.map((key, n) => typedKeyFact("float", n, key))),
+                  [rule],
+                ),
+                rule,
+                refused,
+                keys.join(" "),
+                "23505",
               );
             }
-          }),
-      );
-
-      it.effect(
-        "keeps two float keys of one mapping that name two doubles, the key on (mapping, value) unbroken",
-        () =>
-          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyFloat, "mapping", "value")) over the
-          // cast it generates, against the doubles each decimal rounds to, which differ: the
-          // control of the repeat above. A stray row's deferred containments may still refuse the
-          // write at commit, so the key alone is read.
-          // Bound: 1 and 2, 0.1 and 0.100000000000001 (apart in the fifteenth digit), 1 and the
-          // double one ulp above it, the greatest finite double and INF, the least subnormal and
-          // 0, and INF and -INF.
-          Effect.gen(function* floatDistinct() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const [first, second] of [
-              ["1", "2"],
-              ["0.1", "0.100000000000001"],
-              ["1", "1.0000000000000002"],
-              ["1.7976931348623157e308", "1e309"],
-              ["4.9e-324", "0"],
-              ["INF", "-INF"],
-            ] as const) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(MapKeyFloat, [
-                  { key: first, ...at(0) },
-                  { key: second, ...at(1) },
-                ]),
-                {},
-              );
-
-              assert.isFalse(
-                rejectedBy(outcome, keyOver("MapKeyFloat", ["mapping", "value"])),
-                `${first} ${second}`,
-              );
-            }
-          }),
+          }).pipe(Effect.scoped),
+        { timeout: leaseTestTimeoutMs },
       );
 
       it.effect(
@@ -512,36 +493,17 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a float key outside xs:double's lexical space and a pair's item holding a C0 control by its type's pattern law, named Typed attribute value",
+        "refuses a pair's or a directed pair's item holding a C0 control by its type's pattern law, named Typed attribute value",
         () =>
-          // Oracle: PostgreSQL, the text domain of `FloatKey` and of `Item` as the statement casts
-          // each value, before any row CHECK, and grizzle's pattern law of the field, named by its
-          // type's row of `textLaws`. The import writes no such row
-          // (`#pantry/import/overlays/mapping.ts` `typedKeyAdders`), so only a direct writer meets
-          // the domain, which judges the form as `Typed_attribute_value` judges the same key on
-          // `MapKeyType` above (readings 7 and 154).
-          // Bound: float keys with a comma, a space before, a word and XML Schema 1.1's +INF, and
-          // 1.5, which the domain holds; a pair and a directed pair whose first item holds U+0001,
-          // which an XML 1.1 document writes as `&#x1;`, and whose second item holds none.
-          Effect.gen(function* untypedKeys() {
+          // Oracle: PostgreSQL, the text domain of `Item` as the statement casts each value, before
+          // any row CHECK, and grizzle's pattern law of the field, named by its type's row of
+          // `textLaws`. The import writes no such row (`#pantry/import/overlays/mapping.ts`
+          // `typedKeyAdders`), so only a direct writer meets the domain, which judges the form as
+          // `Typed_attribute_value` judges the same key on `MapKeyType` above (reading 7).
+          // Bound: a pair and a directed pair whose first item holds U+0001, which an XML 1.1
+          // document writes as `&#x1;`, and whose second item holds none.
+          Effect.gen(function* untypedItems() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const key of ["1,5", " 1", "abc", "+INF"] as const) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(MapKeyFloat, [{ key, ...at(0) }]),
-                {},
-              );
-
-              assert.deepStrictEqual(
-                refusedNameOf(outcome, patternOf("MapKeyFloat", "key")),
-                Option.some("Typed attribute value"),
-                key,
-              );
-            }
-
-            const lawful = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyFloat, [{ key: "1.5", ...at(0) }]),
-              {},
-            );
             const pair = yield* db.apply(
               ChangeSet.empty(Author).insert(MapKeyPair, [
                 { ...at(0), first: "A\u{1}", gap: " ", key: "A\u{1} B", second: "B" },
@@ -555,7 +517,6 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               {},
             );
 
-            assert.isFalse(rejectedBy(lawful, patternOf("MapKeyFloat", "key")), "1.5");
             assert.deepStrictEqual(
               refusedNameOf(pair, patternOf("MapKeyPair", "first")),
               Option.some("Typed attribute value"),

@@ -73,6 +73,7 @@ import {
   resourceMetadata,
 } from "#pantry/qti/metadata.ts";
 import { integerKeyPattern, MapKeyType } from "#pantry/qti/mapping.ts";
+import { doublePattern } from "#pantry/qti/operators.ts";
 import { ResourceDocument, ResourceHref, ResourceTyped } from "#pantry/qti/package.ts";
 import {
   AssembledName,
@@ -873,12 +874,57 @@ export const queriesOf = (base: QtiBase) => {
   );
 
   /**
+   * A float map key's typed value, one row per entry whose key is in `xs:double`'s lexical space as
+   * an attribute writes it (`doublePattern`, XML Schema 1.0's, reading 71's edition, so `+INF` is
+   * outside it) and whose mapping's base type is `float`: its entry's `node`, its `mapping`, and
+   * `value`, the double the key names, which PostgreSQL reads from the key's text by grizzle's
+   * `Compute.parseDouble`, XML Schema 1.1's doubleLexicalMap (Part 2 §3.3.5.2, reading 144): the
+   * decimal rounded once to the nearest double, ties to even, of any digits and any exponent, an
+   * infinity of its sign at or past the overflow threshold and a zero of its sign at or below half
+   * the least subnormal. `doublePattern`'s language lies inside grizzle's `doubleText`, the text
+   * the parse reads total.
+   *
+   * Every float key in the lexical space has a row (reading 154), so the key over
+   * `(mapping, value)` compares every float key by its value: `1`, `1.0` and `10e-1` are one value,
+   * `1e400`, `2e400` and `INF` another, and `0`, `-0` and `1e-400` a third. PostgreSQL's `float8`
+   * equality holds -0 equal to 0 and NaN equal to NaN, as an identity constraint compares two keys
+   * "equal or identical" (XML Schema 1.1 Part 1 §3.11.4). A key outside the lexical space has no
+   * row, and `Typed_attribute_value` refuses it on its `MapKeyType` row alone.
+   *
+   * The `where` selects by the match the parse needs as its guard, restated, as `MapKeyInteger`'s
+   * does: `Compute.when`'s third argument is the value at a key the `where` has taken out, so no
+   * row holds it.
+   */
+  const MapKeyFloat = derived(
+    "MapKeyFloat",
+    query(base).rule((r) => {
+      const { key: form, mapping, node } = v(MapKeyType, "key");
+
+      return r
+        .match(MapKeyType, { baseType: "float", key: form, mapping, node })
+        .where(Compute.matches(form, doublePattern))
+        .find({
+          mapping,
+          node,
+          value: Compute.when(
+            Compute.matches(form, doublePattern),
+            (double) => Compute.parseDouble(double),
+            0,
+          ),
+        });
+    }),
+  );
+
+  /**
    * The mapping overlays' rules over a query, each named by its oracle law: an integer mapping's
-   * keys are distinct by the integers they name ("Map key", information model §5.88.4 and §7.21: a
-   * mapping is a function of its source value).
+   * keys are distinct by the integers they name, and a float mapping's by the doubles they name
+   * ("Map key", information model §5.88.4 and §7.21: a mapping is a function of its source value).
    */
   const mappingQueryLawsByName = {
-    "Map key": [key(on(MapKeyInteger, "mapping", "value"))],
+    "Map key": [
+      key(on(MapKeyInteger, "mapping", "value")),
+      key(on(MapKeyFloat, "mapping", "value")),
+    ],
   } as const;
 
   /**
@@ -902,6 +948,7 @@ export const queriesOf = (base: QtiBase) => {
     LinkReading,
     ListedIdentifier,
     ListedTitle,
+    MapKeyFloat,
     MapKeyInteger,
     MappedReading,
     MatchedIdentifier,

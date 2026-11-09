@@ -235,12 +235,12 @@ const situationsOf = (input: MappingCase): readonly KeySituation[] => {
 
 describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () => {
   it.effect(
-    "writes one MapKey row per qti-map-entry, distinct by node, even where two entries are identical, and each typed key's row by its base type, an integer key none",
+    "writes one MapKey row per qti-map-entry, distinct by node, even where two entries are identical, and each typed key's row by its base type, an integer key and a float key none",
     (ctx) =>
       // Oracle: a second implementation, a direct walk of the XDM tree that numbers its entries in
-      // document order, against the builder's read of the flat rows; every float key, whose row
-      // `FloatKey`'s pattern law judges; and no integer key, whose typed value is the query
-      // `MapKeyInteger`'s, read from its `MapKeyType` row.
+      // document order, against the builder's read of the flat rows; and no integer key and no
+      // float key, whose typed values are the queries `MapKeyInteger`'s and `MapKeyFloat`'s, read
+      // from their `MapKeyType` rows.
       // Bound: every mapping of 3 base types with at most 4 entries over 3 keys and 2 values,
       // 4,665.
       searched(
@@ -289,10 +289,7 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
               );
 
               assert.notProperty(rows, "MapKeyInteger");
-              assert.deepStrictEqual(
-                [...rows.MapKeyFloat].map(([node, row]) => [node, row.key]),
-                input.baseType === "float" ? [...walked].map(([node, { key }]) => [node, key]) : [],
-              );
+              assert.notProperty(rows, "MapKeyFloat");
               assert.deepStrictEqual([...rows.Mapping.keys()], [ids.idOf(3)]);
               assert.strictEqual(rows.Mapping.get(ids.idOf(3))?.baseTypes, 1n);
               assert.strictEqual(rows.Mapping.get(ids.idOf(3))?.declaration, ids.idOf(2));

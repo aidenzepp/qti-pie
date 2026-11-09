@@ -76,7 +76,6 @@ import { keyText, namespaceText } from "#pantry/qti/limits.ts";
 import { interactionLawsByName, interactionRelations } from "#pantry/qti/interactions.ts";
 import {
   Digits,
-  FloatKey,
   Gap,
   Item,
   mappingLawsByName,
@@ -427,7 +426,6 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
     "MappingCardinality",
     "MapKey",
     "MapKeyType",
-    "MapKeyFloat",
     "MapKeyPoint",
     "MapKeyPair",
     "MapKeyDirectedPair",
@@ -485,10 +483,8 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
  *   {@link textLaws}, holds to the days 0001-01-01 to 9999-12-31 the cast reads total, refused the
  *   same way. Its value is the calendar day `lastUpdated` names, which the value domain states
  *   exists, so it is the value domain's.
- * - A typed map key's generated fields read its own split, by concatenation and conditionals, or a
- *   float key's `Compute.parseDouble`, which its key's pattern law, named by FloatKey's row of
- *   {@link textLaws}, holds to `xs:double`'s lexical space, inside the `doubleText` the parse reads
- *   total. No term reads a closed relation, so none is NULL.
+ * - A typed map key's generated fields read its own split, by concatenation and conditionals. No term
+ *   reads a closed relation, so none is NULL.
  * - A document's and an item's assembly's `xml:lang` form's compared `value` is the form collapsed
  *   and case-folded, cast into the form's own key text, a cast the schema proves total: a written
  *   text, never NULL.
@@ -508,7 +504,6 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
   ...namedBy("value domain", "StatisticDate.date"),
   ...namedBy(
     "E1 derived",
-    "MapKeyFloat.value",
     "MapKeyPoint.value",
     "MapKeyPoint.xNegative",
     "MapKeyPoint.yNegative",
@@ -612,11 +607,8 @@ export const patternNameIn = (
  *   §4); a foreign namespace name is `Char`s because crust reads no other; an entry path begins
  *   with no `/` because the directory reader lists paths relative to the package root and `zip.ts`
  *   refuses an absolute name;
- * - A typed float map key and a pair's or a directed pair's item are "Typed attribute value": the
- *   import writes every float key's row and every pair key's split whatever its form, so `FloatKey`
- *   (the float row of `BaseTypePattern` written exactly) and `Item` (wider than an identifier)
- *   refuse only a key `Typed_attribute_value` refuses on its `MapKeyType` row. A float key past
- *   `FloatKey`'s bound breaks `MapKey`'s `keyText` too, whose insert grizzle runs first;
+ * - A pair's or a directed pair's item is "Typed attribute value": `Item` (wider than an identifier)
+ *   refuses only a key `Typed_attribute_value` refuses on its `MapKeyType` row;
  * - An unbounded XML production (a node's or an attribute's `Char*`, a comment, an instruction, a
  *   doctype, an encoding name, a version number, an NCName) is "XML production", which crust
  *   refuses before any row exists;
@@ -641,7 +633,6 @@ export const textLaws: ReadonlyMap<RegexText<string>, LawName> = new Map<
   [NamespacePrefix, "Key text bound"],
   [ForeignNamespace, "Key text bound"],
   [EntryPath, "Key text bound"],
-  [FloatKey, "Typed attribute value"],
   [NamespaceUri, "Namespace name"],
   [Chars, "XML production"],
   [Lexical, "XML production"],

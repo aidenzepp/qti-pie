@@ -9,9 +9,10 @@
  * the key is of that value's form, its fields the split PostgreSQL generates the value from, and
  * each lookup table's typed attribute values; and, where the declaration has a base type, a
  * mapping's, a map key's and a lookup value's row beside it (a record has none: lane NIL's audit,
- * B12). An integer key has no typed row: the query `MapKeyInteger` (`#pantry/qti/queries.ts`)
- * reads its value from its `MapKeyType` row. The database proves every one of them
- * (`mappingLaws`), so a row this builder gets wrong is refused, never accepted.
+ * B12). An integer key and a float key have no typed row: the queries `MapKeyInteger` and
+ * `MapKeyFloat` (`#pantry/qti/queries.ts`) read their values from their `MapKeyType` rows. The
+ * database proves every one of them (`mappingLaws`), so a row this builder gets wrong is refused,
+ * never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
@@ -24,7 +25,7 @@ import { lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
-import { FloatKey, Item } from "#pantry/qti/mapping.ts";
+import { Item } from "#pantry/qti/mapping.ts";
 import type {
   AreaMapping,
   AreaMappingCardinality,
@@ -33,7 +34,6 @@ import type {
   LookupValueType,
   MapKey,
   MapKeyDirectedPair,
-  MapKeyFloat,
   MapKeyPair,
   MapKeyPoint,
   MapKeyType,
@@ -71,7 +71,6 @@ export interface MappingRows {
   readonly LookupValueType: ReadonlyMap<string, Addition<typeof LookupValueType>>;
   readonly MapKey: ReadonlyMap<string, Addition<typeof MapKey>>;
   readonly MapKeyDirectedPair: ReadonlyMap<string, Addition<typeof MapKeyDirectedPair>>;
-  readonly MapKeyFloat: ReadonlyMap<string, Addition<typeof MapKeyFloat>>;
   readonly MapKeyPair: ReadonlyMap<string, Addition<typeof MapKeyPair>>;
   readonly MapKeyPoint: ReadonlyMap<string, Addition<typeof MapKeyPoint>>;
   readonly MapKeyType: ReadonlyMap<string, Addition<typeof MapKeyType>>;
@@ -116,12 +115,6 @@ const copyOf = ({ baseType, cardinality, declarationKind }: Declared): Declarati
   cardinalities: typedCountOf(cardinality),
   declarationKind,
 });
-
-/**
- * The float keys that hold a typed value, as `FloatKey`, the type of `MapKeyFloat.key`, holds them:
- * `xs:double`'s lexical space (reading 154), the keys the `floatKeys` mirror selects.
- */
-const floatKey = new RegExp(FloatKey.patterns[0].source, FloatKey.patterns[0].flags);
 
 /**
  * A pair's or a directed pair's item as `Item`, the type of each item field, holds it.
@@ -308,7 +301,6 @@ export const directedPairPartsOf = (
  */
 interface TypedKeys {
   readonly MapKeyDirectedPair: Map<string, Addition<typeof MapKeyDirectedPair>>;
-  readonly MapKeyFloat: Map<string, Addition<typeof MapKeyFloat>>;
   readonly MapKeyPair: Map<string, Addition<typeof MapKeyPair>>;
   readonly MapKeyPoint: Map<string, Addition<typeof MapKeyPoint>>;
 }
@@ -324,20 +316,19 @@ interface TypedEntry {
 
 /**
  * Each base type's stored typed key, where it has one: the split of its key into the row's parts,
- * and the relation its row joins, written only where each part is a value of its field's type. A
- * float key's row holds the key alone, written where `FloatKey` holds it; a pair's or a directed
- * pair's, where both items of its split are `Item`s; a point's parts are typed by their split.
- * These are the keys each typed relation's mirror selects ("Mapping overlay": `floatKeys` over
- * `xs:double`'s lexical space, `pairKeys` and `directedPairKeys` over `pairKeyPattern`), so a key
- * of no such form has no typed row, and `Typed_attribute_value` alone refuses it on its
+ * and the relation its row joins, written only where each part is a value of its field's type: a
+ * pair's or a directed pair's where both items of its split are `Item`s, and a point's parts typed
+ * by their split. These are the keys each typed relation's mirror selects ("Mapping overlay":
+ * `pairKeys` and `directedPairKeys` over `pairKeyPattern`, `pointKeys` over `pointKeyPattern`), so
+ * a key of no such form has no typed row, and `Typed_attribute_value` alone refuses it on its
  * `MapKeyType` row: a form outside a type's lexical space denotes no value of it (XML Schema Part 2
  * §2.3), as reading 152 reads it for a name. Each of these relations is stored, so the host decides
  * which rows exist and the mirror judges the decision (the constraint-engine plan's B9). A row for
- * every float key, or for every pair split, breaks the mirror beside `Typed attribute value`.
+ * every pair split breaks the mirror beside `Typed attribute value`.
  *
- * An integer key has no typed row: its typed value is the query `MapKeyInteger`
- * (`#pantry/qti/queries.ts`), PostgreSQL's parse of its `MapKeyType` row's key, keyed by a rule
- * over the query.
+ * An integer key and a float key have no typed row: their typed values are the queries
+ * `MapKeyInteger` and `MapKeyFloat` (`#pantry/qti/queries.ts`), PostgreSQL's parses of their
+ * `MapKeyType` rows' keys, each keyed by a rule over its query.
  */
 const typedKeyAdders: Partial<
   Readonly<Record<BaseTypeHandle, (typed: TypedKeys, entry: TypedEntry) => void>>
@@ -350,11 +341,6 @@ const typedKeyAdders: Partial<
       pairItem.test(directed.target)
     ) {
       typed.MapKeyDirectedPair.set(entry.node, { ...directed, ...entry });
-    }
-  },
-  float: (typed, entry) => {
-    if (floatKey.test(entry.key)) {
-      typed.MapKeyFloat.set(entry.node, entry);
     }
   },
   pair: (typed, entry) => {
@@ -372,10 +358,9 @@ const typedKeyAdders: Partial<
 };
 
 /**
- * Add a map key's typed row, where its base type gives it one and the key is of its form: a float
- * key in `xs:double`'s lexical space, a point's two integers' signs, zeros and digits, and a
- * pair's or a directed pair's two `Item`s. Every other key has no typed row, and
- * `Typed_attribute_value` refuses it on its `MapKeyType` row.
+ * Add a map key's typed row, where its base type gives it one and the key is of its form: a point's
+ * two integers' signs, zeros and digits, and a pair's or a directed pair's two `Item`s. Every other
+ * key has no typed row, and `Typed_attribute_value` refuses it on its `MapKeyType` row.
  *
  * @param typed - The typed rows so far.
  * @param baseType - The key's mapping's base type.
@@ -424,16 +409,14 @@ const matchingOf = (
  *
  * A map entry with no `map-key` has no `MapKey` row, and AL3 refuses the element. A key past the
  * key-text bound keeps its `MapKey` row and its typed row, and `MapKey`'s `keyText` refuses it
- * under "Key text bound" (its parts' types bound no length, and `FloatKey` holds `keyText`'s
- * bound). A typed key has its typed row exactly where it is of its base type's form
- * ({@link typedKeyAdders}); any other key has none, and `Typed_attribute_value` refuses it. A
- * table entry, and a
- * table with a `default-value`, has its `LookupValue` row, with its table's declaration. Each of a
- * mapping, a map key and a lookup value has its row beside its declaration's base type, where the
- * declaration has one, and only there; a record's has none, so its keys and values are read in no
- * base type and have no typed row. Each of a mapping, an area mapping and a lookup table has its
- * row beside its declaration's cardinality, where the declaration has one, and only there (spec
- * reading 158).
+ * under "Key text bound" (its parts' types bound no length). A typed key has its typed row exactly
+ * where it is of its base type's form ({@link typedKeyAdders}); any other key has none, and
+ * `Typed_attribute_value` refuses it. A table entry, and a table with a `default-value`, has its
+ * `LookupValue` row, with its table's declaration. Each of a mapping, a map key and a lookup value
+ * has its row beside its declaration's base type, where the declaration has one, and only there; a
+ * record's has none, so its keys and values are read in no base type and have no typed row. Each of
+ * a mapping, an area mapping and a lookup table has its row beside its declaration's cardinality,
+ * where the declaration has one, and only there (spec reading 158).
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -478,7 +461,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
   const mappingBaseTypes = new Map<string, Addition<typeof MappingBaseType>>();
   const typed: TypedKeys = {
     MapKeyDirectedPair: new Map(),
-    MapKeyFloat: new Map(),
     MapKeyPair: new Map(),
     MapKeyPoint: new Map(),
   };

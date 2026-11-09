@@ -3,7 +3,8 @@
  * is named by an oracle law, the typed map keys select exactly the lexical forms their base types
  * give a typed value, read against the deleted schema's lexical forms with JavaScript's engine as
  * the oracle, and an integer key's typed value, the query `MapKeyInteger`, repeats exactly where
- * the law oracle's `Map key` names a repeat.
+ * the law oracle's `Map key` names a repeat; a float key's, the query `MapKeyFloat`, is held to the
+ * law oracle by `#pantry/import/overlays/float-keys.oracle.test.ts`.
  *
  * The database tests (`mapping.db.test.ts`) judge the same laws through PostgreSQL, and the
  * builder's rows are `#pantry/import/overlays/mapping.test.ts`'s.
@@ -26,12 +27,10 @@ import { BaseTypePattern } from "#pantry/qti/expression-types.ts";
 import {
   AreaMapping,
   exactValuePattern,
-  FloatKey,
   integerKeyPattern,
   LookupValue,
   MapKey,
   MapKeyDirectedPair,
-  MapKeyFloat,
   MapKeyPair,
   MapKeyPoint,
   Mapping,
@@ -71,9 +70,10 @@ const parsed = new RegExp(doubleText, "u");
 const integerKey = new RegExp(integerKeyPattern, "u");
 
 /**
- * `FloatKey`'s pattern, the float keys that hold a typed value, as JavaScript's engine reads it.
+ * `doublePattern`, the float keys the query `MapKeyFloat` (`#pantry/qti/queries.ts`) gives a typed
+ * value, as JavaScript's engine reads it.
  */
-const floatKey = new RegExp(FloatKey.patterns[0].source, "u");
+const floatKey = new RegExp(doublePattern, "u");
 
 /**
  * The relations this module declares.
@@ -84,7 +84,6 @@ const mappingRelations = {
   LookupValue,
   MapKey,
   MapKeyDirectedPair,
-  MapKeyFloat,
   MapKeyPair,
   MapKeyPoint,
   Mapping,
@@ -127,12 +126,6 @@ describe("qti/mapping.ts, declared", { timeout: searchTimeout }, () => {
       "MappableBaseType",
       "Typed attribute value",
     ]);
-  });
-
-  it("types a float key by xs:double's one lexical pattern, the one a tolerance is read by", () => {
-    // Oracle: `#pantry/qti/operators.ts` `doublePattern`, the schema's one statement of
-    // `xs:double`'s lexical space, whose language the box below holds to the deleted `xsDouble`.
-    assert.deepStrictEqual(FloatKey.patterns, [{ flags: "u", source: doublePattern }]);
   });
 });
 
@@ -209,9 +202,9 @@ describe("qti/mapping.ts, the typed keys' languages", { timeout: searchTimeout }
     "selects exactly the xs:double lexical forms as the float keys that hold a typed value, each inside grizzle's doubleText",
     (ctx) =>
       // Oracle: the specification as a checker, the deleted schema's `xsDouble`, read by
-      // JavaScript's engine beside `FloatKey`'s pattern; reading 154 gives every float key a value,
-      // so the languages are equal, and grizzle's `doubleText`, the language its parse reads
-      // total, holds them.
+      // JavaScript's engine beside `doublePattern`, the selection of the query `MapKeyFloat`;
+      // reading 154 gives every float key a value, so the languages are equal, and grizzle's
+      // `doubleText`, the language its parse reads total, holds them.
       // Bound: every text of at most 4 characters over 11 characters, 16,105.
       searched(
         ctx,
@@ -604,6 +597,25 @@ describe("qti/mapping.ts, an integer key's typed value", { timeout: searchTimeou
       "value",
     ]);
     assert.notProperty(QtiBase.relations, "MapKeyInteger");
+  });
+
+  it("is the query MapKeyFloat of Qti for a float key, over each entry's node, its mapping and the double it parses", () => {
+    // Oracle: grizzle's README, "Rules over queries" and "Parsing text": `Compute.parseDouble` is
+    // a double precision, so `1` and `1.0` meet as one value, and the entry's node keeps two
+    // entries of one double two rows the key refuses; the type annotation holds the value's SQL
+    // type to `double precision` when the file typechecks.
+    // Bound: the one relation.
+    const { MapKeyFloat } = Qti.relations;
+    const value: "double precision" = MapKeyFloat.heading.value.sql;
+
+    assert.strictEqual(MapKeyFloat.kind, "derived");
+    assert.strictEqual(value, "double precision");
+    assert.deepStrictEqual(Object.keys(MapKeyFloat.heading).toSorted(), [
+      "mapping",
+      "node",
+      "value",
+    ]);
+    assert.notProperty(QtiBase.relations, "MapKeyFloat");
   });
 
   it.effect(
