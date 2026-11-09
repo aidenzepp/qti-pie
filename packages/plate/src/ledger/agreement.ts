@@ -51,6 +51,13 @@
  *   limit the README records. Pantry refuses both: a root that its closed relation `RootOfType`
  *   (`packages/pantry/src/grammar/install.ts`) does not pair with the resource's type, and a
  *   document it cannot read.
+ * - A LOM `learningResourceType` of `exam` or `self assessment` from the LOM vocabulary in an
+ *   external record file, a `resourcemetadata/xml` document, is accepted. Plate holds reading 122
+ *   ("a LOM `learningResourceType` of the LOM vocabulary is neither `exam` nor `self assessment`")
+ *   in the manifest alone (`#plate/package/manifest.ts`), and reads a record file for its root
+ *   alone, the limit the README records. Pantry refuses it `lom-learning-resource-type`: reading
+ *   122, as decision 460 amended it, holds over the records of the manifest and of each external
+ *   record file (`recordDocumentTypes`, `packages/pantry/src/qti/metadata.ts`).
  * - Through an item ref `lti` that names an LTI link, `lti.1.SCORE` is read as a numbered reading and
  *   refused (reading 88, "a numbered reference such as `Q01.2.SCORE` names an instance of an item
  *   ref that a selection with replacement can repeat, and nothing else"). Pantry resolves its split
@@ -62,6 +69,10 @@
  * - A section ref whose `href` names no section document, such as the test itself, an item, a
  *   webcontent file, an empty `href` or `#x`, is accepted and judged no further. Pantry refuses it
  *   by its law `Document_entry` (`packages/pantry/src/qti/package.ts`).
+ * - A package whose tests together place section documents more than 4,096 times, or place more than
+ *   8 MiB of them, is refused `assembly-limit`, plate's own stated limit and no rule of QTI
+ *   (`#plate/package/open.ts`). Pantry states no bound on a test's assembly, and judges such a
+ *   package by its laws.
  *
  * @module
  */

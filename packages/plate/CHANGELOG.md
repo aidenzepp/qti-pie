@@ -16,9 +16,9 @@ M3.
   pantry's cutover. Each line below names its reading by number and wording, the rule and `check` a
   host receives, and the corpus documents whose verdict moves. Every corpus document and package
   that no line names keeps its verdict, its refusals and their sentences.
-- Four refusal rules are new, under pantry's names: `inclusion-cycle`, `branch-target`,
-  `document-lang` and `lom-learning-resource-type`. Every other new refusal is an existing rule with
-  a new `check` in its detail.
+- Five refusal rules are new. Four take pantry's names: `inclusion-cycle`, `branch-target`,
+  `document-lang` and `lom-learning-resource-type`. The fifth, `assembly-limit`, is plate's own
+  stated limit. Every other new refusal is an existing rule with a new `check` in its detail.
 - Tests and sections:
   - A section that holds only a rubric block, or nothing, is accepted and delivered. `open` refused
     it with `child-count` (reading 26, "an assessment section may hold no part"). Corpus:
@@ -429,15 +429,26 @@ M3.
     and its last 511 characters around one `…` (U+2026). This is plate's own bound, not a rule of
     QTI, so that a hostile package cannot make its refusals too long to serialise. No corpus
     refusal carries a fact that long, so no wording moves.
-  - These hostile shapes no longer take time that grows faster than their size: many sibling `q`
-    elements, many default hotspots before trailing text, many resources that name one large
-    document, many references under a deep `xml:base`, a section document that many parts place,
-    many refusals across a test's placements, a long inclusion chain, branch rules whose target
-    many section documents write, many names read through the section documents that one section
-    document places when many parts place it (reading 86), and many branch rules at the end of a
-    long chain of section documents, each to a target that a document placed twice writes. On each,
-    the time now grows about as the input does, and the last two no longer hold memory that grows
-    faster than their size. No verdict, refusal or sentence moves.
+  - `assembly-limit`: a package whose tests together place section documents more than 4,096
+    times, or place more than 8 MiB (8,388,608 bytes) of them, is refused with one refusal, and none
+    of its tests is judged. A section document placed in two test parts, or in two tests, counts
+    twice, and its bytes count each time. The refusal's detail names the `bound` passed,
+    `placements` or `bytes`, its `limit` and the count `reached`. Whether a package is refused never
+    depends on the order of its manifest's resources, but which bound the refusal names, and its
+    `reached`, may. This is plate's own stated limit, not a rule of QTI, as the element-depth limit
+    of 256 is. A section document is judged once for each placement (readings 5 and 145), so a
+    package's tests can make that work far larger than the package. Issue #64 tracks the redesign
+    that would lift the limit. Within it, every verdict is as before. Corpus: none, since no corpus
+    package holds a section ref.
+  - Within the assembly limit, these hostile shapes no longer take time that grows faster than their
+    size: many sibling `q` elements, many default hotspots before trailing text, many resources that
+    name one large document, many references under a deep `xml:base`, a section document that many
+    parts place, many refusals across a test's placements, a long inclusion chain, branch rules
+    whose target many section documents write, many names read through the section documents that
+    one section document places when many parts place it (reading 86), and many branch rules at the
+    end of a long chain of section documents, each to a target that a document placed twice writes.
+    On each, the time now grows about as the input does, and the last two no longer hold memory that
+    grows faster than their size. No verdict, refusal or sentence moves.
 
 ### Record answers and `qti-field-value` (M3)
 

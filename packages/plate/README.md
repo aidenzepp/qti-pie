@@ -726,18 +726,23 @@ holds no value for in a test *(pending)*: the test's own `numAttempts` or `compl
 the test declares none, `QTI_CONTEXT` or a context variable, the `duration` of a part, a section or
 an item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`, or a
 `qti-test-variables` of `duration`. In a test that holds a `qti-assessment-section-ref`, it also
-marks a dotted name unless the name is a part, section or item ref of the test document itself, a
-dot, and a variable name that holds no dot. After an item ref that a selection with replacement can
-repeat, an occurrence number may come before the variable name, as in `a.2.SCORE`. So it marks
-`I1.SCORE` where `I1` is an item ref in a section document, and `a.b.SCORE` where `a` is the test's
-own item ref and `a.b` a section document's, even when `a`'s item declares `b.SCORE`. It also marks
-such a test's outcome processing when the processing holds one of the eight expressions above,
-because they would look up only the test document's own items: a session delivers none of a section
-document's items. `openPackage` also marks a test's outcome processing, and leaves out a template
-default, that reads an item's context variable through its item ref, such as `ITEM1.CTX` where the
-item declares `CTX` in a `qti-context-declaration`: the item marks that declaration, and plate holds
-no value of it. A test checked apart from its items cannot see this, so there its processing runs
-and fails at that read with `UnknownIdentifierError`. `open` accepts these, as pantry does.
+marks a dotted name, judged by the test document alone, unless the name is a part, section or item
+ref of the test document itself, a dot, and a variable name that holds no dot. After an item ref
+that a selection with replacement can repeat, an occurrence number may come before the variable
+name, as in `a.2.SCORE`. So it marks `I1.SCORE` where `I1` is an item ref in a section document, and
+`a.b.SCORE` where `a` is the test's own item ref and `a.b` a section document's, even when `a`'s
+item declares `b.SCORE`. It also marks such a test's outcome processing when the processing holds
+one of the eight expressions above, because they would look up only the test document's own items: a
+session delivers none of a section document's items. `openPackage` reads the items, and marks a name
+that the test document alone leaves unmarked when the one reading that resolves the name is through
+an item ref or section that a section document holds. It marks `x.y.SCORE`, for example, where the
+test's own item ref `x.y` names an item that declares no `SCORE` and a section document's item ref
+`x` names one that declares `y.SCORE`. `openPackage` also marks a test's outcome processing, and
+leaves out a template default, that reads an item's context variable through its item ref, such as
+`ITEM1.CTX` where the item declares `CTX` in a `qti-context-declaration`: the item marks that
+declaration, and plate holds no value of it. A test checked apart from its items cannot see this, so
+there its processing runs and fails at that read with `UnknownIdentifierError`. `open` accepts
+these, as pantry does.
 
 `openPackage` accepts a test that sets a variable from `qti-field-value` of an item's `record`
 response, whatever the field, in its outcome processing or in an item ref's template default.
@@ -951,6 +956,11 @@ The `path` of a file reference's `package-file-missing` and of an `item-ref-unre
 `chain` of an `inclusion-cycle`, are at most 1,024 characters: a longer one keeps its first 512 and
 its last 511 characters around one `…`.
 
+To open packages you do not trust, call `openPackage` under a time limit too, as [Scoring](#scoring)
+says for `score`. A package whose tests together place section documents more than 4,096 times, or
+place more than 8 MiB of them, is refused `assembly-limit` before any test is judged
+([Limits](#limits)). Within that limit, a package built to be slow can still take seconds.
+
 An item ref may name an LTI link in place of an item ([reading 110](../../docs/spec-readings.md),
 "under an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded
 limit, and a template default is refused"). `openPackage` delivers the test with the ref marked
@@ -972,6 +982,7 @@ the row names.
 | Limit | Cause | What would lift it |
 | --- | --- | --- |
 | A document nested deeper than 256 elements is refused `reader-refused`, its `readerRule` `element-depth`, as crust refuses it. XML and QTI set no depth | The bound protects the recursive walks over a read document | Walks that keep their own stack, then a higher bound in crust's reader |
+| A package whose tests together place section documents more than 4,096 times, or place more than 8 MiB (8,388,608 bytes) of them, is refused `assembly-limit`, its `bound` `placements` or `bytes`, and none of its tests is judged. A section document placed in two test parts, or in two tests, counts twice, and its bytes count each time | A section document is judged once for each placement (readings 5 and 145), so the work follows the assembled tests, which test parts, tests and chains of section documents can make far larger than the package | The redesign that [issue #64](https://github.com/aidenzepp/qti-pie/issues/64) tracks: no placement for each test part, and a section document judged once across tests whose reaches agree |
 | A section ref whose `href` leads outside the package is refused `package-path-outside`, check `remote-section` (reading 170) | plate never fetches a section, so it cannot assemble the test | Fetching the section when the package is opened |
 | A document that holds an `xi:include` is `unchecked`. A loop through includes is not seen, and the `xml:lang` of an included fragment asks for no LOM listing | plate never fetches an included fragment | Fetching each fragment and judging it in place |
 | Under an item ref that names an LTI link, a variable mapping's source and a name read through the ref are accepted unchecked (readings 106 and 110). The mapping's target is judged by reading 97 | The package declares nothing that a link reports | A source that lists the outcomes a link reports |
