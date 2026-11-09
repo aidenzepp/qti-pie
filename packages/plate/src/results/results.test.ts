@@ -472,8 +472,9 @@ const typedRecord = (text: string): RecordValue => ({
 /**
  * An item written for this test whose template processing sets `HIDDEN` to `B` and `BLOCK` to `Y`.
  * Its shuffled Choice bound to `RESPONSE` holds `A` to `D`, `B` hidden while `HIDDEN` holds `B`;
- * its template block `X`, shown only while `BLOCK` holds `X`, holds a shuffled Choice bound to
- * `INNER`. So the page shows three of `RESPONSE`'s choices and no `INNER` at all.
+ * its template inline `X`, shown only while `BLOCK` holds `X`, holds a shuffled Inline Choice bound
+ * to `INNER` in its `span`, since a template block may hold no interaction (reading 143). So the
+ * page shows three of `RESPONSE`'s choices and no `INNER` at all.
  */
 const hidingXml = [
   '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="hiding"',
@@ -498,14 +499,13 @@ const hidingXml = [
   '<qti-simple-choice identifier="C">Charlie</qti-simple-choice>',
   '<qti-simple-choice identifier="D">Delta</qti-simple-choice>',
   "</qti-choice-interaction>",
-  '<qti-template-block identifier="X" template-identifier="BLOCK" show-hide="show">',
-  "<qti-content-body><div>",
-  '<qti-choice-interaction response-identifier="INNER" max-choices="1" shuffle="true">',
-  '<qti-simple-choice identifier="P">Papa</qti-simple-choice>',
-  '<qti-simple-choice identifier="Q">Quebec</qti-simple-choice>',
-  '<qti-simple-choice identifier="R">Romeo</qti-simple-choice>',
-  "</qti-choice-interaction>",
-  "</div></qti-content-body></qti-template-block>",
+  '<p><qti-template-inline identifier="X" template-identifier="BLOCK" show-hide="show"><span>',
+  '<qti-inline-choice-interaction response-identifier="INNER" shuffle="true">',
+  '<qti-inline-choice identifier="P">Papa</qti-inline-choice>',
+  '<qti-inline-choice identifier="Q">Quebec</qti-inline-choice>',
+  '<qti-inline-choice identifier="R">Romeo</qti-inline-choice>',
+  "</qti-inline-choice-interaction>",
+  "</span></qti-template-inline></p>",
   "</qti-item-body></qti-assessment-item>",
 ].join("");
 
@@ -1294,7 +1294,7 @@ describe("results", () => {
   );
 
   it.effect(
-    "[I-5] writes a shuffled Choice's choiceSequence in the order the page renders under the record, without the choice its template hides, none for a Choice a hidden template block holds, and the template variables between the responses and the outcomes",
+    "[I-5] writes a shuffled Choice's choiceSequence in the order the page renders under the record, without the choice its template hides, none for an Inline Choice a hidden template inline holds, and the template variables between the responses and the outcomes",
     () =>
       Effect.gen(function* hiddenChoice() {
         const hiding = yield* acceptItem("items/hiding.xml", new TextEncoder().encode(hidingXml));
@@ -1478,7 +1478,7 @@ describe("results", () => {
   );
 
   it.effect(
-    "[I-5] reports the record's value, not the saved one, for a response only a template block the record hides binds, as score keeps it, and a shown response's saved value",
+    "[I-5] reports the record's value, not the saved one, for a response only a template inline the record hides binds, as score keeps it, and a shown response's saved value",
     () =>
       Effect.gen(function* savedHidden() {
         const hiding = yield* acceptItem("items/hiding.xml", new TextEncoder().encode(hidingXml));

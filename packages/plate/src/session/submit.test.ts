@@ -491,15 +491,29 @@ const plainChoice = (identifier: string): string =>
   `<qti-simple-choice identifier="${identifier}">Choice ${identifier}</qti-simple-choice>`;
 
 /**
- * Write the text of a template block shown by the template variable `T` when it holds the block's
- * identifier.
+ * Write the text of a hand-built Inline Choice bound to a single identifier response, its choices
+ * `Choice` and their identifiers.
  *
- * @param identifier The block's identifier.
- * @param content The block's content.
- * @returns The block's text.
+ * @param response The response it binds.
+ * @param choices The identifiers of its choices.
+ * @param required Whether it carries `required="true"`, so `validate-responses` refuses a NULL
+ *   post.
+ * @returns The interaction's text.
  */
-const blockShownByT = (identifier: string, content: string): string =>
-  `<qti-template-block identifier="${identifier}" template-identifier="T" show-hide="show"><qti-content-body>${content}</qti-content-body></qti-template-block>`;
+const inlineChoiceXml = (response: string, choices: readonly string[], required = false): string =>
+  `<qti-inline-choice-interaction response-identifier="${response}" shuffle="false"${required ? ' required="true"' : ""}>${choices.map((identifier) => `<qti-inline-choice identifier="${identifier}">Choice ${identifier}</qti-inline-choice>`).join("")}</qti-inline-choice-interaction>`;
+
+/**
+ * Write the text of a paragraph holding a template inline shown by the template variable `T` when
+ * it holds the inline's identifier. A template block may hold no interaction (reading 143), so an
+ * interaction shown or hidden by a template sits in a template inline's `span`.
+ *
+ * @param identifier The inline's identifier.
+ * @param content The content of its `span`.
+ * @returns The paragraph's text.
+ */
+const inlineShownByT = (identifier: string, content: string): string =>
+  `<p><qti-template-inline identifier="${identifier}" template-identifier="T" show-hide="show"><span>${content}</span></qti-template-inline></p>`;
 
 /**
  * Write the text of a hand-built templated item: `RESPONSE`, a single identifier whose correct
@@ -930,9 +944,9 @@ describe("submitItem", () => {
   );
 
   it.effect(
-    "[I-5] under validate-responses true judges a template block the item's record shows: its Choice of min-choices 1 refuses an empty post (responses-invalid) and accepts a choice",
+    "[I-5] under validate-responses true judges a template inline the item's record shows: its required Inline Choice refuses an empty post (responses-invalid) and accepts a choice",
     () =>
-      Effect.gen(function* shownBlock() {
+      Effect.gen(function* shownInline() {
         const delivery = yield* builtDelivery(
           "block",
           [partOf("part", ["block"], { control: 'validate-responses="true"' })],
@@ -940,10 +954,7 @@ describe("submitItem", () => {
             [
               "block",
               templatedItemXml("block", "X", {
-                body: blockShownByT(
-                  "X",
-                  choiceXml("RESPONSE", ["A", "B", "C"].map(plainChoice).join(""), 1),
-                ),
+                body: inlineShownByT("X", inlineChoiceXml("RESPONSE", ["A", "B", "C"], true)),
               }),
             ],
           ],
@@ -1031,9 +1042,9 @@ describe("submitItem", () => {
   );
 
   it.effect(
-    "[I-5] under allow-skipping false counts a template block's interaction the item's record shows: an empty submit is skipping-not-allowed, and an answer is accepted",
+    "[I-5] under allow-skipping false counts a template inline's interaction the item's record shows: an empty submit is skipping-not-allowed, and an answer is accepted",
     () =>
-      Effect.gen(function* shownBlockSkipped() {
+      Effect.gen(function* shownInlineSkipped() {
         const delivery = yield* builtDelivery(
           "unskippable",
           [partOf("part", ["unskippable"], { control: 'allow-skipping="false"' })],
@@ -1041,10 +1052,7 @@ describe("submitItem", () => {
             [
               "unskippable",
               templatedItemXml("unskippable", "X", {
-                body: blockShownByT(
-                  "X",
-                  choiceXml("RESPONSE", ["A", "B", "C"].map(plainChoice).join("")),
-                ),
+                body: inlineShownByT("X", inlineChoiceXml("RESPONSE", ["A", "B", "C"])),
               }),
             ],
           ],
@@ -1226,7 +1234,7 @@ describe("submitItem", () => {
   );
 
   it.effect(
-    "[I-5] under validate-responses true submits a templated item whose hidden template block's interaction holds a non-NULL declared default, with no refusal",
+    "[I-5] under validate-responses true submits a templated item whose hidden template inline's interaction holds a non-NULL declared default, with no refusal",
     () =>
       Effect.gen(function* hiddenDefault() {
         const delivery = yield* builtDelivery(
@@ -1238,7 +1246,7 @@ describe("submitItem", () => {
               templatedItemXml("hidden", "X", {
                 body: [
                   choiceXml("RESPONSE", ["A", "B", "C"].map(plainChoice).join("")),
-                  blockShownByT("Y", choiceXml("HIDDEN", ["D", "E"].map(plainChoice).join(""))),
+                  inlineShownByT("Y", inlineChoiceXml("HIDDEN", ["D", "E"])),
                 ].join(""),
                 declarations:
                   '<qti-response-declaration identifier="HIDDEN" cardinality="single" base-type="identifier"><qti-default-value><qti-value>E</qti-value></qti-default-value></qti-response-declaration>',

@@ -610,14 +610,16 @@ const builtInDefaults = `<?xml version="1.0" encoding="UTF-8"?>
 
 /**
  * Write a hand-built item document whose template processing sets the single identifier template
- * variable `BLOCK` to `NO`, so its record hides the template block shown when `BLOCK` holds `YES`.
+ * variable `BLOCK` to `NO`, so its record hides the template inline shown when `BLOCK` holds `YES`.
  * Its response `R2` of identifiers has the correct response `C1`, then `C2` where it is not single,
- * and its response processing sets `SCORE` to 1 when `R2` matches it, else to 0.
+ * and its response processing sets `SCORE` to 1 when `R2` matches it, else to 0. A template block
+ * may hold no interaction (reading 143), so the hidden interaction sits in a template inline's
+ * `span`, and is an inline one.
  *
  * @param interaction The interaction bound to `R2`, as its markup.
  * @param cardinality `R2`'s cardinality.
- * @param hidden Whether the interaction sits in that hidden template block, rather than in the
- *   item body outside any template block.
+ * @param hidden Whether the interaction sits in that hidden template inline, rather than in the
+ *   item body outside any template content.
  * @returns The item document.
  */
 const blockDocument = (
@@ -636,7 +638,7 @@ const blockDocument = (
   </qti-template-processing>
   <qti-item-body>
     <p>Intro</p>
-    ${hidden ? `<qti-template-block identifier="YES" template-identifier="BLOCK" show-hide="show"><qti-content-body>${interaction}</qti-content-body></qti-template-block>` : interaction}
+    ${hidden ? `<p><qti-template-inline identifier="YES" template-identifier="BLOCK" show-hide="show"><span>${interaction}</span></qti-template-inline></p>` : interaction}
   </qti-item-body>
   <qti-response-processing>
     <qti-response-condition>
@@ -660,10 +662,17 @@ const orderOfTwo =
   '<qti-order-interaction response-identifier="R2"><qti-simple-choice identifier="C1">One</qti-simple-choice><qti-simple-choice identifier="C2">Two</qti-simple-choice></qti-order-interaction>';
 
 /**
- * A single Choice bound to `R2` over the choices `C1` and `C2`: an interaction the renderer shows.
+ * A Custom Interaction bound to `R2`: an inline interaction the renderer shows as a notice, so it
+ * binds no response on the page, and one a template inline may hold (reading 143).
  */
-const choiceOfTwo =
-  '<qti-choice-interaction response-identifier="R2" max-choices="1"><qti-simple-choice identifier="C1">One</qti-simple-choice><qti-simple-choice identifier="C2">Two</qti-simple-choice></qti-choice-interaction>';
+const customOfR2 = '<qti-custom-interaction response-identifier="R2"/>';
+
+/**
+ * An Inline Choice bound to `R2` over the choices `C1` and `C2`: an inline interaction the renderer
+ * shows.
+ */
+const inlineChoiceOfTwo =
+  '<qti-inline-choice-interaction response-identifier="R2"><qti-inline-choice identifier="C1">One</qti-inline-choice><qti-inline-choice identifier="C2">Two</qti-inline-choice></qti-inline-choice-interaction>';
 
 /**
  * Open a hand-built item document, which `check` must accept (with or without unsupported
@@ -1351,11 +1360,11 @@ describe("score over the content a templated item's record shows", () => {
 
 describe("score over a response an interaction the renderer shows as a notice binds", () => {
   it.effect(
-    "[I-5] stores the record's NULL for a response only an Order in a hidden template block binds, whatever is posted, and scores it",
+    "[I-5] stores the record's NULL for a response only a Custom Interaction, shown as a notice, in a hidden template inline binds, whatever is posted, and scores it",
     () =>
       Effect.gen(function* dropsHiddenNotice() {
         const stored = yield* scoredInBlock(
-          blockDocument(orderOfTwo, "ordered", true),
+          blockDocument(customOfR2, "ordered", true),
           identifiers("ordered", "C1", "C2"),
         );
 
@@ -1365,11 +1374,11 @@ describe("score over a response an interaction the renderer shows as a notice bi
   );
 
   it.effect(
-    "[I-5] stores the record's NULL for a response only a Choice in a hidden template block binds, whatever is posted, and scores it",
+    "[I-5] stores the record's NULL for a response only an Inline Choice in a hidden template inline binds, whatever is posted, and scores it",
     () =>
       Effect.gen(function* dropsHiddenChoice() {
         const stored = yield* scoredInBlock(
-          blockDocument(choiceOfTwo, "single", true),
+          blockDocument(inlineChoiceOfTwo, "single", true),
           identifiers("single", "C1"),
         );
 

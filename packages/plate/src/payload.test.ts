@@ -1923,31 +1923,42 @@ describe("redactItem on template blocks, inlines and choices", () => {
 });
 
 /**
- * Build a template block of `T`, shown when `T` holds its identifier, whose content holds a Text
- * Entry bound to the response given.
+ * Build a paragraph holding a template inline of `T`, shown when `T` holds its identifier, whose
+ * `span` holds a Text Entry bound to the response given. A template block may hold no interaction
+ * (reading 143), so the interaction a template shows or hides sits in a template inline.
  *
- * @param identifier The block's identifier.
+ * @param identifier The inline's identifier.
  * @param response The response its Text Entry binds.
- * @returns The block's source element.
+ * @returns The paragraph's source element.
  */
-const answeringBlock = (identifier: string, response: string): SourceElement =>
+const answeringInline = (identifier: string, response: string): SourceElement =>
   el(
-    "qti-template-block",
-    [attr("identifier", identifier), attr("show-hide", "show"), attr("template-identifier", "T")],
+    "p",
+    [],
     [
       el(
-        "qti-content-body",
-        [],
-        [el("p", [], [el("qti-text-entry-interaction", [attr("response-identifier", response)])])],
+        "qti-template-inline",
+        [
+          attr("identifier", identifier),
+          attr("show-hide", "show"),
+          attr("template-identifier", "T"),
+        ],
+        [
+          el(
+            "span",
+            [],
+            [el("qti-text-entry-interaction", [attr("response-identifier", response)])],
+          ),
+        ],
       ),
     ],
   );
 
 /**
- * An item whose body holds two template blocks of `T`: `A`, whose Text Entry binds the string
+ * An item whose body holds two template inlines of `T`: `A`, whose Text Entry binds the string
  * response `SHOWN_ANSWER`, and `B`, whose Text Entry binds the float response `HIDDEN_ANSWER`.
  */
-const blockAnswers: SourceDocument = doc(
+const inlineAnswers: SourceDocument = doc(
   "item.xml",
   el(
     "qti-assessment-item",
@@ -1971,7 +1982,7 @@ const blockAnswers: SourceDocument = doc(
       el(
         "qti-item-body",
         [],
-        [answeringBlock("A", "SHOWN_ANSWER"), answeringBlock("B", "HIDDEN_ANSWER")],
+        [answeringInline("A", "SHOWN_ANSWER"), answeringInline("B", "HIDDEN_ANSWER")],
       ),
     ],
   ),
@@ -2029,8 +2040,8 @@ const respondedTo = (redaction: Redacted): readonly string[] =>
   redaction.responses.map((binding) => binding.identifier);
 
 describe("redactItem on responses only hidden content binds", () => {
-  it("[I-5] lists no response only a template block the record hides binds, in the redacted item or its JSON, and names that response as hidden-only", () => {
-    const accepted = Option.getOrThrow(acceptedItem(check(blockAnswers, tables, Option.none())));
+  it("[I-5] lists no response only a template inline the record hides binds, in the redacted item or its JSON, and names that response as hidden-only", () => {
+    const accepted = Option.getOrThrow(acceptedItem(check(inlineAnswers, tables, Option.none())));
     const showingA = holding({ T: identifierValue("A") });
     const shown = redact(accepted, showingA);
 
@@ -3677,7 +3688,7 @@ const counted = (value: Value): CountedValue => {
 
 describe("redactStructure", () => {
   it("[I-5] decides what redactItem decides over the templated fixtures: the same interactions and choices, responses, notices and hidden-only responses", () => {
-    const answers = acceptedFrom(blockAnswers);
+    const answers = acceptedFrom(inlineAnswers);
     const parameters = acceptedFrom(parameterDocument);
     const containers = acceptedFrom(containerParameterDocument);
     const cases: readonly (readonly [string, Item, RedactRecord | undefined])[] = [
@@ -3694,9 +3705,9 @@ describe("redactStructure", () => {
       ),
       ["template visibility with no record", visibility, undefined],
       ["template visibility with no value of VISIBLE", visibility, holding({})],
-      ["answering blocks, T holding A", answers, holding({ T: identifierValue("A") })],
-      ["answering blocks, T holding B", answers, holding({ T: identifierValue("B") })],
-      ["answering blocks with no record", answers, undefined],
+      ["answering inlines, T holding A", answers, holding({ T: identifierValue("A") })],
+      ["answering inlines, T holding B", answers, holding({ T: identifierValue("B") })],
+      ["answering inlines with no record", answers, undefined],
       ["parameters the record expands", parameters, parameterValues],
       ["parameters the record withholds", parameters, holding({})],
       ["container parameters", containers, containerParameterValues],
