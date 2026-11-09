@@ -374,6 +374,7 @@ const admitsWild = (attribute: { readonly domain: Domain }, declaresId: boolean)
  * `xml:` names are validated, as a `lax` attribute wildcard's are.
  *
  * @param kinds - The composition's kinds.
+ * @param namespaceOf - Each kind's namespace ({@link namespaceOfKind}).
  * @param declared - The keys of the attributes the vocabularies admit ({@link attributeKey}).
  * @param declaresId - The (version, kind)s whose declared uses include an ID-derived one,
  *   `<version> <kind>`.
@@ -381,6 +382,7 @@ const admitsWild = (attribute: { readonly domain: Domain }, declaresId: boolean)
  */
 const layerOf = (
   kinds: Kinds<string, string>,
+  namespaceOf: (kind: string) => NamespaceOfKind,
   declared: ReadonlySet<string>,
   declaresId: ReadonlySet<string>,
 ): readonly Declared[] => {
@@ -391,7 +393,7 @@ const layerOf = (
       .flatMap(({ kind, namespace, processing, versions: holding }) =>
         holding.flatMap((version) =>
           open
-            .attributesUnder({ namespace, processing }, namespaceOfKind(kinds, kind))
+            .attributesUnder({ namespace, processing }, namespaceOf(kind))
             .filter(({ name }) => !covered(version, kind) || name === "data-*")
             .filter((attribute) => admitsWild(attribute, declaresId.has(`${version} ${kind}`)))
             .map((attribute) => ({ attribute, kind, version })),
@@ -515,6 +517,7 @@ interface GovernedAttributes {
  * assesses.
  *
  * @param kinds - The composition's kinds.
+ * @param namespaceOf - Each kind's namespace ({@link namespaceOfKind}).
  * @param xsi - The `xsi:type` law's relations.
  * @param governingTexts - The texts of the named types the composition's elements may be governed
  *   by ({@link governingTextsOf}).
@@ -522,6 +525,7 @@ interface GovernedAttributes {
  */
 const governedOf = (
   kinds: Kinds<string, string>,
+  namespaceOf: (kind: string) => NamespaceOfKind,
   xsi: XsiTypes,
   governingTexts: readonly TypeText[],
 ): GovernedAttributes => {
@@ -559,7 +563,7 @@ const governedOf = (
     const hosts = [
       ...rowsAt(wildcardOf, key).flatMap(({ namespace, processing }) =>
         open
-          .attributesUnder({ namespace, processing }, namespaceOfKind(kinds, kind))
+          .attributesUnder({ namespace, processing }, namespaceOf(kind))
           .filter(({ name }) => !covered(version, kind) || name === "data-*")
           .filter((attribute) => admitsWild(attribute, declaresId)),
       ),
@@ -708,7 +712,12 @@ export const compose = <const V extends readonly Vocabulary[]>(
       ),
       vocabularies: list,
     });
-    const namespaceOf = (kind: string) => namespaceOfKind(base, kind);
+    // Each kind's namespace, read once from its `ElementName` row: the readers below ask it of a
+    // kind once per wildcard position and global kind.
+    const kindNamespaces: ReadonlyMap<string, NamespaceOfKind> = new Map(
+      base.nodeKind.handles.map((kind) => [kind, namespaceOfKind(base, kind)]),
+    );
+    const namespaceOf = (kind: string): NamespaceOfKind => kindNamespaces.get(kind) ?? nameless;
     const installed = yield* contentOf({
       facets: stated.map((facet) => facet.content),
       foreignRoots: open.foreignRoots,
@@ -775,8 +784,8 @@ export const compose = <const V extends readonly Vocabulary[]>(
     const governingTexts = governingTextsOf(list.map(({ namespace }) => namespace));
     const attributes = yield* generateAttributes(
       {
-        declarations: [...declarations, ...layerOf(kinds, declared, declaresId)],
-        ...governedOf(kinds, xsi, governingTexts),
+        declarations: [...declarations, ...layerOf(kinds, namespaceOf, declared, declaresId)],
+        ...governedOf(kinds, namespaceOf, xsi, governingTexts),
         kinds: kinds.nodeKind,
         names: kinds.attributeName,
         texts: textTypes.filter(({ kind }) => kinds.nodeKind.has(kind)),
