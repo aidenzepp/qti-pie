@@ -1750,11 +1750,13 @@ export const withUnheldReads = (test: Test, reads: readonly UnheldRead[]): Test 
 };
 
 /**
- * An item ref of a test document that names an LTI link in place of an item (reading 110, "a
- * variable mapping and a template default name variables an item declares, so under an item ref
- * that names an LTI link both are refused"), which the test model cannot see from the test
- * document alone: its identifier, and its path in the test document. A package, which reads the
- * resource an item ref names, finds each one.
+ * An item ref of a test document that names an LTI link in place of an item (reading 110, "under
+ * an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded limit,
+ * and a template default is refused"), which the test model cannot see from the test document
+ * alone: its identifier, and its path in the test document. A package, which reads the resource an
+ * item ref names, finds each one (`#plate/package/open.ts`). It leaves a variable mapping's source
+ * under the ref unchecked, judges the mapping's target by reading 97, refuses a template default
+ * `undeclared-variable`, and delivers the test without the ref ({@link withLtiLinks}).
  */
 export interface LtiLink {
   readonly identifier: string;

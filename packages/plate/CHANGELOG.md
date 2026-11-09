@@ -182,8 +182,11 @@ M3.
   - A Text Entry's or Extended Text's `string-identifier` names a declared `string` response other
     than its `response-identifier`, and an element's `id` may not equal a response's identifier
     (reading 14, "a text-entry interaction's `response-identifier` and `string-identifier` are
-    `xs:IDREF`s"). The refusals are `undeclared-response`, `binding` with check `string-binding` or
-    `bound-once`, and `duplicate-identifier`. Corpus: none.
+    `xs:IDREF`s"). A `string-identifier` that names a `record` response, or a response whose base
+    type is spelled as anything but `string`, is refused, and no cardinality is asked of the
+    response, for Text Entry and Extended Text alike. The information model asks only for "a second
+    response variable (of base-type string)". The refusals are `undeclared-response`, `binding` with
+    check `string-binding` or `bound-once`, and `duplicate-identifier`. Corpus: none.
   - An interaction whose count allows more than one choice, or any number, binds a `multiple`
     response (`binding`, check `count-cardinality`). Before, plate rendered it as a multi-select
     over a single response. One response binds one interaction (`binding`, check `bound-once`). A
@@ -252,7 +255,7 @@ M3.
   - After a child a repeated wildcard holds, no element of an earlier particle follows:
     `misplaced-element`, check `order` (reading 96, "a repeated wildcard keeps its sequence's
     order"). Corpus: none.
-  - The ID table, in QTI's namespace only: a second element with one `id` is refused
+  - The ID table, over the elements QTI's tables govern: a second element with one `id` is refused
     `duplicate-identifier`, an IDREF that names no ID `attribute-type` with check `idref-target`,
     and a wildcard `xml:id` on an element whose type declares an ID `unknown-attribute`
     (reading 101, "an ID that an element's text carries is bound to that element's parent";
@@ -299,8 +302,10 @@ M3.
     keeps its notice.
   - `qti-card`: an empty `qti-card` or `qti-card-entry` is accepted. It was refused `child-count`
     (reading 31, "a card holds an HTML content node, file hrefs, both, or nothing").
-  - `qti-gap-match-interaction`: one with two or more gaps bound to a `single` response is refused
-    `binding`, check `gap-match-single`.
+  - `qti-gap-match-interaction`: one with two or more gaps bound to a `single`, an `ordered` or a
+    `record` response is refused `binding`, check `gap-match-single`, its `cardinality` fact naming
+    which (reading 169, "a gap match interaction with two or more gaps binds a response of multiple
+    cardinality"). A gap match of one gap is held to no cardinality.
   - The shared readings now agree with seven of the operator's eight disputed rulings: `%d` (P1),
     `qti-custom-interaction` (P2), `data-ssml` (P3), `qti-card` (P5), usage-data values (P6),
     `qti-gap-match-interaction` (P7) and a test's `SCORE` and `MAXSCORE` of any base type (P8). They
@@ -330,10 +335,15 @@ M3.
   - A PCI names its module by `module`, by `qti-interaction-modules` or by both, or it is refused
     `missing-attribute`, check `pci-module-source` (R10-a, "a PCI names its module by `module`, by
     `qti-interaction-modules`, or by both"). Corpus: none.
-  - Under an item ref that names an LTI link, a variable mapping is accepted unchecked, a recorded
-    limit, and so is a name read through the ref, whose processing is marked. A template default
-    under it stays refused `undeclared-variable` (reading 110 as amended; reading 106, "a prefixed
-    reference reaches every built-in variable its item ref's item holds"). Corpus: none.
+  - Under an item ref that names an LTI link, a variable mapping's source is accepted unchecked, a
+    recorded limit, and so is a name read through the ref, whose processing is marked. A template
+    default under it stays refused `undeclared-variable` (reading 110 as amended; reading 106, "a
+    prefixed reference reaches every built-in variable its item ref's item holds"). The mapping's
+    target is judged by reading 97 ("a variable mapping's target names no other variable its item
+    ref's item holds"): a second mapping of the ref with the same target, and a target that names
+    `completionStatus`, `numAttempts` or `duration` other than the mapping's own source, are refused
+    `duplicate-identifier`. A target of `QTI_CONTEXT` stays accepted there, since a link holds no
+    item variables. Corpus: none.
   - A section ref whose `href` leads outside the package is refused `package-path-outside`, check
     `remote-section`, in the test and in each section document it places. It is a stated limit, not
     a rule of QTI: plate never fetches a section (reading 170, "a section ref whose href is external
@@ -341,6 +351,64 @@ M3.
   - A tab, line feed or carriage return in a `data-ssml` value's `break.time` or `prosody.rate` is
     refused `attribute-type`, check `data-ssml` (R7-a, a `data-ssml` value is Data-SSML JSON).
     Corpus: none.
+- Repairs after the phase's review, each moving no corpus document:
+  - A session counts a numbered name such as `a.2.SCORE` as `openPackage` does, only through an
+    item ref that a selection with replacement can repeat (reading 88). With item refs `a` and `a.2`
+    and no such selection, outcome processing and a template default read item ref `a.2`'s `SCORE`.
+    Through a section document's `a.2`, the processing is marked, as other reads through a section
+    document are. `Test` and `TestScope` gain an optional `repeatable`, the identifiers of those
+    item refs, which `buildTest` always gives. Corpus: none.
+  - In a test's processing, and in a section document's under a test that reaches it, a
+    `qti-map-response` or `qti-map-response-point` of the test's `duration`, or of the `numAttempts`
+    plate keeps for a test that declares none, is refused `template-requirements`, as an item's of
+    its own built-in is (reading 166, "an unprefixed `qti-map-response` or `qti-map-response-point`
+    that names a built-in response variable, an item's `numAttempts` or `duration` or a test's
+    `duration`, is refused under 'Mapped response' too"). A test that declares `numAttempts` keeps
+    the `undeclared-variable` refusal (reading 168). The sentence for a built-in in a test's or a
+    section's processing asks for a response an item declares, read through its item ref. Corpus:
+    none.
+  - A stimulus is judged as an item's body is for its choices, its PCIs, its table headers and its
+    quotation marks. Two choices that share an identifier are refused `duplicate-identifier`
+    (reading 104, "a choice's identifier is used by no other choice of any class in its document"),
+    a PCI that names no module `missing-attribute` with check `pci-module-source` (R10-a), a
+    `headers` token that names no `th` of its table `attribute-type` with check `headers`
+    (reading 126), and a quotation mark beside or inside a `q` `text-not-allowed` with check
+    `quotation` (reading 127). A stimulus declares no variables, so no choice of one is refused for
+    naming a variable. Corpus: none.
+  - A `qti-rubric-block` of a test or a section, and a `qti-test-feedback`, are judged for `headers`
+    (reading 126) and `q` (reading 127) as an item's body is, in a test and in a section document.
+    Corpus: none.
+  - What the manifest's version decides is judged only on the elements the structural walk checks
+    (reading 57, "in lax wildcard content, every prose rule judges the QTI elements the structural
+    walk checks there"). In a 3.0.0 package, a `qti-custom-interaction` inside lax wildcard content,
+    which the XSD declares only within its parents, is not refused. In a 3.0.1 package, a
+    `mastery-value` inside a QTI root nested in lax content, which reading 6 keeps foreign, is not
+    refused `mastery-range`. Corpus: none.
+  - An element the walk passes over laxly has its `xml:id` and `xml:lang` judged, as XML Schema
+    assesses it against the ur-type. Its `xml:lang` is held to reading 129's language tags. Its
+    `xml:id` is held to `xs:ID`, and below an element QTI's tables govern it is one of the
+    document's IDs: a repeat is refused `duplicate-identifier` (reading 101), an IDREF that names it
+    resolves, and a `data-catalog-idref` that names it is refused `attribute-type` with check
+    `catalog-reference`, since it names no `qti-catalog`, and not with check `idref-target`. An
+    `xml:id` that a wildcard admits and that is no NCName is refused `attribute-type`, as a declared
+    ID of that value is (reading 156). What the walk never visits stays unjudged, a README limit.
+    Corpus: none.
+  - A section document the manifest lists is judged whether or not a test reaches it: its item
+    refs, its section refs (reading 170), its variable mappings and its template defaults
+    (readings 97 and 110) are refused as a reached one's are, after the reached ones' refusals, in
+    the manifest's order. Its expressions are judged only under a test that reaches it. Corpus:
+    none.
+  - The `path` of a file reference's `package-file-missing` and of an `item-ref-unresolved`, and the
+    `chain` of an `inclusion-cycle`, are at most 1,024 characters: a longer one keeps its first 512
+    and its last 511 characters around one `…` (U+2026). This is plate's own bound, not a rule of
+    QTI, so that a hostile package cannot make its refusals too long to serialise. No corpus
+    refusal carries a fact that long, so no wording moves.
+  - These hostile shapes no longer take time that grows faster than their size: many sibling `q`
+    elements, many default hotspots before trailing text, many resources that name one large
+    document, many references under a deep `xml:base`, a section document that many parts place,
+    many refusals across a test's placements, a long inclusion chain, and branch rules whose target
+    many section documents write. On each, the time now grows about as the input does. No verdict,
+    refusal or sentence moves.
 
 ### Record answers and `qti-field-value` (M3)
 
