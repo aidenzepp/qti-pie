@@ -856,7 +856,7 @@ describe("README.md", () => {
 
     for (const fragment of [
       "the `duration` of a part, a section or an item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`",
-      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name, judged by the test document alone, unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
       "So do a `qti-variable`, `qti-correct` or `qti-default` of a `file` variable, of a `record` outcome or template variable, or of a `record` response with a `file` field",
       "A test's `qti-default` of its own `duration` gives NULL of a single duration",
       "A test reads an item's `numAttempts` as the number of attempts started, the count `results` writes",
@@ -901,7 +901,7 @@ describe("README.md", () => {
     assert.include(outcomes, "when the processing holds one of the eight expressions above");
     assert.include(
       outcomes,
-      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name, judged by the test document alone, unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
     );
   });
 
@@ -1148,7 +1148,7 @@ describe("README.md", () => {
     const outcomes = flatSectionOf("## Outcome processing");
 
     for (const fragment of [
-      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name, judged by the test document alone, unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
       "After an item ref that a selection with replacement can repeat, an occurrence number may come before the variable name, as in `a.2.SCORE`.",
       "So it marks `I1.SCORE` where `I1` is an item ref in a section document, and `a.b.SCORE` where `a` is the test's own item ref and `a.b` a section document's, even when `a`'s item declares `b.SCORE`.",
       "A session delivers only the items of the test document's own item refs, which is why the verdict marks the dotted names listed earlier in this section.",
@@ -1163,6 +1163,42 @@ describe("README.md", () => {
       outcomes,
       "the verdict marks a dotted name that reads through a section document",
     );
+  });
+
+  it("align-54 r12 limit docs assembly-limit: the Limits table holds the assembly limit with both bounds, its cause and issue #64, and Documents and packages advises a time limit for openPackage that names the bound", () => {
+    const limits = flatSectionOf("## Limits");
+
+    for (const fragment of [
+      "| A package whose tests together place section documents more than 4,096 times, or place more than 8 MiB (8,388,608 bytes) of them, is refused `assembly-limit`, its `bound` `placements` or `bytes`, and none of its tests is judged. A section document placed in two test parts, or in two tests, counts twice, and its bytes count each time |",
+      "| A section document is judged once for each placement (readings 5 and 145), so the work follows the assembled tests, which test parts, tests and chains of section documents can make far larger than the package |",
+      "| The redesign that [issue #64](https://github.com/aidenzepp/qti-pie/issues/64) tracks: no placement for each test part, and a section document judged once across tests whose reaches agree |",
+    ]) {
+      assert.include(limits, fragment);
+    }
+
+    const advice =
+      paragraphsOf("## Documents and packages").find((paragraph) =>
+        paragraph.includes("time limit"),
+      ) ?? assert.fail("Documents and packages advises no time limit for openPackage");
+    for (const fragment of [
+      "To open packages you do not trust, call `openPackage` under a time limit too, as [Scoring](#scoring) says for `score`.",
+      "more than 4,096 times, or place more than 8 MiB of them, is refused `assembly-limit` before any test is judged",
+    ]) {
+      assert.include(advice, fragment);
+    }
+  });
+
+  it("align-54 r12 limit docs D1: Outcome processing says that openPackage marks a name of the test's own form whose one resolving reading is a section document's, which the test document alone leaves unmarked", () => {
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "it also marks a dotted name, judged by the test document alone, unless the name is a part, section or item ref of the test document itself",
+      "`openPackage` reads the items, and marks a name that the test document alone leaves unmarked when the one reading that resolves the name is through an item ref or section that a section document holds.",
+      "It marks `x.y.SCORE`, for example, where the test's own item ref `x.y` names an item that declares no `SCORE` and a section document's item ref `x` names one that declares `y.SCORE`.",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
+    assert.notInclude(outcomes, "it also marks a dotted name unless the name is");
   });
 
   it("align-54 r11 docs 4, 6 and 9: Outcome processing names a test's map response of a built-in, a mapping's target under an LTI link and every section document the manifest lists", () => {
