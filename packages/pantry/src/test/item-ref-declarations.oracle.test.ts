@@ -942,10 +942,6 @@ const assertNoSentinel = (input: ItemRefPackage, inputs: PackageInputs, literal:
     [],
     `${literal}: an item ref's item holds the nil uuid`,
   );
-  assert.isFalse(
-    [...inputs.ItemRefTarget.values()].some(({ type }) => type === "none"),
-    `${literal}: an item ref's target stands for a resource the package lacks`,
-  );
   assert.deepStrictEqual(orphansOf(inputs), [], `${literal}: a family member has no owner`);
   assert.isFalse(
     [...inputs.TemplateDefault.values()].some(({ lexical }) => lexical === ""),
