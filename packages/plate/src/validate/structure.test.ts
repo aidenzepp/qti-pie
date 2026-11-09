@@ -2109,6 +2109,66 @@ const idResource = (dependencies: readonly SourceElement[]): SourceElement =>
     manifestNamespace,
   );
 
+/**
+ * Construct an ID/IDREF case's item whose body holds the given content and then a custom
+ * interaction, whose `##any` `lax` element wildcard admits the given children.
+ *
+ * @param before The body's children before the custom interaction.
+ * @param children The custom interaction's children.
+ * @returns The item as a source document.
+ */
+const laxItem = (
+  before: readonly SourceChild[],
+  ...children: readonly SourceChild[]
+): SourceDocument =>
+  idItem(
+    [idResponse],
+    [...before, el("qti-custom-interaction", [attr("response-identifier", "RESPONSE")], children)],
+  );
+
+/**
+ * An element of another namespace, which no table declares, so the walk passes over it laxly in
+ * a custom interaction's content.
+ *
+ * @param local Its local name.
+ * @param attributes Its attributes.
+ * @returns The element.
+ */
+const laxWidget = (local: string, ...attributes: readonly SourceAttribute[]): SourceElement =>
+  el(local, attributes, [text("w")], otherNamespace);
+
+/**
+ * The path of a {@link laxItem}'s custom interaction.
+ */
+const laxInteraction = `${idBody}/qti-custom-interaction`;
+
+/**
+ * The committed tables, with the custom interaction's element wildcard made `skip`, so its
+ * content is never visited: no committed table holds a `skip` wildcard.
+ */
+const skipping: Tables = {
+  ...generatedTables,
+  elements: {
+    ...generatedTables.elements,
+    "qti-custom-interaction": {
+      ...element(),
+      ...generatedTables.elements["qti-custom-interaction"],
+      anyElement: { namespace: "##any", process: "skip" },
+    },
+  },
+};
+
+/**
+ * Construct a {@link laxItem} whose custom interaction holds one element of another namespace that
+ * writes an `xml:lang`.
+ *
+ * @param language The `xml:lang`, as written.
+ * @param attributes The element's attributes before it.
+ * @returns The item as a source document.
+ */
+const laxLanguage = (language: string, ...attributes: readonly SourceAttribute[]): SourceDocument =>
+  laxItem([], laxWidget("w", ...attributes, attr("lang", language, xmlNamespace)));
+
 describe("checkStructure", () => {
   describe("the six rules", () => {
     it("[I-0] refuses an element its parent's table does not admit as unknown-element", () => {
@@ -5954,5 +6014,183 @@ describe("checkStructure", () => {
         }),
       { tags: ["corpus"] },
     );
+  });
+
+  describe("align-54 r11 lax xml attributes: xml:id and xml:lang are assessed wherever the walk visits an element (readings 101, 129 and 156)", () => {
+    it("align-54 r11 lax xml attributes finding 8: refuses a second xml:id of one value on an element passed over laxly as duplicate-identifier, and one equal to a checked element's id (reading 101)", () => {
+      assert.deepStrictEqual(
+        idFound(
+          laxItem(
+            [],
+            laxWidget("w", attr("id", "a", xmlNamespace)),
+            laxWidget("v", attr("id", "a", xmlNamespace)),
+          ),
+        ),
+        [
+          [
+            "duplicate-identifier",
+            at(`${laxInteraction}/{${otherNamespace}}v/@xml:id`),
+            { identifier: "a", reading: "101" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        idFound(
+          laxItem(
+            [el("p", [attr("id", "a")], [text("x")])],
+            laxWidget("w", attr("id", " a ", xmlNamespace)),
+          ),
+        ),
+        [
+          [
+            "duplicate-identifier",
+            at(`${laxInteraction}/{${otherNamespace}}w/@xml:id`),
+            { identifier: "a", reading: "101" },
+          ],
+        ],
+      );
+    });
+
+    it("align-54 r11 lax xml attributes finding 8: an IDREF naming the xml:id of an element passed over laxly resolves to it (reading 156)", () => {
+      assert.deepStrictEqual(
+        idFound(
+          laxItem(
+            [el("p", [attr("aria-labelledby", "lab")], [text("x")])],
+            laxWidget("w", attr("id", "lab", xmlNamespace)),
+          ),
+        ),
+        [],
+      );
+      assert.deepStrictEqual(
+        idFound(
+          laxItem(
+            [el("p", [attr("aria-labelledby", "lab")], [text("x")])],
+            laxWidget("w", attr("id", "lab")),
+          ),
+        ),
+        [
+          [
+            "attribute-type",
+            at(`${idBody}/p/@aria-labelledby`),
+            idrefTarget("p", "aria-labelledby", "lab"),
+          ],
+        ],
+      );
+    });
+
+    it("align-54 r11 lax xml attributes finding 8: refuses an xml:id that is no NCName as attribute-type, expected ID, on a qti-custom-operator whose attribute wildcard admits it and on an element passed over laxly, and it binds no ID, so two of them do not collide (reading 156)", () => {
+      const operator = idSet(
+        el("qti-custom-operator", [attr("class", "c"), attr("id", "1a", xmlNamespace)]),
+      );
+      const refusedId = (local: string) =>
+        [
+          "attribute-type",
+          at(`${laxInteraction}/{${otherNamespace}}${local}/@xml:id`),
+          {
+            attribute: "xml:id",
+            element: `{${otherNamespace}}${local}`,
+            expected: "ID",
+            value: "1a",
+          },
+        ] as const;
+
+      assert.deepStrictEqual(idFound(idItem([idScore], [el("p", [], [text("x")])], [operator])), [
+        [
+          "attribute-type",
+          at(`${idSetting}/qti-custom-operator/@xml:id`),
+          { attribute: "xml:id", element: "qti-custom-operator", expected: "ID", value: "1a" },
+        ],
+      ]);
+      assert.deepStrictEqual(
+        idFound(
+          laxItem(
+            [],
+            laxWidget("w", attr("id", "1a", xmlNamespace)),
+            laxWidget("v", attr("id", "1a", xmlNamespace)),
+          ),
+        ),
+        [refusedId("w"), refusedId("v")],
+      );
+    });
+
+    it('align-54 r11 lax xml attributes finding 8: refuses xml:lang="en_US" on an element passed over laxly as reading 129\'s row refuses it on a checked one, after its unresolvable xsi:type, and admits x-none and a padded tag (reading 129)', () => {
+      const at129 = (language: string) =>
+        [
+          "attribute-type",
+          at(`${laxInteraction}/{${otherNamespace}}w/@xml:lang`),
+          {
+            attribute: "xml:lang",
+            element: `{${otherNamespace}}w`,
+            expected: "a well-formed BCP 47 language tag, or empty",
+            reading: "129",
+            value: language,
+          },
+        ] as const;
+
+      assert.deepStrictEqual(idFound(laxLanguage("en_US")), [at129("en_US")]);
+      assert.deepStrictEqual(
+        idFound(laxLanguage("en_US", attr("type", "nowhere:T", xsiNamespace))).map(
+          ([rule, where, detail]) => [rule, where, detail["reading"]],
+        ),
+        [
+          [
+            "attribute-type",
+            at(`${laxInteraction}/{${otherNamespace}}w/@{${xsiNamespace}}type`),
+            "83",
+          ],
+          ["attribute-type", at(`${laxInteraction}/{${otherNamespace}}w/@xml:lang`), "129"],
+        ],
+      );
+      for (const language of ["x-none", " en-GB ", ""]) {
+        assert.deepStrictEqual(idFound(laxLanguage(language)), [], JSON.stringify(language));
+      }
+    });
+
+    it("align-54 r11 lax xml attributes finding 8: judges no xml:id or xml:lang in content a skip wildcard admits, which the walk never visits (the control)", () => {
+      const content = [
+        laxWidget("w", attr("id", "a", xmlNamespace), attr("lang", "en_US", xmlNamespace)),
+        laxWidget("v", attr("id", "a", xmlNamespace)),
+        laxWidget("u", attr("id", "1a", xmlNamespace)),
+      ];
+
+      assert.isNotEmpty(idFound(laxItem([], ...content)));
+      assert.deepStrictEqual(
+        checkStructure(laxItem([], ...content), skipping).map((refusal) => [
+          refusal.rule,
+          refusal.location,
+        ]),
+        [],
+      );
+    });
+
+    it("align-54 r11 lax xml attributes finding 8: a checked element's xml:id and xml:lang are judged as before: once each, and a wildcard xml:id beside a declared ID only as reading 109 refuses it (the control)", () => {
+      assert.deepStrictEqual(
+        cited(bodied(el("p", [attr("lang", "en_US", xmlNamespace)], [text("Colour")]))),
+        [["attribute-type", inBody("p/@xml:lang"), "129"]],
+      );
+      assert.deepStrictEqual(
+        idFound(idItem([], [el("p", [attr("id", "1a")], [text("x")])])).map(
+          ([rule, where, detail]) => [rule, where, detail["expected"]],
+        ),
+        [["attribute-type", at(`${idBody}/p/@id`), "ID"]],
+      );
+      assert.deepStrictEqual(idFound(idExit(attr("id", "1a", xmlNamespace))), [
+        [
+          "unknown-attribute",
+          at(`${idProcessing}/qti-exit-response/@xml:id`),
+          { attribute: "xml:id", element: "qti-exit-response", reading: "109" },
+        ],
+      ]);
+      assert.deepStrictEqual(
+        idFound(
+          idItem(
+            [idScore],
+            [el("p", [attr("aria-labelledby", "w")], [text("x")])],
+            [idSet(el("qti-custom-operator", [attr("id", " w ", xmlNamespace)]))],
+          ),
+        ),
+        [],
+      );
+    });
   });
 });

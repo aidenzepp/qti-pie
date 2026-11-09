@@ -522,9 +522,10 @@ interface WithdrawnAttribute {
 /**
  * A reading that narrows an attribute of XML's own namespace, which XML defines for every element:
  * on every element the walk checks, in every namespace, whether the table that governs it declares
- * the attribute or an attribute wildcard admits it, the value collapsed must satisfy `holds`, which
- * also reads the element, or it is `attribute-type` with `expected` as the values the row admits,
- * citing `reading`. An attribute the walk refuses as `unknown-attribute` is not read again.
+ * the attribute or an attribute wildcard admits it, and on every element it passes over laxly, the
+ * value collapsed must satisfy `holds`, which also reads the element, or it is `attribute-type`
+ * with `expected` as the values the row admits, citing `reading`. An attribute the walk refuses as
+ * `unknown-attribute` is not read again.
  */
 interface XmlAttribute {
   readonly attribute: string;
@@ -1552,10 +1553,14 @@ const readingRows: readonly ReadingRow[] = [
   },
   // Reading 129: `xml:lang`, on every element, is a tag or empty (XML 1.0, section 2.12), its
   // whitespace collapsed as `xs:language` collapses it, and on an item's or a stimulus's root a tag
-  // and never empty. XML defines it for every element, so these rows read it in every namespace
-  // the walk checks, a manifest's LOM strings among them, where `xml.xsd`'s type, or the wildcard
-  // that admits it, says nothing of its value. An element the walk passes over, such as MathML
-  // under its `skip` wildcard, is not read: plate's open limit, beside reading 60's.
+  // and never empty. XML defines it for every element, so these rows read it on every element the
+  // walk visits, in every namespace: each it checks, a manifest's LOM strings among them, and each
+  // it passes over laxly, where `xml.xsd`'s type, or the wildcard that admits it, says nothing of
+  // its value. What the walk never visits is not read, plate's open limit beside reading 60's: what
+  // a `skip` wildcard admits; an element of a namespace plate holds no tables for, such as MathML,
+  // that its parent's table names or a `strict` wildcard admits; a QTI root or a manifest nested in
+  // lax content (reading 6); and content a complex `xsi:type` keeps unchecked (reading 50); each
+  // with everything below it.
   {
     attribute: "lang",
     expected: "a well-formed BCP 47 language tag, which an item or a stimulus may not leave empty",
@@ -2553,7 +2558,8 @@ const checkUndeclared = (
 
 /**
  * Check an attribute of XML's own namespace against the rows that narrow it, on an element of any
- * namespace the walk checks, whether its table declares the attribute or a wildcard admits it.
+ * namespace the walk checks, whether its table declares the attribute or a wildcard admits it, and
+ * on one the walk passes over laxly ({@link checkPassed}).
  *
  * @param source The document.
  * @param element The attribute's element.
@@ -2585,6 +2591,60 @@ const checkXml = (
         value: attribute.value,
       }),
     );
+};
+
+/**
+ * The type `xml.xsd` gives `xml:id`, `xs:ID`, by its global declaration, against which XML Schema
+ * assesses an `xml:id` no table declares wherever a `lax` or `strict` wildcard admits it.
+ */
+const xmlIdType: AttributeType = { kind: "builtin", name: "ID" };
+
+/**
+ * Check an attribute that no table declares and a wildcard admits, if it is one of XML's own
+ * namespace: an `xml:id` against `xml.xsd`'s global declaration ({@link xmlIdType}) where the
+ * wildcard assesses it, a `lax` or a `strict` one (XML Schema Part 1, section 3.4.4, clause 5, as
+ * {@link isWildId} reads it), and then against the rows that narrow XML's attributes
+ * ({@link checkXml}). An `xml:id` that is no NCName once collapsed is `attribute-type`, its
+ * `expected` the type's, as a declared ID attribute of that value is, since reading 156 holds that
+ * "its value domain alone refuses it"; it binds no ID ({@link boundIdOf}). Under `skip` it is not
+ * assessed.
+ *
+ * @param source The document.
+ * @param element The attribute's element.
+ * @param path The element's path.
+ * @param wildcard The attribute wildcard that admits it: the table's that governs an element the
+ *   walk checks, or the ur-type's ({@link urTypeAttributes}) for one it passes over laxly; none
+ *   where no wildcard is written.
+ * @param attribute The attribute.
+ * @returns Its `attribute-type` refusals; none for an attribute in another namespace, or one whose
+ *   value holds an unexpanded entity reference, which is unknown.
+ */
+const checkWildXml = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  wildcard: Wildcard | undefined,
+  attribute: SourceAttribute,
+): readonly Refusal[] => {
+  const assessed =
+    wildcard !== undefined &&
+    wildcard.process !== "skip" &&
+    attribute.namespace === xmlNamespace &&
+    attribute.local === "id" &&
+    attribute.references.length === 0;
+  const typed =
+    assessed && !admits(xmlIdType, attribute.value)
+      ? [
+          refuse(source, "attribute-type", attributePath(path, attribute), {
+            attribute: attributeName(attribute),
+            element: elementName(element),
+            expected: describeType(xmlIdType),
+            value: attribute.value,
+          }),
+        ]
+      : [];
+
+  return [...typed, ...checkXml(source, element, path, attribute)];
 };
 
 /**
@@ -3173,13 +3233,13 @@ const namedType = (
  * unexpanded entity reference, whose value is unknown, or it is a record's `base-type`, which is
  * `unknown-attribute` ({@link isRecordBaseType}). An undeclared one goes to {@link checkUndeclared},
  * with whether the Schematron's extension lists cover the element's name (reading 90), and one a
- * wildcard admits then to {@link checkXml}, which reads `xml:lang` wherever it is written.
- * Non-whitespace text in an element whose table admits none is `text-not-allowed`. The placement
- * and child-count rows go to {@link checkPlacement} and {@link checkChildCounts}, and a default
- * hotspot's place and a lookup table's outcome to {@link checkDefaultHotspot} and
- * {@link checkLookupTable}. The attributes and the text are checked by the table that governs the
- * element, and its `xsi:type` by the types its name is declared with. The readings' rows name QTI's
- * elements and attributes only.
+ * wildcard admits then to {@link checkWildXml}, which holds an `xml:id` to `xs:ID` and reads
+ * `xml:lang` wherever it is written. Non-whitespace text in an element whose table admits none is
+ * `text-not-allowed`. The placement and child-count rows go to {@link checkPlacement} and
+ * {@link checkChildCounts}, and a default hotspot's place and a lookup table's outcome to
+ * {@link checkDefaultHotspot} and {@link checkLookupTable}. The attributes and the text are checked
+ * by the table that governs the element, and its `xsi:type` by the types its name is declared with.
+ * The readings' rows name QTI's elements and attributes only.
  *
  * @param source The document.
  * @param element The element.
@@ -3257,7 +3317,7 @@ const checkElement = (
     if (declaration === undefined) {
       refusals.push(
         ...Option.match(checkUndeclared(source, element, path, governed, covered, attribute), {
-          onNone: () => checkXml(source, element, path, attribute),
+          onNone: () => checkWildXml(source, element, path, table.anyAttribute, attribute),
           onSome: (refusal) => [refusal],
         }),
       );
@@ -3691,11 +3751,14 @@ const admit = (
 };
 
 /**
- * One element the walk checks or refuses, in document order: checked by the table that governs it,
- * checked as an element a simple type governs in lax wildcard content, by reading 60 ("a simple
- * type it names governs its text and is checked"), refused as `unknown-element`, citing the
- * reading that refuses it, if any, or passed over laxly with its `xsi:type` refused, by reading 83
- * ("a prefix nothing binds makes the document invalid").
+ * One element the walk visits, in document order: checked by the table that governs it, checked as
+ * an element a simple type governs in lax wildcard content, by reading 60 ("a simple type it names
+ * governs its text and is checked"), refused as `unknown-element`, citing the reading that refuses
+ * it, if any, or passed over laxly, its attributes assessed against the ur-type ({@link
+ * checkPassed}): `mistyped` holds its `xsi:type` to refuse where that does not resolve, by reading
+ * 83 ("a prefix nothing binds makes the document invalid"), and `qti` whether the walk reached it
+ * below an element QTI's tables govern, so that its `xml:id` is one of the document's IDs
+ * ({@link idEntriesOf}).
  */
 type Step =
   | {
@@ -3704,13 +3767,18 @@ type Step =
       readonly name: ElementTable;
       readonly visit: Visit;
     }
-  | { readonly attribute: SourceAttribute; readonly kind: "mistyped"; readonly visit: Visit }
+  | {
+      readonly kind: "lax";
+      readonly mistyped: Option.Option<SourceAttribute>;
+      readonly qti: boolean;
+      readonly visit: Visit;
+    }
   | { readonly kind: "simple"; readonly visit: Visit }
   | { readonly kind: "unknown"; readonly reading: Option.Option<string>; readonly visit: Visit };
 
 /**
- * The walk of a document: each element it checks or refuses, the table that governs each element
- * it checks with its tables' namespace, and each element's parent.
+ * The walk of a document: each element it checks, refuses or passes over laxly, the table that
+ * governs each element it checks with its tables' namespace, and each element's parent.
  */
 interface Walked {
   readonly governing: ReadonlyMap<SourceElement, Governed>;
@@ -3724,7 +3792,8 @@ interface Walked {
  * An element's children are admitted by the table that governs it, laxly when the walk passed over
  * it in lax wildcard content, and as `unknown-element` when a simple type governs it there, by
  * reading 60 ("a simple type it names governs its text and is checked"). An element passed over
- * laxly whose `xsi:type` does not resolve leaves a step that refuses its `xsi:type`.
+ * laxly leaves a step that holds its `xsi:type` where that does not resolve, and whether it lies
+ * below an element QTI's tables govern, with elements passed over laxly between.
  *
  * @param source The document.
  * @param schemas The tables by namespace.
@@ -3735,6 +3804,8 @@ const walkTables = (source: SourceDocument, schemas: Schemas): Walked => {
   const governing = new Map<SourceElement, Governed>();
   const laxed = new Set<SourceElement>();
   const simple = new Set<SourceElement>();
+  // Each element QTI's tables govern, and each element passed over laxly below one.
+  const underQti = new Set<SourceElement>();
   const steps: Step[] = [];
 
   for (const visit of walk(source)) {
@@ -3746,9 +3817,13 @@ const walkTables = (source: SourceDocument, schemas: Schemas): Walked => {
     const admission = admit(element, parent, governing, laxed, simple, parents, schemas);
     if (admission.kind === "lax") {
       laxed.add(element);
-      if (Option.isSome(admission.mistyped)) {
-        steps.push({ attribute: admission.mistyped.value, kind: "mistyped", visit });
+
+      const qti = Option.exists(parent, (container) => underQti.has(container));
+      if (qti) {
+        underQti.add(element);
       }
+
+      steps.push({ kind: "lax", mistyped: admission.mistyped, qti, visit });
     } else if (admission.kind === "simple") {
       simple.add(element);
       steps.push({ kind: "simple", visit });
@@ -3761,6 +3836,10 @@ const walkTables = (source: SourceDocument, schemas: Schemas): Walked => {
         (): Governed => ({ namespace: element.namespace, table: name }),
       );
       governing.set(element, governed);
+      if (governed.namespace === qtiNamespace) {
+        underQti.add(element);
+      }
+
       steps.push({ governed, kind: "check", name, visit });
     }
   }
@@ -3875,6 +3954,43 @@ const refuseMistyped = (
 };
 
 /**
+ * The attribute wildcard of the ur-type definition, `xs:anyType`, against which XML Schema assesses
+ * an element no declaration governs in lax wildcard content (Part 1, section 3.4.7): every
+ * namespace, laxly, so an attribute of XML's own namespace, which `xml.xsd` declares globally, is
+ * assessed by its declaration, and an attribute nothing declares globally is not assessed.
+ */
+const urTypeAttributes: Wildcard = { namespace: "##any", process: "lax" };
+
+/**
+ * Check an element the walk passes over laxly, as XML Schema assesses it against the ur-type:
+ * its `xsi:type` where that does not resolve ({@link refuseMistyped}), then each attribute in
+ * document order as {@link checkWildXml} checks one the ur-type's wildcard admits
+ * ({@link urTypeAttributes}), so an `xml:id` is held to `xs:ID` and `xml:lang` to reading 129's
+ * rows. Its `xml:id` is one of the document's IDs where it lies below an element QTI's tables
+ * govern ({@link idEntriesOf}).
+ *
+ * @param source The document.
+ * @param element The element.
+ * @param path The element's path.
+ * @param mistyped Its `xsi:type`, where that does not resolve.
+ * @returns Its refusals, its `xsi:type`'s first.
+ */
+const checkPassed = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  mistyped: Option.Option<SourceAttribute>,
+): readonly Refusal[] => [
+  ...Option.match(mistyped, {
+    onNone: () => [],
+    onSome: (attribute) => [refuseMistyped(source, element, path, attribute)],
+  }),
+  ...element.attributes.flatMap((attribute) =>
+    checkWildXml(source, element, path, urTypeAttributes, attribute),
+  ),
+];
+
+/**
  * The IDREFs a reading sets aside, by element and attribute, each with the reading: the XSD types
  * them `xs:IDREF`, and the table does not resolve them.
  *
@@ -3966,9 +4082,12 @@ const roleOf = (
 /**
  * Collect the ID/IDREF table's entries from the walk's steps, in document order.
  *
- * Only elements QTI's tables govern take part: a manifest's ID and IDREF typing is not applied, a
- * limit by rule `db2ef322`, since the manifest's own rules already refuse a dependency that names
- * no resource (`dependency-unresolved`). An attribute a reading withdraws takes no part.
+ * Only elements QTI's tables govern take part, and the elements the walk passes over laxly below
+ * them, whose `xml:id` alone is an entry: lax assessment judges it by `xml.xsd`'s declaration, of
+ * type `xs:ID`, and assesses no other attribute of theirs, which nothing declares globally. A
+ * manifest's ID and IDREF typing is not applied, a limit by rule `db2ef322`, since the manifest's
+ * own rules already refuse a dependency that names no resource (`dependency-unresolved`). An
+ * attribute a reading withdraws takes no part.
  *
  * @param source The document.
  * @param steps The walk's steps.
@@ -3976,6 +4095,20 @@ const roleOf = (
  */
 const idEntriesOf = (source: SourceDocument, steps: readonly Step[]): readonly IdEntry[] =>
   steps.flatMap((step): readonly IdEntry[] => {
+    if (step.kind === "lax" && step.qti) {
+      const { element, path } = step.visit;
+
+      return element.attributes
+        .filter((attribute) => attribute.namespace === xmlNamespace && attribute.local === "id")
+        .map((attribute): IdEntry => ({
+          attribute,
+          declaration: Option.none(),
+          element,
+          path,
+          role: "id",
+        }));
+    }
+
     if (step.kind !== "check" || step.governed.namespace !== qtiNamespace) {
       return [];
     }
@@ -4087,9 +4220,10 @@ const boundIdOf = (entry: IdEntry): Option.Option<string> => {
  *
  * The table holds every attribute of an element QTI's tables govern whose type, the governing
  * type's (reading 84), derives from `ID`, and so the response declarations' identifiers (reading
- * 14); a context declaration's identifier (reading 74); and a wild `xml:id` that stands (reading
- * 109). Only a value that is an NCName once collapsed is an ID; any other binds nothing and its
- * value domain alone refuses it (reading 156). Then:
+ * 14); a context declaration's identifier (reading 74); a wild `xml:id` that stands (reading 109);
+ * and the `xml:id` of an element the walk passes over laxly below one QTI's tables govern. Only a
+ * value that is an NCName once collapsed is an ID; any other binds nothing and its value domain
+ * alone refuses it (reading 156). Then:
  *
  * - An ID a different element already gave is `duplicate-identifier` at the later attribute, its
  *   detail the `identifier` and the reading that makes the two collide: 14 where a response
@@ -4103,13 +4237,14 @@ const boundIdOf = (entry: IdEntry): Option.Option<string> => {
  *
  * Its limits, each recorded here: an ID an element's text carries under an `xsi:type` (reading 101)
  * takes no part, since the walk does not check simply typed text (reading 60), so the table holds
- * attributes alone, as reading 91 requires a rule a package cannot yet check to be recorded. A
- * manifest's IDs and IDREFs are not judged ({@link idEntriesOf}). An IDREF is not refused where the
- * table cannot be complete: in a document that includes a fragment, whose IDs are its assembly's
- * (reading 117), and where an ID attribute's value holds an unexpanded entity reference; nor where
- * it names an `id` or `xml:id` of a MathML or SSML island, which the walk keeps unchecked
- * ({@link unwalkedOf}). An attribute whose value holds an unexpanded entity reference is unknown
- * and not judged.
+ * attributes alone, as reading 91 requires a rule a package cannot yet check to be recorded. An
+ * `xml:id` of content the walk never visits takes no part (the reading-129 rows' comment names that
+ * content). A manifest's IDs and IDREFs are not judged ({@link idEntriesOf}). An IDREF is not
+ * refused where the table cannot be complete: in a document that includes a fragment, whose IDs are
+ * its assembly's (reading 117), and where an ID attribute's value holds an unexpanded entity
+ * reference; nor where it names an `id` or `xml:id` of a MathML or SSML island, which the walk
+ * keeps unchecked ({@link unwalkedOf}). An attribute whose value holds an unexpanded entity
+ * reference is unknown and not judged.
  *
  * @param source The document.
  * @param steps The walk's steps.
@@ -4199,10 +4334,11 @@ const checkIds = (
  * Give the document's IDs as its ID/IDREF table binds them ({@link checkIds}), each with the
  * element that holds it: the declared ID attributes of the elements QTI's tables govern, a response
  * declaration's identifier among them (reading 14), a context declaration's identifier (reading
- * 74) and a wild `xml:id` that stands (reading 109), as {@link idEntriesOf} finds them, each
- * collapsed and an NCName ({@link boundIdOf}). An ID two elements give is held by the first, in
- * document order, as the table resolves an IDREF to it. The `id` and `xml:id` of a MathML or SSML
- * island are not among them, since the walk keeps those elements unchecked ({@link unwalkedOf}).
+ * 74), a wild `xml:id` that stands (reading 109) and the `xml:id` of an element passed over laxly
+ * below one QTI's tables govern, as {@link idEntriesOf} finds them, each collapsed and an NCName
+ * ({@link boundIdOf}). An ID two elements give is held by the first, in document order, as the
+ * table resolves an IDREF to it. The `id` and `xml:id` of a MathML or SSML island are not among
+ * them, since the walk keeps those elements unchecked ({@link unwalkedOf}).
  *
  * It walks the document again, so a caller asks for it only where it needs it.
  *
@@ -4267,14 +4403,16 @@ export const governingTables = (
  * and `count-range`, each at the path of the element or attribute at fault. Over QTI's elements it
  * keeps the document's ID/IDREF table ({@link checkIds}): a repeated ID is `duplicate-identifier`,
  * and an IDREF that names no ID is `attribute-type`, `check: "idref-target"`, after the element's
- * other refusals. The readings are QTI's
- * and apply to QTI's elements only, but for the rows that read XML's own `xml:lang`, which hold on
- * every element the walk checks (reading 129). Each element is checked by the table
- * {@link governingTables} gives it, except one a simple type governs in lax wildcard content, whose
- * attributes and element children are refused and whose text is not checked, plate's open limit
- * that reading 60 ("a simple type it names governs its text and is checked") records. It does not
- * enter an element it refuses as unknown, and does enter a misplaced one. A document whose root is
- * outside QTI's namespace and every namespace of `others` yields nothing here: that is the
+ * other refusals. The readings are QTI's and apply to QTI's elements only, but for the rows that
+ * read XML's own `xml:lang`, which hold on every element the walk checks or passes over laxly
+ * (reading 129). An element passed over laxly is assessed against the ur-type ({@link
+ * checkPassed}): its unresolvable `xsi:type` and its `xml:id` and `xml:lang` are judged, and below
+ * an element QTI's tables govern its `xml:id` is one of the IDs. Each element is checked by the
+ * table {@link governingTables} gives it, except one a simple type governs in lax wildcard content,
+ * whose attributes and element children are refused and whose text is not checked, plate's open
+ * limit that reading 60 ("a simple type it names governs its text and is checked") records. It does
+ * not enter an element it refuses as unknown, and does enter a misplaced one. A document whose root
+ * is outside QTI's namespace and every namespace of `others` yields nothing here: that is the
  * verdict's `not-qti-root`.
  *
  * @param source The document, as the reader adapter built it.
@@ -4307,8 +4445,11 @@ export const checkStructure = (
       return checkSimplyTyped(source, element, path);
     }
 
-    if (step.kind === "mistyped") {
-      return [refuseMistyped(source, element, path, step.attribute)];
+    if (step.kind === "lax") {
+      return [
+        ...checkPassed(source, element, path, step.mistyped),
+        ...(identified.get(element) ?? []),
+      ];
     }
 
     const named = Option.match(parent, {
