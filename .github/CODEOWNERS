@@ -1,0 +1,19 @@
+# Code owners for qti-pie, set by @aidenzepp on 2026-11-09.
+#
+# These paths carry the project's rules and its evidence: the specification
+# readings, the QTI intent, the agent rules, the committed migrations, every
+# test, and the renderer package. With code-owner review required on main, a
+# change to any of them needs @aidenzepp's approval. Paths not listed here have
+# no code owner.
+#
+# Syntax: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+# The last matching pattern wins. Every line names the same owner, so no line
+# overrides another. A pattern with no slash (*.test.ts) matches at any depth;
+# a pattern with a leading or middle slash is anchored at the repository root.
+
+*.test.ts                  @aidenzepp
+packages/*/migrations/**   @aidenzepp
+packages/plate/**          @aidenzepp
+/AGENTS.md                 @aidenzepp
+/docs/qti-intent.md        @aidenzepp
+/docs/spec-readings.md     @aidenzepp
