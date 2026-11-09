@@ -490,17 +490,31 @@ type KeyOf<Key extends readonly AnyKeyField[]> = {
 };
 
 /**
- * Write the text a row's key is found by: its key fields' handles in key order, NUL between them,
- * as grizzle keys a closed relation's rows (`closedRows`, `schema/relation.ts`). No handle holds
- * NUL, which no XML name, URI or numeral does, so two keys write one text exactly when they are
- * one key.
+ * Number a row's key: its key fields' codes as the digits of a mixed-radix numeral, the first
+ * field the most significant, each digit's base its field's code space (its roster's size). Two
+ * keys have one number exactly when they are one key, and the number is exact while the product of
+ * the bases stays within `Number.MAX_SAFE_INTEGER`, which {@link lookupOf} holds every index to.
  *
  * @param key - The key's fields.
  * @param row - The row, or a lookup's key.
- * @returns The key's text.
+ * @returns The key's number, or none for a key that leaves a field out or holds a value outside
+ *   its field's code space, which no row is at.
  */
-const keyTextOf = (key: readonly AnyKeyField[], row: AnyRow): string =>
-  key.map(({ name }) => String(row[name])).join("\u0000");
+const keyNumberOf = (key: readonly AnyKeyField[], row: AnyRow): number | undefined => {
+  let number = 0;
+  for (const field of key) {
+    const value = row[field.name];
+    const code =
+      value === undefined ? undefined : Option.getOrUndefined(field.roster.codeOf(String(value)));
+    if (code === undefined) {
+      return undefined;
+    }
+
+    number = number * field.roster.handles.length + code;
+  }
+
+  return number;
+};
 
 /**
  * Index a relation's entries by their rows' keys, for its lookups: the entry at a key, none where
@@ -516,17 +530,33 @@ const keyTextOf = (key: readonly AnyKeyField[], row: AnyRow): string =>
  * @param key - The relation's key fields.
  * @param entries - Its rows, each with whatever the host reads beside it.
  * @returns The entry at a key.
+ * @throws {Error} When the key's code space has more keys than a number holds exactly, so two keys
+ *   could share a number: a key of more or wider fields than any relation of the composition has.
  */
 const lookupOf = <Key extends readonly AnyKeyField[], Entry extends { readonly row: AnyRow }>(
   key: Key,
   entries: readonly Entry[],
 ): ((at: KeyOf<Key>) => Option.Option<Entry>) => {
-  const byKey = new Map(entries.map((entry) => [keyTextOf(key, entry.row), entry] as const));
+  const space = key.reduce((size, field) => size * field.roster.handles.length, 1);
+  if (space > Number.MAX_SAFE_INTEGER) {
+    throw new Error(
+      `A key over ${key.map(({ name }) => name).join(", ")} has ${String(space)} keys, more than a number holds exactly; index it by fewer or narrower fields.`,
+    );
+  }
 
-  return (at) =>
-    key.every(({ name }) => Object.hasOwn(at, name))
-      ? Option.fromNullishOr(byKey.get(keyTextOf(key, at)))
-      : Option.none();
+  const byKey = new Map<number, Entry>();
+  for (const entry of entries) {
+    const at = keyNumberOf(key, entry.row);
+    if (at !== undefined) {
+      byKey.set(at, entry);
+    }
+  }
+
+  return (at) => {
+    const number = keyNumberOf(key, at);
+
+    return number === undefined ? Option.none() : Option.fromNullishOr(byKey.get(number));
+  };
 };
 
 /**
@@ -588,7 +618,7 @@ export const faultOf = (relation: {
   const split = key.findIndex((field) => field._tag === "dependent");
   const prefixFields = split === -1 ? key : key.slice(0, split);
   const fields = [...key, ...payload];
-  const seen = new Set<string>();
+  const seen = new Set<number | undefined>();
   for (const row of rows) {
     const prefix = Object.fromEntries(
       prefixFields.map(({ name: field }) => [field, String(row[field])] as const),
@@ -604,12 +634,12 @@ export const faultOf = (relation: {
       );
     }
 
-    const text = keyTextOf(key, row);
-    if (seen.has(text)) {
+    const number = keyNumberOf(key, row);
+    if (seen.has(number)) {
       return Option.some(new KeyCollision({ key: spell(key, row), relation: name }));
     }
 
-    seen.add(text);
+    seen.add(number);
   }
 
   return Option.none();
