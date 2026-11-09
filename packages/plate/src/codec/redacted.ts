@@ -500,6 +500,7 @@ const ResponseBindingSchema = Schema.Union([
  */
 export const RedactedSchema = Schema.Struct({
   body: BodyNodes,
+  credit: Schema.OptionFromOptionalKey(Schema.Literals(["full", "none", "partial"])),
   document: Schema.String,
   identifier: Schema.String,
   lang: OptionalText,

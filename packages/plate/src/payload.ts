@@ -7,8 +7,9 @@
  * every field it names one by one and never spreads a model object, so a field the model gains
  * reaches the page only when this file names it. Neither copy holds a correct response, a mapping,
  * a response default, a processing rule, a template rule or feedback content the record hides, nor
- * any outcome or template value but the ones the body's printed variables print, as text, and the
- * ones its `param-variable` parameters pass, as their `value`, nor a template or feedback
+ * any outcome or template value but the ones the body's printed variables print, as text, the ones
+ * its `param-variable` parameters pass, as their `value`, and the credit a shown modal feedback
+ * carries, `full`, `partial` or `none` from `SCORE` against `MAXSCORE`, nor a template or feedback
  * visibility: a template block, inline or choice, and a feedback block, inline or modal feedback,
  * is settled as shown, hidden or withheld before the page sees it. Neither holds a
  * seed: the view's seed only orders a shuffled Choice's or Inline Choice's choices. What the page
@@ -429,6 +430,11 @@ export type PayloadNode = ElementPayload | InteractionPayload | NoticePayload | 
  */
 export interface Payload {
   readonly body: readonly PayloadNode[];
+  /**
+   * The credit the attempt shown earned, which each modal feedback's section carries: the
+   * redacted item's ({@link RedactedFields.credit}).
+   */
+  readonly credit: Option.Option<Credit>;
   readonly finished: boolean;
   /**
    * The item instance key, which scopes every id and entry name.
@@ -441,6 +447,13 @@ export interface Payload {
   readonly notices: readonly string[];
   readonly title: string;
 }
+
+/**
+ * How much of the item's score the attempt shown earned, read from its own `SCORE` against its own
+ * `MAXSCORE`: `full` when the score reaches the maximum, `none` when it is 0 or below, and
+ * `partial` between.
+ */
+export type Credit = "full" | "none" | "partial";
 
 /**
  * A modal feedback the page shows: its content and its title, as the payload holds them.
@@ -474,6 +487,11 @@ export type ResponseBinding =
  */
 export interface RedactedFields {
   readonly body: readonly BodyNode[];
+  /**
+   * The credit the attempt shown earned ({@link creditOf}), none when the page shows no modal
+   * feedback or the item's scores cannot say.
+   */
+  readonly credit: Option.Option<Credit>;
   /**
    * The document's location as the host named it.
    */
@@ -2138,6 +2156,86 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
 ];
 
 /**
+ * The outcomes {@link creditOf} reads: the item's score, "the candidate's overall performance on the
+ * item", and its maximum, each of which "needs to be a float" (the information model's
+ * OutcomeDeclaration, section 4.5).
+ */
+const scoreOutcomes = { maximum: "MAXSCORE", score: "SCORE" } as const;
+
+/**
+ * Give the value a page may grade an attempt by of one score outcome: its single finite float, read
+ * from the record, when the item declares the outcome single and float and a candidate may see
+ * it. An outcome whose `view` names other audiences and not `candidate` is not the candidate's;
+ * with no `view` it is every audience's ("If no view is specified the outcome is treated as
+ * relevant to all views", section 4.5.4).
+ *
+ * @param item The item, whose declaration types the outcome.
+ * @param record The record of the attempt shown.
+ * @param identifier The outcome, `SCORE` or `MAXSCORE`.
+ * @returns The value; none when the item declares no such outcome, declares it of another type or
+ *   for other views, or the record holds NULL, a value of another type or a non-finite one.
+ */
+const gradingValue = (
+  item: Item,
+  record: RedactRecord,
+  identifier: string,
+): Option.Option<number> =>
+  Option.fromUndefinedOr(item.outcomes.get(identifier)).pipe(
+    Option.filter(
+      (declaration) =>
+        declaration.baseType === "float" &&
+        declaration.cardinality === "single" &&
+        Option.match(declaration.view, {
+          onNone: () => true,
+          onSome: (views) => views.includes("candidate"),
+        }),
+    ),
+    Option.flatMap(() => own(record.outcomes, identifier)),
+    Option.flatMap((value) =>
+      value.cardinality === "single" ? Arr.head(value.values) : Option.none(),
+    ),
+    Option.flatMap((single) =>
+      single.baseType === "float" && Number.isFinite(single.value)
+        ? Option.some(single.value)
+        : Option.none(),
+    ),
+  );
+
+/**
+ * Give the credit an attempt earned, which each modal feedback the page shows carries: its own
+ * `SCORE`, `s`, against its own `MAXSCORE`, `m`, `full` when `s >= m`, `none` when `s <= 0`, and
+ * `partial` when `0 < s < m`. It reads the outcomes response processing set, so it is none before
+ * any has run in the attempt shown, as no modal feedback shows then (section 5.93).
+ *
+ * It is none, so the card stays neutral, wherever the scores cannot say: when the item declares no
+ * `MAXSCORE`; when either outcome is not a single float, or its value is NULL or not finite
+ * ({@link gradingValue}); when `m <= 0`; when `SCORE` carries `external-scored`, since a human or
+ * an external machine gives its value, and response processing's is not the attempt's score
+ * (section 4.5.10); and when either outcome's `view` leaves out the candidate (section 4.5.4).
+ *
+ * @param item The item.
+ * @param record The record of the attempt shown.
+ * @returns The credit, or none.
+ */
+const creditOf = (item: Item, record: RedactRecord): Option.Option<Credit> =>
+  record.attempt === "submitted" &&
+  item.outcomes.get(scoreOutcomes.score)?.externalScored === undefined
+    ? Option.all([
+        gradingValue(item, record, scoreOutcomes.score),
+        gradingValue(item, record, scoreOutcomes.maximum),
+      ]).pipe(
+        Option.filter(([, maximum]) => maximum > 0),
+        Option.map(([score, maximum]): Credit => {
+          if (score >= maximum) {
+            return "full";
+          }
+
+          return score <= 0 ? "none" : "partial";
+        }),
+      )
+    : Option.none();
+
+/**
  * Copy the parts of an item the page may know: the allowlist, and the only way to make a
  * {@link Redacted} from an item.
  *
@@ -2221,14 +2319,18 @@ export const redactItem = (
   record?: RedactRecord,
   limits?: Pick<Configuration, "outputBudget">,
 ): Redacted => {
-  const { body, hiddenOnly, modalFeedback, notices, unprinted } = printBody(
-    item,
-    printingOf(item, record),
-    { budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget), kind: "text" },
-  );
+  const printing = printingOf(item, record);
+  const { body, hiddenOnly, modalFeedback, notices, unprinted } = printBody(item, printing, {
+    budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget),
+    kind: "text",
+  });
 
   return brandRedacted({
     body,
+    credit:
+      modalFeedback.length === 0
+        ? Option.none()
+        : printing.pipe(Option.flatMap((attempt) => creditOf(item, attempt))),
     document: item.document,
     identifier: item.identifier,
     lang: item.lang,
@@ -2482,6 +2584,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
 
   return {
     body: copyNodes(redacted.body, build),
+    credit: redacted.credit,
     finished: view.finished,
     instance: view.instance,
     lang: Option.getOrElse(redacted.lang, () => view.locale),

@@ -1338,6 +1338,58 @@ const hiddenOnlyOf = (body: readonly BodyNode[], showing: Showing): ReadonlySet<
 };
 
 /**
+ * Give the credit the rule gives a shown modal feedback, written from the rule rather than from
+ * plate: once response processing has run, `SCORE` (s) against `MAXSCORE` (m), each declared a
+ * single float a candidate may see (no `view`, or one naming `candidate`, information model 4.5.4)
+ * and holding a finite value, with m above 0 and no `external-scored` on `SCORE` (4.5.10): `full`
+ * when s >= m, `none` when s <= 0, `partial` between; none otherwise.
+ *
+ * @param item The item.
+ * @param values The record the item is shown by.
+ * @returns The credit, or none.
+ */
+const creditFor = (item: Item, values: Option.Option<RedactRecord>): Option.Option<string> => {
+  const read = (record: RedactRecord, identifier: string): Option.Option<number> => {
+    const declared = item.outcomes.get(identifier);
+    const value = Object.hasOwn(record.outcomes, identifier)
+      ? record.outcomes[identifier]
+      : undefined;
+    const single = value?.cardinality === "single" ? value.values[0] : undefined;
+    const seen =
+      declared !== undefined &&
+      declared.baseType === "float" &&
+      declared.cardinality === "single" &&
+      declared.view.pipe(
+        Option.map((views) => views.includes("candidate")),
+        Option.getOrElse(() => true),
+      );
+
+    return seen && single?.baseType === "float" && Number.isFinite(single.value)
+      ? Option.some(single.value)
+      : Option.none();
+  };
+
+  return values.pipe(
+    Option.filter(
+      (record) =>
+        record.attempt === "submitted" && item.outcomes.get("SCORE")?.externalScored === undefined,
+    ),
+    Option.flatMap((record) =>
+      Option.all([read(record, "SCORE"), read(record, "MAXSCORE")]).pipe(
+        Option.filter(([, maximum]) => maximum > 0),
+        Option.map(([scored, maximum]) => {
+          if (scored >= maximum) {
+            return "full";
+          }
+
+          return scored <= 0 ? "none" : "partial";
+        }),
+      ),
+    ),
+  );
+};
+
+/**
  * Report whether redacted fields are the item's as the page may see them (P7§4.9): the document,
  * identifier, `lang` and title as the item holds them; a body that
  * {@link fits} the nodes {@link slotsOf} decides, so a template value shows only as the text a
@@ -1386,6 +1438,7 @@ const fieldsFit = (
     isDeepStrictEqual(
       {
         body: fields.body,
+        credit: modal.length === 0 ? Option.none() : creditFor(item, values),
         document: item.document,
         identifier: item.identifier,
         lang: item.lang,

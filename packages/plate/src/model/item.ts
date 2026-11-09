@@ -76,6 +76,7 @@ import {
   areaShapes,
   baseTypes,
   cardinalities,
+  externalScorings,
   interactionNames,
   outcomeViews,
   renders,
@@ -87,6 +88,7 @@ import type {
   BaseType,
   Cardinality,
   Condition,
+  ExternalScoring,
   FeatureRule,
   InteractionName,
   OutcomeView,
@@ -272,6 +274,13 @@ export interface OutcomeDeclaration {
    * The `qti-default-value`, when the declaration has one.
    */
   readonly defaultValue: Option.Option<Value>;
+  /**
+   * `external-scored`, `externalMachine` or `human`: the outcome's value is produced by scoring
+   * outside the item's response processing (the information model's OutcomeDeclaration, section
+   * 4.5.10). Absent when the declaration writes none, so a declaration built by hand may leave it
+   * out.
+   */
+  readonly externalScored?: ExternalScoring;
   readonly identifier: string;
   /**
    * `interpretation`, an `xs:string`, as written.
@@ -1784,8 +1793,20 @@ export const outcomeDeclaration = (
     );
     const defaultValue = yield* optionalValue(build, declaration, "qti-default-value", read.value);
     const lookupTable = yield* lookupTableOf(build, declaration, read.value.baseType);
+    const externalScored = yield* enumerated(
+      build,
+      declaration,
+      "external-scored",
+      externalScorings,
+    );
+    const outcome: OutcomeDeclaration = { ...read.value, ...reporting, defaultValue, lookupTable };
 
-    return Option.some({ ...read.value, ...reporting, defaultValue, lookupTable });
+    return Option.some(
+      Option.match(externalScored, {
+        onNone: () => outcome,
+        onSome: (scoring) => ({ ...outcome, externalScored: scoring }),
+      }),
+    );
   });
 
 /**

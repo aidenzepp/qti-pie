@@ -29,6 +29,7 @@ import type {
   InlineChoiceInteraction,
   Interaction,
   Item,
+  OutcomeDeclaration,
   ResponseDeclaration,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
@@ -918,8 +919,29 @@ const itemOf = (interaction: Interaction): Item => ({
 });
 
 /**
+ * A single float outcome declaration with no default and no reporting attribute.
+ *
+ * @param identifier The outcome's identifier.
+ * @returns The declaration.
+ */
+const floatOutcome = (identifier: string): OutcomeDeclaration => ({
+  baseType: "float",
+  cardinality: "single",
+  defaultValue: Option.none(),
+  identifier,
+  interpretation: Option.none(),
+  longInterpretation: Option.none(),
+  lookupTable: Option.none(),
+  masteryValue: Option.none(),
+  normalMaximum: Option.none(),
+  normalMinimum: Option.none(),
+  view: Option.none(),
+});
+
+/**
  * The Text Entry's item with one modal feedback, titled so its ModalFeedback part carries
- * `aria-label`, shown once response processing has set `FEEDBACK` to `correct` ({@link answered}).
+ * `aria-label`, shown once response processing has set `FEEDBACK` to `correct` ({@link answered}),
+ * and a `SCORE` and `MAXSCORE`, so the part carries `data-credit` too.
  */
 const modalItem = (): Item => ({
   ...itemOf(textEntry),
@@ -932,11 +954,15 @@ const modalItem = (): Item => ({
       title: Option.some("Feedback"),
     },
   ],
+  outcomes: new Map([
+    ["MAXSCORE", floatOutcome("MAXSCORE")],
+    ["SCORE", floatOutcome("SCORE")],
+  ]),
 });
 
 /**
  * The record of an attempt response processing has run, `FEEDBACK` at `correct`, which shows
- * {@link modalItem}'s modal feedback.
+ * {@link modalItem}'s modal feedback, and `SCORE` at its `MAXSCORE`, full credit.
  */
 const answered: RedactRecord = {
   attempt: "submitted",
@@ -947,6 +973,12 @@ const answered: RedactRecord = {
       cardinality: "single",
       values: [{ baseType: "identifier", value: "correct" }],
     },
+    MAXSCORE: {
+      baseType: "float",
+      cardinality: "single",
+      values: [{ baseType: "float", value: 1 }],
+    },
+    SCORE: { baseType: "float", cardinality: "single", values: [{ baseType: "float", value: 1 }] },
   },
   templates: {},
 };

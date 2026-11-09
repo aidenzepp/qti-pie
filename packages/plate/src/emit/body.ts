@@ -886,7 +886,9 @@ export const emitBody = (
  * Emit the modal feedback the payload shows: one ModalFeedback part per modal feedback, in document
  * order, each a `section` holding its content, named by its `title` through `aria-label` when it
  * has one (the information model's ModalFeedback, section 5.93.4: an engine may present the title
- * "for example as the title of a modal pop-up window"). The Root holds them after the body: how
+ * "for example as the title of a modal pop-up window"), and carrying the payload's credit as
+ * `data-credit` when it has one, `full`, `partial` or `none`, which the default theme draws as a
+ * mark and a coloured edge and which adds no words. The Root holds them after the body: how
  * modal feedback is displayed "is left to the delivery platform, and an implementation may simply
  * display modal feedback in-line in the item" (the best practice guide, section 3.7.3), and a host
  * that wants a dialog swaps the part.
@@ -916,10 +918,16 @@ export const emitModalFeedback = (
         itemPart(
           state.parts,
           "modalFeedback",
-          Option.match(feedback.title, {
-            onNone: () => ({}),
-            onSome: (title) => ({ "aria-label": title }),
-          }),
+          {
+            ...Option.match(feedback.title, {
+              onNone: () => ({}),
+              onSome: (title) => ({ "aria-label": title }),
+            }),
+            ...Option.match(payload.credit, {
+              onNone: () => ({}),
+              onSome: (credit) => ({ "data-credit": credit }),
+            }),
+          },
           content,
         ),
       ),

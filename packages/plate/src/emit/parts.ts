@@ -517,7 +517,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     element: "section",
     interaction: "item",
     listOwner: false,
-    merged: ["aria-label"],
+    merged: ["aria-label", "data-credit"],
     part: "modalFeedback",
     tagClass: "flow-container",
   },

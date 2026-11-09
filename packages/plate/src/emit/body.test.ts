@@ -80,6 +80,7 @@ const farTimeoutMs = 60_000;
  */
 const payloadOf = (body: readonly PayloadNode[]): Payload => ({
   body,
+  credit: Option.none(),
   finished: false,
   instance,
   lang: "en",

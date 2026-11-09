@@ -300,6 +300,7 @@ const blankLabel: InlineChoicePayload = { ...picker, label: Option.some([said(" 
  */
 const pageOf = (mode: RenderMode = "answering", finished = false): Payload => ({
   body: [],
+  credit: Option.none(),
   finished,
   instance,
   lang: "en",

@@ -813,6 +813,7 @@ describe("redactItem", () => {
     assert.notInclude(json(copied), extra);
     assert.deepStrictEqual(Object.keys(copied).toSorted(), [
       "body",
+      "credit",
       "document",
       "identifier",
       "lang",
@@ -2215,6 +2216,7 @@ describe("payload", () => {
 
     assert.deepStrictEqual(Object.keys(built).toSorted(), [
       "body",
+      "credit",
       "finished",
       "instance",
       "lang",

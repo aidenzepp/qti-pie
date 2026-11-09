@@ -1720,6 +1720,7 @@ describe("render", () => {
     const decoded: Redacted = Result.getOrThrow(decodeRedacted(json));
     const handBuilt: RedactedFields = {
       body: redacted.body,
+      credit: redacted.credit,
       document: redacted.document,
       identifier: redacted.identifier,
       lang: redacted.lang,

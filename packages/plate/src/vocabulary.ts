@@ -783,6 +783,18 @@ export const outcomeViews = [
 export type OutcomeView = (typeof outcomeViews)[number];
 
 /**
+ * The values of an outcome declaration's `external-scored`, which "identifies whether or not the
+ * value for this outcome is produced by human or by machine scoring" (the information model's
+ * OutcomeDeclaration, section 4.5.10): `externalMachine` or `human`.
+ */
+export const externalScorings = ["externalMachine", "human"] as const;
+
+/**
+ * One of {@link externalScorings}.
+ */
+export type ExternalScoring = (typeof externalScorings)[number];
+
+/**
  * The item session statuses M2's engine gives an item, as Results Reporting's `sessionStatus`
  * spells them (`rr-bind.txt:4069-4079`): `initial` before its first attempt, `pendingSubmission`
  * while an attempt has started and its responses are unprocessed, and `final` once a submission
