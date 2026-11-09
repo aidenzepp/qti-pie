@@ -3,8 +3,9 @@
  * is named by an oracle law, the typed map keys select exactly the lexical forms their base types
  * give a typed value, read against the deleted schema's lexical forms with JavaScript's engine as
  * the oracle, and an integer key's typed value, the query `MapKeyInteger`, repeats exactly where
- * the law oracle's `Map key` names a repeat; a float key's, the query `MapKeyFloat`, is held to the
- * law oracle by `#pantry/import/overlays/float-keys.oracle.test.ts`.
+ * the law oracle's `Map key` names a repeat, as do a point's, a pair's and a directed pair's, the
+ * queries `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; a float key's, the query
+ * `MapKeyFloat`, is held to the law oracle by `#pantry/import/overlays/float-keys.oracle.test.ts`.
  *
  * The database tests (`mapping.db.test.ts`) judge the same laws through PostgreSQL, and the
  * builder's rows are `#pantry/import/overlays/mapping.test.ts`'s.
@@ -16,7 +17,7 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
@@ -28,16 +29,14 @@ import {
   AreaMapping,
   exactValuePattern,
   integerKeyPattern,
+  itemPattern,
   LookupValue,
   MapKey,
-  MapKeyDirectedPair,
-  MapKeyPair,
-  MapKeyPoint,
+  MapKeyItems,
   Mapping,
   mappingLaws,
   LookupTable,
-  pairKeyPattern,
-  pointKeyPattern,
+  twoItemPattern,
 } from "#pantry/qti/mapping.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
 import { Qti, QtiBase } from "#pantry/qti/own.ts";
@@ -83,9 +82,7 @@ const mappingRelations = {
   LookupTable,
   LookupValue,
   MapKey,
-  MapKeyDirectedPair,
-  MapKeyPair,
-  MapKeyPoint,
+  MapKeyItems,
   Mapping,
 };
 
@@ -279,14 +276,55 @@ const baseTypeForm = (baseType: string): RegExp =>
 const exactValue = new RegExp(exactValuePattern, "u");
 
 /**
- * `pointKeyPattern` as JavaScript's engine reads it.
+ * `twoItemPattern` as JavaScript's engine reads it: the keys whose split `MapKeyItems` holds.
  */
-const pointKey = new RegExp(pointKeyPattern, "u");
+const twoItemKey = new RegExp(twoItemPattern, "u");
 
 /**
- * `pairKeyPattern` as JavaScript's engine reads it.
+ * `itemPattern` as JavaScript's engine reads it: the runs the queries `MapKeyPair` and
+ * `MapKeyDirectedPair` give a typed value.
  */
-const pairKey = new RegExp(pairKeyPattern, "u");
+const itemRun = new RegExp(itemPattern, "u");
+
+/**
+ * Split a two-item key into its two runs, as `MapKeyItems` holds them.
+ *
+ * @param key - The key.
+ * @returns Its two runs, or none for a key `twoItemPattern` leaves out.
+ */
+const runsOf = (key: string): readonly [string, string] | undefined => {
+  const groups = /^(?<first>[^\t\n\r ]+)[\t\n\r ](?<second>[^\t\n\r ]+)$/u.exec(key)?.groups;
+  const first = groups?.["first"];
+  const second = groups?.["second"];
+
+  return twoItemKey.test(key) && first !== undefined && second !== undefined
+    ? [first, second]
+    : undefined;
+};
+
+/**
+ * Whether the schema gives a key a point's typed value: its split's runs, by the query
+ * `MapKeyPoint`'s selection, are each in `xs:integer`'s lexical space.
+ *
+ * @param key - The key.
+ * @returns Whether it does.
+ */
+const pointSelected = (key: string): boolean =>
+  Option.exists(Option.fromUndefinedOr(runsOf(key)), (runs) =>
+    runs.every((run) => integerKey.test(run)),
+  );
+
+/**
+ * Whether the schema gives a key a pair's or a directed pair's typed value: its split's runs, by
+ * the queries `MapKeyPair`'s and `MapKeyDirectedPair`'s selection, are each an item.
+ *
+ * @param key - The key.
+ * @returns Whether it does.
+ */
+const pairSelected = (key: string): boolean =>
+  Option.exists(Option.fromUndefinedOr(runsOf(key)), (runs) =>
+    runs.every((run) => itemRun.test(run)),
+  );
 
 /**
  * The characters the two-item box draws texts from: digits and signs a point's integers hold,
@@ -322,9 +360,10 @@ describe("qti/mapping.ts, the two-item keys and exact values", { timeout: search
     (ctx) =>
       // Oracle: the specification as a checker, `BaseTypePattern`'s point and pair rows (two
       // xs:integer or IdentifierDType items, one whitespace character between) intersected with
-      // reading 7's exactness,
-      // here a JavaScript trim of XML whitespace; `pairKeyPattern` may select more, the texts that
-      // are no pair, which `Typed_attribute_value` refuses.
+      // reading 7's exactness, here a JavaScript trim of XML whitespace, against the schema's
+      // selections: `twoItemPattern`'s split, its runs each an integer for `MapKeyPoint` and each
+      // an item for `MapKeyPair`; the pair selection may hold more, the texts that are no pair,
+      // which `Typed_attribute_value` refuses.
       // Bound: every text of at most 4 characters over 8 characters, 4,681.
       searched(
         ctx,
@@ -350,8 +389,8 @@ describe("qti/mapping.ts, the two-item keys and exact values", { timeout: search
               c.note(itemSituationOf(point || pair, exact));
 
               assert.strictEqual(exactValue.test(text), exact, JSON.stringify(text));
-              assert.strictEqual(pointKey.test(text), point && exact, JSON.stringify(text));
-              assert.isTrue(!(pair && exact) || pairKey.test(text), JSON.stringify(text));
+              assert.strictEqual(pointSelected(text), point && exact, JSON.stringify(text));
+              assert.isTrue(!(pair && exact) || pairSelected(text), JSON.stringify(text));
             }),
         ),
       ),
@@ -661,6 +700,150 @@ describe("qti/mapping.ts, an integer key's typed value", { timeout: searchTimeou
                 breaches.some((breach) => breach.startsWith("Map key")),
                 integersRepeat(left, right),
                 `${left} ${right}: ${breaches.join("; ")}`,
+              );
+            }),
+        ),
+      ),
+  );
+});
+
+/**
+ * The two-item box's keys: a point, its spelling with a zero and a sign, its reverse and its
+ * spelling with a tab (`&#9;`, which attribute-value normalization keeps), a pair, its reverse and
+ * its spelling with a tab, two spaces between, which no two-item key holds, and one item alone.
+ */
+const twoItemBoxKeys = [
+  "1 2",
+  "01 +2",
+  "2 1",
+  "1&#9;2",
+  "A B",
+  "B A",
+  "A&#9;B",
+  "A  B",
+  "A",
+] as const;
+
+/**
+ * A key as its attribute's value reads it: its `&#9;` a tab.
+ *
+ * @param written - The key as the item writes it.
+ * @returns The key.
+ */
+const keyOf = (written: string): string => written.replaceAll("&#9;", "\t");
+
+/**
+ * The typed value the schema's query of a base type gives a key, as the host reads it: a point's
+ * two integers (`numericNamed`, the host's reading of `Compute.parseDecimal`), a pair's two items
+ * as a set (their least and greatest, in any one order), and a directed pair's two in order; none
+ * where the query holds no row of the key.
+ *
+ * @param baseType - The mapping's base type.
+ * @param key - The key.
+ * @returns The value's text.
+ */
+const twoItemValueOf = (baseType: "directedPair" | "pair" | "point", key: string) => {
+  const runs = runsOf(key);
+  if (runs === undefined) {
+    return undefined;
+  }
+
+  if (baseType === "point") {
+    const integers = runs.map((run) => {
+      const parsed = integerKey.test(run) ? numericNamed(run) : undefined;
+
+      return parsed?.kind === "finite" ? String(parsed.digits) : undefined;
+    });
+
+    return integers.every((integer) => integer !== undefined) ? integers.join(" ") : undefined;
+  }
+
+  if (!runs.every((run) => itemRun.test(run))) {
+    return undefined;
+  }
+
+  return (baseType === "pair" ? runs.toSorted() : runs).join(" ");
+};
+
+/**
+ * What a pair of the two-item box's keys is: one key twice, two spellings of one value, two
+ * values, or a key of no value of its base type.
+ */
+type TwoItemPairSituation = "one key" | "one value" | "two values" | "no value";
+
+describe("qti/mapping.ts, a two-item key's typed value", { timeout: searchTimeout }, () => {
+  it("is the queries MapKeyPoint, MapKeyPair and MapKeyDirectedPair of Qti, over each entry's node and mapping and the value read from its split", () => {
+    // Oracle: grizzle's README, "Rules over queries" and "Parsing text": a point's two
+    // `Compute.parseDecimal`s are numerics, so `1 2` and `01 +2` meet as one value, and a pair's
+    // and a directed pair's items are texts; the type annotations hold each value's SQL type
+    // when the file typechecks, and the entry's node keeps two entries of one value two rows.
+    // Bound: the three relations.
+    const { MapKeyDirectedPair, MapKeyPair, MapKeyPoint } = Qti.relations;
+    const x: "numeric" = MapKeyPoint.heading.x.sql;
+    const y: "numeric" = MapKeyPoint.heading.y.sql;
+
+    assert.deepStrictEqual([x, y], ["numeric", "numeric"]);
+    for (const [relation, heading] of [
+      [MapKeyPoint, ["mapping", "node", "x", "y"]],
+      [MapKeyPair, ["high", "low", "mapping", "node"]],
+      [MapKeyDirectedPair, ["mapping", "node", "source", "target"]],
+    ] as const) {
+      assert.strictEqual(relation.kind, "derived", relation.name);
+      assert.deepStrictEqual(Object.keys(relation.heading).toSorted(), [...heading]);
+      assert.notProperty(QtiBase.relations, relation.name);
+    }
+  });
+
+  it.effect(
+    "repeats two keys of a point, pair or directed pair mapping exactly where the law oracle names a Map key repeat",
+    (ctx) =>
+      // Oracle: the law oracle (`#pantry/test/oracle.ts`), the specification as a checker: two
+      // keys repeat where they are one text or one value of their base type, a point by its two
+      // integers, a pair undirected and a directed pair ordered (§8.13), against the schema's
+      // keys read as its statements state them ({@link twoItemValueOf}).
+      // Bound: every ordered pair of the box's 9 keys in each of the 3 base types, 243.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every ordered pair of 9 two-item keys, in a point, pair or directed pair mapping",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<TwoItemPairSituation>([
+              "one key",
+              "one value",
+              "two values",
+              "no value",
+            ]),
+            generator: (source) =>
+              [
+                source.draw(element(["directedPair", "pair", "point"] as const)),
+                source.draw(element(twoItemBoxKeys)),
+                source.draw(element(twoItemBoxKeys)),
+              ] as const,
+            limit: 300,
+            literal: (drawn) => JSON.stringify(drawn),
+            oracle: { kind: "specification", name: "the law oracle's Map key" },
+            suite: "qti/mapping-two-item-repeat",
+          },
+          ([baseType, left, right], c) =>
+            Effect.gen(function* twoItemRepeat() {
+              const values = [left, right].map((key) => twoItemValueOf(baseType, keyOf(key)));
+              const [first, second] = values;
+              const repeat =
+                keyOf(left) === keyOf(right) || (first !== undefined && first === second);
+              const situations: readonly [TwoItemPairSituation, boolean][] = [
+                ["one key", keyOf(left) === keyOf(right)],
+                ["no value", values.includes(undefined)],
+                ["one value", repeat],
+              ];
+              c.note(situations.find(([, holds]) => holds)?.[0] ?? "two values");
+
+              const breaches = yield* mappingBreachesOf(mappedItem(baseType, [left, right], "7"));
+
+              assert.strictEqual(
+                breaches.some((breach) => breach.startsWith("Map key")),
+                repeat,
+                `${baseType} ${left} ${right}: ${breaches.join("; ")}`,
               );
             }),
         ),

@@ -5,14 +5,12 @@
  *
  * The rows restate what the tree says and nothing else: each overlay's node tuple, its parent, its
  * declaration's `declarationRef` tuple as `#pantry/qti/declarations.ts` derives it, each map
- * entry's `map-key` as written, each key's typed row where its base type has a typed value and
- * the key is of that value's form, its fields the split PostgreSQL generates the value from, and
- * each lookup table's typed attribute values; and, where the declaration has a base type, a
- * mapping's, a map key's and a lookup value's row beside it (a record has none: lane NIL's audit,
- * B12). An integer key and a float key have no typed row: the queries `MapKeyInteger` and
- * `MapKeyFloat` (`#pantry/qti/queries.ts`) read their values from their `MapKeyType` rows. The
- * database proves every one of them (`mappingLaws`), so a row this builder gets wrong is refused,
- * never accepted.
+ * entry's `map-key` as written, each two-item key's split, and each lookup table's typed
+ * attribute values; and, where the declaration has a base type, a mapping's, a map key's and a
+ * lookup value's row beside it (a record has none: lane NIL's audit, B12). No key has a typed row:
+ * each typed value is a query (`#pantry/qti/queries.ts`) over the `MapKeyType` rows and the
+ * splits. The database proves every one of them (`mappingLaws`), so a row this builder gets wrong
+ * is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
@@ -25,7 +23,6 @@ import { lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
-import { Item } from "#pantry/qti/mapping.ts";
 import type {
   AreaMapping,
   AreaMappingCardinality,
@@ -33,9 +30,7 @@ import type {
   LookupValue,
   LookupValueType,
   MapKey,
-  MapKeyDirectedPair,
-  MapKeyPair,
-  MapKeyPoint,
+  MapKeyItems,
   MapKeyType,
   Mapping,
   MappingBaseType,
@@ -70,9 +65,7 @@ export interface MappingRows {
   readonly LookupValue: ReadonlyMap<string, Addition<typeof LookupValue>>;
   readonly LookupValueType: ReadonlyMap<string, Addition<typeof LookupValueType>>;
   readonly MapKey: ReadonlyMap<string, Addition<typeof MapKey>>;
-  readonly MapKeyDirectedPair: ReadonlyMap<string, Addition<typeof MapKeyDirectedPair>>;
-  readonly MapKeyPair: ReadonlyMap<string, Addition<typeof MapKeyPair>>;
-  readonly MapKeyPoint: ReadonlyMap<string, Addition<typeof MapKeyPoint>>;
+  readonly MapKeyItems: ReadonlyMap<string, Addition<typeof MapKeyItems>>;
   readonly MapKeyType: ReadonlyMap<string, Addition<typeof MapKeyType>>;
   readonly Mapping: ReadonlyMap<string, Addition<typeof Mapping>>;
   readonly MappingBaseType: ReadonlyMap<string, Addition<typeof MappingBaseType>>;
@@ -117,14 +110,17 @@ const copyOf = ({ baseType, cardinality, declarationKind }: Declared): Declarati
 });
 
 /**
- * A pair's or a directed pair's item as `Item`, the type of each item field, holds it.
- */
-const pairItem = new RegExp(Item.patterns[0].source, Item.patterns[0].flags);
-
-/**
- * A point key's or a pair key's split: its two items and the whitespace between them.
+ * A two-item key's split, as `twoItemPattern` (`#pantry/qti/mapping.ts`) reads the key: its first
+ * run of characters holding no XML whitespace, the one whitespace character after it, and its
+ * second run.
  */
 const twoItems = /^(?<first>[^\t\n\r ]+)(?<gap>[\t\n\r ])(?<second>[^\t\n\r ]+)$/u;
+
+/**
+ * The base types whose keys are written as two items: each key of a mapping of one, split into
+ * its two items, has its `MapKeyItems` row.
+ */
+const twoItemBaseTypes: ReadonlySet<string> = new Set(["directedPair", "pair", "point"]);
 
 /**
  * The lookup tables' kinds, each with the attribute whose value it carries: its entries'
@@ -138,69 +134,9 @@ const lookupAttributeOf: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * An integer's split: the sign, the leading zeros, and the magnitude, which holds one digit at
- * least.
- */
-const integerParts = /^(?<sign>[+-]?)(?<zeros>0*)(?<digits>0|[1-9][0-9]*)$/u;
-
-/**
- * The parts of one of a point's integers, as {@link MapKeyPoint} holds its first.
- */
-type IntegerParts = {
-  readonly digits: Addition<typeof MapKeyPoint>["xDigits"];
-  readonly sign: Addition<typeof MapKeyPoint>["xSign"];
-  readonly zeros: Addition<typeof MapKeyPoint>["xZeros"];
-};
-
-/**
- * Whether a text is a sign or none, the language of `MapKeyPoint.xSign`.
- *
- * @param text - The text, none where the split did not match.
- * @returns Whether it is `+`, `-` or nothing.
- */
-const isSign = (text: string | undefined): text is IntegerParts["sign"] =>
-  text === "" || text === "+" || text === "-";
-
-/**
- * Whether a text is a run of zeros, the language of `MapKeyPoint.xZeros`.
- *
- * @param text - The text, none where the split did not match.
- * @returns Whether it holds `0` alone, or nothing.
- */
-const isZeros = (text: string | undefined): text is IntegerParts["zeros"] =>
-  text !== undefined && /^0*$/u.test(text);
-
-/**
- * Whether a text is an integer's magnitude with no leading zero, the language of
- * `MapKeyPoint.xDigits`.
- *
- * @param text - The text, none where the split did not match.
- * @returns Whether it is `0` or starts with a nonzero digit, digits alone.
- */
-const isDigits = (text: string | undefined): text is IntegerParts["digits"] =>
-  text !== undefined && /^(?:0|[1-9][0-9]*)$/u.test(text);
-
-/**
- * Split one of a point key's integers into the parts PostgreSQL generates its canonical form from:
- * the sign, the leading zeros and the magnitude.
- *
- * @param key - The integer's text.
- * @returns The parts, or none for a text that is no member of `integerKeyPattern`
- *   (`#pantry/qti/mapping.ts`).
- */
-export const integerPartsOf = (key: string): IntegerParts | undefined => {
-  const groups = integerParts.exec(key)?.groups;
-  const sign = groups?.["sign"];
-  const zeros = groups?.["zeros"];
-  const digits = groups?.["digits"];
-
-  return isSign(sign) && isZeros(zeros) && isDigits(digits) ? { digits, sign, zeros } : undefined;
-};
-
-/**
  * The whitespace between a point's or a pair's two items, as `Gap` types it.
  */
-type GapText = Addition<typeof MapKeyPair>["gap"];
+type GapText = Addition<typeof MapKeyItems>["gap"];
 
 /**
  * Whether a text is one XML whitespace character, the language of `Gap`.
@@ -212,13 +148,17 @@ const isGap = (text: string | undefined): text is GapText =>
   text === " " || text === "\t" || text === "\n" || text === "\r";
 
 /**
- * Split a key of two items around the whitespace between them.
+ * Split a two-item key around the one whitespace character between its items: the one split the
+ * host makes of a map key, since no grizzle `Compute` term splits a text (no substring, split or
+ * pattern group at the vendored commit; reported to grizzle, and waiting on its text-split term).
+ * Every value read from the items is the database's (`#pantry/qti/queries.ts` `MapKeyPoint`,
+ * `MapKeyPair` and `MapKeyDirectedPair`), and `E1_derived` proves the split spells the key.
  *
  * @param key - The key.
- * @returns Its first item, the whitespace and its second item, or none for a key that is not two
- *   items.
+ * @returns Its first run, the whitespace and its second run, or none for a key that is not two
+ *   runs around one whitespace character, the keys `twoItemPattern` leaves out.
  */
-const itemsOf = (
+export const itemsOf = (
   key: string,
 ): { readonly first: string; readonly gap: GapText; readonly second: string } | undefined => {
   const groups = twoItems.exec(key)?.groups;
@@ -229,148 +169,6 @@ const itemsOf = (
   return first === undefined || !isGap(gap) || second === undefined
     ? undefined
     : { first, gap, second };
-};
-
-/**
- * Split a point map key into the parts PostgreSQL generates its canonical form from: each
- * integer's, as {@link integerPartsOf} splits one, and the whitespace between them.
- *
- * @param key - The key.
- * @returns The parts, or none for a key that is no member of `pointKeyPattern`
- *   (`#pantry/qti/mapping.ts`).
- */
-export const pointPartsOf = (
-  key: string,
-): Omit<Addition<typeof MapKeyPoint>, "key" | "mapping" | "node"> | undefined => {
-  const items = itemsOf(key);
-  const x = items === undefined ? undefined : integerPartsOf(items.first);
-  const y = items === undefined ? undefined : integerPartsOf(items.second);
-  if (items === undefined || x === undefined || y === undefined) {
-    return undefined;
-  }
-
-  return {
-    gap: items.gap,
-    xDigits: x.digits,
-    xSign: x.sign,
-    xZeros: x.zeros,
-    yDigits: y.digits,
-    ySign: y.sign,
-    yZeros: y.zeros,
-  };
-};
-
-/**
- * Split a pair map key into the parts PostgreSQL generates its canonical form from: its two items
- * and the whitespace between them.
- *
- * The split is wider than `pairKeyPattern` (`#pantry/qti/mapping.ts`): an item of the split is any
- * run of no XML whitespace, and an `Item` a run of XML `Char`s past U+0020. The two part on the C0
- * control characters an XML 1.1 document writes as character references (`&#x1;`), whose key no
- * typed row holds ({@link typedKeyAdders}), and `Typed_attribute_value` refuses it
- * (`mapping.test.ts`).
- *
- * @param key - The key.
- * @returns The parts, or none for a key that is not two items around one XML whitespace
- * character.
- */
-export const pairPartsOf = (
-  key: string,
-): Omit<Addition<typeof MapKeyPair>, "key" | "mapping" | "node"> | undefined => itemsOf(key);
-
-/**
- * Split a directed pair map key into the parts PostgreSQL generates its canonical form from: its
- * source and target and the whitespace between them, as {@link pairPartsOf} splits a pair key.
- *
- * @param key - The key.
- * @returns The parts, or none for a key that is not two items around one XML whitespace
- * character.
- */
-export const directedPairPartsOf = (
-  key: string,
-): Omit<Addition<typeof MapKeyDirectedPair>, "key" | "mapping" | "node"> | undefined => {
-  const items = itemsOf(key);
-
-  return items === undefined
-    ? undefined
-    : { gap: items.gap, source: items.first, target: items.second };
-};
-
-/**
- * The typed map keys' rows, one keyed set per relation, by the entry's node.
- */
-interface TypedKeys {
-  readonly MapKeyDirectedPair: Map<string, Addition<typeof MapKeyDirectedPair>>;
-  readonly MapKeyPair: Map<string, Addition<typeof MapKeyPair>>;
-  readonly MapKeyPoint: Map<string, Addition<typeof MapKeyPoint>>;
-}
-
-/**
- * A map key, its mapping and its entry's node, which each typed row holds.
- */
-interface TypedEntry {
-  readonly key: string;
-  readonly mapping: NodeId;
-  readonly node: NodeId;
-}
-
-/**
- * Each base type's stored typed key, where it has one: the split of its key into the row's parts,
- * and the relation its row joins, written only where each part is a value of its field's type: a
- * pair's or a directed pair's where both items of its split are `Item`s, and a point's parts typed
- * by their split. These are the keys each typed relation's mirror selects ("Mapping overlay":
- * `pairKeys` and `directedPairKeys` over `pairKeyPattern`, `pointKeys` over `pointKeyPattern`), so
- * a key of no such form has no typed row, and `Typed_attribute_value` alone refuses it on its
- * `MapKeyType` row: a form outside a type's lexical space denotes no value of it (XML Schema Part 2
- * §2.3), as reading 152 reads it for a name. Each of these relations is stored, so the host decides
- * which rows exist and the mirror judges the decision (the constraint-engine plan's B9). A row for
- * every pair split breaks the mirror beside `Typed attribute value`.
- *
- * An integer key and a float key have no typed row: their typed values are the queries
- * `MapKeyInteger` and `MapKeyFloat` (`#pantry/qti/queries.ts`), PostgreSQL's parses of their
- * `MapKeyType` rows' keys, each keyed by a rule over its query.
- */
-const typedKeyAdders: Partial<
-  Readonly<Record<BaseTypeHandle, (typed: TypedKeys, entry: TypedEntry) => void>>
-> = {
-  directedPair: (typed, entry) => {
-    const directed = directedPairPartsOf(entry.key);
-    if (
-      directed !== undefined &&
-      pairItem.test(directed.source) &&
-      pairItem.test(directed.target)
-    ) {
-      typed.MapKeyDirectedPair.set(entry.node, { ...directed, ...entry });
-    }
-  },
-  pair: (typed, entry) => {
-    const pair = pairPartsOf(entry.key);
-    if (pair !== undefined && pairItem.test(pair.first) && pairItem.test(pair.second)) {
-      typed.MapKeyPair.set(entry.node, { ...pair, ...entry });
-    }
-  },
-  point: (typed, entry) => {
-    const point = pointPartsOf(entry.key);
-    if (point !== undefined) {
-      typed.MapKeyPoint.set(entry.node, { ...point, ...entry });
-    }
-  },
-};
-
-/**
- * Add a map key's typed row, where its base type gives it one and the key is of its form: a point's
- * two integers' signs, zeros and digits, and a pair's or a directed pair's two `Item`s. Every other
- * key has no typed row, and `Typed_attribute_value` refuses it on its `MapKeyType` row.
- *
- * @param typed - The typed rows so far.
- * @param baseType - The key's mapping's base type.
- * @param entry - The key, its mapping and its entry's node.
- * @param entry.key - The key.
- * @param entry.mapping - The mapping's node.
- * @param entry.node - The entry's node.
- */
-const addTypedKey = (typed: TypedKeys, baseType: BaseTypeHandle, entry: TypedEntry): void => {
-  typedKeyAdders[baseType]?.(typed, entry);
 };
 
 /**
@@ -408,15 +206,16 @@ const matchingOf = (
  * `matched`, the key's ASCII lowercase where `folded`.
  *
  * A map entry with no `map-key` has no `MapKey` row, and AL3 refuses the element. A key past the
- * key-text bound keeps its `MapKey` row and its typed row, and `MapKey`'s `keyText` refuses it
- * under "Key text bound" (its parts' types bound no length). A typed key has its typed row exactly
- * where it is of its base type's form ({@link typedKeyAdders}); any other key has none, and
- * `Typed_attribute_value` refuses it. A table entry, and a table with a `default-value`, has its
- * `LookupValue` row, with its table's declaration. Each of a mapping, a map key and a lookup value
- * has its row beside its declaration's base type, where the declaration has one, and only there; a
- * record's has none, so its keys and values are read in no base type and have no typed row. Each of
- * a mapping, an area mapping and a lookup table has its row beside its declaration's cardinality,
- * where the declaration has one, and only there (spec reading 158).
+ * key-text bound keeps its `MapKey` row and its split, and `MapKey`'s `keyText` refuses it under
+ * "Key text bound". A key of a point, pair or directed pair mapping has its `MapKeyItems` row
+ * exactly where it is two runs around one whitespace character ({@link itemsOf}); any other has
+ * none, and `Typed_attribute_value` refuses it. A table entry, and a table with a `default-value`,
+ * has its `LookupValue` row, with its table's declaration. Each of a
+ * mapping, a map key and a lookup value has its row beside its declaration's base type, where the
+ * declaration has one, and only there; a record's has none, so its keys and values are read in no
+ * base type and have no typed row. Each of a mapping, an area mapping and a lookup table has its
+ * row beside its declaration's cardinality, where the declaration has one, and only there (spec
+ * reading 158).
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -459,11 +258,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
   const mapKeys = new Map<string, Addition<typeof MapKey>>();
   const mapKeyTypes = new Map<string, Addition<typeof MapKeyType>>();
   const mappingBaseTypes = new Map<string, Addition<typeof MappingBaseType>>();
-  const typed: TypedKeys = {
-    MapKeyDirectedPair: new Map(),
-    MapKeyPair: new Map(),
-    MapKeyPoint: new Map(),
-  };
+  const mapKeyItems = new Map<string, Addition<typeof MapKeyItems>>();
   const mappings = new Map<string, Addition<typeof Mapping>>();
   const lookupTables = new Map<string, Addition<typeof LookupTable>>();
   const cardinalities = {
@@ -550,7 +345,11 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     });
     for (const baseType of Option.toArray(mappingDeclaration.baseType)) {
       mapKeyTypes.set(node.id, { baseType, key, mapping: node.parent, node: node.id });
-      addTypedKey(typed, baseType, { key, mapping: node.parent, node: node.id });
+      for (const items of twoItemBaseTypes.has(baseType)
+        ? Option.toArray(Option.fromUndefinedOr(itemsOf(key)))
+        : []) {
+        mapKeyItems.set(node.id, { ...items, key, mapping: node.parent, node: node.id });
+      }
     }
   }
 
@@ -561,7 +360,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     LookupValue: lookupValues,
     LookupValueType: lookupValueTypes,
     MapKey: mapKeys,
-    ...typed,
+    MapKeyItems: mapKeyItems,
     MapKeyType: mapKeyTypes,
     Mapping: mappings,
     MappingBaseType: mappingBaseTypes,

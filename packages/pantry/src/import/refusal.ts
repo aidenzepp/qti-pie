@@ -75,15 +75,7 @@ import { readerOrigin, RefusalOrigin } from "#pantry/package/refusal-origin.ts";
 import type { RefusedLaw } from "#pantry/package/refusal-origin.ts";
 import { keyText, namespaceText } from "#pantry/qti/limits.ts";
 import { interactionLawsByName, interactionRelations } from "#pantry/qti/interactions.ts";
-import {
-  Digits,
-  Gap,
-  Item,
-  mappingLawsByName,
-  Negative,
-  Sign,
-  Zeros,
-} from "#pantry/qti/mapping.ts";
+import { Gap, mappingLawsByName, Run } from "#pantry/qti/mapping.ts";
 import { DayForm, metadataLawsByName, metadataRelations } from "#pantry/qti/metadata.ts";
 import { Chars, EndCharacter, nodeLawsByName, Prefix } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
@@ -427,9 +419,7 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
     "MappingCardinality",
     "MapKey",
     "MapKeyType",
-    "MapKeyPoint",
-    "MapKeyPair",
-    "MapKeyDirectedPair",
+    "MapKeyItems",
     "AreaMapping",
     "AreaMappingCardinality",
     "LookupTable",
@@ -484,8 +474,6 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
  *   {@link textLaws}, holds to the days 0001-01-01 to 9999-12-31 the cast reads total, refused the
  *   same way. Its value is the calendar day `lastUpdated` names, which the value domain states
  *   exists, so it is the value domain's.
- * - A typed map key's generated fields read its own split, by concatenation and conditionals. No term
- *   reads a closed relation, so none is NULL.
  * - A document's and an item's assembly's `xml:lang` form's compared `value` is the form collapsed
  *   and case-folded, cast into the form's own key text, a cast the schema proves total: a written
  *   text, never NULL.
@@ -503,16 +491,7 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
     "SectionSelection.select",
   ),
   ...namedBy("value domain", "StatisticDate.date"),
-  ...namedBy(
-    "E1 derived",
-    "MapKeyPoint.value",
-    "MapKeyPoint.xNegative",
-    "MapKeyPoint.yNegative",
-    "MapKeyPair.value",
-    "MapKeyDirectedPair.value",
-    "DocumentLang.value",
-    "AssembledLang.value",
-  ),
+  ...namedBy("E1 derived", "DocumentLang.value", "AssembledLang.value"),
 ];
 
 /**
@@ -608,8 +587,6 @@ export const patternNameIn = (
  *   §4); a foreign namespace name is `Char`s because crust reads no other; an entry path begins
  *   with no `/` because the directory reader lists paths relative to the package root and `zip.ts`
  *   refuses an absolute name;
- * - A pair's or a directed pair's item is "Typed attribute value": `Item` (wider than an identifier)
- *   refuses only a key `Typed_attribute_value` refuses on its `MapKeyType` row;
  * - An unbounded XML production (a node's or an attribute's `Char*`, a comment, an instruction, a
  *   doctype, an encoding name, a version number, an NCName) is "XML production", which crust
  *   refuses before any row exists;
@@ -646,12 +623,8 @@ export const textLaws: ReadonlyMap<RegexText<string>, LawName> = new Map<
   [NcName, "XML production"],
   [EntityName, "XML production"],
   [Space, "E1 derived"],
-  [Sign, "E1 derived"],
-  [Zeros, "E1 derived"],
-  [Digits, "E1 derived"],
-  [Negative, "E1 derived"],
   [Gap, "E1 derived"],
-  [Item, "Typed attribute value"],
+  [Run, "E1 derived"],
   [Affix, "E1 derived"],
   [Separator, "E1 derived"],
   [HrefParams, "E1 derived"],

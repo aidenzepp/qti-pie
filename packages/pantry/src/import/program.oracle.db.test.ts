@@ -838,7 +838,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [keyOn("MapKeyPair", "mapping", "value")],
+          laws: [keyOn("MapKeyPair", "mapping", "low", "high")],
           name: "a pair mapping keyed A B and B A (map-key-unique, Q5.11)",
         },
         {
@@ -851,7 +851,7 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [keyOn("MapKeyPoint", "mapping", "value")],
+          laws: [keyOn("MapKeyPoint", "mapping", "x", "y")],
           name: "a point mapping keyed 1 2 and 01 +2 (map-key-unique, Q5.11)",
         },
         {

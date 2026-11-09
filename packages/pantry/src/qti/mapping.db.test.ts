@@ -10,10 +10,10 @@
  * (membership, since a merged native names several, C22); whether the host or PostgreSQL's UNIQUE
  * finds a key's repeat is outside the contract.
  *
- * The keys over the queries `MapKeyInteger` and `MapKeyFloat` (`#pantry/qti/queries.ts`) are
- * deferred constraint triggers, which `db.apply` would judge at COMMIT behind the stray rows'
- * foreign keys, so their cases are judged by a direct SQL writer (`#pantry/test/direct-sql.ts`,
- * README "Direct SQL access"): the `MapKeyType` rows each query reads, every deferrable constraint
+ * The keys over the typed keys' queries (`#pantry/qti/queries.ts`) are deferred constraint
+ * triggers, which `db.apply` would judge at COMMIT behind the stray rows' foreign keys, so their
+ * cases are judged by a direct SQL writer (`#pantry/test/direct-sql.ts`, README "Direct SQL
+ * access"): the `MapKeyType` rows and splits each query reads, every deferrable constraint
  * deferred and rolled back unchecked but the rule's trigger, set immediate alone.
  *
  * The cases over a whole imported item need the importer's ChangeSet (Q5.15), and are stated in
@@ -36,9 +36,7 @@ import {
   LookupTableCardinality,
   LookupValueType,
   MapKey,
-  MapKeyDirectedPair,
-  MapKeyPair,
-  MapKeyPoint,
+  MapKeyItems,
   MapKeyType,
   MappingBaseType,
   MappingCardinality,
@@ -185,30 +183,28 @@ const mapKeyRow = (at: number, key: string, baseType = "string"): Fact<typeof Ma
 });
 
 /**
- * The name of the trigger the key over a typed key's query (`#pantry/qti/queries.ts`,
- * `MapKeyInteger` or `MapKeyFloat`) is on `MapKeyType`, the one table the query reads: a rule over
- * a query is a deferred constraint trigger on each table its query reads, which grizzle names from
- * a digest and describes by its comment, `trigger of rule` and the rule as its law spells it
- * (grizzle's `lawsOf`), and grizzle's `constraintNamesOf` names a check alone.
+ * The name of the trigger a key over a typed key's query (`#pantry/qti/queries.ts`) is on one of
+ * the tables the query reads: a rule over a query is a deferred constraint trigger on each table
+ * its query reads, all under one name, which grizzle mints from a digest and describes by its
+ * comment, `trigger of rule` and the rule as its law spells it (grizzle's `lawsOf`), and grizzle's
+ * `constraintNamesOf` names a check alone.
  *
  * @param client - The session.
- * @param query - The query's name.
+ * @param table - A table the query reads, by its relation's name.
+ * @param side - The key's side as its law spells it, its query and its fields.
  * @returns The trigger's name, the constraint `SET CONSTRAINTS` sets immediate; none or several
  *   fail the case.
  */
-const typedKeyRule = (
-  client: Parameters<typeof rowsOf>[0],
-  query: typeof Qti.relations.MapKeyInteger.name | typeof Qti.relations.MapKeyFloat.name,
-) =>
+const typedKeyRule = (client: Parameters<typeof rowsOf>[0], table: string, side: string) =>
   rowsOf<{ readonly tgname: string }>(
     client,
     `SELECT t.tgname FROM pg_catalog.pg_trigger t
       WHERE t.tgrelid = pg_catalog.to_regclass($1)
         AND pg_catalog.obj_description(t.oid, 'pg_trigger') LIKE $2`,
-    [`${qtiSchema}.${tableOf(MapKeyType.name)}`, `trigger of rule key ${query}(mapping, value)%`],
+    [`${qtiSchema}.${tableOf(table)}`, `trigger of rule key ${side}%`],
   ).pipe(
     Effect.map((rows) => {
-      assert.lengthOf(rows, 1, `the key over ${query}(mapping, value)`);
+      assert.lengthOf(rows, 1, `the key over ${side}`);
 
       return rows[0]?.tgname ?? "";
     }),
@@ -223,10 +219,38 @@ const typedKeyRule = (
  * @param key - Its key.
  * @returns The fact, of `MapKeyType`.
  */
-const typedKeyFact = (baseType: "float" | "integer", at: number, key: string) => ({
+const typedKeyFact = (baseType: string, at: number, key: string) => ({
   fact: { baseType, key, mapping: stray, node: strayNode(at) },
   relation: MapKeyType,
 });
+
+/**
+ * A stray two-item map key of a mapping of a base type, entry `at`: its `MapKeyType` row and its
+ * split, the rows a two-item key's query reads.
+ *
+ * @param baseType - The mapping's base type.
+ * @param at - The entry's number.
+ * @param key - Its key, two runs around one whitespace character.
+ * @returns The facts.
+ * @throws {Error} When the key is not two runs: a defect of the test.
+ */
+const twoItemFacts = (baseType: string, at: number, key: string) => {
+  const groups = /^(?<first>[^\t\n\r ]+)(?<gap>[\t\n\r ])(?<second>[^\t\n\r ]+)$/u.exec(
+    key,
+  )?.groups;
+  const [first, gap, second] = [groups?.["first"], groups?.["gap"], groups?.["second"]];
+  if (first === undefined || gap === undefined || second === undefined) {
+    throw new Error(`The case's key ${JSON.stringify(key)} is not two runs; write one that is.`);
+  }
+
+  return [
+    typedKeyFact(baseType, at, key),
+    {
+      fact: { first, gap, key, mapping: stray, node: strayNode(at), second },
+      relation: MapKeyItems,
+    },
+  ];
+};
 
 /**
  * The mapping and node of a stray typed key, entry `n`.
@@ -310,7 +334,11 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
           // 1.0.
           Effect.gen(function* integerKeys() {
             const client = yield* loginSession;
-            const rule = yield* typedKeyRule(client, Qti.relations.MapKeyInteger.name);
+            const rule = yield* typedKeyRule(
+              client,
+              MapKeyType.name,
+              `${Qti.relations.MapKeyInteger.name}(mapping, value)`,
+            );
             for (const { keys, refused } of [
               { keys: ["1", "01"], refused: true },
               { keys: ["-0", "+0"], refused: true },
@@ -354,7 +382,11 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
           // double and INF, the least subnormal and 0, INF and -INF, and INF and +INF.
           Effect.gen(function* floatKeys() {
             const client = yield* loginSession;
-            const rule = yield* typedKeyRule(client, Qti.relations.MapKeyFloat.name);
+            const rule = yield* typedKeyRule(
+              client,
+              MapKeyType.name,
+              `${Qti.relations.MapKeyFloat.name}(mapping, value)`,
+            );
             for (const { keys, refused } of [
               { keys: ["1", "1.0"], refused: true },
               { keys: ["1", "10e-1"], refused: true },
@@ -493,171 +525,105 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a pair's or a directed pair's item holding a C0 control by its type's pattern law, named Typed attribute value",
+        "refuses a two-item key's split that does not spell its key by E1_derived, and a run holding whitespace by Run's pattern law",
         () =>
-          // Oracle: PostgreSQL, the text domain of `Item` as the statement casts each value, before
-          // any row CHECK, and grizzle's pattern law of the field, named by its type's row of
-          // `textLaws`. The import writes no such row (`#pantry/import/overlays/mapping.ts`
-          // `typedKeyAdders`), so only a direct writer meets the domain, which judges the form as
-          // `Typed_attribute_value` judges the same key on `MapKeyType` above (reading 7).
-          // Bound: a pair and a directed pair whose first item holds U+0001, which an XML 1.1
-          // document writes as `&#x1;`, and whose second item holds none.
-          Effect.gen(function* untypedItems() {
+          // Oracle: PostgreSQL, the E1_derived CHECK on MapKeyItems (the split spells the key),
+          // judged as the row is inserted, and the text domain of `Run` as the statement casts
+          // each run, named by its row of `textLaws`; the control is the split that spells its key.
+          // Bound: a second run that is not the key's, a run holding the space between, and the
+          // lawful split of `A B`.
+          Effect.gen(function* splits() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            const pair = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyPair, [
-                { ...at(0), first: "A\u{1}", gap: " ", key: "A\u{1} B", second: "B" },
+            const unspelled = yield* db.apply(
+              ChangeSet.empty(Author).insert(MapKeyItems, [
+                { ...at(0), first: "A", gap: " ", key: "A B", second: "C" },
               ]),
               {},
             );
-            const directed = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyDirectedPair, [
-                { ...at(0), gap: " ", key: "A\u{1} B", source: "A\u{1}", target: "B" },
+            const spaced = yield* db.apply(
+              ChangeSet.empty(Author).insert(MapKeyItems, [
+                { ...at(0), first: "A B", gap: " ", key: "A B C", second: "C" },
+              ]),
+              {},
+            );
+            const lawful = yield* db.apply(
+              ChangeSet.empty(Author).insert(MapKeyItems, [
+                { ...at(0), first: "A", gap: " ", key: "A B", second: "B" },
               ]),
               {},
             );
 
+            assert.isTrue(rejectedBy(unspelled, checkNamed("MapKeyItems", "E1_derived")));
             assert.deepStrictEqual(
-              refusedNameOf(pair, patternOf("MapKeyPair", "first")),
-              Option.some("Typed attribute value"),
+              refusedNameOf(spaced, patternOf("MapKeyItems", "first")),
+              Option.some("E1 derived"),
             );
-            assert.isFalse(rejectedBy(pair, patternOf("MapKeyPair", "second")));
-            assert.deepStrictEqual(
-              refusedNameOf(directed, patternOf("MapKeyDirectedPair", "source")),
-              Option.some("Typed attribute value"),
-            );
-            assert.isFalse(rejectedBy(directed, patternOf("MapKeyDirectedPair", "target")));
+            assert.isFalse(rejectedBy(lawful, checkNamed("MapKeyItems", "E1_derived")));
+            assert.isFalse(rejectedBy(lawful, patternOf("MapKeyItems", "first")));
           }),
       );
 
       it.effect(
-        "refuses two point, pair or directed pair keys of one mapping that name one value, by each key on (mapping, value)",
+        "refuses two point, pair or directed pair keys of one mapping that name one value, by the key over each one's query, and keeps two that name two values",
         () =>
-          // Oracle: PostgreSQL, the UNIQUE of key(on(R, "mapping", "value")) for each two-item
-          // relation over the value it generates, each row's parts true to its E1_derived
-          // (information model §8.13: a pair undirected, a point and a directed pair ordered).
-          // Bound: points 1 2 and 01 +2; pairs A B and B A, and U+E000 U+10000 and its reverse;
-          // directed pairs A B and A, a tab, B.
-          Effect.gen(function* twoItemRepeat() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const point = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyPoint, [
-                {
-                  ...at(0),
-                  gap: " ",
-                  key: "1 2",
-                  xDigits: "1",
-                  xSign: "",
-                  xZeros: "",
-                  yDigits: "2",
-                  ySign: "",
-                  yZeros: "",
-                },
-                {
-                  ...at(1),
-                  gap: " ",
-                  key: "01 +2",
-                  xDigits: "1",
-                  xSign: "",
-                  xZeros: "0",
-                  yDigits: "2",
-                  ySign: "+",
-                  yZeros: "",
-                },
-              ]),
-              {},
-            );
-            const pairs = [];
-            for (const [first, second] of [
-              ["A", "B"],
-              ["\u{E000}", "\u{10000}"],
+          // Oracle: PostgreSQL, the key over each two-item query (`src/qti/queries.ts`
+          // `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`): a deferred constraint trigger
+          // on `MapKeyItems` and `MapKeyType`, the tables the query reads, set immediate alone,
+          // which raises 23505 under the rule's name where two entries of one mapping hold one
+          // value (information model §8.13: a pair undirected, a point and a directed pair
+          // ordered, a point's integers each `Compute.parseDecimal`'s).
+          // Bound: points 1 2 and 01 +2, and 1 2 and 1, a tab, 2; pairs A B and B A, and U+E000
+          // U+10000 and its reverse; directed pairs A B and A, a tab, B; against points -1 2 and
+          // 1 2, and 1 2 and 2 1, pairs A B and A C, and directed pairs A B and B A.
+          Effect.gen(function* twoItemKeys() {
+            const client = yield* loginSession;
+            const rules = {
+              directedPair: yield* typedKeyRule(
+                client,
+                MapKeyItems.name,
+                `${Qti.relations.MapKeyDirectedPair.name}(mapping, source, target)`,
+              ),
+              pair: yield* typedKeyRule(
+                client,
+                MapKeyItems.name,
+                `${Qti.relations.MapKeyPair.name}(mapping, low, high)`,
+              ),
+              point: yield* typedKeyRule(
+                client,
+                MapKeyItems.name,
+                `${Qti.relations.MapKeyPoint.name}(mapping, x, y)`,
+              ),
+            };
+            for (const { baseType, keys, refused } of [
+              { baseType: "point", keys: ["1 2", "01 +2"], refused: true },
+              { baseType: "point", keys: ["1 2", "1\t2"], refused: true },
+              { baseType: "pair", keys: ["A B", "B A"], refused: true },
+              {
+                baseType: "pair",
+                keys: ["\u{E000} \u{10000}", "\u{10000} \u{E000}"],
+                refused: true,
+              },
+              { baseType: "directedPair", keys: ["A B", "A\tB"], refused: true },
+              { baseType: "point", keys: ["-1 2", "1 2"], refused: false },
+              { baseType: "point", keys: ["1 2", "2 1"], refused: false },
+              { baseType: "pair", keys: ["A B", "A C"], refused: false },
+              { baseType: "directedPair", keys: ["A B", "B A"], refused: false },
             ] as const) {
-              pairs.push(
-                yield* db.apply(
-                  ChangeSet.empty(Author).insert(MapKeyPair, [
-                    { ...at(0), first, gap: " ", key: `${first} ${second}`, second },
-                    { ...at(1), first: second, gap: " ", key: `${second} ${first}`, second: first },
-                  ]),
-                  {},
+              const rule = rules[baseType];
+              assertVerdict(
+                yield* judged(
+                  client,
+                  statedInserts(keys.flatMap((key, n) => twoItemFacts(baseType, n, key))),
+                  [rule],
                 ),
+                rule,
+                refused,
+                `${baseType}: ${keys.join(" | ")}`,
+                "23505",
               );
             }
-            const directed = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyDirectedPair, [
-                { ...at(0), gap: " ", key: "A B", source: "A", target: "B" },
-                { ...at(1), gap: "\t", key: "A\tB", source: "A", target: "B" },
-              ]),
-              {},
-            );
-
-            assert.isTrue(rejectedBy(point, keyOver("MapKeyPoint", ["mapping", "value"])));
-            for (const pair of pairs) {
-              assert.isTrue(rejectedBy(pair, keyOver("MapKeyPair", ["mapping", "value"])));
-            }
-            assert.isTrue(
-              rejectedBy(directed, keyOver("MapKeyDirectedPair", ["mapping", "value"])),
-            );
-          }),
-      );
-
-      it.effect(
-        "keeps two point, pair or directed pair keys of one mapping that name two values, each key on (mapping, value) unbroken",
-        () =>
-          // Oracle: PostgreSQL, the UNIQUE of key(on(R, "mapping", "value")) for each two-item
-          // relation over the value it generates, against §8.13's tuples, which differ: the
-          // control of the repeats above. A stray row's deferred containments may still refuse the
-          // write at commit, so the key alone is read.
-          // Bound: points -1 2 and 1 2; pairs A B and A C; directed pairs A B and B A.
-          Effect.gen(function* twoItemDistinct() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const point = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyPoint, [
-                {
-                  ...at(0),
-                  gap: " ",
-                  key: "-1 2",
-                  xDigits: "1",
-                  xSign: "-",
-                  xZeros: "",
-                  yDigits: "2",
-                  ySign: "",
-                  yZeros: "",
-                },
-                {
-                  ...at(1),
-                  gap: " ",
-                  key: "1 2",
-                  xDigits: "1",
-                  xSign: "",
-                  xZeros: "",
-                  yDigits: "2",
-                  ySign: "",
-                  yZeros: "",
-                },
-              ]),
-              {},
-            );
-            const pair = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyPair, [
-                { ...at(0), first: "A", gap: " ", key: "A B", second: "B" },
-                { ...at(1), first: "A", gap: " ", key: "A C", second: "C" },
-              ]),
-              {},
-            );
-            const directed = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyDirectedPair, [
-                { ...at(0), gap: " ", key: "A B", source: "A", target: "B" },
-                { ...at(1), gap: " ", key: "B A", source: "B", target: "A" },
-              ]),
-              {},
-            );
-
-            assert.isFalse(rejectedBy(point, keyOver("MapKeyPoint", ["mapping", "value"])));
-            assert.isFalse(rejectedBy(pair, keyOver("MapKeyPair", ["mapping", "value"])));
-            assert.isFalse(
-              rejectedBy(directed, keyOver("MapKeyDirectedPair", ["mapping", "value"])),
-            );
-          }),
+          }).pipe(Effect.scoped),
+        { timeout: leaseTestTimeoutMs },
       );
     },
   );

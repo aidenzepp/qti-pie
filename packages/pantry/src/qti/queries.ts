@@ -72,7 +72,7 @@ import {
   objectTypes,
   resourceMetadata,
 } from "#pantry/qti/metadata.ts";
-import { integerKeyPattern, MapKeyType } from "#pantry/qti/mapping.ts";
+import { integerKeyPattern, itemPattern, MapKeyItems, MapKeyType } from "#pantry/qti/mapping.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
 import { ResourceDocument, ResourceHref, ResourceTyped } from "#pantry/qti/package.ts";
 import {
@@ -916,14 +916,108 @@ export const queriesOf = (base: QtiBase) => {
   );
 
   /**
-   * The mapping overlays' rules over a query, each named by its oracle law: an integer mapping's
-   * keys are distinct by the integers they name, and a float mapping's by the doubles they name
-   * ("Map key", information model §5.88.4 and §7.21: a mapping is a function of its source value).
+   * A point map key's typed value, one row per entry of a point mapping whose key splits into two
+   * runs ({@link MapKeyItems}) that are each in `xs:integer`'s lexical space: its entry's `node`,
+   * its `mapping`, and `x` and `y`, the integers its two items name, each PostgreSQL's
+   * `Compute.parseDecimal` of the item's text, as `MapKeyInteger` reads one. A point is "an
+   * integer tuple" (information model §8.13), so the key over `(mapping, x, y)` is uniqueness by
+   * typed value: `1 2`, `01 +2` and `1`, a tab, `2` are one point.
+   *
+   * The `where` selects by the matches the parses need as their guards, restated, so no row holds
+   * a `Compute.when`'s third argument.
+   */
+  const MapKeyPoint = derived(
+    "MapKeyPoint",
+    query(base).rule((r) => {
+      const { first, mapping, node, second } = v(MapKeyItems, "items");
+
+      return r
+        .match(MapKeyItems, { first, mapping, node, second })
+        .match(MapKeyType, { baseType: "point", node })
+        .where(
+          r.and(
+            Compute.matches(first, integerKeyPattern),
+            Compute.matches(second, integerKeyPattern),
+          ),
+        )
+        .find({
+          mapping,
+          node,
+          x: Compute.when(
+            Compute.matches(first, integerKeyPattern),
+            (integer) => Compute.parseDecimal(integer),
+            0n,
+          ),
+          y: Compute.when(
+            Compute.matches(second, integerKeyPattern),
+            (integer) => Compute.parseDecimal(integer),
+            0n,
+          ),
+        });
+    }),
+  );
+
+  /**
+   * A pair map key's typed value, one row per entry of a pair mapping whose key splits into two
+   * runs ({@link MapKeyItems}) that are each an item (`itemPattern`): its entry's `node`, its
+   * `mapping`, and `low` and `high`, its two items in code-point order, their least and their
+   * greatest. A pair's association "is undirected so (A,B) and (B,A) are equivalent" (information
+   * model §8.13), so the key over `(mapping, low, high)` is uniqueness by typed value: `A B`, `B A`
+   * and `A`, a tab, `B` are one pair. Text compares by code point, its collation `pg_c_utf8`.
+   */
+  const MapKeyPair = derived(
+    "MapKeyPair",
+    query(base).rule((r) => {
+      const { first, mapping, node, second } = v(MapKeyItems, "items");
+
+      return r
+        .match(MapKeyItems, { first, mapping, node, second })
+        .match(MapKeyType, { baseType: "pair", node })
+        .where(r.and(Compute.matches(first, itemPattern), Compute.matches(second, itemPattern)))
+        .find({
+          high: Compute.greatest(first, second),
+          low: Compute.least(first, second),
+          mapping,
+          node,
+        });
+    }),
+  );
+
+  /**
+   * A directed pair map key's typed value, one row per entry of a directed pair mapping whose key
+   * splits into two runs ({@link MapKeyItems}) that are each an item (`itemPattern`): its entry's
+   * `node`, its `mapping`, and `source` and `target`, its two items in order. A directed pair's
+   * association "is directed so (A,B) and (B,A) are not equivalent" (information model §8.13), so
+   * the key over `(mapping, source, target)` keeps the order and reads the whitespace between as
+   * none: `A B` and `A`, a tab, `B` are one directed pair, and `B A` another.
+   */
+  const MapKeyDirectedPair = derived(
+    "MapKeyDirectedPair",
+    query(base).rule((r) => {
+      const { first, mapping, node, second } = v(MapKeyItems, "items");
+
+      return r
+        .match(MapKeyItems, { first, mapping, node, second })
+        .match(MapKeyType, { baseType: "directedPair", node })
+        .where(r.and(Compute.matches(first, itemPattern), Compute.matches(second, itemPattern)))
+        .find({ mapping, node, source: first, target: second });
+    }),
+  );
+
+  /**
+   * The mapping overlays' rules over a query, each named by its oracle law: a mapping's keys are
+   * distinct by the values they name, each typed key by its query's value: an integer's, a
+   * float's, a point's two integers, a pair's two items in order of code point and a directed
+   * pair's two in order ("Map key", information model §5.88.4 and §7.21: a mapping is a function
+   * of its source value, and §8.13).
    */
   const mappingQueryLawsByName = {
     "Map key": [
       key(on(MapKeyInteger, "mapping", "value")),
       key(on(MapKeyFloat, "mapping", "value")),
+      key(on(MapKeyPoint, "mapping", "x", "y")),
+      key(on(MapKeyPair, "mapping", "low", "high")),
+      key(on(MapKeyDirectedPair, "mapping", "source", "target")),
     ],
   } as const;
 
@@ -948,8 +1042,11 @@ export const queriesOf = (base: QtiBase) => {
     LinkReading,
     ListedIdentifier,
     ListedTitle,
+    MapKeyDirectedPair,
     MapKeyFloat,
     MapKeyInteger,
+    MapKeyPair,
+    MapKeyPoint,
     MappedReading,
     MatchedIdentifier,
     MatchedTitle,

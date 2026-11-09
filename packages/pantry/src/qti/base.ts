@@ -162,9 +162,7 @@ import {
   LookupValue,
   LookupValueType,
   MapKey,
-  MapKeyDirectedPair,
-  MapKeyPair,
-  MapKeyPoint,
+  MapKeyItems,
   MapKeyType,
   Mapping,
   MappingBaseType,
@@ -435,8 +433,7 @@ const declarationRelations = {
 
 /**
  * `mapping.ts`'s relations: each response mapping, its declaration's base type and its map keys,
- * each beside that base type, with the typed values of its point, pair and directed pair keys (an
- * integer key's and a float key's are the queries `MapKeyInteger` and `MapKeyFloat`,
+ * each beside that base type, with each two-item key's split (every typed key's value is a query,
  * `#pantry/qti/queries.ts`), each area mapping, each outcome's lookup table and its tables' typed
  * values, each beside its declaration's base type, and each mapping, area mapping and lookup table
  * beside its declaration's cardinality.
@@ -449,9 +446,7 @@ const mappingRelations = {
   LookupValue,
   LookupValueType,
   MapKey,
-  MapKeyDirectedPair,
-  MapKeyPair,
-  MapKeyPoint,
+  MapKeyItems,
   MapKeyType,
   Mapping,
   MappingBaseType,

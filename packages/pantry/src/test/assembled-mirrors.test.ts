@@ -61,15 +61,6 @@ const unreadGenerated = (term: string): string =>
   `a field PostgreSQL generates by a term that holds ${term}, which the host's evaluator does not read`;
 
 /**
- * Why a typed map key's value is absent: PostgreSQL generates it from the map key's split by a
- * conditional, or a pair key's by grizzle's `Compute.least` and `Compute.greatest`
- * (`#pantry/qti/mapping.ts`).
- */
-const typedKeyValue = unreadGenerated(
-  "a conditional, or a least and a greatest, of the map key's split",
-);
-
-/**
  * Every value the host does not restore that a law over the every-relation package's rows reads,
  * as `Relation.field` or `Relation: a <kind> term`, with why.
  */
@@ -80,8 +71,6 @@ const unjudged = {
   "Expression: a between term": unreadTerm("between"),
   "LeastCount: a base term": unreadTerm("base"),
   "LeastCount: a when term": unreadTerm("when"),
-  "MapKeyPair.value": typedKeyValue,
-  "MapKeyPoint.value": typedKeyValue,
   "MasteryCeiling: a when term": unreadTerm("when"),
   "MasteryFloor: a when term": unreadTerm("when"),
   "MathAction: a base term": unreadTerm("base"),

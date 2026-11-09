@@ -19,12 +19,11 @@
  *   `Attribute` (C18), one row per entry, so two entries with one key are two facts the key law
  *   refuses rather than one fact that set semantics collapses (rows-first §0), and
  *   {@link MapKeyType} holds it beside its mapping's base type, where it has one;
- * - {@link MapKeyPoint}, {@link MapKeyPair} and {@link MapKeyDirectedPair} hold a map key's typed
- *   value where it differs from its lexical form, each a row of its own relation keyed by the
- *   entry's node and mirrored with the map keys of its base type, its `value` a field PostgreSQL
- *   generates from the key's text; an integer key's and a float key's typed values are no stored
- *   rows but the queries `MapKeyInteger` and `MapKeyFloat` (`#pantry/qti/queries.ts`), PostgreSQL's
- *   parses of the key's text, of which the import writes nothing;
+ * - A map key's typed value, where it differs from its lexical form, is no stored row but a query
+ *   (`#pantry/qti/queries.ts`): `MapKeyInteger` and `MapKeyFloat` parse an integer's and a float's
+ *   key text, and `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair` read a two-item key's items
+ *   from {@link MapKeyItems}, the one stored split of a point's, a pair's or a directed pair's key
+ *   into its two items, mirrored with the keys of those base types written as two;
  * - {@link LookupValue} copies each table entry's `target-value` and each table's `default-value`
  *   with its table's declaration, and {@link LookupValueType} holds it beside the declaration's
  *   base type, where it has one.
@@ -59,7 +58,6 @@ import {
   closedId,
   Compute,
   contained,
-  generated,
   key,
   mirrors,
   natural,
@@ -86,7 +84,7 @@ import {
   declarationRef,
 } from "#pantry/qti/declarations.ts";
 import { BaseTypePattern } from "#pantry/qti/expression-types.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { keyText, keyTextBytes } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 
 /**
@@ -99,20 +97,20 @@ import { Node, nodeRef } from "#pantry/qti/node.ts";
 export const integerKeyPattern = "^[+-]?[0-9]+$";
 
 /**
- * A point's lexical form as an attribute writes it: two integers and the one whitespace character
- * between them, as `BaseTypePattern`'s point row reads it, none around (reading 7): the map keys of
- * a point mapping whose value {@link MapKeyPoint} holds.
+ * A two-item key as an attribute writes it: two runs of characters holding no XML whitespace, and
+ * the one whitespace character between them, none around: the keys of a point, pair or directed
+ * pair mapping whose split {@link MapKeyItems} holds. Each typed value's query judges its items:
+ * a point's are two integers, a pair's and a directed pair's two runs of {@link itemPattern}, and
+ * `Typed_attribute_value` judges the key's lexical form.
  */
-export const pointKeyPattern = "^[+-]?[0-9]+[\\t\\n\\r ][+-]?[0-9]+$";
+export const twoItemPattern = "^[^\\t\\n\\r ]+[\\t\\n\\r ][^\\t\\n\\r ]+$";
 
 /**
- * A pair's or a directed pair's lexical form as an attribute writes it: two runs of non-space
- * `Char`s and the one whitespace character between them, none around: the map keys whose value
- * {@link MapKeyPair} or {@link MapKeyDirectedPair} holds. That each run is an identifier is
- * `Typed_attribute_value`'s to judge.
+ * One item of a pair or a directed pair: a run of XML `Char`s holding no whitespace, its
+ * identifier's lexical form `Typed_attribute_value` judges: the items the queries `MapKeyPair`
+ * and `MapKeyDirectedPair` (`#pantry/qti/queries.ts`) give a typed value.
  */
-export const pairKeyPattern =
-  "^[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+[\\t\\n\\r ][\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+$";
+export const itemPattern = "^[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+$";
 
 /**
  * A text with no whitespace before or after it: an XML `Char` other than whitespace at each end,
@@ -197,136 +195,34 @@ export const MapKeyType = relation(
 );
 
 /**
- * An optional sign, as an integer's lexical form begins. Exported for `src/import/refusal.ts`,
- * which names its pattern law.
- */
-export const Sign = str.regex("^[+-]?$");
-
-/**
- * The leading zeros of an integer's lexical form. Exported for `src/import/refusal.ts`, which
- * names its pattern law.
- */
-export const Zeros = str.regex("^0*$");
-
-/**
- * An integer's magnitude with no leading zero: `0`, or a nonzero digit and any digits. Exported for
- * `src/import/refusal.ts`, which names its pattern law.
- */
-export const Digits = str.regex("^(?:0|[1-9][0-9]*)$");
-
-/**
- * The sign of an integer's canonical form: `-` for a negative value, empty otherwise. Exported for
- * `src/import/refusal.ts`, which names its pattern law.
- */
-export const Negative = str.regex("^-?$");
-
-/**
  * The one XML whitespace character between a point's or a pair's two items, as `BaseTypePattern`
  * reads them. Exported for `src/import/refusal.ts`, which names its pattern law.
  */
 export const Gap = str.regex("^[\\t\\n\\r ]$");
 
 /**
- * One item of a pair or a directed pair: a run of XML `Char`s holding no whitespace, its
- * identifier's lexical form `Typed_attribute_value` judges. Exported for `src/import/refusal.ts`,
- * which names its pattern law.
+ * One of the two runs a two-item key splits into: characters holding no XML whitespace, of at most
+ * {@link keyTextBytes} UTF-8 bytes, the most the key it is cut from holds, so a parse of it reads a
+ * bounded text. Exported for `src/import/refusal.ts`, which names its pattern law.
  */
-export const Item = str.regex("^[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+$");
+export const Run = str.bytes(keyTextBytes, str.regex("^[^\\t\\n\\r ]+$"));
 
 /**
- * A point map key's typed value, keyed by its entry's node: its key split into each of its two
- * integers' sign, leading zeros and magnitude, and the whitespace between them, which the host
- * writes and `E1_derived` proves, and three fields PostgreSQL generates from them: `xNegative` and
- * `yNegative`, each integer's canonical sign, and `value`, the two canonical integers with one
- * space between, `xNegative ‖ xDigits ‖ " " ‖ yNegative ‖ yDigits`.
+ * A two-item map key's split, keyed by its entry's node: its `key`, a point's, a pair's or a
+ * directed pair's written as two runs and the one whitespace character between them
+ * ({@link twoItemPattern}), its `mapping`, and its `first` run, the `gap` and its `second` run,
+ * which the host writes and `E1_derived` proves.
  *
- * A point is "an integer tuple" (information model §8.13), so two keys name one point exactly when
- * their canonical forms are equal, and `key(mapping, value)` is uniqueness by typed value: `1 2`,
- * `01 +2` and `1`, a tab, `2` are one point.
+ * The split is the host's because no grizzle `Compute` term splits a text (no substring, split or
+ * pattern group at the vendored commit; the gap is reported to grizzle, and the split waits on its
+ * text-split term). Every typed value read from the items is the database's: the queries
+ * `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair` (`#pantry/qti/queries.ts`) select the
+ * items of their base type's form and read the value from them.
  */
-export const MapKeyPoint = relation.generated(
-  "MapKeyPoint",
-  {
-    gap: Gap,
-    key: keyText,
-    mapping: uuid,
-    node: uuid,
-    xDigits: Digits,
-    xSign: Sign,
-    xZeros: Zeros,
-    yDigits: Digits,
-    ySign: Sign,
-    yZeros: Zeros,
-  },
+export const MapKeyItems = relation(
+  "MapKeyItems",
+  { first: Run, gap: Gap, key: keyText, mapping: uuid, node: uuid, second: Run },
   ["node"],
-  (r) => {
-    const xNegative = Compute.cond(
-      Compute.and(Compute.eq(r.xSign, "-"), Compute.ne(r.xDigits, "0")),
-      Compute.literal(Negative, "-"),
-      "",
-    );
-    const yNegative = Compute.cond(
-      Compute.and(Compute.eq(r.ySign, "-"), Compute.ne(r.yDigits, "0")),
-      Compute.literal(Negative, "-"),
-      "",
-    );
-
-    return {
-      value: generated(
-        keyText,
-        Compute.concat(
-          Compute.concat(Compute.concat(Compute.concat(xNegative, r.xDigits), " "), yNegative),
-          r.yDigits,
-        ),
-      ),
-      xNegative: generated(Negative, xNegative),
-      yNegative: generated(Negative, yNegative),
-    };
-  },
-);
-
-/**
- * A pair map key's typed value, keyed by its entry's node: its key split into its two identifiers
- * and the whitespace between them, which the host writes and `E1_derived` proves, and `value`,
- * which PostgreSQL generates from them: their least, one space and their greatest, so the two in
- * code-point order with one space between.
- *
- * A pair's association "is undirected so (A,B) and (B,A) are equivalent" (information model §8.13),
- * so `key(mapping, value)` is uniqueness by typed value: `A B`, `B A` and `A`, a tab, `B` are one
- * pair. Text compares by code point here, its collation `pg_c_utf8`.
- */
-export const MapKeyPair = relation.generated(
-  "MapKeyPair",
-  { first: Item, gap: Gap, key: keyText, mapping: uuid, node: uuid, second: Item },
-  ["node"],
-  (r) => ({
-    value: generated(
-      keyText,
-      Compute.concat(
-        Compute.concat(Compute.least(r.first, r.second), " "),
-        Compute.greatest(r.first, r.second),
-      ),
-    ),
-  }),
-);
-
-/**
- * A directed pair map key's typed value, keyed by its entry's node: its key split into its source
- * and target identifiers and the whitespace between them, which the host writes and `E1_derived`
- * proves, and `value`, which PostgreSQL generates from them: the two in order with one space
- * between.
- *
- * A directed pair's association "is directed so (A,B) and (B,A) are not equivalent" (information
- * model §8.13), so its value keeps the order and reads its whitespace as one space: `A B` and `A`,
- * a tab, `B` are one directed pair, and `B A` another.
- */
-export const MapKeyDirectedPair = relation.generated(
-  "MapKeyDirectedPair",
-  { gap: Gap, key: keyText, mapping: uuid, node: uuid, source: Item, target: Item },
-  ["node"],
-  (r) => ({
-    value: generated(keyText, Compute.concat(Compute.concat(r.source, " "), r.target)),
-  }),
 );
 
 /**
@@ -530,27 +426,14 @@ const typedMapKeys = select(MapKey, (k) => k.eq(k.baseTypes, 1n));
 const typedLookupValues = select(LookupValue, (v) => v.eq(v.baseTypes, 1n));
 
 /**
- * The map keys of point mappings written as two integers: each has its {@link MapKeyPoint} row,
- * and no other key does.
+ * The map keys of point, pair and directed pair mappings written as two items: each has its
+ * {@link MapKeyItems} row, and no other key does.
  */
-const pointKeys = select(MapKeyType, (k) =>
-  k.and(k.eq(k.baseType, "point"), Compute.matches(k.key, pointKeyPattern)),
-);
-
-/**
- * The map keys of pair mappings written as two items: each has its {@link MapKeyPair} row, and no
- * other key does.
- */
-const pairKeys = select(MapKeyType, (k) =>
-  k.and(k.eq(k.baseType, "pair"), Compute.matches(k.key, pairKeyPattern)),
-);
-
-/**
- * The map keys of directed pair mappings written as two items: each has its
- * {@link MapKeyDirectedPair} row, and no other key does.
- */
-const directedPairKeys = select(MapKeyType, (k) =>
-  k.and(k.eq(k.baseType, "directedPair"), Compute.matches(k.key, pairKeyPattern)),
+const twoItemKeys = select(MapKeyType, (k) =>
+  k.and(
+    k.in(k.baseType, ["directedPair", "pair", "point"]),
+    Compute.matches(k.key, twoItemPattern),
+  ),
 );
 
 /**
@@ -587,10 +470,9 @@ const lookupAttributes = select(Attribute, (a) =>
  *   `AreaMapping_base_type`), judged where the declaration has a cardinality; a mapping's base type
  *   is in `MappableBaseType`, and an area mapping's is `point`, each judged where the declaration
  *   has one;
- * - **map keys:** the entry's mapping's `baseTypes`, its `map-key` copy, the lexical key, each typed
- *   relation mirrored with its typed keys, `E1_derived` its split, and its typed key over the value
- *   PostgreSQL generates, and `Typed_attribute_value` its lexical form; an integer key's and a
- *   float key's typed keys are rules over the queries `MapKeyInteger` and `MapKeyFloat`
+ * - **map keys:** the entry's mapping's `baseTypes`, its `map-key` copy, the lexical key, a two-item
+ *   key's split mirrored with the keys written as two items and `E1_derived` over it, and
+ *   `Typed_attribute_value` its lexical form; each typed key is a rule over its query
  *   (`#pantry/qti/queries.ts`);
  * - **`Lookup_table_cardinality`:** a match or interpolation table's outcome is single, judged where
  *   it has a cardinality;
@@ -629,37 +511,14 @@ export const mappingLawsByName = {
     ),
     contained(on(foldedKeys, "node"), on(stringKeys, "node")),
     contained(on(stringKeys, "node"), on(foldedOrCaseKeys, "node")),
-    check("E1_derived", MapKeyPoint, (m) =>
-      m.eq(
-        m.key,
-        Compute.concat(
-          Compute.concat(
-            Compute.concat(
-              Compute.concat(Compute.concat(Compute.concat(m.xSign, m.xZeros), m.xDigits), m.gap),
-              m.ySign,
-            ),
-            m.yZeros,
-          ),
-          m.yDigits,
-        ),
-      ),
-    ),
-    check("E1_derived", MapKeyPair, (m) =>
+    check("E1_derived", MapKeyItems, (m) =>
       m.eq(m.key, Compute.concat(Compute.concat(m.first, m.gap), m.second)),
-    ),
-    check("E1_derived", MapKeyDirectedPair, (m) =>
-      m.eq(m.key, Compute.concat(Compute.concat(m.source, m.gap), m.target)),
     ),
   ],
   "Lookup table cardinality": [
     check("Lookup_table_cardinality", LookupTableCardinality, (t) => t.eq(t.cardinality, "single")),
   ],
-  "Map key": [
-    key(on(MapKey, "mapping", "key")),
-    key(on(MapKeyPoint, "mapping", "value")),
-    key(on(MapKeyPair, "mapping", "value")),
-    key(on(MapKeyDirectedPair, "mapping", "value")),
-  ],
+  "Map key": [key(on(MapKey, "mapping", "key"))],
   MappableBaseType: [
     check("MappableBaseType", MappingCardinality, (m) => m.ne(m.cardinality, "record")),
     contained(on(MappingBaseType, "baseType"), on(MappableBaseType, "baseType")),
@@ -723,12 +582,7 @@ export const mappingLawsByName = {
       ),
       on(caseAttributes, "node"),
     ),
-    mirrors(on(pointKeys, "node", "mapping", "key"), on(MapKeyPoint, "node", "mapping", "key")),
-    mirrors(on(pairKeys, "node", "mapping", "key"), on(MapKeyPair, "node", "mapping", "key")),
-    mirrors(
-      on(directedPairKeys, "node", "mapping", "key"),
-      on(MapKeyDirectedPair, "node", "mapping", "key"),
-    ),
+    mirrors(on(twoItemKeys, "node", "mapping", "key"), on(MapKeyItems, "node", "mapping", "key")),
     contained(
       on(AreaMapping, "node", "document", "kind", "start", "nearest", "version", "declaration"),
       nodeRef,
