@@ -250,7 +250,12 @@ describe("the oracle's key-text list", () => {
     // of, each bounded by its own type where its row is written: an entry's path is `EntryPath`,
     // which the oracle bounds as `Document.path`. A float map key's typed value is the query
     // `MapKeyFloat` over `MapKeyType`, and a resource's document's path meets a typed href in a
-    // rule over the query `TypedHref`, so neither copies a text.
+    // rule over the query `TypedHref`, so neither copies a text. Three sources are queries, whose
+    // text is no row's the import writes, each held where grizzle types it: R26's
+    // `DescribedLang.value` and `DescribedAssembledLang.value` are `DocumentLang`'s and
+    // `AssembledLang`'s generated `value`, which grizzle casts into `keyText` where it computes
+    // it (`Compute.cast`, identity.ts), and `RequiredSsmlProperty.name` is a constant of its query,
+    // one of `ph`, `interpret-as` and `alias`, the values grizzle's heading types it by.
     // Bound: every law the schema states that is no check.
     assert.deepStrictEqual(
       [
@@ -260,7 +265,12 @@ describe("the oracle's key-text list", () => {
             .map(({ copy, source }) => `${source} → ${copy.split(" → ")[1] ?? ""}`),
         ),
       ].toSorted(),
-      ["Entry.path → FileHref.path"],
+      [
+        "DescribedAssembledLang.value → ResourceLomLanguageSet.lang",
+        "DescribedLang.value → ResourceLomLanguageSet.lang",
+        "Entry.path → FileHref.path",
+        "RequiredSsmlProperty.name → DataSsmlProperty.name",
+      ],
     );
   });
 });
