@@ -36,7 +36,7 @@ const caseHang = Duration.minutes(1);
 /**
  * A field's value in a closed relation's rows: a handle or a text, or a natural.
  */
-const ValueSchema = Schema.Union([Schema.String, Schema.BigInt]);
+const ValueSchema = Schema.Union([Schema.String, Schema.BigInt, Schema.Boolean]);
 
 /**
  * A field's value in a closed relation's rows.
