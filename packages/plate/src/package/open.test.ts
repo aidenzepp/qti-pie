@@ -279,6 +279,17 @@ const titledItemXml = (title: string, attributes = ""): string =>
   `<qti-assessment-item xmlns="${qti}" identifier="a" title="${title}" adaptive="false" time-dependent="false"${attributes}><qti-item-body><p>a</p></qti-item-body></qti-assessment-item>`;
 
 /**
+ * Write an item whose identifier and title are `a`, which writes `xml:lang="en"`, whose body's one
+ * `p` writes further attributes, and whose catalog `c` holds one card.
+ *
+ * @param body Further attributes of the body's `p`, as written, each after a space.
+ * @param card The catalog's card, as written.
+ * @returns The item's text.
+ */
+const catalogItemXml = (body: string, card: string): string =>
+  `<qti-assessment-item xmlns="${qti}" identifier="a" title="a" adaptive="false" time-dependent="false" xml:lang="en"><qti-item-body><p${body}>a</p></qti-item-body><qti-catalog-info><qti-catalog id="c">${card}</qti-catalog></qti-catalog-info></qti-assessment-item>`;
+
+/**
  * Write a LOM `general`'s title, one `string` for each language and value, each writing its
  * `language`.
  *
@@ -1301,6 +1312,23 @@ const defaultsOfSecond = (test: AcceptedTest): readonly string[] =>
     .flatMap((section) => section.children)
     .flatMap((child) =>
       child.kind === "item-ref" && child.identifier === "second"
+        ? child.templateDefaults.map((each) => each.templateIdentifier)
+        : [],
+    );
+
+/**
+ * Give the template defaults an item ref of a test holds, each the template variable it sets.
+ *
+ * @param test The test.
+ * @param itemRef The item ref's identifier.
+ * @returns The variables, in order.
+ */
+const defaultsUnder = (test: AcceptedTest, itemRef: string): readonly string[] =>
+  test.test.parts
+    .flatMap((part) => part.children)
+    .flatMap((section) => section.children)
+    .flatMap((child) =>
+      child.kind === "item-ref" && child.identifier === itemRef
         ? child.templateDefaults.map((each) => each.templateIdentifier)
         : [],
     );
@@ -4330,6 +4358,51 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
+      'align-54 R3 catalog languages F5: an item writing xml:lang en whose record lists only en is accepted when its card, a card entry, an HTML content or an element inside one states de, as catalog content is not among the elements reading 134 counts (R9-c, "R26 counts the metadata binding\'s elements, and catalog content is not among them")',
+      () =>
+        Effect.gen(function* catalogLanguages() {
+          const cards = [
+            '<qti-card support="glossary-on-screen" xml:lang="de"><qti-html-content><p>Wort</p></qti-html-content></qti-card>',
+            '<qti-card support="glossary-on-screen"><qti-card-entry xml:lang="de" default="true"><qti-html-content><p>Wort</p></qti-html-content></qti-card-entry></qti-card>',
+            '<qti-card support="glossary-on-screen"><qti-html-content xml:lang="de"><p>Wort</p></qti-html-content></qti-card>',
+            '<qti-card support="glossary-on-screen"><qti-card-entry><qti-html-content><p xml:lang="de">Wort</p></qti-html-content></qti-card-entry></qti-card>',
+          ];
+          for (const card of cards) {
+            const verdict = yield* openDescribed(
+              catalogItemXml("", card),
+              `${lomTitle("a")}<language>en</language>`,
+            );
+
+            assert.deepStrictEqual(refusalsOf(verdict), [], card);
+            acceptedOf(verdict);
+          }
+        }),
+    );
+
+    it.effect(
+      "align-54 R3 catalog languages F5, control: the same de on a body p beside the catalog is still refused document-lang at the general, once",
+      () =>
+        Effect.gen(function* catalogLanguagesControl() {
+          const verdict = yield* openDescribed(
+            catalogItemXml(
+              ' xml:lang="de"',
+              '<qti-card support="glossary-on-screen"><qti-html-content xml:lang="de"><p>Wort</p></qti-html-content></qti-card>',
+            ),
+            `${lomTitle("a")}<language>en</language>`,
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: { document: "items/a.xml", language: "de", listed: "en", reading: "134" },
+              document: fileLocation(location, manifestFile),
+              location: { kind: "path", path: generalAt(soleResource) },
+              rule: "document-lang",
+            },
+          ]);
+        }),
+    );
+
+    it.effect(
       "align-54 LOM languages E41a: a root with no title beside a LOM title, or no identifier beside a LOM identifier, even an empty one, is refused at the root",
       () =>
         Effect.gen(function* lomUnwritten() {
@@ -5020,6 +5093,61 @@ describe("package/open.ts", () => {
 
           assert.deepStrictEqual(refusalsOf(verdict), []);
           assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+        }),
+    );
+
+    it.effect(
+      "a54-r3-lang amendment: a template default of T under ITEM1's item ref whose expression reads through the LTI item ref by a qti-correct, a qti-map-response or a qti-map-response-point is left out and marked variable:<name> at the default, as one that reads by a qti-variable is, the two mappings each inside a qti-round of T's integer type, while the processing runs and the document's own verdict keeps it (reading 166 (\"a name read through an LTI link (reading 110) [is] accepted\"))",
+      () =>
+        Effect.gen(function* linkedReadInDefault() {
+          for (const [name, expression] of [
+            ["lti.X", '<qti-correct identifier="lti.X"/>'],
+            [
+              "lti.RESPONSE",
+              '<qti-round><qti-map-response identifier="lti.RESPONSE"/></qti-round>',
+            ],
+            [
+              "lti.POINT",
+              '<qti-round><qti-map-response-point identifier="lti.POINT"/></qti-round>',
+            ],
+          ] as const) {
+            const files = new Map(ltiPackage(settingTotal(oneFloat)));
+            files.set(
+              "test.xml",
+              new TextEncoder().encode(
+                processingTestXml(
+                  settingTotal(oneFloat),
+                  itemRefXml(
+                    "ITEM1",
+                    "items/a.xml",
+                    `<qti-template-default template-identifier="T">${expression}</qti-template-default>`,
+                  ),
+                  itemRefXml("lti", "links/lti.xml"),
+                ),
+              ),
+            );
+
+            const verdict = yield* openPackage(location, files);
+            const { alone, delivered } = deliveredAndAlone(verdict);
+
+            assert.deepStrictEqual(refusalsOf(verdict), [], expression);
+            assert.deepStrictEqual(
+              [defaultsUnder(delivered, "ITEM1"), defaultsUnder(alone, "ITEM1")],
+              [[], ["T"]],
+              expression,
+            );
+            assert.deepStrictEqual(
+              variableMarks(delivered),
+              [
+                [
+                  `variable:${name}`,
+                  "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[1]/qti-template-default",
+                ],
+              ],
+              expression,
+            );
+            assert.strictEqual(delivered.test.outcomeProcessing.kind, "runs", expression);
+          }
         }),
     );
   });
