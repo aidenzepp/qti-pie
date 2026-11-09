@@ -11,9 +11,9 @@ import { Qti } from "#pantry/qti/own.ts";
 import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
 
 /**
- * The committed migration's measured counts (the `_init` regenerated on grizzle `0c2154c`), as a
- * ratchet: a change that moves one fails here until the count is measured again. A regeneration
- * updates them here, and only here.
+ * The committed migration's measured counts (the `_init` drafted from zero on grizzle `1ab3847`,
+ * after the merge of Sterling's upstream), as a ratchet: a change that moves one fails here until
+ * the count is measured again. A regeneration updates them here, and only here.
  *
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
@@ -23,19 +23,21 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * - `nodeAxes`: `Node`'s own foreign keys, its families' axes (the owner copy, the predecessor, the
  *   deferred last, and the attribute and namespace stand-ins);
  * - `nodeKeys`: every foreign key on `Node`, its axes and the reverse sides of the mirrors into its
- *   selections.
+ *   selections;
+ * - `constraintTriggers`: one deferred constraint trigger per table a rule over a query reads
+ *   (`#pantry/qti/queries.ts`), which is how grizzle judges such a rule at COMMIT (README, "Rules
+ *   over queries"), so fin.md §13's zero target for them no longer holds since the cutover;
+ * - `validateFiles`: the one `-validate.sql` file those rules are validated in.
  */
 const measured = {
-  // MERGE-OPEN: recount after the re-drafted _init, and name its grizzle pin above (ours 106, his 117, base 102)
-  constants: 106,
+  constants: 122,
+  constraintTriggers: 88,
   live: 7,
-  // MERGE-OPEN: recount after the re-drafted _init (ours 38, his 43, base 37)
-  names: 38,
-  nodeAxes: 6,
-  // MERGE-OPEN: recount after the re-drafted _init (ours 41, his 47, base 39)
-  nodeKeys: 41,
-  // MERGE-OPEN: recount after the re-drafted _init (ours 230, his 265, base 226)
-  tables: 230,
+  names: 45,
+  nodeAxes: 5,
+  nodeKeys: 48,
+  tables: 250,
+  validateFiles: 1,
 } as const;
 
 /**
@@ -66,7 +68,6 @@ describe("the committed migration", () => {
         assert.strictEqual(entries[1], "snapshot.json");
         assert.deepStrictEqual(
           {
-            constraintTriggers: held.laws.constraintTriggers,
             enums: held.enums,
             inserts: held.seed.inserts,
             lawFunctions: held.functions.law,
@@ -75,10 +76,8 @@ describe("the committed migration", () => {
             repeatedDomains: held.domains.total - held.domains.distinct,
             seedFolders: held.seed.folders,
             seededRelations: Object.keys(held.seed.rows).length,
-            validateFiles: held.laws.validateFiles,
           },
           {
-            constraintTriggers: 0,
             enums: 0,
             inserts: 0,
             lawFunctions: 0,
@@ -87,17 +86,18 @@ describe("the committed migration", () => {
             repeatedDomains: 0,
             seedFolders: 0,
             seededRelations: 0,
-            validateFiles: 0,
           },
         );
         assert.deepStrictEqual(
           {
             constants: held.functions.constant,
+            constraintTriggers: held.laws.constraintTriggers,
             live: held.functions.live,
             names: held.functions.names,
             nodeAxes: held.foreignKeys.axes["node"] ?? 0,
             nodeKeys: held.foreignKeys.byTable["node"] ?? 0,
             tables: held.tables.total,
+            validateFiles: held.laws.validateFiles,
           },
           measured,
         );
