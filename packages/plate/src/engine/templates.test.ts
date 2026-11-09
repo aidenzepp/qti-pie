@@ -394,6 +394,28 @@ describe("a CC2_* template whose needs the item does not meet (Q6: marked, never
         );
       }),
   );
+
+  it.effect(
+    "CC2_match is marked variable:SCORE when the item declares no SCORE, which the engine then does not hold, and score does not run it",
+    () =>
+      Effect.gen(function* cc2MatchUndeclared() {
+        yield* markedNotRun(templatedBytes("CC2_match", false, []), "variable:SCORE");
+      }),
+  );
+
+  it.effect(
+    "CC2_match_basic is marked variable:MAXSCORE when the item declares SCORE and no MAXSCORE, which the engine then does not hold, and score does not run it",
+    () =>
+      Effect.gen(function* cc2MatchBasicUndeclared() {
+        yield* markedNotRun(
+          templatedBytes("CC2_match_basic", false, [
+            outcomeXml("SCORE", "float"),
+            outcomeXml("FEEDBACKBASIC", "identifier"),
+          ]),
+          "variable:MAXSCORE",
+        );
+      }),
+  );
 });
 
 describe("a CC2_* template whose SCORE or MAXSCORE is declared record (reading 153)", () => {

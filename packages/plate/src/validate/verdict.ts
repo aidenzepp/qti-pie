@@ -50,7 +50,7 @@ import { durationForm, trimXmlSpace } from "#plate/model/values.ts";
 import { checkCatalogs } from "#plate/validate/catalog.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
-import { checkRules } from "#plate/validate/rules.ts";
+import { checkRules, dataSsml, holdsUnexpanded, judgedVisits } from "#plate/validate/rules.ts";
 import {
   attributeName,
   checkStructure,
@@ -59,7 +59,7 @@ import {
   isInstanceAttribute,
   tableOf,
 } from "#plate/validate/structure.ts";
-import { checkTestRules, dataSsml } from "#plate/validate/test-rules.ts";
+import { checkTestRules } from "#plate/validate/test-rules.ts";
 import { checkVersion } from "#plate/validate/versions.ts";
 import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
 import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
@@ -1039,15 +1039,11 @@ const checkStimulusRules = (source: SourceDocument, tables: Tables): readonly Re
     return [];
   }
 
-  const governing = governingTables(source, tables);
-  const visits = [...walk(source)].filter((visit) => governing.has(visit.element));
-  const unexpanded = visits.some(
-    ({ element }) =>
-      element.attributes.some((attribute) => attribute.references.length > 0) ||
-      element.children.some((child) => child.kind === "entity"),
-  );
+  const visits = judgedVisits(source, tables);
 
-  return unexpanded ? [] : visits.flatMap((visit) => dataSsml(source, visit, tables));
+  return visits.some((visit) => holdsUnexpanded(visit.element))
+    ? []
+    : visits.flatMap((visit) => dataSsml(source, visit, tables));
 };
 
 /**
@@ -2024,13 +2020,13 @@ const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<
  *   would set an item's variable.
  * - None (P8): a name the item declares no variable of the `expected` kind for. A template rule's
  *   target lists every kind the rule may set, space-separated, and the sentence offers them as
- *   alternatives (pantry's `DeclaredRefKind`). A test's printed variable, and a name in a test's
- *   processing or a section document a test reaches, carries `declarer: "test"`, and the sentence
- *   names the test as what declares no such variable (pantry's `binding-declared` for a test); a
- *   test may declare an outcome or a context variable, so the fix to declare it stands. A response
- *   that no declaration can give, a dotted name read through an item ref, test part or section, a
- *   built-in, or any response a test names, is worded by {@link undeclarableResponse}, so the
- *   sentence never asks for it to be declared.
+ *   alternatives. A test's printed variable, and a name in a test's processing or a section
+ *   document a test reaches, carries `declarer: "test"`, and the sentence names the test as what
+ *   declares no such variable (pantry's `binding-declared` for a test); a test may declare an
+ *   outcome or a context variable, so the fix to declare it stands. A response that no declaration
+ *   can give, a dotted name read through an item ref, test part or section, a built-in, or any
+ *   response a test names, is worded by {@link undeclarableResponse}, so the sentence never asks
+ *   for it to be declared.
  *
  * Each names the element, or the element's attribute when a reference attribute names the
  * variable.

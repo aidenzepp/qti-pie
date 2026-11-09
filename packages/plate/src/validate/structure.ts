@@ -2417,6 +2417,16 @@ const idRoleOf = (type: AttributeType): Option.Option<IdRole> => {
 };
 
 /**
+ * Report whether an attribute's type makes its value one IDREF of the document's ID/IDREF table
+ * ({@link idRoleOf}): `xs:IDREF` or an atomic type derived from it, never a list of them.
+ *
+ * @param type The attribute's type, as its declaration gives it.
+ * @returns Whether its value is an IDREF.
+ */
+export const isIdrefType = (type: AttributeType): boolean =>
+  Option.exists(idRoleOf(type), (role) => role === "idref");
+
+/**
  * Report whether a table declares an attribute use of a type derived from `ID`, such as `id` of
  * `UniqueIdentifierDType`, whether or not the element writes it.
  *

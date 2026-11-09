@@ -67,6 +67,17 @@ const attributeOf = (element: SourceElement, local: string): Option.Option<Sourc
   );
 
 /**
+ * Give the tool attributes an item root lacks, in the order a `label-tool` refusal lists them
+ * (reading 128): this module's E31b for a QTI 3.0.1 root's own `label`, and E31a for a body
+ * element's (`labelTool` in `#plate/validate/rules.ts`).
+ *
+ * @param root The item root.
+ * @returns The missing ones of `tool-name` and `tool-version`; none when it carries both.
+ */
+export const missingToolAttributes = (root: SourceElement): readonly string[] =>
+  toolAttributes.filter((name) => Option.isNone(attributeOf(root, name)));
+
+/**
  * Refuse each `qti-custom-interaction` of a QTI 3.0.0 document (the operator's P2): 3.0.0
  * deprecates it and requires a `qti-portable-custom-interaction` in its place. Plate keeps the
  * operator's ruling (overseer `b7d702d6`), which main now shares as R10-b ("A 3.0.0 document holds
@@ -122,7 +133,7 @@ const isRootLabelTool = (refusal: Refusal, rootPath: string): boolean =>
 const rootLabel = (source: SourceDocument, refusals: readonly Refusal[]): readonly Refusal[] => {
   const { root } = source;
   const path = root.local;
-  const missing = toolAttributes.filter((name) => Option.isNone(attributeOf(root, name)));
+  const missing = missingToolAttributes(root);
   const judged =
     root.namespace === qtiNamespace &&
     root.local === "qti-assessment-item" &&

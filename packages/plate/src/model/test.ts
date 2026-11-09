@@ -13,7 +13,7 @@
  * @module
  */
 import { Array as Arr, Effect, Option, pipe } from "effect";
-import { attributePath, walk, xincludeNamespace } from "#plate/document/source.ts";
+import { attributePath, walk } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import {
   attributeOf,
@@ -122,7 +122,7 @@ export interface ItemRef {
 
 /**
  * A `qti-assessment-section`. `children` holds its sections and item references in document order;
- * a `qti-assessment-section-ref` and an `xi:include` are marked and not among them.
+ * a `qti-assessment-section-ref` is marked and not among them.
  */
 export interface Section {
   readonly children: readonly SectionChild[];
@@ -222,11 +222,6 @@ export const absentControl: ControlAttributes = {
 const elementMarks: ReadonlySet<string> = new Set(
   testMarks.filter((mark) => mark.startsWith("qti-")),
 );
-
-/**
- * The mark of an XInclude `include`, which is never fetched.
- */
-const includeMark: TestMark = "xi:include";
 
 /**
  * The mark of a `qti-item-session-control` whose `allow-comment` is true.
@@ -624,21 +619,13 @@ const holdsOn = (condition: Condition, declaration: SourceElement): boolean => {
 };
 
 /**
- * Name the element feature an element is, if it is one: a `qti-*` element `testMarks` names, or an
- * XInclude `include`.
+ * Name the element feature an element is, if it is one: a `qti-*` element `testMarks` names.
  *
  * @param element The element.
  * @returns The feature's key, or none when the element is not one.
  */
-const elementMark = (element: SourceElement): Option.Option<string> => {
-  if (element.namespace === xincludeNamespace) {
-    return element.local === "include" ? Option.some(includeMark) : Option.none();
-  }
-
-  return isQti(element) && elementMarks.has(element.local)
-    ? Option.some(element.local)
-    : Option.none();
-};
+const elementMark = (element: SourceElement): Option.Option<string> =>
+  isQti(element) && elementMarks.has(element.local) ? Option.some(element.local) : Option.none();
 
 /**
  * Give the marks a `qti-item-session-control` carries, in the order its attributes are written:
@@ -670,14 +657,14 @@ const controlMarks = (control: SourceElement, path: string): readonly MarkedFeat
 /**
  * Give every feature a test holds and M2 does not deliver, in document order.
  *
- * An element `testMarks` names, an XInclude `include` among them, is marked at its path, and its
- * own subtree is not searched, so a rubric block's stylesheet is not marked apart from the block. A
- * `qti-item-session-control` gives its own marks. A test-level outcome declaration is marked as the
+ * An element `testMarks` names is marked at its path, and its own subtree is not searched, so a
+ * rubric block's stylesheet is not marked apart from the block. A `qti-item-session-control` gives
+ * its own marks. A test-level outcome declaration is marked as the
  * item model marks an item's: the `renders` marks that sit on it, at its path, and each `qti-*`
  * element below it that the model does not read, keyed by its name, its subtree not searched. An
  * element a reader has marked already, the outcome processing and each template default, gives its
  * own mark when it is an element feature, then the reader's marks, where it stands, its subtree not
- * searched, so an `xi:include` in it is marked once.
+ * searched, so an element the reader marked in it is not marked again.
  *
  * @param source The test.
  * @param placed The marks a reader gave, keyed by the element they stand at.
@@ -1299,8 +1286,7 @@ const outcomeSetting = (
  * Read one outcome rule element into the rules it runs: a `qti-outcome-condition`, a
  * `qti-set-outcome-value`, a `qti-lookup-outcome-value` and a `qti-exit-test` are one rule each,
  * and a `qti-outcome-processing-fragment` is its own rules, read in place, nested fragments
- * included. An XInclude `include` is never fetched (S-6): it is marked `xi:include` at its path.
- * Any other element is marked by its name.
+ * included. Any other element is marked by its name.
  *
  * @param reading The processing's reading context.
  * @param element The rule element.
@@ -1310,10 +1296,6 @@ const outcomeRule = (
   reading: ExpressionReading,
   element: SourceElement,
 ): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> => {
-  if (element.namespace === xincludeNamespace && element.local === "include") {
-    return reading.unread(element, includeMark);
-  }
-
   if (isQti(element, "qti-outcome-processing-fragment")) {
     return outcomeRules(reading, elementsOf(element));
   }
@@ -1377,7 +1359,7 @@ interface ReadProcessing {
  *
  * Its rules are read into the item model's {@link Rule} union, each expression through the
  * registry's generic reader. It is `marked`, and nothing is refused, when the engine cannot run it:
- * an element the reader marks at its path (an `xi:include`, a rule of a malformed shape), a name
+ * an element the reader marks at its path (a rule of a malformed shape), a name
  * the engine does not hold in a test ({@link unheldNames}, and a `qti-test-variables` that names
  * `duration`, {@link collectsDurations}), each the mark `variable:<name>` at the processing
  * element's path, as the item model marks an item's, or, in a test that references a section
@@ -1441,8 +1423,8 @@ interface ReadDefault {
  * processing resolves (G-R3, pending: of those, the engine holds in a template default only the
  * test's declared outcomes, the test's own `duration`, which reads NULL there, and an item's
  * variables read by a prefixed name, as in outcome processing). It is left out, and nothing is
- * refused, when the engine cannot apply it: an element the reader marks at its path (an
- * `xi:include`, a default that does not hold exactly one expression), or a name the engine does not
+ * refused, when the engine cannot apply it: an element the reader marks at its path (a default
+ * that does not hold exactly one expression), or a name the engine does not
  * hold in a test ({@link addUnheldReads}, and a `qti-test-variables` that names `duration`,
  * {@link collectsDurations}), each the mark `variable:<name>` at the default's path.
  *
@@ -1492,7 +1474,7 @@ const templateDefaultOf = (
  * Build the test model of a valid `qti-assessment-test`.
  *
  * The parts, their sections and item references are read in document order; a
- * `qti-assessment-section-ref` and an `xi:include` are marked and left out, and every other
+ * `qti-assessment-section-ref` is marked and left out, and every other
  * `testMarks` feature is marked and left out of the tree or, as `allow-comment` and a negative
  * `max-attempts`, held as written. Each `qti-item-session-control` attribute is held as written or
  * absent, and each item reference's weights, variable mappings and template defaults are read, a
@@ -1504,6 +1486,9 @@ const templateDefaultOf = (
  * expression would count the test document's own items alone), and `runs` with its rules
  * otherwise; nothing in it or in a template default is refused but an attribute outside its type.
  * `declared` holds every identifier the test's outcome and context declarations declare.
+ *
+ * A test holding an XInclude `include` is never built: `check` leaves it unchecked (E23) before it
+ * reaches here, so no include is read or marked.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The test, or the refusal `value-type` at the first typed value outside its lexical

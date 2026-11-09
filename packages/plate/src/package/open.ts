@@ -3371,6 +3371,13 @@ const branchRuleOf = ({ element, parent, path }: Visit): Option.Option<BranchRul
  * parent's, no order of its own drawn, a test part its own part; each section ref, a site in its
  * parent's scope; and each branch rule that names a target ({@link branchRuleOf}).
  *
+ * It reads every element, where reading 87's rule for a document judged alone (`branchContext` in
+ * `#plate/validate/test-rules.ts`, E8a) reads only the elements the structural walk judges. The two
+ * differ only for an identified element in content the walk passes over, which no part, section or
+ * item ref the test delivers is: E8a's reading is the right one, so a target that names such an
+ * element names nothing of the test, while this walk resolves it. Moving this walk onto the judged
+ * elements would change what it refuses there, so it is a follow-up, not made here.
+ *
  * @param visits The visits of the document's elements, in document order.
  * @returns What reading 87 reads of it.
  */

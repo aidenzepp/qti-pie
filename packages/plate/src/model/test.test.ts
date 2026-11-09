@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { attr, doc, el, text, xincludeNamespace } from "#plate/document/source.ts";
+import { attr, doc, el, text } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
   SourceChild,
@@ -419,10 +419,10 @@ describe("buildTest", () => {
   );
 
   it.effect(
-    "marks an adaptive selection and an xi:include at their paths, and leaves the include out of the tree",
+    "marks an adaptive selection at its path, and keeps its section's item refs in the tree",
     () =>
-      Effect.gen(function* marksAdaptiveAndInclude() {
-        const included = test([
+      Effect.gen(function* marksAdaptiveSelection() {
+        const adaptive = test([
           part("P1", "linear", "individual", [
             section("S1", [
               el(
@@ -437,24 +437,16 @@ describe("buildTest", () => {
               ),
               itemRef("I1", "items/one.xml"),
             ]),
-            section("S2", [
-              itemRef("I2", "items/two.xml"),
-              el("include", [attr("href", "shared/items.xml")], [], xincludeNamespace),
-              itemRef("I3", "items/three.xml"),
-            ]),
+            section("S2", [itemRef("I2", "items/two.xml"), itemRef("I3", "items/three.xml")]),
           ]),
         ]);
-        const built = yield* buildTest(included);
+        const built = yield* buildTest(adaptive);
 
-        assert.deepStrictEqual(checkStructure(included, tables), []);
+        assert.deepStrictEqual(checkStructure(adaptive, tables), []);
         assert.deepStrictEqual(built.unsupported, [
           mark(
             "qti-adaptive-selection",
             `${firstPart}/qti-assessment-section[1]/qti-adaptive-selection`,
-          ),
-          mark(
-            "xi:include",
-            `${firstPart}/qti-assessment-section[2]/{${xincludeNamespace}}include`,
           ),
         ]);
         assert.deepStrictEqual(
@@ -980,23 +972,6 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
         assert.deepStrictEqual(checkStructure(document, tables), []);
         assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
         assert.deepInclude(built.unsupported, mark("variable:duration", processingPath));
-      }),
-  );
-
-  it.effect(
-    "[T-9] absent, marked or runs: one that holds an xi:include is marked xi:include at the include, once",
-    () =>
-      Effect.gen(function* holdsInclude() {
-        const document = processed([
-          setting("qti-set-outcome-value", "SCORE", baseValue("float", "1")),
-          el("include", [attr("href", "shared/processing.xml")], [], xincludeNamespace),
-        ]);
-        const built = yield* buildTest(document);
-
-        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
-        assert.deepStrictEqual(built.unsupported, [
-          mark("xi:include", `${processingPath}/{${xincludeNamespace}}include`),
-        ]);
       }),
   );
 

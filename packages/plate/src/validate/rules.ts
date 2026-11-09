@@ -52,6 +52,7 @@ import { decodeDataSsml } from "#plate/validate/data-ssml.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { governingTables } from "#plate/validate/structure.ts";
+import { missingToolAttributes } from "#plate/validate/versions.ts";
 import type { ChildName, Tables } from "#plate/validate/xsd.ts";
 import { baseTypes, cardinalities, templateName } from "#plate/vocabulary.ts";
 import type { BaseType, Cardinality, TemplateName } from "#plate/vocabulary.ts";
@@ -1678,9 +1679,10 @@ const mappingNeedOf = (
  * the detail a declared response that lacks both would get. The qti package refuses the same by
  * its `Mapped response` law, which a built-in breaks for want of the table.
  * Template processing is not judged here either: every response this rule could judge there is a
- * read template processing may not make, {@link templateReads}' refusal (P26), which the qti
- * package reports in place of P27 because it keeps its first refusal and `checkMapping` reads the
- * name before it judges the mapping.
+ * read template processing may not make, {@link templateReads}' refusal (P26) alone, so it is
+ * refused once. The qti package states the two as separate laws, `Template reads` (P26) and
+ * `Mapped response` (P27), and names a refusal by its most specific law in one fixed order
+ * (`precedence` in `packages/pantry/src/vocab/laws.ts`).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -2770,8 +2772,10 @@ const declaredBuiltIn = (
  * `variable-kind`), both in `packages/pantry/src/qti/expressions.ts`. A reference attribute that
  * names no variable is {@link attributeReferences}' refusal, and a template rule's target
  * {@link templateTarget}'s. In template processing a name that template processing may not read
- * ({@link forbiddenRead}) is {@link templateReads}' refusal (P26) alone, as the qti package, which
- * keeps its first refusal, reports it: `read` refuses it before anything else judges the name.
+ * ({@link forbiddenRead}) is {@link templateReads}' refusal (P26) alone, never this one as well.
+ * The qti package states that read as its own law, `Template reads` (P26), beside `Variable
+ * declared` and `Variable kind`, and names a refusal by its most specific law in one fixed order
+ * (`precedence` in `packages/pantry/src/vocab/laws.ts`).
  *
  * A read of the built-in `duration` is never refused for the item's `time-dependent`: reading 150
  * ("an item's built-in `duration` may be read whether or not the item is time dependent"). A
@@ -3783,17 +3787,17 @@ const namableBy = (
  *
  * In template processing a reference that names a variable template processing may not read, a
  * declared response or outcome or a built-in other than `QTI_CONTEXT` ({@link forbiddenRead}), is
- * `expression-type` with `check: "template-read"` and the `attribute` (P26), and nothing else: the
- * qti package's `checkAttributeReference` reads the name, which refuses P26, before it judges P24,
- * and the qti package keeps its first refusal. Its checked entries are the qti package's list of
- * reference attributes (`referenceAttributes`): `tolerance`, which is not checked, is not in it, so
- * a `tolerance` that names such a variable is not refused (OD-P8-20). A reference that names
- * nothing, or a template variable of another type, is refused as in response processing.
+ * `expression-type` with `check: "template-read"` and the `attribute` (P26), and nothing else,
+ * never P24 as well. The qti package states the two as its `Template reads` and `Reference type`
+ * laws, and names a refusal by its most specific law in one fixed order (`precedence` in
+ * `packages/pantry/src/vocab/laws.ts`). `tolerance` is not a checked entry, so a `tolerance` that
+ * names such a variable is not refused (OD-P8-20). A reference that names nothing, or a template
+ * variable of another type, is refused as in response processing.
  *
  * In a test's processing a name its typer answers (`typeUnanswered`), which no declaration and no
  * built-in does, is a prefixed read: it is never `undeclared-variable`, and it is P24's when its
- * type does not agree with the entry's single base type, as the qti package's
- * `checkAttributeReference` judges the variable it resolves to. A string attribute's braced name
+ * type does not agree with the entry's single base type, as the qti package's `Reference type` law
+ * judges the variable it resolves to. A string attribute's braced name
  * is such a read only when the typer types it other than `unknown` ({@link namableBy}). In a
  * section on its own every name is typed `unknown`, so none is refused. A name nothing answers in a
  * test's processing, or in a section document a test reaches, carries `declarer: "test"`
@@ -4429,7 +4433,7 @@ const variableDeclarations = [
  * @param tables The tables generated from the QTI XSD, the ones the structural walk checks it by.
  * @returns Each element the rules judge, with the path and the parent `walk` gives it.
  */
-const judgedVisits = (source: SourceDocument, tables: Tables): readonly Visit[] => {
+export const judgedVisits = (source: SourceDocument, tables: Tables): readonly Visit[] => {
   const governing = governingTables(source, tables);
 
   return [...walk(source)].filter((visit) => governing.has(visit.element));
@@ -4437,12 +4441,16 @@ const judgedVisits = (source: SourceDocument, tables: Tables): readonly Visit[] 
 
 /**
  * Report whether a judged element holds an unexpanded entity reference where a rule may read it:
- * in an attribute's value or among its children, wildcard content included.
+ * in an attribute's value or among its children, wildcard content included. Every prose rule of a
+ * document judges nothing when one of its judged elements does: the item rules here, the test
+ * rules (`#plate/validate/test-rules.ts`), the catalog rules (`#plate/validate/catalog.ts`) and the
+ * stimulus rules of the verdict, which leaves such a document unchecked unless the structural walk
+ * refuses it.
  *
  * @param element The element.
  * @returns Whether its attributes or its children hold a reference whose value is unknown.
  */
-const holdsUnexpanded = (element: SourceElement): boolean =>
+export const holdsUnexpanded = (element: SourceElement): boolean =>
   element.attributes.some((attribute) => attribute.references.length > 0) ||
   element.children.some((child) => child.kind === "entity");
 
@@ -4507,11 +4515,6 @@ const toolLabelTypes: ReadonlySet<string> = new Set([
   "BaseSequenceXBaseEmptyDType",
   "ItemBodyDType",
 ]);
-
-/**
- * The tool attributes an item root carries when it uses labels, in the order a refusal lists them.
- */
-const toolAttributes = ["tool-name", "tool-version"] as const;
 
 /**
  * Report whether a named type is one of {@link toolLabelTypes} or derives from one, by extension or
@@ -4580,7 +4583,7 @@ const labelTool = (
   tables: Tables,
 ): readonly Refusal[] => {
   const { root } = source;
-  const missing = toolAttributes.filter((name) => Option.isNone(attributeOf(root, name)));
+  const missing = missingToolAttributes(root);
   if (missing.length === 0) {
     return [];
   }
@@ -4824,9 +4827,9 @@ const quotation = (source: SourceDocument, visit: Visit): readonly Refusal[] => 
 /**
  * Report whether an element's kind declares `data-ssml`: a QTI element whose name's table holds the
  * attribute in no namespace. The XSD declares it on exactly the 45 elements the Data-SSML binding
- * lists (§5); on any other, only an attribute wildcard admits a `data-ssml`, laxly and unchecked,
- * so nothing the standard states makes its value Data-SSML and it is not refused (rule
- * `5b8ee08b`).
+ * lists (§5), a rubric block among them; on any other, only an attribute wildcard admits a
+ * `data-ssml`, laxly and unchecked, so nothing the standard states makes its value Data-SSML and it
+ * is not refused (rule `5b8ee08b`).
  *
  * @param tables The tables generated from the QTI XSD.
  * @param element The element.
@@ -4848,6 +4851,10 @@ const declaresDataSsml = (tables: Tables, element: SourceElement): boolean =>
  * judges it. A value that decodes keeps the `data-ssml` feature mark every body element carrying
  * the attribute gets (`#plate/vocabulary.ts`).
  *
+ * It judges every document by the same decoder, with the same refusal: an item's elements here, a
+ * test's and a section's rubric blocks and test feedback through `checkTestRules` in
+ * `#plate/validate/test-rules.ts`, and a stimulus's body through the verdict's own stimulus rules.
+ *
  * @param source The document.
  * @param visit The element's visit.
  * @param tables The tables generated from the QTI XSD.
@@ -4855,7 +4862,11 @@ const declaresDataSsml = (tables: Tables, element: SourceElement): boolean =>
  *   none when the value is Data-SSML JSON, and for an element that carries no `data-ssml` or whose
  *   kind does not declare it.
  */
-const dataSsml = (source: SourceDocument, visit: Visit, tables: Tables): readonly Refusal[] => {
+export const dataSsml = (
+  source: SourceDocument,
+  visit: Visit,
+  tables: Tables,
+): readonly Refusal[] => {
   const attribute = attributeOf(visit.element, "data-ssml");
   if (Option.isNone(attribute) || !declaresDataSsml(tables, visit.element)) {
     return [];
@@ -4881,50 +4892,48 @@ const dataSsml = (source: SourceDocument, visit: Visit, tables: Tables): readonl
  * `attribute-type` and `text-not-allowed`, reading 19's `max-strings` on an Extended Text bound to
  * a container, and reading 23's `expression-placement` on a `qti-variable` that carries
  * `weight-identifier`, which only a test's outcome processing may hold ({@link weightPlacement},
- * pantry's P12). `undeclared-response` and `binding` judge each binding an interaction makes, its
- * `response-identifier` and a Text Entry's or an Extended Text's `string-identifier`
- * ({@link responseRules}): the declaration each names, its fit, reading 92's counts and single
- * binding, and a gap match's gaps. `count-range` judges a least count against its most (reading 76)
- * and an order interaction's counts against its choices (reading 18, {@link countRules}).
- * `duplicate-identifier` judges the item's declarations among themselves
+ * which pantry once refused as P12). `undeclared-response` and `binding` judge each binding an
+ * interaction makes, its `response-identifier` and a Text Entry's or an Extended Text's
+ * `string-identifier` ({@link responseRules}): the declaration each names, its fit, reading 92's
+ * counts and single binding, and a gap match's gaps. `count-range` judges a least count against its
+ * most (reading 76) and an order interaction's counts against its choices (reading 18,
+ * {@link countRules}). `duplicate-identifier` judges the item's declarations among themselves
  * ({@link duplicateDeclaration}), and each choice of the nine pooled classes, gaps among them,
  * against the one pool and the item's variables (reading 104 as amended, E19,
- * {@link choiceIdentifier}), a
- * mapping's keys, as written and as values of its base type (readings 98 and 160, B5b,
- * {@link repeatedMapKey}), and a record value's fields (B7, {@link repeatedField}).
- * `attribute-type` judges a `mastery-value` outside the bounds its outcome declaration writes
- * (reading 9, E42a, {@link masteryRange}). Every law over a name reads it only where it is an
- * NCName ({@link nameOf}, reading 152, E40a), and a declaration's values are typed only where its
- * cardinality spells one (reading 158). The body content rules judge an item that labels a body
- * element without naming its tool, `missing-attribute` once at the root ({@link labelTool}, reading
- * 128, E31a); an interaction a `qti-template-block` holds, `misplaced-element`
- * ({@link templateBlockInteraction}, reading 143, E37); a cell's `headers` that names no header of
- * its table, or one twice, `attribute-type` ({@link tableHeaders}, reading 126, E29); and a
- * quotation mark against a `q`, `text-not-allowed` ({@link quotation}, reading 127, E30); and a
- * `data-ssml` value that is not Data-SSML JSON, `attribute-type` ({@link dataSsml}, the operator's
- * P3).
- * `template-requirements` judges the declarations a standard template, an inline `qti-map-response`
- * or `qti-map-response-point` and a `qti-lookup-outcome-value` need, and a mapping expression of a
- * built-in response, which has none. `undeclared-variable` judges
- * the variable a rule or an expression names, through its kind's declaration facet in the registry,
- * and the variables its reference attributes name, through its kind's reference facet, a built-in
- * by the kind it stands as (reading 111), and refuses a template rule that sets a variable of a
- * kind it may not set, and a name a `qti-printed-variable` or a `template-identifier`
- * gives that the item declares no variable of, or a Portable Custom Interaction's
- * `qti-context-variable` names that is no context variable ({@link contextVariableReference}), or a
- * feedback element's `outcome-identifier` names that is no outcome of the item
- * ({@link feedbackOutcome}, reading 77, E3a). `expression-type` judges what a
- * `qti-set-outcome-value`, `qti-set-template-value`, `qti-set-correct-response` or
- * `qti-set-default-value` sets, a branch's or a template constraint's condition, a lookup's
- * operand, every expression's operands by its kind's rule, the variables its reference attributes
- * name, a read template processing may not make, and the kind and type of the variables a
- * `qti-printed-variable` or a `template-identifier` names, and the type of the outcome a feedback
- * element names. Each expression is typed through its kind's rule in the registry (`kindRules` in
- * `#plate/model/expressions/read.ts`). The variable, type and reference rules judge inline response
- * processing and template processing alike, as the qti package does. A field of a record
- * declaration's value that lacks its `field-identifier` or its `base-type` is `missing-attribute`
- * ({@link recordFieldAttributes}), and so is a Portable Custom Interaction that names its module by
- * neither a `module` nor a `qti-interaction-modules` ({@link pciModuleSource}, R10-a).
+ * {@link choiceIdentifier}), a mapping's keys, as written and as values of its base type (readings
+ * 98 and 160, B5b, {@link repeatedMapKey}), and a record value's fields (B7,
+ * {@link repeatedField}). `attribute-type` judges a `mastery-value` outside the bounds its outcome
+ * declaration writes (reading 9, E42a, {@link masteryRange}). Every law over a name reads it only
+ * where it is an NCName ({@link nameOf}, reading 152, E40a), and a declaration's values are typed
+ * only where its cardinality spells one (reading 158). The body content rules judge an item that
+ * labels a body element without naming its tool, `missing-attribute` once at the root
+ * ({@link labelTool}, reading 128, E31a); an interaction a `qti-template-block` holds,
+ * `misplaced-element` ({@link templateBlockInteraction}, reading 143, E37); a cell's `headers` that
+ * names no header of its table, or one twice, `attribute-type` ({@link tableHeaders}, reading 126,
+ * E29); and a quotation mark against a `q`, `text-not-allowed` ({@link quotation}, reading 127,
+ * E30); and a `data-ssml` value that is not Data-SSML JSON, `attribute-type` ({@link dataSsml}, the
+ * operator's P3). `template-requirements` judges the declarations a standard template, an inline
+ * `qti-map-response` or `qti-map-response-point` and a `qti-lookup-outcome-value` need, and a
+ * mapping expression of a built-in response, which has none. `undeclared-variable` judges the
+ * variable a rule or an expression names, through its kind's declaration facet in the registry, and
+ * the variables its reference attributes name, through its kind's reference facet, a built-in by
+ * the kind it stands as (reading 111), and refuses a template rule that sets a variable of a kind
+ * it may not set, and a name a `qti-printed-variable` or a `template-identifier` gives that the
+ * item declares no variable of, or a Portable Custom Interaction's `qti-context-variable` names
+ * that is no context variable ({@link contextVariableReference}), or a feedback element's
+ * `outcome-identifier` names that is no outcome of the item ({@link feedbackOutcome}, reading 77,
+ * E3a). `expression-type` judges what a `qti-set-outcome-value`, `qti-set-template-value`,
+ * `qti-set-correct-response` or `qti-set-default-value` sets, a branch's or a template constraint's
+ * condition, a lookup's operand, every expression's operands by its kind's rule, the variables its
+ * reference attributes name, a read template processing may not make, and the kind and type of the
+ * variables a `qti-printed-variable` or a `template-identifier` names, and the type of the outcome
+ * a feedback element names. Each expression is typed through its kind's rule in the registry
+ * (`kindRules` in `#plate/model/expressions/read.ts`). The variable, type and reference rules judge
+ * inline response processing and template processing alike, as the qti package does. A field of a
+ * record declaration's value that lacks its `field-identifier` or its `base-type` is
+ * `missing-attribute` ({@link recordFieldAttributes}), and so is a Portable Custom Interaction that
+ * names its module by neither a `module` nor a `qti-interaction-modules` ({@link pciModuleSource},
+ * R10-a).
  *
  * The rules judge exactly what the structural walk checks, and only an item they can read whole:
  *
@@ -5077,8 +5086,8 @@ type ProcessingScope = Pick<
  * whatever kind of variable the reference expects: where it expects another kind
  * ({@link variableType}), a `qti-map-response` or a `qti-correct` of a test outcome `A.B`, or a
  * `qti-set-outcome-value` of a context variable `C.X`, nothing answers it, and it is refused
- * `undeclared-variable` as its undotted form is (pantry P8 and P27, whose `DeclaredRefKind` admits
- * only a declaration of the kind).
+ * `undeclared-variable` as its undotted form is (pantry's P8 and P27, its `Variable declared` and
+ * `Mapped response` laws).
  *
  * @param test The test document.
  * @param typePrefixed The typer of its prefixed reads.
@@ -5171,7 +5180,7 @@ const processingScope = (
  *   `qti-outcome-processing`, a `qti-pre-condition`, a `qti-branch-rule` and a
  *   `qti-template-default`. A test declares no response, so an unprefixed `qti-map-response` or
  *   `qti-map-response-point` names none and is refused `undeclared-variable`, where the qti package
- *   reports P27 (`checkMapping`); a prefixed one is a package's to judge.
+ *   reports P27 (its `Mapped response` law); a prefixed one is a package's to judge.
  * - What a `qti-set-outcome-value` sets (P20, {@link setType}) and a `qti-lookup-outcome-value`'s
  *   table and operand (P22, {@link lookupTableRequirements}, {@link lookupOperandType}) in outcome
  *   processing, and what a `qti-template-default` sets (P20) where `templateDefaultType` types its

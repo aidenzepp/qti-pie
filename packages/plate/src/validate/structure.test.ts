@@ -2966,7 +2966,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("the information model's mapping placements (pantry mapping-base-type and area-mapping-point)", () => {
+  describe("the information model's mapping placements (pantry mapping-base-type)", () => {
     it("[I-1] refuses a qti-mapping in a file response, the mapping its base type forbids, as misplaced-element (pantry mapping-base-type; info.txt:34086)", () => {
       assert.deepStrictEqual(
         judgedMapping(mappingItem("single", Option.some("file"), mapping)),
@@ -2988,21 +2988,21 @@ describe("checkStructure", () => {
       );
     });
 
-    it("[I-1] refuses a qti-area-mapping in an identifier response, an area mapping off a point, as misplaced-element (pantry area-mapping-point; info.txt:39388)", () => {
+    it("[I-1] refuses a qti-area-mapping in an identifier response, an area mapping off a point, as misplaced-element (pantry mapping-base-type; info.txt:39388)", () => {
       assert.deepStrictEqual(
         judgedMapping(mappingItem("single", Option.some("identifier"), areaMapping)),
         misplacedMapping("qti-area-mapping", pointed),
       );
     });
 
-    it("[I-1] refuses a qti-area-mapping in a record response, an area mapping off a point, as misplaced-element (pantry area-mapping-point; info.txt:39388)", () => {
+    it("[I-1] refuses a qti-area-mapping in a record response, an area mapping off a point, as misplaced-element (pantry mapping-base-type; info.txt:39388)", () => {
       assert.deepStrictEqual(
         judgedMapping(mappingItem("record", Option.none(), areaMapping)),
         misplacedMapping("qti-area-mapping", pointed),
       );
     });
 
-    it("[I-1] admits a qti-mapping in a string and a directedPair response, and a qti-area-mapping in a single and a multiple point response (pantry mapping-base-type, area-mapping-point)", () => {
+    it("[I-1] admits a qti-mapping in a string and a directedPair response, and a qti-area-mapping in a single and a multiple point response (pantry mapping-base-type)", () => {
       assert.deepStrictEqual(
         [
           mappingItem("single", Option.some("string"), mapping),

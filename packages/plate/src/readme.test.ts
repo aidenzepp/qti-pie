@@ -910,7 +910,7 @@ describe("README.md", () => {
 
     assert.include(
       scoring,
-      "| A `qti-mapping` in a response declaration of base type `file` or `duration`, or of cardinality `record`, or a `qti-area-mapping` in one whose base type is not `point` | `misplaced-element` | `mapping-base-type`, `area-mapping-point` |",
+      "| A `qti-mapping` in a response declaration of base type `file` or `duration`, or of cardinality `record`, or a `qti-area-mapping` in one whose base type is not `point` | `misplaced-element` | `mapping-base-type` |",
     );
     assert.notInclude(scoring, "first entry listed *(pending)*");
 

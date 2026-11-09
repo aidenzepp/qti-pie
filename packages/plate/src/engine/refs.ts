@@ -331,7 +331,10 @@ const prefixedOf = (variables: Variables, name: string): Option.Option<PrefixedR
  * is then never read through an item ref, as their value reads decide (`namedResponse` and
  * `evaluateDefault` in `#plate/engine/expressions/references.ts`): for `qti-correct` a response
  * the holder declares; for `qti-default` a response, an outcome or a template variable it
- * declares, or a built-in the run holds ({@link builtInType}).
+ * declares, or a built-in the run holds ({@link builtInType}). A `qti-correct` also reads a held
+ * built-in it names, `numAttempts` or `duration` (E22a, reading 111), which `namedResponse` takes
+ * before any item ref; this test leaves it out, since a built-in's name has no dot, so no prefixed
+ * reading resolves it, and it holds no record.
  *
  * @param kind The kind.
  * @param identifier The name it writes.
