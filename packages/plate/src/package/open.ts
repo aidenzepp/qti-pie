@@ -1195,6 +1195,50 @@ const boundedFact = (fact: string): string =>
   fact.length <= factLimit ? fact : `${fact.slice(0, factHead)}…${fact.slice(-factTail)}`;
 
 /**
+ * Join some texts with a separator into a fact bounded as {@link boundedFact} bounds one, copying
+ * only the characters the bounded fact keeps rather than writing the whole join out first.
+ *
+ * An `inclusion-cycle` refusal's chain names every document from the test down to the one whose
+ * section ref returns, so a hostile package of long paths, many refs back and a long chain would
+ * write out text that grows as the square of its documents for each such ref, only to bound it.
+ *
+ * @param texts The texts, in order.
+ * @param separator What goes between each two of them.
+ * @returns `boundedFact(texts.join(separator))`.
+ */
+const boundedJoin = (texts: readonly string[], separator: string): string => {
+  const pieces = texts.flatMap((text, index) => (index === 0 ? [text] : [separator, text]));
+  let length = 0;
+  for (const piece of pieces) {
+    length += piece.length;
+  }
+
+  if (length <= factLimit) {
+    return pieces.join("");
+  }
+
+  let head = "";
+  for (const piece of pieces) {
+    if (head.length >= factHead) {
+      break;
+    }
+
+    head += piece.slice(0, factHead - head.length);
+  }
+
+  let tail = "";
+  for (const piece of pieces.toReversed()) {
+    if (tail.length >= factTail) {
+      break;
+    }
+
+    tail = `${piece.slice(Math.max(0, piece.length - (factTail - tail.length)))}${tail}`;
+  }
+
+  return `${head}…${tail}`;
+};
+
+/**
  * A directory of some paths inside a package, the files a package holds or lists, or the documents
  * a ref may name: the names of its files, each with its path as given, and of the directories in it
  * by name, each a folder of its own.
@@ -2991,31 +3035,80 @@ const factsOf = (refusal: Refusal): string =>
   ]);
 
 /**
+ * The refusals given so far, counted by their facts ({@link factsOf}) as each is given, so a loop
+ * that gives more at each step judges each step against the count it keeps rather than one counted
+ * again over every refusal given so far, and computes each refusal's facts once.
+ */
+interface HeldRefusals {
+  /**
+   * Give the refusals of a list that the ones held do not already hold, each held one passing over
+   * one refusal with its facts once within the list, as {@link notHeld} gives them, and hold them
+   * from then on.
+   *
+   * @param refusals The refusals.
+   * @returns The refusals not held, in order.
+   */
+  readonly keep: (refusals: readonly Refusal[]) => readonly Refusal[];
+}
+
+/**
+ * Hold some refusals, counted by their facts, for a loop to give more against
+ * ({@link HeldRefusals}).
+ *
+ * @param held The refusals already given.
+ * @returns What holds them.
+ */
+const holding = (held: readonly Refusal[]): HeldRefusals => {
+  const counts = new Map<string, number>();
+  /**
+   * Count one more refusal with some facts as held.
+   *
+   * @param facts The refusal's facts.
+   */
+  const hold = (facts: string): void => {
+    counts.set(facts, (counts.get(facts) ?? 0) + 1);
+  };
+  for (const refusal of held) {
+    hold(factsOf(refusal));
+  }
+
+  return {
+    keep: (refusals) => {
+      // How many of the held refusals with each facts this list has passed over so far.
+      const passed = new Map<string, number>();
+      const kept: { readonly facts: string; readonly refusal: Refusal }[] = [];
+      for (const refusal of refusals) {
+        const facts = factsOf(refusal);
+        const used = passed.get(facts) ?? 0;
+        if ((counts.get(facts) ?? 0) > used) {
+          passed.set(facts, used + 1);
+        } else {
+          kept.push({ facts, refusal });
+        }
+      }
+
+      for (const { facts } of kept) {
+        hold(facts);
+      }
+
+      return kept.map(({ refusal }) => refusal);
+    },
+  };
+};
+
+/**
  * Give the refusals of one list that another does not already hold, each held one passing over one
  * refusal with its facts ({@link factsOf}).
+ *
+ * A loop that gives refusals against every one given so far keeps one {@link holding} across its
+ * steps instead, so it does not count them all again at each.
  *
  * @param refusals The refusals.
  * @param held The refusals already given.
  * @returns The refusals not held, in order.
  */
-const notHeld = (refusals: readonly Refusal[], held: readonly Refusal[]): readonly Refusal[] => {
-  const counts = new Map<string, number>();
-  for (const refusal of held) {
-    counts.set(factsOf(refusal), (counts.get(factsOf(refusal)) ?? 0) + 1);
-  }
-
-  const kept: Refusal[] = [];
-  for (const refusal of refusals) {
-    const left = counts.get(factsOf(refusal)) ?? 0;
-    if (left > 0) {
-      counts.set(factsOf(refusal), left - 1);
-    } else {
-      kept.push(refusal);
-    }
-  }
-
-  return kept;
-};
+const notHeld = (refusals: readonly Refusal[], held: readonly Refusal[]): readonly Refusal[] =>
+  holding(held).keep(refusals);
 
 /**
  * Give the refusals several ways of judging one thing give, each refusal once, in the order the
@@ -3025,12 +3118,9 @@ const notHeld = (refusals: readonly Refusal[], held: readonly Refusal[]): readon
  * @returns The refusals.
  */
 const unionOf = (ways: readonly (readonly Refusal[])[]): readonly Refusal[] => {
-  const union: Refusal[] = [];
-  for (const way of ways) {
-    union.push(...notHeld(way, union));
-  }
+  const union = holding([]);
 
-  return union;
+  return ways.flatMap((way) => union.keep(way));
 };
 
 /**
@@ -3971,14 +4061,15 @@ const countsOf = (
  * placement that holds it, would merge that document into itself without end, which no aggregated
  * document is (reading 85, "an inclusion never reaches itself"): it is `inclusion-cycle` at the
  * section ref, its detail the section ref's `identifier` when it writes one, its `href` as written,
- * the `chain` of document paths from the test through the repeated one, space-separated, and
- * `reading: "85"`, given once for each section ref of the test the walk finds so, and it places
- * nothing, as pantry's law "Inclusion cycle" refuses it alone. The walk finds every loop the test
- * reaches at one section ref at least; a ref that closes a loop only on a chain the walk does not
- * take, since it walks each placement once, is not refused again: whether some chain of documents
- * through a given one leads to a ref is not decidable in polynomial time in general, so plate
- * refuses the loop at the refs its own walk meets. An `xi:include` is never fetched here (S-6), so
- * a loop through includes is not seen, a recorded limit (rule `db2ef322`).
+ * the `chain` of document paths from the test through the repeated one, space-separated and bounded
+ * as any fact is ({@link boundedJoin}), and `reading: "85"`, given once for each section ref of the
+ * test the walk finds so, and it places nothing, as pantry's law "Inclusion cycle" refuses it
+ * alone. The walk finds every loop the test reaches at one section ref at least; a ref that closes
+ * a loop only on a chain the walk does not take, since it walks each placement once, is not refused
+ * again: whether some chain of documents through a given one leads to a ref is not decidable in
+ * polynomial time in general, so plate refuses the loop at the refs its own walk meets. An
+ * `xi:include` is never fetched here (S-6), so a loop through includes is not seen, a recorded
+ * limit (rule `db2ef322`).
  *
  * @param test The test's own placement.
  * @param sectionPaths The path of every section resource's document.
@@ -4061,7 +4152,7 @@ const assemble = (
         refused.add(site.element);
         cycles.push(
           refuse(placement.source.location, "inclusion-cycle", site.at, {
-            chain: [...open.map((one) => one.placement.path), site.path].join(" "),
+            chain: boundedJoin([...open.map((one) => one.placement.path), site.path], " "),
             href: site.href,
             ...Option.match(identifierOf(site.element), {
               onNone: () => ({}),
@@ -5315,10 +5406,12 @@ const judgeTest = (
       ),
     ];
   };
+  // Each placement's refusals beyond those given so far, counted once across the placements.
   const sections: Refusal[] = [...cycles];
+  const given = holding(cycles);
   for (const placement of placements.slice(1)) {
     here = placement;
-    sections.push(...notHeld(judgePlacement(placement), sections));
+    sections.push(...given.keep(judgePlacement(placement)));
   }
 
   return {
@@ -5587,7 +5680,9 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
   };
   const tests = new Map<string, Pick<TestJudgement, "links" | "reads" | "refs">>();
   const testRefusals: Refusal[] = [];
+  // Each test's section refusals beyond those an earlier test gave, counted once across the tests.
   const underTests: Refusal[] = [];
+  const heldUnderTests = holding([]);
   const reached = new Map<string, ReachedSection>();
   for (const path of pathsOfType(manifest, "imsqti_test_xmlv3p0")) {
     const source = documents.get(path)?.source;
@@ -5600,7 +5695,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
       const judged = judgeTest(source.success, path, refTargets, sectionPaths, documents);
       tests.set(path, judged);
       testRefusals.push(...judged.refusals);
-      underTests.push(...notHeld(judged.sections, underTests));
+      underTests.push(...heldUnderTests.keep(judged.sections));
       for (const section of judged.reached) {
         if (!reached.has(section.path)) {
           reached.set(section.path, section);
