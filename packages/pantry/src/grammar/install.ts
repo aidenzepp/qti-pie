@@ -1061,8 +1061,7 @@ export const KindGovernor = closed.relation(
  * attribute an element may carry under its governor in the version, with its value domain, its use
  * and its slot among the names the (version, governor) admits, slots 0 to n − 1. A kind's own rows
  * are the grammar's `AttributeGrammar`, a governing type's its `GovernedAttribute`. The installed
- * relations restate it by attribute model and slot ({@link AttributeGrammar},
- * {@link AttributeSlotOf}); the host reads these rows.
+ * relations restate it by attribute model ({@link AttributeGrammar}); the host reads these rows.
  */
 export const attributeRows = [
   ...grammar.attributes.admission.rows.map(({ domain, kind, name, position, use, version }) => ({
@@ -1127,7 +1126,7 @@ const attributeModels = (() => {
 
 /**
  * The `AttributeModel` roster: every distinct attribute grammar of a (version, governor), named by
- * its first governor, {@link AttributeGrammar} and {@link AttributeSlotOf} keyed by it.
+ * its first governor, {@link AttributeGrammar} keyed by it.
  */
 export const AttributeModel = closed(
   "AttributeModel",
@@ -1163,8 +1162,8 @@ export const AttributeModelOf = closed.relation(
 );
 
 /**
- * `AttributeSlots`: model → slots, the number of attributes each model admits, the slots 0 to
- * n − 1 of {@link AttributeGrammar}'s blocks (README, "Closed relations").
+ * `AttributeSlots`: model → slots, the number of attributes each model admits, whose slots 0 to
+ * n − 1 key {@link Required}'s and {@link CountedSlot}'s blocks (README, "Closed relations").
  */
 export const AttributeSlots = closed.relation(
   "AttributeSlots",
@@ -1182,9 +1181,11 @@ export const AttributeSlots = closed.relation(
 const modelSlot = slot(closedId(AttributeSlot), fin(AttributeSlots, "slots"));
 
 /**
- * `AttributeGrammar`: (model, slot) → (name, domain, use), each attribute a model admits at its
- * slot, keyed by the model's own slots as `FollowSetOf` is by its model's positions, so each
- * model's block holds its own attributes and no other's: its name, its value domain and its use.
+ * `AttributeGrammar`: (model, name) → (slot, domain, use), each attribute a model admits: its slot
+ * among the model's names, one of the slots 0 to n − 1 of its `AttributeSlots` count, its value
+ * domain and its use. Every law reads an element's attribute by its name (AL1, AL2's slot and the
+ * value domain), so the relation is keyed by name: an unadmitted name reads no row, and
+ * `AttributeGrammar.row(model)` is the set of the model's names.
  */
 export const AttributeGrammar = closed.relation(
   "AttributeGrammar",
@@ -1192,10 +1193,10 @@ export const AttributeGrammar = closed.relation(
     domain: closedId(ValueDomain),
     model: closedId(AttributeModel),
     name: closedId(AttributeName),
-    slot: modelSlot,
+    slot: closedId(AttributeSlot),
     use: closedId(Use),
   },
-  ["model", "slot"],
+  ["model", "name"],
   attributeModels.models.flatMap(({ handle, rows }) =>
     rows.map(({ domain, name, position, use }) => ({
       domain,
@@ -1203,28 +1204,6 @@ export const AttributeGrammar = closed.relation(
       name,
       slot: position,
       use,
-    })),
-  ),
-);
-
-/**
- * `AttributeSlotOf`: (model, name) → slot, the slot of each name a model admits, the index an
- * element's attribute is read through by name (AL1, AL2's slot and the value domain); an
- * unadmitted name reads no row, and `AttributeSlotOf.row(model)` is the set of the model's names.
- */
-export const AttributeSlotOf = closed.relation(
-  "AttributeSlotOf",
-  {
-    model: closedId(AttributeModel),
-    name: closedId(AttributeName),
-    slot: closedId(AttributeSlot),
-  },
-  ["model", "name"],
-  attributeModels.models.flatMap(({ handle, rows }) =>
-    rows.map(({ name, position }) => ({
-      model: asAttributeModel(handle),
-      name,
-      slot: position,
     })),
   ),
 );
@@ -1294,7 +1273,7 @@ const countedModels = (() => {
   }
 
   return [...counts].map(([model, { max, min, names }]) => {
-    const slots = AttributeSlotOf.rows
+    const slots = AttributeGrammar.rows
       .filter((row) => row.model === model && names.includes(row.name))
       .map(({ slot: at }) => at);
 

@@ -66,8 +66,8 @@ import {
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import {
+  AttributeGrammar,
   AttributeModelOf,
-  AttributeSlotOf,
   NodeKind,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
@@ -214,7 +214,7 @@ const carries = (n: NodeRow, name: "kind" | "src" | "srclang" | "srcset") =>
   n.eq(
     Compute.subset(
       Compute.singleton(
-        AttributeSlotOf.at("slot", AttributeModelOf.at("model", n.version, n.governor), name),
+        AttributeGrammar.at("slot", AttributeModelOf.at("model", n.version, n.governor), name),
       ),
       n.attrs,
     ),

@@ -38,8 +38,8 @@ import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Option } from "effect";
 import {
+  AttributeGrammar,
   AttributeModelOf,
-  AttributeSlotOf,
   DocumentType,
   GoverningOf,
 } from "#pantry/grammar/install.ts";
@@ -138,7 +138,7 @@ const lexicals = [
 /**
  * Every attribute row of one kind the grammar admits, under every document type and with a value
  * of each verdict: each `GoverningOf` row of the kind, each name its governor's attribute model
- * admits (`AttributeModelOf`, `AttributeSlotOf`).
+ * admits (`AttributeModelOf`, `AttributeGrammar`).
  *
  * @param kind - The element's kind.
  * @returns The rows.
@@ -149,7 +149,7 @@ const rowsOf = (kind: string): readonly AttributeCase[] =>
     .flatMap(({ governor, governs, version }) =>
       AttributeModelOf.rows
         .filter((model) => model.version === version && model.governor === governor)
-        .flatMap(({ model }) => AttributeSlotOf.rows.filter((slot) => slot.model === model))
+        .flatMap(({ model }) => AttributeGrammar.rows.filter((slot) => slot.model === model))
         .flatMap(({ name }) =>
           DocumentType.handles.flatMap((documentType) =>
             lexicals.map(({ idValue, lexical }) => ({
@@ -249,7 +249,7 @@ describe("qti/identity.ts, the copy-backs restated over the ID-typed attributes"
           onEmpty: () =>
             Effect.die(
               new Error(
-                `The grammar admits no attribute of ${copyBack.kind}, so the search has no row to judge ${copyBack.from}'s copy-back by. Check the GoverningOf, AttributeModelOf and AttributeSlotOf rows of the kind.`,
+                `The grammar admits no attribute of ${copyBack.kind}, so the search has no row to judge ${copyBack.from}'s copy-back by. Check the GoverningOf, AttributeModelOf and AttributeGrammar rows of the kind.`,
               ),
             ),
           onNonEmpty: (rows) =>

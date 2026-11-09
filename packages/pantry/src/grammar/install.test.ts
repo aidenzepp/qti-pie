@@ -462,11 +462,6 @@ const attributeModels: ReadonlyMap<string, string> = new Map(
 const attributeGrammar = groupedBy("AttributeGrammar", "model", ["slot", "name", "domain", "use"]);
 
 /**
- * Each model's `AttributeSlotOf` rows as (name, slot).
- */
-const attributeSlotOf = groupedBy("AttributeSlotOf", "model", ["name", "slot"]);
-
-/**
  * Each model's `Required` slots.
  */
 const required = groupedBy("Required", "model", ["slot"]);
@@ -489,6 +484,16 @@ const ownAttributes = Map.groupBy(
   ],
   ({ governor, version }) => `${version} ${governor}`,
 );
+
+/**
+ * Each attribute row's (model, name, slot), its slot as AL1 and AL2 read it by name.
+ *
+ * @param rows - The rows.
+ * @returns Each row's model, name and slot.
+ */
+const slotsOf = (
+  rows: readonly { readonly model: string; readonly name: string; readonly slot: string }[],
+) => rows.map(({ model, name, slot }) => ({ model, name, slot }));
 
 describe("the installed relations", () => {
   it.effect(
@@ -566,11 +571,6 @@ describe("the installed relations", () => {
                     tupleText([position, name, domain, use]),
                   ),
                 ),
-                at,
-              );
-              assert.deepStrictEqual(
-                attributeSlotOf.get(model) ?? noRows,
-                new Set(own.map(({ name, position }) => tupleText([name, position]))),
                 at,
               );
               assert.deepStrictEqual(
@@ -655,6 +655,47 @@ describe("the installed relations", () => {
       keyedSet("IncludeRoot", key, grammar.include.includeRoot.rows),
     );
     assert.isBelow(install.IncludeMember.rows.length, grammar.include.includeRoot.rows.length);
+  });
+
+  it("state AttributeSlotOf and AttributeGrammar once, keyed (model, name): each name at its slot with its domain and use, and each (model, slot) one attribute's", () => {
+    // Oracle: install.ts's attribute rows of each model's first (version, governor), spelled as
+    // the two relations this one restates: AttributeSlotOf (model, name) → slot and
+    // AttributeGrammar (model, slot) → (name, domain, use). The laws read `at("slot", m, name)`,
+    // `at("domain", m, name)` and `row(m)` where they read AttributeSlotOf's slot and names and
+    // AttributeGrammar's domain at that slot, so the two agree exactly when the rows keyed by
+    // (model, name) are the first and keyed by (model, slot) the second. `keyedSet` refuses a
+    // repeated key, so the second also holds (model, slot) to one attribute, the key `Required` and
+    // `CountedSlot` state slots by.
+    const modelOf = new Map(
+      install.AttributeModelOf.rows.map(({ governor, model, version }) => [
+        `${version} ${governor}`,
+        model,
+      ]),
+    );
+    const firstFamily = new Map<string, string>();
+    for (const { governor, model, version } of install.AttributeModelOf.rows) {
+      firstFamily.getOrInsert(model, `${version} ${governor}`);
+    }
+    const restated = install.attributeRows.flatMap(
+      ({ domain, governor, name, position, use, version }) => {
+        const at = `${version} ${governor}`;
+        const model = modelOf.get(at);
+
+        return model !== undefined && firstFamily.get(model) === at
+          ? [{ domain, model, name, slot: position, use }]
+          : [];
+      },
+    );
+    const merged = install.AttributeGrammar.rows;
+
+    assert.deepStrictEqual(
+      keyedSet("AttributeGrammar by name", ["model", "name"], slotsOf(merged)),
+      keyedSet("AttributeSlotOf", ["model", "name"], slotsOf(restated)),
+    );
+    assert.deepStrictEqual(
+      keyedSet("AttributeGrammar by slot", ["model", "slot"], merged),
+      keyedSet("AttributeGrammar keyed by slot", ["model", "slot"], restated),
+    );
   });
 
   it("make ContentModelOf total, CountedOf and BarredOf exactly today's Counted but its caps and ChildBarredBy, SharedModelOf exactly the shared families, and Capped exactly Counted's caps", () => {

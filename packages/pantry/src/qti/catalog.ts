@@ -65,7 +65,6 @@ import { booleanTrue } from "#pantry/grammar/domains.ts";
 import {
   AttributeGrammar,
   AttributeModelOf,
-  AttributeSlotOf,
   NodeKind,
   SchemaVersion,
   ValueIdentity,
@@ -247,10 +246,7 @@ type AttributeRow = RowScalars<typeof Attribute>;
 const identityOf = (a: AttributeRow) => {
   const model = AttributeModelOf.at("model", a.version, a.governor);
 
-  return ValueIdentity.at(
-    "identity",
-    AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, a.name)),
-  );
+  return ValueIdentity.at("identity", AttributeGrammar.at("domain", model, a.name));
 };
 
 /**

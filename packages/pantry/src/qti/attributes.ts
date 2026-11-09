@@ -9,13 +9,12 @@
  * names a type derived from the declared one, or a simple type governs a foreign element (spec
  * readings 60, 83 and 84; `GoverningOf` of the element's type, `typeGovernorOf` of
  * `#pantry/qti/node.ts`). The governor's attribute model, `AttributeModelOf(version, governor)`,
- * then gives the name's slot, `AttributeSlotOf(model, name)`, and the slot its value domain and
- * use, `AttributeGrammar(model, slot)`. `Attribute` copies `kind`, `version`, `document` and
- * `governor` from its element along the family's owner axis, so every law below reads its
- * governor inline.
+ * then gives the name's slot, value domain and use, `AttributeGrammar(model, name)`. `Attribute`
+ * copies `kind`, `version`, `document` and `governor` from its element along the family's owner
+ * axis, so every law below reads its governor inline.
  *
  * - **AL1, admission** (`AL1_admission`, rule `attribute-admission`): the name is one its element's
- *   governor admits, `{name} ⊆ AttributeSlotOf.row(model)`, with `{name}` the name's
+ *   governor admits, `{name} ⊆ AttributeGrammar.row(model)`, with `{name}` the name's
  *   `Compute.singleton`. It is a named check, not a generated column's NOT NULL: the governor it
  *   reads is `version` and `governor`, accumulated copies, and a generated field's term reads only
  *   the fields its caller writes (grizzle's README, "How a field is written"). An unadmitted name
@@ -110,7 +109,6 @@ import {
   AttributeModelOf,
   AttributeName,
   AttributeSlot,
-  AttributeSlotOf,
   boundedDomains,
   CountedSlot,
   DocumentType,
@@ -376,24 +374,24 @@ type NamedRow = Pick<AttributeRow, "governor" | "name" | "version">;
 const attributeModelOf = (a: NamedRow) => AttributeModelOf.at("model", a.version, a.governor);
 
 /**
- * Read an admitted attribute's slot under its element's governor (`AttributeSlotOf`).
+ * Read an admitted attribute's slot under its element's governor (`AttributeGrammar`).
  *
  * @param a - The row.
  * @returns The closed read, absent for an unadmitted name.
  */
-const slotOf = (a: NamedRow) => AttributeSlotOf.at("slot", attributeModelOf(a), a.name);
+const slotOf = (a: NamedRow) => AttributeGrammar.at("slot", attributeModelOf(a), a.name);
 
 /**
  * State that an attribute's name is one its element's governor admits: the singleton of the name
- * inside `AttributeSlotOf`'s row of names for the governor's model. It reads no NULL where the name
- * is unadmitted, so it is the admission law itself, not a closed read's absence. Exported for
+ * inside `AttributeGrammar`'s row of names for the governor's model. It reads no NULL where the
+ * name is unadmitted, so it is the admission law itself, not a closed read's absence. Exported for
  * `#pantry/qti/cdn.ts`, whose laws read an admitted attribute's domain.
  *
  * @param a - The row.
  * @returns The predicate.
  */
 export const admitted = (a: AttributeRow) =>
-  a.eq(Compute.subset(Compute.singleton(a.name), AttributeSlotOf.row(attributeModelOf(a))), true);
+  a.eq(Compute.subset(Compute.singleton(a.name), AttributeGrammar.row(attributeModelOf(a))), true);
 
 /**
  * Read an admitted attribute's value domain under its element's governor. Exported for
@@ -402,8 +400,7 @@ export const admitted = (a: AttributeRow) =>
  * @param a - The row.
  * @returns The closed read, absent for an unadmitted name.
  */
-export const domainOf = (a: NamedRow) =>
-  AttributeGrammar.at("domain", attributeModelOf(a), slotOf(a));
+export const domainOf = (a: NamedRow) => AttributeGrammar.at("domain", attributeModelOf(a), a.name);
 
 /**
  * State that an attribute's name is an open class's.
@@ -557,7 +554,7 @@ export const attributeLawsByName = {
               o.ne(o.local, name),
               o.eq(
                 Compute.disjoint(
-                  AttributeSlotOf.row(AttributeModelOf.at("model", o.version, o.governor)),
+                  AttributeGrammar.row(AttributeModelOf.at("model", o.version, o.governor)),
                   Bits.of(AttributeName, [name]),
                 ),
                 true,

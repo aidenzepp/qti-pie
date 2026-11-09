@@ -134,7 +134,6 @@ import {
   AttributeGrammar,
   AttributeModelOf,
   AttributeName,
-  AttributeSlotOf,
   Governor,
   Identity,
   NodeKind,
@@ -686,7 +685,7 @@ type IdentityHandle = (typeof Identity.handles)[number];
  */
 const identityIn = (a: AttributeRow, identities: readonly IdentityHandle[]) => {
   const model = AttributeModelOf.at("model", a.version, a.governor);
-  const domain = AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, a.name));
+  const domain = AttributeGrammar.at("domain", model, a.name);
 
   return a.and(ValueIdentity.has(domain), a.in(ValueIdentity.at("identity", domain), identities));
 };

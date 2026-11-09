@@ -409,8 +409,8 @@ const positionHandle = (state: number): PositionHandle => {
 
 /**
  * What the host writes of an attribute its governor admits, read once from the attribute grammar
- * (`AttributeGrammar`, `AttributeSlotOf`) and its domain's rows: its slot's position, whether its
- * domain is an `xs:IDREF` or `xs:IDREFS` (`ValueIdentity`), so it holds its IDREF pieces.
+ * (`AttributeGrammar`) and its domain's rows: its slot's position, whether its domain is an
+ * `xs:IDREF` or `xs:IDREFS` (`ValueIdentity`), so it holds its IDREF pieces.
  */
 interface AdmittedAttribute {
   readonly idrefs: boolean;

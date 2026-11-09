@@ -118,8 +118,8 @@ import {
 import type { RowScalars } from "@bjornpagen/grizzle";
 import type { DocumentType, ResourceType } from "#pantry/grammar/install.ts";
 import {
+  AttributeGrammar,
   AttributeModelOf,
-  AttributeSlotOf,
   BaseType,
   BaseTypeLexical,
   NodeKind,
@@ -724,7 +724,7 @@ const carries = (n: NodeRow, name: "baseType" | "fieldIdentifier") =>
   n.eq(
     Compute.subset(
       Compute.singleton(
-        AttributeSlotOf.at("slot", AttributeModelOf.at("model", n.version, n.governor), name),
+        AttributeGrammar.at("slot", AttributeModelOf.at("model", n.version, n.governor), name),
       ),
       n.attrs,
     ),
