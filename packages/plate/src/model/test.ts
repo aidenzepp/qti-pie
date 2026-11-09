@@ -967,11 +967,14 @@ const readsOwnStructure = (names: ProcessingNames, prefix: string, rest: string)
  * structure stays held there; an outcome-only expression in such a test is marked on its own
  * ({@link outcomeOnlyMarks}). Otherwise it is held, the test scope's to resolve.
  *
- * A limit stays (rule `db2ef322`): the test model reads no item, so it holds a name whose own
- * reading counts whether or not that item declares the variable. Where it does not, and a section
- * document's item reference resolves the name, as a section document's `a.2` resolves `a.2.SCORE`
- * beside an own repeatable `a` whose item declares no `SCORE`, the package counts that reading
- * alone and accepts the name, the processing stays held, and the engine finds no reading of it.
+ * The test model reads no item, so it holds a name whose own reading counts whether or not that
+ * item declares the variable. Where it does not, and a section document's item reference resolves
+ * the name, as a section document's `a.2` resolves `a.2.SCORE` beside an own repeatable `a` whose
+ * item declares no `SCORE`, or a section document's `x` resolves `x.y.SCORE` beside an own `x.y`
+ * whose item declares no `SCORE`, the package counts that reading alone and accepts the name. The
+ * package reads the items, so it marks the processing that reads such a name (`judgeTest` in
+ * `#plate/package/open.ts`, through {@link withUnheldReads}), and no session runs it. A test built
+ * apart from its items holds it, and there the engine finds no reading of it.
  *
  * @param names What the processing resolves a name against.
  * @param name The dotted name.
@@ -1637,8 +1640,11 @@ export const buildTest = (source: SourceDocument): Effect.Effect<Test, Refusal> 
 /**
  * A read by a test's processing of a variable the engine holds no value of, which the test model
  * cannot see from the test document alone: an item's context variable read through its item ref
- * (`ITEMREF.VAR` naming the item's `qti-context-declaration`), which the item marks. A package,
- * which reads the test's items, finds each one.
+ * (`ITEMREF.VAR` naming the item's `qti-context-declaration`), which the item marks; any variable
+ * read through an item ref that names an LTI link; or a name whose one counting reading reads
+ * through an item ref, part or section a section document writes, though a reading through the
+ * test's own structure counts in the test document alone ({@link isPrefixedHeld}). A package,
+ * which reads the test's items and the section documents it reaches, finds each one.
  *
  * It lies in the test's outcome processing, or in a template default of one of the test's own item
  * refs, named by the item ref's identifier. `name` is the name read, as written, and `path` the

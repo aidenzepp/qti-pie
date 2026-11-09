@@ -1309,6 +1309,42 @@ const variableMarks = (test: AcceptedTest): readonly (readonly [string, string])
   );
 
 /**
+ * Open a package whose test's own section holds, after what is given, the item ref `own` to
+ * an item, then a section ref to the section document `sections/s.xml`, whose item ref
+ * `placed` names item `i2`, which declares `SCORE` and the further declarations given; the
+ * test's outcome processing sets `TOTAL` to a name. Item `i1` declares no `SCORE`.
+ *
+ * @param name The name `TOTAL` is set to.
+ * @param own The test's own item ref and the item it names, `items/i1.xml` or `items/i2.xml`.
+ * @param placed The section document's item ref.
+ * @param before What the test's section holds before `own`, as written.
+ * @param declarations What `i2` declares after `SCORE`, as written.
+ * @returns The package's verdict.
+ */
+const openCounting = (
+  name: string,
+  own: readonly [identifier: string, href: string],
+  placed: string,
+  before: string,
+  declarations: string,
+) =>
+  openPackage(
+    location,
+    packageOf({
+      "items/i1.xml": `<qti-assessment-item xmlns="${qti}" identifier="i1" title="i1" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="OTHER" cardinality="single" base-type="float"/><qti-item-body><p>i1</p></qti-item-body></qti-assessment-item>`,
+      "items/i2.xml": `<qti-assessment-item xmlns="${qti}" identifier="i2" title="i2" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>${declarations}<qti-item-body><p>i2</p></qti-item-body></qti-assessment-item>`,
+      [manifestFile]: manifestXml(
+        resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+        resourceXml("I1", "imsqti_item_xmlv3p0", "items/i1.xml"),
+        resourceXml("I2", "imsqti_item_xmlv3p0", "items/i2.xml"),
+        resourceXml("S", "imsqti_section_xmlv3p0", "sections/s.xml"),
+      ),
+      "sections/s.xml": `<qti-assessment-section xmlns="${qti}" identifier="S2" title="S2" visible="true">${itemRefXml(placed, "../items/i2.xml")}</qti-assessment-section>`,
+      "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="SEC" title="SEC" visible="true">${before}${itemRefXml(...own)}${sectionRefXml("R", "sections/s.xml")}</qti-assessment-section></qti-test-part><qti-outcome-processing>${settingTotal(variableXml(name))}</qti-outcome-processing></qti-assessment-test>`,
+    }),
+  );
+
+/**
  * Give the template defaults the item ref `second` of a test `openContextReading` writes holds,
  * each the template variable it sets.
  *
@@ -7066,6 +7102,56 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(variableMarks(context.alone), []);
           assert.strictEqual(collected.delivered, collected.alone);
           assert.strictEqual(collected.delivered.test.outcomeProcessing.kind, "runs");
+        }),
+    );
+  });
+
+  describe("openPackage, a test whose one counting reading of a name is a section document's", () => {
+    it.effect(
+      "align-54 r12 counting reading in a section document N1: a.2.SCORE beside an own a a selection with replacement can repeat, whose item declares no SCORE, and x.y.SCORE beside an own x.y, whose item declares no SCORE, each read through a section document's a.2 or x alone, are delivered with the processing marked, variable:<name> at the processing, while the test document's own verdict runs it",
+      () =>
+        Effect.gen(function* countingInSection() {
+          for (const [name, own, placed, before, declarations] of [
+            ["a.2.SCORE", ["a", "items/i1.xml"], "a.2", replacingSelection, ""],
+            [
+              "x.y.SCORE",
+              ["x.y", "items/i1.xml"],
+              "x",
+              "",
+              '<qti-outcome-declaration identifier="y.SCORE" cardinality="single" base-type="float"/>',
+            ],
+          ] as const) {
+            const verdict = yield* openCounting(name, own, placed, before, declarations);
+            const { alone, delivered } = deliveredAndAlone(verdict);
+
+            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", name);
+            assert.deepStrictEqual(delivered.test.outcomeProcessing, { kind: "marked" }, name);
+            assert.deepStrictEqual(
+              variableMarks(delivered),
+              [[`variable:${name}`, processingPath]],
+              name,
+            );
+            assert.strictEqual(alone.test.outcomeProcessing.kind, "runs", name);
+            assert.deepStrictEqual(variableMarks(alone), [], name);
+          }
+        }),
+    );
+
+    it.effect(
+      "align-54 r12 counting reading in a section document N1: the controls: beside the same section document, a.2.SCORE through an own a a selection with replacement can repeat and a.b.SCORE through an own a.b, each item declaring SCORE, are delivered as the test document's own verdict gives them, their processing running",
+      () =>
+        Effect.gen(function* countingOwn() {
+          for (const [name, own, before] of [
+            ["a.2.SCORE", ["a", "items/i2.xml"], replacingSelection],
+            ["a.b.SCORE", ["a.b", "items/i2.xml"], ""],
+          ] as const) {
+            const verdict = yield* openCounting(name, own, "other", before, "");
+            const { alone, delivered } = deliveredAndAlone(verdict);
+
+            assert.strictEqual(delivered, alone, name);
+            assert.strictEqual(delivered.test.outcomeProcessing.kind, "runs", name);
+            assert.deepStrictEqual(variableMarks(delivered), [], name);
+          }
         }),
     );
   });

@@ -612,10 +612,11 @@ const resolve = (scope: TestScope, prefix: string, rest: string): Option.Option<
  * its one resolving reading is a section document's item ref, whose item the scope does not hold:
  * in a test that references a section document, the test model marks a processing that reads a
  * dotted name unless the test's own part, section or item ref reads a variable name holding no dot
- * through it (`isPrefixedHeld` in `#plate/model/test.ts`). So a checked package reaches the first
- * only where that own item declares no such variable and a section document's item ref resolves
- * the name, a limit the test model records; otherwise only a test and items checked apart reach
- * either. The engine holds no part's or section's `duration`, and the test model marks a
+ * through it (`isPrefixedHeld` in `#plate/model/test.ts`). Where that own item declares no such
+ * variable and a section document's item ref resolves the name, the package, which reads the
+ * items, marks the processing that reads it (`judgeTest` in `#plate/package/open.ts`). So a
+ * checked package reaches neither; only a test and items checked apart reach either. The engine
+ * holds no part's or section's `duration`, and the test model marks a
  * processing that reads one, so that reading reads nothing too.
  *
  * @param scope The test scope.
