@@ -65,6 +65,63 @@ export const knownEntries = (known: Known): PackageEntries =>
  * The known disagreements, keyed by signature.
  */
 export const known = {
+  "import-only-law: Branch target, contained BranchResolution(instance, rule, target) in BranchTarget(instance, rule, target)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+        ],
+        [
+          "test.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref identifier="ref2"><qti-branch-rule target=""/></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+        ],
+      ],
+      fix: "a stated limit (spec reading 1): an empty branch rule target still writes its BranchResolution row, which Branch target wants in BranchTarget on the import's side alone; value domain refuses it on both sides; lifted by writing no derived row for a value outside its domain",
+      owner: "decision 463",
+    },
+  'import-only-law: Choice identifier key, {"kind":"key","side":{"relation":"Choice","terms":[{"kind":"field","field":"document"},{"kind":"field","field":"kind"},{"kind":"field","field":"identifier"}],"selection":{"conjuncts":[]}}}':
+    {
+      files: [
+        [
+          "choice.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><qti-choice-interaction><qti-simple-choice identifier="Kéééxéxxxééxx𝔸x𝔸𝔸éé𝔸é語xxé𝔸𝔸語語語語𝔸語語ééxxxé語x𝔸é𝔸𝔸éé𝔸é語𝔸éé𝔸é語𝔸語𝔸語x語é語𝔸é𝔸é語xé語éxéxéé語x𝔸𝔸語𝔸語語éxééé𝔸ééx語語xx語𝔸𝔸語語éxx語é𝔸語é𝔸éxéx語x𝔸語é語語éxx語語語é語𝔸é語é語語éxéx語𝔸x語𝔸xé語xx𝔸é語xééxx語𝔸語éx𝔸é𝔸語語é語語語é語xéé𝔸é𝔸x𝔸x語語𝔸𝔸x𝔸語éé語éé語𝔸𝔸𝔸xxé𝔸語語𝔸語x𝔸𝔸𝔸x語xéééé𝔸語𝔸語x語xé𝔸𝔸éx𝔸語語𝔸語x𝔸𝔸ééx語ééx𝔸éé𝔸x語𝔸é𝔸é𝔸語éé語𝔸x語𝔸語é𝔸𝔸éx𝔸𝔸𝔸語𝔸x𝔸x語𝔸xx𝔸x語éx𝔸x𝔸xx語é𝔸x𝔸éééxé𝔸xéxé語éxx語語語é𝔸é𝔸xx𝔸語語xx𝔸x𝔸x語語語é𝔸éx語語xxé語語xé𝔸語x𝔸𝔸xé語x𝔸x𝔸𝔸𝔸xéé𝔸xéxé𝔸𝔸語x𝔸𝔸éééxé𝔸語語語é語x語語é𝔸x𝔸語語xéxxx𝔸𝔸𝔸語𝔸語𝔸𝔸𝔸é語𝔸𝔸語xx語é語語語語𝔸é語𝔸éé𝔸語𝔸𝔸é語é語𝔸語𝔸𝔸𝔸語語x𝔸𝔸語語é𝔸𝔸語xx語xx語語é𝔸é𝔸𝔸xéx語xéxx語語x𝔸𝔸語𝔸éx語x語xé語xééxx語éé𝔸𝔸語語語語é語𝔸x語x語𝔸x語x語é語xx𝔸é語語語𝔸語xx𝔸語語xéé語語éé語éx語é𝔸éx𝔸語xxéxéx𝔸xé語é語é𝔸xé𝔸xé𝔸éxx𝔸語é𝔸𝔸é𝔸𝔸x語x語xéxxé語語語é語𝔸éx語x𝔸語ééé語é語xéxéx語é𝔸𝔸xéx語語𝔸xxé語x語語語xxx𝔸é𝔸語𝔸語語é語語xx語xéxééé語x𝔸xxx𝔸語é語語é語語éé𝔸x𝔸xé語xxxéxé語𝔸éé𝔸é𝔸𝔸語𝔸語x𝔸xx𝔸x𝔸x𝔸語é𝔸𝔸語xé𝔸語xxx語語語𝔸語語𝔸xxé𝔸xxx𝔸xx語é語é𝔸é𝔸語語𝔸éx語éééééé語xx𝔸éxx𝔸語𝔸語語語éxéx𝔸語語𝔸𝔸éx𝔸é𝔸xéééx𝔸é語x𝔸ééé𝔸𝔸xéx語x𝔸語語𝔸𝔸xé語xx𝔸語𝔸éééé語éx𝔸é語𝔸xx語x語𝔸語éxéé𝔸éx𝔸xxé𝔸語é語語𝔸語語語xééééx語𝔸𝔸xé語éx𝔸x語xx語x𝔸xxéééx𝔸x語語語xxé語𝔸é語𝔸xé語𝔸éx𝔸x𝔸x語ééé𝔸ééé語語é語éxxx語x𝔸𝔸é語é𝔸語xxxé𝔸éx語éé𝔸éx語éxéé語語x𝔸xéx語é𝔸𝔸x𝔸語語x語語語𝔸語語x語𝔸𝔸éx語éxéx𝔸語xxx𝔸𝔸x𝔸xx語語語𝔸x語語x𝔸語語𝔸éx語é語語xééééx語𝔸éxé語éx𝔸x𝔸é𝔸語éxx𝔸xxééxxxxxxé𝔸x語語𝔸𝔸𝔸𝔸𝔸x𝔸é語é𝔸𝔸xxx"/><qti-simple-choice identifier="Kéééxéxxxééxx𝔸x𝔸𝔸éé𝔸é語xxé𝔸𝔸語語語語𝔸語語ééxxxé語x𝔸é𝔸𝔸éé𝔸é語𝔸éé𝔸é語𝔸語𝔸語x語é語𝔸é𝔸é語xé語éxéxéé語x𝔸𝔸語𝔸語語éxééé𝔸ééx語語xx語𝔸𝔸語語éxx語é𝔸語é𝔸éxéx語x𝔸語é語語éxx語語語é語𝔸é語é語語éxéx語𝔸x語𝔸xé語xx𝔸é語xééxx語𝔸語éx𝔸é𝔸語語é語語語é語xéé𝔸é𝔸x𝔸x語語𝔸𝔸x𝔸語éé語éé語𝔸𝔸𝔸xxé𝔸語語𝔸語x𝔸𝔸𝔸x語xéééé𝔸語𝔸語x語xé𝔸𝔸éx𝔸語語𝔸語x𝔸𝔸ééx語ééx𝔸éé𝔸x語𝔸é𝔸é𝔸語éé語𝔸x語𝔸語é𝔸𝔸éx𝔸𝔸𝔸語𝔸x𝔸x語𝔸xx𝔸x語éx𝔸x𝔸xx語é𝔸x𝔸éééxé𝔸xéxé語éxx語語語é𝔸é𝔸xx𝔸語語xx𝔸x𝔸x語語語é𝔸éx語語xxé語語xé𝔸語x𝔸𝔸xé語x𝔸x𝔸𝔸𝔸xéé𝔸xéxé𝔸𝔸語x𝔸𝔸éééxé𝔸語語語é語x語語é𝔸x𝔸語語xéxxx𝔸𝔸𝔸語𝔸語𝔸𝔸𝔸é語𝔸𝔸語xx語é語語語語𝔸é語𝔸éé𝔸語𝔸𝔸é語é語𝔸語𝔸𝔸𝔸語語x𝔸𝔸語語é𝔸𝔸語xx語xx語語é𝔸é𝔸𝔸xéx語xéxx語語x𝔸𝔸語𝔸éx語x語xé語xééxx語éé𝔸𝔸語語語語é語𝔸x語x語𝔸x語x語é語xx𝔸é語語語𝔸語xx𝔸語語xéé語語éé語éx語é𝔸éx𝔸語xxéxéx𝔸xé語é語é𝔸xé𝔸xé𝔸éxx𝔸語é𝔸𝔸é𝔸𝔸x語x語xéxxé語語語é語𝔸éx語x𝔸語ééé語é語xéxéx語é𝔸𝔸xéx語語𝔸xxé語x語語語xxx𝔸é𝔸語𝔸語語é語語xx語xéxééé語x𝔸xxx𝔸語é語語é語語éé𝔸x𝔸xé語xxxéxé語𝔸éé𝔸é𝔸𝔸語𝔸語x𝔸xx𝔸x𝔸x𝔸語é𝔸𝔸語xé𝔸語xxx語語語𝔸語語𝔸xxé𝔸xxx𝔸xx語é語é𝔸é𝔸語語𝔸éx語éééééé語xx𝔸éxx𝔸語𝔸語語語éxéx𝔸語語𝔸𝔸éx𝔸é𝔸xéééx𝔸é語x𝔸ééé𝔸𝔸xéx語x𝔸語語𝔸𝔸xé語xx𝔸語𝔸éééé語éx𝔸é語𝔸xx語x語𝔸語éxéé𝔸éx𝔸xxé𝔸語é語語𝔸語語語xééééx語𝔸𝔸xé語éx𝔸x語xx語x𝔸xxéééx𝔸x語語語xxé語𝔸é語𝔸xé語𝔸éx𝔸x𝔸x語ééé𝔸ééé語語é語éxxx語x𝔸𝔸é語é𝔸語xxxé𝔸éx語éé𝔸éx語éxéé語語x𝔸xéx語é𝔸𝔸x𝔸語語x語語語𝔸語語x語𝔸𝔸éx語éxéx𝔸語xxx𝔸𝔸x𝔸xx語語語𝔸x語語x𝔸語語𝔸éx語é語語xééééx語𝔸éxé語éx𝔸x𝔸é𝔸語éxx𝔸xxééxxxxxxé𝔸x語語𝔸𝔸𝔸𝔸𝔸x𝔸é語é𝔸𝔸xxx"/></qti-choice-interaction></qti-item-body></qti-assessment-item>`,
+        ],
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
+        ],
+      ],
+      fix: "a stated limit (spec reading 1): two simple choice identifiers that share a value holding a character from U+10000 up are outside NCName by spec reading 94, and the import still keys them under Choice identifier key, while the law oracle reads each as no id; value domain refuses it on both sides; lifted by reading names from XML 1.0 Fifth Edition (spec reading 94), or by writing no row for a value outside its domain",
+      owner: "decision 463",
+    },
+  'import-only-law: Choice identifier key, {"kind":"key","side":{"relation":"Hottext","terms":[{"kind":"field","field":"document"},{"kind":"field","field":"identifier"}],"selection":{"conjuncts":[]}}}':
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>`,
+        ],
+        [
+          "rtest01/rtest01-fragment.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-hottext-interaction><p><qti-hottext identifier="0"/><qti-hottext identifier="0"/></p></qti-hottext-interaction></div>`,
+        ],
+      ],
+      fix: "a stated limit (spec reading 1): two hottext identifiers outside their domain that share a value are keyed by the import under Choice identifier key (Hottext), while the law oracle reads each as no id; value domain refuses it on both sides; lifted by keying only identifiers inside their domain (decision 457 (2)'s pattern)",
+      owner: "decision 463",
+    },
   'import-only-law: DocumentId key, {"kind":"key","side":{"relation":"IdBinding","terms":[{"kind":"field","field":"document"},{"kind":"field","field":"id"}],"selection":{"conjuncts":[{"kind":"compare","op":"eq","left":{"kind":"field","field":"admitted"},"right":{"kind":"literal","value":true,"type":undefined}}]}}}':
     {
       files: [
@@ -78,6 +135,73 @@ export const known = {
       fix: "a stated limit (spec reading 1): an element the grammar admits under its own parent binds its ID though an ancestor is a forbidden element whose subtree the law oracle drops, so its duplicate ID breaks DocumentId key beside the ancestor's N5 admitted, which no verdict follows; lifted by binding only an ID whose every ancestor the grammar admits",
       owner: "decision 452",
     },
+  'import-only-law: DocumentId key, {"kind":"key","side":{"relation":"ResourceId","terms":[{"kind":"field","field":"package"},{"kind":"field","field":"identifier"}],"selection":{"conjuncts":[]}}}':
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource identifier="00000000-0000-0000-0000-000000000000"/><resource identifier="00000000-0000-0000-0000-000000000000"/></resources></manifest>`,
+        ],
+      ],
+      fix: "a stated limit (spec reading 1): two cp:resource identifiers outside their domain that share a value are keyed by the import under DocumentId key (ResourceId), while the law oracle reads each as no id; value domain refuses it on both sides; lifted by keying only identifiers inside their domain (decision 457 (2)'s pattern)",
+      owner: "decision 463",
+    },
+  "import-only-law: E1 derived, check E1_derived on ObjectIdentifier": {
+    files: [
+      [
+        "choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier=""/>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
+      ],
+    ],
+    fix: "a stated limit (spec reading 1): an empty item identifier still writes its ObjectIdentifier row, which breaks E1 derived on the import's side alone; value domain refuses it on both sides; lifted by writing no derived row for a value outside its domain",
+    owner: "decision 463",
+  },
+  "import-only-law: E1 derived, check E1_derived on SectionIdentifier": {
+    files: [
+      [
+        "example.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-if><qti-is-null><qti-sum><qti-test-variables section-identifier="K𝔸éé語x𝔸x語語x語xx𝔸𝔸xxé𝔸語𝔸é語𝔸x語é語𝔸𝔸𝔸éé語語xxéx語𝔸𝔸ééé語語𝔸é𝔸語éx𝔸𝔸x𝔸𝔸é語éxééé語é語é語𝔸é語語語語é語語ééé語x𝔸éé語é語𝔸éxé語éx語語é語éx𝔸xx𝔸語xxxx語語ééé語éx語x語語x𝔸x語xx語é𝔸𝔸𝔸𝔸éx語𝔸語𝔸𝔸𝔸é𝔸éx語語ééx𝔸x語é語x語éxéxx語𝔸éé𝔸xéé語語é𝔸𝔸éx語語語𝔸xéx𝔸é𝔸語𝔸語x𝔸語xxxéx語é語éééx𝔸é𝔸éx𝔸éxxéxxx𝔸éé語語語𝔸𝔸éx𝔸xéé𝔸xx𝔸語é語𝔸語xéx𝔸語語x語xé𝔸é語x語語語語é語x語éx語xxéx語é𝔸𝔸x𝔸𝔸語éxé𝔸é語𝔸x𝔸ééé語𝔸xxx語é𝔸𝔸語𝔸𝔸é𝔸é𝔸x語語éé𝔸語語𝔸𝔸x𝔸語𝔸éx𝔸語語𝔸é𝔸語𝔸語x語éxéxé語語xé𝔸é語é語xx𝔸x語xéx語𝔸xxxé𝔸xxxxé𝔸𝔸xxé𝔸𝔸𝔸é語語語𝔸x𝔸é𝔸語語x𝔸𝔸é𝔸éx𝔸𝔸x𝔸é𝔸x𝔸é語éx𝔸𝔸語𝔸語é𝔸語語語éé𝔸éxxxé𝔸ééé𝔸語語xéx語é語𝔸𝔸𝔸𝔸𝔸x語語𝔸語語x𝔸𝔸𝔸𝔸語x語éx語語é語𝔸x𝔸𝔸xé𝔸xx語x𝔸𝔸語éé𝔸ééx語éxéé𝔸語語xxx𝔸𝔸xxxxxéé𝔸éx𝔸é語xx語語𝔸語éx語語語é𝔸語𝔸x語é語語語é𝔸x語𝔸x𝔸x語𝔸𝔸𝔸é𝔸é𝔸x語xx𝔸語語語éé𝔸xx語𝔸xéxxx𝔸x語é𝔸x語xx𝔸𝔸éx語é語𝔸éx語éé語𝔸é𝔸xé𝔸é語é𝔸x語𝔸xééé語語語𝔸éxxxé𝔸語x𝔸éxx𝔸é𝔸x𝔸xx𝔸𝔸語𝔸é語é𝔸é𝔸𝔸語語語語é語éé𝔸éé𝔸語語語x語語xééé語𝔸語éééx𝔸語é𝔸x𝔸xé語𝔸é𝔸éx𝔸é語xxxé語éé語é語𝔸語éxéx語xéxxééé語x𝔸éxxxxéxxxx語𝔸語x語𝔸語x𝔸x語語語𝔸語𝔸éééé𝔸x語語𝔸𝔸語ééxx語語語𝔸語é語𝔸é語語xé𝔸x語xx𝔸x語é𝔸語語é𝔸𝔸語x𝔸語ééx𝔸𝔸語𝔸x𝔸é𝔸語xéé語xéx𝔸é語𝔸語語x語語𝔸語𝔸語語𝔸語語xx語xé𝔸éé𝔸é𝔸語x𝔸𝔸x𝔸語é語ééx𝔸xéxé𝔸語語語x𝔸xé語éxé𝔸xé𝔸𝔸é語ééxxx語x𝔸語語語語éxx語é語xé𝔸é語語éx𝔸語x語𝔸語éx𝔸xx𝔸語語é𝔸𝔸語𝔸語xx𝔸𝔸𝔸éé語𝔸é語x𝔸x語語𝔸é語𝔸語ééxééx𝔸x𝔸𝔸𝔸𝔸xéé語x𝔸éx語語語語𝔸éé𝔸𝔸語𝔸語𝔸é語語𝔸語語語x語é𝔸𝔸𝔸é𝔸éé𝔸𝔸x𝔸é語𝔸x𝔸𝔸𝔸語𝔸語語語éé𝔸ééé語x語語xxé語éééxéxx語éx"/></qti-sum></qti-is-null></qti-response-if></qti-response-condition>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource href="example.xml" type="imsqti_stimulus_xmlv3p0"/></resources></manifest>`,
+      ],
+    ],
+    fix: "a stated limit (spec reading 1): a section identifier holding a character from U+10000 up is outside NCName by spec reading 94, and the import still writes its SectionIdentifier row, which breaks E1 derived; value domain refuses it on both sides; lifted by reading names from XML 1.0 Fifth Edition (spec reading 94), or by writing no row for a value outside its domain",
+    owner: "decision 463",
+  },
+  "import-only-law: E1 derived, check E1_derived on TestToken": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section><qti-assessment-section><qti-assessment-item-ref identifier=""/></qti-assessment-section></qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "a stated limit (spec reading 1): an empty assessment item ref identifier still writes its TestToken row, which breaks E1 derived on the import's side alone; value domain refuses it on both sides; lifted by writing no derived row for a value outside its domain",
+    owner: "decision 463",
+  },
   "import-only-law: E1 derived, contained GeneralObject(record, document) in LomObject(record, document) (under a record file whose root is a cp:manifest)":
     {
       files: [
@@ -101,6 +225,44 @@ export const known = {
         ],
       ],
       fix: "a stated limit (spec reading 1): a record file whose root is a cp:manifest still has its resource-owned record read, so the record's general object breaks E1 derived where the law oracle reads no record of that file (decision 449's shape); RootOfType refuses it on both sides; lifted by reading no record a record file's cp:resource owns",
+      owner: "decision 463",
+    },
+  "import-only-law: E1 derived, contained InteractionAttribute(node, value) in Slider(node, lower)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>`,
+        ],
+        [
+          "rtest01/rtest01-fragment.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-slider-interaction lower-bound="0"/></div>`,
+        ],
+      ],
+      fix: "a stated limit (spec reading 1): a slider interaction writing its lower bound alone writes no Slider row, and E1 derived wants the bound's InteractionAttribute in Slider(node, lower) (NIL's \"(6) the absence defaults\"); AL3 required refuses it on both sides; lifted by a law that wants the row only where the attribute is written",
+      owner: "decision 463",
+    },
+  "import-only-law: E1 derived, contained InteractionAttribute(node, value) in Slider(node, upper)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
+        ],
+        [
+          "items/item.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><qti-slider-interaction upper-bound="10"/></qti-item-body></qti-assessment-item>`,
+        ],
+      ],
+      fix: "a stated limit (spec reading 1): a slider interaction writing its upper bound alone writes no Slider row, and E1 derived wants the bound's InteractionAttribute in Slider(node, upper) (NIL's \"(6) the absence defaults\"); AL3 required refuses it on both sides; lifted by a law that wants the row only where the attribute is written",
       owner: "decision 463",
     },
   "import-only-law: E1 derived, contained LomRecord(ownerParent, named) in LomResource(node, named)":
@@ -198,6 +360,85 @@ export const known = {
       fix: "a stated limit (spec reading 1): the import and the law oracle attach a resource's LOM record differently when its cp:resource carries xml:base, so the record's title breaks LomObjectTitle on the import's side alone; Href listed refuses it on both sides; lifted by attaching a resource's record under the one href its xml:base resolves on both sides",
       owner: "decision 463",
     },
+  "import-only-law: Section identifier target, check Section_identifier_target on Reading": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-outcome-processing><qti-set-outcome-value><qti-sum><qti-test-variables section-identifier="Kx語é語xéé𝔸xéé語é語語𝔸語éé𝔸xxx語𝔸xxé語é語語é𝔸語x𝔸語xxééé語𝔸é𝔸x𝔸語é𝔸語語x語éx𝔸語x𝔸é𝔸éxxx語語𝔸éxx𝔸𝔸𝔸x𝔸語語𝔸𝔸𝔸éxé語x𝔸xx語xxéx𝔸éxéé語語xéé𝔸xx𝔸xxx語éx語xxéx語xé語𝔸é𝔸éx𝔸𝔸𝔸𝔸é語é語𝔸éé語語𝔸語𝔸語語é𝔸éx𝔸語語語𝔸é𝔸語xxx語𝔸é𝔸𝔸é語語xx𝔸é𝔸é語語𝔸語𝔸𝔸x𝔸𝔸xx語éx語ééé𝔸語語語x𝔸語é語xx𝔸語é語語x𝔸語𝔸𝔸𝔸𝔸語語é𝔸𝔸𝔸xéééxééé語x語xxéé𝔸é𝔸xéx𝔸xéé語𝔸𝔸xé𝔸𝔸𝔸x語語é語語𝔸𝔸𝔸x語xéééx𝔸語𝔸xx語語𝔸éé𝔸語𝔸x語xé語𝔸xéx語é語語語é𝔸x語語x語éx語x𝔸éé𝔸x語xx語語x語xxxé𝔸語xé𝔸𝔸語語語語x語語x語x𝔸x𝔸éxx語語x𝔸𝔸xéxx語語語𝔸éxéxx𝔸𝔸語𝔸xxx𝔸xéx語xxxéé語x𝔸𝔸𝔸𝔸𝔸x𝔸é𝔸xé語語xx語x語x𝔸𝔸𝔸ééxéxéx語éxxé𝔸𝔸é𝔸𝔸𝔸𝔸éxx𝔸xéé𝔸語𝔸語éé𝔸éx𝔸語é𝔸𝔸語xéé𝔸xx𝔸𝔸éxéx語éxxé語éé𝔸𝔸𝔸語𝔸語éé語éé語語éé語𝔸é𝔸𝔸x語𝔸語xéé𝔸語語𝔸𝔸𝔸語語éxééx𝔸é語éxxéxx語𝔸語𝔸x語é𝔸語xx𝔸語語𝔸語語é𝔸語語語xxx𝔸𝔸𝔸x𝔸語𝔸語𝔸語x語𝔸é語語語𝔸ééé語𝔸x𝔸語éxxx𝔸x𝔸éxé𝔸éx𝔸𝔸éééxxé𝔸𝔸𝔸é𝔸𝔸xé語語éé𝔸é語éx𝔸é語x語xé𝔸語語𝔸xxééx語𝔸語語𝔸é𝔸語é𝔸é語xé語xxé語𝔸𝔸x𝔸語xééxé𝔸xxxxx語語éx𝔸𝔸x語語𝔸語𝔸xééxxx語語𝔸xxx𝔸𝔸é𝔸é語語語𝔸𝔸語語éxx語𝔸語語x𝔸ééééx𝔸語𝔸𝔸xéx𝔸éx𝔸é𝔸語語éx語𝔸éé語𝔸𝔸語éééé𝔸𝔸xéé𝔸é語語𝔸xx語語𝔸x𝔸x𝔸𝔸語é𝔸xé語x語x語éxx語é語𝔸é𝔸語é𝔸語xéé語語é語語語語x語éxxé𝔸ééx𝔸xxxx語語x語xxx語語ééxxéééxx語xxx語éxé語x語é語語語語éxx𝔸é語é語é𝔸x𝔸語éé語𝔸xxé𝔸éxxxxé𝔸é𝔸x𝔸xéxéx𝔸éxxéx語𝔸𝔸xx𝔸語é語x𝔸𝔸語xéxx𝔸x𝔸xx語語xx語語𝔸𝔸語éx𝔸𝔸xé𝔸x𝔸𝔸xx𝔸xx語語語𝔸語語語xxx𝔸éx𝔸語𝔸xé𝔸xé語x語𝔸語éx𝔸xx𝔸語語語é𝔸xé𝔸語語éx語𝔸𝔸語語𝔸語語x𝔸𝔸𝔸語é𝔸xéé語é語éxx語éééxx語𝔸語語é𝔸éé語é語x𝔸éxé語éx語語語𝔸x語xx𝔸𝔸𝔸𝔸é語é語語𝔸𝔸x𝔸xé語"/></qti-sum></qti-set-outcome-value></qti-outcome-processing></qti-assessment-test>`,
+      ],
+    ],
+    fix: "a stated limit (spec reading 1): a section identifier holding a character from U+10000 up is outside NCName by spec reading 94, and the import still checks its Reading under Section identifier target; value domain refuses it on both sides; lifted by reading names from XML 1.0 Fifth Edition (spec reading 94), or by writing no row for a value outside its domain",
+    owner: "decision 463",
+  },
+  "import-only-law: Template default target, contained TemplateDefault(node) in TemplateDefaultTarget(node)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+        ],
+        [
+          "items/item.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="N"/></qti-assessment-item>`,
+        ],
+        [
+          "test.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="items/item.xml"><qti-template-default template-identifier="N"/></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+        ],
+      ],
+      fix: 'a stated limit (spec reading 1): a template default without its expression writes no TemplateDefaultTarget row, and Template default target wants one per template default (NIL\'s "(6) the absence defaults"); AL3 required refuses it on both sides; lifted by a law that wants the row only where the attribute is written',
+      owner: "decision 463",
+    },
+  "import-only-law: Test overlay, contained Node(id) in SectionSelection(node)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section visible="true"><qti-selection/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: 'a stated limit (spec reading 1): a selection without its select attribute writes no SectionSelection row, and Test overlay wants one per node (NIL\'s "(6) the absence defaults"); AL3 required refuses it on both sides; lifted by a law that wants the row only where the attribute is written',
+    owner: "decision 463",
+  },
+  "import-only-law: Test overlay, contained Node(id) in VariableMapping(node)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section visible="true"><qti-assessment-item-ref><qti-variable-mapping/></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: 'a stated limit (spec reading 1): a variable mapping missing either attribute writes no VariableMapping row, and Test overlay wants one per node (NIL\'s "(6) the absence defaults"); AL3 required refuses it on both sides; lifted by a law that wants the row only where the attribute is written',
+    owner: "decision 463",
+  },
   "import-only-law: Test overlay, contained Section(node, visible) in TestFlag(node, value)": {
     files: [
       [
