@@ -1441,6 +1441,37 @@ const wholeItem = (children: readonly SourceChild[]): SourceDocument =>
   ]);
 
 /**
+ * An item whose body holds a paragraph around one `object` with the attributes the tables
+ * require of it and the given others.
+ *
+ * @param attributes The object's other attributes.
+ * @returns The item.
+ */
+const objectWith = (...attributes: readonly SourceAttribute[]): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-item-body",
+      [],
+      [
+        el(
+          "p",
+          [],
+          [el("object", [attr("data", "x.png"), attr("type", "image/png"), ...attributes])],
+        ),
+      ],
+    ),
+  ]);
+
+/**
+ * Where an attribute of {@link objectWith}'s object sits.
+ *
+ * @param name The attribute's name as its path step spells it.
+ * @returns The location.
+ */
+const objectAttribute = (name: string): Location =>
+  at(`qti-assessment-item/qti-item-body/p/object/@${name}`);
+
+/**
  * Check a document against the generated tables, keeping each refusal's rule, location and detail.
  *
  * @param source The document.
@@ -2640,6 +2671,136 @@ describe("checkStructure", () => {
       );
 
       assert.deepStrictEqual(found(source), []);
+    });
+  });
+
+  describe('reading 90 ("on an element the Schematron\'s extension-attribute lists cover, an attribute its XSD does not declare is a `data-` attribute, or the document is refused")', () => {
+    it("align-54 extension lists E10: refuses object's alt and qti-extended-text-interaction's patternMask, which neither declares, as unknown-attribute", () => {
+      const extended = wholeItem([
+        el(
+          "qti-item-body",
+          [],
+          [
+            el("qti-extended-text-interaction", [
+              attr("response-identifier", "RESPONSE"),
+              attr("patternMask", "x"),
+            ]),
+          ],
+        ),
+      ]);
+
+      assert.isTrue(generatedTables.elements["object"]?.extensionCovered);
+      assert.isTrue(generatedTables.elements["qti-extended-text-interaction"]?.extensionCovered);
+      assert.deepStrictEqual(judged(objectWith(attr("alt", "x"))), [
+        [
+          "unknown-attribute",
+          objectAttribute("alt"),
+          { attribute: "alt", element: "object", reading: "90" },
+        ],
+      ]);
+      assert.deepStrictEqual(judged(extended), [
+        [
+          "unknown-attribute",
+          at("qti-assessment-item/qti-item-body/qti-extended-text-interaction/@patternMask"),
+          {
+            attribute: "patternMask",
+            element: "qti-extended-text-interaction",
+            reading: "90",
+          },
+        ],
+      ]);
+    });
+
+    it("align-54 extension lists E10: refuses an attribute in another namespace, and an xml: attribute the element does not declare, xml:id and xml:space, as unknown-attribute", () => {
+      for (const [written, name] of [
+        [attr("x", "1", otherNamespace), `{${otherNamespace}}x`],
+        [attr("id", "o1", xmlNamespace), "xml:id"],
+        [attr("space", "preserve", xmlNamespace), "xml:space"],
+      ] as const) {
+        assert.deepStrictEqual(
+          judged(objectWith(written)),
+          [
+            [
+              "unknown-attribute",
+              objectAttribute(name),
+              { attribute: name, element: "object", reading: "90" },
+            ],
+          ],
+          name,
+        );
+      }
+    });
+
+    it("align-54 extension lists E10: accepts a data- attribute, a valid xsi:type and reading 10's aria-keyshortcuts on a covered element", () => {
+      const objectTyped = objectWith(
+        attr("qti", qtiNamespace, xmlnsNamespace),
+        attr("type", "qti:ObjectDType", xsiNamespace),
+      );
+      const shortcut = wholeItem([
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "p",
+              [],
+              [
+                el("img", [
+                  attr("alt", "A map"),
+                  attr("src", "map.png"),
+                  attr("aria-keyshortcuts", "Alt+K"),
+                ]),
+              ],
+            ),
+          ],
+        ),
+      ]);
+
+      assert.isTrue(generatedTables.elements["img"]?.extensionCovered);
+      assert.deepStrictEqual(judged(objectWith(attr("data-x", "1"))), []);
+      assert.deepStrictEqual(judged(objectTyped), []);
+      assert.deepStrictEqual(judged(shortcut), []);
+    });
+
+    it("align-54 extension lists E10: refuses a data- name reading 13 refuses as reading 13 does, suggesting its lower case", () => {
+      const source = objectWith(attr("data-X", "1"));
+
+      assert.deepStrictEqual(judged(source), [
+        [
+          "unknown-attribute",
+          objectAttribute("data-X"),
+          { attribute: "data-X", element: "object", reading: "13" },
+        ],
+      ]);
+      assert.deepStrictEqual(
+        checkStructure(source, generatedTables)[0]?.suggestion,
+        Option.some("data-x"),
+      );
+    });
+
+    it("align-54 extension lists E10: leaves an element the lists do not cover to its wildcard, so qti-custom-operator keeps an attribute in another namespace", () => {
+      const operator = wholeItem([
+        el(
+          "qti-response-processing",
+          [],
+          [
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "SCORE")],
+              [el("qti-custom-operator", [attr("x", "1", otherNamespace)])],
+            ),
+          ],
+        ),
+      ]);
+      const written = `qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-custom-operator/@{${otherNamespace}}x`;
+
+      assert.isUndefined(generatedTables.elements["qti-custom-operator"]?.extensionCovered);
+      assert.deepStrictEqual(
+        judged(operator).filter(
+          ([, refused]) => refused.kind === "path" && refused.path === written,
+        ),
+        [],
+      );
     });
   });
 

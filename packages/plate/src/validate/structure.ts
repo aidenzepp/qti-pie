@@ -32,7 +32,8 @@
  *
  * Over the XSD's rules it applies the shared readings that set the XSD aside where the walk can see
  * them, each a row of {@link readingRows}: attributes narrowed, retyped, withdrawn or required,
- * `data-*` names, placements, child counts and the range of the count attributes, and beside them
+ * `data-*` names, the attributes an element the Schematron's extension lists cover may carry
+ * (reading 90), placements, child counts and the range of the count attributes, and beside them
  * the information model's own sentences the XSD does not hold: the floor of a literal `figures` or
  * `n`, the `tolerance` an absolute or relative `qti-equal` must carry, the identifiers the built-in
  * variables keep from every declaration, and the values a `tolerance` holds. The XSD's own order
@@ -2204,17 +2205,45 @@ const misnamed = (
   );
 
 /**
+ * Report whether an attribute an element's governing table does not declare is one reading 90
+ * ("on an element the Schematron's extension-attribute lists cover, an attribute its XSD does not
+ * declare is a `data-` attribute, or the document is refused") lets an element its lists cover
+ * carry: a `data-` attribute in no namespace, whose name reading 13 then judges, or reading 10's
+ * `aria-keyshortcuts` where the table declares the XSD's `aria-keyshorts` (the empty elements).
+ * XML Schema's four `xsi:` attributes and the namespace declarations never reach this check.
+ *
+ * @param table The table that governs the element.
+ * @param attribute The undeclared attribute.
+ * @returns Whether the attribute is an extension reading 90 admits.
+ */
+const isExtension = (table: ContentTable, attribute: SourceAttribute): boolean =>
+  attribute.namespace === "" &&
+  (attribute.local.startsWith("data-") ||
+    (attribute.local === "aria-keyshortcuts" &&
+      table.attributes.some(
+        (declaration) =>
+          declaration.use !== "prohibited" &&
+          declaration.namespace === "" &&
+          declaration.local === "aria-keyshorts",
+      )));
+
+/**
  * Check one attribute the element's table does not declare.
  *
  * When the element's attribute wildcard matches its namespace it is allowed, unless a reading
  * refuses its name: then it is `unknown-attribute`, suggesting the name in lower case when that
- * name passes. Otherwise it is `unknown-attribute`, with the misspelling table's suggestion when a
- * row matches.
+ * name passes. On an element the Schematron's extension lists cover, the wildcard admits only an
+ * extension ({@link isExtension}), and any other attribute it matches is `unknown-attribute`,
+ * citing reading 90, as XML's `xml:id` and an attribute in another namespace are. Otherwise it is
+ * `unknown-attribute`, with the misspelling table's suggestion when a row matches.
  *
  * @param source The document.
  * @param element The attribute's element.
  * @param path The element's path.
  * @param governed The table that governs the element, with its tables' namespace.
+ * @param covered Whether the extension lists cover the element, by its name's table: the lists
+ *   name elements, so an element an `xsi:type` governs is covered by its name, and what its
+ *   governing table declares is still declared.
  * @param attribute The undeclared attribute.
  * @returns The refusal, or none when the wildcard admits the attribute and no reading refuses
  *   its name.
@@ -2224,11 +2253,23 @@ const checkUndeclared = (
   element: SourceElement,
   path: string,
   governed: Governed,
+  covered: boolean,
   attribute: SourceAttribute,
 ): Option.Option<Refusal> => {
   const detail = { attribute: attributeName(attribute), element: elementName(element) };
   const wildcard = governed.table.anyAttribute;
-  if (wildcard !== undefined && wildcardAdmits(wildcard, attribute.namespace, governed.namespace)) {
+  const admitted =
+    wildcard !== undefined && wildcardAdmits(wildcard, attribute.namespace, governed.namespace);
+  if (admitted && covered && !isExtension(governed.table, attribute)) {
+    return Option.some(
+      refuse(source, "unknown-attribute", attributePath(path, attribute), {
+        ...detail,
+        reading: "90",
+      }),
+    );
+  }
+
+  if (admitted) {
     return Option.map(misnamed(element, attribute), (row) =>
       refuse(
         source,
@@ -2882,7 +2923,8 @@ const namedType = (
  * goes to {@link checkValue} and is checked for `padded-attribute`, unless its value holds an
  * unexpanded entity reference, whose value is unknown, or it is a record's `base-type`, which is
  * `unknown-attribute` ({@link isRecordBaseType}). An undeclared one goes to {@link checkUndeclared},
- * and one a wildcard admits then to {@link checkXml}, which reads `xml:lang` wherever it is written.
+ * with whether the Schematron's extension lists cover the element's name (reading 90), and one a
+ * wildcard admits then to {@link checkXml}, which reads `xml:lang` wherever it is written.
  * Non-whitespace text in an element whose table admits none is `text-not-allowed`. The placement
  * and child-count rows go to {@link checkPlacement} and {@link checkChildCounts}, and a default
  * hotspot's place and a lookup table's outcome to {@link checkDefaultHotspot} and
@@ -2919,6 +2961,7 @@ const checkElement = (
   ];
   const label = elementName(element);
   const declared = table.attributes.filter((declaration) => declaration.use !== "prohibited");
+  const covered = name.extensionCovered === true;
 
   for (const declaration of declared) {
     const present = element.attributes.some(
@@ -2964,7 +3007,7 @@ const checkElement = (
     );
     if (declaration === undefined) {
       refusals.push(
-        ...Option.match(checkUndeclared(source, element, path, governed, attribute), {
+        ...Option.match(checkUndeclared(source, element, path, governed, covered, attribute), {
           onNone: () => checkXml(source, element, path, attribute),
           onSome: (refusal) => [refusal],
         }),

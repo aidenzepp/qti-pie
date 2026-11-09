@@ -879,6 +879,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -1748,6 +1749,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -2617,6 +2619,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -3486,6 +3489,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -4513,6 +4517,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -5540,6 +5545,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -6274,6 +6280,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -7143,6 +7150,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -8054,6 +8062,7 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -8870,6 +8879,7 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -9739,6 +9749,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -10677,6 +10688,7 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -11332,6 +11344,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -12359,6 +12372,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -13228,6 +13242,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -14097,6 +14112,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -14761,6 +14777,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -15421,6 +15438,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -16466,6 +16484,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -17390,6 +17409,7 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -18259,6 +18279,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -19308,6 +19329,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -19981,6 +20003,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -20850,6 +20873,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -21719,6 +21743,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -22746,6 +22771,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -23661,6 +23687,7 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -24688,6 +24715,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -25557,6 +25585,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -26426,6 +26455,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -27295,6 +27325,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -28164,6 +28195,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -29033,6 +29065,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -29902,6 +29935,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -30929,6 +30963,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -31584,6 +31619,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -32453,6 +32489,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -33155,6 +33192,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -34024,6 +34062,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -35051,6 +35090,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -36078,6 +36118,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -37105,6 +37146,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -38085,6 +38127,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -38754,6 +38797,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -39623,6 +39667,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -40329,6 +40374,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -41198,6 +41244,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -42076,6 +42123,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -42971,6 +43019,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -43079,6 +43128,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -43214,6 +43264,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -43261,6 +43312,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -43345,6 +43397,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -43389,6 +43442,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -43487,6 +43541,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -44231,6 +44286,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -44934,6 +44990,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -45438,6 +45495,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -46214,6 +46272,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -47996,6 +48055,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -49613,6 +49673,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -50833,6 +50894,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -52254,6 +52316,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -52960,6 +53023,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -53834,6 +53898,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": true,
       "types": [
@@ -54846,6 +54911,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -55592,6 +55658,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -56441,6 +56508,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -57328,6 +57396,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": true,
       "types": [
@@ -58301,6 +58370,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -59040,6 +59110,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -59743,6 +59814,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -60994,6 +61066,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -61717,6 +61790,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -62591,6 +62665,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": true,
       "types": [
@@ -63414,6 +63489,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -63709,6 +63785,7 @@
           "namespace": "http://www.w3.org/2001/10/synthesis"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": true,
       "types": [
@@ -64905,6 +64982,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": true,
       "types": [
@@ -65626,6 +65704,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -68643,6 +68722,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": true,
       "types": [
@@ -70914,6 +70994,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -72316,6 +72397,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -73019,6 +73101,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -74806,6 +74889,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -77114,6 +77198,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -77813,6 +77898,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -77856,6 +77942,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -79739,6 +79826,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": true,
       "types": [
@@ -82551,6 +82639,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -83331,6 +83420,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -85494,6 +85584,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": true,
       "types": [
@@ -86472,6 +86563,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": true,
       "types": [
@@ -86503,6 +86595,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -87232,6 +87325,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -88267,6 +88361,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -90049,6 +90144,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -92210,6 +92306,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": true,
       "types": [
@@ -92350,6 +92447,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -92450,6 +92548,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -93264,6 +93363,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -94258,6 +94358,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": false,
       "text": false,
       "types": [
@@ -95181,6 +95282,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -95936,6 +96038,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -96691,6 +96794,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -97450,6 +97554,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -98221,6 +98326,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -99090,6 +99196,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -100117,6 +100224,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -100986,6 +101094,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -101678,6 +101787,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -102547,6 +102657,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -103416,6 +103527,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -104285,6 +104397,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -105040,6 +105153,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -105909,6 +106023,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -106611,6 +106726,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -107262,6 +107378,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -108367,6 +108484,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -109034,6 +109152,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -110139,6 +110258,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -110790,6 +110910,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -111445,6 +111566,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -112129,6 +112251,7 @@
         }
       ],
       "children": [],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -112998,6 +113121,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -113667,6 +113791,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": false,
       "types": [
@@ -114536,6 +114661,7 @@
           "namespace": "http://www.w3.org/2001/XInclude"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
@@ -115297,6 +115423,7 @@
           "namespace": "http://www.imsglobal.org/xsd/imsqtiasi_v3p0"
         }
       ],
+      "extensionCovered": true,
       "global": true,
       "text": true,
       "types": [
