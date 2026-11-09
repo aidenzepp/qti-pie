@@ -19,6 +19,16 @@
  * is never kept past the state of the package it is tied to. It records the copy's commit too, as
  * provenance only, so re-pointing the copy at a commit with the same rows keeps it.
  *
+ * The run sees only the corpus, so a difference no corpus package shows has no row. Each such
+ * difference known is recorded here instead:
+ *
+ * - A reference from inside a section document a test places twice, through a name one of its
+ *   placements gives, reads the placement that holds it and is accepted (reading 86, "a section
+ *   document a test places twice is written once"; `#plate/package/open.ts`). Pantry's law
+ *   `Prefixed_reference` (`packages/pantry/src/qti/expressions.ts`) refuses any reading through a
+ *   name two placements give, wherever the reference stands. No corpus package holds a section
+ *   ref.
+ *
  * @module
  */
 import { readdir, readFile } from "node:fs/promises";
@@ -41,7 +51,7 @@ export const verdictsSource = "packages/pantry/verdicts/qti-examples-0a92fbb.tsv
  * The commit of `main` whose {@link verdictsSource} `qti-verdicts.tsv` copies byte for byte: the
  * `main` the agreement was last run on.
  */
-export const verdictsCommit = "8d8832a";
+export const verdictsCommit = "083890d8";
 
 /**
  * The copy's path, beside this module.
@@ -133,10 +143,12 @@ export type RulingState = typeof RulingState.Type;
 /**
  * The Schema of the operator's ruling that a disagreement is an expected difference.
  *
- * `expectedWhile` ties the ruling to the state of the other package, never to all time ("pantry
- * does not yet model this vocabulary (its phases 6 to 11)"); `group` is the ruling's group, 1 to
- * 3; `source` names where it was ruled; and `state` is the state it was made on, whose sides
- * {@link staleRulings} compares with the agreement's run.
+ * `expectedWhile` ties the ruling to the state of the package that does not model what the other
+ * judges, never to all time ("pantry does not yet model this vocabulary (its phases 6 to 11)",
+ * "plate does not validate MathML (M3)"); `group` is the ruling's group, one of criterion 5's three
+ * expected differences: 1, either package's unmodeled vocabulary; 2, metaData and LOM; 3,
+ * usageData, which carries QTI 2.2 usage data; `source` names where it was ruled; and `state` is
+ * the state it was made on, whose sides {@link staleRulings} compares with the agreement's run.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `Ruling` is the Schema and the type of a ruling under one name, so a decoder and a signature read as one thing.
 export const Ruling = Schema.Struct({
