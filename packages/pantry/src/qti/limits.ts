@@ -40,9 +40,9 @@ export const anyText = str.regex("^.*$", "su");
  * tree lowering merges each fold's pair into the axis's one foreign key). It covers the narrower
  * keys too: `Idref`'s `(node, attribute, index)` (`#pantry/qti/attributes.ts`), a counted family's
  * `(group, text, hidden index)` such as `File`'s (`#pantry/qti/package.ts`), and a plain `(uuid,
- * text)`. One bound for all of them keeps a value one relation holds from being refused by
- * another. A slice that puts key text in a wider key widens this; until it does, grizzle's compile of
- * `Qti` refuses the wider key as past PostgreSQL's index row limit, so every test that compiles the
+ * text)`. One bound for all of them keeps a value one relation holds from being refused by another.
+ * A slice that puts key text in a wider key widens this; until it does, grizzle's compile of `Qti`
+ * refuses the wider key as past PostgreSQL's index row limit, so every test that compiles the
  * schema fails.
  */
 export const widestTextKey = [
