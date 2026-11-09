@@ -5,6 +5,8 @@ import {
   EncodingFailure,
   ExecutionFailure,
   OpenError,
+  ServerError,
+  Sqlstate,
   TokenError,
   TransportFailure,
 } from "@bjornpagen/grizzle";
@@ -207,6 +209,25 @@ const uncompiled = CompileError.make({
     "BranchResolution.instanceEnd copies Instance's end along the owner axis of Instance.rules, a column its owner fills only after its members",
 });
 
+/**
+ * The server's refusal of a statement, a unique violation (SQLSTATE 23505), built with grizzle's
+ * own constructor: a reason of an `ExecutionFailure` that is no compile error.
+ */
+const serverRefusal = new ServerError({
+  column: undefined,
+  constraint: undefined,
+  dataType: undefined,
+  detail: undefined,
+  hint: undefined,
+  message: "duplicate key value violates unique constraint",
+  schema: undefined,
+  sqlstate: Option.getOrThrowWith(
+    Option.fromUndefinedOr(Sqlstate.parse("23505")),
+    () => new Error("Sqlstate.parse refused 23505, the unique violation's SQLSTATE."),
+  ),
+  table: undefined,
+});
+
 describe("describeFailure, a program grizzle refused to compile", () => {
   it("an ExecutionFailure or an OpenError carrying a CompileError exits 70 as internal, with a help that blames qti and keeps the database", () => {
     // Oracle: the failure's carrier and its reason's tag, read from its fields: grizzle refused
@@ -226,10 +247,7 @@ describe("describeFailure, a program grizzle refused to compile", () => {
       assert.isTrue(Option.isNone(namedFailureOf(failure)), failure._tag);
     }
 
-    assert.deepStrictEqual(
-      identity({ _tag: "ExecutionFailure", reason: { _tag: "ServerError" } }),
-      database,
-    );
+    assert.deepStrictEqual(identity(new ExecutionFailure({ reason: serverRefusal })), database);
     assert.deepStrictEqual(
       identity(new OpenError({ reason: new TokenError({ cause: new Error("refused") }) })),
       database,

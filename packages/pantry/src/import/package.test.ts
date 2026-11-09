@@ -12,21 +12,18 @@
 import {
   CommitUnknown,
   Db,
+  Migrating,
   query,
   ReadFailure,
+  SerializationFailure,
+  ServerError,
+  Sqlstate,
   StaleSnapshot,
   TransientFailure,
   uuid,
   v,
 } from "@bjornpagen/grizzle";
-import type {
-  ApplyError,
-  ReadError,
-  SerializationFailure,
-  ServerError,
-  StaleReason,
-  Uuid,
-} from "@bjornpagen/grizzle";
+import type { ApplyError, ReadError, Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, it as plainIt, layer } from "@effect/vitest";
 import { Clock, Effect, Fiber, Layer, Option, Ref, Result, Schedule } from "effect";
@@ -65,20 +62,13 @@ const packageRows = query(Author).rule((r) => {
     .find({ id });
 });
 
-const serializationReason = {
-  _tag: "SerializationFailure",
-  message: "PostgreSQL found no serial order of this transaction and a concurrent one",
-};
-
-// SAFETY: Grizzle exports `SerializationFailure` as a type only (`adapter/public/errors.ts`;
-// findings row 21), so no public constructor builds one, and a constructor checks nothing its type
-// does not. The plain fields of the class at `adapter/errors/failures.ts` stand for it:
-// `TransientFailure` reads its reason only through `_tag` and `message`.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-const serializationReasonAsType = serializationReason as SerializationFailure;
-
-const serverReport = {
-  _tag: "ServerError",
+/**
+ * The server's report of a serialization failure, SQLSTATE 40001, built with grizzle's own
+ * constructor from the ErrorResponse the server writes, as its wire builds it.
+ *
+ * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/packages/grizzle/src/adapter/errors/failures.ts#L61-L94
+ */
+const serverReport = new ServerError({
   column: undefined,
   constraint: undefined,
   dataType: undefined,
@@ -86,25 +76,20 @@ const serverReport = {
   hint: undefined,
   message: "could not serialize access due to concurrent update",
   schema: undefined,
-  sqlstate: "40001",
+  sqlstate: Option.getOrThrowWith(
+    Option.fromUndefinedOr(Sqlstate.parse("40001")),
+    () => new Error("Sqlstate.parse refused 40001, the serialization failure's SQLSTATE."),
+  ),
   table: undefined,
-};
-
-// SAFETY: Grizzle exports `ServerError` as a type only (`adapter/public/errors.ts`; findings row
-// 21), and its `sqlstate` is a branded `Sqlstate` with no public parse (`engine/src/core/sqlstate.ts`).
-// The plain fields of the class at `adapter/errors/failures.ts` stand for it: the code under test
-// reads only `_tag`.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-const serverReportAsType = serverReport as ServerError;
+});
 
 /**
- * The failure a serializable transaction meets: a `TransientFailure` built with `new` over a
- * `SerializationFailure` reason and a `ServerError` report, each asserted above from its plain
- * fields.
+ * The failure a serializable transaction meets: a `TransientFailure` over a `SerializationFailure`
+ * reason and the server's report, each built with grizzle's own constructor.
  */
 const serializationFailure = new TransientFailure({
-  error: serverReportAsType,
-  reason: serializationReasonAsType,
+  error: serverReport,
+  reason: new SerializationFailure(),
 });
 
 /**
@@ -226,38 +211,20 @@ describe("import/package.test.ts, the retry budget", () => {
  */
 const readBackId: Uuid = "00000000-0000-4000-8000-000000000001";
 
-const migratingReason = {
-  _tag: "Migrating",
-  message: "a migration is running or stopped part-way",
-};
-
-// SAFETY: Grizzle exports `StaleReason` as a type only (`adapter/public/errors.ts`), so no public
-// constructor builds a `Migrating`. The plain fields of the class at `adapter/errors/failures.ts`
-// stand for it: `StaleSnapshot` reads its reason only through `message`.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-const migratingReasonAsType = migratingReason as StaleReason;
-
-/**
- * The snapshot a {@link StaleSnapshot} names.
- */
-type Fingerprint = ConstructorParameters<typeof StaleSnapshot>[0]["snapshot"];
-
-// SAFETY: `SchemaFingerprint` is a branded string with no public parse; `StaleSnapshot` only
-// prints it, so any string stands for one.
-// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-const fingerprintAsType = "fingerprint-of-another-snapshot" as Fingerprint;
-
 /**
  * A failure of each kind grizzle's README gives a read ("Errors": `ReadFailure`, `TransientFailure`
- * or `StaleSnapshot`), each built from the plain fields asserted above.
+ * or `StaleSnapshot`), each built with grizzle's own constructor: a `StaleSnapshot` takes the
+ * snapshot's fingerprint as text and admits it itself.
+ *
+ * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/packages/grizzle/src/adapter/errors/execution.ts#L335-L350
  */
 const readFailures: readonly ReadError[] = [
-  new ReadFailure({ reason: serverReportAsType }),
+  new ReadFailure({ reason: serverReport }),
   serializationFailure,
   new StaleSnapshot({
-    error: serverReportAsType,
-    reason: migratingReasonAsType,
-    snapshot: fingerprintAsType,
+    error: serverReport,
+    reason: new Migrating(),
+    snapshot: "fingerprint-of-another-snapshot",
   }),
 ];
 
