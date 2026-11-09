@@ -360,8 +360,10 @@ const stimulusRefKeyOf = (listed: ListedRows): readonly Breach[] => {
  * Judge what each item ref of a test or section document names, whether or not it writes an
  * identifier: its href, where it writes one, names an item or an LTI link of the package (B2, B3),
  * and one that writes none names nothing, which AL3 alone refuses (spec reading 155); each variable
- * mapping's source an outcome its item declares and its target no other variable of it (A34,
- * reading 97); and each template default's template a template its item declares (A37).
+ * mapping's source, where it writes one, an outcome its item declares and its target no other
+ * variable of it (A34, reading 97); and each template default's template, where it writes one, a
+ * template its item declares (A37). An unwritten or unread identifier names nothing, which AL3
+ * alone refuses.
  *
  * @param input - The package.
  * @param document - The document.
@@ -401,16 +403,16 @@ const itemRefLawsOf = (
     const mappings = children
       .filter(({ kind }) => kind === "qti-variable-mapping")
       .flatMap((mapping): readonly Breach[] => {
-        const source = Option.getOrElse(
-          typedValueOf(rows, mapping.id, "source-identifier"),
-          () => "",
-        );
+        const written = typedValueOf(rows, mapping.id, "source-identifier");
+        const source = Option.getOrElse(written, () => "");
         const mapped = Option.getOrElse(
           typedValueOf(rows, mapping.id, "target-identifier"),
           () => "",
         );
+        // An unwritten or unread source-identifier names nothing: AL3 refuses it alone, as the
+        // importer writes no row for an absent attribute (reading 155).
         const sourced =
-          linked || kindsOf(source).includes("qti-outcome-declaration")
+          linked || Option.isNone(written) || kindsOf(source).includes("qti-outcome-declaration")
             ? []
             : [breachAt(rows, mapping, "Variable mapping source", { itemRef, source })];
         const shadowed =
@@ -428,19 +430,22 @@ const itemRefLawsOf = (
     const defaults = children
       .filter(({ kind }) => kind === "qti-template-default")
       .flatMap((templated): readonly Breach[] => {
-        const template = Option.getOrElse(
-          typedValueOf(rows, templated.id, "template-identifier"),
-          () => "",
-        );
+        // An unwritten or unread template-identifier names nothing: AL3 refuses it alone, as
+        // the importer writes no row for an absent attribute (reading 155).
+        const template = typedValueOf(rows, templated.id, "template-identifier");
 
-        return kindsOf(template).includes("qti-template-declaration")
-          ? []
-          : [
-              breachAt(rows, templated, "Template default target", {
-                itemRef,
-                template,
-              }),
-            ];
+        return Option.match(template, {
+          onNone: () => [],
+          onSome: (name): readonly Breach[] =>
+            kindsOf(name).includes("qti-template-declaration")
+              ? []
+              : [
+                  breachAt(rows, templated, "Template default target", {
+                    itemRef,
+                    template: name,
+                  }),
+                ],
+        });
       });
 
     return [...named, ...mappings, ...defaults];

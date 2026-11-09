@@ -322,10 +322,11 @@ describe("qti/tests.ts, an external include", () => {
     const include = { external: false, kind: "xi:include" };
     const external = { ...include, external: true };
     const sectionRef = { external: false, kind: "qti-assessment-section-ref" };
-    const remoteRef = { ...sectionRef, external: true };
 
     // A site's href is its SitePath (#46's row of its own): "Include target" is an include's
-    // SitePath, and a section ref's "Document entry" its own, each then into its ReferencePath.
+    // SitePath, and "Document entry" demands one of each section ref that writes an href that stays
+    // in the package, read from its href's Reference (one that writes none is AL3's alone, reading
+    // 115), each then into its ReferencePath.
     const [target, ...moreTargets] = containmentsOf(
       ["Site", "node", "kind"],
       ["SitePath", "node", "kind"],
@@ -338,14 +339,29 @@ describe("qti/tests.ts, an external include", () => {
       assert.isFalse(selects(target.left, { ...include, kind: sectionRef.kind }), "a section ref");
     }
 
-    const [entry, ...moreEntries] = containmentsOf(["Site", "node"], ["SitePath", "node"]);
+    const [entry, ...moreEntries] = containmentsOf(["Reference", "node"], ["SitePath", "node"]);
     assert.isDefined(entry, "the section ref's entry path");
     assert.deepStrictEqual(moreEntries, []);
     if (entry !== undefined) {
-      assert.isFalse(selects(entry.left, include), "an include is judged by Include target");
-      assert.isFalse(selects(entry.left, external), "an external include has none");
-      assert.isTrue(selects(entry.left, sectionRef), "an in-package section ref has one");
-      assert.isFalse(selects(entry.left, remoteRef), "an external section ref is Remote's alone");
+      const sectionRefHref = { kind: sectionRef.kind, name: "href", scope: "entry" };
+      assert.isTrue(selects(entry.left, sectionRefHref), "an in-package section ref has one");
+      assert.isTrue(
+        selects(entry.left, { ...sectionRefHref, scope: "document" }),
+        "one naming its own document is demanded one",
+      );
+      assert.isTrue(
+        selects(entry.left, { ...sectionRefHref, scope: "unresolved" }),
+        "one naming no path is demanded one",
+      );
+      assert.isFalse(
+        selects(entry.left, { ...sectionRefHref, scope: "external" }),
+        "an external section ref is Remote's alone",
+      );
+      assert.isFalse(
+        selects(entry.left, { ...sectionRefHref, kind: include.kind }),
+        "an include is judged by Include target",
+      );
+      assert.isFalse(selects(entry.left, { ...sectionRefHref, name: "src" }), "only its href");
     }
 
     const [reached, ...moreReached] = containmentsOf(

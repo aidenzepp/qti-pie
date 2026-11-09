@@ -685,11 +685,12 @@ export const MappingSourceDeclaration = relation(
  * A variable mapping's item ref, keyed by the mapping's node (spec reading 110): `itemRef`,
  * `VariableMapping`'s `parent`, and `types`, drawn: its count of {@link MappingItemRefType} rows, 1
  * where the item ref has a target and 0 where it has none: it writes no href, which AL3 alone
- * refuses (spec reading 155), or its href names no resource, which "Item ref target" refuses over
- * the item ref (`#pantry/qti/tests.ts`). Every mapping has one. A mapping whose item ref names an
- * LTI link has no item, so no source declaration, and is accepted unchecked; every other, one
- * under an item ref with no target among them, must have its {@link MappingSourceDeclaration}
- * ("Variable mapping source").
+ * refuses (spec reading 155), or its href names no resource of a type the importer reads, which
+ * "Item ref target" refuses over the item ref unless a resource of an unread type names its path,
+ * itself AL1's refusal (`#pantry/qti/tests.ts` `ItemRefHref`). Every mapping has one. A mapping
+ * whose item ref names an LTI link has no item, so no source declaration, and is accepted
+ * unchecked; every other, one under an item ref with no target among them, must have its
+ * {@link MappingSourceDeclaration} ("Variable mapping source").
  */
 export const MappingItemRef = relation(
   "MappingItemRef",

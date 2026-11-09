@@ -735,7 +735,10 @@ const refusedFields = (inputs: PackageInputs): ReadonlySet<string> => {
       const member = memberOf.get(`${relation}.${field}`);
       const nested = Schema.decodeUnknownOption(WrittenRows)(value);
       if (member !== undefined && Option.isSome(nested)) {
-        const held = member === relation ? treeCopies(row, copies) : {};
+        // A tree whose rows hold no kind, an assembly's `Instance`, accumulates only uuids and
+        // flags along its owner axis, no copy a key text or a fold's selection reads.
+        const held =
+          member === relation && Predicate.isString(row["kind"]) ? treeCopies(row, copies) : {};
         for (const each of nested.value) {
           visit(member, each, held);
         }
@@ -869,19 +872,25 @@ const twinRows = (sketch: Sketch) =>
   }).pipe(Effect.scoped);
 
 /**
- * Judge one generated package both ways: the oracle's "Key text bound" breaches against the
+ * Judge one package's entries both ways: the oracle's "Key text bound" breaches against the
  * database's refusal of the same texts as the import's rows give it, a `keyText` field written past
  * what the schema's type admits, or a copy left out of a relation its containment reads; and the
  * rule each would refuse it under ({@link databaseRules}) against the rules the oracle names.
  *
- * @param sketch - The package.
- * @param note - Notes the situations it reaches.
- * @returns Nothing; fails on a disagreement.
+ * @param entries - The package's entries.
+ * @param literal - The package as a failure names it.
+ * @param twin - The rows the import writes for the package's twin, by relation ({@link twinRows}),
+ *   or none for a package with no twin, whose import leaves no copy out by its texts' lengths.
+ * @returns The oracle's breaches and the fields the import's rows hold past the bound, each copy
+ *   left out as `Relation.*`; fails on a disagreement.
  */
-const judged = (sketch: Sketch, note: (situation: Situation) => void) =>
-  Effect.gen(function* judgedCase() {
-    const literal = Formatter.format(sketch);
-    const dir = yield* scopedPackage(packageOf(sketch));
+const judgedEntries = (
+  entries: ReadonlyMap<string, Uint8Array>,
+  literal: string,
+  twin: Option.Option<ReadonlyMap<string, number>>,
+) =>
+  Effect.gen(function* judgedEntriesCase() {
+    const dir = yield* scopedPackage(entries);
     const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
     const breaches =
       judgment._tag === "Judged"
@@ -894,20 +903,11 @@ const judged = (sketch: Sketch, note: (situation: Situation) => void) =>
     const program = yield* readProgram(dir);
     const refused = new Set([
       ...refusedFields(program.inputs),
-      ...leftOut(rowCountsOf(program), yield* twinRows(sketch)),
+      ...Option.match(twin, {
+        onNone: () => [],
+        onSome: (short) => leftOut(rowCountsOf(program), short),
+      }),
     ]);
-    for (const site of sites) {
-      const held = sketch[site];
-      if (held !== undefined && held.count > edges[held.script]) {
-        note(`${site} past the bound`);
-        note(`${held.script} past the bound`);
-        if (freeSites.has(site)) {
-          note("a free text past the bound");
-        }
-      }
-    }
-
-    note(refused.size > 0 ? "refused" : "accepted");
     assert.strictEqual(
       bound.length > 0,
       refused.size > 0,
@@ -928,10 +928,109 @@ const judged = (sketch: Sketch, note: (situation: Situation) => void) =>
       );
     }
 
+    return { breaches, refused };
+  }).pipe(Effect.scoped);
+
+/**
+ * Judge one generated package both ways ({@link judgedEntries}), against its twin's rows.
+ *
+ * @param sketch - The package.
+ * @param note - Notes the situations it reaches.
+ * @returns Nothing; fails on a disagreement.
+ */
+const judged = (sketch: Sketch, note: (situation: Situation) => void) =>
+  Effect.gen(function* judgedCase() {
+    for (const site of sites) {
+      const held = sketch[site];
+      if (held !== undefined && held.count > edges[held.script]) {
+        note(`${site} past the bound`);
+        note(`${held.script} past the bound`);
+        if (freeSites.has(site)) {
+          note("a free text past the bound");
+        }
+      }
+    }
+
+    const { breaches, refused } = yield* judgedEntries(
+      packageOf(sketch),
+      Formatter.format(sketch),
+      Option.some(yield* twinRows(sketch)),
+    );
+
+    note(refused.size > 0 ? "refused" : "accepted");
     if (breaches.some(({ law }) => law !== "Key text bound")) {
       note("another law broken too");
     }
-  }).pipe(Effect.scoped);
+  });
+
+/**
+ * `n` ASCII bytes forming a valid NCName: a path segment of exactly that many bytes.
+ *
+ * @param n - The bytes.
+ * @returns The segment.
+ */
+const segmentOf = (n: number): string => `K${"x".repeat(n - 1)}`;
+
+/**
+ * The XML declaration every reference case's document opens with.
+ */
+const declared = '<?xml version="1.0" encoding="UTF-8"?>';
+
+/**
+ * A manifest's namespace and metadata, as each reference case writes them.
+ */
+const manifestOpen = `${declared}<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata>`;
+
+/**
+ * A package whose item includes a file through an href of `n` bytes, which resolves through the
+ * item's folder, `rtest01/`, to `n + 8` bytes (genetic repair round 2, D5).
+ *
+ * @param n - The href's bytes.
+ * @returns Its entries.
+ */
+const includeOf = (n: number): ReadonlyMap<string, Uint8Array> =>
+  new Map([
+    [
+      "imsmanifest.xml",
+      new TextEncoder().encode(
+        `${manifestOpen}<resources><resource type="imsqti_item_xmlv3p0" href="rtest01/item.xml"/></resources></manifest>`,
+      ),
+    ],
+    [
+      "rtest01/item.xml",
+      new TextEncoder().encode(
+        `${declared}<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-item-body><xi:include href="${segmentOf(n)}"/></qti-item-body></qti-assessment-item>`,
+      ),
+    ],
+  ]);
+
+/**
+ * A package whose manifest's resource and file hrefs of `n` bytes each resolve through the
+ * resources' `xml:base`, `d/`, to `n + 2` bytes.
+ *
+ * @param n - Each href's bytes.
+ * @returns Its entries.
+ */
+const basedOf = (n: number): ReadonlyMap<string, Uint8Array> =>
+  new Map([
+    [
+      "imsmanifest.xml",
+      new TextEncoder().encode(
+        `${manifestOpen}<resources xml:base="d/"><resource identifier="r1" type="webcontent" href="${segmentOf(n)}"><file href="${segmentOf(n)}"/></resource></resources></manifest>`,
+      ),
+    ],
+  ]);
+
+/**
+ * The reference cases: each an href within the bound that resolves to an in-package path one byte
+ * past it, and its control, which resolves to the bound exactly.
+ */
+const referenceCases = [
+  { entries: includeOf(keyTextBytes - 7), literal: "an include past the bound", past: true },
+  { entries: includeOf(keyTextBytes - 8), literal: "an include at the bound", past: false },
+  { entries: basedOf(keyTextBytes - 1), literal: "a based resource past the bound", past: true },
+  { entries: basedOf(keyTextBytes - 2), literal: "a based resource at the bound", past: false },
+] as const;
 
 /**
  * The box: the package with every place short; then each place alone, in each script, at the
@@ -1098,6 +1197,24 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               }),
           ),
         ),
+      { timeout: testTimeoutMs },
+    );
+
+    test.effect(
+      "refuses a reference whose in-package path resolves past the bound under Key text bound, exactly where its import's rows hold the path",
+      () =>
+        // Oracle: as the box's, the import's rows under the schema's own keyText type. Bound: an
+        // include resolved through its document's folder and a resource and file resolved through
+        // an xml:base, each one byte past the bound and at it.
+        Effect.gen(function* eachReferenceCase() {
+          for (const { entries, literal, past } of referenceCases) {
+            const { breaches, refused } = yield* judgedEntries(entries, literal, Option.none());
+            const bound = breaches.filter(({ law }) => law === "Key text bound");
+
+            assert.strictEqual(refused.size > 0, past, `${literal}: the import's rows`);
+            assert.strictEqual(bound.length > 0, past, `${literal}: the oracle's Key text bound`);
+          }
+        }),
       { timeout: testTimeoutMs },
     );
   },

@@ -9,10 +9,17 @@
  * (`cp:resource`), {@link File} (`cp:file`) and {@link Dependency} (`cp:dependency`). Each copies
  * its node's {@link nodeRef} tuple, names a node of its own kind, and takes each attribute value it
  * compares from `Attribute` (C18), with its lexical form in no index (the tier-1 addendum's "Text
- * in keys"). An identifier that may be unwritten is a row of its own, or none (AGENTS.md, Schema
- * intent): a `cp:manifest` that writes no `identifier` has no {@link ManifestId}, and a
- * `cp:resource` none no {@link ResourceId}, so AL3 refuses the element alone and no law compares an
- * identifier it does not have.
+ * in keys"); an identifier or an `identifierref` holds that form collapsed beside it, its value,
+ * which the laws compare (C17, decision 457 (3)). An identifier that may be unwritten is a row of
+ * its own, or none (AGENTS.md, Schema intent): a `cp:manifest` that writes no `identifier` has no
+ * {@link ManifestId}, and a `cp:resource` none no {@link ResourceId}, so AL3 refuses the element
+ * alone and no law compares an identifier it does not have.
+ *
+ * A resource's `type` that is written but spells no `ResourceType` handle is unread: the resource
+ * has no {@link ResourceTyped} and its href no typed href, and its href is one of the query
+ * `UnreadTypeHref`'s rows instead (`#pantry/qti/queries.ts`), a join no table stores rather than a
+ * sentinel code, so a law can read that a resource names the path with a type the importer could
+ * not read (the oracle's `itemRefTargetOf` names no target there).
  *
  * Two relations are projections, keyed by their heading, each owning a counted family whose count
  * is above 0, so each holds exactly the values some member row holds: {@link FileHref}, the hrefs a
@@ -79,7 +86,7 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
-import { Attribute, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
@@ -127,8 +134,11 @@ export const entryFamily = ordered(on(Entry, "package", "at"), fin(Package, "ent
 
 /**
  * The manifest's identifier, keyed by the `cp:manifest` node, where the manifest writes one: its
- * {@link nodeRef} tuple, its package, and its `identifier`'s lexical form, which
- * {@link ManifestIdSpace} holds beside the resources' identifiers.
+ * {@link nodeRef} tuple, its package, its `identifier` as written (`lexical`, C18's copy) and that
+ * form collapsed (`identifier`), its value, which {@link ManifestIdSpace} holds beside the
+ * resources' identifiers. An `xs:ID` is a whiteSpace `collapse` type, so `" M"` and `M` are one
+ * identifier (decision 457 (3); IMS Content Packaging 1.2, §6.11.4, leaves the value to the
+ * binding).
  */
 export const ManifestId = relation(
   "ManifestId",
@@ -136,6 +146,7 @@ export const ManifestId = relation(
     document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
+    lexical: keyText,
     nearest: uuid,
     node: uuid,
     package: uuid,
@@ -168,23 +179,26 @@ export const Resource = relation(
 
 /**
  * A resource's identifier, keyed by the `cp:resource` node, where the resource writes one: its
- * package and its `identifier`'s lexical form, which the package's resources hold once each
- * ("DocumentId key") and a dependency's `identifierref` names ("Dependency target").
+ * package, its `identifier` as written (`lexical`, C18's copy) and that form collapsed
+ * (`identifier`), its value, which the package's resources hold once each ("DocumentId key") and a
+ * dependency's collapsed `identifierref` names ("Dependency target"). An `xs:ID` is a whiteSpace
+ * `collapse` type, so `" r1 "` and `r1` are one identifier (decision 457 (3); IMS Content
+ * Packaging 1.2, §6.11.4).
  */
 export const ResourceId = relation(
   "ResourceId",
-  { identifier: keyText, node: uuid, package: uuid },
+  { identifier: keyText, lexical: keyText, node: uuid, package: uuid },
   ["node"],
 );
 
 /**
  * The identifiers of a package's manifest and its resources, one `xs:ID` space (IMS Content
- * Packaging 1.2), a projection keyed by its heading: one row per identifier and kind of element
- * that writes it, `cp:manifest` ({@link ManifestId}) or `cp:resource` ({@link ResourceId}). Two
- * resources of one identifier are one row, which "DocumentId key" refuses over {@link ResourceId};
- * a resource of the manifest's identifier is a second row of its (package, identifier), which
- * "Manifest id space" refuses. A side that writes no identifier has no row, so it is compared
- * with nothing.
+ * Packaging 1.2), a projection keyed by its heading: one row per collapsed identifier and kind of
+ * element that writes it, `cp:manifest` ({@link ManifestId}) or `cp:resource` ({@link ResourceId}).
+ * Two resources of one identifier are one row, which "DocumentId key" refuses over
+ * {@link ResourceId}; a resource of the manifest's identifier is a second row of its (package,
+ * identifier), which "Manifest id space" refuses. A side that writes no identifier has no row, so
+ * it is compared with nothing.
  *
  * Its kind is `cp:manifest` or `cp:resource` by its containments and its key alone, with no check:
  * every check is named by an oracle law, and these rows are "Manifest overlay"'s, a law the law
@@ -375,14 +389,21 @@ export const ResourceFile = relation(
 
 /**
  * A dependency's overlay, keyed by the `cp:dependency` node: its {@link nodeRef} tuple, its
- * `resource` the node's parent, its resource's package, and its `identifierref`'s lexical form,
- * which names a resource of its package through its {@link DependencyTarget}.
+ * `resource` the node's parent, its resource's package, its `identifierref` as written (`lexical`,
+ * C18's copy) and that form collapsed (`ref`), its value, which names a resource of its package
+ * through its {@link DependencyTarget}. An `xs:IDREF` is a whiteSpace `collapse` type, so an
+ * `identifierref` written `" r1"` names `r1` (decision 457 (3); IMS Content Packaging 1.2,
+ * §6.11.5: it "shall duplicate exactly a value for an Identifier object"). A dependency has its
+ * row only where its `identifierref` names something once collapsed ({@link namingPattern}); any
+ * other, absent or no NCName, names no resource, and AL3 or its value domain refuses it alone
+ * (spec reading 152, decision 457 (2)).
  */
 export const Dependency = relation(
   "Dependency",
   {
     document: uuid,
     kind: closedId(NodeKind),
+    lexical: keyText,
     nearest: uuid,
     node: uuid,
     package: uuid,
@@ -396,11 +417,11 @@ export const Dependency = relation(
 
 /**
  * The resource a dependency names, keyed by the `cp:dependency` node: its {@link Dependency}'s
- * package, `identifierref` and own resource, and `target`, the resource whose identifier its
- * `identifierref` is ({@link ResourceId}), its own where its own is one. A dependency whose
- * `identifierref` names no resource has no row, which "Dependency target" refuses; one that names
- * its own resource is refused by "Self dependency" (IMS Content Packaging 1.2, §6.11.5 B ii), so a
- * resource that writes no identifier is named by none.
+ * package, collapsed `identifierref` and own resource, and `target`, the resource whose collapsed
+ * identifier its collapsed `identifierref` is ({@link ResourceId}), its own where its own is one. A
+ * dependency whose `identifierref` names no resource has no row, which "Dependency target" refuses;
+ * one that names its own resource is refused by "Self dependency" (IMS Content Packaging 1.2,
+ * §6.11.5 B ii), so a resource that writes no identifier is named by none.
  */
 export const DependencyTarget = relation(
   "DependencyTarget",
@@ -576,9 +597,19 @@ const resourceHrefs = attributesOf("cp:resource", "href");
 const fileHrefs = attributesOf("cp:file", "href");
 
 /**
- * The `identifierref` of each `cp:dependency`.
+ * The `identifierref` of each `cp:dependency` that names something once collapsed
+ * ({@link namingPattern}): each such dependency's, and only theirs, is copied into its
+ * {@link Dependency}. `xs:IDREF` restricts `xs:NCName`, so any other identifierref names no
+ * resource, and its value domain refuses it alone (spec reading 152, decision 457 (2)).
  */
-const dependencyRefs = attributesOf("cp:dependency", "identifierref");
+const namingDependencyRefs = select(Attribute, (a) =>
+  a.and(
+    a.eq(a.name, "identifierref"),
+    a.eq(a.kind, "cp:dependency"),
+    a.eq(a.documentType, "manifest"),
+    Compute.matches(a.lexical, namingPattern),
+  ),
+);
 
 /**
  * Select the nodes of one kind: a containment into it on `id` is a fixed target, its source meeting
@@ -597,6 +628,16 @@ const nodesOf = (kind: "cp:dependency" | "cp:file" | "cp:manifest" | "cp:resourc
  * is an `xs:string` enumeration, whose whitespace is preserved (XSD 1.1 Part 2, §4.3.6).
  */
 const spelledResourceTypes = ResourceTypeLexical.rows.map(({ lexical }) => lexical);
+
+/**
+ * A resource `type` that spells a `ResourceType` handle, as a pattern over its lexical form: one of
+ * {@link spelledResourceTypes}, each as written, its regex characters escaped. The query
+ * `UnreadTypeHref` (`#pantry/qti/queries.ts`) reads its complement as a field test, since a rule
+ * over a query may not negate a relation inside a condition.
+ */
+export const spelledResourceTypePattern = Compute.pattern<string>(
+  `^(?:${spelledResourceTypes.map((lexical) => lexical.replaceAll(/[$()*+.?[\\\]^{|}]/gu, "\\$&")).join("|")})$`,
+);
 
 /**
  * The `type` of each `cp:resource` that spells a `ResourceType` handle, as written: each is its
@@ -726,13 +767,15 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  *   the same names in `#pantry/qti/queries.ts`.
  * - **P4 `manifest-id-space` ("Manifest id space"):** no resource's identifier is its manifest's: the
  *   two are one (package, identifier) of {@link ManifestIdSpace}, each side's rows exactly its
- *   written identifiers, and every row but the manifest's a resource's.
- * - **C17 ("E1 derived"):** a resource's type code is the one its `type` spells, where it spells one;
- *   a document a resource lists has its {@link ResourceDocument}, its `Document`'s copy, and its
- *   document type is its resource type's (`ResourceDocumentType`), so the manifest alone has none;
- *   a path resolved in the package holds no dot segment ({@link resolvedPathPattern}); a reference
- *   is its written pieces, external where its target has a scheme or a leading `/`, and its own
- *   document's only where its target is empty.
+ *   collapsed identifiers, and every row but the manifest's a resource's.
+ * - **C17 ("E1 derived"):** the manifest's and each resource's identifier, and each dependency's
+ *   `identifierref`, is its written form collapsed (decision 457 (3)); a resource's type code is
+ *   the one its `type` spells, where it spells one; a document a resource lists has its
+ *   {@link ResourceDocument}, its `Document`'s copy, and its document type is its resource type's
+ *   (`ResourceDocumentType`), so the manifest alone has none; a path resolved in the package holds
+ *   no dot segment ({@link resolvedPathPattern}); a reference is its written pieces, external where
+ *   its target has a scheme or a leading `/`, and its own document's only where its target is
+ *   empty.
  * - **`href-form` ("Href form"), a stated limit:** no href is one the importer reads no name from
  *   (`unresolved`), and a `srcset` is one candidate, its URL alone.
  * - **`include-href` ("Include fragment identifier"):** an `xi:include`'s href carries no fragment
@@ -752,10 +795,11 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  *   "enables reference to a 'qti-assessment-stimulus' instance", its href "The uri used to refer to
  *   the stimulus file"); an external one is not resolved (reading 35's reading of an absolute
  *   URI).
- * - **a dependency names a resource:** its `identifierref` is a resource identifier of its package
- *   (IMS Content Packaging 1.2, `dependency`), the resources' identifiers distinct per package, so
- *   it has its {@link DependencyTarget}; and **`self-dependency` ("Self dependency"):** the target
- *   is never its own resource (§6.11.5 B ii).
+ * - **a dependency names a resource:** its collapsed `identifierref` is a collapsed resource
+ *   identifier of its package (IMS Content Packaging 1.2, `dependency`, §6.11.5; decision 457 (3)),
+ *   the resources' identifiers distinct per package, so it has its {@link DependencyTarget}; and
+ *   **`self-dependency` ("Self dependency"):** the target is never its own resource (§6.11.5 B
+ *   ii).
  */
 export const packageLawsByName = {
   "Dependency target": [contained(on(Dependency, "node"), on(DependencyTarget, "node"))],
@@ -780,6 +824,9 @@ export const packageLawsByName = {
       ),
       on(ResourceDocument, "node"),
     ),
+    check("E1_derived", ManifestId, (m) => m.eq(m.identifier, Compute.collapse(m.lexical))),
+    check("E1_derived", ResourceId, (r) => r.eq(r.identifier, Compute.collapse(r.lexical))),
+    check("E1_derived", Dependency, (d) => d.eq(d.ref, Compute.collapse(d.lexical))),
     check("E1_derived", ResourceTyped, (r) =>
       r.eq(ResourceTypeLexical.at("lexical", r.type), r.typeLexical),
     ),
@@ -872,7 +919,7 @@ export const packageLawsByName = {
     ),
     contained(on(ManifestId, "node"), on(nodesOf("cp:manifest"), "id")),
     contained(on(ManifestId, "document", "package"), on(Document, "node", "package")),
-    contained(on(manifestIdentifiers, "node", "lexical"), on(ManifestId, "node", "identifier")),
+    contained(on(manifestIdentifiers, "node", "lexical"), on(ManifestId, "node", "lexical")),
     key(on(ManifestId, "package")),
     contained(
       on(ManifestId, "package", "identifier"),
@@ -888,7 +935,7 @@ export const packageLawsByName = {
     ),
     contained(on(Resource, "node"), on(nodesOf("cp:resource"), "id")),
     contained(on(Resource, "document", "package"), on(Document, "node", "package")),
-    contained(on(resourceIdentifiers, "node", "lexical"), on(ResourceId, "node", "identifier")),
+    contained(on(resourceIdentifiers, "node", "lexical"), on(ResourceId, "node", "lexical")),
     contained(on(ResourceId, "node", "package"), on(Resource, "node", "package")),
     contained(
       on(ResourceId, "package", "identifier"),
@@ -914,7 +961,7 @@ export const packageLawsByName = {
     ),
     contained(on(Dependency, "node"), on(nodesOf("cp:dependency"), "id")),
     contained(on(Dependency, "resource", "package"), on(Resource, "node", "package")),
-    contained(on(dependencyRefs, "node", "lexical"), on(Dependency, "node", "ref")),
+    contained(on(namingDependencyRefs, "node", "lexical"), on(Dependency, "node", "lexical")),
     contained(
       on(DependencyTarget, "node", "package", "ref", "resource"),
       on(Dependency, "node", "package", "ref", "resource"),

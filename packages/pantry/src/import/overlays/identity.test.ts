@@ -77,6 +77,7 @@ type CaseKind =
   | "cp:metadata.resource"
   | "cp:resource"
   | "cp:resources"
+  | "cpx:variant"
   | "div"
   | "lom:educational"
   | "lom:general"
@@ -121,6 +122,7 @@ const attribute = (
     | "endmark"
     | "href"
     | "id"
+    | "identifier"
     | "label"
     | "name"
     | "ref"
@@ -1556,5 +1558,50 @@ describe("import/overlays/identity.ts, a share's same-document fragment (P7)", (
       "a",
       "b",
     ]);
+  });
+});
+
+describe("import/overlays/identity.ts, an unadmitted element's ID (R2)", () => {
+  it("binds a cpx:variant's identifier only where its manifest's version admits the variant: each keeps its DocumentId, and under 3.0.1, which forbids it, neither is admitted nor binds", () => {
+    // Oracle: R2 and the variant class: the 3.0.1 profile gives cpx:variant under cp:resource a
+    // maxOccurs of 0 where 3.0.0 admits it, and ChildGrammar's key set is admission. The law oracle
+    // drops an unadmitted node with its attributes, so its ID binds nothing, and "N5 admitted"
+    // alone refuses R-O4's two variants of one identifier.
+    // Bound: R-O4's manifest, two resources each holding a variant "v1", in both versions.
+    const cases = [
+      ["3.0.0", true],
+      ["3.0.1", false],
+    ] as const;
+
+    for (const [written, bound] of cases) {
+      const resource = elementOf(
+        "cp:resource",
+        [],
+        [elementOf("cpx:variant", [attribute("identifier", "v1")], [])],
+      );
+      const manifest = elementOf(
+        "cp:manifest",
+        [],
+        [elementOf("cp:resources", [], [resource, resource])],
+      );
+      const rows = rowsOf(documentOf(manifest, written), { ...ids, documentType: "none" });
+
+      assert.deepStrictEqual(
+        [...rows.DocumentId.values()].map(({ admitted, id, node }) => [node, id, admitted]),
+        [
+          [idOf(4), "v1", bound],
+          [idOf(6), "v1", bound],
+        ],
+        written,
+      );
+      assert.deepStrictEqual(
+        [...rows.IdBinding.values()].map(({ admitted, id, owner }) => [owner, id, admitted]),
+        [
+          [idOf(4), "v1", bound],
+          [idOf(6), "v1", bound],
+        ],
+        written,
+      );
+    }
   });
 });

@@ -118,6 +118,8 @@ const [first, second] = [uuidOf(1), uuidOf(2)] as const;
  * @param node - The element's number.
  * @param document - Its document.
  * @param pieces - The lexical form and its pieces.
+ * @param pieces.admitted - Whether the grammar admits its element where it stands; by default it
+ *   does.
  * @param pieces.before - The whitespace before the value.
  * @param pieces.id - The value.
  * @param pieces.after - The whitespace after the value.
@@ -129,12 +131,14 @@ const documentId = (
   node: number,
   document: string,
   {
+    admitted = true,
     after = "",
     before = "",
     id,
     lexical = `${before}${id}${after}`,
     owner = node,
   }: {
+    readonly admitted?: boolean;
     readonly after?: string;
     readonly before?: string;
     readonly id: string;
@@ -142,21 +146,31 @@ const documentId = (
     readonly owner?: number;
   },
 ): Stated => ({
-  fact: { after, before, document, id, lexical, node: uuidOf(node), owner: uuidOf(owner) },
+  fact: {
+    admitted,
+    after,
+    before,
+    document,
+    id,
+    lexical,
+    node: uuidOf(node),
+    owner: uuidOf(owner),
+  },
   relation: DocumentId,
 });
 
 /**
  * An `IdBinding` fact: an id of a document bound to an element, carried by the IDs the case states
- * under it.
+ * under it, and admitted as they are.
  *
  * @param document - The document.
  * @param id - The id.
  * @param owner - The number of the element it is bound to.
+ * @param admitted - Whether the grammar admits that element where it stands; by default it does.
  * @returns The fact.
  */
-const binding = (document: string, id: string, owner: number): Stated => ({
-  fact: { document, id, owner: uuidOf(owner) },
+const binding = (document: string, id: string, owner: number, admitted = true): Stated => ({
+  fact: { admitted, document, id, owner: uuidOf(owner) },
   relation: IdBinding,
 });
 
@@ -393,35 +407,75 @@ const ssmlScope = (
 
 describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
   it.effect(
-    "refuses one id bound to two elements of one document by DocumentId key, and accepts one id bound twice to one element and one id in two documents",
+    "refuses one id bound to two admitted elements of one document by DocumentId key, and accepts one id bound twice to one element, one id in two documents and one id an unadmitted element also carries",
     () =>
-      // Oracle: PostgreSQL, the UNIQUE of `key(on(IdBinding, "document", "id"))`, against XML
-      // Schema 1.0 Part 1 §3.15.5 and cvc-id clause 2 (reading 101): an id's [binding] is the set of
-      // elements that purport it, an attribute's element or an ID-typed text's parent, and no
+      // Oracle: PostgreSQL, the UNIQUE of `key(on(admittedBindings, "document", "id"))`, against
+      // XML Schema 1.0 Part 1 §3.15.5 and cvc-id clause 2 (reading 101): an id's [binding] is the
+      // set of elements that purport it, an attribute's element or an ID-typed text's parent, and no
       // binding has two members; so two ID-typed children of one parent with one value, ` a ` and
-      // `a`, are one binding, and so are one id in each of two documents.
-      // Bound: one id on two elements of one document; one id twice under one parent, as written
+      // `a`, are one binding, and so are one id in each of two documents. An element the grammar
+      // does not admit where it stands binds no ID (gr-4, decision 452: the key is over admitted
+      // bindings, and "N5 admitted" alone refuses that element), so its id beside an admitted
+      // element's is no second member.
+      // Bound: one id on two admitted elements of one document; one id on an admitted and an
+      // unadmitted element, and on two unadmitted ones; one id twice under one parent, as written
       // and padded; one id in two documents.
       Effect.gen(function* documentKey() {
         const client = yield* loginSession;
-        const key = yield* constraintDescribed(client, "id_binding", "key IdBinding(document, id)");
-
-        assertVerdict(
-          yield* judged(
-            client,
-            // Each binding is carried once, by an ID the case does not write.
-            statedInserts(
-              [3, 4].map((owner): Stated => ({
-                fact: { carriers: 1n, document: first, id: "a", owner: uuidOf(owner) },
-                relation: IdBinding,
-              })),
-            ),
-          ),
-          key,
-          true,
-          "one id on two elements",
-          "23505",
+        const key = yield* constraintDescribed(
+          client,
+          "id_binding",
+          "key IdBinding(document where %, id where %)",
         );
+        // Each element's number and whether it is admitted.
+        const twoElements = [
+          [
+            "one id on two admitted elements",
+            [
+              [3, true],
+              [4, true],
+            ],
+          ],
+          [
+            "one id on an admitted and an unadmitted element",
+            [
+              [3, true],
+              [4, false],
+            ],
+          ],
+          [
+            "one id on two unadmitted elements",
+            [
+              [3, false],
+              [4, false],
+            ],
+          ],
+        ] as const;
+
+        for (const [label, owners] of twoElements) {
+          assertVerdict(
+            yield* judged(
+              client,
+              // Each binding is carried once, by an ID the case does not write.
+              statedInserts(
+                owners.map(([owner, admitted]): Stated => ({
+                  fact: {
+                    admitted,
+                    carriers: 1n,
+                    document: first,
+                    id: "a",
+                    owner: uuidOf(owner),
+                  },
+                  relation: IdBinding,
+                })),
+              ),
+            ),
+            key,
+            label === "one id on two admitted elements",
+            label,
+            "23505",
+          );
+        }
         assertVerdict(
           yield* judged(
             client,

@@ -21,7 +21,7 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { ruleOfLaw } from "#pantry/import/refusal.ts";
+import { lawNameOf, ruleOfLaw } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -214,10 +214,17 @@ const keyOf = (values: readonly (Datum | undefined)[]): string =>
 
 /**
  * Every containment the schema states from a site or its path, read from the statements grizzle
- * keeps, selections included: the include's target and href, the section ref's document entry,
- * the file's existence and the href's reachability.
+ * keeps, selections included: the include's target and href, the file's existence and the href's
+ * reachability, and the section ref's document entry, which "Document entry" reads from the href
+ * reference of a section ref that writes an href that stays in the package.
  */
-const siteContainments = [...containmentsOf(Qti, "Site"), ...containmentsOf(Qti, "SitePath")];
+const siteContainments = [
+  ...containmentsOf(Qti, "Site"),
+  ...containmentsOf(Qti, "SitePath"),
+  ...containmentsOf(Qti, "Reference").filter(({ law }) =>
+    Option.contains(lawNameOf(law), "Document entry"),
+  ),
+];
 
 /**
  * Judge each site's rows by the schema's own statements, read from grizzle's: `File_exists` over
@@ -391,8 +398,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (i
       // against the schema's statements as grizzle keeps them, their selections included
       // (`#pantry/test/key-copies.ts` `checkOf`, `#pantry/test/judged-laws.ts` `containmentsOf`),
       // evaluated over the import's rows and named by refusal.ts's rules. A section ref with no
-      // href breaks its document law, a deferred key, beside AL3, which PostgreSQL judges first as
-      // the node is inserted.
+      // href breaks AL3 alone, which PostgreSQL judges as the node is inserted and none of these
+      // statements states: it writes no href reference, so "Document entry" demands it no path
+      // (reading 115, one cause per fault).
       // Bound: the box's 125 packages.
       searched(
         ctx,
@@ -425,9 +433,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (i
                 const expected = ruleOfCase(name, box[name]);
                 assert.deepStrictEqual(
                   [...(broken.get(site.node) ?? [])].toSorted(),
-                  expected === undefined
-                    ? []
-                    : [expected === "required-attribute" ? "entry-kind" : expected],
+                  expected === undefined || expected === "required-attribute" ? [] : [expected],
                   `${literal}: ${name}`,
                 );
               }

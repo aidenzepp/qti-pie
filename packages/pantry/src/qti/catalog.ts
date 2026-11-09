@@ -69,9 +69,9 @@ import {
   SchemaVersion,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { Attribute } from "#pantry/qti/attributes.ts";
+import { Attribute, namingPattern } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { AssembledId, DocumentId, namingPattern, PlacedIdref } from "#pantry/qti/identity.ts";
+import { AssembledId, DocumentId, PlacedIdref } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { nodeRef } from "#pantry/qti/node.ts";
 import { TestDocument } from "#pantry/qti/tests.ts";

@@ -72,6 +72,7 @@ import {
   referenceCensus,
   referenceRowsOf,
   typedHrefsOf,
+  unreadTypePathsOf,
 } from "#pantry/import/overlays/package.ts";
 import type { PackageRows, ReferenceRows } from "#pantry/import/overlays/package.ts";
 import { rowsOf as quotationRowsOf } from "#pantry/import/overlays/quotation.ts";
@@ -297,6 +298,13 @@ export const overlayPartsOf = (
     })),
     assembled,
     built.flatMap(({ rows }) => typedHrefsOf(rows.package)),
+    new Set(
+      built.flatMap(({ document, rows }) =>
+        document.listed.path === manifestPath
+          ? [...unreadTypePathsOf(document.listed.tree, document.ids.idOf, rows.package)]
+          : [],
+      ),
+    ),
   );
 
   const placedIds = placedIdRowsOf({

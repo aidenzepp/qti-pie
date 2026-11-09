@@ -14,9 +14,9 @@
  *   it is accepted unchecked (reading 110, its `MappingItemRefType`), their containments into
  *   `ItemRefDocument` and `Declaration`, their CHECKs, a mapped reading's declaration (its
  *   mapping's source's), `VariableMapping`'s key and session check, and what each item ref names:
- *   its `ItemRefTarget` and `ItemRefDocument`, each a row only where the package holds it. Each law
- *   carries the name `src/import/refusal.ts` gives the schema's statement of it ({@link hostLaws},
- *   held to `statedLaws` by the first test).
+ *   its `ItemRefHref`, and its `ItemRefTarget` and `ItemRefDocument`, each a row only where the
+ *   package holds it. Each law carries the name `src/import/refusal.ts` gives the schema's statement
+ *   of it ({@link hostLaws}, held to `statedLaws` by the first test).
  *
  * The two must name the same breaches, but one residual the schema states on purpose: the declared
  * half of `Variable mapping target` is judged on a mapping's `MappingSourceDeclaration`, so a
@@ -36,10 +36,10 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import type { Case } from "@grizzle/testing/explore";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
-import { grammar } from "#pantry/grammar/install.ts";
+import { grammar, ResourceTypeLexical } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { lawOfCheck, ruleOfLaw, statedLaws } from "#pantry/import/refusal.ts";
-import type { PackageInputs } from "#pantry/import/write.ts";
+import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { itemResourceType, linkResourceTypes } from "#pantry/qti/tests.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
@@ -85,6 +85,14 @@ const testTimeoutMs = 1_200_000;
  * The oracle's tables over the installed grammar, built once.
  */
 const laws = lawsOf(grammar);
+
+/**
+ * The lexical forms of a resource's `type` that spell a `ResourceType` handle, each as written
+ * (`ResourceTypeLexical`'s), which a resource of an unread type's `type` is none of.
+ */
+const spelledResourceTypes: ReadonlySet<string> = new Set(
+  ResourceTypeLexical.rows.map(({ lexical }) => lexical),
+);
 
 /**
  * The nil uuid, which no row of the three relations may hold.
@@ -230,7 +238,15 @@ const restates = (law: Law, restated: Restated): boolean => {
 const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
   [{ kind: "check", name: "Item_ref_target" }, "Item ref target"],
   [
-    { from: ["Attribute", "node"], kind: "contained", to: ["ItemRefTarget", "node"] },
+    { from: ["Attribute", "node"], kind: "contained", to: ["ItemRefHref", "node"] },
+    "Item ref target",
+  ],
+  [
+    {
+      from: ["ItemRefHref", "package", "path"],
+      kind: "contained",
+      to: ["UnreadTypeHref", "package", "path"],
+    },
     "Item ref target",
   ],
   [
@@ -760,10 +776,11 @@ const readingBreaches = (rows: HostRows): readonly HostBreach[] => {
 };
 
 /**
- * The breaches of the laws over what each item ref names (B2, B3, "Item ref target"): each item
- * ref that writes an href has its target, of the item type or an LTI type, named by a resource of
- * the package; and each of the item type has its document, whose root is an item, and no other
- * has one. Each is named by the empty name, as the oracle keys the law by its path alone.
+ * The breaches of the laws over what each item ref names (B2, B3, "Item ref target"): each item ref
+ * that writes an href has its href's row, and its target, of the item type or an LTI type, named by
+ * a resource of the package, unless a resource of an unread type names its path, where it may have
+ * none (decision 454); and each of the item type has its document, whose root is an item, and no
+ * other has one. Each is named by the empty name, as the oracle keys the law by its path alone.
  *
  * @param inputs - The import's rows.
  * @returns The breaches.
@@ -788,8 +805,40 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
     })),
   );
 
+  // The hrefs of the package's resources of an unread type (decision 454), as the query
+  // `UnreadTypeHref` reads them: a resource's href beside its `type` as written, where that form is
+  // nonempty and spells no `ResourceType` handle.
+  const nodes = (node: NodeMember): readonly NodeMember[] => [
+    node,
+    ...node.children.flatMap(nodes),
+  ];
+  const unreadTypes = new Set(
+    [...inputs.Node.values()]
+      .flatMap(nodes)
+      .filter(
+        ({ attributes, kind }) =>
+          kind === "cp:resource" &&
+          attributes.some(
+            ({ lexical, name }) =>
+              name === "type" && lexical !== "" && !spelledResourceTypes.has(lexical),
+          ),
+      )
+      .map(({ id }) => id),
+  );
+  const unreadPaths = [...inputs.ResourceHref.values()].filter(({ node }) => unreadTypes.has(node));
+
   return [
-    ...hrefs.flatMap(({ node }) => unless(inputs.ItemRefTarget.has(node), law, "")),
+    ...hrefs.flatMap(({ node }) => unless(inputs.ItemRefHref.has(node), law, "")),
+    ...[...inputs.ItemRefHref.values()].flatMap((href) =>
+      unless(
+        inputs.ItemRefTarget.has(href.node) ||
+          unreadPaths.some(
+            ({ package: held, path }) => held === href.package && path === href.path,
+          ),
+        law,
+        "",
+      ),
+    ),
     ...targets.flatMap((target) => [
       ...unless(itemTypes.has(target.type), law, ""),
       ...unless(

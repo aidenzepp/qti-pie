@@ -46,7 +46,7 @@ import type {
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
-import { closedName, documentFamily } from "#pantry/model/xdm.ts";
+import { closedName, documentFamily, flatten } from "#pantry/model/xdm.ts";
 import type {
   ClosedName,
   NodeId,
@@ -80,10 +80,21 @@ const TestLayer = NodeChildProcessSpawner.layer.pipe(
 const ids: ManifestIds = { idOf, package: "00000000-0000-4000-8000-0000000000aa" };
 
 /**
- * One overlay row as the walk expects it: its relation and its fields, and the typed hrefs
- * (`typedHrefsOf`), which no relation stores, by the resource's node.
+ * One overlay row as the walk expects it: its relation and its fields, and the rows of the two
+ * queries over them no relation stores, the typed hrefs (`typedHrefsOf`) and the unread-type hrefs
+ * ({@link unreadTypeHrefsOf}), each by the resource's node.
  */
-type Expected = { readonly [Relation in keyof PackageRows | "TypedHref"]: Map<string, object> };
+type Expected = {
+  readonly [Relation in keyof PackageRows | "TypedHref" | "UnreadTypeHref"]: Map<string, object>;
+};
+
+/**
+ * The lexical forms of a resource's `type` that spell a `ResourceType` handle, each as written
+ * (`ResourceTypeLexical`).
+ */
+const spelledTypes: ReadonlySet<string> = new Set(
+  ResourceTypeLexical.rows.map(({ lexical }) => lexical),
+);
 
 /**
  * The text of a projection's key: its heading's values as a JSON array.
@@ -109,16 +120,19 @@ const manifestHrefOf = (href: string, bases: readonly string[]) => {
 };
 
 /**
- * Expect a resource's `href` rows: its `ResourceHref`, resolved by the oracle; and where its type
- * spells a handle, its typed href, of its compared path and type.
+ * Expect a resource's `href` rows: its `ResourceHref`, resolved by the oracle; where its type
+ * spells a handle, its typed href, of its compared path and type; and where its type is written and
+ * spells none, its unread-type href, of its compared path.
  *
  * @param expected - The walk's rows so far.
- * @param resource - The resource's href, node, package and type, and the bases in scope.
+ * @param resource - The resource's href, node, package, type and its lexical form, and the bases
+ *   in scope.
  * @param resource.bases - The `xml:base` values in scope, its own last.
  * @param resource.href - Its href.
  * @param resource.node - Its node.
  * @param resource.pkg - Its package.
  * @param resource.type - The handle its type spells, none where it spells none.
+ * @param resource.typeLexical - Its type as written, none where unwritten.
  */
 const expectHref = (
   expected: Expected,
@@ -128,13 +142,18 @@ const expectHref = (
     readonly node: NodeId;
     readonly pkg: string;
     readonly type: Option.Option<string>;
+    readonly typeLexical: string | undefined;
   },
 ): void => {
-  const { bases, href, node, pkg, type } = resource;
+  const { bases, href, node, pkg, type, typeLexical } = resource;
   const { path: at, scope } = manifestHrefOf(href, bases);
   expected.ResourceHref.set(node, { href, node, package: pkg, path: at, scope });
   for (const code of Option.toArray(type)) {
     expected.TypedHref.set(node, { node, package: pkg, path: at, scope, type: code });
+  }
+
+  if (Option.isNone(type) && typeLexical !== undefined && typeLexical !== "") {
+    expected.UnreadTypeHref.set(node, { node, package: pkg, path: at });
   }
 };
 
@@ -173,14 +192,16 @@ const expectResource = (
   }
 
   if (href !== undefined) {
-    expectHref(expected, { bases, href, node, pkg, type });
+    expectHref(expected, { bases, href, node, pkg, type, typeLexical });
   }
 };
 
 /**
  * Walk a manifest's tree in document order and collect the overlay rows it implies: each
  * `cp:manifest`, `cp:resource`, `cp:file` and `cp:dependency` with its node's tuple, its parent and
- * its attributes as written.
+ * its attributes as written, each identifier and `identifierref` beside it collapsed as an `xs:ID`
+ * and an `xs:IDREF` are (decision 457 (3)), the value the identifier space and the dependencies
+ * compare.
  *
  * @param doc - The manifest's tree.
  * @returns Every overlay's expected rows.
@@ -199,10 +220,10 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     ResourceId: new Map(),
     ResourceTyped: new Map(),
     TypedHref: new Map(),
+    UnreadTypeHref: new Map(),
   };
   const document = ids.idOf(0);
   const interactions = new Set<string>(interactionKinds);
-  const spelled = new Set<string>(ResourceTypeLexical.rows.map(({ lexical }) => lexical));
   let next = 1;
   const named: { readonly identifier: string; readonly node: NodeId }[] = [];
   const dependencies: { readonly node: NodeId; readonly ref: string; readonly resource: NodeId }[] =
@@ -234,9 +255,17 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     const ownBase = valueOf("xml:base");
     const bases = ownBase === undefined ? parent.bases : [...parent.bases, ownBase];
 
-    const identifier = valueOf("identifier");
-    if (kind === "cp:manifest" && identifier !== undefined) {
-      expected.ManifestId.set(id, { ...tuple, identifier, package: pkg, parent: parent.id });
+    const identifierLexical = valueOf("identifier");
+    const identifier =
+      identifierLexical === undefined ? undefined : oracleValueOf(identifierLexical, "collapse");
+    if (kind === "cp:manifest" && identifier !== undefined && identifierLexical !== undefined) {
+      expected.ManifestId.set(id, {
+        ...tuple,
+        identifier,
+        lexical: identifierLexical,
+        package: pkg,
+        parent: parent.id,
+      });
       expected.ManifestIdSpace.set(heading([pkg, identifier, kind]), {
         identifier,
         kind,
@@ -251,12 +280,17 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
         bases,
         href: valueOf("href"),
         row,
-        spelled,
+        spelled: spelledTypes,
         typeLexical: valueOf("type"),
       });
-      if (identifier !== undefined) {
+      if (identifier !== undefined && identifierLexical !== undefined) {
         named.push({ identifier, node: id });
-        expected.ResourceId.set(id, { identifier, node: id, package: pkg });
+        expected.ResourceId.set(id, {
+          identifier,
+          lexical: identifierLexical,
+          node: id,
+          package: pkg,
+        });
         expected.ManifestIdSpace.set(heading([pkg, identifier, kind]), {
           identifier,
           kind,
@@ -284,9 +318,16 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
       });
     }
 
-    const ref = kind === "cp:dependency" ? valueOf("identifierref") : undefined;
-    if (ref !== undefined) {
-      expected.Dependency.set(id, { ...tuple, package: pkg, ref, resource: parent.id });
+    const refLexical = kind === "cp:dependency" ? valueOf("identifierref") : undefined;
+    if (refLexical !== undefined) {
+      const ref = oracleValueOf(refLexical, "collapse");
+      expected.Dependency.set(id, {
+        ...tuple,
+        lexical: refLexical,
+        package: pkg,
+        ref,
+        resource: parent.id,
+      });
       dependencies.push({ node: id, ref, resource: parent.id });
     }
 
@@ -305,7 +346,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
 
   // A dependency names its own resource where that resource's identifier is its ref, and
   // otherwise the first resource in document order that writes the ref (IMS Content Packaging
-  // 1.2, `dependency`), none where none does.
+  // 1.2, `dependency`), none where none does; both collapsed (decision 457 (3)).
   for (const { node, ref, resource } of dependencies) {
     const target = named.some(
       ({ identifier, node: held }) => held === resource && identifier === ref,
@@ -347,14 +388,65 @@ const sortedEntries = (map: ReadonlyMap<string, object>): readonly (readonly [st
   [...map].toSorted(([left], [right]) => left.localeCompare(right));
 
 /**
- * Compare the builder's keyed sets with the walk's: every relation's keys and rows alike, and the
- * typed hrefs the host reads of them (`typedHrefsOf`), by the resource's node.
+ * A row of the query `UnreadTypeHref`: a resource's node, its package and its href's path.
+ */
+interface UnreadTypeHrefRow {
+  readonly node: string;
+  readonly package: string;
+  readonly path: string;
+}
+
+/**
+ * The rows of the query `UnreadTypeHref` (`#pantry/qti/queries.ts`) over a manifest, restated on
+ * the host: each resource's `ResourceHref` beside its `type` attribute as the tree's rows hold it,
+ * where that form is nonempty and spells no `ResourceType` handle ({@link spelledTypes}), as its
+ * node, package and path, by the node. Only the database evaluates the query, which "Item ref
+ * target" reads by (package, path); this reads the rows the query reads, the builder's and the
+ * tree's, so a builder that loses an unread-type resource's href fails here.
  *
- * @param rows - The builder's rows.
+ * @param doc - The manifest's tree.
+ * @param rows - The builder's rows of it.
+ * @returns The query's rows, by the resource's node.
+ */
+const unreadTypeHrefsOf = (
+  doc: XdmDocument<Composed>,
+  rows: Pick<PackageRows, "ResourceHref">,
+): ReadonlyMap<string, UnreadTypeHrefRow> => {
+  const flat = flatten(doc, ids.idOf);
+  const resources = new Set<string>(
+    flat.nodes.flatMap(({ id, kind }) => (kind === "cp:resource" ? [id] : [])),
+  );
+  const types = new Map<string, string>(
+    flat.attributes.flatMap(({ lexical, name, node }) =>
+      name === "type" && resources.has(node) ? [[node, lexical] as const] : [],
+    ),
+  );
+
+  return new Map(
+    [...rows.ResourceHref.values()].flatMap(({ node, package: pkg, path }) =>
+      Option.toArray(Option.fromUndefinedOr(types.get(node)))
+        .filter((lexical) => lexical !== "" && !spelledTypes.has(lexical))
+        .map(() => [node, { node, package: pkg, path }] as const),
+    ),
+  );
+};
+
+/**
+ * Compare the builder's keyed sets with the walk's: every relation's keys and rows alike, and the
+ * rows of the queries over them the host reads or restates, the typed hrefs (`typedHrefsOf`) and
+ * the unread-type hrefs ({@link unreadTypeHrefsOf}), by the resource's node.
+ *
+ * @param doc - The manifest's tree.
+ * @param rows - The builder's rows of it.
  * @param expected - The walk's.
  * @param label - The case, for a failure's message.
  */
-const assertRows = (rows: PackageRows, expected: Expected, label: string): void => {
+const assertRows = (
+  doc: XdmDocument<Composed>,
+  rows: PackageRows,
+  expected: Expected,
+  label: string,
+): void => {
   for (const relation of relationNames) {
     assert.deepStrictEqual(
       sortedEntries(rows[relation]),
@@ -367,6 +459,11 @@ const assertRows = (rows: PackageRows, expected: Expected, label: string): void 
     sortedEntries(new Map(typedHrefsOf(rows).map((typed) => [typed.node, typed] as const))),
     sortedEntries(expected.TypedHref),
     `${label} TypedHref`,
+  );
+  assert.deepStrictEqual(
+    sortedEntries(unreadTypeHrefsOf(doc, rows)),
+    sortedEntries(expected.UnreadTypeHref),
+    `${label} UnreadTypeHref`,
   );
 };
 
@@ -658,6 +755,71 @@ const declaredVersion = (manifest: XmlDocument): Option.Option<string> =>
       .at(0),
   );
 
+/**
+ * Build a manifest of resources, each its own identifier, its href listed as its one file and the
+ * type it writes, if any, and read the unread-type hrefs of the builder's rows
+ * ({@link unreadTypeHrefsOf}).
+ *
+ * @param resources - Each resource's href and type, none where it writes no type.
+ * @returns The path of each unread-type href, in document order; the paths those name, once each,
+ *   the one package's (package, path) pairs "Item ref target" reads; and the path of each typed
+ *   href.
+ */
+const unreadOf = (
+  resources: readonly { readonly href: string; readonly type: string | undefined }[],
+) => {
+  const doc = treeOf({
+    manifestBase: undefined,
+    manifestIdentifier: "m",
+    resources: resources.map(({ href, type }) => ({
+      base: undefined,
+      dependencies: [],
+      files: [href],
+      href,
+      identifier: "own",
+      type,
+    })),
+    resourcesBase: undefined,
+  });
+  const rows = rowsOf(doc, ids);
+  const unread = [...unreadTypeHrefsOf(doc, rows).values()];
+
+  return {
+    hrefs: unread.map(({ path }) => path),
+    paths: [...new Set(unread.map(({ path }) => path))],
+    typed: typedHrefsOf(rows).map(({ path }) => path),
+  };
+};
+
+/**
+ * Build a manifest of one resource, `r1`, holding the dependencies given, and read the refs of the
+ * `Dependency` rows the builder writes.
+ *
+ * @param dependencies - Each dependency's `identifierref` as written.
+ * @returns The ref and the written form of each `Dependency` row, in document order.
+ */
+const dependencyRefsOf = (dependencies: readonly string[]) =>
+  [
+    ...rowsOf(
+      treeOf({
+        manifestBase: undefined,
+        manifestIdentifier: "m",
+        resources: [
+          {
+            base: undefined,
+            dependencies,
+            files: [],
+            href: undefined,
+            identifier: "r1",
+            type: "webcontent",
+          },
+        ],
+        resourcesBase: undefined,
+      }),
+      ids,
+    ).Dependency.values(),
+  ].map(({ lexical, ref }) => ({ lexical, ref }));
+
 describe("import/overlays/package.ts", () => {
   it.effect("writes each overlay's rows as the walk of the manifest's tree names them", (ctx) =>
     // Oracle: a second implementation, a direct walk of the XDM document that numbers its nodes in
@@ -711,7 +873,7 @@ describe("import/overlays/package.ts", () => {
             const doc = treeOf(input);
             const rows = rowsOf(doc, ids);
 
-            assertRows(rows, walk(doc), "generated");
+            assertRows(doc, rows, walk(doc), "generated");
             for (const [at, { type }] of namedDocuments(rows)
               .values()
               .map((named) => [named.path, named] as const)) {
@@ -721,6 +883,57 @@ describe("import/overlays/package.ts", () => {
       ),
     ),
   );
+
+  it("gives the query UnreadTypeHref a row for a resource whose written type spells no handle, and none for a typed or untyped one", () => {
+    // Oracle: R-O6's manifest (the genetic repair's gr-5a): its first resource's type carries a
+    // trailing space, so it spells no handle; the test resource's spells one. A `bogus` type is
+    // unread too; a resource that writes no type has no row, and AL3 refuses it alone. The query
+    // (`#pantry/qti/queries.ts`) is restated over the rows it reads, the builder's `ResourceHref`
+    // and the tree's `type` attribute ({@link unreadTypeHrefsOf}); two unread resources of one
+    // path are two rows of one (package, path), the pair "Item ref target" reads.
+    assert.deepStrictEqual(
+      unreadOf([
+        { href: "item.xml", type: "resourceextmetadata/xml " },
+        { href: "test.xml", type: "imsqti_test_xmlv3p0" },
+      ]),
+      { hrefs: ["item.xml"], paths: ["item.xml"], typed: ["test.xml"] },
+      "R-O6",
+    );
+    assert.deepStrictEqual(
+      unreadOf([{ href: "item.xml", type: "bogus" }]),
+      { hrefs: ["item.xml"], paths: ["item.xml"], typed: [] },
+      "bogus",
+    );
+    assert.deepStrictEqual(
+      unreadOf([{ href: "item.xml", type: undefined }]),
+      { hrefs: [], paths: [], typed: [] },
+      "no type",
+    );
+    assert.deepStrictEqual(
+      unreadOf([
+        { href: "item.xml", type: "bogus" },
+        { href: "item.xml", type: "bogus" },
+      ]),
+      { hrefs: ["item.xml", "item.xml"], paths: ["item.xml"], typed: [] },
+      "two unread resources of one path, one (package, path)",
+    );
+  });
+
+  it("writes a Dependency only for a dependency whose identifierref names something once collapsed", () => {
+    // Oracle: spec reading 152 and decision 457 (2), with the genetic repair round 2's class 1
+    // (gr2-2): `xs:IDREF` restricts `xs:NCName`, so `1x` and `x𝔸` name no resource and have no
+    // Dependency row, and their value domain refuses them alone; `r1` and its padded form name the
+    // resource `r1` and keep their row, its ref the collapsed value and its lexical form as
+    // written (decision 457 (3): an `xs:IDREF` is a whiteSpace `collapse` type).
+    assert.deepStrictEqual(dependencyRefsOf(["1x"]), [], "a digit first");
+    assert.deepStrictEqual(dependencyRefsOf(["x𝔸"]), [], "a character no NCName holds");
+    assert.deepStrictEqual(dependencyRefsOf(["r1"]), [{ lexical: "r1", ref: "r1" }], "an NCName");
+    assert.deepStrictEqual(
+      dependencyRefsOf([" r1"]),
+      [{ lexical: " r1", ref: "r1" }],
+      "an NCName once collapsed, its ref collapsed and its lexical form as written",
+    );
+  });
 });
 
 layer(TestLayer, { excludeTestServices: true })("import/overlays/package.ts, fixtures", (suite) => {
@@ -762,7 +975,7 @@ layer(TestLayer, { excludeTestServices: true })("import/overlays/package.ts, fix
 
           shredded += 1;
           const rows = rowsOf(tree.value, ids);
-          assertRows(rows, walk(tree.value), name);
+          assertRows(tree.value, rows, walk(tree.value), name);
           assert.isNotEmpty(rows.ManifestId, name);
         }
 

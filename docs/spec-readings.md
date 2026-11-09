@@ -58,11 +58,34 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    - A test's prefixed `qti-variable` and an unweighted `qti-test-variables` with no `base-type`, typed `unknown` until
      an expression is typed once per assembly (reading 167, decision 435).
 
-   One limit changes no verdict, only the rule it is named by: where a manifest's path breaks two laws, the refusal
-   names the CHECK PostgreSQL judges first (reading 162).
+   Limits that change no verdict, only the laws a refused package is found to break, and at most the rule it is named
+   by:
+   - Where a manifest's path breaks two laws, the refusal names the CHECK PostgreSQL judges first (reading 162).
+   - A record file (`resourcemetadata/xml`) whose root is a `cp:manifest` and whose `cp:resource` owns a LOM record
+     also breaks "E1 derived", which the law oracle does not raise: the import writes a `LomResource` for the package
+     manifest's resources alone, while the record that resource owns is still read, and is held to a `LomResource`.
+     A learning resource type the LOM vocabulary forbids in that record also breaks "LOM learning resource type",
+     which the law oracle does not raise either: it reads a type only in a record's document, and a record file whose
+     root is a `cp:manifest` is none (reading 122). "RootOfType" refuses the file on both sides, since such a file's
+     root is a `lom:lom`, so the rule stays "RootOfType". Outlandish and absent from the official packages; lifted by
+     reading no record a record file's `cp:resource` owns (decision 449, stated here; decision 460, on the learning
+     resource type).
+   - An inclusion cycle closed only by an include that may not stand for its target's root breaks "Inclusion cycle"
+     in the law oracle and not in the import: XInclude still recurses through such an include (reading 85), but the
+     import places a child instance only at a site that places its target. Both refuse the package under "Include
+     root" (reading 116), so the rule stays "Include root"; a cycle every edge of which is a standing include breaks
+     "Inclusion cycle" on both sides. Outlandish and absent from the official packages; lifted by counting a
+     non-standing include as an edge of the import's cycle (decision 451, stated here).
+   - An element the grammar admits under its own parent, nested inside a forbidden element, such as a `cpx:variant`
+     inside a 3.0.1 `cpx:variant`'s metadata, binds its ID in the import, though the law oracle drops the forbidden
+     element's whole subtree. An ID it duplicates then breaks "DocumentId key" beside the ancestor's "N5 admitted",
+     which refuses the package on both sides, so the refusal can be named "DocumentId key", which ranks first, where
+     the law oracle names another rule. Outlandish and absent from the official packages; lifted by binding only an
+     ID whose every ancestor the grammar admits (decision 452, stated here).
 
    (2026-10-30, restated without exceptions 2026-11-03. Amended under the operator's ruling of 2026-11-07, register
-   D1, to defer to this list; the element-depth limit added by decision 445.)
+   D1, to defer to this list; the element-depth limit added by decision 445; the three limits that change no verdict
+   after reading 162's added by decisions 449, 451 and 452.)
 
 2. **MathML validity is the MathML 3 Recommendation**: its RelaxNG schema and its prose rules, not only the MathML XSD
    that QTI's schema imports. MathML that breaks a rule of the Recommendation, such as an operator applied to the wrong
@@ -2237,11 +2260,15 @@ against it. A reading that is not an information-model-over-XSD case says which 
      reads the first. A `value` of another LOM vocabulary (an interactivity type's `exam`) and an element of another
      namespace inside the type are not read. The law is `lom-learning-resource-type` (`src/qti/metadata.ts`,
      `LomResourceType` and `LomResourceTypeSource`): a type whose value collapses to a forbidden one has a source naming
-     another vocabulary. It holds over every document's LOM, a resource's metadata, the manifest's own and an external
-     record. The 1EdTech corpus holds 18 `learningResourceType`s, every one of source `RDNLTSNType`, so no verdict
-     moves. Main refused the two values whatever the source; this reading refuses only the LOM vocabulary's. This binds
-     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by RV seat M, on the
-     review of PR #46, under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
+     another vocabulary. It holds over the records: a resource's metadata and the manifest's own, in the package
+     manifest, and an external record file. A `cp:metadata` of any other document describes no part of the package, so
+     a `learningResourceType` there is no record's and is not read (the ruling of `170356bd`; `recordDocumentTypes`,
+     `src/qti/metadata.ts`). The 1EdTech corpus holds 18 `learningResourceType`s, every one of source `RDNLTSNType`,
+     so no verdict moves. Main refused the two values whatever the source; this reading refuses only the LOM
+     vocabulary's. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06
+     by RV seat M, on the review of PR #46, under Bjorn's standing ruling of 2026-11-05 that the spec wins.)
+     (Amended 2026-11-09 by the Mind, decision 460, on gr2-close's class B: the records the law reads stated, as the
+     import already read them; nothing the import refuses changed.)
 123. **A `bdo` carries `dir`, and its value is `ltr` or `rtl`.** The information model says of BDO "Authors must
      specify the dir attribute on this tag, with the value ltr to specify a left-to-right override and with the value
      rtl to specify a right-to-left override. The auto value must not be specified" (section 5.11, in both versions).
@@ -3023,17 +3050,19 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      conflict. (Decided 2026-11-07 by the coordinator, under Bjorn's standing ruling of 2026-11-05, from seat
      FIX-LOMLANG.)
 152. **A value names something only where it is an NCName: a variable reference's, an interaction's binding, a
-     declaration's `identifier` and a record field's `field-identifier`. Any other value names nothing: no row holds
-     it as a name, and its value domain alone refuses it.** The ASI XSD types each such attribute `IdentifierDType`,
+     declaration's `identifier`, a record field's `field-identifier`, a test part's, section's, section ref's or item
+     ref's `identifier` and a `cp:dependency`'s `identifierref`. Any other value names nothing: no row holds it as a
+     name, and its value domain alone refuses it.** The ASI XSD types each such attribute `IdentifierDType`,
      which restricts `xs:NCName` (`imsqti_asiv3p0_v1p0.xsd`), or, in a literal-or-reference union, holds the
      variable by its `VariableStringDType` member, an `xs:NCName` too (a printed variable's `base` and `index`, a
      random integer's `min` and `max`, a rounding's `figures`), or by `EncVariableStringDType`, an NCName between
-     braces. A form outside a type's lexical space denotes no value of it (XML Schema Part 2, §2.3), so `""`, a form
-     of whitespace alone, `1a`, `a b`, or a name only XML 1.0's fifth edition admits, such as one that starts with
-     ARABIC-INDIC DIGIT ZERO, which the `Letter` tables `\i` and `\c` read (XML Schema Part 2, Appendix F) hold as a
-     digit, names no variable, declaration or field. It shares no name with another, no
-     reference resolves to it, and the law a reference, a binding or a name is held to does not judge it; the
-     attribute's value domain refuses it under its own rule. The grammar states the NCName once
+     braces. IMS Content Packaging 1.2's binding types a `cp:dependency`'s `identifierref` `xs:IDREF`, which restricts
+     `xs:NCName` (`imsqtiv3p0_imscpv1p2_v1p0.xsd`). A form outside a type's lexical space denotes no value of it (XML
+     Schema Part 2, §2.3), so `""`, a form of whitespace alone, `1a`, `a b`, or a name only XML 1.0's fifth edition
+     admits, such as one that starts with ARABIC-INDIC DIGIT ZERO, which the `Letter` tables `\i` and `\c` read (XML
+     Schema Part 2, Appendix F) hold as a digit, names no variable, declaration, field, test structure or resource. It
+     shares no name with another, no reference resolves to it, and the law a reference, a binding or a name is held to
+     does not judge it; the attribute's value domain refuses it under its own rule. The grammar states the NCName once
      (`ncNamePattern`, `src/grammar/domains.ts`), and the schema's sources and the importer's readers each read it.
      This sets aside the importer's reading of any string as a name: a content reference or a binding by its
      collapsed value, so `template-identifier=""` was a template reference no declaration held, a declaration's or a
@@ -3044,7 +3073,8 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      ask a row of every declaration, still break beside its value domain, as they did for an empty identifier
      before; that wants the declaration's name as a row of its own, as `RecordFieldName` is a field's. This
      binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
-     coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FIX-NCNAME.)
+     coordinator, under Bjorn's standing ruling of 2026-11-05, from seat FIX-NCNAME.) (Amended 2026-11-09,
+     decision 457 (2).)
 153. **A record has no base type, so no value stands for one: a law about a record's whole value judges its cardinality,
      and a law over a base type reads the declaration's own, where it writes one.** The information model says
      "Variables with record cardinality have no base-type" (tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3,

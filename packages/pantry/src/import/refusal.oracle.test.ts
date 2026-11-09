@@ -1758,9 +1758,11 @@ describe("the census of the composed Qti schema", () => {
       // include whose path an entry holds but that names no document the manifest lists, or that
       // writes no href that names a path of the package, breaks "Include target", the oracle's law
       // for includes alone; a section ref whose path names no section document breaks "Document
-      // entry" on its path, its SitePath, which every section ref has; and a site whose path no
-      // entry holds breaks "File exists", its SitePath's check, which gates both. Each is a law Qti
-      // states, under its own rule, so a dangling site of either kind is refused under one rule.
+      // entry" on its path, its SitePath, which only a section ref that writes an href that stays
+      // in the package has (one that writes none is AL3's alone, reading 115); and a site whose
+      // path no entry holds breaks "File exists", its SitePath's check, which gates both. Each is a
+      // law Qti states, under its own rule, so a dangling site of either kind is refused under one
+      // rule.
       const stated = schemaLawsOf(Qti);
       const kinds: readonly (readonly [LawSide, LawSide, Rule])[] = [
         [sideOf("SitePath", "node"), sideOf("SiteTarget", "node"), "include-target"],
@@ -1771,7 +1773,7 @@ describe("the census of the composed Qti schema", () => {
           sideOf("TestDocument", "package", "path"),
           "entry-kind",
         ],
-        [sideOf("Site", "node"), sideOf("SitePath", "node"), "entry-kind"],
+        [sideOf("Reference", "node"), sideOf("SitePath", "node"), "entry-kind"],
       ];
 
       for (const [from, to, rule] of kinds) {

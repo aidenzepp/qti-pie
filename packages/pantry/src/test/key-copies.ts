@@ -238,24 +238,39 @@ const StoredRelationSchema = Schema.Struct({
 });
 
 /**
- * Every field of the composed schema whose type is `keyText`, an accumulator or a generated field
- * of it included, as `Relation.field`: grizzle keeps an accumulator's type at its `field` and a
- * generated field's at its `type`.
+ * Every field of the composed schema whose type is `keyText`, as `Relation.field`, and whether the
+ * database fills it: grizzle keeps an accumulator's type at its `field` and a generated field's at
+ * its `type`, and the import writes neither.
  */
-export const keyTextFields: ReadonlySet<string> = new Set(
+const keyTextFieldFills: readonly { readonly field: string; readonly filled: boolean }[] =
   Object.values(Qti.relations).flatMap((member) =>
     Option.match(Schema.decodeUnknownOption(StoredRelationSchema)(member), {
       onNone: () => [],
       onSome: ({ fields, name }) =>
-        Object.entries(fields).flatMap(([field, type]) =>
-          type === keyText ||
-          (Predicate.hasProperty(type, "field") && type.field === keyText) ||
-          (Predicate.hasProperty(type, "type") && type.type === keyText)
-            ? [`${name}.${field}`]
-            : [],
-        ),
+        Object.entries(fields).flatMap(([field, type]) => {
+          const filled =
+            (Predicate.hasProperty(type, "field") && type.field === keyText) ||
+            (Predicate.hasProperty(type, "type") && type.type === keyText);
+
+          return type === keyText || filled ? [{ field: `${name}.${field}`, filled }] : [];
+        }),
     }),
-  ),
+  );
+
+/**
+ * Every field of the composed schema whose type is `keyText`, an accumulator or a generated field
+ * of it included, as `Relation.field`.
+ */
+export const keyTextFields: ReadonlySet<string> = new Set(
+  keyTextFieldFills.map(({ field }) => field),
+);
+
+/**
+ * The fields of {@link keyTextFields} the database fills, an accumulator's or a generated field's,
+ * as `Relation.field`: the import never writes them, so no row of the import holds their text.
+ */
+export const filledKeyTextFields: ReadonlySet<string> = new Set(
+  keyTextFieldFills.flatMap(({ field, filled }) => (filled ? [field] : [])),
 );
 
 /**

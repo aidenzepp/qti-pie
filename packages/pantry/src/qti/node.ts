@@ -331,6 +331,16 @@ const namedlyTyped = (n: NodeRow) =>
 const admissionOf = (n: NodeRow) => ContentModelOf.at("admission", n.version, n.parentKind);
 
 /**
+ * State that the grammar admits a member where it stands: its parent's family's admission map holds
+ * its kind (`AdmissionIn`). "N5 admitted" refuses every member it is false of, and an ID of one it
+ * is false of binds nothing (`#pantry/qti/identity.ts`, R2).
+ *
+ * @param n - The row.
+ * @returns The predicate.
+ */
+export const admitsHere = (n: NodeRow) => AdmissionIn.has(admissionOf(n), n.kind);
+
+/**
  * Read a member's position in its parent's content model, its family's admission map's cell
  * (`AdmissionIn`): a position above 0 where one particle names its kind, 0 for character data and
  * for a kind several particles name, and nothing where the parent does not admit the kind.
@@ -355,8 +365,7 @@ const positionOf = (n: NodeRow) => AdmissionIn.at("position", admissionOf(n), n.
  * @param n - The row.
  * @returns The predicate.
  */
-const positioned = (n: NodeRow) =>
-  n.and(AdmissionIn.has(admissionOf(n), n.kind), n.or(element(n), n.ne(positionOf(n), "0")));
+const positioned = (n: NodeRow) => n.and(admitsHere(n), n.or(element(n), n.ne(positionOf(n), "0")));
 
 /**
  * The value domains that check nothing: those whose pattern is `xs:anySimpleType`'s, every string

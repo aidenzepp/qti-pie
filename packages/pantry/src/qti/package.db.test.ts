@@ -702,6 +702,9 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                     fact: {
                       document: stray,
                       kind: codeOf(NodeKind.handles, "cp:dependency"),
+                      // The identifierref as written, beside `ref`, its collapsed value (gr2-4:
+                      // identifierrefs compare collapsed).
+                      lexical: "nowhere",
                       nearest: stray,
                       node: strayOther,
                       package: stray,

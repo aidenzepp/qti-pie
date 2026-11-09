@@ -34,6 +34,7 @@ import {
 } from "@bjornpagen/grizzle";
 import { documentTypes } from "#pantry/grammar/install.ts";
 import type { QtiBase } from "#pantry/qti/base.ts";
+import { Attribute } from "#pantry/qti/attributes.ts";
 import { DataSsmlMember, DataSsmlProperty } from "#pantry/qti/data-ssml.ts";
 import { DeclarationIdentifier } from "#pantry/qti/declarations.ts";
 import {
@@ -75,7 +76,12 @@ import {
 } from "#pantry/qti/metadata.ts";
 import { integerKeyPattern, itemPattern, MapKeyItems, MapKeyType } from "#pantry/qti/mapping.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
-import { ResourceDocument, ResourceHref, ResourceTyped } from "#pantry/qti/package.ts";
+import {
+  ResourceDocument,
+  ResourceHref,
+  ResourceTyped,
+  spelledResourceTypePattern,
+} from "#pantry/qti/package.ts";
 import {
   AssembledName,
   InstanceName,
@@ -83,6 +89,7 @@ import {
   itemRefKind,
   ItemRefTarget,
   linkResourceTypes,
+  untargetedItemRefs,
   VariableMapping,
 } from "#pantry/qti/tests.ts";
 
@@ -119,6 +126,30 @@ export const queriesOf = (base: QtiBase) => {
   );
 
   /**
+   * The href of a resource whose `type` is written and spells no `ResourceType` handle, by the
+   * resource's node: its {@link ResourceHref}'s package and path, where the resource's manifest
+   * `type` is nonempty and spells no handle (`spelledResourceTypePattern`), so the resource has no
+   * {@link ResourceTyped} (spec reading 67: AL1's value domain refuses the `type` alone). A resource that writes no `type` has none (AL3 refuses it
+   * alone), and neither has one that writes no `href`, which names no path. Its rows are a join no
+   * table stores, which "Item ref target" reads: an item ref whose href names nothing the importer
+   * reads names a path one of these names, or is refused (the oracle's `itemRefTargetOf` names no
+   * target there).
+   */
+  const UnreadTypeHref = derived(
+    "UnreadTypeHref",
+    query(base).rule((r) => {
+      const { node, package: pkg, path } = v(ResourceHref, "href");
+      const { lexical } = v(Attribute, "type");
+
+      return r
+        .match(ResourceHref, { node, package: pkg, path })
+        .match(Attribute, { documentType: "manifest", kind: "cp:resource", lexical, name: "type", node })
+        .where(r.and(r.ne(lexical, ""), Compute.not(Compute.matches(lexical, spelledResourceTypePattern))))
+        .find({ node, package: pkg, path });
+    }),
+  );
+
+  /**
    * The typed hrefs whose type `RootOfType` maps: each names a document of that type.
    */
   const documentHrefs = select(TypedHref, (h) => h.in(h.type, documentTypes));
@@ -134,7 +165,8 @@ export const queriesOf = (base: QtiBase) => {
    * - **P2 `root-type-reverse` ("RootOfType"):** every document a resource lists is at the path of a
    *   typed href of its type (spec reading 176).
    * - **B2 and B3 ("Item ref target"):** an item ref's target is a (path, type) pair a typed href of
-   *   its package names.
+   *   its package names, and an item ref with no target names a path an unread-type resource names
+   *   ({@link UnreadTypeHref}).
    */
   const packageQueryLawsByName = {
     "Document entry": [
@@ -151,6 +183,10 @@ export const queriesOf = (base: QtiBase) => {
         on(ItemRefTarget, "package", "path", "type"),
         on(TypedHref, "package", "path", "type"),
       ),
+      // An item ref whose href names no resource of a type the importer reads names a path a
+      // resource of an unread type names, so the type of what it names is unread, and nothing
+      // judges it (spec reading 67).
+      contained(on(untargetedItemRefs, "package", "path"), on(UnreadTypeHref, "package", "path")),
     ],
     RootOfType: [
       contained(
@@ -1099,6 +1135,7 @@ export const queriesOf = (base: QtiBase) => {
     MatchedTitle,
     RequiredSsmlProperty,
     TypedHref,
+    UnreadTypeHref,
   };
 
   /**

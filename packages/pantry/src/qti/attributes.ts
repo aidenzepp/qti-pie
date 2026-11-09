@@ -124,12 +124,23 @@ import {
   ValueDomainOf,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
+import { namingText } from "#pantry/grammar/domains.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { handlePrefixes } from "#pantry/model/xdm.ts";
 import { NamespacePrefix, OpenElementName } from "#pantry/qti/chardata.ts";
 import { keyText, localNameBytes, namespaceText } from "#pantry/qti/limits.ts";
 import { Chars, holdsCheckedText, Node, universalDomains } from "#pantry/qti/node.ts";
 import { dataName } from "#pantry/vocab/open.ts";
+
+/**
+ * A lexical form that names something once collapsed, an NCName with XML whitespace around it
+ * (`namingText` of `#pantry/grammar/domains.ts`): a declaration's, a record field's or a test
+ * structure's identifier and a dependency's `identifierref` (spec reading 152), and an ID-typed
+ * attribute's or text's ID value, `xs:ID` being a restriction of `xs:NCName` (spec reading 156).
+ * Any other form names nothing, and its value domain refuses it alone. Every module of the schema
+ * reads it here, one pattern.
+ */
+export const namingPattern = Compute.pattern<string>(namingText);
 
 /**
  * Reading 13's `data-*` names (`dataName` of `#pantry/vocab/open.ts`), as the pattern

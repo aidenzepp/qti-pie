@@ -94,7 +94,7 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { ncNamePattern } from "#pantry/grammar/domains.ts";
-import { Attribute, Space } from "#pantry/qti/attributes.ts";
+import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import {
   BaseTypePattern,
   unjudgedBaseTypes,
@@ -114,13 +114,6 @@ import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
  * form's outer whitespace and nothing more.
  */
 const namePattern = Compute.pattern<string>(`^${ncNamePattern}$`);
-
-/**
- * A lexical form that names something once collapsed: an NCName with XML whitespace around it,
- * which collapsing strips. Any other form names nothing, and its value domain refuses it alone
- * (spec reading 152).
- */
-const namingPattern = Compute.pattern<string>(`^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`);
 
 /**
  * The kinds that declare a variable: the `NodeKind` handles that are `DeclarationKind` handles too

@@ -30,14 +30,18 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * - `validateFiles`: the one `-validate.sql` file those rules are validated in.
  */
 const measured = {
-  constants: 119,
-  constraintTriggers: 88,
-  live: 7,
-  names: 48,
-  nodeAxes: 5,
-  nodeKeys: 48,
-  tables: 250,
-  validateFiles: 1,
+  // MERGE-OPEN: recount after the re-drafted _init, and name its grizzle pin and provenance in the
+  // doc above. Every count below; his GEN-S6 adds `ItemRefHref`, `UnreadTypeHref` and
+  // `UnreadTypePath`, and his GEN-S8 moves one generated column and foreign key from `Site` to
+  // `Reference`.
+  constants: 119, // MERGE-OPEN: recount after the re-drafted _init (ours 119, his 117)
+  constraintTriggers: 88, // MERGE-OPEN: recount after the re-drafted _init (ours 88)
+  live: 7, // MERGE-OPEN: recount after the re-drafted _init (ours and his 7)
+  names: 48, // MERGE-OPEN: recount after the re-drafted _init (ours 48, his 43, base 43)
+  nodeAxes: 5, // MERGE-OPEN: recount after the re-drafted _init (ours 5, his 6, base 6)
+  nodeKeys: 48, // MERGE-OPEN: recount after the re-drafted _init (ours 48, his 47, base 47)
+  tables: 250, // MERGE-OPEN: recount after the re-drafted _init (ours 250, his 268, base 265)
+  validateFiles: 1, // MERGE-OPEN: recount after the re-drafted _init (ours 1)
 } as const;
 
 /**
@@ -56,7 +60,9 @@ describe("the committed migration", () => {
       // Oracle: the specification as a checker, fin.md §13's zero targets (the ones
       // `census.test.ts` states as predicates) and plan-qti-pie Q6.02's counts, over the committed
       // migration's census; the schema's own members for the counts that follow from them (a table
-      // per stored relation, a names constant per roster).
+      // per stored relation, a names constant per roster). The chain's later migrations (GEN-S3 to
+      // GEN-S8) fold into the one `_init` drafted from zero, so their data steps, which moved rows
+      // already stored, have none to move, and the zero target for inserts holds.
       // Bound: the one committed migration.
       Effect.gen(function* committedCensus() {
         const fs = yield* FileSystem.FileSystem;

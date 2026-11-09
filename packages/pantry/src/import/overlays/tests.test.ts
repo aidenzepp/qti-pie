@@ -497,6 +497,36 @@ describe("import/overlays/tests.ts, includes", () => {
       assert.strictEqual(rows?.Inclusion.size, 0, href);
     }
   });
+
+  it("places a child instance for an include only where it may stand for its target's root: one under the item's body, none under a paragraph, which Include root refuses", () => {
+    // Oracle: reading 114 and 117: an include places its target only where `IncludeRoot` gives its
+    // parent that target's root; under `p` a `div` fragment may not stand, so "Include root" refuses
+    // the include, the fragment places nowhere in the item, and is judged as its own document.
+    const fragment = documentOf(
+      el("div", [], [el("qti-hottext-interaction", [["response-identifier", "RESPONSE"]])]),
+    );
+    const cases: readonly (readonly [string, XdmClosedElement<Composed>, number])[] = [
+      ["include in the body", el("xi:include", [["href", "f.xml"]]), 1],
+      ["include in a paragraph", el("p", [], [el("xi:include", [["href", "f.xml"]])]), 0],
+    ];
+
+    for (const [label, holder, children] of cases) {
+      const item = documentOf(
+        el("qti-assessment-item", [["identifier", "I"]], [el("qti-item-body", [], [holder])]),
+      );
+      const documents = rowsOfPackage([
+        ["i.xml", item],
+        ["f.xml", fragment],
+      ]);
+      const assembled = assembledRowsOf(documents, () => idOf(999));
+      const itemRoot = [...assembled.Instance.values()].find(
+        ({ rootKind }) => rootKind === "qti-assessment-item",
+      );
+
+      assert.strictEqual(documents[0]?.SiteTarget.size, 1, label);
+      assert.strictEqual(itemRoot?.children.length, children, label);
+    }
+  });
 });
 
 describe("import/overlays/tests.ts, parts", () => {
@@ -827,10 +857,13 @@ const identifiedKinds: ReadonlySet<string> = new Set([
 
 /**
  * Read each identified element's collapsed identifier by a direct pre-order walk of the XDM tree,
- * numbered as {@link partsByWalk} numbers it: none for one that writes no identifier.
+ * numbered as {@link partsByWalk} numbers it: none for one that writes no identifier, nor for a test
+ * part, section, section ref or item ref whose collapsed identifier is empty, which is no NCName
+ * and so names nothing (spec reading 152). Empty is the one such form {@link identifierForms}
+ * writes; a stimulus ref keeps its row whatever it spells.
  *
  * @param doc - The document.
- * @returns Each identified element's start, with its identifier collapsed, where it writes one.
+ * @returns Each identified element's start, with its identifier collapsed, where it has a row.
  */
 const identifiersByWalk = (doc: XdmDocument<Composed>): ReadonlyMap<bigint, string> => {
   const found = new Map<bigint, string>();
@@ -841,8 +874,13 @@ const identifiersByWalk = (doc: XdmDocument<Composed>): ReadonlyMap<bigint, stri
     const form = node.attributes.find(
       (attribute) => attribute.name._tag === "closed" && attribute.name.handle === "identifier",
     );
-    if (form !== undefined && identifiedKinds.has(node.kind)) {
-      found.set(start, form.lexical.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, ""));
+    const collapsed = form?.lexical.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "");
+    if (
+      collapsed !== undefined &&
+      identifiedKinds.has(node.kind) &&
+      (collapsed !== "" || node.kind === "qti-assessment-stimulus-ref")
+    ) {
+      found.set(start, collapsed);
     }
 
     for (const child of node.children) {
@@ -856,13 +894,53 @@ const identifiersByWalk = (doc: XdmDocument<Composed>): ReadonlyMap<bigint, stri
   return found;
 };
 
+/**
+ * The identifiers of the `Named` rows of a test's sections: one test part holding a section of each
+ * identifier, in order.
+ *
+ * @param identifiers - The sections' identifiers, as written.
+ * @returns The test document's section rows' identifiers, in one list per document.
+ */
+const sectionsOf = (identifiers: readonly string[]): readonly (readonly string[])[] =>
+  rowsOfPackage([
+    [
+      "t.xml",
+      documentOf(
+        el(
+          "qti-assessment-test",
+          [["identifier", "T"]],
+          [
+            el(
+              "qti-test-part",
+              [
+                ["identifier", "P"],
+                ["navigation-mode", "linear"],
+                ["submission-mode", "individual"],
+              ],
+              identifiers.map((identifier) =>
+                el("qti-assessment-section", [
+                  ["identifier", identifier],
+                  ["visible", "true"],
+                ]),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  ]).map((rows) =>
+    [...rows.Named.values()]
+      .filter(({ kind }) => kind === "qti-assessment-section")
+      .map(({ identifier }) => identifier),
+  );
+
 describe("import/overlays/tests.ts, names", () => {
   it.effect(
-    "writes a Named or StimulusRef row exactly where its element writes an identifier, holding it collapsed",
+    "writes a Named or StimulusRef row exactly where its element writes an identifier that names something, holding it collapsed",
     (ctx) =>
       // Oracle: a second implementation, a direct pre-order walk of the XDM tree, with XML Schema
-      // Part 2 §4.3.6's collapse, and reading 147: an element that writes no identifier names
-      // nothing, so it has no row.
+      // Part 2 §4.3.6's collapse, reading 147: an element that writes no identifier names nothing,
+      // so it has no row, and reading 152: nor does a structure whose identifier is blank.
       // Bound: a test of a part, a section, an item ref and a section ref, and an item of two
       // stimulus refs, each identifier unwritten, bare, padded or whitespace alone, 4,096.
       searched(
@@ -902,6 +980,20 @@ describe("import/overlays/tests.ts, names", () => {
             }),
         ),
       ),
+  );
+
+  it.effect(
+    "writes no Named row for a structure whose identifier is no NCName, and one for each that is",
+    () =>
+      // Oracle: reading 152 and decision 457 (2), each case's rows written out by hand: a section
+      // whose collapsed identifier is no NCName names nothing, so it has no Named row and its value
+      // domain refuses it alone. Bound: a test part of two sections, each identifier one of 1x
+      // (a leading digit), x𝔸 (a character no NCName holds), S1 and a padded S2.
+      Effect.sync(() => {
+        assert.deepStrictEqual(sectionsOf(["1x", "1x"]), [[]]);
+        assert.deepStrictEqual(sectionsOf(["x𝔸", "S1"]), [["S1"]]);
+        assert.deepStrictEqual(sectionsOf(["S1", " S2\t"]), [["S1", "S2"]]);
+      }),
   );
 });
 

@@ -1248,7 +1248,7 @@ const packageRowsOf = (
   return {
     assembled,
     documents: inputs,
-    together: assembledExpressionRowsOf(inputs, assembled, resources),
+    together: assembledExpressionRowsOf(inputs, assembled, resources, new Set()),
   };
 };
 

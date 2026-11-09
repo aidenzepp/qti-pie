@@ -13,6 +13,9 @@
  * class some package can show, a law the host judges or a uuid field it holds to the mint, which
  * the replay's guard holds every entry to.
  *
+ * A class spec reading 1 lists as a stated limit waits on no fix: its entry's owner is the decision
+ * that states it, its fix what would lift it, and it stays while the limit stands.
+ *
  * The host's judge is a fast pre-filter (`#pantry/test/gen/genetic/host-laws.ts`, the owner's Q4
  * ruling): a class it reports becomes an entry only once its package reproduces it on PostgreSQL.
  */
@@ -58,7 +61,125 @@ export const knownEntries = (known: Known): PackageEntries =>
 /**
  * The known disagreements.
  */
-export const known: readonly Known[] = [];
+export const known: readonly Known[] = [
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2" xmlns:drd="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource identifier="v1" type="webcontent"/><resource identifier="r2" type="webcontent"><cpx:variant identifier="v0"><cpx:metadata><drd:accessForAllResource><cpx:variant identifier="v1"/></drd:accessForAllResource></cpx:metadata></cpx:variant></resource></resources></manifest>`,
+      ],
+    ],
+    fix: "a stated limit (spec reading 1): an element the grammar admits under its own parent binds its ID though an ancestor is a forbidden element whose subtree the law oracle drops, so its duplicate ID breaks DocumentId key beside the ancestor's N5 admitted, which no verdict follows; lifted by binding only an ID whose every ancestor the grammar admits",
+    owner: "decision 452",
+    signature: {
+      kind: "import-only-law",
+      law: {
+        kind: "key",
+        side: {
+          relation: "IdBinding",
+          selection: {
+            conjuncts: [
+              {
+                kind: "compare",
+                left: { field: "admitted", kind: "field" },
+                op: "eq",
+                right: { kind: "literal", type: undefined, value: true },
+              },
+            ],
+          },
+          terms: [
+            { field: "document", kind: "field" },
+            { field: "id", kind: "field" },
+          ],
+        },
+      },
+    },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourcemetadata/xml" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><resources><resource><metadata><lom xmlns="http://ltsc.ieee.org/xsd/LOM"/></metadata></resource></resources></manifest>`,
+      ],
+    ],
+    fix: "a stated limit (spec reading 1): a record file whose root is a cp:manifest has no LomResource, which is written for the package manifest's resources alone, while its resource-owned record is still read, so E1 derived breaks beside RootOfType, which refuses the file on both sides; lifted by reading no record a record file's cp:resource owns",
+    owner: "decision 449",
+    // MERGE-OPEN: his key, E1 derived's contained LomRecord(ownerParent, named) in LomResource(node,
+    // named), names LomResource and LomRecord.named, which 660a9d64 deleted, so no law of Qti states
+    // it; this signature is a placeholder until the replay shows what the package shows now.
+    signature: {
+      kind: "import-only-law",
+      law: { kind: "check", name: "E1_derived", relation: "LomRecord" },
+    },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourcemetadata/xml" href="r.xml"/></resources></manifest>`,
+      ],
+      [
+        "r.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><resources><resource><metadata><imsmd:lom><imsmd:educational><imsmd:learningResourceType><imsmd:value>exam</imsmd:value></imsmd:learningResourceType></imsmd:educational></imsmd:lom></metadata></resource></resources></manifest>`,
+      ],
+    ],
+    fix: "a stated limit (spec reading 1): a record file whose root is a cp:manifest still has its resource-owned record read, so its learning resource type is judged under LOM learning resource type where the law oracle reads no record of that file; RootOfType refuses the file on both sides; lifted by reading no record a record file's cp:resource owns",
+    owner: "decision 449",
+    signature: {
+      kind: "import-only-law",
+      law: {
+        from: {
+          relation: "LomResourceType",
+          selection: {
+            conjuncts: [
+              {
+                arg: { args: [{ field: "text", kind: "field" }], fn: "collapse", kind: "compute" },
+                kind: "in",
+                values: ["exam", "self assessment"],
+              },
+            ],
+          },
+          terms: [{ field: "node", kind: "field" }],
+        },
+        kind: "contained",
+        to: {
+          relation: "LomResourceTypeSource",
+          selection: {
+            conjuncts: [
+              {
+                arg: {
+                  arg: {
+                    args: [{ field: "text", kind: "field" }],
+                    fn: "collapse",
+                    kind: "compute",
+                  },
+                  kind: "in",
+                  values: ["", "LOMv1.0"],
+                },
+                kind: "not",
+              },
+            ],
+          },
+          terms: [{ field: "node", kind: "field" }],
+        },
+      },
+    },
+  },
+];
 
 /**
  * The disagreements a fix closed, each kept as a seed: the closed class's signature, the lane that
@@ -507,6 +628,106 @@ export const fixed: readonly Known[] = [
   {
     files: [
       [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>`,
+      ],
+      [
+        "rtest01/rtest01-fragment.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-hottext-interaction response-identifier="RESPONSE"/></div>`,
+      ],
+      [
+        "rtest01/rtest01-set01.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-item-body><p><xi:include href="rtest01-fragment.xml"/></p></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: "a site places its target only where it is a section ref or an include that may stand for the target's root (SiteTarget.places), so an include Include root refuses places no child instance and its fragment's interaction no PlacedBinding under the item",
+    owner: "genetic-repair gr-2",
+    signature: {
+      kind: "import-only-law",
+      law: {
+        from: {
+          relation: "PlacedBinding",
+          selection: { conjuncts: [] },
+          terms: [
+            { field: "instance", kind: "field" },
+            { field: "node", kind: "field" },
+            { field: "attribute", kind: "field" },
+            { field: "assembly", kind: "field" },
+            { field: "document", kind: "field" },
+            { field: "kind", kind: "field" },
+            { field: "identifier", kind: "field" },
+          ],
+        },
+        kind: "contained",
+        to: {
+          relation: "PlacedBindingDeclaration",
+          selection: { conjuncts: [] },
+          terms: [
+            { field: "instance", kind: "field" },
+            { field: "node", kind: "field" },
+            { field: "attribute", kind: "field" },
+            { field: "assembly", kind: "field" },
+            { field: "document", kind: "field" },
+            { field: "kind", kind: "field" },
+            { field: "identifier", kind: "field" },
+          ],
+        },
+      },
+    },
+  },
+  {
+    files: [
+      [
+        "choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><resources><resource><metadata><imsmd:lom><imsmd:educational><imsmd:learningResourceType><imsmd:value>exam</imsmd:value></imsmd:learningResourceType></imsmd:educational></imsmd:lom></metadata></resource></resources></manifest>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
+      ],
+    ],
+    fix: "the law oracle reads a learning resource type only in the records' documents, the manifest's and an external record file's, as the import's recordDocumentTypes does (170356bd's reading)",
+    owner: "genetic-repair-3 gr3-2",
+    signature: { kind: "oracle-only-law", law: "LOM learning resource type" },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="T" cardinality="single" base-type="float"/></qti-assessment-item>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="item.xml"><qti-template-default><qti-base-value base-type="float">1</qti-base-value></qti-template-default></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "an unwritten or unread template-identifier names nothing, so the law oracle leaves the template default to AL3, as the importer writes no row for it",
+    owner: "genetic-repair gr-6",
+    signature: { kind: "oracle-only-law", law: "Template default target" },
+  },
+  {
+    files: [
+      [
         "choice.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
@@ -672,6 +893,34 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource><dependency identifierref="1x"/></resource></resources></manifest>`,
+      ],
+    ],
+    fix: "spec reading 152 and decision 457 (2): a dependency's identifierref that is no NCName once collapsed names no resource, so it writes no Dependency row and its value domain refuses it alone, where the import wrote one that no DependencyTarget could follow",
+    owner: "genetic-repair-2 gr2-2",
+    signature: {
+      kind: "import-only-law",
+      law: {
+        from: {
+          relation: "Dependency",
+          selection: { conjuncts: [] },
+          terms: [{ field: "node", kind: "field" }],
+        },
+        kind: "contained",
+        to: {
+          relation: "DependencyTarget",
+          selection: { conjuncts: [] },
+          terms: [{ field: "node", kind: "field" }],
+        },
+      },
+    },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
 <manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
       ],
       [
@@ -791,6 +1040,41 @@ export const fixed: readonly Known[] = [
             { field: "package", kind: "field" },
             { field: "path", kind: "field" },
             { field: "node", kind: "field" },
+          ],
+        },
+      },
+    },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource><cpx:variant identifier="v1"/></resource><resource><cpx:variant identifier="v1"/></resource></resources></manifest>`,
+      ],
+    ],
+    fix: "an element the grammar does not admit where it stands binds no ID (DocumentId.admitted, IdBinding.admitted), so a forbidden cpx:variant is refused under N5 admitted alone and DocumentId key reads only an admitted element's IDs (R2)",
+    owner: "genetic-repair gr-4",
+    signature: {
+      kind: "import-only-law",
+      law: {
+        kind: "key",
+        side: {
+          relation: "IdBinding",
+          selection: {
+            conjuncts: [
+              {
+                kind: "compare",
+                left: { field: "admitted", kind: "field" },
+                op: "eq",
+                right: { kind: "literal", type: undefined, value: true },
+              },
+            ],
+          },
+          terms: [
+            { field: "document", kind: "field" },
+            { field: "id", kind: "field" },
           ],
         },
       },
@@ -1149,6 +1433,41 @@ export const fixed: readonly Known[] = [
   {
     files: [
       [
+        "choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item/>`,
+      ],
+      [
+        "es/choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item/>`,
+      ],
+      [
+        "images/sign.png",
+        "b64",
+        "iVBORw0KGgoAAAANSUhEUgAAAKoAAABjCAYAAAALkZv+AAAABGdBTUEAANkE3LLaAgAAD3RJREFUeJztnX9sE+cZx78Gu3ZQISRAViVtAw1FYVvOK6xboCud060rReMyBmIFp1XG5nSoLY62Ng1SqBQ0InercKZuSjJtbtUk0xo24YwWtJVahHUNqoKGURdLJSPRloiSNRFxwQ52ePfHnc939sX2nX/ga96PZMl37/O+73OvH7/v3XvP874AhUKhUCgUCoVCoVAoFAqFctvQJUosLi7unZqaelKv18/mSiHKwiUcDhsBFAOYjk3TJ8pICPnKwMAAHnjgAWO2lKNQIqxbty5QWFj4VZ/P97fYtISGCoAsXrwYd955Z5ZUo1CiLF68WL927drtmzZt+qfL5ZoUpy26XUpRKDLo9Hr93Uaj8asvvPDCUnECNVRKPqEDsOzWrVurr1+/XvHcc88Jt5zUUCl5g06ng06nMxBClt68ebP4ypUrK19++WU9QA2VkmfoOBYRQhYvWrTIMDo6Sg2Voh2ooVI0ATVUiiaghkrRBNRQKZqAGipFE1BDpWgCaqgUTUANlaIJqKFSNAE1VIomoIZK0QSaNdTghA++yaBmy88MfvgujiAftMx2e2XXUMM+NHCuW9DpdDh8bjpBeiN8kesMnketKJ/cp6BsPfr/HUBw5Jjk/K8u+qVVjPXDLErv9QUVlS9XRuzHXFOLxleOYSLZ7xQeQaMo3+sxusZysbM2oY463TKst76NQFzOIHrronJ1vSPRlBy0VzbIrqHqK/FDh0U4PFT9Es77pekNfDrbXodKE3/etAabmeTFmwyAqWInRt3NwrmVSwqkKpStQzX/ne3wYk+lSVH5AKAv3w5XOzuvnNfjhrNpF8p+fAzhRAXqK/ADB1+xpQNs1dJE0rj7K5uTK7nCKBNPFMJN0dG6u6Jtkov2ygbJYqbSZklhmeioCxuXrcBw4IhglAZJelStkjUAvAAsdrTvrgRmuUBYo5Fz+r7695OCdPkT+2BHG5wAzpwbw56KCiHN7z2DLgAAi+Y9VarKBwCDkTMqhm3G/q3lmJ2dhdEIXBv7EE1t3ZxQtxvDv92JKhPmZUkhw1W8LHnj65cUCt9tjnZsMAG8ljAaAcyO4eSHiPtz+C/2or47enzo0d/hKdKCcv44F+2VU4qKij56//33STp4O6wEgPRjcZDRmHS2fUiUa4a4WE6WdQ1LygtdHScBmXqGe2x8+XYyHBKVY+XKsbQOpFW+oGfHcFza1OlWvm6WDM6k2B6WDpJElMx4O/hyrSS21pkpOS0JISRAeqyIa/Pmk6MSqWy3lxruueee8I4dO87abLaX9u3b9+3du3evfvrpp01ADnrUCIytFTUfH4LTA8DThNW1hZg63oBko4W7fj/qPigDbgBYAnR3jWNg5j08HDNqVu5ogBVd6IYTR996Fp17KhC8+Ce+Z2Hw4r5NaZUfYcY3iHPnbwChEADg+if/hKvlEJ+6FEuyMvx1Y38tUBbRabwb/scHcfzFr8dJhkf+jL38Nfd5XTjPbEQbgLatnWggR4ReNVftlRMy2aOyHcOEhIaJXfQvZ5r7yGmXLWGPGv+xzNtrDbazQi8xKu5Z7G4SkkgqL192ZJB8WNIzdDXl9lDWo8Z/LJL2ihAibjvDX/NJQgghl/psQh67W9qrZrO91JCoR83d9NTsDUBfiaOBYTTzN+betl14tL4rYTaLYwABEkIgEEAgNIPBvh9hyTyyX3/yeXCPZk5sr3mC71mAnobH5h06lJQPABZ7D7xeL7xDp2EXHjAsGJg6jj0bViW8FgnLUhcFWJweDyAUCHB6XvXCvq4wXmziHbQ4vdx351aYzWas3RVtXyfrxIjohjYX7ZUpcj+PaqrEkaFLaLUkF40gNFrYgI21e7C+IIzpsfM4e3FSKrhqC17k/wVej4c7x7rw3coETzdKygewrLIKVVVVqNpQg1/0u8HV5sGW+tfj16FJxMws/OEwgsGg9OOfwNmzvrgHJIP4lmLpejzxrXIEg9PwnTuPSV74vdda4AUAhoXdbkd1dTXsdjtsbOQf5cRrx6NTVblor5yQiaF/iB9e2I6YoSo0StpFw0nqQ7/o1sExGFdfaLSPMCIZx+CUjFbKyxeuo11a5/jJ1ug1xF6jDMlvIUDAtJMpknjoj364oTc0fpJY+OOT47G1jpNWJiJvI17R00+22ksNt2/oD/vw5gE3AMD9m2PwibsJfTn2v9ojHLoPvCma8B/FB251VerLvowa4YjBpnVF8UIKyw+P9aM+ch0HbDg2Ep3ZL1lvRqS/cj+zEY3HRmRKiBQ0gj/8pnv+9BjGh86nKBnEW01bwfWJ92N1cWx6MdZXR7TsQktXtNxstFc2SLiaX1FR0UcnTpz44ubNKUw855rgNCb8BShdlXiYytvy5yWM6Uk/lq4qSmlKZnpiAgWlpci1lnFkoL3uvffeuQcffPCDlStXvj03Nzf02WeffWwyma688cYbwZxNT2UcUxFKs/nrZLv8edGjaJVMrzYPRaWlWdRFAVluL806pVAWFtRQKZqAGipFE1BDpWgCaqgUTUANNQFh/m1ROJzQyzTtPLnQK578iQ5IBe0YqhLv+BjZXp/05wiPibzczQelLyKCE+jvPIhasw6GggIUFBTAYDDAbK5Bw8Ffobe3F+fGYn5eNXm4jPN64seLKqtDfXSABsnEK9RMMuhgBM8juRd9SmQHHZb4154BqXfXfB/XcCC9PAJR/08ApPV03LtP1XVMDTqSv35NwYMrl+SFP2omUOIdn0xWiDwQ7aB1ruslOIUjC5odtfjy3Stx0/8/XPj7cTi7PYClHazIaUNNngjJPPHTqUNtdEC+oilDFZjJgqz/HNr49/mMrQfvdu6BxGmv4Xm8sPcwfvHZNhSlk0cgiL+88kzMuUPoPPUUjjwuMtW06gAAKxpffB6V4kudDmJpkQkNsvL5iTYNNQv4Pz4Hzhws6Ppl1Bimx8aAsnIU6YHSx1twNM08EVL1xE+nDo7UowPymc+/oc7noBy7F6EhcsIjieC87K7HxgOfgmEArFiBFfgUn2In/vxOC0pU5KkwAUAY77zm4ITtDuys2oAH+mxo29UFoA3O/gYc3V6uWq+KmLsMj1vqsWWpzWK4aJbQzlO/mFS84yO/7+VrMlMwYVy+4JWcMQgZGHxyVXTnFlwGsDXYtm0b1ng88Hi8WFO7DRUmdXkAKPLEV12HQIrRAXmONg01Be/41cyDnKy3Ca5TI5KHhmnfu/g9byhfKOV+NFPVY2hlAMCLXWvrccrHeaszP3GBHD+KI0da8VNHJLY/pDoPoMwTX20dYlKJDtA0+TY9pcQ7nswMEaskjSEWliUWRnyOJQOiuavQ6GnCxuRhrVbCWhhpHVaXMK2jNI8aT3w1eimJDsgXEk1PacdQQ5dIM5Os4UWGSggJXfWS9mYrYWLzMQxhbQ4yOCoztxkYJyc7Wok11ggYC7HaWknfwHB8HHvKecQx9zYSP7UaIH22aBmS8ByFeg27bMnbSkOGql0Pf1mUeccvdPImOoDn8+nhL4sy7/iFTt5EB6SANh+mKAsOaqgUTUANlaIJqKFSNAE1VIomWKCG6sf5sxeTeLeHMTk2gaAi2dTI5/0B8lW3rBvqWP/BqFd5Q2/MjxlEf6NZSBeWw1G79r+4ZF+vyJv9oGQVO/j/hZ9tYVCQ0APegJL6YwgokQWUr3ev8lqDvtcT1GFGTV0jes/GRAwo1E1VHVki64Za/tiTsPLf2xu2xkwum7C9tQvcm2oWdd/hl+hWu/a/iFBIlIEpQIF4xthggNyC7PEYoVciCyhf717ltZoqWTjmrccLT7cTe7esRUOvT1SpMt1U1ZElcjDhL+8oIWAwIOIqKZZUt/Z/BD/+1CJySvYewmun9uHI46UiCcDW3IwVABD4D952dsMLwGpvxj0FAPApBv/FecArkVWz3n3a+xzAivaOb/D1BHHlo3+grYvzYu3a+3M8u+NNfl8BpbqpqeM2kJF3/YGoc0j7kEz0kpDOkiHRe2d1a//zRQ73yLzXbibi9ZZD4iWVQ15eByvxhuKFlMimsz+AsmsV1SO3r8CQSyjL3ndJpW5q6lBPfqw4rRLG1gp7ZGT0NGF1bSemgQRr/wdx4uheLm+zG0PCVjVtcPaPCVJ68VgSjvTlftwQh2XyQkpkxbjr96OuoQ51dXWoa6iDocSKDxMEzyq/Vp7ZG3GnijZ8Hx2899/liWtp66amjkySk3f90euXqy7xz7Bmwy4c/fUuwLCeC3BzP4NvHlyBo+vkF+QOj50A54PM4PCz27Gh9EuwoQ1dAJxsJ+yiMA85lPi+J5f1oFuy8rsFdySQVnqtyYgNYkhHN3V1ZI4c9KjRe9DgdZnH808uIxIoIXs3q2jt/zDe7TzMf/eCLTPDbF6LqKS0V802ite7V7nPgTx+/Ocy900uvjEza/EnriOTZN9QTavxDX44a3rVhRG/aJ4oPI1Tf/w9f7AGKwvicovKSWHt/8l30dTGee6zNjvs9mpUV9tht9uEVaFjN1zINqrWu1e4z8FMUPoXD/on0H94Pw7x0S67LfenrZvaOjJFDob+pdj8lBXwdAPuJqxd1gTGYsEaAO7IBgcALO0/QIVIm9Asf8MgHlv0FWj56ygKd67GgbilusN4r+MV7oG29TSOt9RIUie+ezfKHj0EwIlX3mpA5x5RAHEoJNyeJJmjUCTradoCQ5N8GuMYxIUqLqZU+bVyRJYk8DRVQzdPPRbHaeyT2coyVd3SqSNnZM7DP0S87g5itVjinm4ZC0scPYPSJ07xflRMs2hnOT75kvip3k6GA9InfVtP/BNqQJJHOsMQ3cUOxOqKzysmqWzAS2xJPetFGzOouFZC5pvZEIXdWO2kZ+BSWrqpqiMNFpCHv0a4bfsDpMBt1G0BefhrhNu2P0AK5KlueT+PSqEA1FApGoEaKkUTUEOlaAJqqBRNQA2VogmooVI0ATVUiiaghkrRBNRQKZqAGipFE1BDpWgCaqgUTUANlaIJqKFSNAE1VIomoIZK0QQJPfxv3br1v4ceegjLly8P63Q6HZKErlAo6TA9Pb344Ycflo0RTmio165d+7bZbL6/oqLie3q9fr1Op1tOCDEtWrSIGiwl49xxxx1zRqPxulxaspipmxcuXPiotrZ2ZHJy8mtzc3P3EUKW63Q6GmtFyRpzc3OzsedS7hkbGxsLAoHAveFwuGRubi5XK7lQFi7BGzdu/DcShapoCH/kkUf09913XxEhJA/jFCmfN0KhUFiv108rDpc+c+ZMuKSkZOquu+6iQz8lJxQXF8/dbh0olJT5PxnH/s3Oh1sOAAAAAElFTkSuQmCC",
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2" identifier="MANIFEST-85D76736-6D19-9DC0-7C0B-57C31A9FD390"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="choice" type="imsqti_item_xmlv3p0"><file href="choice.xml"/><cpx:variant identifier="v1"/></resource><resource identifier="choice-twin" type="pls"><file href="images/sign.png"/><cpx:variant identifier="v1"/></resource><resource identifier="choice_es" type="imsqti_item_xmlv3p0"><file href="es/choice.xml"/></resource></resources></manifest>`,
+      ],
+    ],
+    fix: "an element the grammar does not admit where it stands binds no ID (DocumentId.admitted, IdBinding.admitted), so a forbidden cpx:variant is refused under N5 admitted alone and DocumentId key reads only an admitted element's IDs (R2)",
+    owner: "genetic-repair gr-4",
+    signature: {
+      importRule: "document-key",
+      kind: "lone-refusal",
+      law: "N5 admitted",
+      witness: "unreported",
+    },
+  },
+  {
+    files: [
+      [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
@@ -1324,6 +1643,38 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section identifier="1x"/><qti-assessment-section identifier="1x"/></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "spec reading 152 and decision 457 (2): a test part's, section's, section ref's or item ref's identifier that is no NCName once collapsed names nothing, so it writes no Named row and its value domain refuses it alone, where the import wrote one for each and two such identifiers collided in Named's key",
+    owner: "genetic-repair-2 gr2-3",
+    signature: {
+      kind: "import-only-law",
+      law: {
+        kind: "key",
+        side: {
+          relation: "Named",
+          selection: { conjuncts: [] },
+          terms: [
+            { field: "document", kind: "field" },
+            { field: "identifier", kind: "field" },
+          ],
+        },
+      },
+    },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
 <manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
       ],
       [
@@ -1432,6 +1783,38 @@ export const fixed: readonly Known[] = [
           terms: [
             { field: "node", kind: "field" },
             { field: "attribute", kind: "field" },
+          ],
+        },
+      },
+    },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section identifier="1x"/><qti-assessment-section identifier="1x"/></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "spec reading 152 and decision 457 (2): a test part's, section's, section ref's or item ref's identifier that is no NCName once collapsed names nothing, so it writes no Named row and hence no AssembledName, and its value domain refuses it alone, where the import assembled one for each and two such identifiers collided in AssembledName's key",
+    owner: "genetic-repair-2 gr2-3",
+    signature: {
+      kind: "import-only-law",
+      law: {
+        kind: "key",
+        side: {
+          relation: "AssembledName",
+          selection: { conjuncts: [] },
+          terms: [
+            { field: "assembly", kind: "field" },
+            { field: "identifier", kind: "field" },
           ],
         },
       },
@@ -1778,6 +2161,76 @@ export const fixed: readonly Known[] = [
         "imsmanifest.xml",
         "xml",
         `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="bogus" href="item.xml"/><resource type="webcontent" href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section><qti-assessment-item-ref href="item.xml"/></qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "decision 454: where a resource of an unread type names an item ref's path and none of the item type or an LTI type does, the importer writes no ItemRefTarget of the other read type beside it, as the law oracle names none (main's m0 class)",
+    owner: "genetic-repair gr-5b",
+    signature: {
+      kind: "import-only-law",
+      law: { kind: "check", name: "Item_ref_target", relation: "ItemRefTarget" },
+    },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourceextmetadata/xml " href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section><qti-assessment-item-ref href="item.xml"/></qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: 'decision 454: an item ref whose path only a resource of an unread type names has an ItemRefHref with no ItemRefTarget, contained in UnreadTypePath, so "Item ref target" asks it for no target, as the law oracle names none; the package is R-O6, and its type="bogus" twin and m0 (type="imsqti_item_xmlv2p2", unread) showed the same class',
+    owner: "genetic-repair gr-5b",
+    signature: {
+      kind: "import-only-law",
+      law: {
+        from: {
+          relation: "Attribute",
+          selection: {
+            conjuncts: [
+              {
+                kind: "compare",
+                left: { field: "name", kind: "field" },
+                op: "eq",
+                right: { kind: "literal", type: undefined, value: "href" },
+              },
+              {
+                arg: { field: "kind", kind: "field" },
+                kind: "in",
+                values: ["qti-assessment-item-ref"],
+              },
+            ],
+          },
+          terms: [{ field: "node", kind: "field" }],
+        },
+        kind: "contained",
+        to: {
+          relation: "ItemRefHref",
+          selection: { conjuncts: [] },
+          terms: [{ field: "node", kind: "field" }],
+        },
+      },
+    },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
 <manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1">
   <metadata>
     <schema>QTI Package</schema>
@@ -2060,5 +2513,30 @@ export const fixed: readonly Known[] = [
     fix: "an include splices its target only where it may stand for the target's root (Inclusion.splices, IncludeRoot through Compute.singleton), so an item that includes itself in its body still heads its assembly, and its rule fragment's set-outcome-value is judged there",
     owner: "ASM",
     signature: { kind: "oracle-only-law", law: "Variable declared" },
+  },
+  {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="T" cardinality="single" base-type="float"/></qti-assessment-item>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="item.xml"><qti-variable-mapping target-identifier="X"/></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "an unwritten or unread source-identifier names nothing, so the law oracle leaves the variable mapping to AL3, as the importer writes no row for it",
+    owner: "genetic-repair gr-6",
+    signature: { kind: "oracle-only-law", law: "Variable mapping source" },
   },
 ];

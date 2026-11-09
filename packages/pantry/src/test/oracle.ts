@@ -3802,6 +3802,14 @@ const toleranceSignOf = (value: string): "not positive" | "positive" | "string" 
 const lomForbidden: ReadonlySet<string> = new Set(["exam", "self assessment"]);
 
 /**
+ * The types of the documents a package's records are read from, as {@link documentTypeOf} types
+ * them: the package's own manifest (`none`) and an external record file, whose root is a `lom:lom`
+ * (`resourcemetadata/xml`, reading 81). A `cp:metadata` of any other document describes no part of
+ * the package, so its `lom:*` elements are no record's (ruling `170356bd`).
+ */
+const recordTypes: ReadonlySet<string> = new Set(["none", "resourcemetadata/xml"]);
+
+/**
  * The kinds of an item whose `label` is text for a reader and asks for no tool (spec reading 128):
  * the information model describes `ItemFileInfo`'s, the type of `qti-calculator-info` and
  * `qti-digital-material`, as "A human readable label/short description for the file" (§5.80.2),
@@ -3901,12 +3909,13 @@ const overlayLaws: readonly ((
             : [{ keys: { baseType, text }, law: "Usage typed value" }];
         })
       : [],
-  (node, { view }) => {
+  (node, { laws, view }) => {
     // Reading 122: "the LOM-defined values self assessment and exam are forbidden" (QTI 3.0
     // Metadata §2.7.5.1), of a term of the LOM vocabulary: its source LOMv1.0, or empty, which
     // the loose binding's default="LOMv1.0" fills, or not written; both compared collapsed. The
     // first value and the first source stand for the type, as the binding caps each at one (N7).
-    if (node.kind !== "lom:learningResourceType") {
+    // It reads a type only in a record's document (`recordTypes`, ruling `170356bd`).
+    if (node.kind !== "lom:learningResourceType" || !recordTypes.has(documentTypeOf(view, laws))) {
       return [];
     }
 
@@ -4895,6 +4904,22 @@ const entryPathAt = ({ resolution }: ResolvedHref): Option.Option<string> =>
   resolution.scope === "entry" ? Option.some(resolution.path) : Option.none();
 
 /**
+ * The "Key text bound" keys of an href that resolves to an entry path past `keyText`'s bound: the
+ * import writes each resolved in-package path into a `keyText` field (reading 133, "every text the
+ * schema copies into a keyText field counts against it"), so an href within the bound that
+ * resolves past it, through its document's folder or an `xml:base`, is refused under
+ * `key-text-bound` all the same.
+ *
+ * @param resolution - The href's resolution.
+ * @param held - The field the import writes the path into, as `Relation.field`.
+ * @returns The keys, none for a path within the bound or one outside the package.
+ */
+const pathBoundKeys = (resolution: ResolvedHref["resolution"], held: string): readonly Keys[] =>
+  resolution.scope === "entry" && utf8Length(resolution.path) > keyTextBytes
+    ? [{ bound: String(keyTextBytes), bytes: String(utf8Length(resolution.path)), field: held }]
+    : [];
+
+/**
  * List a manifest's resources.
  *
  * @param manifest - The manifest's view.
@@ -5119,7 +5144,8 @@ const oneCandidate = (lexical: string): boolean => {
  * `xml:base` values in scope ({@link resolvedAt}); one the representation reads no name from, and a
  * `srcset` of more than one candidate or with a descriptor, breaks "Href form"; and each that
  * resolves in the package names an entry ("File exists", IMS Content Packaging 1.2,
- * InterchangePackage (d)), a stimulus ref's a stimulus.
+ * InterchangePackage (d)), a stimulus ref's a stimulus, and an entry path within `keyText`'s bound,
+ * the `ReferencePath` or `TextReferencePath` the import writes it into ({@link pathBoundKeys}).
  *
  * @param documents - The documents the manifest lists, read.
  * @param entries - The package's entry paths.
@@ -5151,6 +5177,7 @@ const referenceBreaches = (
           const lexical = stringValueOf(view, member);
 
           return {
+            field: "TextReferencePath.path",
             form: "uri" as const,
             lexical,
             member,
@@ -5167,6 +5194,7 @@ const referenceBreaches = (
             version: member.version,
           }),
         ).map(({ form }) => ({
+          field: "ReferencePath.path",
           form,
           lexical,
           member,
@@ -5196,6 +5224,11 @@ const referenceBreaches = (
         resolution.scope !== "entry" || entries.has(resolution.path)
           ? []
           : [breach("File exists", { from: pathOf(view, member.id), path: resolution.path })],
+      ),
+      ...resolved.flatMap(({ field: held, member, resolution }) =>
+        pathBoundKeys(resolution, held).map((keys) =>
+          breach("Key text bound", { ...keys, node: pathOf(view, member.id) }),
+        ),
       ),
       ...resolved.flatMap(({ member, resolution }) =>
         member.kind !== "qti-assessment-stimulus-ref" ||
@@ -5875,7 +5908,9 @@ const documentLangBreaches = (
  * Evaluate the laws of §1.6 and O6 over a package: the stated limit `href-form` first, then
  * `root-type-reverse`, `file-listed`, `href-listed`, `entry-kind`, `file-exists`,
  * `manifest-id-space`, `self-dependency` and `lom-identifier`, and reading 85's `inclusion-cycle`
- * ({@link inclusionCycles}), then R26's `document-lang` ({@link documentLangBreaches}).
+ * ({@link inclusionCycles}), then R26's `document-lang` ({@link documentLangBreaches}); and
+ * `key-text-bound` for a resource's or a file's href that resolves to an entry path past the bound,
+ * the `ResourceHref` or `File` the import writes it into ({@link pathBoundKeys}).
  *
  * @param input - The package.
  * @param input.files - Its entries.
@@ -6004,6 +6039,18 @@ const packageBreaches = (
         .filter((path) => !entryPaths.has(path))
         .map((path) => breach("File exists", { from: pathOf(manifest, member.id), path })),
     ),
+    ...resources.flatMap(({ node, resolved }) =>
+      Option.toArray(resolved).flatMap(({ resolution }) =>
+        pathBoundKeys(resolution, "ResourceHref.path").map((keys) =>
+          breach("Key text bound", { ...keys, node: pathOf(manifest, node.id) }),
+        ),
+      ),
+    ),
+    ...fileNodes.flatMap(({ member, resolved }) =>
+      pathBoundKeys(resolved.resolution, "File.path").map((keys) =>
+        breach("Key text bound", { ...keys, node: pathOf(manifest, member.id) }),
+      ),
+    ),
     ...inclusionCycles(input.documents, grammar).map((chain) =>
       breach("Inclusion cycle", { chain: spaced(chain), path: chain[0] ?? "" }),
     ),
@@ -6016,11 +6063,16 @@ const packageBreaches = (
           node: pathOf(manifest, resource.node.id),
         }),
       ),
+    // A dependency's `identifierref` (`xs:IDREF`) and its resource's `identifier` (`xs:ID`) are
+    // whiteSpace collapse types, so they compare collapsed: `identifierref=" W"` names `W`
+    // (decision 457 (3); IMS Content Packaging 1.2 §6.11.5 B ii).
     ...manifest.members.flatMap((member) => {
       const resource = manifest.byId.get(member.parent);
-      const ref = valueOf(manifest, member.id, "identifierref");
+      const ref = collapsedValueOf(manifest, member.id, "identifierref");
       const own =
-        resource === undefined ? Option.none() : valueOf(manifest, resource.id, "identifier");
+        resource === undefined
+          ? Option.none()
+          : collapsedValueOf(manifest, resource.id, "identifier");
 
       return member.kind === "cp:dependency" &&
         Option.isSome(ref) &&
@@ -6543,6 +6595,49 @@ const assembliesOf = (
 };
 
 /**
+ * Judge the own attributes of each include a splicing document replaces by its target's root
+ * ({@link splicedTarget}), by the attribute laws of any element ({@link attributeBreaches}), over
+ * the document's unspliced view. The merged tree holds the target's root in the include's place, so
+ * the include's attributes are judged nowhere else, while the import keeps them as rows (reading 85
+ * binds `parse` to `xml`; reading 117 places the target and says nothing of the include's own
+ * attributes). An include of its own document is never replaced, the chain always holding the
+ * document, so it stands in the merged tree and is judged there. A placed fragment's include of a
+ * document further up its chain is not replaced either, so its breaches are listed twice, in place
+ * and here: the same laws, in a package "Inclusion cycle" refuses.
+ *
+ * @param sites - Every site of the package.
+ * @param grammar - The composed grammar.
+ * @param laws - The law tables.
+ * @param assembled - Each document's assembly's ids beyond its own, by path.
+ * @returns The breaches, document by document in site order, each at the include's path in its
+ *   own document.
+ */
+const splicedIncludeBreaches = (
+  sites: readonly SiteOf[],
+  grammar: ComposedGrammar,
+  laws: Laws,
+  assembled: (path: string) => ReadonlySet<string>,
+): readonly Breach[] => {
+  const replaced = Arr.groupBy(
+    sites.filter(
+      (site) =>
+        site.document.path !== Option.getOrUndefined(site.path) &&
+        Option.isSome(splicedTarget(grammar, site)),
+    ),
+    (site) => site.document.path,
+  );
+
+  return Object.values(replaced).flatMap((held) => {
+    const [{ view }] = held;
+    const includes = new Set(held.map(({ node }) => pathOf(view, node.id)));
+
+    return attributeBreaches(view, laws, assembled(view.path)).filter((breach) =>
+      includes.has(breach.keys["node"] ?? ""),
+    );
+  });
+};
+
+/**
  * Judge every listed document's own laws in place (reading 117): a document an include splices into
  * another is judged inside each document that splices it, and not alone; every other document is
  * judged with its includes spliced, as XInclude's result infoset reads it, so its included
@@ -6620,6 +6715,12 @@ const inPlaceBreaches = (
           }),
         ],
       }),
+    ),
+    ...splicedIncludeBreaches(
+      sites,
+      grammar,
+      laws,
+      (path) => assemblies.get(path)?.ids ?? new Set(),
     ),
     ...dedupedBreaches([...assemblies.values()].flatMap(({ breaches }) => breaches)),
   ];

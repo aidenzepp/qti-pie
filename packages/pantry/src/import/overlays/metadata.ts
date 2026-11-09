@@ -684,6 +684,14 @@ const usageValueBaseTypeRowsOf = (
 const recordTypes: ReadonlySet<string> = new Set(recordDocumentTypes);
 
 /**
+ * The manifest's type, the one document whose `cp:resource`s are the package's resources: a
+ * {@link LomResource} is the node of a `Resource`, which the manifest alone writes
+ * (`#pantry/import/overlays/package.ts`'s `noPackageRows`), so a `cp:resource` of a record file
+ * whose root is a `cp:manifest` names no resource of the package.
+ */
+const manifestType = "none" satisfies (typeof ResourceType.handles)[number];
+
+/**
  * The metadata rows of a document that holds no package record: every relation of the records
  * empty.
  */
