@@ -41,7 +41,12 @@ import type {
   XsdOracle,
 } from "#pantry/test/xsd-catalog.ts";
 import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
-import { asiNamespace, xlinkNamespace, xmlNamespace } from "#pantry/vocab/namespaces.ts";
+import {
+  asiNamespace,
+  xlinkNamespace,
+  xmlNamespace,
+  xsiNamespace,
+} from "#pantry/vocab/namespaces.ts";
 import { foreignRoots } from "#pantry/vocab/open.ts";
 import { xmllintValidate } from "#pantry/xml/oracle.ts";
 import type { XsdVerdict } from "#pantry/xml/oracle.ts";
@@ -137,6 +142,64 @@ export const laxNilRecord: Recorded = {
     why: "libxml2 never assesses the value of xsi:nil on a foreign element against its built-in declaration",
   },
   rule: "attribute-lexical",
+};
+
+/**
+ * The codec's refusal of an `xsi:nil` its element does not admit, the attribute and its element
+ * captured as written.
+ */
+const unadmittedNil =
+  /^codec at \S*: The attribute (?<attribute>[^\s:]+:nil) in (?<element>\S+) is declared by xml\.xsd or XML Schema, so it is read only under its own name, which its element does not admit/u;
+
+/**
+ * `xsi:nil` that is no `xs:boolean` on an element no declaration makes nillable: libxml2 2.9.13
+ * reports the value and never cvc-elt clause 3.1 (XML Schema Part 1, 3.3.4: an element whose
+ * declaration is not nillable carries no `xsi:nil` at all), since it tests nillability only once
+ * the value is a valid `xs:boolean` (`xmlschemas.c:25264-25287` in v2.9.13). With a boolean value
+ * it says "The element is not 'nillable'.", which the catalog classes `attribute-allowed`, so the
+ * two oracles agree. The law oracle's refusal is the codec's, which names the attribute and not
+ * its value, so the detail cannot tell the two apart: a generated document's difference matches
+ * only where the document holds such an `xsi:nil` that is no `xs:boolean` ({@link holdsNilValue}).
+ */
+export const nilValueRecord: Recorded = {
+  class: "attribute-allowed",
+  detail: unadmittedNil,
+  direction: "oracle-only",
+  reason: {
+    _tag: "libxml2",
+    why: "libxml2 tests an element's nillability only when its xsi:nil is a valid xs:boolean, so an xsi:nil that is none on a non-nillable element is refused for its value alone (xmlschemas.c:25264-25287 in v2.9.13)",
+  },
+  rule: "unmodeled-vocabulary",
+};
+
+/**
+ * An `xs:boolean`'s lexical space, its whitespace collapsed (XML Schema Part 2, 3.2.2).
+ */
+const booleanLexical = /^[\t\n\r ]*(?:true|false|1|0)[\t\n\r ]*$/u;
+
+/**
+ * Decide whether a document holds the `xsi:nil` a {@link nilValueRecord} difference names, with a
+ * value that is no `xs:boolean`.
+ *
+ * @param difference - The difference.
+ * @param root - The document's root.
+ * @returns Whether an element of the name the codec wrote carries an `xsi:nil` of the name it
+ *   wrote, whose value is no `xs:boolean`.
+ */
+const holdsNilValue = (difference: Difference, root: Element): boolean => {
+  const groups = unadmittedNil.exec(difference.detail)?.groups;
+  const holds = (element: Element): boolean =>
+    (element.qname === groups?.["element"] &&
+      element.attributes.some(
+        ({ local, namespace, qname, value }) =>
+          namespace === xsiNamespace &&
+          local === "nil" &&
+          qname === groups["attribute"] &&
+          !booleanLexical.test(value),
+      )) ||
+    element.children.some((child) => child.kind === "element" && holds(child));
+
+  return groups !== undefined && holds(root);
 };
 
 /**
@@ -282,6 +345,7 @@ export const libxml2Records: readonly Recorded[] = [
   idrefRecord,
   locationRecord,
   laxNilRecord,
+  nilValueRecord,
   emptyIdrefsRecord,
   blankListRecord,
   base64Record,
@@ -1243,6 +1307,17 @@ export const generatedRecorded: readonly Recorded[] = [
     rule: "binding-declared",
   },
   {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 92,
+      says: "Each response variable declared may be bound to one and only one interaction",
+      why: "each response variable is bound to one interaction only (information model §2.2.2.2), so two interactions of an item that name one response are refused; the XSD resolves no binding",
+    },
+    rule: "binding-unique",
+  },
+  {
     class: "attribute-value",
     detail:
       /^value domain at \S+: (?:src|poster|srcset): "(?: |\\[nrt])*" is outside URLDType \(reading [^)]*\b12[45]\b/u,
@@ -2093,7 +2168,8 @@ export interface GeneratedContext {
  * Find the record a generated or bred document's difference matches: reading 114's fragment root,
  * reading 6's nested roots on `xmllint`'s side and on the law oracle's, reading 61's ordering slot,
  * reading 81's schema set by the rows or by an edit the codec refused, reading 60's lax
- * `xsi:type`, and then the corpus's, libxml2's and the generated records.
+ * `xsi:type`, and then the corpus's, libxml2's and the generated records, libxml2's unchecked
+ * nillability only where the document holds an `xsi:nil` that is no `xs:boolean`.
  *
  * @param difference - The difference.
  * @param context - What the classes read of the document.
@@ -2131,13 +2207,17 @@ export const generatedRecordOf = (
     return outsideSet;
   }
 
-  return isLaxXsiType(difference, new Set([...names.lax, ...names.outside]))
-    ? laxXsiType
-    : recordOf(context.document, context.version, difference, [
-        ...recorded,
-        ...libxml2Records,
-        ...generatedRecorded,
-      ]);
+  if (isLaxXsiType(difference, new Set([...names.lax, ...names.outside]))) {
+    return laxXsiType;
+  }
+
+  const record = recordOf(context.document, context.version, difference, [
+    ...recorded,
+    ...libxml2Records,
+    ...generatedRecorded,
+  ]);
+
+  return record === nilValueRecord && !holdsNilValue(difference, root) ? undefined : record;
 };
 
 /**

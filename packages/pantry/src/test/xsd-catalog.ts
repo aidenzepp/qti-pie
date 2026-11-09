@@ -438,6 +438,7 @@ const structuralClasses: readonly (readonly [RegExp, boolean | undefined, Refusa
   [/No matching global declaration available for the validation root/u, undefined, "vocabulary"],
   [/^The attribute '[^']+' is required but missing\./u, undefined, "attribute-required"],
   [/^The attribute '[^']+' is not allowed\./u, undefined, "attribute-allowed"],
+  [/^The element is not 'nillable'\./u, undefined, "attribute-allowed"],
   [/demanded by the strict wildcard/u, true, "attribute-allowed"],
   [/^This element is not expected\./u, undefined, "content"],
   [/^Missing child element\(s\)\./u, undefined, "content"],

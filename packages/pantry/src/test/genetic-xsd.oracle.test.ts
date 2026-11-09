@@ -448,10 +448,24 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * as it does a blank `xs:NMTOKENS` or `xs:IDREFS` element (`blankListRecord`), whose pattern named
  * those two types alone.
  *
- * The last is the genetic repair's R-X1: an interaction in a modal feedback's content body, which
+ * The next is the genetic repair's R-X1: an interaction in a modal feedback's content body, which
  * the law oracle refuses under N6 (§5.93: the content of a modal feedback contains no interaction)
  * and xmllint accepts, as the XSD does not state the ban; its `specification` record sits beside
  * the template block's.
+ *
+ * The next two are the genetic repair's R-X2b and R-X2: `xsi:nil` on a division, an element no
+ * declaration makes nillable. With `xsi:nil="false"` libxml2 says "The element is not
+ * 'nillable'." (cvc-elt.3.1), which agrees with the law oracle's `attribute-allowed` once the
+ * catalog classes it so. With `xsi:nil=""` libxml2 reports only the value, which is no
+ * `xs:boolean`, and never cvc-elt.3.1, while the law oracle refuses the value and the attribute's
+ * presence both; its `libxml2` record is `nilValueRecord`.
+ *
+ * The last two are the genetic repair's R-X3b and R-X3: two interactions of an item that bind one
+ * response variable, two text entry interactions in one paragraph and a text entry interaction
+ * beside a custom interaction. The law oracle refuses the second binding under Binding unique
+ * (reading 92, §2.2.2.2: a response variable is bound to one interaction only), which reading 172
+ * widened to every interaction kind, and xmllint accepts both, as the XSD resolves no binding;
+ * their `beyond` record sits beside reading 75's.
  */
 const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
   {
@@ -529,6 +543,22 @@ const keptDocuments: readonly { readonly name: string; readonly text: string }[]
   {
     name: "an interaction in a modal feedback's division",
     text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-modal-feedback outcome-identifier="FEEDBACK" identifier="f" show-hide="show"><qti-content-body><div><qti-text-entry-interaction response-identifier="R"/></div></qti-content-body></qti-modal-feedback></qti-assessment-item>',
+  },
+  {
+    name: "a false xsi:nil on a stimulus body's division, which no declaration makes nillable",
+    text: '<qti-assessment-stimulus xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="s" title="t"><qti-stimulus-body><div xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="false"/></qti-stimulus-body></qti-assessment-stimulus>',
+  },
+  {
+    name: "an empty xsi:nil on a stimulus body's division, which no declaration makes nillable",
+    text: '<qti-assessment-stimulus xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="s" title="t"><qti-stimulus-body><div xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil=""/></qti-stimulus-body></qti-assessment-stimulus>',
+  },
+  {
+    name: "two text entry interactions bound to one response variable",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="a1" cardinality="single" base-type="string"/><qti-item-body><p><qti-text-entry-interaction response-identifier="a1"/><qti-text-entry-interaction response-identifier="a1"/></p></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "a text entry interaction and a custom interaction bound to one response variable",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="a1" cardinality="single" base-type="string"/><qti-item-body><p><qti-text-entry-interaction response-identifier="a1"/></p><qti-custom-interaction response-identifier="a1"/></qti-item-body></qti-assessment-item>',
   },
 ];
 
