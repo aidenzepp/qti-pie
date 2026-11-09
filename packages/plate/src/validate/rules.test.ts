@@ -6461,3 +6461,78 @@ describe("align-54 body content: a name that is no NCName gets its value refusal
     );
   });
 });
+
+/**
+ * The path of the `span` {@link spoken} writes.
+ */
+const spokenSpan = "qti-assessment-item/qti-item-body/p/span";
+
+/**
+ * Construct an item whose paragraph holds a `span` with the given `data-ssml`.
+ *
+ * @param value The `span`'s `data-ssml`, as the XML reader gives it.
+ * @returns The item.
+ */
+const spoken = (value: string): SourceDocument =>
+  item(
+    [],
+    [
+      el(
+        "p",
+        [],
+        [text("Our word is "), el("span", [attr("data-ssml", value)], [text("mRNA")]), text(".")],
+      ),
+    ],
+  );
+
+/**
+ * Construct the `data-ssml` refusal of {@link spoken}'s `span` (the operator's P3).
+ *
+ * @param problem The problem its decoding names.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const badSsml = (problem: string): Judged => ({
+  detail: { attribute: "data-ssml", check: "data-ssml", element: "span", problem },
+  path: `${spokenSpan}/@data-ssml`,
+  rule: "attribute-type",
+});
+
+describe("align-54 Data-SSML: a data-ssml value is Data-SSML JSON (the operator's P3)", () => {
+  it('align-54 Data-SSML P3: refuses data-ssml="hello", which is not JSON, as attribute-type data-ssml with problem json at the attribute', () => {
+    assert.deepStrictEqual(judged(spoken("hello")), [badSsml("json")]);
+  });
+
+  it("align-54 Data-SSML P3: refuses an unknown property, a value of the wrong type and a value outside its list, each as attribute-type data-ssml with its problem", () => {
+    assert.deepStrictEqual(
+      [
+        '{"speak":{"alias":"messenger RNA"}}',
+        '{"sub":{"alias":3}}',
+        '{"say-as":{"interpret-as":"spell-out"}}',
+      ].map((value) => judged(spoken(value))),
+      [[badSsml("name")], [badSsml("type")], [badSsml("value")]],
+    );
+  });
+
+  it("align-54 Data-SSML P3: accepts a data-ssml that is Data-SSML JSON, keeping the span's data-ssml mark", () => {
+    const source = spoken('{"sub":{"alias":"messenger RNA"}}');
+    const verdict = check(source, tables, Option.none());
+
+    assert.deepStrictEqual(judged(source), []);
+    assert.deepStrictEqual(
+      verdict.verdict === "accepted-with-unsupported" && verdict.kind === "item"
+        ? verdict.accepted.unsupported
+        : verdict.verdict,
+      [{ feature: "data-ssml", path: spokenSpan, shown: "mark" }],
+    );
+  });
+
+  it("align-54 Data-SSML P3: does not judge a data-ssml an attribute wildcard admits on a kind that does not declare it (rule 5b8ee08b)", () => {
+    const listed = item(
+      [],
+      [el("ul", [], [el("li", [attr("data-ssml", "hello")], [text("mRNA")])])],
+    );
+
+    assert.deepStrictEqual(judged(listed), []);
+    assert.deepStrictEqual(verdictRefusals(listed), []);
+  });
+});
