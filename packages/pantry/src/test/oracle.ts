@@ -11,9 +11,9 @@
  *
  * A package is judged as the importer will read it: its entries once, the manifest's schema
  * version, then each document through shred, the codec, which refuses `unmodeled-vocabulary`,
- * `attribute-admission` (an attribute its kind admits under no name) and `not-qti3`, and then
- * through the importer's one other check before any row exists, a closed `data-ssml` value
- * Data-SSML does not admit (`attribute-lexical`), and nothing else ({@link CodecRefusal}). The
+ * `attribute-admission` (an attribute its kind admits under no name) and `not-qti3`, and nothing
+ * else ({@link CodecRefusal}): a closed `data-ssml` value Data-SSML does not admit is the law
+ * "Data SSML"'s, over the document's rows (spec reading 177). The
  * documents that shred are folded. A fold that meets a child or an attribute with no cell has no
  * rows, and its refusal is the one breach of its document; every law is evaluated over the rows of
  * the documents that fold, each breach reported with the law, the rule the law keeps from the guard
@@ -136,7 +136,7 @@ import {
   lomNamedTypes,
   objectRoots,
 } from "#pantry/test/oracle-laws.ts";
-import { dataSsmlBreachIn } from "#pantry/test/oracle-laws/data-ssml.ts";
+import { dataSsmlBreachOf } from "#pantry/test/oracle-laws/data-ssml.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { mathmlNamespace, namespaceNameOf, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import { oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
@@ -314,14 +314,11 @@ export type Breach = LawBreach<LawName>;
 /**
  * The rules the codec and the reader refuse a package under, before any row exists: an attribute
  * shred reads under no name or open class its kind admits is `attribute-admission`, the rule of
- * AL1, and every other name shred cannot represent is `unmodeled-vocabulary`. A closed `data-ssml`
- * value Data-SSML does not admit is `attribute-lexical`, which the importer checks and the database
- * does not (spec reading R7-a).
+ * AL1, and every other name shred cannot represent is `unmodeled-vocabulary`.
  */
 export type CodecRule = Extract<
   OracleRule,
   | "attribute-admission"
-  | "attribute-lexical"
   | "href-path"
   | "manifest-root"
   | "not-qti3"
@@ -4622,6 +4619,15 @@ const overlayBreaches = (
     ),
     ...assembledCatalogs,
   ]);
+  // Reading 177: a closed `data-ssml` holds one JSON object Data-SSML 1.0 admits, which the database
+  // judges over the rows the importer reads the value into ("Data SSML").
+  const ssmlValues = view.members.flatMap((node) =>
+    (view.attributesOf.get(node.id) ?? [])
+      .filter((attribute) => attribute.name === "data-ssml")
+      .flatMap((attribute) =>
+        Option.toArray(dataSsmlBreachOf(attribute.lexical)).map((path) => ({ node, path })),
+      ),
+  );
   const catalogRefs = view.members.flatMap((node) =>
     (view.attributesOf.get(node.id) ?? [])
       .filter(
@@ -4720,6 +4726,7 @@ const overlayBreaches = (
     ...catalogRefs.map(({ node, token }) =>
       at(node.id, { keys: { token }, law: "Catalog reference" }),
     ),
+    ...ssmlValues.map(({ node, path }) => at(node.id, { keys: { path }, law: "Data SSML" })),
     ...[...bindings].flatMap(([identifier, held]) =>
       held.slice(1).map(({ node }) =>
         at(node.id, {
@@ -6621,9 +6628,8 @@ const inPlaceBreaches = (
  * Judge a package as the importer will read it, and every law over its rows.
  *
  * The manifest is read and its schema version decoded, then the manifest and each document it
- * lists are read and shredded in manifest order: the first refusal of the reader, the codec or the
- * importer's `data-ssml` check (documents only, never the manifest) is the judgment, since no row
- * of the package is written. Otherwise every document is folded, and
+ * lists are read and shredded in manifest order: the first refusal of the reader or the codec is
+ * the judgment, since no row of the package is written. Otherwise every document is folded, and
  * the judgment is every breach: the package laws first, as the package's own rows are written
  * first, then each document's in manifest order. A document whose fold meets a missing cell has no
  * rows, so its breaches are that refusal alone; a manifest that does not fold lists nothing, and
@@ -6692,16 +6698,6 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
 
         const xml = yield* readDocument(path, file.bytes);
         const tree = yield* shredDocument(path, xml, version, shredGrammar);
-        const breach = dataSsmlBreachIn(tree);
-        if (Option.isSome(breach)) {
-          return yield* Effect.fail<CodecRefusal>({
-            _tag: "CodecRefusal",
-            detail: `${path} at ${breach.value}: Data-SSML 1.0 does not admit the value`,
-            document: path,
-            rule: "attribute-lexical",
-          });
-        }
-
         const resources: Arr.NonEmptyReadonlyArray<ResourceOf> = [
           resource,
           ...listing
@@ -7122,6 +7118,10 @@ const ownLaws = {
   "Custom interaction version": {
     explain: (keys) =>
       `the custom interaction ${field(keys, "node")} stands in a 3.0.0 document, which holds none: portable custom interactions take their place`,
+  },
+  "Data SSML": {
+    explain: (keys) =>
+      `the data-ssml value at ${field(keys, "path")} is one Data-SSML 1.0's JSON Schema does not admit`,
   },
   "Declaration base type": {
     explain: (keys) =>

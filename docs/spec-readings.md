@@ -3589,3 +3589,25 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      of a resource, and the records' `named`, are join copies of another kind, which grizzle's rules over queries
      delete. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-08 by the
      coordinator, under the operator's standing ruling of 2026-11-05, from seat SWEEP-NODESENT.)
+177. **The database judges a closed `data-ssml` against Data-SSML 1.0, over the rows the importer reads the value into;
+     the importer judges nothing of it.** Reading R7-a states what a `data-ssml` value must be (one JSON object that
+     Data-SSML 1.0's normative JSON Schema admits, section 3.4) and has the importer check it, with the database holding
+     the text unchecked. This keeps R7-a's content and moves its check into the database, as Bjorn's ruling that the
+     database checks everything requires (no host judge of what a law can state). The JSON grammar is not a law grizzle
+     can state (one pattern needs about 4,400 positions where grizzle admits 4,096, `docs/grizzle-findings.md`), so the
+     importer reads the value once, before any row exists, as it reads a document's XML: one JSON object of objects of
+     strings, each member and each property in the order written and each name and value decoded, a name written twice
+     kept twice (`dataSsmlOf`, `src/vocab/data-ssml.ts`). It decides nothing else. The schema is the database's, law
+     "Data SSML" under `attribute-lexical` (`src/qti/data-ssml.ts`): every closed `data-ssml` has its `DataSsml` row,
+     so a value that is no such JSON has none and is refused; every member is one the schema lists, every property one its
+     member lists, an enumerated value one of the schema's, and a normalized value (`time`, `rate`) free of tab, line feed
+     and carriage return, each a check (`Data_SSML`) over the schema's table (`dataSsmlMembers`); and each required
+     property (`ph`, `interpret-as`, `alias`) written, a rule over a query (`RequiredSsmlProperty`,
+     `src/qti/queries.ts`). So a ChangeSet written without the importer is held to the same law, and R7-a's stated limit
+     goes. A new one replaces R7-a's "no length bound": each member's and property's name and value is compared by the
+     database, so it is a `keyText`, and one past the key-text bound is refused under that limit (reading 1's list), a
+     length no Data-SSML value needs. The value as written is still the document's attribute, exported as written. The
+     law oracle judges the same values with its own reader as before (`src/test/oracle-laws/data-ssml.ts`), now as the
+     law "Data SSML" over a document's rows, not a refusal before any row. This binds pantry and plate alike as to what
+     is valid. This is not a case of documents in conflict. (Decided 2026-11-09 by Bjorn: the database checks everything,
+     with no checker outside it.)

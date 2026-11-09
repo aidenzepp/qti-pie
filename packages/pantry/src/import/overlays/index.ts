@@ -18,6 +18,8 @@
 import { Equal, Formatter, Option, Result, Schema, Struct } from "effect";
 import { placedCatalogRowsOf, rowsOf as catalogRowsOf } from "#pantry/import/overlays/catalog.ts";
 import type { CatalogRows, PlacedCatalogRows } from "#pantry/import/overlays/catalog.ts";
+import { rowsOf as dataSsmlRowsOf } from "#pantry/import/overlays/data-ssml.ts";
+import type { DataSsmlRows } from "#pantry/import/overlays/data-ssml.ts";
 import { rowsOf as declarationRowsOf } from "#pantry/import/overlays/declarations.ts";
 import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
 import {
@@ -89,6 +91,7 @@ import { manifestPath } from "#pantry/qti/package.ts";
 export type OverlayRows = AssembledExpressionRows &
   AssembledRows &
   CatalogRows &
+  DataSsmlRows &
   DeclarationRows &
   ExpressionRows &
   HtmlRows &
@@ -115,6 +118,7 @@ export type OverlayRows = AssembledExpressionRows &
  */
 interface DocumentRows {
   readonly catalog: CatalogRows;
+  readonly dataSsml: DataSsmlRows;
   readonly declarations: DeclarationRows;
   readonly expressions: ExpressionRows;
   readonly html: HtmlRows;
@@ -145,6 +149,7 @@ interface DocumentRows {
  */
 const documentRowsOf = ({ ids, listed: { path, tree } }: PlacedDocument): DocumentRows => ({
   catalog: catalogRowsOf(tree, ids),
+  dataSsml: dataSsmlRowsOf(tree, ids),
   declarations: declarationRowsOf(tree, ids),
   expressions: expressionRowsOf(tree, ids),
   html: htmlRowsOf(tree, ids),
@@ -318,6 +323,7 @@ export const overlayPartsOf = (
   return [
     ...built.flatMap(({ rows }) => [
       rows.catalog,
+      rows.dataSsml,
       rows.declarations,
       rows.expressions,
       rows.html,

@@ -348,6 +348,11 @@ export const lawTable = {
     source:
       "R10-b: https://www.imsglobal.org/spec/qti/v3p0/info#Data_PortableCustomInteraction (§5.106, 3.0.0: 'PCIs MUST be used instead of custom interactions (the latter have been deprecated)', a sentence the 3.0.1 text drops): a 3.0.0 document holds no qti-custom-interaction, and a 3.0.1 document may (interactions.ts Custom_interaction_version)",
   },
+  "Data SSML": {
+    rule: "attribute-lexical",
+    source:
+      "reading 177, over R7-a: https://www.imsglobal.org/spec/qti/v3p0/datassml/ (Data-SSML 1.0 §3.4, JSON Schema, NORMATIVE): a closed data-ssml holds one JSON object whose members are among break, phoneme, prosody, say-as and sub, each an object of the string properties the schema lists for it (break: strength, time; phoneme: ph, alphabet, type; prosody: rate; say-as: interpret-as; sub: alias), with ph, interpret-as and alias required, strength, alphabet, type and interpret-as enumerated, and time and rate normalized strings; a name written twice is admitted and each value judged (RFC 8259 §4). The importer reads the JSON into rows and the database judges them (data-ssml.ts DataSsml, DataSsmlMember, DataSsmlProperty, SsmlMember, SsmlProperty, SsmlEnumerated, Data_SSML; queries.ts RequiredSsmlProperty)",
+  },
   "Declaration base type": {
     rule: "declaration-type",
     source:

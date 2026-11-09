@@ -80,6 +80,7 @@ import { DayForm, metadataLawsByName, metadataRelations } from "#pantry/qti/meta
 import { Chars, EndCharacter, nodeLawsByName, Prefix } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
 import { catalogLawsByName, catalogRelations } from "#pantry/qti/catalog.ts";
+import { dataSsmlLawsByName, dataSsmlRelations } from "#pantry/qti/data-ssml.ts";
 import { htmlLawsByName, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLawsByName } from "#pantry/qti/identity.ts";
 import { mathmlLawsByName, mathmlRelations } from "#pantry/qti/mathml.ts";
@@ -447,6 +448,7 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
     operatorRelations,
     catalogRelations,
     mathmlRelations,
+    dataSsmlRelations,
   ),
 ];
 
@@ -676,6 +678,7 @@ export const namedLaws: readonly LawsByName[] = [
   quotationLawsByName,
   operatorLawsByName,
   catalogLawsByName,
+  dataSsmlLawsByName,
   mathmlLawsByName,
   testLawsByName,
   ...builtLawsByName,

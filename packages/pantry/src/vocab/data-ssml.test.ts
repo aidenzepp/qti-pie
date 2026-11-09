@@ -1,15 +1,17 @@
 /**
- * The importer's judgment of a `data-ssml` value (`#pantry/vocab/data-ssml.ts`, spec reading
- * R7-a): what Data-SSML 1.0's JSON Schema admits, and the refusal of a package that holds a value
- * it does not.
+ * The rows the importer reads a `data-ssml` value into (`#pantry/vocab/data-ssml.ts`), and the law
+ * the database holds them to ("Data SSML", spec reading 177, restated on the host by
+ * `#pantry/test/data-ssml-law.ts`): what Data-SSML 1.0's JSON Schema admits, and the refusal of a
+ * package that holds a value it does not.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
-import { dataSsmlFaultOf } from "#pantry/vocab/data-ssml.ts";
+import { dataSsmlOf } from "#pantry/vocab/data-ssml.ts";
 import { previewPackage } from "#pantry/import/preview.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
+import { breaksDataSsml } from "#pantry/test/data-ssml-law.ts";
 import { materializeSpec } from "#pantry/test/fixtures.ts";
 import type { FixtureSpec } from "#pantry/test/fixtures.ts";
 
@@ -181,33 +183,58 @@ const repeatedRefused = [
   '{"break":{"time":"1s","time":"2\\ts"}}',
 ];
 
-describe("dataSsmlFaultOf", () => {
+describe("dataSsmlOf and the law over its rows", () => {
   it("admits what Data-SSML 1.0 admits and refuses what it does not, every JSON spelling, against an independent reader", () => {
     for (const text of [...admitted, ...refused]) {
       assert.strictEqual(reads(text), admitted.includes(text), `oracle: ${text}`);
     }
 
     const wrong = [
-      ...[...admitted, ...repeated].filter((text) => dataSsmlFaultOf(text) !== undefined),
-      ...[...refused, ...repeatedRefused].filter((text) => dataSsmlFaultOf(text) === undefined),
+      ...[...admitted, ...repeated].filter(breaksDataSsml),
+      ...[...refused, ...repeatedRefused].filter((text) => !breaksDataSsml(text)),
     ];
 
     assert.deepStrictEqual(wrong, []);
   });
 
-  it("names the path of the value it refuses", () => {
-    const paths: readonly (readonly [string, string])[] = [
-      ["x", "$"],
-      ['{"brk":{}}', '$["brk"]'],
-      ['{"break":"x"}', "$.break"],
-      ['{"break":{"pitch":"x"}}', '$.break["pitch"]'],
-      ['{"break":{"strength":"loud"}}', "$.break.strength"],
-      ['{"break":{"time":"2\\ts"}}', "$.break.time"],
-      ['{"sub":{"alias":1}}', "$.sub.alias"],
-      ['{"phoneme":{"type":"ruby"}}', "$.phoneme"],
-    ];
-    for (const [text, path] of paths) {
-      assert.strictEqual(dataSsmlFaultOf(text)?.path, path, text);
+  it("reads each member and property in the order written, a repeated name twice, each value decoded", () => {
+    assert.deepStrictEqual(
+      dataSsmlOf('{"b\\u0072eak":{"time":"1s","time":"2s"},"brk":{"x":"\\u0041"}}'),
+      Option.some([
+        {
+          name: "break",
+          properties: [
+            { name: "time", value: "1s" },
+            { name: "time", value: "2s" },
+          ],
+        },
+        { name: "brk", properties: [{ name: "x", value: "A" }] },
+      ]),
+    );
+  });
+
+  it("reads no rows from a text that is no JSON object of objects of strings, and leaves the schema to the law", () => {
+    // The grammar is the reader's: a text, a member or a value of no such shape has no rows.
+    for (const text of [
+      "x",
+      "[]",
+      '{"break":"x"}',
+      '{"sub":{"alias":1}}',
+      '{"sub":{"alias":"a"}} x',
+    ]) {
+      assert.isTrue(Option.isNone(dataSsmlOf(text)), text);
+    }
+
+    // The schema is the law's: an unknown member or property, a value outside its list and a
+    // missing required property are read as written, and the law refuses them.
+    for (const text of [
+      '{"brk":{}}',
+      '{"break":{"pitch":"x"}}',
+      '{"break":{"strength":"loud"}}',
+      '{"phoneme":{"type":"ruby"}}',
+    ]) {
+      assert.isTrue(Option.isSome(dataSsmlOf(text)), text);
+      assert.isTrue(breaksDataSsml(text), text);
     }
   });
 });

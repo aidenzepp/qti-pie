@@ -150,6 +150,7 @@ import {
 } from "#pantry/qti/declarations.ts";
 import type { cdnLawsByName } from "#pantry/qti/cdn.ts";
 import { catalogLaws, catalogRelations } from "#pantry/qti/catalog.ts";
+import { dataSsmlLaws, dataSsmlRelations } from "#pantry/qti/data-ssml.ts";
 import { htmlLaws, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLaws, identityRelations } from "#pantry/qti/identity.ts";
 import { interactionLaws, interactionRelations } from "#pantry/qti/interactions.ts";
@@ -513,6 +514,7 @@ type QtiStatement =
   | (typeof operatorLaws)[number]
   | (typeof mathmlLaws)[number]
   | (typeof catalogLaws)[number]
+  | (typeof dataSsmlLaws)[number]
   | NonNullable<CdnStatements[keyof CdnStatements]>[number];
 
 /**
@@ -522,7 +524,7 @@ type CdnStatements = ReturnType<typeof cdnLawsByName>;
 
 /**
  * Every module's statements, in module order, each module's list one element: a list of lists
- * holds sixteen types, where a list literal of every statement would hold them all.
+ * holds seventeen types, where a list literal of every statement would hold them all.
  */
 const moduleLaws: readonly (readonly QtiStatement[])[] = [
   nodeLaws,
@@ -541,6 +543,7 @@ const moduleLaws: readonly (readonly QtiStatement[])[] = [
   operatorLaws,
   mathmlLaws,
   catalogLaws,
+  dataSsmlLaws,
 ];
 
 /**
@@ -567,6 +570,7 @@ export const qtiRelations = {
   ...operatorRelations,
   ...mathmlRelations,
   ...catalogRelations,
+  ...dataSsmlRelations,
 };
 
 /**

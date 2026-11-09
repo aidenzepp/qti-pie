@@ -34,6 +34,7 @@ import {
 } from "@bjornpagen/grizzle";
 import { documentTypes } from "#pantry/grammar/install.ts";
 import type { QtiBase } from "#pantry/qti/base.ts";
+import { DataSsmlMember, DataSsmlProperty } from "#pantry/qti/data-ssml.ts";
 import { DeclarationIdentifier } from "#pantry/qti/declarations.ts";
 import {
   heldKinds,
@@ -1024,6 +1025,55 @@ export const queriesOf = (base: QtiBase) => {
   const mappingQueryLaws = Object.values(mappingQueryLawsByName).flat();
 
   /**
+   * Each property a `data-ssml` member requires, by the member's element, its place and the
+   * property's name (Data-SSML 1.0 §3.4: `phoneme`'s `ph`, `say-as`'s `interpret-as`, `sub`'s
+   * `alias`): one rule per required property, each a member of that name, beside the property's
+   * name. "Data SSML" holds each to a property its member writes.
+   */
+  const RequiredSsmlProperty = derived(
+    "RequiredSsmlProperty",
+    query(base)
+      .rule((r) => {
+        const { at, node } = v(DataSsmlMember, "member");
+
+        return r
+          .match(DataSsmlMember, { at, member: "phoneme", node })
+          .find({ member: at, name: "ph", node });
+      })
+      .rule((r) => {
+        const { at, node } = v(DataSsmlMember, "member");
+
+        return r
+          .match(DataSsmlMember, { at, member: "say-as", node })
+          .find({ member: at, name: "interpret-as", node });
+      })
+      .rule((r) => {
+        const { at, node } = v(DataSsmlMember, "member");
+
+        return r
+          .match(DataSsmlMember, { at, member: "sub", node })
+          .find({ member: at, name: "alias", node });
+      }),
+  );
+
+  /**
+   * The `data-ssml` rule over a query: every required property is written (Data-SSML 1.0 §3.4).
+   */
+  const dataSsmlQueryLawsByName = {
+    "Data SSML": [
+      contained(
+        on(RequiredSsmlProperty, "node", "member", "name"),
+        on(DataSsmlProperty, "node", "member", "name"),
+      ),
+    ],
+  } as const;
+
+  /**
+   * The `data-ssml` rule over a query, in one list.
+   */
+  const dataSsmlQueryLaws = Object.values(dataSsmlQueryLawsByName).flat();
+
+  /**
    * Every query `Qti` names, under its own name.
    */
   const relations = {
@@ -1047,6 +1097,7 @@ export const queriesOf = (base: QtiBase) => {
     MappedReading,
     MatchedIdentifier,
     MatchedTitle,
+    RequiredSsmlProperty,
     TypedHref,
   };
 
@@ -1059,6 +1110,7 @@ export const queriesOf = (base: QtiBase) => {
     metadataQueryLawsByName,
     expressionQueryLawsByName,
     mappingQueryLawsByName,
+    dataSsmlQueryLawsByName,
   ] as const;
 
   /**
@@ -1074,7 +1126,8 @@ export const queriesOf = (base: QtiBase) => {
     | (typeof identityQueryLaws)[number]
     | (typeof metadataQueryLaws)[number]
     | (typeof expressionQueryLaws)[number]
-    | (typeof mappingQueryLaws)[number];
+    | (typeof mappingQueryLaws)[number]
+    | (typeof dataSsmlQueryLaws)[number];
 
   /**
    * Every rule over a query, each domain's list spread in `lawsByName`'s order.
@@ -1085,6 +1138,7 @@ export const queriesOf = (base: QtiBase) => {
     ...metadataQueryLaws,
     ...expressionQueryLaws,
     ...mappingQueryLaws,
+    ...dataSsmlQueryLaws,
   ];
 
   return { laws, lawsByName, relations };

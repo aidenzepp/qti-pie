@@ -1,8 +1,9 @@
 /**
  * The law oracle's own reader of a `data-ssml` value, written from Data-SSML 1.0's JSON Schema
  * (section 3.4.5, Definitions, and Appendix C1.1) as spec reading R7-a states it, and not from the
- * importer's checker (`src/vocab/data-ssml.ts`), so that the two judges of the value are
- * independent: a defect in one gives a verdict the other does not repeat.
+ * importer's reader (`src/vocab/data-ssml.ts`) or the database's law over its rows (spec reading
+ * 177), so that the two judges of the value are independent: a defect in one gives a verdict the
+ * other does not repeat.
  *
  * The technique differs on purpose. The text is tokenized whole under RFC 8259's grammar, the
  * tokens are read into lists of `[name, value]` pairs that keep every duplicate (`JSON.parse` keeps
@@ -10,13 +11,11 @@
  * values. A name written twice is admitted and each of its values judged (RFC 8259 section 4:
  * names "SHOULD be unique").
  *
- * The module imports only `effect` and the types of the tree it walks.
+ * The module imports only `effect`.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/datassml/ | IMS Data-SSML 1.0, 3.4 JSON Schema}
  */
 import { Option } from "effect";
-import type { Composed } from "#pantry/model/composed.ts";
-import type { XdmChild, XdmDocument } from "#pantry/model/xdm.ts";
 
 /**
  * What a property's string may be, in the schema's own terms.
@@ -472,43 +471,6 @@ export const dataSsmlBreachOf = (text: string): Option.Option<string> => {
     if (breach !== undefined) {
       return Option.some(breach);
     }
-  }
-
-  return Option.none();
-};
-
-/**
- * Judge every `data-ssml` a document's closed kinds declare, in document order. An element whose
- * kind does not declare the attribute reads it as an open `data-*` name, which holds any text
- * (spec readings 13 and 90), so only an attribute whose name is closed with handle `data-ssml` is
- * judged.
- *
- * @param tree - The document as shred gives it.
- * @returns The path of the first breach, or none when every `data-ssml` is admitted.
- */
-export const dataSsmlBreachIn = (tree: XdmDocument<Composed>): Option.Option<string> => {
-  const pending: XdmChild<Composed>[] = [tree.root];
-  for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
-    if (
-      node._tag === "text" ||
-      node._tag === "ws" ||
-      node._tag === "comment" ||
-      node._tag === "pi" ||
-      node._tag === "entityRef"
-    ) {
-      continue;
-    }
-
-    for (const { lexical, name } of node.attributes) {
-      if (name._tag === "closed" && name.handle === "data-ssml") {
-        const breach = dataSsmlBreachOf(lexical);
-        if (Option.isSome(breach)) {
-          return breach;
-        }
-      }
-    }
-
-    pending.push(...node.children.toReversed());
   }
 
   return Option.none();

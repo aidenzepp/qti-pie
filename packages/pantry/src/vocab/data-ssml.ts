@@ -1,39 +1,45 @@
 /**
- * Judge a `data-ssml` value against Data-SSML 1.0's JSON Schema (spec reading R7-a): one JSON
- * object whose members are among `break`, `phoneme`, `prosody`, `say-as` and `sub`, each an object
- * of the properties the schema lists for it, each property a string, the required ones present,
- * and the enumerated ones one of the schema's values.
+ * Read a `data-ssml` value into the rows the database judges it by (spec reading 177, over R7-a):
+ * the members of one JSON object, in the order written, each an object of string properties, each
+ * property's name and decoded value in the order written. The database holds those rows to
+ * Data-SSML 1.0's JSON Schema (`#pantry/qti/data-ssml.ts`, law "Data SSML"): which members and
+ * properties it lists, the enumerated and the normalized values, and the required properties.
+ * This module judges none of that. It reads the JSON, which grizzle cannot state as a pattern (one
+ * pattern for the language needs about 4,400 positions where grizzle admits 4,096,
+ * `docs/grizzle-findings.md`), and a value that is not one JSON object of objects of strings has
+ * no rows, so the database refuses its attribute under "Data SSML", which requires every closed
+ * `data-ssml` to have them.
  *
- * The importer asks it of every `data-ssml` a closed kind declares, before any row is built. The
- * database holds the value as text and does not re-prove its form: one pattern for this language
- * needs about 4,400 positions where grizzle admits 4,096 (`docs/grizzle-findings.md`, the
- * pattern-size row), so the check lives here and a ChangeSet that bypasses the importer is the
- * limit R7-a states.
- *
- * The value is read as written, as RFC 8259 reads it, one grammar for the text and the schema's
- * tables for its meaning. A name written twice in one object is admitted (RFC 8259 §4: names
- * "SHOULD be unique") and each of its values is judged, which `JSON.parse` cannot do, since it
- * keeps the last. The module is pure: it imports only the types of the tree it walks.
+ * The value is read as written, as RFC 8259 reads it, one grammar for the text. A name written
+ * twice in one object is kept twice (RFC 8259 §4: names "SHOULD be unique"), each value its own
+ * row, which `JSON.parse` cannot do, since it keeps the last. {@link dataSsmlMembers} is the
+ * schema's table, which the database installs as closed relations. The module is pure.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/datassml/ | IMS Data-SSML 1.0, 3.4 JSON Schema}
  */
-import type { Composed } from "#pantry/model/composed.ts";
-import type { XdmChild, XdmDocument } from "#pantry/model/xdm.ts";
+import { Option } from "effect";
 
 /**
- * Why a `data-ssml` value is refused: the JSON path of the offending value (`$` for the root and
- * for text that is not JSON, `$.break.strength` for a property) and what to change.
+ * One property of a `data-ssml` member as written: its name and its value, each decoded.
  */
-export interface DataSsmlFault {
-  readonly detail: string;
-  readonly path: string;
+export interface SsmlPropertyText {
+  readonly name: string;
+  readonly value: string;
+}
+
+/**
+ * One member of a `data-ssml` object as written: its decoded name and its properties, in order.
+ */
+export interface SsmlMemberText {
+  readonly name: string;
+  readonly properties: readonly SsmlPropertyText[];
 }
 
 /**
  * What a property's string may be: any string, an enumerated value, or a normalized string, whose
  * decoded value holds no tab, line feed or carriage return.
  */
-type Domain =
+export type Domain =
   | { readonly kind: "enumeration"; readonly values: readonly string[] }
   | { readonly kind: "normalized" }
   | { readonly kind: "string" };
@@ -41,7 +47,7 @@ type Domain =
 /**
  * One property of a member: its name, its domain and whether the schema requires it.
  */
-interface Property {
+export interface Property {
   readonly domain: Domain;
   readonly name: string;
   readonly required: boolean;
@@ -54,7 +60,7 @@ interface Property {
  * `rate` are normalized strings in the schema's OAS3 form (Appendix C, and the information model's
  * `RateUnion`), over the prose's percentage.
  */
-const members: ReadonlyMap<string, readonly Property[]> = new Map([
+export const dataSsmlMembers: ReadonlyMap<string, readonly Property[]> = new Map([
   [
     "break",
     [
@@ -117,35 +123,10 @@ const letterEscapes: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * A step of the reader: the value read and the offset just after it, or the refusal.
+ * A step of the reader: the value read and the offset just after it, or none where the text breaks
+ * RFC 8259's grammar or the shape a `data-ssml` value has.
  */
-type Step<T> = { readonly next: number; readonly value: T } | DataSsmlFault;
-
-/**
- * What {@link readPair} reads in place of a name when the object ends: a string no name decodes to
- * can stand for it, since a decoded name is any string, so it is a symbol.
- */
-const end = Symbol("end");
-
-/**
- * Whether a step is a refusal.
- */
-const isFault = <T>(step: Step<T>): step is DataSsmlFault => "detail" in step;
-
-/**
- * Build the refusal of text that breaks RFC 8259's grammar, or the shape the schema fixes, at an
- * offset. The path is the root where the text is no JSON, because no value has a place until the
- * text has been read.
- */
-const brokenAt = (text: string, at: number, expected: string): DataSsmlFault => {
-  const found =
-    at < text.length ? `found ${JSON.stringify(text[at])}` : "found the end of the value";
-
-  return {
-    detail: `The value is not one JSON object: expected ${expected} at offset ${String(at)}, ${found}. Write the value as a JSON object.`,
-    path: "$",
-  };
-};
+type Step<T> = Option.Option<{ readonly next: number; readonly value: T }>;
 
 /**
  * Return the offset of the first character at or after `at` that is not JSON whitespace.
@@ -172,11 +153,11 @@ const readString = (text: string, start: number): Step<string> => {
     if (unit === 0x22) {
       pieces.push(text.slice(from, at));
 
-      return { next: at + 1, value: pieces.join("") };
+      return Option.some({ next: at + 1, value: pieces.join("") });
     }
 
     if (unit < 0x20) {
-      return brokenAt(text, at, "an escaped control character inside the string");
+      return Option.none();
     }
 
     if (unit === 0x5c) {
@@ -192,7 +173,7 @@ const readString = (text: string, start: number): Step<string> => {
         pieces.push(String.fromCodePoint(Number.parseInt(hex, 16)));
         at += 6;
       } else {
-        return brokenAt(text, at + 1, 'one of " \\ / b f n r t, or u and four hex digits');
+        return Option.none();
       }
 
       from = at;
@@ -201,240 +182,97 @@ const readString = (text: string, start: number): Step<string> => {
     }
   }
 
-  return brokenAt(text, text.length, "the closing quote of the string");
+  return Option.none();
 };
 
 /**
- * Where an object's reader stands: just after `{` (`open`), just after a `,` (`comma`), or just
- * after a pair's value (`value`).
+ * Read one JSON object whose `{` is at `open`, each pair's name decoded and its value read by
+ * `value` from the offset just after the colon and its whitespace.
+ *
+ * @param text - The whole value.
+ * @param open - The offset of the object's `{`.
+ * @param value - The reader of one pair's value, none where the value is not of its shape.
+ * @returns The pairs in the order written, and the offset after the `}`; none where the text is no
+ *   such object.
  */
-type Stand = "comma" | "open" | "value";
-
-/**
- * Read an object's next pair: the closing brace, as `"end"`, where the object may end, or the
- * pair's decoded name with the offset of its value left to the caller.
- */
-const readPair = (text: string, from: number, stand: Stand): Step<string | typeof end> => {
-  const at = skipSpace(text, from);
-  if (text[at] === "}" && stand !== "comma") {
-    return { next: at + 1, value: end };
-  }
-
-  if (text[at] !== '"') {
-    return brokenAt(text, at, stand === "comma" ? "a member name" : "a member name or '}'");
-  }
-
-  const name = readString(text, at);
-  if (isFault(name)) {
-    return name;
-  }
-
-  const colon = skipSpace(text, name.next);
-  if (text[colon] !== ":") {
-    return brokenAt(text, colon, "':'");
-  }
-
-  return { next: skipSpace(text, colon + 1), value: name.value };
-};
-
-/**
- * Read what follows a pair's value: a `,`, consumed and leaving the reader after a comma, or a `}`,
- * left for {@link readPair} to close the object and leaving the reader after a value.
- */
-const readSeparator = (text: string, from: number): Step<Stand> => {
-  const at = skipSpace(text, from);
-  if (text[at] === ",") {
-    return { next: at + 1, value: "comma" };
-  }
-
-  return text[at] === "}" ? { next: at, value: "value" } : brokenAt(text, at, "',' or '}'");
-};
-
-/**
- * Whether a decoded string is in a property's domain, and if not what the domain is.
- */
-const outsideDomain = (domain: Domain, value: string): string | undefined => {
-  switch (domain.kind) {
-    case "enumeration": {
-      return domain.values.includes(value)
-        ? undefined
-        : `${JSON.stringify(value)} is not one of ${domain.values.join(", ")}`;
-    }
-    case "normalized": {
-      return /[\t\n\r]/u.test(value)
-        ? "the value holds a tab, a line feed or a carriage return"
-        : undefined;
-    }
-    case "string": {
-      return undefined;
-    }
-    default: {
-      return domain satisfies never;
-    }
-  }
-};
-
-/**
- * Read the object of one member whose `{` is at `open`, judging each property against the
- * member's table.
- */
-const readMember = (
+const readObject = <T>(
   text: string,
   open: number,
-  member: string,
-  properties: readonly Property[],
-): Step<null> => {
-  const path = `$.${member}`;
-  const seen = new Set<string>();
-  let from = open + 1;
-  let stand: Stand = "open";
+  value: (at: number) => Step<T>,
+): Step<readonly { readonly name: string; readonly value: T }[]> => {
+  const pairs: { readonly name: string; readonly value: T }[] = [];
+  let at = skipSpace(text, open + 1);
+  if (text[at] === "}") {
+    return Option.some({ next: at + 1, value: pairs });
+  }
+
   for (;;) {
-    const pair = readPair(text, from, stand);
-    if (isFault(pair)) {
-      return pair;
-    }
-
-    if (pair.value === end) {
-      const missing = properties.find(({ name, required }) => required && !seen.has(name));
-
-      return missing === undefined
-        ? { next: pair.next, value: null }
-        : {
-            detail: `${member} needs its ${missing.name} property. Add ${JSON.stringify(missing.name)} with a string.`,
-            path,
-          };
-    }
-
-    const property = properties.find(({ name }) => name === pair.value);
-    if (property === undefined) {
-      return {
-        detail: `${member} has no property ${JSON.stringify(pair.value)}. Use ${properties.map(({ name }) => name).join(", ")}.`,
-        path: `${path}[${JSON.stringify(pair.value)}]`,
-      };
-    }
-
-    const at = pair.next;
-    const here = `${path}.${property.name}`;
     if (text[at] !== '"') {
-      return { detail: `${property.name} is not a string. Write it as a JSON string.`, path: here };
+      return Option.none();
     }
 
-    const value = readString(text, at);
-    if (isFault(value)) {
-      return value;
+    const name = readString(text, at);
+    if (Option.isNone(name)) {
+      return Option.none();
     }
 
-    const outside = outsideDomain(property.domain, value.value);
-    if (outside !== undefined) {
-      return { detail: `${outside}. Change ${property.name}.`, path: here };
+    const colon = skipSpace(text, name.value.next);
+    if (text[colon] !== ":") {
+      return Option.none();
     }
 
-    seen.add(property.name);
-
-    const separator = readSeparator(text, value.next);
-    if (isFault(separator)) {
-      return separator;
+    const read = value(skipSpace(text, colon + 1));
+    if (Option.isNone(read)) {
+      return Option.none();
     }
 
-    from = separator.next;
-    stand = separator.value;
+    pairs.push({ name: name.value.value, value: read.value.value });
+
+    const separator = skipSpace(text, read.value.next);
+    if (text[separator] === "}") {
+      return Option.some({ next: separator + 1, value: pairs });
+    }
+
+    if (text[separator] !== ",") {
+      return Option.none();
+    }
+
+    at = skipSpace(text, separator + 1);
   }
 };
 
 /**
- * Judge a `data-ssml` value as written.
+ * Read a JSON string at `at`.
+ */
+const stringAt =
+  (text: string) =>
+  (at: number): Step<string> =>
+    text[at] === '"' ? readString(text, at) : Option.none();
+
+/**
+ * Read a JSON object at `at` whose every value is a string.
+ */
+const propertiesAt =
+  (text: string) =>
+  (at: number): Step<readonly { readonly name: string; readonly value: string }[]> =>
+    text[at] === "{" ? readObject(text, at, stringAt(text)) : Option.none();
+
+/**
+ * Read a `data-ssml` value as written into its members and their properties.
  *
  * @param text - The attribute's lexical form.
- * @returns The refusal naming the path of what the schema does not admit and what to change, or
- *   `undefined` when Data-SSML 1.0 admits the value.
+ * @returns The members in the order written, each with its properties in order; none where the
+ *   text is not one JSON object whose every value is an object of strings, with nothing but
+ *   whitespace around it.
  */
-export const dataSsmlFaultOf = (text: string): DataSsmlFault | undefined => {
-  let from = skipSpace(text, 0);
-  if (text[from] !== "{") {
-    return brokenAt(text, from, "a JSON object");
+export const dataSsmlOf = (text: string): Option.Option<readonly SsmlMemberText[]> => {
+  const open = skipSpace(text, 0);
+  if (text[open] !== "{") {
+    return Option.none();
   }
 
-  from += 1;
-  let stand: Stand = "open";
-  for (;;) {
-    const pair = readPair(text, from, stand);
-    if (isFault(pair)) {
-      return pair;
-    }
-
-    if (pair.value === end) {
-      const tail = skipSpace(text, pair.next);
-
-      return tail === text.length ? undefined : brokenAt(text, tail, "the end of the value");
-    }
-
-    const properties = members.get(pair.value);
-    if (properties === undefined) {
-      return {
-        detail: `${JSON.stringify(pair.value)} is not a member Data-SSML knows. Use ${[...members.keys()].join(", ")}.`,
-        path: `$[${JSON.stringify(pair.value)}]`,
-      };
-    }
-
-    if (text[pair.next] !== "{") {
-      return {
-        detail: `${pair.value} is not an object. Write it as a JSON object of its properties.`,
-        path: `$.${pair.value}`,
-      };
-    }
-
-    const member = readMember(text, pair.next, pair.value, properties);
-    if (isFault(member)) {
-      return member;
-    }
-
-    const separator = readSeparator(text, member.next);
-    if (isFault(separator)) {
-      return separator;
-    }
-
-    from = separator.next;
-    stand = separator.value;
-  }
-};
-
-/**
- * Judge every `data-ssml` a document's closed kinds declare, in document order.
- *
- * An element whose kind does not declare the attribute reads it as an open `data-*` name, which
- * holds any text (spec readings 13 and 90), so only a closed `data-ssml` is judged.
- *
- * @param tree - The document as shred gives it.
- * @returns The first refusal with its element's kind named in the detail, or `undefined` when
- *   every `data-ssml` is admitted.
- */
-export const dataSsmlFaultIn = (tree: XdmDocument<Composed>): DataSsmlFault | undefined => {
-  const stack: XdmChild<Composed>[] = [tree.root];
-  for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
-    if (
-      node._tag === "text" ||
-      node._tag === "ws" ||
-      node._tag === "comment" ||
-      node._tag === "pi" ||
-      node._tag === "entityRef"
-    ) {
-      continue;
-    }
-
-    for (const { lexical, name } of node.attributes) {
-      const fault =
-        name._tag === "closed" && name.handle === "data-ssml"
-          ? dataSsmlFaultOf(lexical)
-          : undefined;
-      if (fault !== undefined) {
-        const where = node._tag === "element" ? `a ${node.kind} element` : "an element";
-
-        return { detail: `On ${where}, ${fault.detail}`, path: fault.path };
-      }
-    }
-
-    stack.push(...node.children.toReversed());
-  }
-
-  return undefined;
+  return readObject(text, open, propertiesAt(text)).pipe(
+    Option.filter(({ next }) => skipSpace(text, next) === text.length),
+    Option.map(({ value }) => value.map(({ name, value: properties }) => ({ name, properties }))),
+  );
 };

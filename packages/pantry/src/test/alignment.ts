@@ -1135,6 +1135,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    177,
+    {
+      owner:
+        'law "Data SSML" over `DataSsml`, `DataSsmlMember` and `DataSsmlProperty`, its `Data_SSML` checks over the table of the schema (`src/qti/data-ssml.ts`) and the rule over `RequiredSsmlProperty` (`src/qti/queries.ts`); the import\'s reading of the value into rows, judging nothing (`dataSsmlOf`, `src/vocab/data-ssml.ts`; `src/import/overlays/data-ssml.ts`); the law oracle\'s "Data SSML" over a document\'s rows (`dataSsmlBreachOf`, `src/test/oracle-laws/data-ssml.ts`; `src/test/oracle.ts`); held by `src/vocab/data-ssml.test.ts` and `src/test/oracle-laws/data-ssml.oracle.test.ts`, against the law restated over the rows (`src/test/data-ssml-law.ts`)',
+      status: "G",
+    },
+  ],
 ]);
 
 /**
