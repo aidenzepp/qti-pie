@@ -1585,6 +1585,30 @@ export const fixed = {
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
     owner: "NIL",
   },
+  "oracle-only-law: Template default target": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="T" cardinality="single" base-type="float"/></qti-assessment-item>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="item.xml"><qti-template-default><qti-base-value base-type="float">1</qti-base-value></qti-template-default></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "an unwritten or unread template-identifier names nothing, so the law oracle leaves the template default to AL3, as the importer writes no row for it",
+    owner: "genetic-repair gr-6",
+  },
   "oracle-only-law: Template default type": {
     files: [
       [
@@ -1662,5 +1686,29 @@ export const fixed = {
     ],
     fix: "an include splices its target only where it may stand for the target's root (Inclusion.splices, IncludeRoot through Compute.singleton), so an item that includes itself in its body still heads its assembly, and its rule fragment's set-outcome-value is judged there",
     owner: "ASM",
+  },
+  "oracle-only-law: Variable mapping source": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-template-declaration identifier="T" cardinality="single" base-type="float"/></qti-assessment-item>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-item-ref href="item.xml"><qti-variable-mapping target-identifier="X"/></qti-assessment-item-ref></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "an unwritten or unread source-identifier names nothing, so the law oracle leaves the variable mapping to AL3, as the importer writes no row for it",
+    owner: "genetic-repair gr-6",
   },
 } satisfies Entries;
