@@ -226,8 +226,9 @@ const constraintNamesOnce = Fn.memoize(constraintNamesOf);
  * the oracle ({@link constraintNamesOnce}), each only where no test before it in the run has: the
  * slowest is two compiles and the import, and grizzle puts one compile of a large schema at 15 to
  * 45 s (`e3975d35`). 18.1 s was its slowest such test on 2026-11-08, at a load no run recorded.
- * Measurement owed at a load average of at least 60, under Bjorn's moratorium of 2026-11-08, which
- * runs no test: until then it holds over three times two of grizzle's slowest compiles.
+ * Measured 2026-11-09: 20.2 s at a load average of 62 to 76, its slowest such test ("under --json
+ * prints one error object with the rules, each law and its sources"), the file alone at nice 19 on
+ * one worker; it holds over three times two of grizzle's slowest compiles.
  */
 const lawModelTestTimeoutMs = 300_000;
 
