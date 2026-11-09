@@ -35,10 +35,11 @@
  *
  * What it does not restore stays absent: a tree root's copies along the axis, whose start values
  * grizzle keeps in its own field builders; a copy along a last or a predecessor axis; a generated
- * field whose term holds one the evaluator does not read, a cast or a conditional. A float is read
- * as grizzle's `float8` stores it, -0 as 0. A law that reads an absent value on a row it reads is
- * not judged, and {@link judge} names it with every absent value, so a skip is always named by its
- * cause.
+ * field whose term holds one the evaluator does not read (`#pantry/test/predicates.ts` `termOf`),
+ * such as a cast into a type but a double or a numeric, or a `Compute.when` over a guard but
+ * `Compute.matches`. A float is read as grizzle's `float8` stores it, -0 as 0. A law that reads an
+ * absent value on a row it reads is not judged, and {@link judge} names it with every absent value,
+ * so a skip is always named by its cause.
  */
 import type { Law, LawSide } from "@bjornpagen/grizzle";
 import { Array as Arr, Formatter, Function as Fn, Option, Predicate, Schema } from "effect";
@@ -203,7 +204,7 @@ const keyOf = (relation: string): readonly string[] => relations.get(relation)?.
  *
  * @param expr - The term, as grizzle keeps it.
  * @returns The field's value over a row: unknown where the term reads a field the row lacks, or
- *   holds a term the host does not read, such as a cast or a conditional.
+ *   holds a term the host does not read (`#pantry/test/predicates.ts` `termOf`).
  * @throws {Error} When grizzle keeps no term there: a defect of the host judge, which must learn
  *   the description's shape before it restores the field.
  */

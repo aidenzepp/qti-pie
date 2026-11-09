@@ -12,11 +12,9 @@
  *
  * Each package is held three ways: by the specification by hand ({@link expectedOf}), by the law
  * oracle's laws, and by the import's rows: which `NormalMinimum`, `MasteryFloor` and
- * `MasteryCeiling` rows exist, and the laws they break on the host, under the refusal's rule. The
- * host reads no `Compute.when` term (`#pantry/test/host-judge.ts`), so it judges no
- * `Mastery_range`; the import's verdict on it is read from its pair rows as the law's check orders
- * them ({@link rowsBreakRange}), and the database tier judges the check itself
- * (`#pantry/qti/declarations.db.test.ts`).
+ * `MasteryCeiling` rows exist, and the laws they break on the host (`#pantry/test/host-judge.ts`),
+ * `Mastery_range` among them as its check orders the pair rows, under the refusal's rule. The
+ * database tier judges the check itself (`#pantry/qti/declarations.db.test.ts`).
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -174,23 +172,6 @@ const expectedOf = (drawn: Case): ReadonlySet<LawName> => {
 };
 
 /**
- * Whether the import's pair rows break `Mastery_range` as its check orders them: a floor whose
- * minimum is above its mastery value, or a ceiling whose mastery value is above its maximum. Every
- * text of the box is inside the check's double form and none is `NaN`, so the check's order is the
- * numbers' order.
- *
- * @param inputs - The import's rows.
- * @returns Whether a pair is out of order.
- */
-const rowsBreakRange = (inputs: PackageInputs): boolean =>
-  [...inputs.MasteryFloor.values()].some(
-    ({ masteryValue, normalMinimum }) => Number(normalMinimum) > Number(masteryValue),
-  ) ||
-  [...inputs.MasteryCeiling.values()].some(
-    ({ masteryValue, normalMaximum }) => Number(masteryValue) > Number(normalMaximum),
-  );
-
-/**
  * Hold a case's scale rows to what the specification gives it: its normal minimum's row exactly
  * where it has one, holding the written form or its version's default and whether it is written,
  * and each pair's row exactly where it has both of its values.
@@ -318,7 +299,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   const { inputs } = yield* readProgram(yield* scopedPackage(entries));
                   assertRows(drawn, inputs, label);
 
-                  // The host judges every law but Mastery range, whose verdict the pair rows give,
+                  // The host judges every law, Mastery range's check over the pair rows among them,
                   // and its refusal is named by the rule the catalog's precedence puts first, as
                   // the database's is.
                   const { broken } = judgeHost(hostRowsOf(inputs), hostLaws);
@@ -328,14 +309,9 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   const shown =
                     broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law";
                   assert.sameMembers(
-                    [
-                      ...new Set([
-                        ...brokenNames,
-                        ...(rowsBreakRange(inputs) ? ["Mastery range"] : []),
-                      ]),
-                    ],
+                    [...new Set(brokenNames)],
                     [...expected],
-                    `${label}: the import's rows break ${shown}${rowsBreakRange(inputs) ? ", and a pair is out of order" : ""}`,
+                    `${label}: the import's rows break ${shown}`,
                   );
 
                   const brokenLaws = broken.map(({ law }) => law);

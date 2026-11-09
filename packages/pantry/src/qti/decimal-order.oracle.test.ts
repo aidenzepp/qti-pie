@@ -6,11 +6,11 @@
  *
  * - **The schema's check**, `Aria_value_range` (`#pantry/qti/interactions.ts`), read from `Qti`'s
  *   statements, so the predicate judged is the one the database installs, and evaluated over the
- *   case's `AriaRange` row on the host as PostgreSQL evaluates it (`#pantry/test/order-checks.ts`):
- *   a `Compute.matches` guard as a regular expression under `u`, `Compute.parseDecimal` as the
- *   decimal the text names exactly, and numeric's exact order. The row is the case's two values
- *   collapsed, as the import copies them; the copies themselves are `AriaValue`'s containments
- *   (C18), which other tests hold.
+ *   case's `AriaRange` row on the host as PostgreSQL evaluates it (`breaks` of
+ *   `#pantry/test/predicates.ts`): a `Compute.matches` guard as a regular expression under `u`,
+ *   `Compute.parseDecimal` as the decimal the text names exactly, and numeric's exact order. The
+ *   row is the case's two values collapsed, as the import copies them; the copies themselves are
+ *   `AriaValue`'s containments (C18), which other tests hold.
  * - **The law oracle** (`documentBreaches` of `#pantry/test/oracle.ts`) names `Aria value range` over
  *   the item that writes the case's values.
  * - **The reference** written here from XML Schema 1.1 (Part 2 §3.3.3): a value is read where its
@@ -43,13 +43,19 @@ import { shred } from "#pantry/model/shred.ts";
 import { AriaRange } from "#pantry/qti/interactions.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
-import { breaks, checkOf, installedChecks } from "#pantry/test/order-checks.ts";
-import type { CheckRow } from "#pantry/test/order-checks.ts";
+import { Qti } from "#pantry/qti/schema.ts";
+import { breaks, checksOf, closedOf } from "#pantry/test/predicates.ts";
+import type { Row } from "#pantry/test/predicates.ts";
 
 /**
  * The ARIA range check `Qti` installs.
  */
-const installed = installedChecks("Aria_value_range");
+const installed = checksOf(Qti.statements).filter(({ name }) => name === "Aria_value_range");
+
+/**
+ * Qti's closed relations, which a check's closed reads look up: these checks read none.
+ */
+const closed = closedOf(Qti.relations);
 
 /**
  * Grizzle's former widest numeric with a lexical form, the one the deleted check cast through.
@@ -60,24 +66,22 @@ const formerDecimal = pg.numeric(511, 255);
  * The deleted check, restated as it was: each value cast through {@link formerDecimal}'s lexical
  * form, a value outside it read as the infinity at the end of the order that holds it.
  */
-const former = Option.toArray(
-  checkOf(
-    check("Aria_value_range", AriaRange, (r) =>
-      r.le(
-        Compute.when(
-          Compute.matches(r.min, lexicalForm(formerDecimal)),
-          (min) => Compute.cast(min, formerDecimal),
-          Decimal.negativeInfinity,
-        ),
-        Compute.when(
-          Compute.matches(r.max, lexicalForm(formerDecimal)),
-          (max) => Compute.cast(max, formerDecimal),
-          Decimal.infinity,
-        ),
+const former = checksOf([
+  check("Aria_value_range", AriaRange, (r) =>
+    r.le(
+      Compute.when(
+        Compute.matches(r.min, lexicalForm(formerDecimal)),
+        (min) => Compute.cast(min, formerDecimal),
+        Decimal.negativeInfinity,
+      ),
+      Compute.when(
+        Compute.matches(r.max, lexicalForm(formerDecimal)),
+        (max) => Compute.cast(max, formerDecimal),
+        Decimal.infinity,
       ),
     ),
   ),
-);
+]);
 
 /**
  * The oracle's former decimal form, which held a sign and digits on neither side of the point.
@@ -623,12 +627,12 @@ const situationsOf = (drawnCase: RangeCase, expected: boolean): readonly Situati
  * @returns The plants caught.
  */
 const caughtOf = (
-  rows: ReadonlyMap<string, readonly CheckRow[]>,
+  rows: ReadonlyMap<string, readonly Row[]>,
   [min, max]: readonly [string, string],
   expected: boolean,
 ): readonly Situation[] => {
   const plants: readonly (readonly [Situation, boolean])[] = [
-    ["caught: the schema's former bounded form", breaks(former, rows)],
+    ["caught: the schema's former bounded form", breaks(former, rows, closed)],
     ["caught: the oracle's former decimal form", formerOracleBelow(max, min)],
   ];
 
@@ -653,7 +657,7 @@ const judged = (drawnCase: RangeCase, note: (situation: Situation) => void) =>
     const expected = above(...read);
     const label = Formatter.format(drawnCase.forms);
 
-    assert.strictEqual(breaks(installed, rows), expected, `the schema's check on ${label}`);
+    assert.strictEqual(breaks(installed, rows, closed), expected, `the schema's check on ${label}`);
     assert.strictEqual(
       documentBreaches("item.xml", folded, oracleLaws).some(
         ({ law }) => law === "Aria value range",

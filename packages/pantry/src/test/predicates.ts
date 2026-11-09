@@ -3,17 +3,20 @@
  * keeps on a schema's statements, and a predicate evaluated over a row in SQL's three-valued logic.
  *
  * It states no law and reads no schema: a caller hands it the statements it reads and the schema's
- * members whose closed relations a predicate's closed reads look up ({@link closedOf}). Two callers
- * share it: the law oracle's key copies (`#pantry/test/key-copies.ts`), which read the composed
- * schema's copies into a key text, and the tests' host judge (`#pantry/test/host-judge.ts`), which
- * judges the import's own rows by the schema's laws. No production module reads it. The law oracle
- * may read this module because it reads no statement of its own; `src/grammar/purity.test.ts`
- * holds it to that.
+ * members whose closed relations a predicate's closed reads look up ({@link closedOf}). Three
+ * callers share it: the law oracle's key copies (`#pantry/test/key-copies.ts`), which read the
+ * composed schema's copies into a key text; the tests' host judge (`#pantry/test/host-judge.ts`),
+ * which judges the import's own rows by the schema's laws; and the order tests
+ * (`qti/double-order.oracle.test.ts`, `qti/decimal-order.oracle.test.ts`), which judge the checks
+ * that order two lexical forms whole ({@link breaks}). No production module reads it. The law
+ * oracle may read this module because it reads no statement of its own;
+ * `src/grammar/purity.test.ts` holds it to that, so it imports nothing of grizzle's but types.
  *
- * - **Values.** A row is its fields' values, each a {@link Datum}: a text, a natural, a float, a
- *   truth value or a set of a roster's handles.
+ * - **Values.** A row is its fields' values, each a {@link Datum}: a text, a natural, a float, an
+ *   exact numeric, a truth value or a set of a roster's handles.
  * - **Terms.** A stored predicate reads into a {@link Term} ({@link termOf}): fields, literals,
- *   comparisons, `in`, `and`, `or`, `not`, a closed relation's three reads, and the `Compute`
+ *   comparisons, `in`, `and`, `or`, `not`, a closed relation's three reads, a `Compute.when` over a
+ *   `Compute.matches` guard, a cast of a text into a double or a numeric, and the `Compute`
  *   functions of {@link computers}; any other term is `unread`.
  * - **Evaluation.** {@link evaluate} is SQL's three-valued logic: an absent field, a closed read at a
  *   key its relation holds no tuple at and an unread term are unknown; `and`, `or` and `not` are
@@ -22,16 +25,26 @@
  *   and its terms, each a field or `pred` of one, written as an outcome names a law's side
  *   ({@link lawSideOf}).
  */
-import type { AnySchema, LawSide } from "@bjornpagen/grizzle";
+import type { AnySchema, LawSide, Statement } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, pipe, Predicate, Schema } from "effect";
 
 /**
- * One value a predicate reads: a text, a natural, a float, a boolean, or a set of a roster's
- * handles. A float has grizzle's one zero: `float8` stores -0 as 0 (`codec/scalar.ts` and
- * `scalar/values/convert.ts` of grizzle-engine at the vendored commit), so {@link floatDatum}
+ * An exact numeric as PostgreSQL's `numeric` orders it: a finite decimal, its digits signed over
+ * ten to its scale, an infinity of a sign, or NaN, which `numeric` holds equal to itself and above
+ * every other value.
+ */
+export type Numeric =
+  | { readonly digits: bigint; readonly kind: "finite"; readonly scale: number }
+  | { readonly kind: "infinite"; readonly negative: boolean }
+  | { readonly kind: "nan" };
+
+/**
+ * One value a predicate reads: a text, a natural, a float, an exact numeric, a boolean, or a set
+ * of a roster's handles. A float has grizzle's one zero: `float8` stores -0 as 0 (`codec/scalar.ts`
+ * and `scalar/values/convert.ts` of grizzle-engine at the vendored commit), so {@link floatDatum}
  * normalizes it.
  */
-export type Datum = bigint | boolean | number | ReadonlySet<string> | string;
+export type Datum = bigint | boolean | number | Numeric | ReadonlySet<string> | string;
 
 /**
  * Read a float as the datum a `float8` column holds: -0 as 0, grizzle's one zero, every other
@@ -75,10 +88,18 @@ export type Term =
   | { readonly args: readonly Term[]; readonly kind: "closedHas"; readonly relation: string }
   | { readonly arg: Term; readonly kind: "in"; readonly values: readonly Term[] }
   | { readonly arg: Term; readonly kind: "not" }
+  | { readonly arg: Term; readonly kind: "cast"; readonly to: "double" | "numeric" }
   | { readonly field: string; readonly kind: "field" }
   | { readonly kind: "compare"; readonly left: Term; readonly op: string; readonly right: Term }
   | { readonly kind: "literal"; readonly value: Datum }
-  | { readonly kind: "unread"; readonly term: string };
+  | { readonly kind: "unread"; readonly term: string }
+  | {
+      readonly kind: "when";
+      readonly otherwise: Term;
+      readonly pattern: string;
+      readonly proved: Term;
+      readonly subject: Term;
+    };
 
 /**
  * A predicate's term as grizzle keeps it, read field by field: every field a term of
@@ -89,11 +110,16 @@ interface StoredTerm {
   readonly args?: readonly StoredTerm[];
   readonly field?: string;
   readonly fn?: string;
+  readonly guard?: { readonly kind: string; readonly pattern?: string };
   readonly kind: string;
   readonly left?: StoredTerm;
   readonly op?: string;
+  readonly otherwise?: StoredTerm;
+  readonly proved?: StoredTerm;
   readonly relation?: string;
   readonly right?: StoredTerm;
+  readonly subject?: StoredTerm;
+  readonly to?: { readonly kind: string; readonly type?: string };
   readonly value?: unknown;
   readonly values?: readonly unknown[];
 }
@@ -108,14 +134,136 @@ export const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
   ),
   field: Schema.optionalKey(Schema.String),
   fn: Schema.optionalKey(Schema.String),
+  guard: Schema.optionalKey(
+    Schema.Struct({ kind: Schema.String, pattern: Schema.optionalKey(Schema.String) }),
+  ),
   kind: Schema.String,
   left: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
   op: Schema.optionalKey(Schema.String),
+  otherwise: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  proved: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
   relation: Schema.optionalKey(Schema.String),
   right: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  subject: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  to: Schema.optionalKey(
+    Schema.Struct({ kind: Schema.String, type: Schema.optionalKey(Schema.String) }),
+  ),
   value: Schema.optionalKey(Schema.Unknown),
   values: Schema.optionalKey(Schema.Array(Schema.Unknown)),
 });
+
+/**
+ * A float literal JSON cannot write as a number, as a description holds it: its name.
+ */
+const FloatNameSchema = Schema.Struct({
+  float: Schema.Literals(["Infinity", "-Infinity", "NaN"]),
+});
+
+/**
+ * A numeric literal as a description holds it: grizzle's `Decimal`, read by the text it writes,
+ * PostgreSQL's `numeric_out` (`scalar/values/decimal.ts` of grizzle-engine at the vendored commit).
+ * Its parts' kind marks it, so no other literal reads as one. This module imports none of
+ * grizzle's values (`src/grammar/purity.test.ts`), so it reads the Decimal by its shape.
+ */
+const DecimalLiteralSchema = Schema.Struct({
+  parts: Schema.Struct({
+    kind: Schema.Literals(["-infinity", "finite", "infinity", "nan"]),
+  }),
+  text: Schema.String,
+});
+
+/**
+ * A decimal text's parts: its sign, its integer digits and its fraction digits.
+ */
+const decimalParts = /^(?<sign>[+-]?)(?<whole>[0-9]*)(?:\.(?<fraction>[0-9]*))?$/u;
+
+/**
+ * The exact numeric a text names, as `numeric_in` reads every text of grizzle's `decimalText`, and
+ * `Infinity`, `-Infinity` and `NaN` by name, as a `Decimal` writes them.
+ *
+ * @param text - The text.
+ * @returns The numeric, none for a text that names none, which a predicate reads as unknown.
+ */
+export const numericNamed = (text: string): Numeric | undefined => {
+  if (text === "NaN") {
+    return { kind: "nan" };
+  }
+
+  if (text === "Infinity" || text === "-Infinity") {
+    return { kind: "infinite", negative: text.startsWith("-") };
+  }
+
+  const parts = decimalParts.exec(text)?.groups;
+  const [sign, whole, fraction] = [parts?.["sign"], parts?.["whole"], parts?.["fraction"] ?? ""];
+  if (sign === undefined || whole === undefined || (whole === "" && fraction === "")) {
+    return undefined;
+  }
+
+  const magnitude = BigInt(`0${whole}${fraction}`);
+
+  return { digits: sign === "-" ? -magnitude : magnitude, kind: "finite", scale: fraction.length };
+};
+
+/**
+ * The double a decimal text names, `INF`, `+INF`, `-INF` and `NaN` by name: grizzle's
+ * `Compute.parseDouble` over its operand, and PostgreSQL's `float8in` over a text a guard has held
+ * to a double's form, each XML Schema 1.1's doubleLexicalMap, which `Number` computes exactly for a
+ * decimal of at most 20 significant digits.
+ *
+ * @param text - The text.
+ * @returns The double.
+ */
+export const doubleNamed = (text: string): number => {
+  if (text === "INF" || text === "+INF") {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return text === "-INF" ? Number.NEGATIVE_INFINITY : Number(text);
+};
+
+/**
+ * Whether a datum is an exact numeric.
+ *
+ * @param datum - The datum.
+ * @returns Whether it is one.
+ */
+const isNumeric = (datum: Datum | undefined): datum is Numeric =>
+  Predicate.isObject(datum) && !(datum instanceof Set) && "kind" in datum;
+
+/**
+ * Rank an exact numeric's kind in `numeric`'s order: -Infinity, every finite value, +Infinity,
+ * NaN.
+ *
+ * @param value - The numeric.
+ * @returns Its rank.
+ */
+const numericRank = (value: Numeric): number => {
+  if (value.kind === "infinite") {
+    return value.negative ? -1 : 1;
+  }
+
+  return value.kind === "nan" ? 2 : 0;
+};
+
+/**
+ * Order two exact numerics as PostgreSQL's `numeric` does: two finite ones at their common scale,
+ * every other pair by {@link numericRank}.
+ *
+ * @param left - One numeric.
+ * @param right - The other.
+ * @returns Negative, zero or positive as `left` sorts before, with or after `right`.
+ */
+const numericOrder = (left: Numeric, right: Numeric): number => {
+  if (left.kind === "finite" && right.kind === "finite") {
+    const scale = Math.max(left.scale, right.scale);
+    const a = left.digits * 10n ** BigInt(scale - left.scale);
+    const b = right.digits * 10n ** BigInt(scale - right.scale);
+
+    return Number(a > b) - Number(a < b);
+  }
+
+  return Math.sign(numericRank(left) - numericRank(right));
+};
 
 /**
  * The kinds of relation whose rows the host holds, so a side over one is judged here: a stored
@@ -206,7 +354,21 @@ export type StoredStatement = typeof StatementSchema.Type;
  */
 export const termOf = (stored: StoredTerm): Term => {
   const unread: Term = { kind: "unread", term: stored.kind };
-  const { arg, field, fn, left, op, relation, right, values } = stored;
+  const {
+    arg,
+    field,
+    fn,
+    guard,
+    left,
+    op,
+    otherwise,
+    proved,
+    relation,
+    right,
+    subject,
+    to,
+    values,
+  } = stored;
   const readers = new Map<string, () => Term>([
     ["and", () => ({ args: (stored.args ?? []).map(termOf), kind: "and" })],
     [
@@ -252,6 +414,20 @@ export const termOf = (stored: StoredTerm): Term => {
       () =>
         fn === undefined ? unread : { args: (stored.args ?? []).map(termOf), fn, kind: "compute" },
     ],
+    [
+      "cast",
+      () => {
+        if (arg === undefined) {
+          return unread;
+        }
+
+        if (to?.type === "double precision") {
+          return { arg: termOf(arg), kind: "cast", to: "double" };
+        }
+
+        return to?.kind === "numeric" ? { arg: termOf(arg), kind: "cast", to: "numeric" } : unread;
+      },
+    ],
     ["field", () => (field === undefined ? unread : { field, kind: "field" })],
     [
       "in",
@@ -276,13 +452,44 @@ export const termOf = (stored: StoredTerm): Term => {
     [
       "literal",
       () =>
-        Option.match(Schema.decodeUnknownOption(DatumSchema)(stored.value), {
-          onNone: () => unread,
-          onSome: (value): Term => ({ kind: "literal", value }),
-        }),
+        pipe(
+          Schema.decodeUnknownOption(DatumSchema)(stored.value),
+          Option.orElse(() =>
+            Option.map(Schema.decodeUnknownOption(FloatNameSchema)(stored.value), ({ float }) =>
+              Number(float),
+            ),
+          ),
+          Option.orElse(() =>
+            Option.flatMap(
+              Schema.decodeUnknownOption(DecimalLiteralSchema)(stored.value),
+              ({ text }) => Option.fromUndefinedOr(numericNamed(text)),
+            ),
+          ),
+          Option.match({
+            onNone: () => unread,
+            onSome: (value): Term => ({ kind: "literal", value }),
+          }),
+        ),
     ],
     ["not", () => (arg === undefined ? unread : { arg: termOf(arg), kind: "not" })],
     ["or", () => ({ args: (stored.args ?? []).map(termOf), kind: "or" })],
+    [
+      "when",
+      () =>
+        guard?.kind !== "matches" ||
+        guard.pattern === undefined ||
+        subject === undefined ||
+        proved === undefined ||
+        otherwise === undefined
+          ? unread
+          : {
+              kind: "when",
+              otherwise: termOf(otherwise),
+              pattern: guard.pattern,
+              proved: termOf(proved),
+              subject: termOf(subject),
+            },
+    ],
   ]);
 
   return readers.get(stored.kind)?.() ?? unread;
@@ -309,8 +516,12 @@ const operandsOf = (term: Term): readonly Term[] => {
     case "in": {
       return [term.arg, ...term.values];
     }
+    case "cast":
     case "not": {
       return [term.arg];
+    }
+    case "when": {
+      return [term.subject, term.proved, term.otherwise];
     }
     case "field":
     case "literal":
@@ -390,6 +601,31 @@ export const closedOf = (members: AnySchema["relations"]): Closed => {
 };
 
 /**
+ * Write an exact numeric as `numeric_out` does: a finite one's digits with its scale's fraction,
+ * and each other by name.
+ *
+ * @param value - The numeric.
+ * @returns Its text.
+ */
+const numericText = (value: Numeric): string => {
+  if (value.kind === "nan") {
+    return "NaN";
+  }
+
+  if (value.kind === "infinite") {
+    return value.negative ? "-Infinity" : "Infinity";
+  }
+
+  const magnitude = (value.digits < 0n ? -value.digits : value.digits)
+    .toString()
+    .padStart(value.scale + 1, "0");
+  const whole = magnitude.slice(0, magnitude.length - value.scale);
+  const fraction = magnitude.slice(magnitude.length - value.scale);
+
+  return `${value.digits < 0n ? "-" : ""}${whole}${fraction === "" ? "" : `.${fraction}`}`;
+};
+
+/**
  * Write a datum as a key's text: a text as itself, a natural, a float or a boolean as it prints, a
  * set as its members, and an absent value as nothing.
  *
@@ -399,6 +635,10 @@ export const closedOf = (members: AnySchema["relations"]): Closed => {
 export const datumText = (datum: Datum | undefined): string => {
   if (datum === undefined || Predicate.isString(datum)) {
     return datum ?? "";
+  }
+
+  if (isNumeric(datum)) {
+    return numericText(datum);
   }
 
   return Predicate.isBigInt(datum) || Predicate.isNumber(datum) || Predicate.isBoolean(datum)
@@ -553,6 +793,10 @@ const equal = (left: Datum, right: Datum): boolean => {
     return floatOrder(left, right) === 0;
   }
 
+  if (isNumeric(left) || isNumeric(right)) {
+    return isNumeric(left) && isNumeric(right) && numericOrder(left, right) === 0;
+  }
+
   return left instanceof Set && right instanceof Set
     ? left.size === right.size && [...left].every((member) => right.has(member))
     : left === right;
@@ -617,6 +861,10 @@ const compared = (op: string, left: Datum, right: Datum): boolean | undefined =>
 
   if (Predicate.isNumber(left) && Predicate.isNumber(right)) {
     return floatTests.get(op)?.(left, right);
+  }
+
+  if (isNumeric(left) && isNumeric(right)) {
+    return orderTests.get(op)?.(numericOrder(left, right));
   }
 
   const order = ordered(left, right);
@@ -709,8 +957,10 @@ const translated = ([text = "", from = "", to = ""]: readonly string[]): string 
  * The `Compute` functions a predicate reads, by name: grizzle's set algebra over sets of handles
  * (`subset`, `disjoint`, `union`, `difference`, `cardinality`, and `singleton`, the set holding a
  * closed id's one handle), its text terms (`matches`, `startsWith`, `endsWith`, `concat`,
- * `translate`, `collapse`) and `add` of two naturals, each as grizzle states it in SQL. Any other
- * function is unread: a selection or a check that holds one is not judged.
+ * `translate`, `collapse`), `add` of two naturals, and the parses of a text a guard has held to
+ * their language, `parseDouble` into a float ({@link doubleNamed}) and `parseDecimal` into an exact
+ * numeric ({@link numericNamed}), each as grizzle states it in SQL. Any other function is unread:
+ * a selection or a check that holds one is not judged.
  */
 const computers: ReadonlyMap<string, (args: readonly Datum[]) => Datum | undefined> = new Map<
   string,
@@ -748,7 +998,25 @@ const computers: ReadonlyMap<string, (args: readonly Datum[]) => Datum | undefin
     ([left, right]) =>
       Predicate.isBigInt(left) && Predicate.isBigInt(right) ? left + right : undefined,
   ],
+  ["parseDouble", (args) => ofTexts(args, 1, ([text = ""]) => doubleNamed(text))],
+  ["parseDecimal", ([text]) => (Predicate.isString(text) ? numericNamed(text) : undefined)],
 ]);
+
+/**
+ * Cast a text into a float or an exact numeric, as PostgreSQL's `float8in` and `numeric_in` read a
+ * text a guard has held to the type's form: {@link doubleNamed}, {@link numericNamed}.
+ *
+ * @param to - The type.
+ * @param held - The text.
+ * @returns The value, unknown for no text or one no numeric names.
+ */
+const castOf = (to: "double" | "numeric", held: Datum | undefined): Datum | undefined => {
+  if (!Predicate.isString(held)) {
+    return undefined;
+  }
+
+  return to === "double" ? doubleNamed(held) : numericNamed(held);
+};
 
 /**
  * Evaluate the operands of a term, the whole unknown where any is.
@@ -831,10 +1099,37 @@ const applied = (
 };
 
 /**
+ * Negate a truth value in Kleene's logic: unknown stays unknown.
+ *
+ * @param held - The value.
+ * @returns Its negation, unknown for any value no truth value is.
+ */
+const negated = (held: Datum | undefined): boolean | undefined =>
+  Predicate.isBoolean(held) ? !held : undefined;
+
+/**
+ * Take the branch of a `Compute.when` a subject reaches, as grizzle's `CASE` does: its proved
+ * branch where the subject matches the guard's pattern, its otherwise elsewhere.
+ *
+ * @param term - The when.
+ * @param subject - The subject's value.
+ * @returns The branch, none where the subject is unknown or no text.
+ */
+const branchOf = (
+  term: Extract<Term, { readonly kind: "when" }>,
+  subject: Datum | undefined,
+): Option.Option<Term> =>
+  Predicate.isString(subject)
+    ? Option.some(matches(subject, term.pattern) ? term.proved : term.otherwise)
+    : Option.none();
+
+/**
  * Evaluate a term over a row in SQL's three-valued logic: a field the row does not know, a closed
  * read at a key its relation holds no tuple at, and an unread term are unknown, `and`, `or` and
- * `not` are Kleene's, and every other operation of an unknown operand is unknown. A comparison
- * `forced` holds is read as false wherever it occurs.
+ * `not` are Kleene's, and every other operation of an unknown operand is unknown. A
+ * `Compute.when` takes its branch where its subject matches its guard's pattern and its otherwise
+ * elsewhere, as grizzle's `CASE` does. A comparison `forced` holds is read as false wherever it
+ * occurs.
  *
  * @param term - The term.
  * @param row - The row's known fields.
@@ -864,9 +1159,7 @@ export const evaluate = (
       return kleene(term.args.map(value), term.kind === "or");
     }
     case "not": {
-      const held = value(term.arg);
-
-      return Predicate.isBoolean(held) ? !held : undefined;
+      return negated(value(term.arg));
     }
     case "compare": {
       const sides = allKnown([term.left, term.right], value);
@@ -887,6 +1180,16 @@ export const evaluate = (
       const args = allKnown(term.args, value);
 
       return args === undefined ? args : closedHeld(closed, term.relation, args);
+    }
+    case "cast": {
+      return castOf(term.to, value(term.arg));
+    }
+    case "when": {
+      return Option.getOrUndefined(
+        Option.flatMap(branchOf(term, value(term.subject)), (branch) =>
+          Option.fromUndefinedOr(value(branch)),
+        ),
+      );
     }
     default: {
       return term satisfies never;
@@ -1020,3 +1323,70 @@ export const lawSideOf = (side: StoredSide): LawSide => ({
     ),
   ),
 });
+
+/**
+ * A check read whole: its declared name, the relation it is stated on, and its predicate.
+ */
+export interface ReadCheck {
+  readonly name: string;
+  readonly predicate: Term;
+  readonly relation: string;
+}
+
+/**
+ * Read the checks among some statements, a schema's or ones built apart, each over a relation
+ * whose rows the host holds ({@link StatementSchema}).
+ *
+ * @param statements - The statements.
+ * @returns Each check, in statement order.
+ */
+export const checksOf = (statements: readonly Statement[]): readonly ReadCheck[] =>
+  statements.flatMap((statement) =>
+    Option.toArray(Schema.decodeUnknownOption(StatementSchema)(statement)).flatMap((read) =>
+      read.kind === "check"
+        ? [
+            {
+              name: read.desc.name,
+              predicate: termOf(read.desc.predicate),
+              relation: read.relation.name,
+            },
+          ]
+        : [],
+    ),
+  );
+
+/**
+ * Whether some row breaks one of some checks, each judged whole, as PostgreSQL evaluates the CHECK
+ * grizzle installs for it: a row breaks a check where its predicate is false.
+ *
+ * @param checks - The checks.
+ * @param rows - The rows, by relation; a relation with none holds every check over it.
+ * @param closed - The schema's closed relations, which the checks' closed reads look up.
+ * @returns Whether one is broken.
+ * @throws {Error} When a check holds a term the host does not read, or a row leaves its predicate
+ *   unknown: the caller judges a predicate whole, never in part.
+ */
+export const breaks = (
+  checks: readonly ReadCheck[],
+  rows: ReadonlyMap<string, readonly Row[]>,
+  closed: Closed,
+): boolean =>
+  checks.some(({ name, predicate, relation }) => {
+    const unread = unreadIn(subtermsOf(predicate));
+    if (unread.length > 0) {
+      throw new Error(
+        `The check ${name} on ${relation} holds ${unread.join(", ")}, which the host does not read, so it cannot be judged whole. Teach src/test/predicates.ts's termOf and evaluate the term.`,
+      );
+    }
+
+    return (rows.get(relation) ?? []).some((row) => {
+      const truth = truthOf(Option.some(predicate), closed)(row);
+      if (truth === undefined) {
+        throw new Error(
+          `The check ${name} on ${relation} is unknown over a row of fields ${Object.keys(row).join(", ")}: give the row every field the check reads.`,
+        );
+      }
+
+      return !truth;
+    });
+  });

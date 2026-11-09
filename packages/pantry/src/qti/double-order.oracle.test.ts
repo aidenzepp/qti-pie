@@ -7,7 +7,7 @@
  * - **The schema's checks**, `Slider_bounds` (`#pantry/qti/interactions.ts`) and `Mastery_range`
  *   (`#pantry/qti/declarations.ts`), read from `Qti`'s statements, so the predicate judged is the
  *   one the database installs, and evaluated over each row of the case on the host as PostgreSQL
- *   evaluates it (`#pantry/test/order-checks.ts`): a `Compute.matches` guard as a regular
+ *   evaluates it (`breaks` of `#pantry/test/predicates.ts`): a `Compute.matches` guard as a regular
  *   expression under `u`, `Compute.parseDouble` as the double the decimal text names, and
  *   `float8`'s order, in which NaN equals NaN and is above every other value. A term of any other
  *   kind fails the case, so no predicate is ever judged in part. The rows are the case's bounds as
@@ -56,13 +56,21 @@ import { Slider } from "#pantry/qti/interactions.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
-import { breaks, checkOf, doubleNamed, installedChecks } from "#pantry/test/order-checks.ts";
-import type { CheckRow, ReadCheck } from "#pantry/test/order-checks.ts";
+import { Qti } from "#pantry/qti/schema.ts";
+import { breaks, checksOf, closedOf, doubleNamed } from "#pantry/test/predicates.ts";
+import type { ReadCheck, Row } from "#pantry/test/predicates.ts";
 
 /**
  * The checks of the two double orders that `Qti` installs, by the relation each is stated on.
  */
-const installed = installedChecks("Slider_bounds", "Mastery_range");
+const installed = checksOf(Qti.statements).filter(({ name }) =>
+  ["Slider_bounds", "Mastery_range"].includes(name),
+);
+
+/**
+ * Qti's closed relations, which a check's closed reads look up: these checks read none.
+ */
+const closed = closedOf(Qti.relations);
 
 /**
  * Grizzle's former bounded form of `double precision`: the form the deleted checks guarded their
@@ -79,7 +87,7 @@ const formerRegex = new RegExp(formerForm, "u");
  * The deleted checks, restated as they were: each bound cast through the former form, `NaN` ordered
  * against nothing, and a text outside the form read as the end of the order that holds it.
  */
-const former: readonly ReadCheck[] = [
+const former: readonly ReadCheck[] = checksOf([
   check("Slider_bounds", Slider, (s) =>
     s.or(
       s.eq(s.lower, "NaN"),
@@ -134,7 +142,7 @@ const former: readonly ReadCheck[] = [
       ),
     ),
   ),
-].flatMap((statement) => Option.toArray(checkOf(statement)));
+]);
 
 /**
  * The scale's checks before its forms were collapsed, restated as they were: each form read by
@@ -142,7 +150,7 @@ const former: readonly ReadCheck[] = [
  * and any other form, one with outer whitespace among them, read as the end of the order that
  * holds it.
  */
-const uncollapsed: readonly ReadCheck[] = [
+const uncollapsed: readonly ReadCheck[] = checksOf([
   check("Mastery_range", MasteryFloor, (r) =>
     r.or(
       r.eq(r.normalMinimum, "NaN"),
@@ -179,7 +187,7 @@ const uncollapsed: readonly ReadCheck[] = [
       ),
     ),
   ),
-].flatMap((statement) => Option.toArray(checkOf(statement)));
+]);
 
 /**
  * XML Schema 1.0's `xs:double` lexical space (Part 2 §3.2.5.1), the reference's.
@@ -613,14 +621,10 @@ const itemOf = (attributes: ReadonlyMap<string, string>): string => {
  * @param attributes - The case's attributes.
  * @returns The rows.
  */
-const rowsOf = (attributes: ReadonlyMap<string, string>): ReadonlyMap<string, CheckRow[]> => {
+const rowsOf = (attributes: ReadonlyMap<string, string>): ReadonlyMap<string, Row[]> => {
   const form = (name: string): Option.Option<string> =>
     Option.fromUndefinedOr(attributes.get(name));
-  const pair = (
-    first: string,
-    second: string,
-    fields: readonly [string, string],
-  ): readonly CheckRow[] =>
+  const pair = (first: string, second: string, fields: readonly [string, string]): readonly Row[] =>
     Option.toArray(
       Option.map(Option.all([form(first), form(second)]), ([a, b]) => ({
         [fields[0]]: a,
@@ -826,14 +830,14 @@ const situationsOf = (drawnCase: OrderCase, expected: boolean): readonly Situati
  */
 const caughtOf = (
   drawnCase: OrderCase,
-  rows: ReadonlyMap<string, readonly CheckRow[]>,
+  rows: ReadonlyMap<string, readonly Row[]>,
   expected: boolean,
 ): readonly Situation[] => {
   const [low, high] = formsRead(drawnCase);
   const scale = (verdict: () => boolean): Option.Option<boolean> =>
     drawnCase.carrier === "slider" ? Option.none() : Option.some(verdict());
   const plants: readonly (readonly [Situation, Option.Option<boolean>])[] = [
-    ["caught: the schema's former bounded form", Option.some(breaks(former, rows))],
+    ["caught: the schema's former bounded form", Option.some(breaks(former, rows, closed))],
     [
       "caught: the oracle's former Slider bounds reading",
       drawnCase.carrier === "slider"
@@ -844,7 +848,7 @@ const caughtOf = (
       "caught: the oracle's former Mastery range reading",
       scale(() => scaleAbove(formerScale, drawnCase.forms)),
     ],
-    ["caught: the schema's uncollapsed scale", scale(() => breaks(uncollapsed, rows))],
+    ["caught: the schema's uncollapsed scale", scale(() => breaks(uncollapsed, rows, closed))],
     [
       "caught: the oracle's uncollapsed scale",
       scale(() => scaleAbove(writtenScale, drawnCase.forms)),
@@ -875,7 +879,11 @@ const judged = (drawnCase: OrderCase, note: (situation: Situation) => void) =>
     const expected = above(referenceOf(low), referenceOf(high));
     const label = `${drawnCase.carrier} ${Formatter.format(drawnCase.forms)}`;
 
-    assert.strictEqual(breaks(installed, rows), expected, `the schema's checks on ${label}`);
+    assert.strictEqual(
+      breaks(installed, rows, closed),
+      expected,
+      `the schema's checks on ${label}`,
+    );
     assert.strictEqual(
       documentBreaches("item.xml", folded, oracleLaws).some(
         ({ law }) => law === "Slider bounds" || law === "Mastery range",

@@ -1,10 +1,10 @@
 /**
  * A schema's laws read as the foreign keys between its stored relations: each containment's key and
- * each family's owner axis, read off the laws grizzle's public `lawsOf` names (through
- * `statementLawsOf` of `#pantry/import/refusal.ts`, the one compile per process) and the relations'
+ * each family's owner axis, read off the laws grizzle's public `lawsOf` lists (through
+ * `schemaLawsOf` of `#pantry/import/refusal.ts`, the one compile per process) and the relations'
  * typed `kind` and `name`, never off grizzle's statement shapes.
  */
-import { statementLawsOf } from "#pantry/import/refusal.ts";
+import { schemaLawsOf } from "#pantry/import/refusal.ts";
 import type { Qti } from "#pantry/qti/schema.ts";
 
 /**
@@ -34,7 +34,7 @@ export const keysOf = (schema: typeof Qti) => {
       relation.kind === "relation" ? [relation.name] : [],
     ),
   );
-  const laws = statementLawsOf(schema).flatMap(({ laws: stated }) => stated);
+  const laws = schemaLawsOf(schema);
 
   return {
     axes: laws.flatMap((law): readonly ForeignKey[] =>
