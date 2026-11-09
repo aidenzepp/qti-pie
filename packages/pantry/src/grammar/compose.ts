@@ -34,7 +34,7 @@
  * Every admitted triple is stated once: a triple two sources state is a `KeyCollision` of its
  * family's admission map's `AdmissionIn` rows (`faultOf`, which the tests read).
  */
-import { Function as Fn, Option, Result } from "effect";
+import { Option, Result } from "effect";
 import type { Admission, AdmittedChild } from "#pantry/grammar/admission.ts";
 import { generate as generateAncestry } from "#pantry/grammar/ancestry.ts";
 import type { AncestrySets } from "#pantry/grammar/ancestry.ts";
@@ -870,14 +870,14 @@ export const compose = <const V extends readonly Vocabulary[]>(
   });
 
 /**
- * {@link compose} memoized by its list's identity (Effect's `Function.memoize`), for
- * {@link composed}, which passes it {@link vocabularies} alone.
+ * Production's grammar: {@link vocabularies} composed once, as this module loads, so every reader
+ * of it shares the one composition.
  */
-const production = Fn.memoize((list: typeof vocabularies) => compose(list));
+const production = compose(vocabularies);
 
 /**
- * Compose production's list, {@link vocabularies}, once per process: the first call composes it,
- * and every later call returns that same result.
+ * Read production's grammar, {@link vocabularies} composed once per process, as this module
+ * loaded: every call returns that one result.
  *
  * A composition takes seconds and production's list never changes, so every reader of the grammar
  * shares one: `install.ts` when it loads, and every test, whether or not its file loads
@@ -886,5 +886,4 @@ const production = Fn.memoize((list: typeof vocabularies) => compose(list));
  *
  * @returns The grammar, or the first generator's refusal.
  */
-export const composed = (): Result.Result<ComposedGrammar, ComposeError> =>
-  production(vocabularies);
+export const composed = (): Result.Result<ComposedGrammar, ComposeError> => production;

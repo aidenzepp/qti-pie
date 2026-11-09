@@ -212,51 +212,37 @@ export type XsiTypeError = UnderivedType;
 interface DerivationIndex {
   readonly derivedFrom: ReadonlyMap<string, readonly ExpandedName[]>;
   readonly names: readonly string[];
-  readonly namesIn: ReadonlyMap<SchemaVersion, ReadonlySet<string>>;
+  readonly namesIn: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 /**
- * The index of each derivations list read so far. Every composition reads the one leaf, and its
- * `xs:anyType` row lists every name of a version, so indexing it once keeps a composition's cost
- * in its own rows.
- */
-const derivationIndexes = new WeakMap<readonly TypeDerivation[], DerivationIndex>();
-
-/**
- * Index derivations for lookup, once per list.
+ * Index derivations for lookup, in one pass over them: the `TypeName` handles in the order the
+ * derivations first name them, and each version's handles.
  *
  * @param derivations - The derivations.
  * @returns Their index.
  */
 const derivationIndexOf = (derivations: readonly TypeDerivation[]): DerivationIndex => {
-  const known = derivationIndexes.get(derivations);
-  if (known !== undefined) {
-    return known;
+  const derivedFrom = new Map<string, readonly ExpandedName[]>();
+  const names = new Set<string>();
+  const namesIn = new Map<string, Set<string>>();
+  for (const { derived, type, versions } of derivations) {
+    const own = typeHandle(type);
+    const handles = [own, ...derived.map(typeHandle)];
+    for (const handle of handles) {
+      names.add(handle);
+    }
+
+    for (const version of versions) {
+      const held = namesIn.getOrInsertComputed(version, () => new Set());
+      derivedFrom.set(`${version} ${own}`, derived);
+      for (const handle of handles) {
+        held.add(handle);
+      }
+    }
   }
 
-  const index: DerivationIndex = {
-    derivedFrom: new Map(
-      derivations.flatMap(({ derived, type, versions }) =>
-        versions.map((version) => [`${version} ${typeHandle(type)}`, derived] as const),
-      ),
-    ),
-    names: [
-      ...new Set(derivations.flatMap(({ derived, type }) => [type, ...derived].map(typeHandle))),
-    ],
-    namesIn: new Map(
-      [...new Set(derivations.flatMap(({ versions }) => versions))].map((version) => [
-        version,
-        new Set(
-          derivations
-            .filter(({ versions }) => versions.includes(version))
-            .flatMap(({ derived, type }) => [type, ...derived].map(typeHandle)),
-        ),
-      ]),
-    ),
-  };
-  derivationIndexes.set(derivations, index);
-
-  return index;
+  return { derivedFrom, names: [...names], namesIn };
 };
 
 /**

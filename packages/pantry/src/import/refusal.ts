@@ -29,9 +29,7 @@ import type { Law, Refused, Witness } from "@bjornpagen/grizzle";
 import { Array as Arr, Formatter, Match, Option, Order, pipe, Predicate, Schema } from "effect";
 import type { Types } from "effect";
 
-import { rowsAt } from "#pantry/grammar/closed.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { followPairsOf } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 
@@ -481,10 +479,10 @@ export type RefusalWitness =
     };
 
 /**
- * The installed grammar's rows an explanation reads: the content grammar and `Admission`, the
- * generators' rows `src/grammar/install.ts` installs (its `grammar`).
+ * The installed grammar's rows an explanation reads: the content grammar, the generators' rows
+ * `src/grammar/install.ts` installs (its `grammar`).
  */
-export type RefusalConstants = Pick<ComposedGrammar, "admission" | "content">;
+export type RefusalConstants = Pick<ComposedGrammar, "content">;
 
 /**
  * A position a content model allows next: its code, the kinds that stand at it, and the particle
@@ -531,101 +529,56 @@ const contentOrderLaws: Readonly<
 };
 
 /**
- * The content grammar as an explanation reads it, every lookup a map's: each family's content
- * model by `version parent` (`ContentModelOf`), `Follow`'s successors by `model position`, `Last`'s
- * ends by model, and the kinds at each position of each family by `version parent position`, those
- * its admission map gives the position, by kind, and then those its shared model's symbol sets do.
- */
-interface ContentIndex {
-  readonly ends: ReadonlyMap<string, readonly string[]>;
-  readonly kinds: ReadonlyMap<string, readonly string[]>;
-  readonly models: ReadonlyMap<string, string>;
-  readonly next: ReadonlyMap<string, readonly string[]>;
-}
-
-/**
- * Each content grammar's index, built on its first explanation, which no later explanation scans
- * the rows for again.
- */
-const contentIndexes = new WeakMap<RefusalConstants, ContentIndex>();
-
-/**
- * Key a row of a relation over (version, parent, position).
+ * Read the positions a content model's follow set holds after a state: `FollowMember` at
+ * `FollowSetOf(model, state)`, none for a state the model has not.
  *
- * @param version - The schema version.
- * @param parent - The model's kind.
- * @param position - The position.
- * @returns The key.
+ * @param content - The content grammar.
+ * @param model - The model.
+ * @param state - The state.
+ * @returns The positions, in `FollowMember`'s order.
  */
-const positionKey = (version: string, parent: string, position: string): string =>
-  `${version} ${parent} ${position}`;
+const followedAfter = (
+  content: RefusalConstants["content"],
+  model: string,
+  state: string,
+): readonly string[] =>
+  Option.match(content.followSetOf.lookup({ from: state, model }), {
+    onNone: () => [],
+    onSome: ({ set }) =>
+      content.followMember.rows.flatMap((row) => (row.set === set ? [row.to] : [])),
+  });
 
 /**
- * Group values under keys, each key's values in first-seen order and each once.
+ * Read the kinds a family's model places at each position: those its admission map gives the
+ * position, by kind, then those its shared model's symbol sets do, each once. The family's map's
+ * children and its shared model's pairs are read once, for every position asked.
  *
- * @param pairs - The (key, value) pairs.
- * @returns The groups.
+ * @param content - The content grammar.
+ * @param family - The family's version and parent.
+ * @param family.version - The version.
+ * @param family.parent - The parent's kind.
+ * @returns The kinds at a position.
  */
-const grouped = (pairs: Iterable<readonly [string, string]>): ReadonlyMap<string, string[]> => {
-  const groups = new Map<string, string[]>();
-  for (const [key, value] of pairs) {
-    const group = groups.get(key);
-    if (group === undefined) {
-      groups.set(key, [value]);
-    } else if (!group.includes(value)) {
-      group.push(value);
-    }
-  }
+const kindsAt = (
+  content: RefusalConstants["content"],
+  family: { readonly parent: string; readonly version: string },
+): ((position: string) => readonly string[]) => {
+  const children = Option.toArray(content.contentModelOf.lookup(family)).flatMap(({ admission }) =>
+    content.admissionIn.rows.filter((row) => row.map === admission),
+  );
+  const pairs = Option.toArray(content.sharedModelOf.lookup(family)).flatMap(({ model }) =>
+    content.symbolSetOf.rows.filter((pair) => pair.model === model),
+  );
 
-  return groups;
-};
-
-/**
- * Read the content grammar's index, building it once per grammar.
- *
- * @param constants - The installed grammar's rows.
- * @returns The index.
- */
-const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
-  const known = contentIndexes.get(constants);
-  if (known !== undefined) {
-    return known;
-  }
-
-  const { content } = constants;
-  const childrenOf = Map.groupBy(content.admissionIn.rows, ({ map }) => map);
-  const symbolsOf = Map.groupBy(content.symbolSetOf.rows, ({ model }) => model);
-  const membersOf = Map.groupBy(content.symbolMember.rows, ({ set }) => set);
-  const index: ContentIndex = {
-    ends: grouped(content.last.rows.map(({ model, position }) => [model, position] as const)),
-    kinds: grouped([
-      // Each family's admission map's children, each at its position.
-      ...content.contentModelOf.rows.flatMap(({ admission, parent, version }) =>
-        rowsAt(childrenOf, admission).map(
-          ({ child, position }) => [positionKey(version, parent, position), child] as const,
-        ),
+  return (position) =>
+    Arr.dedupe([
+      ...children.flatMap((row) => (row.position === position ? [row.child] : [])),
+      ...pairs.flatMap((pair) =>
+        content.symbolMember.rows.some((row) => row.set === pair.set && row.position === position)
+          ? [pair.kind]
+          : [],
       ),
-      // Each shared family's model's kinds, each at every position of its symbol set.
-      ...content.sharedModelOf.rows.flatMap(({ model, parent, version }) =>
-        rowsAt(symbolsOf, model).flatMap(({ kind, set }) =>
-          rowsAt(membersOf, set).map(
-            ({ position }) => [positionKey(version, parent, position), kind] as const,
-          ),
-        ),
-      ),
-    ]),
-    models: new Map(
-      content.contentModelOf.rows.map(
-        ({ model, parent, version }) => [`${version} ${parent}`, model] as const,
-      ),
-    ),
-    next: grouped(
-      followPairsOf(content).map(({ from, model, to }) => [`${model} ${from}`, to] as const),
-    ),
-  };
-  contentIndexes.set(constants, index);
-
-  return index;
+    ]);
 };
 
 /**
@@ -685,17 +638,6 @@ const brokenStateOf = (law: LawName, witness: RefusalWitness): Option.Option<Bro
 };
 
 /**
- * Read the values a grouping of the index holds under a key: none where the grouping holds no
- * group of it, as a relation's image of a key no row has is empty.
- *
- * @param groups - The grouping.
- * @param key - The key.
- * @returns Its values, in the grouping's order.
- */
-const groupAt = (groups: ReadonlyMap<string, readonly string[]>, key: string): readonly string[] =>
-  Option.toArray(Option.fromUndefinedOr(groups.get(key))).flat();
-
-/**
  * Name the positions a model allows after a state, with their kinds and sources.
  *
  * @param broken - The state.
@@ -707,17 +649,21 @@ const allowedAfter = (
   broken: BrokenState,
   constants: RefusalConstants,
 ): Option.Option<{ readonly allowed: readonly Allowed[]; readonly model: string }> => {
-  const index = contentIndexOf(constants);
+  const { content } = constants;
   const { parent, state, version } = broken;
 
-  return Option.map(Option.fromUndefinedOr(index.models.get(`${version} ${parent}`)), (model) => ({
-    allowed: Arr.sort(groupAt(index.next, `${model} ${state}`), byPosition).map((position) => ({
-      kinds: groupAt(index.kinds, positionKey(version, parent, position)),
-      position,
-      source: Option.map(constants.content.sourceOf({ parent, position, version }), sourceText),
-    })),
-    model,
-  }));
+  return Option.map(content.contentModelOf.lookup({ parent, version }), ({ model }) => {
+    const placed = kindsAt(content, { parent, version });
+
+    return {
+      allowed: Arr.sort(followedAfter(content, model, state), byPosition).map((position) => ({
+        kinds: placed(position),
+        position,
+        source: Option.map(content.sourceOf({ parent, position, version }), sourceText),
+      })),
+      model,
+    };
+  });
 };
 
 /**
@@ -761,7 +707,12 @@ const brokenStateText = (
   const { kind, parent, state, version } = broken;
   const { allowed, model } = after;
   if (broken.law === "N7 Last") {
-    const ends = Arr.sort(groupAt(contentIndexOf(constants).ends, model), byPosition);
+    const ends = Arr.sort(
+      Arr.dedupe(
+        constants.content.last.rows.flatMap((row) => (row.model === model ? [row.position] : [])),
+      ),
+      byPosition,
+    );
 
     return `${parent}'s children end in state ${state} of its content model in ${version}, which ends only in ${ends.length === 0 ? "no state" : ends.join(", ")}; after state ${state} it needs one of ${allowedText(allowed)}`;
   }

@@ -106,8 +106,8 @@ describe("the content grammar's work", () => {
         const built = work.automata;
 
         assert.strictEqual(built, withParticle.length);
-        // A second read of production's grammar is the first composition's result (`composed()`
-        // is memoized by its list), so it builds no automaton again.
+        // A second read of production's grammar is the one composition `compose.ts` made as it
+        // loaded (`composed()`), so it builds no automaton again.
         yield* Effect.fromResult(compose.composed());
         assert.strictEqual(work.automata, built);
         // Each family reads one of the distinct automata, fewer than the models that build them.
