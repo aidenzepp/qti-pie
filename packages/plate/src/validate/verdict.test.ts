@@ -1089,7 +1089,7 @@ const tolerating = (tolerance: string): SourceDocument =>
     ),
   ]);
 
-describe("check, the built-in variables' identifiers and qti-equal's tolerance tokens (pantry DeclarationNotReserved and P6)", () => {
+describe("check, the built-in variables' identifiers (pantry DeclarationNotReserved) and qti-equal's tolerance values (reading 121, \"every tolerance is one or two values, each number among them above 0\")", () => {
   it("[I-9a] refuses an item that declares a variable named completionStatus, numAttempts or duration as attribute-type at its identifier (pantry DeclarationNotReserved)", () => {
     for (const [kind, identifier, baseType] of [
       ["qti-outcome-declaration", "completionStatus", "identifier"],
@@ -1117,8 +1117,8 @@ describe("check, the built-in variables' identifiers and qti-equal's tolerance t
     }
   });
 
-  it("[I-9a] refuses an item whose qti-equal tolerance holds a token that is neither an xs:double nor an NCName, 1,5, as attribute-type (pantry P6)", () => {
-    assert.deepStrictEqual(refusalsOf(verdictOf(tolerating("1,5"))), [
+  it('[I-9a] refuses an item whose qti-equal tolerance holds a number not above 0, -1, as attribute-type (reading 121, "each number among them above 0")', () => {
+    assert.deepStrictEqual(refusalsOf(verdictOf(tolerating("-1"))), [
       {
         location: {
           kind: "path",
@@ -1129,8 +1129,8 @@ describe("check, the built-in variables' identifiers and qti-equal's tolerance t
     ]);
   });
 
-  it("[I-9a] accepts an item whose qti-equal tolerance is 0.5, 1 2, TOL (an NCName) or INF", () => {
-    for (const tolerance of ["0.5", "1 2", "TOL", "INF"]) {
+  it("[I-9a] accepts an item whose qti-equal tolerance is 0.5, 1 2, TOL or INF, or 1,5 or +INF, which name variables read at run time (reading 121)", () => {
+    for (const tolerance of ["0.5", "1 2", "TOL", "INF", "1,5", "+INF"]) {
       assert.notStrictEqual(verdictOf(tolerating(tolerance)).verdict, "refused", tolerance);
     }
   });
