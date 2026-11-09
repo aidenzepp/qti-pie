@@ -16,7 +16,7 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { swarm, swarmChoice } from "@grizzle/testing/swarm";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Result } from "effect";
+import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { compose } from "#pantry/grammar/compose.ts";
 import { compositions } from "#pantry/grammar/compositions.ts";
 import { compositionsOf } from "#pantry/test/compositions.ts";
@@ -148,8 +148,10 @@ const swarmedMessages: Gen<readonly Message[]> = (source) => {
 };
 
 /**
- * Two toy lists for `compose`: one that composes, and one that `compose` refuses, since its
- * vocabulary states one admitted triple twice. Each is announced before a generator runs, so a
+ * Two toy lists for `compose`: one that composes, and one that `compose` refuses, since its one
+ * attribute declaration's pattern, `[]`, is an empty class, so its domain does not compile
+ * (`UncompiledDomain`). A refusal a generator makes is needed: a closed relation no longer checks
+ * its rows, so a triple stated twice composes. Each is announced before a generator runs, so a
  * refused composition counts as one.
  */
 const toyLists = {
@@ -163,16 +165,31 @@ const toyLists = {
     }),
   ],
   refused: [
-    toyVocabulary({
-      admission: [
-        { child: "e1", parent: "e0", version: "3.0.1" },
-        { child: "e1", parent: "e0", version: "3.0.1" },
+    {
+      ...toyVocabulary({
+        admission: [{ child: "e1", parent: "e0", version: "3.0.1" }],
+        attributes: ["a"],
+        data: ["ws"],
+        facets: toyFacets({}),
+        kinds: ["e0", "e1"],
+      }),
+      declarations: [
+        {
+          domain: {
+            _tag: "atomic",
+            builtin: "string",
+            facets: [{ facet: "whiteSpace", value: "preserve" }],
+            patterns: [["[]"]],
+            primitive: "string",
+          },
+          kind: "e0",
+          name: "a",
+          type: { inline: Option.none(), type: "Toy", whiteSpace: "preserve" },
+          use: "optional",
+          versions: ["3.0.1"],
+        },
       ],
-      attributes: [],
-      data: ["ws"],
-      facets: toyFacets({}),
-      kinds: ["e0", "e1"],
-    }),
+    },
   ],
 } as const;
 
