@@ -25,8 +25,14 @@
  * - Each test places, through its section refs and then each placed section document's, every section
  *   document a section resource names, once for each section ref that names it (reading 86), as if
  *   it were inline; a section ref that returns to a document already on its chain is
- *   `inclusion-cycle` (reading 85) and places nothing. That reach is the test's own parts, sections
- *   and item refs and each placed document's. Through that reach:
+ *   `inclusion-cycle` (reading 85) and places nothing. A section ref of the test or of a placed
+ *   document whose `href` names no path inside the package, through the `xml:base` in scope, places
+ *   nothing and is `package-path-outside` with `check: "remote-section"`, given once however many
+ *   placements reach it (reading 170, "A section ref whose href is external is refused under the
+ *   stated limit 'Remote section ref'"): a stated limit, not a rule of QTI, since plate assembles a
+ *   test from its package's documents and never fetches a section; a fetch of the section at import
+ *   would lift it. That reach is the test's own parts, sections and item refs and each placed
+ *   document's. Through that reach:
  *
  *   - Each part's, section's and item ref's identifier is given once: one a section document gives
  *     again after the test or a document reached before it gave it is `duplicate-identifier` at that
@@ -35,16 +41,17 @@
  *     gives its identifiers once;
  *   - Each item ref resolves through the `xml:base` in scope, or else against its own document's path,
  *     to an item resource the manifest lists, or to an LTI link resource (`ltiLinkTypes`), which an
- *     item ref may name in place of an item (reading 110); a test's own item ref that does neither is
- *     `item-ref-unresolved`, one that writes no identifier included (reading 155). The package
- *     declares nothing a link reports, so a reading through it names a built-in every item has as
- *     that built-in and any other name unchecked (reading 106, "an item ref that names an LTI link
- *     has no item whose declarations a prefix reads, so a prefixed reference through it is accepted
- *     unchecked, a recorded limit"), and its variable mappings are judged by no rule, while each of
- *     its template defaults is `undeclared-variable` (reading 110, "under an item ref that names an
- *     LTI link a variable mapping is accepted unchecked, a recorded limit, and a template default is
- *     refused"): a link is no QTI item and has no template variables to override. A source that
- *     listed the outcomes a link reports would lift the limit;
+ *     item ref may name in place of an item (reading 110); an item ref of the test or of a placed
+ *     document that does neither is `item-ref-unresolved`, one that writes no identifier included
+ *     (reading 155), given once however many placements reach it. The package declares nothing a link
+ *     reports, so a reading through it names a built-in every item has as that built-in and any other
+ *     name unchecked (reading 106, "an item ref that names an LTI link has no item whose declarations
+ *     a prefix reads, so a prefixed reference through it is accepted unchecked, a recorded limit"),
+ *     and its variable mappings are judged by no rule, while each of its template defaults is
+ *     `undeclared-variable` (reading 110, "under an item ref that names an LTI link a variable
+ *     mapping is accepted unchecked, a recorded limit, and a template default is refused"): a link is
+ *     no QTI item and has no template variables to override. A source that listed the outcomes a link
+ *     reports would lift the limit;
  *   - Each dotted reference in the test, a name an expression reads, is judged by reading 48 ("a dotted
  *     reference is accepted when exactly one reading names a real item ref, test part or section and
  *     its variable") against the test's own variables, the items the item refs resolve to, their
@@ -2993,7 +3000,9 @@ interface DocumentStructure {
   readonly targets: readonly ItemRefTarget[];
   /**
    * Each item ref that resolves to neither an item resource nor an LTI link resource,
-   * `item-ref-unresolved` at the item ref.
+   * `item-ref-unresolved` at the item ref, and each section ref whose `href` names no path inside
+   * the package, `package-path-outside` with `check: "remote-section"` at the section ref (reading
+   * 170), in document order.
    */
   readonly unresolved: readonly Refusal[];
   /**
@@ -3063,6 +3072,15 @@ const replacingSections = (visits: readonly Visit[]): ReadonlySet<SourceElement>
  * document's path ({@link basesOf}, reading 103), so one under an `xml:base` outside the package
  * names no path inside it.
  *
+ * A section ref whose `href` names no path inside the package, an absolute URI, a path from a
+ * host's root, a `..` that climbs above the package's root, or any `href` under an `xml:base`
+ * outside the package, places nothing and is `package-path-outside` with `check:
+ * "remote-section"` at the section ref, its detail the `href` and `reading: "170"` (reading 170, "A
+ * section ref whose href is external is refused under the stated limit 'Remote section ref'"). No
+ * rule of QTI bans one: a section ref is a facade for the section it names, and that section is the
+ * test's content, but plate assembles a test from its package's documents alone and never fetches
+ * one, so there is nothing to judge. A fetch of the section at import would lift the limit.
+ *
  * @param source The document's source.
  * @param base The document's path, which its `href`s resolve against where no `xml:base` is in
  *   scope.
@@ -3100,20 +3118,24 @@ const structureIn = (
 
     if (href !== undefined && isQti(element, sectionRefElements)) {
       const written = collapse(href);
-      sectionRefs.push(
-        ...Option.toArray(
-          Option.map(
-            resolveReference(bases.get(element) ?? Option.none(), written),
-            (resolved) => ({
-              at: path,
-              element,
-              href: written,
-              path: resolved,
-              replaced: replacing.has(element),
-            }),
-          ),
-        ),
-      );
+      const resolved = resolveReference(bases.get(element) ?? Option.none(), written);
+      if (Option.isSome(resolved)) {
+        sectionRefs.push({
+          at: path,
+          element,
+          href: written,
+          path: resolved.value,
+          replaced: replacing.has(element),
+        });
+      } else {
+        unresolved.push(
+          refuse(source.location, "package-path-outside", path, {
+            check: "remote-section",
+            href: written,
+            reading: "170",
+          }),
+        );
+      }
     } else if (href !== undefined && isQti(element, itemRefElements)) {
       const written = collapse(href);
       const resolved = resolveReference(bases.get(element) ?? Option.none(), written);
@@ -4870,27 +4892,32 @@ const judgeTest = (
 };
 
 /**
- * Judge the item refs of a section document a test reaches, once for the package however many tests
- * reach it: their variable mappings by {@link judgeMappings} and their template defaults by
- * {@link judgeTemplateDefaults}, against the item each resolves to from the section document's path,
- * each refusal at the section document, as pantry contains a mapping's source and a default's
- * target in its item ref's item's declarations (the `Template default target` and `Variable mapping
- * source` laws in `packages/pantry/src/qti/expressions.ts`). A section document no test reaches is
- * judged by its own verdict alone.
+ * Judge the item refs and section refs of a section document a test reaches, once for the package
+ * however many placements and tests reach it: each item ref that names neither an item nor an LTI
+ * link is `item-ref-unresolved` and each section ref that names no path inside the package is
+ * `package-path-outside` with `check: "remote-section"` (reading 170), as the test's own are
+ * ({@link structureIn}); then their variable mappings by {@link judgeMappings} and their template
+ * defaults by {@link judgeTemplateDefaults}, against the item each resolves to from the section
+ * document's path, each refusal at the section document, as pantry contains a mapping's source and
+ * a default's target in its item ref's item's declarations (the `Template default target` and
+ * `Variable mapping source` laws in `packages/pantry/src/qti/expressions.ts`). A section document
+ * no test reaches is judged by its own verdict alone.
  *
  * @param section The reached section document.
  * @param documents The package's documents.
- * @returns The refusals, the mappings' then the template defaults', each in document order.
+ * @returns The refusals: the unresolved refs', the mappings', then the template defaults', each in
+ *   document order.
  */
 const judgeReached = (
   section: ReachedSection,
   documents: ReadonlyMap<string, Document>,
 ): readonly Refusal[] => {
   const { location } = section.source;
-  const { targets, visits } = section.structure;
+  const { targets, unresolved, visits } = section.structure;
   const variablesFor = variablesThrough(targets, documents);
 
   return [
+    ...unresolved,
     ...judgeMappings(location, visits, variablesFor),
     ...judgeTemplateDefaults(location, visits, variablesFor).refusals,
   ];

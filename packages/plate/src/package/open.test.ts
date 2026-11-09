@@ -1474,6 +1474,28 @@ const cycleRefused = (file: string, identifier: string, href: string, chain: str
 });
 
 /**
+ * The `package-path-outside` refusal of a section ref whose `href` names no path inside the
+ * package (reading 170).
+ *
+ * @param file The path of the section ref's document.
+ * @param at The section ref's path in its document.
+ * @param href Its `href`, collapsed.
+ * @returns The refusal's facts.
+ */
+const remoteRefused = (file: string, at: string, href: string): Seen => ({
+  detail: { check: "remote-section", href, reading: "170" },
+  document: fileLocation(location, file),
+  location: { kind: "path", path: at },
+  rule: "package-path-outside",
+});
+
+/**
+ * The path of the section ref the test {@link referringTestXml} writes after its section `SEC`,
+ * when it writes one.
+ */
+const testSectionRefPath = "qti-assessment-test/qti-test-part/qti-assessment-section-ref";
+
+/**
  * The files of a package whose test `T`, {@link referringTestXml}, places `sections/s0.xml` once,
  * where each section document `X<n>`, at `sections/s<n>.xml`, holds one item ref `I<n>` to
  * `items/a.xml` and, but the last, two section refs to the next: so the last is placed
@@ -5491,6 +5513,112 @@ describe("package/open.ts", () => {
                 "s2.xml",
                 "test.xml sections/s2.xml sections/s3.xml sections/s2.xml",
               ),
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 R3 remote section C: a test whose section ref\'s href is an absolute URI, a path from a host\'s root, or a .. that climbs above the package\'s root is refused as package-path-outside with check remote-section at the ref, its href as written, and the ref places nothing; a section ref to a held section document is accepted (reading 170 ("A section ref whose href is external is refused under the stated limit "Remote section ref""))',
+      () =>
+        Effect.gen(function* remoteSectionRefs() {
+          for (const href of ["https://example.com/s.xml", "/sections/s2.xml", "../../s2.xml"]) {
+            assert.deepStrictEqual(
+              refusalsOf(yield* openPlacing(settingTotal(oneFloat), sectionRefXml("R", href))),
+              [remoteRefused("test.xml", testSectionRefPath, href)],
+              href,
+            );
+          }
+
+          acceptedOf(
+            yield* openPlacing(settingTotal(oneFloat), sectionRefXml("R", "sections/s2.xml")),
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 R3 remote section C: a section ref under an xml:base outside the package names no path inside it, so it is refused as package-path-outside with check remote-section though its href names a held section document; the test is refused for the xml:base itself all the same (reading 170 ("A section ref whose href is external is refused under the stated limit "Remote section ref""); reading 103 ("an xml:base is a base, resolved and never a file reference"))',
+      () =>
+        Effect.gen(function* basedRemoteSectionRef() {
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPlacing(
+                settingTotal(oneFloat),
+                '<qti-assessment-section-ref identifier="R" href="sections/s2.xml" xml:base="https://example.com/"/>',
+              ),
+            ),
+            [
+              remoteRefused("test.xml", testSectionRefPath, "sections/s2.xml"),
+              {
+                detail: {
+                  attribute: "xml:base",
+                  element: "qti-assessment-section-ref",
+                  reading: "90",
+                },
+                document: fileLocation(location, "test.xml"),
+                location: { kind: "path", path: `${testSectionRefPath}/@xml:base` },
+                rule: "unknown-attribute",
+              },
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 R3 remote section C: a section document the test places twice through held refs, whose own section ref is external, is refused once as package-path-outside with check remote-section at that document\'s ref (reading 170 ("A section ref whose href is external is refused under the stated limit "Remote section ref""))',
+      () =>
+        Effect.gen(function* reachedRemoteSectionRef() {
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                packageOf(
+                  referringFiles(
+                    settingTotal(oneFloat),
+                    placedTwice,
+                    sectionXml("", sectionRefXml("R3", "https://example.com/s.xml")),
+                  ),
+                ),
+              ),
+            ),
+            [
+              remoteRefused(
+                "sections/s2.xml",
+                "qti-assessment-section/qti-assessment-section-ref",
+                "https://example.com/s.xml",
+              ),
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 R3 remote section C: an item ref of a section document the test places twice that names no item is refused once as item-ref-unresolved at that document\'s item ref, as the test\'s own item refs are, beside the file reference it names (reading 155 ("the laws over what an item ref names judge every item ref"); reading 103 ("each one that resolves within the package names a file the manifest describes"))',
+      () =>
+        Effect.gen(function* reachedUnresolvedItemRef() {
+          const itemRef = "qti-assessment-section/qti-assessment-item-ref";
+
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                packageOf(
+                  referringFiles(
+                    settingTotal(oneFloat),
+                    placedTwice,
+                    sectionDocumentXml("S2", itemRefXml("I1", "../items/none.xml")),
+                  ),
+                ),
+              ),
+            ),
+            [
+              {
+                detail: { href: "../items/none.xml", identifier: "I1", path: "items/none.xml" },
+                document: fileLocation(location, "sections/s2.xml"),
+                location: { kind: "path", path: itemRef },
+                rule: "item-ref-unresolved",
+              },
+              missingReference(itemRef, "href", "items/none.xml", "sections/s2.xml"),
             ],
           );
         }),
