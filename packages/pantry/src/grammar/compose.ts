@@ -314,7 +314,7 @@ export const coveredBy = (
  * @returns Its namespace, or nameless for a kind with no row, which names no element: the document
  *   node, the doctype, character data and the foreign kinds.
  */
-const namespaceOfKind = (
+export const namespaceOfKind = (
   kinds: Pick<Kinds<string, string>, "elementName">,
   kind: string,
 ): NamespaceOfKind =>

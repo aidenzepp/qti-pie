@@ -280,22 +280,6 @@ export interface ContentGrammar {
 }
 
 /**
- * A content model's automaton whose Unique Particle Attribution fails, so no automaton state
- * decides a child's particle.
- */
-export class AmbiguousModel extends Schema.TaggedError<AmbiguousModel>()("AmbiguousModel", {
-  kind: Schema.String,
-  versions: Schema.String,
-}) {
-  /**
-   * The kind, its versions, and the repair.
-   */
-  override get message(): string {
-    return `The content model of ${this.kind} in ${this.versions} breaches Unique Particle Attribution, so a child's particle is not decided by the children before it. Correct the model, or state a spec reading that removes the ambiguity.`;
-  }
-}
-
-/**
  * A spec reading names a kind or a parent the models do not hold.
  */
 export class UnreadEdit extends Schema.TaggedError<UnreadEdit>()("UnreadEdit", {
@@ -349,12 +333,7 @@ export class UncountedCap extends Schema.TaggedError<UncountedCap>()("UncountedC
 /**
  * The ways the content models have no content grammar.
  */
-export type ContentError =
-  | AmbiguousModel
-  | ClosedRelationError
-  | MixedEnding
-  | UncountedCap
-  | UnreadEdit;
+export type ContentError = ClosedRelationError | MixedEnding | UncountedCap | UnreadEdit;
 
 /**
  * The kinds of character data, comments, instructions and entity references: the XDM's nodes
@@ -572,7 +551,8 @@ const edited = (particle: Particle, edit: ModelEdit): Edited => {
 
 /**
  * Apply every spec reading's edit of a kind's model, in order, and record each edit that found what
- * it names.
+ * it names: the particle {@link contentOf} builds the model's automaton from, which the tests read
+ * too (`content.test.ts`, Unique Particle Attribution over every model of a composition).
  *
  * @param particle - The model's particle.
  * @param edits - Every reading's edits.
@@ -580,7 +560,7 @@ const edited = (particle: Particle, edit: ModelEdit): Edited => {
  * @param used - The edits that found what they name, added to.
  * @returns The edited particle.
  */
-const editedBy = (
+export const editedBy = (
   particle: Particle,
   edits: readonly ModelEdit[],
   kind: string,
@@ -718,7 +698,6 @@ const cappedBy = (
  * ends at the start.
  */
 const noAutomaton: Automaton = {
-  ambiguous: [],
   ends: new Set([0]),
   next: [new Set()],
   positions: [],
@@ -729,7 +708,6 @@ const noAutomaton: Automaton = {
  * ends at, so the family admits no word, not even the empty one.
  */
 const emptyLanguage: Automaton = {
-  ambiguous: [],
   ends: new Set(),
   next: [new Set()],
   positions: [],
@@ -743,29 +721,6 @@ interface Placed {
   readonly position: Position;
   readonly source: Source;
 }
-
-/**
- * Find a state from which one kind leads to two positions, so that no state decides the child's
- * position: a breach of determinism over the kind alphabet. An XSD's Unique Particle Attribution
- * rules it out wherever a kind carries what the XSD tells particles apart by, as a foreign kind
- * carries its namespace class; this refuses, when the grammar composes, a kind that does not.
- *
- * @param automaton - The automaton.
- * @param symbols - The positions each kind names.
- * @returns A kind with such a state, or none.
- */
-const undecidedKindOf = (
-  automaton: Automaton,
-  symbols: ReadonlyMap<string, readonly Placed[]>,
-): Option.Option<string> =>
-  Arr.findFirst([...symbols], ([, placed]) =>
-    automaton.next.some(
-      (next) =>
-        [...new Set(placed.map(({ position }) => position.number))].filter((number) =>
-          next.has(number),
-        ).length > 1,
-    ),
-  ).pipe(Option.map(([kind]) => kind));
 
 /**
  * One installed automaton: its version, parent, model and the kinds it admits by each position.
@@ -1000,17 +955,11 @@ export const contentOf = (input: {
       const automaton = yield* endedBy(
         Option.match(particle, {
           onNone: () => noAutomaton,
-          onSome: (held) => automatonOf(held, input.namespaceOf, own),
+          onSome: automatonOf,
         }),
         edits,
         model.kind,
       );
-      if (automaton.ambiguous.length > 0) {
-        return yield* Result.fail(
-          new AmbiguousModel({ kind: model.kind, versions: model.versions.join(" and ") }),
-        );
-      }
-
       const caps = yield* cappedBy(automaton, edits, model.kind);
       const signature = signatureOf(automaton);
 
@@ -1068,16 +1017,6 @@ export const contentOf = (input: {
                 .push(symbol.processing);
             }
           }
-        }
-
-        const undecided = undecidedKindOf(automaton, symbols);
-        if (Option.isSome(undecided)) {
-          return yield* Result.fail(
-            new AmbiguousModel({
-              kind: `${model.kind} (for ${undecided.value})`,
-              versions: version,
-            }),
-          );
         }
 
         installed.push({
