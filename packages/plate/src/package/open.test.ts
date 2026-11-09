@@ -1249,6 +1249,140 @@ const defaultsOfSecond = (test: AcceptedTest): readonly string[] =>
  */
 const customItemXml = `<qti-assessment-item xmlns="${qti}" identifier="custom" title="Custom" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-item-body><qti-custom-interaction response-identifier="RESPONSE"/></qti-item-body></qti-assessment-item>`;
 
+/**
+ * The section refs of a test part that place the section document `S2`, at `sections/s2.xml`,
+ * twice: `R1`, then `R2`.
+ */
+const placedTwice = `${sectionRefXml("R1", "sections/s2.xml")}${sectionRefXml("R2", "sections/s2.xml")}`;
+
+/**
+ * Open a package whose test, {@link referringTestXml} with the given outcome processing and section
+ * refs, places the section document `S2` at `sections/s2.xml`, whose item ref `I1` holds what is
+ * given.
+ *
+ * @param processing What the test's outcome processing holds, as written.
+ * @param sectionRefs The test part's content after its section `SEC`, as written.
+ * @param itemRef What the section document's item ref `I1` holds, as written.
+ * @returns The package's verdict.
+ */
+const openPlacing = (processing: string, sectionRefs: string, itemRef = "") =>
+  openPackage(location, packageOf(referringFiles(processing, sectionRefs, sectionXml(itemRef))));
+
+/**
+ * Write a `qti-branch-rule` to a target, whose expression is the boolean `true`.
+ *
+ * @param target The rule's `target`.
+ * @returns The rule's text.
+ */
+const branchRuleXml = (target: string): string =>
+  `<qti-branch-rule target="${target}"><qti-base-value base-type="boolean">true</qti-base-value></qti-branch-rule>`;
+
+/**
+ * Open a package whose test, {@link referringTestXml} setting `TOTAL` to 1, places the section
+ * document `S2` through the given part content, with the test's item ref `ITEM0` and the section
+ * document's item ref `I1` each holding what is given.
+ *
+ * @param partContent The test part's content after its section `SEC`, as written.
+ * @param onItem0 What the test's item ref `ITEM0` holds, as written.
+ * @param onI1 What the section document's item ref `I1` holds, as written.
+ * @returns The package's verdict.
+ */
+const openBranching = (partContent: string, onItem0: string, onI1 = "") =>
+  openPackage(
+    location,
+    packageOf({
+      ...referringFiles(settingTotal(oneFloat), partContent, sectionXml(onI1)),
+      "test.xml": referringTestXml(settingTotal(oneFloat), partContent).replace(
+        itemRefXml("ITEM0", "items/b.xml"),
+        itemRefXml("ITEM0", "items/b.xml", onItem0),
+      ),
+    }),
+  );
+
+/**
+ * The `branch-target` refusal of a branch rule at a path, for a reason.
+ *
+ * @param file The rule's document's path.
+ * @param rule The path of the `qti-branch-rule`.
+ * @param target Its target.
+ * @param reason The reason reading 87 refuses it for.
+ * @returns The refusal's facts.
+ */
+const branchRefused = (file: string, rule: string, target: string, reason: string): Seen => ({
+  detail: { reading: "87", reason, target },
+  document: fileLocation(location, file),
+  location: { kind: "path", path: `${rule}/@target` },
+  rule: "branch-target",
+});
+
+/**
+ * The path of the branch rule the test's item ref `ITEM0` holds.
+ */
+const item0RulePath =
+  "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref/qti-branch-rule";
+
+/**
+ * The part content of a test whose section `OUTER` holds the item ref `ITEMB`, then the section ref
+ * `R` that places `S2`, and orders them as given.
+ *
+ * @param ordering What `OUTER` holds before its parts: a `qti-ordering`, or nothing.
+ * @returns The part content.
+ */
+const outerXml = (ordering: string): string =>
+  `<qti-assessment-section identifier="OUTER" title="OUTER" visible="true">${ordering}${itemRefXml("ITEMB", "items/b.xml")}${sectionRefXml("R", "sections/s2.xml")}</qti-assessment-section>`;
+
+/**
+ * The files of a package whose test places `S2` through its section ref `R1`, where `S2` holds the
+ * item ref `I1` and then the given further section refs, beside a section document `S3` at
+ * `sections/s3.xml` that holds the item ref `I3` and then the given section refs.
+ *
+ * @param fromS2 What `S2` holds after its item ref, as written.
+ * @param fromS3 What `S3` holds after its item ref, as written.
+ * @returns The package's files.
+ */
+const loopFiles = (fromS2: string, fromS3: string) =>
+  packageOf({
+    ...referringFiles(
+      settingTotal(oneFloat),
+      sectionRefXml("R1", "sections/s2.xml"),
+      sectionXml("", fromS2),
+    ),
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+      resourceXml("S", "imsqti_section_xmlv3p0", "sections/s2.xml"),
+      resourceXml("S3", "imsqti_section_xmlv3p0", "sections/s3.xml"),
+    ),
+    "sections/s3.xml": sectionDocumentXml("S3", `${itemRefXml("I3", "../items/a.xml")}${fromS3}`),
+  });
+
+/**
+ * Take the facts of every refusal of a package verdict but `missing-attribute`, which the test
+ * document's own verdict gives an element that writes no required attribute.
+ *
+ * @param verdict The package verdict.
+ * @returns The other refusals' facts, in order.
+ */
+const besideMissing = (verdict: PackageVerdict): Seen[] =>
+  refusalsOf(verdict).filter(({ rule }) => rule !== "missing-attribute");
+
+/**
+ * The `inclusion-cycle` refusal of a section document's one section ref.
+ *
+ * @param file The section document's path.
+ * @param identifier The section ref's identifier.
+ * @param href Its `href`.
+ * @param chain The chain of documents it returns along.
+ * @returns The refusal's facts.
+ */
+const cycleRefused = (file: string, identifier: string, href: string, chain: string): Seen => ({
+  detail: { chain, href, identifier, reading: "85" },
+  document: fileLocation(location, file),
+  location: { kind: "path", path: "qti-assessment-section/qti-assessment-section-ref" },
+  rule: "inclusion-cycle",
+});
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -1834,7 +1968,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] refuses a float TOTAL set from ITEM1.RESPONSE, an identifier response read through the reach, as expression-type, pantry's P20, and accepts ITEM1.SCORE and a mapping target typed as its float source",
+      "[T-9] align-54 test assembly E14: refuses a float TOTAL set from ITEM1.RESPONSE, an identifier response read through the reach, as expression-type, pantry's P20, and accepts ITEM1.SCORE; a mapping target RESPONSE, typed as its float source, is no expression-type, but names the item's response RESPONSE, so it is refused as duplicate-identifier (reading 97 (\"a variable mapping's target names no other variable its item ref's item holds\"))",
       () =>
         Effect.gen(function* setThroughReach() {
           const setFrom = (reference: string, firstRef = "") =>
@@ -1864,11 +1998,14 @@ describe("package/open.ts", () => {
           ]);
           assert.isTrue(acceptedAlone(verdict), "the test alone is accepted");
           acceptedOf(yield* setFrom("ITEM1.SCORE"));
-          acceptedOf(
-            yield* setFrom(
-              "ITEM1.RESPONSE",
-              '<qti-variable-mapping source-identifier="SCORE" target-identifier="RESPONSE"/>',
-            ),
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* setFrom(
+                "ITEM1.RESPONSE",
+                '<qti-variable-mapping source-identifier="SCORE" target-identifier="RESPONSE"/>',
+              ),
+            ).map(({ detail, rule }) => [rule, detail["identifier"], detail["reading"]]),
+            [["duplicate-identifier", "RESPONSE", "97"]],
           );
         }),
     );
@@ -2679,7 +2816,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] walks a section document in the reach once for two section refs to it, its own section ref to itself and a second test, giving its refusal once",
+      "[T-9] align-54 test assembly E7: judges a section document's item refs once for two section refs to it and a second test, giving its refusal once, and refuses its own section ref to itself as inclusion-cycle once under each test, naming that test's chain (reading 85 (\"an inclusion never reaches itself\"))",
       () =>
         Effect.gen(function* reachedOnce() {
           const files = referringFiles(
@@ -2709,8 +2846,24 @@ describe("package/open.ts", () => {
           );
 
           assert.deepStrictEqual(
-            refusalsOf(verdict).map((refusal) => [refusal.rule, refusal.document]),
-            [["undeclared-variable", fileLocation(location, "sections/s2.xml")]],
+            refusalsOf(verdict).map((refusal) => [
+              refusal.rule,
+              refusal.document,
+              refusal.detail["chain"],
+            ]),
+            [
+              ["undeclared-variable", fileLocation(location, "sections/s2.xml"), undefined],
+              [
+                "inclusion-cycle",
+                fileLocation(location, "sections/s2.xml"),
+                "test.xml sections/s2.xml sections/s2.xml",
+              ],
+              [
+                "inclusion-cycle",
+                fileLocation(location, "sections/s2.xml"),
+                "test2.xml sections/s2.xml sections/s2.xml",
+              ],
+            ],
           );
         }),
     );
@@ -3580,6 +3733,257 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(variableMarks(context.alone), []);
           assert.strictEqual(collected.delivered, collected.alone);
           assert.strictEqual(collected.delivered.test.outcomeProcessing.kind, "runs");
+        }),
+    );
+  });
+
+  describe("openPackage, the assembled test", () => {
+    it.effect(
+      'align-54 test assembly B6: a reference from the test through item ref I1 of a section document placed twice reads one placement each way, so it is refused as ambiguous-reference, the two readings alike (reading 86 ("a section document a test places twice is written once"))',
+      () =>
+        Effect.gen(function* placedTwiceOutside() {
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPlacing(settingTotal(variableXml("I1.SCORE")), placedTwice)),
+            [
+              {
+                detail: {
+                  firstPrefix: "I1",
+                  firstVariable: "SCORE",
+                  reading: "86",
+                  reference: "I1.SCORE",
+                  secondPrefix: "I1",
+                  secondVariable: "SCORE",
+                },
+                document: fileLocation(location, "test.xml"),
+                location: {
+                  kind: "path",
+                  path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-variable/@identifier",
+                },
+                rule: "ambiguous-reference",
+              },
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 test assembly B6: control: the same reference inside the section document placed twice reads its own placement, so it is accepted (reading 145 ("a fragment a test or a section document splices is judged in the test that places it, once per placement"))',
+      () =>
+        Effect.gen(function* placedTwiceInside() {
+          acceptedOf(
+            yield* openPlacing(
+              settingTotal(oneFloat),
+              placedTwice,
+              preConditionXml(greaterXml("I1.SCORE")),
+            ),
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 test assembly B6: each placement keeps its own selection with replacement: I1.1.SCORE inside S2, placed first under one and then under none, is refused once as undeclared-variable with check numbered, from the second placement (reading 88 ("a numbered reference such as Q01.2.SCORE names an instance of an item ref that a selection with replacement can repeat, and nothing else"))',
+      () =>
+        Effect.gen(function* placementSelection() {
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPlacing(
+                settingTotal(oneFloat),
+                `<qti-assessment-section identifier="OUTER" title="OUTER" visible="true">${replacingSelection}${sectionRefXml("R1", "sections/s2.xml")}</qti-assessment-section>${sectionRefXml("R2", "sections/s2.xml")}`,
+                preConditionXml(greaterXml("I1.1.SCORE")),
+              ),
+            ),
+            [
+              atSection("qti-pre-condition/qti-gt/qti-variable", "identifier", {
+                check: "numbered",
+                element: "qti-variable",
+                identifier: "I1.1.SCORE",
+                itemRef: "I1",
+                reading: "88",
+                reference: "I1.1.SCORE",
+              }),
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 test assembly E7: a section document whose section ref places itself, and two that place each other, are refused once as inclusion-cycle at the section ref that returns, its chain the documents from the test (reading 85 ("an inclusion never reaches itself"))',
+      () =>
+        Effect.gen(function* inclusionCycles() {
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, loopFiles(sectionRefXml("R2", "s2.xml"), ""))),
+            [
+              cycleRefused(
+                "sections/s2.xml",
+                "R2",
+                "s2.xml",
+                "test.xml sections/s2.xml sections/s2.xml",
+              ),
+            ],
+          );
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                loopFiles(sectionRefXml("R2", "s3.xml"), sectionRefXml("R3", "s2.xml")),
+              ),
+            ),
+            [
+              cycleRefused(
+                "sections/s3.xml",
+                "R3",
+                "s2.xml",
+                "test.xml sections/s2.xml sections/s3.xml sections/s2.xml",
+              ),
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 test assembly E8b: a branch rule of the test whose target lies past a section ref, inside the section document it places, is refused as branch-target, unknown placed once and ambiguous placed twice (reading 87 ("from outside a section document a ref places, no target lies inside it"))',
+      () =>
+        Effect.gen(function* branchIntoPlacement() {
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openBranching(sectionRefXml("R", "sections/s2.xml"), branchRuleXml("I1")),
+            ),
+            [branchRefused("test.xml", item0RulePath, "I1", "unknown")],
+          );
+          assert.deepStrictEqual(
+            refusalsOf(yield* openBranching(placedTwice, branchRuleXml("I1"))),
+            [branchRefused("test.xml", item0RulePath, "I1", "ambiguous")],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 test assembly E8b: a branch rule of the placed section document whose target ITEMB comes before its section ref is refused as backward, and accepted when their nearest common section shuffles (reading 87 ("their order is drawn at delivery and is not judged here"))',
+      () =>
+        Effect.gen(function* branchShuffled() {
+          assert.deepStrictEqual(
+            refusalsOf(yield* openBranching(outerXml(""), "", branchRuleXml("ITEMB"))),
+            [
+              branchRefused(
+                "sections/s2.xml",
+                "qti-assessment-section/qti-assessment-item-ref/qti-branch-rule",
+                "ITEMB",
+                "backward",
+              ),
+            ],
+          );
+          acceptedOf(
+            yield* openBranching(
+              outerXml('<qti-ordering shuffle="true"/>'),
+              "",
+              branchRuleXml("ITEMB"),
+            ),
+          );
+        }),
+    );
+
+    it.effect(
+      "align-54 test assembly E14: a variable mapping whose target is another outcome of its item, OTHER, or a built-in, numAttempts, is refused as duplicate-identifier at the target, and one whose target is its own source or a fresh name is accepted (reading 97 (\"a variable mapping's target names no other variable its item ref's item holds\"))",
+      () =>
+        Effect.gen(function* mappingTargets() {
+          for (const target of ["OTHER", "numAttempts"]) {
+            assert.deepStrictEqual(
+              refusalsOf(
+                yield* openPackage(
+                  location,
+                  mappingPackage(
+                    `<qti-variable-mapping source-identifier="SCORE" target-identifier="${target}"/>`,
+                    itemXml("a", "SCORE", "OTHER"),
+                  ),
+                ),
+              ),
+              [
+                {
+                  detail: { identifier: target, reading: "97" },
+                  document: fileLocation(location, "test.xml"),
+                  location: {
+                    kind: "path",
+                    path: `${itemRefChildAt("qti-variable-mapping")}/@target-identifier`,
+                  },
+                  rule: "duplicate-identifier",
+                },
+              ],
+              target,
+            );
+          }
+
+          for (const target of ["SCORE", "NEW"]) {
+            acceptedOf(
+              yield* openPackage(
+                location,
+                mappingPackage(
+                  `<qti-variable-mapping source-identifier="SCORE" target-identifier="${target}"/>`,
+                  itemXml("a", "SCORE", "OTHER"),
+                ),
+              ),
+            );
+          }
+        }),
+    );
+
+    it.effect(
+      'align-54 test assembly E41b: an item ref that writes no identifier is judged like any other: one whose href names no item is refused as item-ref-unresolved with check unwritten, and one whose href names an item has its mappings checked; the missing identifier is left to the test\'s own verdict (reading 155 ("the laws over what an item ref names judge every item ref, whether or not it ... write[s] an identifier"))',
+      () =>
+        Effect.gen(function* unnamedItemRef() {
+          const unnamed = (content: string, href: string) =>
+            openPackage(
+              location,
+              readingPackage(
+                readingTestXml(
+                  oneFloat,
+                  "",
+                  `<qti-assessment-item-ref href="${href}">${content}</qti-assessment-item-ref>`,
+                ),
+                { "items/a.xml": itemXml("a", "SCORE") },
+              ),
+            );
+
+          assert.deepStrictEqual(besideMissing(yield* unnamed("", "items/none.xml")), [
+            {
+              detail: {
+                attribute: "identifier",
+                check: "unwritten",
+                href: "items/none.xml",
+                path: "items/none.xml",
+                reading: "155",
+              },
+              document: fileLocation(location, "test.xml"),
+              location: {
+                kind: "path",
+                path: "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref",
+              },
+              rule: "item-ref-unresolved",
+            },
+          ]);
+          assert.deepStrictEqual(
+            besideMissing(
+              yield* unnamed(
+                '<qti-variable-mapping source-identifier="NOPE" target-identifier="X"/>',
+                "items/a.xml",
+              ),
+            ),
+            [
+              {
+                detail: {
+                  attribute: "source-identifier",
+                  element: "qti-variable-mapping",
+                  expected: "outcome",
+                  identifier: "NOPE",
+                },
+                document: fileLocation(location, "test.xml"),
+                location: {
+                  kind: "path",
+                  path: `${itemRefChildAt("qti-variable-mapping")}/@source-identifier`,
+                },
+                rule: "undeclared-variable",
+              },
+            ],
+          );
         }),
     );
   });
