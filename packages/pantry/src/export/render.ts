@@ -3,7 +3,7 @@
  * delivered (`#pantry/export/scan.ts` `documentScan`), assembled with one stack and written by
  * `unshred` in its export charset. The export runs it for each document of a package
  * (`#pantry/export/package.ts`), and an app outside this package runs it over the rows its own
- * workload's scan read.
+ * workload's scan read, paged by `scannedRows` of `#pantry/export/pages.ts` as the export pages it.
  */
 import { Array as Arr, Effect } from "effect";
 import { addRow, assembleScan, emptyScan } from "#pantry/export/pages.ts";

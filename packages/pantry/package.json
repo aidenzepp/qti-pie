@@ -10,6 +10,7 @@
   "exports": {
     "./db/connection.ts": "./src/db/connection.ts",
     "./db/install.ts": "./src/db/install.ts",
+    "./export/pages.ts": "./src/export/pages.ts",
     "./export/render.ts": "./src/export/render.ts",
     "./export/scan.ts": "./src/export/scan.ts",
     "./qti/logins.ts": "./src/qti/logins.ts",
