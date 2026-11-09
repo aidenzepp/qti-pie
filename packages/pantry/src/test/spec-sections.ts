@@ -57,7 +57,8 @@ export interface SpecDocument {
 
 /**
  * The IMS specifications the law sources cite: the QTI 3.0 and 3.0.1 information models, the QTI
- * 3.0 XML binding, and the metadata and usage-data bindings.
+ * 3.0 XML binding, the metadata and usage-data bindings, and Data-SSML 1.0, the JSON a closed
+ * `data-ssml` holds, which the QTI 3.0 implementation guide names as its definition.
  */
 export const specDocuments: readonly SpecDocument[] = [
   {
@@ -99,6 +100,14 @@ export const specDocuments: readonly SpecDocument[] = [
     text: "pm-ud/ud-bind.txt",
     textSha256: "2af6fe67b2e4403a59ecafbb3275c2d1485ab89138cdcc24d312597cfb005082",
     url: "https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html",
+  },
+  {
+    html: "datassml/infobind.html",
+    htmlSha256: "e7c7473c1431a7dc4a072b74ef5053aeec7d6ed502b49595450a2ea5e1b0bc26",
+    name: "Data-SSML 1.0, its information model and JSON binding",
+    text: "datassml/infobind.txt",
+    textSha256: "54eb1ac14b80dfd7eb4d71f682f9d917a9b97143693797190c286ec619af7d62",
+    url: "https://www.imsglobal.org/sites/default/files/spec/qti/v3/data-ssml_infobind/imsqtiv3p0_datassml_v1p0_InfoBind.html",
   },
 ];
 

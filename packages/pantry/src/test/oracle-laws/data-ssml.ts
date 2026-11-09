@@ -13,7 +13,7 @@
  *
  * The module imports only `effect`.
  *
- * @see {@link https://www.imsglobal.org/spec/qti/v3p0/datassml/ | IMS Data-SSML 1.0, 3.4 JSON Schema}
+ * @see {@link https://www.imsglobal.org/sites/default/files/spec/qti/v3/data-ssml_infobind/imsqtiv3p0_datassml_v1p0_InfoBind.html#JSOND | IMS Data-SSML 1.0, 3.4 Description of the JSON Schema}
  */
 import { Option } from "effect";
 

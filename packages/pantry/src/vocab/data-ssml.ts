@@ -15,7 +15,7 @@
  * row, which `JSON.parse` cannot do, since it keeps the last. {@link dataSsmlMembers} is the
  * schema's table, which the database installs as closed relations. The module is pure.
  *
- * @see {@link https://www.imsglobal.org/spec/qti/v3p0/datassml/ | IMS Data-SSML 1.0, 3.4 JSON Schema}
+ * @see {@link https://www.imsglobal.org/sites/default/files/spec/qti/v3/data-ssml_infobind/imsqtiv3p0_datassml_v1p0_InfoBind.html#JSOND | IMS Data-SSML 1.0, 3.4 Description of the JSON Schema}
  */
 import { Option } from "effect";
 
