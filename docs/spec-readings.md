@@ -45,6 +45,9 @@ operator ruling. A new reading lands here by pull request, and a package that ne
      oracle does not raise, and the rule named first may differ. Outlandish and absent from the official packages;
      lifted by reading names from XML 1.0 Fifth Edition (reading 94), or by writing no row for a value outside its
      domain (decision 463, stated here).
+   - **Include content**: the importer still assesses an element a resolving include holds outside its `xi:fallback`,
+     laxly, and can refuse it, though XInclude ignores that content (reading 118). No corpus package holds such
+     content; lifted by the importer ignoring it, as the law oracle does (issue #66; decision 470, stated here).
 
    Limits that accept content without a check:
    - MathML prose rules no structural law reads, such as the definition a `definitionURL` names, and the importer's
@@ -161,7 +164,7 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    (2026-10-30, restated without exceptions 2026-11-03. Amended under the operator's ruling of 2026-11-07, register
    D1, to defer to this list; the element-depth limit added by decision 445; the three limits that change no verdict
    after reading 162's added by decisions 449, 451 and 452; the limits added by decision 463; the rule fragment limit
-   that moves a verdict stated by decisions 465 and 466.)
+   that moves a verdict stated by decisions 465 and 466; the include content limit stated by decision 470.)
 
 2. **MathML validity is the MathML 3 Recommendation**: its RelaxNG schema and its prose rules, not only the MathML XSD
    that QTI's schema imports. MathML that breaks a rule of the Recommendation, such as an operator applied to the wrong
@@ -2273,13 +2276,20 @@ against it. A reading that is not an information-model-over-XSD case says which 
      containing characters outside the range #x20 through #x7E must be flagged as fatal errors" (XInclude 1.0 Second
      Edition, section 3.1). `XInclude.xsd`'s `includeType` admits any number of `xi:fallback` children, and types the
      two attributes `xs:string`. So `xi:include`'s content model is restated as the elements it ignores, of another
-     namespace or of none, with at most one `xi:fallback` among them, and the two attributes take the pattern
-     `[ -~]*`. XInclude also says "It is a fatal error for an xi:fallback element to appear in a document anywhere other
-     than as the direct child of the xi:include" (section 3.2). The pinned XSDs name `xi:fallback` only under
-     `xi:include`, but a wildcard reads XInclude's globals as their kinds, so a fallback in wildcard content is read as
-     XInclude's element and not refused: a known under-refusal, until a law holds a fallback to its parent. No corpus
-     document holds an include. This binds pantry and plate alike. This is not a case of documents in conflict.
-     (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     namespace or of none, with at most one `xi:fallback` among them, and the two attributes take the pattern `[ -~]*`.
+     Of the rest XInclude says "Other content (text, processing instructions, comments, elements not in the XInclude
+     namespace, descendants of child elements) is not constrained by this specification and is ignored by the XInclude
+     processor, that is, it has no effect on include processing" (section 3.1), and no QTI text bans it, so the content
+     of a resolving include other than its `xi:fallback` is ignored: never assessed laxly, as `XInclude.xsd`'s wildcard
+     would assess it, and never refused (reading 1 lists the importer's remaining departure). XInclude also says "It is
+     a fatal error for an xi:fallback element to appear in a document anywhere other than as the direct child of the
+     xi:include" (section 3.2). The pinned XSDs name `xi:fallback` only under `xi:include`, but a wildcard reads
+     XInclude's globals as their kinds, so a fallback in wildcard content is read as XInclude's element and not refused:
+     a known under-refusal, until a law holds a fallback to its parent. No corpus document holds an include. This binds
+     pantry and plate alike. This is not a case of documents in conflict.
+     (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins. Amended
+     2026-11-09 by the operator under delegation, decision 470: the content of a resolving include other than its
+     fallback is ignored, not assessed laxly.)
 119. **A rounding operator's integer `figures` is at least 1 under significant figures and at least 0 under decimal
      places.** The information model says of EqualRounded's `figures` "If roundingMode= 'significantFigures', the
      value of figures must be a non-zero positive integer. If roundingMode='decimalPlaces', the value of figures must
