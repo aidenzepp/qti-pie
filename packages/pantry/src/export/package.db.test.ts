@@ -1,6 +1,7 @@
 /**
- * The export on the lease: the three corpus packages the import accepts, imported, exported and
- * compared with their record, and the scan's plan read back through `db.explain`.
+ * The export on the lease: the three corpus packages the import accepts and the SSML phase's
+ * positive fixtures, imported, exported and compared with their record, and the scan's plan read
+ * back through `db.explain`.
  *
  * - **The round trip.** Every entry of each package's export is held to canonical equality with the
  *   record its import wrote, and byte equality is reported, per package, as the test's annotation.
@@ -46,13 +47,24 @@ import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/
 const workDirectory = path.resolve(import.meta.dirname, "../../work");
 
 /**
- * The corpus packages the import accepts (`verdicts/qti-examples-0a92fbb.tsv`), each materialized
- * as the import reads it: `simple` and `sharedMedia` as directories, `svg` as its zip.
+ * The packages the import accepts, each materialized as the import reads it: the corpus packages
+ * (`verdicts/qti-examples-0a92fbb.tsv`), `simple` and `sharedMedia` as directories and `svg` as
+ * its zip, then the SSML phase's positive fixtures (held by `fixtures.ssml.oracle.test.ts`) as
+ * directories.
  */
 const accepted = [
   { name: "simple", source: materialize("simple") },
   { name: "sharedMedia", source: materialize("sharedMedia") },
   { name: "svg", source: materializeZip("svg") },
+  { name: "ssml-corpus-sub", source: materialize("ssml-corpus-sub") },
+  { name: "ssml-hooks", source: materialize("ssml-hooks") },
+  { name: "ssml-speak", source: materialize("ssml-speak") },
+  { name: "ssml-voice", source: materialize("ssml-voice") },
+  { name: "ssml-prosody", source: materialize("ssml-prosody") },
+  { name: "ssml-nested", source: materialize("ssml-nested") },
+  { name: "ssml-two-speaks", source: materialize("ssml-two-speaks") },
+  { name: "data-ssml-custom", source: materialize("data-ssml-custom") },
+  { name: "data-ssml", source: materialize("data-ssml") },
 ] as const;
 
 /**
@@ -144,7 +156,7 @@ const TestLayer = Layer.effect(
 
 /**
  * The timeout, in milliseconds, of the hook that builds {@link TestLayer}: the author layer's own
- * budget, and a lease write's for the three imports it runs.
+ * budget, and a lease write's for the imports it runs.
  */
 const importHookTimeoutMs = authorLayerHookTimeoutMs + leaseTestTimeoutMs;
 
@@ -245,7 +257,7 @@ describe.skipIf(!hasLease)(
             // by grizzle's comment on it, and every index of Node that leads with `document`
             // continues with `start`, so an index access of the scan's one relation reads the
             // key's order; `db.explain`'s plans carry each node's type, not its index.
-            // Bound: every document of the three accepted packages.
+            // Bound: every document of the accepted packages.
             Effect.gen(function* planAudit() {
               const db = yield* Db.open(AuthorApp.roles.author, {});
               const client = yield* loginSession;
