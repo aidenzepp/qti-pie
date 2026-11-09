@@ -1307,6 +1307,17 @@ export const generatedRecorded: readonly Recorded[] = [
     rule: "binding-declared",
   },
   {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 92,
+      says: "Each response variable declared may be bound to one and only one interaction",
+      why: "each response variable is bound to one interaction only (information model §2.2.2.2), so two interactions of an item that name one response are refused; the XSD resolves no binding",
+    },
+    rule: "binding-unique",
+  },
+  {
     class: "attribute-value",
     detail:
       /^value domain at \S+: (?:src|poster|srcset): "(?: |\\[nrt])*" is outside URLDType \(reading [^)]*\b12[45]\b/u,
