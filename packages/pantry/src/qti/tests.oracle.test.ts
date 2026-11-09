@@ -7,7 +7,6 @@
  * tests (`#pantry/import/overlays/tests.test.ts`) judge the rows the laws read.
  */
 import { schema } from "@bjornpagen/grizzle";
-import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -17,7 +16,6 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Option, Schema } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawNameOf } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
@@ -27,6 +25,7 @@ import { Qti } from "#pantry/qti/schema.ts";
 import { collapsedPattern, testLaws, testRelations } from "#pantry/qti/tests.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge } from "#pantry/test/host-judge.ts";
+import { lawNamesOf } from "#pantry/test/host-law-names.ts";
 import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import { judge as judgeOracle, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
@@ -413,15 +412,6 @@ const sectionRefPackage = (href: string) => {
   return entries;
 };
 
-/**
- * Name the laws a host judgment lists.
- *
- * @param laws - The broken or skipped laws.
- * @returns Their names.
- */
-const namedLaws = (laws: readonly { readonly law: Law }[]): ReadonlySet<string> =>
-  new Set(laws.flatMap(({ law }) => Option.toArray(lawNameOf(law))));
-
 layer(NodeServices.layer, { excludeTestServices: true })(
   "qti/tests.ts, an external section ref",
   (test) => {
@@ -477,9 +467,9 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     `${href}: the law oracle breaks ${[...oracle].join(", ") || "no law"}`,
                   );
                   assert.deepStrictEqual(
-                    [...namedLaws(host.broken)].toSorted(),
+                    [...lawNamesOf(host.broken)].toSorted(),
                     expected,
-                    `${href}: the import's rows break ${[...namedLaws(host.broken)].join(", ") || "no law"}`,
+                    `${href}: the import's rows break ${[...lawNamesOf(host.broken)].join(", ") || "no law"}`,
                   );
                 }),
               ),

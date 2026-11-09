@@ -35,10 +35,10 @@ import {
 import { Qti } from "#pantry/qti/schema.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { lawNameOf } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge as judgeRows } from "#pantry/test/host-judge.ts";
+import { lawNamesOf } from "#pantry/test/host-law-names.ts";
 import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import { contentLawOf, judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import {
@@ -427,13 +427,8 @@ const hostLaws = judgedLaws(Qti);
  * @param laws - The broken or skipped laws.
  * @returns Their names among reading 104's two.
  */
-const choiceNameLawsOf = (laws: readonly { readonly law: Law }[]): readonly string[] => [
-  ...new Set(
-    laws
-      .flatMap(({ law }) => Option.toArray(lawNameOf(law)))
-      .filter((law) => choiceNameLaws.has(law)),
-  ),
-];
+const choiceNameLawsOf = (laws: readonly { readonly law: Law }[]): readonly string[] =>
+  [...lawNamesOf(laws)].filter((law) => choiceNameLaws.has(law));
 
 describe("qti/interactions.ts, reading 104 by the law oracle", () => {
   it.effect(

@@ -4267,6 +4267,20 @@ const overlayLaws: readonly ((
       return [];
     }
 
+    if (Option.exists(most, (count) => count === 0n || count > 1n)) {
+      return [
+        {
+          keys: {
+            attribute,
+            cardinality,
+            identifier: bound.value,
+            most: Option.match(most, { onNone: () => "", onSome: String }),
+          },
+          law: "Binding cardinality",
+        },
+      ];
+    }
+
     // Reading 169: "The GapMatchInteraction must be bound to a response variable with base-type
     // directedPair and either single or multiple cardinality, depending on the number of gaps"
     // (info §5.57): each gap takes a pair of its own, so two or more gaps take a multiple response.
@@ -4281,19 +4295,6 @@ const overlayLaws: readonly ((
               Option.isSome(valueOf(overlay.view, member.id, "identifier")),
           ).length
         : 0;
-    if (Option.exists(most, (count) => count === 0n || count > 1n)) {
-      return [
-        {
-          keys: {
-            attribute,
-            cardinality,
-            identifier: bound.value,
-            most: Option.match(most, { onNone: () => "", onSome: String }),
-          },
-          law: "Binding cardinality",
-        },
-      ];
-    }
 
     return gaps > 1
       ? [
