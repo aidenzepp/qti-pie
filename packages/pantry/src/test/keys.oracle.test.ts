@@ -371,9 +371,9 @@ interface Drawn {
 type Sketch = Readonly<Partial<Record<Site, Drawn>>>;
 
 /**
- * `keyText`'s pattern, read as grizzle installs it.
+ * `keyText`'s pattern, read as grizzle installs it: its one `str.regex` pattern.
  */
-const keyTextPattern = new RegExp(keyText.pattern.source, keyText.pattern.flags);
+const keyTextPattern = new RegExp(keyText.patterns[0].source, keyText.patterns[0].flags);
 
 /**
  * Decide whether the schema's type admits a text as a key text, as grizzle's `str.bytes` domain

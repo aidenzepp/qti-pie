@@ -1,5 +1,6 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The generated documents spell the XML encoding labels (`UTF-8`) as crust's reader reports them. */
 import { schema } from "@bjornpagen/grizzle";
+import type { RegexText } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
@@ -68,14 +69,14 @@ import { mathmlNamespace, namespaceClassOf, namespaceNameOf } from "#pantry/voca
 /**
  * A text field's pattern compiled as grizzle reads it: `str.regex`'s grammar is ECMAScript's under
  * the field's own flags, so JavaScript's `RegExp` decides exactly the language PostgreSQL's CHECK
- * holds the column to.
+ * holds the column to. Each field read here is a `str.regex` text, whose `patterns` are its one
+ * pattern (grizzle's `RegexText`, `text/field.ts` at `3cc8fbd`).
  *
- * @param field - The field.
- * @param field.desc - Its description, the pattern's source and flags.
+ * @param field - The field's type.
  * @returns The compiled pattern.
  */
-const patternOf = (field: { readonly desc: { readonly flags: string; readonly source: string } }) =>
-  new RegExp(field.desc.source, field.desc.flags);
+const patternOf = (field: RegexText<string>) =>
+  new RegExp(field.patterns[0].source, field.patterns[0].flags);
 
 /**
  * The patterns of `Node.chars` by kind that the arm checks match, under `Compute.matches`'s flags,

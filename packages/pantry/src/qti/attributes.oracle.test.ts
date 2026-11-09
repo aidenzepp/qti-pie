@@ -155,7 +155,7 @@ describe("qti/attributes.ts, declared", () => {
     assert.strictEqual(OpenAttributeName.fields.uri, namespaceText);
     assert.strictEqual(OpenAttributeName.fields.elementNamespace, namespaceText);
     assert.strictEqual(OpenAttributeName.fields.local, OpenLocal);
-    assert.notMatch(OpenLocal.pattern.source, /\{\d*,\d+\}/u);
+    assert.notMatch(OpenLocal.patterns[0].source, /\{\d*,\d+\}/u);
   });
 });
 

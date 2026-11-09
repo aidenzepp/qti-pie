@@ -1420,10 +1420,9 @@ export const fixed: readonly Known[] = [
       kind: "import-only-law",
       law: {
         field: "languageTag",
-        flags: "su",
         kind: "pattern",
+        patterns: [{ flags: "su", source: "^.*$" }],
         relation: "LomString",
-        source: "^.*$",
       },
     },
   },

@@ -167,10 +167,9 @@ const unshowable: readonly Signature[] = [
     kind: "import-only-law",
     law: {
       field: "stringPiece",
-      flags: "u",
       kind: "pattern",
+      patterns: [{ flags: "u", source: "^[\\s\\S]*$" }],
       relation: "Node",
-      source: "^[\\s\\S]*$",
     },
   },
   {

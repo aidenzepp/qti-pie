@@ -1453,10 +1453,11 @@ describe("the refusals made before the database", () => {
 /**
  * Every text field of a schema's ordinary relations, a generated or accumulated one included, with
  * its type and its pattern law, one per field as grizzle states it: its relation and field, and its
- * type's source and flags. A field's type is the one `generated(type, term)` or `accumulated(type,
- * start)` declares, or its descriptor itself. A field's descriptor is read as any value, as
- * {@link generatedLaws} reads it, so a relation with a function-valued type (`MapKeyFloat`'s
- * `pg["double precision"]`) is read, and a pattern of another shape throws.
+ * type's patterns, each a source and flags, in declared order. A field's type is the one
+ * `generated(type, term)` or `accumulated(type, start)` declares, or its descriptor itself. A
+ * field's descriptor is read as any value, as {@link generatedLaws} reads it, so a relation with a
+ * function-valued type (`MapKeyFloat`'s `pg["double precision"]`) is read, and patterns of another
+ * shape throw.
  *
  * @param relations - The schema's `relations`.
  * @returns Each relation's text fields.
@@ -1464,7 +1465,9 @@ describe("the refusals made before the database", () => {
 const textFields = (
   relations: AnySchema["relations"],
 ): readonly { readonly law: Law; readonly type: unknown }[] => {
-  const Pattern = Schema.Struct({ flags: Schema.Literals(["u", "su"]), source: Schema.String });
+  const Patterns = Schema.NonEmptyArray(
+    Schema.Struct({ flags: Schema.Literals(["u", "su"]), source: Schema.String }),
+  );
   const Stored = Schema.Struct({
     fields: Schema.Record(Schema.String, Schema.Unknown),
     kind: Schema.Literal("relation"),
@@ -1483,13 +1486,13 @@ const textFields = (
           onSome: (written) => (written.writing === "generated" ? written.type : written.field),
         });
 
-        return Predicate.hasProperty(type, "pattern")
+        return Predicate.hasProperty(type, "patterns")
           ? [
               {
                 law: {
-                  ...Schema.decodeUnknownSync(Pattern)(type.pattern),
                   field,
                   kind: "pattern",
+                  patterns: Schema.decodeUnknownSync(Patterns)(type.patterns),
                   relation: name,
                 } satisfies Law,
                 type,
@@ -1544,10 +1547,9 @@ const missingFrom = (laws: readonly Law[], among: readonly Law[]): readonly stri
  */
 const clubLaw = (field: string): Extract<Law, { readonly kind: "pattern" }> => ({
   field,
-  flags: "u",
   kind: "pattern",
+  patterns: [{ flags: "u", source: "^[a-z]*$" }],
   relation: "Club",
-  source: "^[a-z]*$",
 });
 
 /**
@@ -1557,13 +1559,15 @@ const clubLaw = (field: string): Extract<Law, { readonly kind: "pattern" }> => (
  * @param field - The field.
  * @returns Its law; a field with none fails the test, naming it.
  */
-const statedPatternLaw = (owner: string, field: string): Law =>
+const statedPatternLaw = (
+  owner: string,
+  field: string,
+): Extract<Law, { readonly kind: "pattern" }> =>
   pipe(
     Arr.findFirst(
-      statedLaws(),
-      ([law]) => law.kind === "pattern" && law.relation === owner && law.field === field,
+      statedLaws().flatMap(([law]) => (law.kind === "pattern" ? [law] : [])),
+      (law) => law.relation === owner && law.field === field,
     ),
-    Option.map(([law]) => law),
     Option.getOrThrowWith(() => new Error(`${owner}.${field} states no pattern law`)),
   );
 
@@ -1659,18 +1663,16 @@ describe("the pattern laws, one per field", () => {
   it(
     "names two fields of one pattern apart: Node.chars an XML production, OpenElementName.namespace a key text's bound",
     () => {
-      // Oracle: grizzle's per-field pattern law, its relation and field beside the source and flags
-      // the field spells (changeset.ts's Law), and the classes of `textLaws`: a node's characters
+      // Oracle: grizzle's per-field pattern law, its relation and field beside the patterns the
+      // field spells (changeset.ts's Law), and the classes of `textLaws`: a node's characters
       // and a foreign namespace name are both `Char*`, but only the name is bounded, so a refusal
       // of the one is crust's production and of the other the stated limit.
       const chars = statedPatternLaw("Node", "chars");
       const namespace = statedPatternLaw("OpenElementName", "namespace");
 
-      assert.isTrue(
-        chars.kind === "pattern" &&
-          namespace.kind === "pattern" &&
-          chars.source === namespace.source &&
-          chars.flags === namespace.flags,
+      assert.deepStrictEqual(
+        chars.patterns,
+        namespace.patterns,
         "the two fields spell one pattern",
       );
       assert.isFalse(sameLaw(chars, namespace));
@@ -1740,7 +1742,7 @@ describe("the census of the composed Qti schema", () => {
         assert.deepStrictEqual(
           [...textLaws.keys()]
             .filter((type) => !typed.has(type))
-            .map(({ pattern }) => Formatter.format(pattern)),
+            .map((type) => Formatter.format(type.patterns)),
           [],
           "rows of textLaws that type no field with a pattern law",
         );

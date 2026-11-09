@@ -626,15 +626,18 @@ const lawsNamed: ReadonlyMap<LawName, readonly Law[]> = new Map(
 );
 
 /**
- * The schema of a relation of `Qti` as the host reads it: its fields' SQL types, and for a closed
- * relation its facts.
+ * The schema of a relation of `Qti` as the host reads it: its fields' SQL types and a text field's
+ * patterns, a conjunction in declared order (grizzle's `RegexText`, `text/field.ts` at `3cc8fbd`),
+ * and for a closed relation its facts.
  */
 const StoredRelation = Schema.Struct({
   fields: Schema.Record(
     Schema.String,
     Schema.Struct({
-      pattern: Schema.optionalKey(
-        Schema.Struct({ flags: Schema.Literals(["su", "u"]), source: Schema.String }),
+      patterns: Schema.optionalKey(
+        Schema.NonEmptyArray(
+          Schema.Struct({ flags: Schema.Literals(["su", "u"]), source: Schema.String }),
+        ),
       ),
       sql: Schema.optionalKey(Schema.String),
     }),
@@ -695,17 +698,11 @@ const patternLaws: readonly PatternLaw[] = writtenLaws.flatMap(([law]) =>
 const patternFields: ReadonlyMap<PatternLaw, readonly (readonly [string, string])[]> = (() => {
   const byLaw = new Map<PatternLaw, (readonly [string, string])[]>();
   for (const [name, { fields, kind }] of relations) {
-    for (const [field, { pattern }] of Object.entries(fields)) {
+    for (const [field, { patterns }] of Object.entries(fields)) {
       const law =
-        kind === "relation" && pattern !== undefined
+        kind === "relation" && patterns !== undefined
           ? patternLaws.find((stated) =>
-              sameLaw(stated, {
-                field,
-                flags: pattern.flags,
-                kind: "pattern",
-                relation: name,
-                source: pattern.source,
-              }),
+              sameLaw(stated, { field, kind: "pattern", patterns, relation: name }),
             )
           : undefined;
       if (law !== undefined) {
@@ -738,8 +735,9 @@ const generatedRelations: ReadonlyMap<Law, string> = new Map(
 );
 
 /**
- * Judge a pattern law over a program's rows: every row of its field's relation holds a value its
- * pattern matches. A relation the program writes no row of holds it.
+ * Judge a pattern law over a program's rows: every row of its field's relation holds a value each
+ * of its patterns matches, a conjunction's every member (grizzle's `str.and`, whose domain tests
+ * each). A relation the program writes no row of holds it.
  *
  * @param view - The rows.
  * @param law - The pattern law.
@@ -751,7 +749,7 @@ const patternVerdictOf = (
   law: PatternLaw,
   fields: readonly (readonly [string, string])[],
 ): Verdict => {
-  const pattern = new RegExp(law.source, law.flags);
+  const patterns = law.patterns.map(({ flags, source }) => new RegExp(source, flags));
   let unknown = false;
   for (const [relation, field] of fields) {
     const rows = view.get(relation);
@@ -764,7 +762,7 @@ const patternVerdictOf = (
       const value = row[field];
       if (!Predicate.isString(value)) {
         unknown = true;
-      } else if (!pattern.test(value)) {
+      } else if (!patterns.every((pattern) => pattern.test(value))) {
         return {
           kind: "broken",
           witness: `${relation}.${field} = ${JSON.stringify(value.slice(0, 80))}`,

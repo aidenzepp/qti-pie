@@ -72,7 +72,7 @@ const integerKey = new RegExp(integerKeyPattern, "u");
 /**
  * `FloatKey`'s pattern, the float keys that hold a typed value, as JavaScript's engine reads it.
  */
-const floatKey = new RegExp(FloatKey.pattern.source, "u");
+const floatKey = new RegExp(FloatKey.patterns[0].source, "u");
 
 /**
  * The relations this module declares.
@@ -132,7 +132,7 @@ describe("qti/mapping.ts, declared", { timeout: searchTimeout }, () => {
   it("types a float key by xs:double's one lexical pattern, the one a tolerance is read by", () => {
     // Oracle: `#pantry/qti/operators.ts` `doublePattern`, the schema's one statement of
     // `xs:double`'s lexical space, whose language the box below holds to the deleted `xsDouble`.
-    assert.strictEqual(FloatKey.pattern.source, doublePattern);
+    assert.deepStrictEqual(FloatKey.patterns, [{ flags: "u", source: doublePattern }]);
   });
 });
 

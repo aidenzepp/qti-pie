@@ -17,7 +17,7 @@ import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { lexical, date } from "@bjornpagen/grizzle";
-import { Array as Arr, Duration, Effect, Option, Result } from "effect";
+import { Array as Arr, Duration, Effect, Equivalence, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { lawNameOf, statedLaws } from "#pantry/import/refusal.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
@@ -259,9 +259,14 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           // Oracle: the ruling's one law: lexical(date)'s pattern law, which refuses a day as its
           // statement casts it into `StatisticDate.day`, and `StatisticDate.date`'s generated law are
           // the value domain, and no law of the table, and no place in the precedence, is a calendar's.
+          const day = lexical(date).patterns.map(({ source }) => source);
           const dayLaws = statedLaws().filter(
             ([law]) =>
-              (law.kind === "pattern" && law.source === lexical(date).pattern.source) ||
+              (law.kind === "pattern" &&
+                Equivalence.Array(Equivalence.String)(
+                  law.patterns.map(({ source }) => source),
+                  day,
+                )) ||
               (law.kind === "generated" && law.relation === "StatisticDate"),
           );
 

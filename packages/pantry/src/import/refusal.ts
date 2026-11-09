@@ -20,7 +20,7 @@
  *   its XSD particle. There is no catalog of messages.
  */
 import { lawsOf, patternLawsOf, sameLaw } from "@bjornpagen/grizzle";
-import type { AnySchema, Law, Statement, Witness } from "@bjornpagen/grizzle";
+import type { AnySchema, Law, RegexText, Statement, Witness } from "@bjornpagen/grizzle";
 import {
   Array as Arr,
   Function as Fn,
@@ -382,13 +382,6 @@ const generatedOf = <R extends { readonly fields: object; readonly name: string 
 ): LawOf<"generated"> => ({ field, kind: "generated", relation: relation.name });
 
 /**
- * A text field type, as `str.regex` and `str.bytes` build it: its pattern's source and flags.
- */
-export interface TextType {
-  readonly pattern: { readonly flags: "su" | "u"; readonly source: string };
-}
-
-/**
  * A field PostgreSQL or grizzle writes, read from its descriptor: the type `generated(type, term)`
  * or `accumulated(type, start)` declared it of (grizzle's `schema/relation.ts` `generatedField`
  * and `accumulatedField`), which grizzle's installation types its column by.
@@ -440,19 +433,19 @@ const fieldTypeOf = (
  * Name each pattern law a schema states by its field's type's row.
  *
  * The laws are grizzle's (`patternLawsOf`), the ones its installation lists its text domains'
- * CHECKs with: one per stored field whose pattern states a law, spelled as the field declares its
- * pattern, by relation name, each relation's fields in declared order. A tautology, a contract's
- * pattern and a closed relation's payload state none. Two fields of one language share one domain
- * and are two laws, so a refusal names the field whose value broke it, and each field's law takes
- * its own type's name.
+ * CHECKs with: one per stored field whose patterns state a law, spelled as the field declares its
+ * patterns (one for `str.regex`, each joined one in order for `str.and`), by relation name, each
+ * relation's fields in declared order. A tautology, a contract's pattern and a closed relation's
+ * payload state none. Two fields of one language share one domain and are two laws, so a refusal
+ * names the field whose value broke it, and each field's law takes its own type's name.
  *
  * @param built - The schema.
- * @param names - Each text type, by its identity, with the law its pattern states.
+ * @param names - Each text type, by its identity, with the law its patterns state.
  * @returns The laws, each with its name; or the first law whose field's type no row names.
  */
 export const namedPatternLaws = (
   built: AnySchema,
-  names: ReadonlyMap<TextType, LawName>,
+  names: ReadonlyMap<RegexText<string>, LawName>,
 ): Result.Result<readonly (readonly [LawOf<"pattern">, LawName])[], UnnamedText> => {
   const byType: ReadonlyMap<unknown, LawName> = names;
 
@@ -495,7 +488,10 @@ export const namedPatternLaws = (
  *   piece the host splits a lexical form into: a map key's, a reference's, a node's end characters,
  *   a selection's form.
  */
-export const textLaws: ReadonlyMap<TextType, LawName> = new Map<TextType, LawName>([
+export const textLaws: ReadonlyMap<RegexText<string>, LawName> = new Map<
+  RegexText<string>,
+  LawName
+>([
   [keyText, "Key text bound"],
   [namespaceText, "Key text bound"],
   [Prefix, "Key text bound"],
