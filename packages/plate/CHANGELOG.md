@@ -429,7 +429,7 @@ M3.
     and its last 511 characters around one `…` (U+2026). This is plate's own bound, not a rule of
     QTI, so that a hostile package cannot make its refusals too long to serialise. No corpus
     refusal carries a fact that long, so no wording moves.
-  - `assembly-limit`: a package whose tests together place section documents more than 4,096
+  - `assembly-limit`: a package whose tests together place section documents more than 2,048
     times, or place more than 4 MiB (4,194,304 bytes) of them, is refused with one refusal, and none
     of its tests is judged. A section document placed in two test parts, or in two tests, counts
     twice, and its bytes count each time. The refusal's detail names the `bound` passed,

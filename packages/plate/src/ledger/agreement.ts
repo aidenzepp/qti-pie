@@ -69,7 +69,7 @@
  * - A section ref whose `href` names no section document, such as the test itself, an item, a
  *   webcontent file, an empty `href` or `#x`, is accepted and judged no further. Pantry refuses it
  *   by its law `Document_entry` (`packages/pantry/src/qti/package.ts`).
- * - A package whose tests together place section documents more than 4,096 times, or place more than
+ * - A package whose tests together place section documents more than 2,048 times, or place more than
  *   4 MiB of them, is refused `assembly-limit`, plate's own stated limit and no rule of QTI
  *   (`#plate/package/open.ts`). Pantry states no bound on a test's assembly, and judges such a
  *   package by its laws.

@@ -1169,7 +1169,7 @@ describe("README.md", () => {
     const limits = flatSectionOf("## Limits");
 
     for (const fragment of [
-      "| A package whose tests together place section documents more than 4,096 times, or place more than 4 MiB (4,194,304 bytes) of them, is refused `assembly-limit`, its `bound` `placements` or `bytes`, and none of its tests is judged. A section document placed in two test parts, or in two tests, counts twice, and its bytes count each time |",
+      "| A package whose tests together place section documents more than 2,048 times, or place more than 4 MiB (4,194,304 bytes) of them, is refused `assembly-limit`, its `bound` `placements` or `bytes`, and none of its tests is judged. A section document placed in two test parts, or in two tests, counts twice, and its bytes count each time |",
       "| A section document is judged once for each placement (readings 5 and 145), so the work follows the assembled tests, which test parts, tests and chains of section documents can make far larger than the package |",
       "| The redesign that [issue #64](https://github.com/aidenzepp/qti-pie/issues/64) tracks: no placement for each test part, and a section document judged once across tests whose reaches agree |",
     ]) {
@@ -1182,7 +1182,7 @@ describe("README.md", () => {
       ) ?? assert.fail("Documents and packages advises no time limit for openPackage");
     for (const fragment of [
       "To open packages you do not trust, call `openPackage` under a time limit too, as [Scoring](#scoring) says for `score`.",
-      "more than 4,096 times, or place more than 4 MiB of them, is refused `assembly-limit` before any test is judged",
+      "more than 2,048 times, or place more than 4 MiB of them, is refused `assembly-limit` before any test is judged",
     ]) {
       assert.include(advice, fragment);
     }

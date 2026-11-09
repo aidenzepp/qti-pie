@@ -3609,8 +3609,8 @@ describe("describeRefusal", () => {
 
   it("align-54 r12 assembly limit: words a package whose tests assemble past the placements bound or the bytes bound with the limit and its number, the count reached, the cause and the remedy, as plate's own limit", () => {
     assert.strictEqual(
-      describeRefusal(limitRefusal({ bound: "placements", limit: "4096", reached: "4097" })),
-      "**`package.zip`: refused.** The package's tests assemble past plate's assembly limit of 4096 placements of section documents: they place section documents at least 4097 times, each document counted once for every test and context that places it; the limit is plate's own, not a rule of QTI. Rule `assembly-limit`. To make it valid: place fewer section documents in the package's tests, or split the package.",
+      describeRefusal(limitRefusal({ bound: "placements", limit: "2048", reached: "2049" })),
+      "**`package.zip`: refused.** The package's tests assemble past plate's assembly limit of 2048 placements of section documents: they place section documents at least 2049 times, each document counted once for every test and context that places it; the limit is plate's own, not a rule of QTI. Rule `assembly-limit`. To make it valid: place fewer section documents in the package's tests, or split the package.",
     );
     assert.strictEqual(
       describeRefusal(limitRefusal({ bound: "bytes", limit: "4194304", reached: "4194560" })),

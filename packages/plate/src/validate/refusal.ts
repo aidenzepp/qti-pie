@@ -44,7 +44,7 @@ import { Schema } from "effect";
  * detail.
  *
  * The last, `assembly-limit`, is plate's own stated limit and no rule of QTI: a package whose
- * tests, taken together, place section documents more than 4,096 times, or place more than 4 MiB of
+ * tests, taken together, place section documents more than 2,048 times, or place more than 4 MiB of
  * them, counting a document once for each placement. Opening a package judges a section document
  * once for each test and context that places it (reading 5, a section document's references
  * "resolve once for each test that includes the section"; reading 145, a fragment a section

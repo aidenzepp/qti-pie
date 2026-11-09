@@ -32,7 +32,7 @@
  *   stated limit 'Remote section ref'"): a stated limit, not a rule of QTI, since plate assembles a
  *   test from its package's documents and never fetches a section; a fetch of the section at import
  *   would lift it. Every test is assembled before any is judged, and across them the placements of
- *   section documents are held to plate's assembly limit, 4,096 placements and 4 MiB placed: past
+ *   section documents are held to plate's assembly limit, 2,048 placements and 4 MiB placed: past
  *   either, the package is refused `assembly-limit` and no test is judged, a stated limit and not a
  *   rule of QTI. That reach is the test's own parts, sections and item refs and each placed
  *   document's. Through that reach:
@@ -3996,7 +3996,7 @@ interface Assembly {
  * for each test part, and a section document judged once across tests whose reaches agree, would
  * lift it.
  */
-const assemblyPlacementLimit = 4096;
+const assemblyPlacementLimit = 2048;
 
 /**
  * How many bytes of section documents a package's assembled tests may place, across all of its
@@ -6559,7 +6559,7 @@ const readPackage = Effect.fnUntraced(function* readPackage(
  * without `imsmanifest.xml` at its root, a manifest the reader cannot read and a manifest
  * `readManifest` refuses each end the reading with those refusals and no resources. Otherwise every
  * rule runs and every refusal is reported, but where the package's tests assemble past plate's
- * stated limit, 4,096 placements of section documents or 4 MiB of them placed, across all of its
+ * stated limit, 2,048 placements of section documents or 4 MiB of them placed, across all of its
  * tests: then no test and no section document is judged, and one `assembly-limit` refusal stands
  * for them. Nothing but its two inputs decides the result.
  *
