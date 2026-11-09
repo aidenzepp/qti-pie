@@ -51,8 +51,8 @@ const opening = [
 const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
 
 /**
- * The README's sections: the eleven it had before M2, the four M2 adds, the one M3.b-2 adds and
- * the one M3.b-3 adds.
+ * The README's sections: the eleven it had before M2, the four M2 adds, the one M3.b-2 adds, the
+ * one M3.b-3 adds and the two align-54 adds.
  */
 const headings = [
   "## Install",
@@ -65,6 +65,8 @@ const headings = [
   "## Scoring",
   "## Template processing",
   "## Outcome processing",
+  "## Documents and packages",
+  "## Limits",
   "## Server and browser",
   "## Hosts",
   "## Styling",
@@ -861,15 +863,16 @@ describe("README.md", () => {
       "`qti-number-correct` and `qti-number-incorrect` consider an item's `file` and `record` responses",
       "| A `qti-lookup-outcome-value` of a dotted name whose value is not a single `integer`, `float` or `duration` | `expression-type` | P22 |",
       "A dotted name the test declares whole, such as an outcome named `S.TOTAL`, is that declaration",
-      "| A dotted name, read or set, that two readings resolve | `ambiguous-reference` | `prefixed-ref` |",
+      "| A dotted name, read, that two readings resolve, such as `a.b` that the test declares whole beside an item ref `a` whose item declares `b` | `ambiguous-reference` | `prefixed-ref` |",
       '`pattern="{ITEM1.N}"`',
-      "| A dotted `qti-correct` that reads anything but a response *(pending)* | `undeclared-variable` | none |",
-      "plate and pantry differ in the last three rows",
+      "| A dotted `qti-correct` that reads anything but a response | `undeclared-variable` | `variable-kind` |",
+      "pantry refuses the last three rows too",
       "judges its expressions under each test that reaches it",
     ]) {
       assert.include(outcomes, fragment);
     }
     assert.notInclude(outcomes, "the last two rows");
+    assert.notInclude(outcomes, "pantry accepts all three");
     assert.include(
       flatSectionOf("## Server and browser"),
       "`itemView`'s configuration never carries the processing seed",
