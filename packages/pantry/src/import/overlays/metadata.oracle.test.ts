@@ -201,7 +201,7 @@ const namingTypes: ReadonlySet<string> = new Set(objectTypes);
 
 /**
  * A root's compared `xml:lang` that states a language to `lom-title` (`languageTagPattern`, spec
- * readings 151 and 164), as `MatchedTitle` reads it.
+ * readings 151 and 174), as `MatchedTitle` reads it.
  */
 const languageTagForm = new RegExp(languageTagPattern, patternFlags);
 

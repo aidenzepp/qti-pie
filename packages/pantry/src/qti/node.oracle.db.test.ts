@@ -523,7 +523,7 @@ const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
  * The `DocumentType` of a folded document, as its document node's `documentType` holds it:
  * `manifest` for the package's manifest, which no resource lists, and for every other document the
  * type of the resource that lists it, the one `RootOfType` names for its root element's kind, which
- * `ResourceDocumentType` spells as itself (spec reading 167).
+ * `ResourceDocumentType` spells as itself (spec reading 176).
  *
  * @param rows - The document's folded rows.
  * @returns The type.

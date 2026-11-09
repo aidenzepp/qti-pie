@@ -395,7 +395,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, P2: a resource's document's (resource type, root kind) is a row of
           // the set RootOfType (its `ResourceDocument`'s containment, a CHECK on that relation), and
-          // a document of type `manifest` is at imsmanifest.xml (readings 93 and 165, the
+          // a document of type `manifest` is at imsmanifest.xml (readings 93 and 176, the
           // `RootOfType` CHECK on `Document`).
           // Bound: an item resource's document with a stimulus root, and a `manifest` document at
           // another path.

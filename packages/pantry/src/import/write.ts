@@ -96,7 +96,7 @@ export interface NodeIds {
   readonly entryAt: (path: string) => boolean;
   /**
    * The document's type: `manifest` for the manifest, which is no resource's document (spec
-   * readings 146 and 167), else the type of the resource that lists it. Every node of the document
+   * readings 146 and 176), else the type of the resource that lists it. Every node of the document
    * copies it (`Node.documentType`), so a law can tell the manifest's elements from another
    * document's.
    */
@@ -136,7 +136,7 @@ export interface NodeIds {
 
 /**
  * A document as the importer lists it, one per path: its path, its tree as shred gives it, and its
- * type: `manifest` for the manifest, which is no resource's document (spec readings 146 and 167),
+ * type: `manifest` for the manifest, which is no resource's document (spec readings 146 and 176),
  * else the type of the resource that names it.
  */
 export interface ListedDocument {
@@ -809,7 +809,7 @@ export const rootInsertOf = (
  * each element a named type governs: a vocabulary element's `ElementType`, and a foreign element's
  * `OpenElementType` with its parent's namespace name, each with its node's governor
  * (`governorOf`); and, for a document a resource lists, its `ResourceDocument`, the type of that
- * resource, which the manifest has none of (spec reading 167).
+ * resource, which the manifest has none of (spec reading 176).
  *
  * @param document - The document as the importer lists it.
  * @param ids - The ids its rows are written under, whether it is in an assembly, and the context

@@ -350,7 +350,7 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  * - `package` and `path` are its `Entry`'s, which Q5.06's P3 states, with the key over them.
  * - `rootKind` is a `NodeKind` handle, the root element's kind, which a containment from the root
  *   element proves. `RootOfType`'s payload is over `NodeKind` too, so P2 compares them directly.
- * - `documentType` is the document's type in its package (spec reading 167): `manifest` for the
+ * - `documentType` is the document's type in its package (spec reading 176): `manifest` for the
  *   package's manifest, which no resource lists, else the type of the resource that lists it, whose
  *   `ResourceDocument` row Q5.06's P1 and P2 judge. Its document node holds it, and every node and
  *   attribute of the document holds it alike, so a law can tell the manifest's elements, and a

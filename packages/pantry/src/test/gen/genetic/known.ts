@@ -1537,7 +1537,7 @@ export const fixed: readonly Known[] = [
 </qti-assessment-test>`,
       ],
     ],
-    fix: "spec reading 163: a section is invisible only where its own visible flag, a row of its own, reads false, so one that writes no visible is never loose and AL3 alone refuses it, never an unwritten visible read as false (the Section.visible the old class named)",
+    fix: "spec reading 173: a section is invisible only where its own visible flag, a row of its own, reads false, so one that writes no visible is never loose and AL3 alone refuses it, never an unwritten visible read as false (the Section.visible the old class named)",
     owner: "SWEEP-VISIBLE",
     signature: {
       kind: "import-only-law",
@@ -1631,7 +1631,7 @@ export const fixed: readonly Known[] = [
 </qti-assessment-test>`,
       ],
     ],
-    fix: "spec reading 163: a section is invisible only where its own visible flag, a row of its own, reads false, so one that writes no visible is never loose and AL3 alone refuses it, never an unwritten visible read as false (the Section.visible the old class named)",
+    fix: "spec reading 173: a section is invisible only where its own visible flag, a row of its own, reads false, so one that writes no visible is never loose and AL3 alone refuses it, never an unwritten visible read as false (the Section.visible the old class named)",
     owner: "SWEEP-VISIBLE",
     signature: {
       kind: "import-only-law",

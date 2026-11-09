@@ -705,7 +705,7 @@ interface Read {
    * The declaration its declared or mapped variable reads (`ReadingDeclaration`), a mapped one's
    * its source's (information model §7.48), with the tables it holds; none for a built-in, for
    * nothing, for a name read through an LTI link (reading 110), and for a mapping whose source its
-   * item declares nothing under (spec reading 166).
+   * item declares nothing under (spec reading 175).
    */
   readonly declaration: Option.Option<Declared>;
   readonly form: "numbered" | "split" | "unsplit";
@@ -750,7 +750,7 @@ const standInKinds: ReadonlySet<string> = new Set([
  * built-in variable; or a declaration that is no outcome or template, whose base type, where it has
  * one, is not the literal's, or whose cardinality, where it has one, is not single. A reading
  * through a mapping whose source its item declares nothing under holds no declaration to judge
- * (spec reading 166).
+ * (spec reading 175).
  *
  * @param read - The reading.
  * @param read.declaration - The declaration it reads, if any.

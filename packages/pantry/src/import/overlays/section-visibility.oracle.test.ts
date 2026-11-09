@@ -1,5 +1,5 @@
 /**
- * A section's visibility is its own `visible`, and nothing else (spec reading 163): the XSD
+ * A section's visibility is its own `visible`, and nothing else (spec reading 173): the XSD
  * requires the attribute, with no default, and the information model says "The visibility of each
  * section is determined solely by the value of its own visible attribute" (§4.2.6). A section that
  * writes none is neither visible nor invisible, so AL3 alone refuses it, on the import's rows as in

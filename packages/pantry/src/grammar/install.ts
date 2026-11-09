@@ -191,7 +191,7 @@ export const toolLabelKinds: readonly Kind[] = toolLabelKindsOf({
 
 /**
  * The `DocumentType` handle of the package's manifest, the IMS Content Packaging manifest document,
- * which is no resource's (spec readings 146 and 167).
+ * which is no resource's (spec readings 146 and 176).
  */
 const manifestDocument = "manifest";
 
@@ -270,7 +270,7 @@ export const ResourceType = closed(
  * The `DocumentType` roster: the type of a document of a package, which every node and attribute of
  * the document copies: `manifest`, the package's manifest document, then the 21 types a
  * `cp:resource` may name, the type of the resource that lists the document (IMS Content Packaging
- * 1.2 sets the manifest apart from the resources it declares; spec reading 167). Every document is
+ * 1.2 sets the manifest apart from the resources it declares; spec reading 176). Every document is
  * one or the other, so the type is total and names no absence.
  */
 export const DocumentType = closed(

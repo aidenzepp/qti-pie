@@ -132,7 +132,7 @@ export const queriesOf = (base: QtiBase) => {
    *   entry by `ResourceDocument`'s copy of its `Document` and the `Document`'s containment into
    *   `Entry`, so no rule here restates it.
    * - **P2 `root-type-reverse` ("RootOfType"):** every document a resource lists is at the path of a
-   *   typed href of its type (spec reading 167).
+   *   typed href of its type (spec reading 176).
    * - **B2 and B3 ("Item ref target"):** an item ref's target is a (path, type) pair a typed href of
    *   its package names.
    */
@@ -337,7 +337,7 @@ export const queriesOf = (base: QtiBase) => {
    * `value`), which R26 asks the category to list. A form that states no language
    * ({@link statedLanguagePattern}: the empty one, one of whitespace alone, or one that is no tag
    * once collapsed) asks nothing, so its value domain alone refuses one that is no tag (spec
-   * reading 164), and an empty one is lawful beside an empty `lom:language`.
+   * reading 174), and an empty one is lawful beside an empty `lom:language`.
    */
   const DescribedLang = derived(
     "DescribedLang",

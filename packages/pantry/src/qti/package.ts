@@ -300,7 +300,7 @@ export const ResourceHref = relation(
 
 /**
  * A document a resource of its package lists, keyed by its document node: the type of that resource
- * (IMS Content Packaging 1.2: a resource's file; spec reading 167). The package's manifest is no
+ * (IMS Content Packaging 1.2: a resource's file; spec reading 176). The package's manifest is no
  * resource's document (spec reading 146) and has no row: its type is `manifest`, its `Document`'s
  * `documentType`, and every other document's is the type here, by `ResourceDocumentType`.
  *

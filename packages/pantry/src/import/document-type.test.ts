@@ -1,6 +1,6 @@
 /**
  * A document's type in its package, written with no handle standing for an absent resource type
- * (spec reading 167): every document's `Document.documentType`, which its nodes copy, is its role,
+ * (spec reading 176): every document's `Document.documentType`, which its nodes copy, is its role,
  * `manifest` or the type of the resource that lists it, and a document a resource lists has its
  * `ResourceDocument`, of that resource's type, which the manifest has none of.
  *

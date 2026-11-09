@@ -1,7 +1,7 @@
 /**
  * The languages R26 (`document-lang`, QTI 3.0 Metadata §2.7.1.3) asks an item's records to list,
  * as the import's rows hold them beside the law oracle: only those its `xml:lang` forms state, a
- * form stating a language only where its value, collapsed, is a language tag (spec reading 164).
+ * form stating a language only where its value, collapsed, is a language tag (spec reading 174).
  *
  * §2.7.1.3 asks "one value for each of the languages referred to by the language attributes on the
  * associated assessmentItem ... and its 'bodyElements'". An `xml:lang` refers to a language by a
@@ -178,7 +178,7 @@ const packageOf = (of: LangCase): PackageEntries => {
 };
 
 /**
- * Decide, from §2.7.1.3 under readings 134 and 164, the forms "Document lang" refuses in a case:
+ * Decide, from §2.7.1.3 under readings 134 and 174, the forms "Document lang" refuses in a case:
  * its form, where it states a tag the record's category does not list, without regard to case.
  *
  * @param of - The case.
@@ -363,7 +363,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 literal: (at) => nameOf(Arr.getUnsafe(cases, at)),
                 oracle: {
                   kind: "second-implementation",
-                  name: "the law oracle and the schema's R26 over the import's rows, against QTI 3.0 Metadata §2.7.1.3 under readings 134 and 164",
+                  name: "the law oracle and the schema's R26 over the import's rows, against QTI 3.0 Metadata §2.7.1.3 under readings 134 and 174",
                 },
                 suite: "import/overlays/document-lang",
               },

@@ -55,11 +55,10 @@
  *   item instance's `xml:lang` carriers are placed under its assembly ({@link PlacedXmlLang}, as
  *   many as its document has, `Document.langs`), gathered per form ({@link AssembledLang}), and
  *   each form the assembly states is listed by every category that describes the item
- *   (`DescribedAssembledLang`).
- *   The binding counts "the associated assessmentItem ... and its 'bodyElements'", and a catalog
- *   is "outside the content body node" (information model §5.28), so R26 counts no `xml:lang`
- *   under a `qti-catalog-info` (reading R9-c): each {@link XmlLang} names its
- *   {@link CatalogScope}, read up the tree as {@link SsmlScope} reads a fragment, and
+ *   (`DescribedAssembledLang`). The binding counts "the associated assessmentItem ... and its
+ *   'bodyElements'", and a catalog is "outside the content body node" (information model §5.28), so
+ *   R26 counts no `xml:lang` under a `qti-catalog-info` (reading R9-c): each {@link XmlLang} names
+ *   its {@link CatalogScope}, read up the tree as {@link SsmlScope} reads a fragment, and
  *   {@link DocumentLang}, {@link AssembledLang} and their carriers count only the carriers whose
  *   scope is their document ({@link BodyXmlLang}, {@link PlacedBodyXmlLang}). Every `xml:lang`
  *   keeps its row.
@@ -89,7 +88,7 @@
  * {@link DocumentLang}'s `value`. An empty `xml:lang`, or one of whitespace alone, states no
  * language ("there is no language information available", XML 1.0 §2.12), so it asks for no
  * listing; nor does a form that is no language tag once collapsed, which identifies no language
- * (RFC 5646 §2.1), so its value domain refuses it alone (spec reading 164,
+ * (RFC 5646 §2.1), so its value domain refuses it alone (spec reading 174,
  * {@link statedLanguagePattern}).
  *
  * Every copy of an attribute into an overlay follows C18 the other way round, from
@@ -181,7 +180,7 @@ export const namingPattern = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
  * (`languageTag`, spec reading 129) with XML whitespace around it, which collapsing strips, since a
  * tag holds none. Any other form states no language and asks no record to list it: the empty one
  * and one of whitespace alone (XML 1.0 §2.12), and one that is no tag, which identifies no language
- * (RFC 5646 §2.1), so its value domain refuses it alone (spec reading 164).
+ * (RFC 5646 §2.1), so its value domain refuses it alone (spec reading 174).
  */
 export const statedLanguagePattern = `^[\\t\\n\\r ]*(?:${languageTag})[\\t\\n\\r ]*$`;
 

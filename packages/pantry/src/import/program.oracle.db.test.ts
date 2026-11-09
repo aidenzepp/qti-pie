@@ -654,7 +654,7 @@ describe.skipIf(!hasLease)(
         {
           // P2's (resource type, root kind) containment into RootOfType, read from the document's
           // ResourceDocument, the row its resource type is held in (`qti/package.ts` packageLaws,
-          // spec reading 167): of the statements named RootOfType, the one this edit breaks; the
+          // spec reading 176): of the statements named RootOfType, the one this edit breaks; the
           // oracle's one breach; and the rule the import names for it, root-type-reverse.
           apply: () =>
             Effect.flatMap(

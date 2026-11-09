@@ -381,7 +381,7 @@ export const Named = relation(
  *   (true where it writes none); `loose`, whether it is invisible and not kept together, so its
  *   children are mixed into its parent's order (information model §5.98), invisible where its
  *   `visible` flag, a row of its own, reads false: one that writes no `visible` is neither visible
- *   nor invisible and has no flag, so it is never loose, and AL3 alone refuses it (reading 163);
+ *   nor invisible and has no flag, so it is never loose, and AL3 alone refuses it (reading 173);
  *   `shuffle`, its ordering's `shuffle`, and `withReplacement`, its selection's `with-replacement`,
  *   each false without the child or the attribute; and its scope: `part`; `replaced` and
  *   `replacing`, whether a section above it, or it or one above it, selects with replacement;
@@ -1280,7 +1280,7 @@ const flagCopy = ([name, kinds]: (typeof flagCarriers)[number]) => {
 /**
  * The sections written invisible: a `visible` that reads false. A section's visibility "is
  * determined solely by the value of its own visible attribute" (information model §4.2.6), so one
- * that writes none is in neither this nor its complement (reading 163).
+ * that writes none is in neither this nor its complement (reading 173).
  */
 const invisibleFlags = select(TestFlag, (f) =>
   f.and(f.eq(f.name, "visible"), f.eq(f.value, false)),

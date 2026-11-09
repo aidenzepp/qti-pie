@@ -11,7 +11,7 @@
  *   an identifier its type reads (reading 147: one that writes none names nothing), its identifier
  *   collapsed, and its scope in its document: its test part, whether a selection with replacement
  *   above it can repeat it, and, for a section, whether its children's order is drawn at delivery
- *   (a shuffle, or a section written invisible, reading 163, and not kept together under a parent
+ *   (a shuffle, or a section written invisible, reading 173, and not kept together under a parent
  *   whose order is drawn, information model §5.98) and whether that looseness reaches the
  *   document's root;
  * - **sites** (`Site`): each section ref, and each include under a parent whose content model holds
@@ -223,7 +223,7 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
     );
     const ordering = children.find(({ kind }) => kind === testKinds.ordering);
     // Invisible only where it writes `visible` false: one that writes none is neither visible nor
-    // invisible (information model §4.2.6, reading 163), so it is not loose.
+    // invisible (information model §4.2.6, reading 173), so it is not loose.
     const loose =
       Option.contains(writtenFlagOf(rows, node.id, "visible"), false) &&
       !flagOf(rows, node.id, "keep-together", true);
