@@ -36,9 +36,15 @@
  *   - Each item ref resolves through the `xml:base` in scope, or else against its own document's path,
  *     to an item resource the manifest lists, or to an LTI link resource (`ltiLinkTypes`), which an
  *     item ref may name in place of an item (reading 110); a test's own item ref that does neither is
- *     `item-ref-unresolved`, one that writes no identifier included (reading 155). A link declares no
- *     variable, so through it a reading names only a built-in every item has (reading 106), and each
- *     of its variable mappings and template defaults is `undeclared-variable`;
+ *     `item-ref-unresolved`, one that writes no identifier included (reading 155). The package
+ *     declares nothing a link reports, so a reading through it names a built-in every item has as
+ *     that built-in and any other name unchecked (reading 106, "an item ref that names an LTI link
+ *     has no item whose declarations a prefix reads, so a prefixed reference through it is accepted
+ *     unchecked, a recorded limit"), and its variable mappings are judged by no rule, while each of
+ *     its template defaults is `undeclared-variable` (reading 110, "under an item ref that names an
+ *     LTI link a variable mapping is accepted unchecked, a recorded limit, and a template default is
+ *     refused"): a link is no QTI item and has no template variables to override. A source that
+ *     listed the outcomes a link reports would lift the limit;
  *   - Each dotted reference in the test, a name an expression reads, is judged by reading 48 ("a dotted
  *     reference is accepted when exactly one reading names a real item ref, test part or section and
  *     its variable") against the test's own variables, the items the item refs resolve to, their
@@ -55,11 +61,11 @@
  *     reads only a template or outcome variable (`expression-type`), a `qti-correct` only a response
  *     (`undeclared-variable`), and a mapping expression only a response its item declares
  *     (`undeclared-variable`) with the mapping it needs (`template-requirements`);
- *   - Each item ref's variable mappings, the test's own and a reached section document's, name an
- *     outcome its item declares as their source (`undeclared-variable`) and each its own target, no
- *     other variable its item holds (`duplicate-identifier`, reading 97), and its template defaults a
- *     template variable its item declares (`undeclared-variable`), each refusal at its own document
- *     and given once however many tests reach it;
+ *   - The variable mappings of each item ref that names an item, the test's own and a reached section
+ *     document's, name an outcome its item declares as their source (`undeclared-variable`) and each
+ *     its own target, no other variable its item holds (`duplicate-identifier`, reading 97), and its
+ *     template defaults a template variable its item declares (`undeclared-variable`), each refusal
+ *     at its own document and given once however many tests reach it;
  *   - The test's expressions are typed through its reach, so the item's processing rules judge what
  *     they read there and what each template default sets (`expression-type`);
  *   - Each placement of a section document a test places is judged under that test as the test is, its
@@ -582,8 +588,9 @@ const processingElements: ReadonlySet<string> = new Set(["qti-outcome-processing
 
 /**
  * The expressions that read a variable by its `identifier`, its value or its default, by local name
- * in QTI's namespace: those a read through an item ref that the engine holds no value of is found
- * in ({@link unheldReadsIn}).
+ * in QTI's namespace: in a template default, the ones a read through an item ref that the engine
+ * holds no value of is found in ({@link unheldReadsIn}), since they are the reads for which the
+ * test model leaves a template default out (`withUnheldReads` in `#plate/model/test.ts`).
  */
 const variableReadElements: ReadonlySet<string> = new Set(["qti-default", "qti-variable"]);
 
@@ -1617,6 +1624,20 @@ interface ItemVariables {
 }
 
 /**
+ * What a reading of a dotted reference may name through a resolved item ref: its item's variables,
+ * or none declared for an LTI link, whose reports the package declares nothing of
+ * ({@link targetVariables}).
+ */
+interface TargetVariables extends ItemVariables {
+  /**
+   * Whether the item ref names an LTI link rather than an item: a name a reading reads through it
+   * that no built-in gives is accepted unchecked (reading 106), and its variable mappings are
+   * judged by no rule (reading 110).
+   */
+  readonly link: boolean;
+}
+
+/**
  * Report whether an item declares a variable by a declaration of one kind.
  *
  * @param variables The item's variables.
@@ -1655,11 +1676,11 @@ const variablesOf = (document: Document | undefined): Option.Option<ItemVariable
 
 /**
  * What a reading of a dotted reference may name through one resolved item ref: its item's
- * variables, and the targets of the item ref's variable mappings whose source the item declares, as
- * pantry's reach holds them (the relations `VariableLookup` and `MappingLookup` in
- * `packages/pantry/src/qti/expressions.ts`).
+ * variables, whether it names an LTI link, and the targets of the item ref's variable mappings
+ * whose source the item declares, as pantry's reach holds them (the relations `VariableLookup` and
+ * `MappingLookup` in `packages/pantry/src/qti/expressions.ts`).
  */
-interface ItemRefVariables extends ItemVariables {
+interface ItemRefVariables extends TargetVariables {
   /**
    * Each mapping target, with the declaration of the source it reads.
    */
@@ -1712,19 +1733,32 @@ interface ReferenceScope {
 interface ReadVariable {
   /**
    * The declaration the reading names directly: a variable its item declares, or, for the unsplit
-   * reading, one the test declares; none for a mapping target and a built-in.
+   * reading, one the test declares; none for a mapping target, a built-in and a name read through
+   * an LTI link.
    */
   readonly declaration: Option.Option<SourceElement>;
   /**
    * The kind of variable it stands as (reading 111): a declared variable's its declaration's, a
-   * mapping target's an outcome, as pantry reads one, and a built-in's the kind QTI gives it.
+   * mapping target's an outcome, as pantry reads one, a built-in's the kind QTI gives it, and a
+   * name's read through an LTI link an outcome, as pantry reads a name that resolves to nothing it
+   * holds.
    */
   readonly kind: VariableKind;
   /**
    * Its type: a mapping target's is its source's, a declared variable's its declaration's, a
-   * built-in's its built-in type; unknown where the declaration's type is not judged.
+   * built-in's its built-in type; unknown where the declaration's type is not judged, and for a
+   * name read through an LTI link.
    */
   readonly type: ExpressionType;
+  /**
+   * Whether it is a name no built-in gives read through an item ref that names an LTI link, which
+   * no kind or type rule judges: the package declares nothing a link reports, so such a reference
+   * is accepted unchecked, a recorded limit (reading 106, "an item ref that names an LTI link has
+   * no item whose declarations a prefix reads, so a prefixed reference through it is accepted
+   * unchecked, a recorded limit"; reading 166, "a name read through an LTI link (reading 110)" is
+   * accepted).
+   */
+  readonly unchecked: boolean;
 }
 
 /**
@@ -1770,7 +1804,23 @@ const builtInVariable = ({ kind, type }: BuiltIn): ReadVariable => ({
   declaration: Option.none(),
   kind,
   type,
+  unchecked: false,
 });
+
+/**
+ * The variable a name no built-in gives reads through an item ref that names an LTI link, accepted
+ * unchecked (reading 106, "an item ref that names an LTI link has no item whose declarations a
+ * prefix reads, so a prefixed reference through it is accepted unchecked, a recorded limit"): no
+ * declaration, an outcome, as pantry reads a name that resolves to nothing it holds (the relation
+ * `Reading` in `packages/pantry/src/qti/expressions.ts`), and of unknown type, which satisfies
+ * every type rule. No kind rule judges it ({@link judgeReference}).
+ */
+const linkVariable: ReadVariable = {
+  declaration: Option.none(),
+  kind: "outcome",
+  type: unknownType,
+  unchecked: true,
+};
 
 /**
  * Give the type a declaration declares, unknown when it is not judged (the item's own verdict's
@@ -1792,7 +1842,11 @@ const declaredType = (declaration: SourceElement): ExpressionType =>
  * ({@link occurrenceOf}), a target of the item ref's variable mappings, else a variable its item
  * declares, else one of the built-ins every item has, `QTI_CONTEXT` among them (reading 106, "a
  * prefixed reference reaches every built-in variable its item ref's item holds, `QTI_CONTEXT`
- * among them"). After a part or a section, the rest is its `duration`, a built-in.
+ * among them"), else, through an item ref that names an LTI link, whatever the rest names, as
+ * {@link linkVariable} (reading 106, "an item ref that names an LTI link has no item whose
+ * declarations a prefix reads, so a prefixed reference through it is accepted unchecked, a recorded
+ * limit"); its numbered form counts as a numbered reading through an item does (reading 88). After
+ * a part or a section, the rest is its `duration`, a built-in.
  *
  * @param scope What the test's references resolve against.
  * @param prefix The part before the dot the reading splits at.
@@ -1817,7 +1871,7 @@ const variableOf = (
   if (source !== undefined) {
     return Option.some([
       form,
-      { declaration: Option.none(), kind: "outcome", type: declaredType(source) },
+      { declaration: Option.none(), kind: "outcome", type: declaredType(source), unchecked: false },
     ]);
   }
 
@@ -1829,14 +1883,17 @@ const variableOf = (
         declaration: Option.some(declaration),
         kind: kindOf(declaration),
         type: declaredType(declaration),
+        unchecked: false,
       },
     ]);
   }
 
-  return Option.map(
-    Option.fromUndefinedOr(itemBuiltIns.get(variable)),
-    (builtIn) => [form, builtInVariable(builtIn)] as const,
-  );
+  const builtIn = itemBuiltIns.get(variable);
+  if (builtIn !== undefined) {
+    return Option.some([form, builtInVariable(builtIn)]);
+  }
+
+  return item.link ? Option.some([form, linkVariable]) : Option.none();
 };
 
 /**
@@ -2096,6 +2153,11 @@ const referencesOf = (
  *   section document a test places twice is written once"), and 48 otherwise.
  * - One whose one counting reading is the unsplit one names the test's own variable, which the rules
  *   judge (`#plate/validate/rules.ts`), so it earns nothing here.
+ * - One whose one counting reading reads, through an item ref that names an LTI link, a name no
+ *   built-in gives ({@link linkVariable}) is accepted unchecked, a recorded limit (reading 106, "an
+ *   item ref that names an LTI link has no item whose declarations a prefix reads, so a prefixed
+ *   reference through it is accepted unchecked, a recorded limit"), so it earns nothing here
+ *   either: the package declares nothing a link reports to judge it against.
  *
  * An expression's reference whose one reading reads the built-in `duration` of an item is never
  * refused for the item's `time-dependent` (reading 150, "an item's built-in `duration` may be read
@@ -2205,7 +2267,7 @@ const judgeReference = (
     ];
   }
 
-  if (first.form === "unsplit") {
+  if (first.form === "unsplit" || first.variable.unchecked) {
     return [];
   }
 
@@ -2260,10 +2322,7 @@ const judgeReference = (
  * `undeclared-variable` at that attribute, its detail the `element`, the `attribute`, the
  * `identifier` and `expected: "outcome"`, pantry's `variable-mapping-source`. It is judged only
  * through an item ref whose item the package holds and the reader read, as pantry contains a
- * mapping's source in the declarations of the item its item ref resolves to, or one that names an
- * LTI link, which declares no variable, so every source under it is refused (reading 110, "a
- * variable mapping and a template default name variables an item declares, so under an item ref
- * that names an LTI link both are refused"). A second mapping of
+ * mapping's source in the declarations of the item its item ref resolves to. A second mapping of
  * one item ref with the same `target-identifier` is `duplicate-identifier` at that attribute, its
  * detail the `identifier`, the key of a mapping by its item ref and its target. So is a target that
  * names another variable its item holds (reading 97, "a variable mapping's target names no other
@@ -2273,16 +2332,24 @@ const judgeReference = (
  * `Variable_mapping_target`. A target that is its own source maps nothing away, and is accepted. A
  * value that is no NCName is the structure check's refusal, so it is passed over.
  *
+ * A mapping under an item ref that names an LTI link is judged by none of the three (reading 110,
+ * "under an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded
+ * limit, and a template default is refused"): the package declares nothing a link reports, so its
+ * source names no declaration to check, its target no variable of an item, and pantry keys a
+ * mapping's target only through its source's declaration (the `Variable mapping target` law over
+ * `MappingSourceDeclaration` in `packages/pantry/src/qti/expressions.ts`), which a mapping under a
+ * link has not. A source that listed the outcomes a link reports would lift the limit.
+ *
  * @param document The document's location.
  * @param visits The visits of the document's elements, in document order.
- * @param variablesFor The variables of the item an item ref resolves to, none when it resolves to
- *   no item the reader read.
+ * @param variablesFor The variables of the item an item ref resolves to, or that it names an LTI
+ *   link, none when it resolves to no item the reader read.
  * @returns The refusals, in document order.
  */
 const judgeMappings = (
   document: string,
   visits: readonly Visit[],
-  variablesFor: (itemRef: SourceElement) => Option.Option<ItemVariables>,
+  variablesFor: (itemRef: SourceElement) => Option.Option<TargetVariables>,
 ): readonly Refusal[] => {
   const targets = new Map<SourceElement, Set<string>>();
   const refusals: Refusal[] = [];
@@ -2291,7 +2358,11 @@ const judgeMappings = (
       Option.filter((one) => isQti(one, itemRefElements)),
       Option.getOrUndefined,
     );
-    if (itemRef !== undefined && isQti(element, mappingElements)) {
+    if (
+      itemRef !== undefined &&
+      isQti(element, mappingElements) &&
+      !Option.exists(variablesFor(itemRef), ({ link }) => link)
+    ) {
       /**
        * Give the variable an attribute of the mapping names.
        *
@@ -2383,9 +2454,11 @@ interface TemplateDefaults {
  * `undeclared-variable` at that attribute, its detail the `element`, the `attribute`, the
  * `identifier` and `expected: "template"`, pantry's `template-default-target`. It is judged only
  * through an item ref whose item the package holds and the reader read, or one that names an LTI
- * link, which declares no template variable, so every default under it is refused (reading 110). A
- * value that is no NCName,
- * or a default without the attribute, is the structure check's refusal, so it is passed over.
+ * link, under which every default is refused (reading 110, "under an item ref that names an LTI
+ * link a variable mapping is accepted unchecked, a recorded limit, and a template default is
+ * refused"): a link is no QTI item and has no template variables to override, whatever outcomes it
+ * reports. A value that is no NCName, or a default without the attribute, is the structure check's
+ * refusal, so it is passed over.
  *
  * @param document The document's location.
  * @param visits The visits of the document's elements, in document order.
@@ -2692,9 +2765,9 @@ type RefTargets = ReadonlyMap<string, "item" | "lti-link">;
 interface ItemRefTarget {
   readonly element: SourceElement;
   /**
-   * Whether it names an LTI link rather than an item: a link declares no variable, so only the
-   * built-ins every item has are read through it (reading 106), and its variable mappings and
-   * template defaults name nothing it declares (reading 110).
+   * Whether it names an LTI link rather than an item: the package declares nothing a link reports,
+   * so a name read through it that no built-in gives is accepted unchecked (reading 106) and so are
+   * its variable mappings, while its template defaults name no template variable (reading 110).
    */
   readonly link: boolean;
   readonly path: string;
@@ -2839,11 +2912,10 @@ const replacingSections = (visits: readonly Visit[]): ReadonlySet<SourceElement>
  * Read what a test's reach is built from in one test or section document: its parts', sections' and
  * item refs' identifiers, each with the path of its `identifier` attribute, its item refs, each
  * resolved against the document's path to an item resource the manifest lists, or to an LTI link
- * resource, which an item ref may name in place of an item (reading 110, "a variable mapping and a
- * template default name variables an item declares, so under an item ref that names an LTI link
- * both are refused"), and its section refs, each with the path it names, each item ref and section
- * ref with whether a selection with replacement in the document lies above it
- * ({@link replacingSections}).
+ * resource, which an item ref may name in place of an item (reading 110, "an item ref may name an
+ * LTI link instead of an item"), and its section refs, each with the path it names, each item ref
+ * and section ref with whether a selection with replacement in the document lies above it ({@link
+ * replacingSections}).
  *
  * An item ref that resolves to no listed item resource and no listed LTI link resource is
  * `item-ref-unresolved` at the item ref,
@@ -3493,8 +3565,11 @@ const assemble = (
 
 /**
  * Give the variables of what a resolved item ref names: its item's, read from the item's document,
- * or, for an LTI link, none, since a link declares no variable (reading 110), so a reading through
- * it names only a built-in every item has (reading 106).
+ * or, for an LTI link, none declared, with the link said: the package declares nothing a link
+ * reports, so a name read through it that no built-in gives is accepted unchecked (reading 106) and
+ * so are its variable mappings, while each of its template defaults is refused (reading 110, "under
+ * an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded limit,
+ * and a template default is refused").
  *
  * @param target The resolved item ref.
  * @param documents The package's documents.
@@ -3503,8 +3578,13 @@ const assemble = (
 const targetVariables = (
   target: ItemRefTarget,
   documents: ReadonlyMap<string, Document>,
-): Option.Option<ItemVariables> =>
-  target.link ? Option.some({ declarations: new Map() }) : variablesOf(documents.get(target.path));
+): Option.Option<TargetVariables> =>
+  target.link
+    ? Option.some({ declarations: new Map(), link: true })
+    : Option.map(variablesOf(documents.get(target.path)), (variables) => ({
+        ...variables,
+        link: false,
+      }));
 
 /**
  * Give the variables of what each of some resolved item refs names ({@link targetVariables}).
@@ -3512,12 +3592,13 @@ const targetVariables = (
  * @param itemRefs The resolved item refs.
  * @param documents The package's documents.
  * @returns What gives an item ref's item's variables, none declared for one that names an LTI
- *   link, and none for an item ref not among them or one whose item the reader did not read.
+ *   link, which it says, and none for an item ref not among them or one whose item the reader did
+ *   not read.
  */
 const variablesThrough = (
   itemRefs: readonly ItemRefTarget[],
   documents: ReadonlyMap<string, Document>,
-): ((itemRef: SourceElement) => Option.Option<ItemVariables>) => {
+): ((itemRef: SourceElement) => Option.Option<TargetVariables>) => {
   const targets = new Map(itemRefs.map((itemRef) => [itemRef.element, itemRef] as const));
 
   return (itemRef) =>
@@ -3573,11 +3654,17 @@ const repeatsIn = (
 
 /**
  * Give each read through an item ref in a test document's processing of a variable the engine holds
- * no value of: a `qti-variable` or a `qti-default` ({@link variableReadElements}) that lies in the
- * test's `qti-outcome-processing` or in a `qti-template-default` of one of its item refs, and whose
- * `identifier` is a name the predicate takes. The test model, built from the document alone, holds
- * such a read and would run it; the engine holds no value of it: the item marks a declared context
- * variable, the engine holds no item's `QTI_CONTEXT`, and a session delivers no LTI link.
+ * no value of: an expression whose `identifier` a test may prefix ({@link referenceElements}) that
+ * lies in the test's `qti-outcome-processing`, or a `qti-variable` or a `qti-default`
+ * ({@link variableReadElements}) that lies in a `qti-template-default` of one of its item refs,
+ * whose `identifier` is a name the predicate takes. The test model, built from the document alone,
+ * holds such a read and would run it; the engine holds no value of it: the item marks a declared
+ * context variable, the engine holds no item's `QTI_CONTEXT`, and a session delivers no LTI link.
+ * In the outcome processing a `qti-correct`, a `qti-map-response` or a `qti-map-response-point` is
+ * found as well, since a name read through an LTI link is accepted whatever reads it (reading 166,
+ * "a name read through an LTI link (reading 110)" is accepted), and the processing would run it on
+ * nothing. A context variable meets none of those three on a checked package: each reads a
+ * response alone ({@link judgeReference}).
  *
  * @param source The test's source.
  * @param visits The visits of its elements, in document order.
@@ -3610,9 +3697,11 @@ const unheldReadsIn = (
     } else if (inherited !== undefined) {
       places.set(element, inherited);
 
-      const name = Option.getOrUndefined(identifierOf(element));
-      if (name !== undefined && isQti(element, variableReadElements) && isUnheld(name)) {
-        reads.push(inherited(name));
+      const read = Option.getOrUndefined(Option.map(identifierOf(element), inherited));
+      const readers =
+        read?.kind === "outcome-processing" ? referenceElements : variableReadElements;
+      if (read !== undefined && isQti(element, readers) && isUnheld(read.name)) {
+        reads.push(read);
       }
     }
   }
@@ -4079,8 +4168,8 @@ const reachOf = (test: Placement, { counts, placements }: Assembly): Reach => {
 
 /**
  * Give what a reading may name through each item ref of a test's reach: its item's variables, none
- * for an LTI link ({@link targetVariables}), and the targets of its variable mappings whose source
- * the item declares.
+ * declared for an LTI link, which it says ({@link targetVariables}), and the targets of its
+ * variable mappings whose source the item declares.
  *
  * @param itemRefs Each item ref of the reach, by identifier.
  * @param documents The package's documents.
@@ -4134,6 +4223,7 @@ const wholeOf = (source: SourceDocument): ReadonlyMap<string, ReadVariable> =>
                     declaration: Option.some(child),
                     kind: kindOf(child),
                     type: declaredType(child),
+                    unchecked: false,
                   },
                 ] as const,
             ),
@@ -4244,20 +4334,25 @@ interface TestJudgement {
  * alone, every name unknown, are the section document's own verdict's, and so are the branch
  * refusals its own check already gives.
  *
- * An item ref that names an LTI link resource in place of an item (reading 110, "a variable mapping
- * and a template default name variables an item declares, so under an item ref that names an LTI
- * link both are refused") resolves, and a link declares no variable, so a reading through it names
- * only a built-in every item has (reading 106) and each of its variable mappings and template
- * defaults is `undeclared-variable`. The test document's own item refs that name one are its
- * `links`, which the delivered test marks `lti-link` and leaves out, and none of them is among
- * its `refs`: plate launches no LTI link, so a session delivers the test without it.
+ * An item ref that names an LTI link resource in place of an item (reading 110, "an item ref may
+ * name an LTI link instead of an item") resolves, and the package declares nothing a link reports:
+ * a reading through it names a built-in every item has as that built-in, and any other name
+ * unchecked, which no kind or type rule judges (reading 106, "an item ref that names an LTI link
+ * has no item whose declarations a prefix reads, so a prefixed reference through it is accepted
+ * unchecked, a recorded limit"); its variable mappings are judged by no rule, and each of its
+ * template defaults is `undeclared-variable` (reading 110, "under an item ref that names an LTI
+ * link a variable mapping is accepted unchecked, a recorded limit, and a template default is
+ * refused"). A source that listed the outcomes a link reports would lift the limit. The test
+ * document's own item refs that name one are its `links`, which the delivered test marks `lti-link`
+ * and leaves out, and none of them is among its `refs`: plate launches no LTI link, so a session
+ * delivers the test without it.
  *
  * Last, it finds each read in the test document's processing, its outcome processing and its item
  * refs' template defaults, through an item ref of a variable the engine holds no value of
  * ({@link unheldReadsIn}): a name the test does not hold whole whose one counting reading reads a
  * variable the item declares in a `qti-context-declaration`, directly or in the numbered form, the
  * built-in `QTI_CONTEXT` (reading 106, "a prefixed reference reaches every built-in variable its
- * item ref's item holds, `QTI_CONTEXT` among them"), or any built-in through an item ref that names
+ * item ref's item holds, `QTI_CONTEXT` among them"), or any variable through an item ref that names
  * an LTI link, which no session delivers. The engine holds no value of any of them, so the
  * delivered test marks the processing that reads it. A read in a reached section document is left
  * alone: a session delivers none of its items, and the test model marks a read through one.
@@ -4538,7 +4633,7 @@ const judgeTest = (
    * engine holds no value of: the test does not hold it whole, and its one counting reading reads a
    * context variable, one its item declares in a `qti-context-declaration` or the built-in
    * `QTI_CONTEXT` (reading 106), or reads through an item ref that names an LTI link, whose
-   * built-ins no session holds.
+   * variables no session holds.
    *
    * @param name The name.
    * @returns Whether it does.

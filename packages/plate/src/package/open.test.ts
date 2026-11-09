@@ -4784,7 +4784,7 @@ describe("package/open.ts", () => {
 
   describe("openPackage, an item ref that names an LTI link", () => {
     it.effect(
-      "align-54 LTI item ref E21: a test whose item ref lti names an LTI link, a resource of type imsbasiclti_xmlv1p3 under 3.0.0 or of type imslti_xmlv1p1 or imsltia_xmlv1p0 under 3.0.1, is accepted with the ref marked lti-link and left out of the delivered test, whose items are ITEM1's alone, while the test document's own verdict keeps the ref unmarked (reading 110 (\"a variable mapping and a template default name variables an item declares, so under an item ref that names an LTI link both are refused\"))",
+      "align-54 LTI item ref E21: a test whose item ref lti names an LTI link, a resource of type imsbasiclti_xmlv1p3 under 3.0.0 or of type imslti_xmlv1p1 or imsltia_xmlv1p0 under 3.0.1, is accepted with the ref marked lti-link and left out of the delivered test, whose items are ITEM1's alone, while the test document's own verdict keeps the ref unmarked (reading 110 (\"an item ref may name an LTI link instead of an item\"))",
       () =>
         Effect.gen(function* linkedItemRef() {
           for (const profile of linkProfiles) {
@@ -4896,20 +4896,72 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      'align-54 LTI item ref E21: lti.SCORE, which no link declares, is refused undeclared-variable, as a read through it reaches only the item built-ins (reading 106 ("a prefixed reference reaches every built-in variable its item ref\'s item holds, `QTI_CONTEXT` among them"))',
+      "align-54 R3 LTI unchecked G2-2: lti.SCORE, a name no built-in gives, read through the LTI item ref in the test's outcome processing is accepted with the processing marked variable:lti.SCORE at it, as a read the engine holds no value of is, while the document's own verdict runs it (reading 106 (\"an item ref that names an LTI link has no item whose declarations a prefix reads, so a prefixed reference through it is accepted unchecked, a recorded limit\"))",
       () =>
-        Effect.gen(function* linkedDeclaration() {
+        Effect.gen(function* linkedName() {
+          const verdict = yield* openPackage(
+            location,
+            ltiPackage(settingTotal(variableXml("lti.SCORE"))),
+          );
+          const { alone, delivered } = deliveredAndAlone(verdict);
+
+          assert.deepStrictEqual(refusalsOf(verdict), []);
+          assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+          assert.deepStrictEqual(delivered.test.outcomeProcessing, { kind: "marked" });
+          assert.deepStrictEqual(variableMarks(delivered), [
+            ["variable:lti.SCORE", processingPath],
+          ]);
+          assert.deepStrictEqual(linkMarks(delivered), [ltiRefPath]);
+          assert.strictEqual(alone.test.outcomeProcessing.kind, "runs");
+        }),
+    );
+
+    it.effect(
+      'align-54 R3 LTI unchecked G2-2: a qti-map-response of lti.RESPONSE and a qti-correct of lti.X are each accepted with the processing marked variable:<name> at it, as a qti-variable of one is, while the document\'s own verdict runs it (reading 166 ("a dotted map response of a mapped response, a dotted correct of a response, and a name read through an LTI link (reading 110) are accepted"))',
+      () =>
+        Effect.gen(function* linkedReaders() {
+          for (const [name, expression] of [
+            ["lti.RESPONSE", '<qti-map-response identifier="lti.RESPONSE"/>'],
+            ["lti.X", '<qti-correct identifier="lti.X"/>'],
+          ] as const) {
+            const verdict = yield* openPackage(location, ltiPackage(settingTotal(expression)));
+            const { alone, delivered } = deliveredAndAlone(verdict);
+
+            assert.deepStrictEqual(refusalsOf(verdict), [], expression);
+            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", expression);
+            assert.deepStrictEqual(
+              delivered.test.outcomeProcessing,
+              { kind: "marked" },
+              expression,
+            );
+            assert.deepStrictEqual(
+              variableMarks(delivered),
+              [[`variable:${name}`, processingPath]],
+              expression,
+            );
+            assert.deepStrictEqual(linkMarks(delivered), [ltiRefPath], expression);
+            assert.strictEqual(alone.test.outcomeProcessing.kind, "runs", expression);
+          }
+        }),
+    );
+
+    it.effect(
+      'align-54 R3 LTI unchecked G2-2, control: the numbered lti.1.SCORE counts as a numbered reading through an item does, so with no selection with replacement it is refused undeclared-variable with check numbered (reading 88 ("a numbered reference such as `Q01.2.SCORE` names an instance of an item ref that a selection with replacement can repeat, and nothing else"))',
+      () =>
+        Effect.gen(function* linkedNumbered() {
           assert.deepStrictEqual(
             refusalsOf(
-              yield* openPackage(location, ltiPackage(settingTotal(variableXml("lti.SCORE")))),
+              yield* openPackage(location, ltiPackage(settingTotal(variableXml("lti.1.SCORE")))),
             ),
             [
               {
                 detail: {
-                  check: "reading",
+                  check: "numbered",
                   element: "qti-variable",
-                  identifier: "lti.SCORE",
-                  reading: "48",
+                  identifier: "lti.1.SCORE",
+                  itemRef: "lti",
+                  reading: "88",
+                  reference: "lti.1.SCORE",
                 },
                 document: fileLocation(location, "test.xml"),
                 location: { kind: "path", path: `${expressionAt("qti-variable")}/@identifier` },
@@ -4921,7 +4973,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      'align-54 LTI item ref E21: a variable mapping of SCORE and a template default of T under it are each refused undeclared-variable, as a source and a template its item does not declare are (reading 110 ("a variable mapping and a template default name variables an item declares, so under an item ref that names an LTI link both are refused"))',
+      'align-54 R3 LTI unchecked G2-2: under the LTI item ref a variable mapping of SCORE is accepted, as no rule judges it, and a template default of T is the one refusal, undeclared-variable with expected template (reading 110 ("under an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded limit, and a template default is refused"))',
       () =>
         Effect.gen(function* linkedMappingAndDefault() {
           assert.deepStrictEqual(
@@ -4935,20 +4987,6 @@ describe("package/open.ts", () => {
               ),
             ),
             [
-              {
-                detail: {
-                  attribute: "source-identifier",
-                  element: "qti-variable-mapping",
-                  expected: "outcome",
-                  identifier: "SCORE",
-                },
-                document: fileLocation(location, "test.xml"),
-                location: {
-                  kind: "path",
-                  path: `${ltiRefPath}/qti-variable-mapping/@source-identifier`,
-                },
-                rule: "undeclared-variable",
-              },
               {
                 detail: {
                   attribute: "template-identifier",
@@ -4965,6 +5003,23 @@ describe("package/open.ts", () => {
               },
             ],
           );
+        }),
+    );
+
+    it.effect(
+      'align-54 R3 LTI unchecked G2-2: three variable mappings under the LTI item ref, two of one target S2 and one whose target is the built-in duration, are accepted, as a mapping under it has no source declaration to key its target by (reading 110 ("under an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded limit, and a template default is refused"))',
+      () =>
+        Effect.gen(function* linkedMappingTargets() {
+          const verdict = yield* openPackage(
+            location,
+            ltiPackage(
+              settingTotal(oneFloat),
+              '<qti-variable-mapping source-identifier="A" target-identifier="S2"/><qti-variable-mapping source-identifier="B" target-identifier="S2"/><qti-variable-mapping source-identifier="C" target-identifier="duration"/>',
+            ),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), []);
+          assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
         }),
     );
   });
