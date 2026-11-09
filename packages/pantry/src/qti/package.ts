@@ -9,10 +9,12 @@
  * (`cp:resource`), {@link File} (`cp:file`) and {@link Dependency} (`cp:dependency`). Each copies
  * its node's {@link nodeRef} tuple, names a node of its own kind, and takes each attribute value it
  * compares from `Attribute` (C18), with the key over that attribute's selection that keeps its
- * lexical form out of every index (the tier-1 addendum's "Text in keys"). An identifier that may be
- * unwritten is a row of its own, or none (AGENTS.md, Schema intent): a `cp:manifest` that writes no
- * `identifier` has no {@link ManifestId}, and a `cp:resource` none no {@link ResourceId}, so AL3
- * refuses the element alone and no law compares an identifier it does not have.
+ * lexical form out of every index (the tier-1 addendum's "Text in keys"); an identifier or an
+ * `identifierref` holds that form collapsed beside it, its value, which the laws compare (C17,
+ * decision 457 (3)). An identifier that may be unwritten is a row of its own, or none (AGENTS.md,
+ * Schema intent): a `cp:manifest` that writes no `identifier` has no {@link ManifestId}, and a
+ * `cp:resource` none no {@link ResourceId}, so AL3 refuses the element alone and no law compares
+ * an identifier it does not have.
  *
  * A resource's `type` that is written but spells no `ResourceType` handle is unread: the resource
  * has no {@link ResourceTyped} and its href no {@link TypedHref}, and its href has an
@@ -193,12 +195,12 @@ export const ResourceId = relation(
 
 /**
  * The identifiers of a package's manifest and its resources, one `xs:ID` space (IMS Content
- * Packaging 1.2), a projection keyed by its heading: one row per identifier and kind of element
- * that writes it, `cp:manifest` ({@link ManifestId}) or `cp:resource` ({@link ResourceId}). Two
- * resources of one identifier are one row, which "DocumentId key" refuses over {@link ResourceId};
- * a resource of the manifest's identifier is a second row of its (package, identifier), which
- * "Manifest id space" refuses. A side that writes no identifier has no row, so it is compared
- * with nothing.
+ * Packaging 1.2), a projection keyed by its heading: one row per collapsed identifier and kind of
+ * element that writes it, `cp:manifest` ({@link ManifestId}) or `cp:resource` ({@link ResourceId}).
+ * Two resources of one identifier are one row, which "DocumentId key" refuses over
+ * {@link ResourceId}; a resource of the manifest's identifier is a second row of its (package,
+ * identifier), which "Manifest id space" refuses. A side that writes no identifier has no row, so
+ * it is compared with nothing.
  *
  * Its kind is `cp:manifest` or `cp:resource` by its containments and its key alone, with no check:
  * every check is named by an oracle law, and these rows are "Manifest overlay"'s, a law the law
