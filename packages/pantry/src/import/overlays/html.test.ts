@@ -1,7 +1,7 @@
 /**
  * The HTML builder's free tests: `headerPiecesOf` splits every `headers` value into exactly its
  * whitespace-separated tokens, and over documents of a known structure `rowsOf` gives each cell's
- * `headers` its nearest table, each `th`'s `id` its value and table whatever its form, and each
+ * `headers` its nearest table, each `th`'s `id` that is an NCName its value and table, and each
  * element on the way up its scope, as the document's own construction says.
  *
  * The expected rows are written by hand from each document's construction, element by element, so
@@ -200,13 +200,13 @@ describe("import/overlays/html.ts, headerPiecesOf", () => {
 const padding: Gen<string> = string(element([" ", "\t", "\n", "\r"] as const), { max: 2, min: 0 });
 
 /**
- * The XML whitespace a `th`'s `id` is padded by on one side in the copy box: none, or one of
+ * The XML whitespace a `th`'s `id` is padded by on one side in the names box: none, or one of
  * space, tab, line feed and carriage return.
  */
 const edge: Gen<string> = string(element([" ", "\t", "\n", "\r"] as const), { max: 1, min: 0 });
 
 /**
- * The values a `th`'s `id` takes in the copy box, each with whether it is an NCName: a name, and
+ * The values a `th`'s `id` takes in the names box, each with whether it is an NCName: a name, and
  * each form spec reading 156 reads as no ID value, the empty one, one that starts with a digit,
  * two names, and `٠a`, whose first character starts a name in XML 1.0's fifth edition but is a
  * digit in the `Letter` tables `xs:NCName` reads.
@@ -386,14 +386,12 @@ describe("import/overlays/html.ts, rowsOf", () => {
   );
 
   it.effect(
-    "gives every th that writes an id its TableHeader, the id's value whatever its form, for the database to judge which names a header",
+    "gives a th's id its TableHeader only where its value is an NCName, its value the form with its outer whitespace set apart",
     (ctx) =>
-      // Oracle: the copy as the schema states it (`#pantry/qti/html.ts`): `TableHeader` holds a
-      // `th`'s `id`, its value the lexical form with its outer XML whitespace set apart (XML Schema
-      // Part 2, §4.3.6), at the `th`'s node and table. Which form names a header is the database's
-      // to judge: a form that is no NCName names none (spec reading 156), and its row breaks the
-      // copy back into `namingIdAttributes` ("E1 derived") beside AL1's value domain, so the
-      // builder copies every form and judges none.
+      // Oracle: the specification as a checker, spec reading 156: a `th`'s `id` is an ID value,
+      // and so a header, only where its value is an NCName (`xs:ID` restricts `xs:NCName`, XML
+      // Schema Part 2, §3.3.8), its value the lexical form with its outer XML whitespace set apart
+      // (§4.3.6), at the `th`'s node and table. Any other form names no header and has no row.
       // Bound: an NCName and each of reading 156's forms that are no NCName, each padded by at
       // most one of space, tab, line feed and carriage return on each side, 150.
       searched(
@@ -412,9 +410,9 @@ describe("import/overlays/html.ts, rowsOf", () => {
             literal: (drawn) => JSON.stringify(drawn),
             oracle: {
               kind: "specification",
-              name: "TableHeader's copy of a th's id, its value collapsed at its ends, XML Schema Part 2, §4.3.6",
+              name: "spec reading 156: a th's id names a header only where its collapsed value is an NCName",
             },
-            suite: "import/overlays/html-header-copy",
+            suite: "import/overlays/html-header-names",
           },
           ({ after, before, form }, c) =>
             Effect.gen(function* copiedId() {
@@ -436,7 +434,7 @@ describe("import/overlays/html.ts, rowsOf", () => {
                   owner: row.owner,
                   table: row.table,
                 })),
-                [{ id: form.value, node: th.id, owner: th.id, table: table.id }],
+                form.names ? [{ id: form.value, node: th.id, owner: th.id, table: table.id }] : [],
                 JSON.stringify(`${before}${form.value}${after}`),
               );
             }),

@@ -15,12 +15,11 @@
  *   named twice by `HeaderToken`'s key (main's `same-table-headers` guard case, ported); and the
  *   overlay's rows held to the tree, by an edit of the package's inputs that writes a state no
  *   valid document shreds to.
- * - **Reading 156:** a `th`'s `id` that is no NCName names no header. The builder copies every `th`'s
- *   `id` into `TableHeader` and judges none of them, so the database refuses that copy: AL1's value
- *   domain refuses the attribute, and "E1 derived" refuses its `TableHeader`, whose copy back into
- *   the ID values whose form names something (`namingIdAttributes`) and into `DocumentId` finds no
- *   row. One case imports such a `th` as the builder writes it; the other writes a `TableHeader`
- *   for a `th` that carries no `id`, which no value domain refuses, so the copy back alone does.
+ * - **Reading 156:** a `th`'s `id` that is no NCName names no header and has no `TableHeader`, so its
+ *   value domain alone refuses it (AL1's lexical half). A `TableHeader` written for a `th` that
+ *   carries no ID value, by an edit of the package's inputs, is refused by its copy back into the
+ *   ID values whose form names something (`namingIdAttributes`) and into `DocumentId` ("E1
+ *   derived").
  */
 import { Db, query, v } from "@bjornpagen/grizzle";
 import type { ApplyOutcome, Law } from "@bjornpagen/grizzle";
@@ -166,8 +165,7 @@ const applyEdited = (
 /**
  * The two containments that hold a `TableHeader` to an ID its `th` carries (E1 derived): its copy
  * back into the ID-typed attributes whose form names something (`namingIdAttributes`, at the `th`
- * kind), and into `DocumentId`. A row for a `th` whose `id` is no NCName, or that carries no `id`,
- * breaks both.
+ * kind), and into `DocumentId`. A row for a `th` that carries no ID value breaks both.
  */
 const headerCopyBack = [
   containedIn(["TableHeader", "node", "constant"], ["Attribute", "node", "kind"]),
@@ -345,12 +343,12 @@ const refusedCases = [
       Effect.flatMap(
         withBody(
           "header-id-no-ncname",
-          `<table><tbody><tr><th id="1a">h</th><td headers="1a">a</td></tr></tbody></table>`,
+          `<table><tbody><tr><th id="1a">h</th><td>a</td></tr></tbody></table>`,
         ),
         (dir) => applyEdited(dir),
       ),
-    laws: [checkNamed("Attribute", "value_domain"), ...headerCopyBack],
-    name: "a th whose id is no NCName, its TableHeader written (AL1's value domain; E1 derived, reading 156)",
+    laws: [checkNamed("Attribute", "value_domain")],
+    name: "a th whose id is no NCName, which has no TableHeader (value domain, reading 156)",
   },
   {
     apply: () =>

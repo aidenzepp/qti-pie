@@ -3,19 +3,12 @@
  * IDs): an attribute whose domain is `xs:ID`, or a context declaration's `identifier` (spec reading
  * 74), is one of its document's IDs only where its lexical form, collapsed, is in `xs:NCName`'s
  * lexical space, which `xs:ID` restricts. A value outside it, empty, whitespace, `1a`, `a b`, or a
- * name only a later edition of XML admits, is no ID: it has no `DocumentId` row and no binding, and
- * its value domain refuses it, on the import's rows as in the law oracle. An IDREF that names it
- * names no ID, and is refused by its own law ("Idref target", or "Table headers" for a cell's
- * `headers`), never accepted through a row the value should not have. The import wrote a
- * `DocumentId` row for every ID-typed attribute before, so an empty value or one with whitespace
- * inside broke "E1 derived" beside the value domain the oracle alone raises.
- *
- * A `th`'s `id` is the one value the import copies whatever its form: the HTML builder writes its
- * `TableHeader` and judges no form (`#pantry/import/overlays/html.ts`), since the database states
- * which `id` names a header. So where it is no NCName, the import's rows break "E1 derived" through
- * that row's copy back into the ID values whose form names something, or into `DocumentId`, a law
- * of the rows the oracle, which reads documents, never raises: the one disagreement such a case
- * must show, and no other.
+ * name only a later edition of XML admits, is no ID: it has no `DocumentId` row, no binding and no
+ * `th` header, and its value domain refuses it alone, on the import's rows as in the law oracle. An
+ * IDREF that names it names no ID, and is refused by its own law ("Idref target", or "Table
+ * headers" for a cell's `headers`), never accepted through a row the value should not have. The
+ * import wrote a `DocumentId` row for every ID-typed attribute before, so an empty value or one
+ * with whitespace inside broke "E1 derived" beside the value domain the oracle alone raises.
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`), which
@@ -41,7 +34,7 @@ import { everyRelationPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
 import { judgeOne, recordsClassOf, shownDisagreement } from "#pantry/test/gen/genetic/judge.ts";
-import type { Disagreement, Signature } from "#pantry/test/gen/genetic/judge.ts";
+import type { Signature } from "#pantry/test/gen/genetic/judge.ts";
 import { known } from "#pantry/test/gen/genetic/known.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
@@ -209,30 +202,6 @@ type Situation =
   | "its own value";
 
 /**
- * Whether a situation writes a value that is no NCName, on the ID alone or on its references too.
- *
- * @param situation - The situation.
- * @returns Whether it does.
- */
-const namesNothing = (situation: Situation): boolean =>
-  situation === "a non-NCName" || situation === "a non-NCName its references name";
-
-/**
- * Whether a disagreement is the import's rows breaking "E1 derived" through a `TableHeader`: its
- * copy back into the ID-typed attributes whose form names something (`namingIdAttributes`), or
- * into `DocumentId`, which no row holds for a `th`'s `id` that is no NCName
- * (`#pantry/qti/html.ts`), though the HTML builder copies it all the same.
- *
- * @param disagreement - The disagreement.
- * @returns Whether it is.
- */
-const isHeaderCopyBack = (disagreement: Disagreement): boolean =>
-  disagreement.kind === "import-only-law" &&
-  disagreement.law === "E1 derived" &&
-  disagreement.broken.kind === "contained" &&
-  disagreement.broken.from.relation === "TableHeader";
-
-/**
  * The values that are no NCName: the empty value; whitespace alone; a name that starts with a
  * digit; two names; and `٠a`, whose first character, ARABIC-INDIC DIGIT ZERO, starts a name in XML
  * 1.0's fifth edition but is a digit in the `Letter` tables `xs:NCName` reads.
@@ -304,7 +273,7 @@ const packageOf = (
 
 layer(NodeServices.layer, { excludeTestServices: true })("an ID whose value is no NCName", (it) => {
   it.effect(
-    "names nothing, so its value domain refuses it, a th's TableHeader copy its copy back beside, and each reference to it its own law, on the import's rows as in the law oracle",
+    "names nothing, so its value domain alone refuses it and each reference to it its own law, on the import's rows as in the law oracle",
     (ctx) =>
       searched(
         ctx,
@@ -362,22 +331,12 @@ layer(NodeServices.layer, { excludeTestServices: true })("an ID whose value is n
                   );
                 }
 
-                const shown = `${site.path} ${site.id.pair}=${JSON.stringify(value)}${edited.length > 1 ? " with its references" : ""}`;
-                const copied = site.id.pair === "th id" && namesNothing(situation);
-                const unrecorded = judged.disagreements.filter(
-                  (disagreement) => !recordsClassOf(recorded, disagreement),
-                );
                 assert.deepStrictEqual(
-                  unrecorded
-                    .filter((disagreement) => !(copied && isHeaderCopyBack(disagreement)))
+                  judged.disagreements
+                    .filter((disagreement) => !recordsClassOf(recorded, disagreement))
                     .map(shownDisagreement),
                   [],
-                  `${shown}: the oracle ${judged.summary.oracle}; the import ${judged.summary.import}`,
-                );
-                assert.strictEqual(
-                  unrecorded.some(isHeaderCopyBack),
-                  copied,
-                  `${shown}: the import's rows break E1 derived through a TableHeader exactly where a th's id is no NCName; the oracle ${judged.summary.oracle}; the import ${judged.summary.import}`,
+                  `${site.path} ${site.id.pair}=${JSON.stringify(value)}${edited.length > 1 ? " with its references" : ""}: the oracle ${judged.summary.oracle}; the import ${judged.summary.import}`,
                 );
               }),
           );

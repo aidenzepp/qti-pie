@@ -145,6 +145,9 @@ const crossings: ByStep = [
       "import/overlays/tests.ts: #pantry/grammar/domains.ts",
     ],
   ],
+  // S8 makes TableHeader a query over its source (B9), which takes html.ts's NCName gate, its one
+  // read of `grammar/domains.ts`.
+  ["S8", ["import/overlays/html.ts: #pantry/grammar/domains.ts"]],
   // S10 takes out of each module the code of the other side, which no export can carry across:
   // `ingest` with its login, retries and refusal report out of `import/package.ts`; `changeSetOf`
   // with the author role out of `import/write.ts`, and the row type with its relations into the

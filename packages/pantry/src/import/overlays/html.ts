@@ -4,14 +4,14 @@
  * a keyed set.
  *
  * The rows restate what the tree says and nothing else: each table cell's `headers` as written,
- * split into its tokens; each `th`'s `id`, its value as `DocumentId` holds it; and each element on
- * the way from those cells up to the table they take part in. The database proves every one of
- * them (`htmlLaws`), so a row this builder gets wrong is refused, never accepted, and judges which
- * `id` names a header: the builder copies each one and judges none. Readings 124 and 125 read
- * `Node` and `Attribute` alone, so they have no rows here.
+ * split into its tokens; each `th`'s `id` that is an NCName, its value as `DocumentId` holds it;
+ * and each element on the way from those cells up to the table they take part in. The database
+ * proves every one of them (`htmlLaws`), so a row this builder gets wrong is refused, never
+ * accepted. Readings 124 and 125 read `Node` and `Attribute` alone, so they have no rows here.
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import type { DocumentContext } from "#pantry/import/context.ts";
+import { isNcName } from "#pantry/grammar/domains.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -163,13 +163,20 @@ const tableWalkOf = (
  * Build a document's HTML rows.
  *
  * Each cell that writes `headers` has its {@link CellHeadersRow}, and each `th` that writes an `id`
- * its `TableHeader`, the ID's value its lexical form with its outer whitespace set apart, as
- * `DocumentId` holds it, whatever its form. An `id` whose value is no NCName names no header (spec
- * reading 156), and the database says so: its row breaks the copy back into the ID values whose
- * form names something (`namingIdAttributes`, "E1 derived" in `#pantry/qti/html.ts`), beside the
- * value domain that refuses the attribute (AL1's lexical half). Each element on the walk up from
- * either to its nearest `table` has its `TableScope`. A text past `keyText`'s bound keeps its row,
- * which `keyText` refuses under "Key text bound". A document with no such cell gives no row.
+ * whose value is an NCName ({@link isNcName}) its `TableHeader`, the ID's value its lexical form
+ * with its outer whitespace set apart, as `DocumentId` holds it; any other `id` names no header
+ * (spec reading 156). Each element on the walk up from either to its nearest `table` has its
+ * `TableScope`. A text past `keyText`'s bound keeps its row, which `keyText` refuses under "Key
+ * text bound". A document with no such cell gives no row.
+ *
+ * The NCName test decides whether a `TableHeader` row exists, so it stays until the relation is a
+ * query over its source, `headerIds` in `#pantry/qti/html.ts` (the constraint-engine plan's B9, at
+ * the grizzle cutover). Writing a row for every `th`'s `id` instead breaks the reading. The row's
+ * copy back into `namingIdAttributes` and `DocumentId` ("E1 derived") would refuse it beside the
+ * value domain that reading 156 says refuses the `id` alone. And a cell's `headers` token naming
+ * that `id` would find the row and hold "Table headers", which the reading says refuses it.
+ * `documentIdOf` (`#pantry/import/overlays/identity.ts`) keeps the same test for the reading's
+ * other half.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -221,10 +228,11 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: HtmlIds): HtmlRows => {
     }
 
     const id = cell.kind === "th" ? valueOf(cell, "id") : undefined;
-    if (id !== undefined) {
+    const value = id?.replace(/^[\t\n\r ]+/u, "").replace(/[\t\n\r ]+$/u, "");
+    if (value !== undefined && isNcName(value)) {
       headerIds.set(cell.id, {
         document,
-        id: id.replace(/^[\t\n\r ]+/u, "").replace(/[\t\n\r ]+$/u, ""),
+        id: value,
         node: cell.id,
         owner: cell.id,
         table: tableOf(cell),
