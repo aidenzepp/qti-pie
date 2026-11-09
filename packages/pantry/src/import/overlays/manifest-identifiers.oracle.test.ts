@@ -13,6 +13,15 @@
  * relation, never a sentinel (AGENTS.md, Schema intent): before this guard the import wrote an
  * absent identifier as "", so two resources of none broke "DocumentId key" and a manifest and a
  * resource of none "Manifest id space", where AL3 alone is broken.
+ *
+ * The identifiers and identifierrefs compare collapsed: an `xs:ID` and an `xs:IDREF` are whiteSpace
+ * `collapse` types, so an `identifierref` written `" r1"` names the resource `r1`, and a manifest
+ * `identifier=" M"` is a resource's `M` (decision 457 (3), need e0a6760b; IMS Content Packaging
+ * 1.2, §6.11.4 and §6.11.5, leave the value to the binding). The explicit cases hold the host's
+ * broken laws to exactly the oracle's: before the import collapsed them, it broke "Dependency
+ * target" on a padded `identifierref` or a padded resource identifier, where the oracle raises
+ * nothing, and raised no "Manifest id space" on a padded manifest identifier, where the oracle
+ * does.
  */
 import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
@@ -32,6 +41,7 @@ import { manifestPath } from "#pantry/qti/package.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
+import { item } from "#pantry/test/probe.ts";
 
 /**
  * The composed grammar every case is judged by.
@@ -167,6 +177,137 @@ const manifestOf = (input: IdentifierCase): string => {
   return `<?xml version="1.0" encoding="UTF-8"?><manifest xmlns="${cpNamespace}"${input.manifest ? ' identifier="m"' : ""}><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata><organizations/><resources>${first}${second}</resources></manifest>`;
 };
 
+/**
+ * Judge a package both ways: the law oracle's judgment and verdict, and the import's rows judged
+ * on the host.
+ *
+ * @param files - Each file's text by path; {@link manifestPath} is the manifest.
+ * @returns The oracle's verdict and broken laws, the import's inputs and the host's verdict.
+ */
+const judgedBothWays = Effect.fn("test.manifestIdentifiers.judgedBothWays")(
+  function* judgedBothWays(files: Readonly<Record<string, string>>) {
+    const text = new TextEncoder();
+    const dir = yield* scopedPackage(
+      new Map(
+        Object.entries(files).map(([path, written]) => [path, text.encode(written)] as const),
+      ),
+    );
+    const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+    const minted = new Set<string>();
+    const { inputs } = yield* readProgram(dir, (): NodeId => {
+      const id: NodeId = randomUUID();
+      minted.add(id);
+
+      return id;
+    });
+    const oracleLaws: ReadonlySet<string> = new Set(
+      judgment._tag === "Judged" ? judgment.breaches.map(({ law }) => law) : [],
+    );
+
+    return {
+      host: hostVerdictOf(inputs, minted),
+      inputs,
+      oracleLaws,
+      verdict: verdictOf(judgment),
+    };
+  },
+);
+
+/**
+ * Write a manifest of identifier `M` around its resources, as the explicit cases do.
+ *
+ * @param resources - The `resource` elements, as written.
+ * @param identifier - The manifest's `identifier`, as written.
+ * @returns The manifest's text.
+ */
+const writtenManifestOf = (resources: string, identifier = "M"): string =>
+  `<?xml version="1.0" encoding="UTF-8"?><manifest xmlns="${cpNamespace}" identifier="${identifier}"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata><organizations/><resources>${resources}</resources></manifest>`;
+
+/**
+ * One explicit case of a padded identifier or identifierref: its package, the laws both sides must
+ * break (`present`) and must not (`absent`), and whether it is valid, a package the oracle accepts
+ * and whose rows break no law on the host (reading 1).
+ */
+interface PaddedCase {
+  readonly absent: readonly string[];
+  readonly files: Readonly<Record<string, string>>;
+  readonly name: string;
+  readonly present: readonly string[];
+  readonly valid: boolean;
+}
+
+/**
+ * Write a `webcontent` resource with its one file, which QTI 3.0's profile requires (`file`
+ * [1..*]), so that no content model law breaks beside the laws a case is about.
+ *
+ * @param identifier - Its `identifier`, as written.
+ * @param file - Its file's `href`, an entry of the package.
+ * @param dependencies - Its `dependency` elements, as written.
+ * @returns The resource's text.
+ */
+const webcontentOf = (identifier: string, file: string, dependencies = ""): string =>
+  `<resource identifier="${identifier}" type="webcontent"><file href="${file}"/>${dependencies}</resource>`;
+
+/**
+ * The text of each `webcontent` file, which no law reads.
+ */
+const webText = "<p>web</p>";
+
+/**
+ * The explicit cases (decision 457 (3)): each identifier and identifierref compares collapsed.
+ */
+const paddedCases: readonly PaddedCase[] = [
+  {
+    absent: ["Dependency target"],
+    files: {
+      [manifestPath]: writtenManifestOf(
+        `${webcontentOf("r1", "r1.html")}${webcontentOf("r2", "r2.html", '<dependency identifierref=" r1"/>')}`,
+      ),
+      "r1.html": webText,
+      "r2.html": webText,
+    },
+    name: "a padded identifierref names its resource",
+    present: [],
+    valid: false,
+  },
+  {
+    absent: ["Dependency target"],
+    files: {
+      [manifestPath]: writtenManifestOf(
+        `${webcontentOf(" r1 ", "r1.html")}${webcontentOf("r2", "r2.html", '<dependency identifierref="r1"/>')}`,
+      ),
+      "r1.html": webText,
+      "r2.html": webText,
+    },
+    name: "an identifierref names a padded resource identifier",
+    present: [],
+    valid: false,
+  },
+  {
+    absent: [],
+    files: {
+      "m.html": webText,
+      [manifestPath]: writtenManifestOf(webcontentOf("M", "m.html"), " M"),
+    },
+    name: "a padded manifest identifier is a resource's",
+    present: ["Manifest id space"],
+    valid: false,
+  },
+  {
+    absent: ["Dependency target"],
+    files: {
+      "item.xml": item,
+      [manifestPath]: writtenManifestOf(
+        `<resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/><dependency identifierref=" W"/></resource>${webcontentOf("W", "w.html")}`,
+      ),
+      "w.html": webText,
+    },
+    name: "a valid package whose item depends on a padded identifierref",
+    present: [],
+    valid: true,
+  },
+];
+
 layer(NodeServices.layer, { excludeTestServices: true })(
   "import/overlays/package.ts, a manifest's identifiers",
   (it) => {
@@ -201,22 +342,9 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 c.noteAll(situationsOf(input));
 
                 const manifest = manifestOf(input);
-                const dir = yield* scopedPackage(
-                  new Map([[manifestPath, new TextEncoder().encode(manifest)]]),
-                );
-                const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
-                const verdict = verdictOf(judgment);
-                const minted = new Set<string>();
-                const { inputs } = yield* readProgram(dir, (): NodeId => {
-                  const id: NodeId = randomUUID();
-                  minted.add(id);
-
-                  return id;
+                const { host, inputs, oracleLaws, verdict } = yield* judgedBothWays({
+                  [manifestPath]: manifest,
                 });
-                const host = hostVerdictOf(inputs, minted);
-                const oracleLaws: ReadonlySet<string> = new Set(
-                  judgment._tag === "Judged" ? judgment.breaches.map(({ law }) => law) : [],
-                );
 
                 for (const name of host.broken.keys()) {
                   assert.isTrue(
@@ -248,5 +376,33 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         ),
       600_000,
     );
+
+    for (const padded of paddedCases) {
+      it.effect(`compares the identifiers and identifierrefs collapsed: ${padded.name}`, () =>
+        Effect.gen(function* paddedCase() {
+          const { host, oracleLaws, verdict } = yield* judgedBothWays(padded.files);
+          const hostLaws = [...host.broken.keys()];
+
+          assert.sameMembers(
+            hostLaws,
+            [...oracleLaws],
+            "the host breaks exactly the oracle's laws",
+          );
+          for (const law of padded.present) {
+            assert.include(hostLaws, law, `the host breaks ${law}`);
+          }
+
+          for (const law of padded.absent) {
+            assert.notInclude(hostLaws, law, `the host breaks no ${law}`);
+            assert.isFalse(oracleLaws.has(law), `the oracle finds ${law} held`);
+          }
+
+          if (padded.valid) {
+            assert.strictEqual(verdict.verdict, "accepted", "the oracle accepts");
+            assert.lengthOf(hostLaws, 0, "the host breaks no law");
+          }
+        }).pipe(Effect.scoped),
+      );
+    }
   },
 );

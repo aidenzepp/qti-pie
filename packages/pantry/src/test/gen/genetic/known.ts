@@ -598,6 +598,18 @@ export const fixed = {
     fix: "spec readings 157 and 158: every declaration has its Declaration row and every row below it whatever its identifier, cardinality and base type spell, each of which is a row of its own (DeclarationIdentifier, DeclarationCardinality, DeclarationBaseType), written only where it names or spells something, so AL3 or the value domain refuses one that does not alone (FIX-DECLNAME closed a nameless declaration's case, FIX-DECLCARD one whose cardinality or base type spells nothing)",
     owner: "FIX-DECLCARD",
   },
+  "import-only-law: Dependency target, contained Dependency(node) in DependencyTarget(node)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource><dependency identifierref="1x"/></resource></resources></manifest>`,
+      ],
+    ],
+    fix: "spec reading 152 and decision 457 (2): a dependency's identifierref that is no NCName once collapsed names no resource, so it writes no Dependency row and its value domain refuses it alone, where the import wrote one that no DependencyTarget could follow",
+    owner: "genetic-repair-2 gr2-2",
+  },
   "import-only-law: Document entry, contained SitePath(package, path) in TestDocument(package, path)":
     {
       files: [
@@ -1334,6 +1346,25 @@ export const fixed = {
     fix: "B11: an absent or unspelled base type or cardinality is no row, never none or single",
     owner: "NIL",
   },
+  'import-only-law: Structure identifier, {"kind":"key","side":{"relation":"Named","terms":[{"kind":"field","field":"document"},{"kind":"field","field":"identifier"}],"selection":{"conjuncts":[]}}}':
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+        ],
+        [
+          "test.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section identifier="1x"/><qti-assessment-section identifier="1x"/></qti-test-part></qti-assessment-test>`,
+        ],
+      ],
+      fix: "spec reading 152 and decision 457 (2): a test part's, section's, section ref's or item ref's identifier that is no NCName once collapsed names nothing, so it writes no Named row and its value domain refuses it alone, where the import wrote one for each and two such identifiers collided in Named's key",
+      owner: "genetic-repair-2 gr2-3",
+    },
   "import-only-law: Template reference, contained TemplateRef(node, attribute) in TemplateRefDeclaration(node, attribute)":
     {
       files: [
@@ -1352,6 +1383,25 @@ export const fixed = {
       ],
       fix: "spec reading 152: a value names something only where it is an NCName (the grammar's ncNamePattern), so the import and the schema's reference sources write no TemplateRef for template-identifier=\"\", and its value domain refuses it alone, as the oracle reads a bare reference (oracle.ts referenced.bare)",
       owner: "FIX-NCNAME",
+    },
+  'import-only-law: Test name key, {"kind":"key","side":{"relation":"AssembledName","terms":[{"kind":"field","field":"assembly"},{"kind":"field","field":"identifier"}],"selection":{"conjuncts":[]}}}':
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+        ],
+        [
+          "test.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section identifier="1x"/><qti-assessment-section identifier="1x"/></qti-test-part></qti-assessment-test>`,
+        ],
+      ],
+      fix: "spec reading 152 and decision 457 (2): a test part's, section's, section ref's or item ref's identifier that is no NCName once collapsed names nothing, so it writes no Named row and hence no AssembledName, and its value domain refuses it alone, where the import assembled one for each and two such identifiers collided in AssembledName's key",
+      owner: "genetic-repair-2 gr2-3",
     },
   "import-only-law: Test overlay, contained Named(node, identifier) in TestToken(node, value)": {
     files: [
