@@ -20,8 +20,11 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * moves no count, and by the genetic repair's migration, GEN-S6, which adds three tables
  * (`ItemRefHref`, `UnreadTypeHref` and `UnreadTypePath`) and a data step, and by genetic repair
  * round 2's migration, GEN-S7, which adds a `lexical` column to three tables, narrows two copies
- * and moves no count (its data step's UPDATEs insert nothing), on grizzle `1.0.0-beta.1`), as a
- * ratchet: a change that moves one fails here
+ * and moves no count (its data step's UPDATEs insert nothing), and by genetic repair round 3's
+ * migration, GEN-S8, which moves "Document entry"'s first containment from a `Site` selection to a
+ * `Reference` selection (one generated column, foreign key and index off `Site`, one onto
+ * `Reference`), adds no data step and moves no count, on grizzle `1.0.0-beta.1`), as a ratchet: a
+ * change that moves one fails here
  * until the count is measured again. A regeneration updates them here, and only here.
  *
  * - `tables`: one per stored relation;

@@ -1082,7 +1082,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     170,
     {
       owner:
-        '"Remote section ref" (`src/qti/tests.ts`): `Remote_section_ref` over `Site`, no section ref marked `external`, under rule `remote-section`, a stated limit among `limitRules` (`src/import/refusal.ts`) and the catalog\'s limit block (`src/vocab/laws.ts`); "Document entry" reads only the section refs whose href stays in the package (`sectionRefSites`); the oracle\'s Remote section ref (`src/test/oracle.ts`); held by `src/qti/tests.oracle.test.ts` and the box `src/test/gen/sites.test.ts` exhausts',
+        '"Remote section ref" (`src/qti/tests.ts`): `Remote_section_ref` over `Site`, no section ref marked `external`, under rule `remote-section`, a stated limit among `limitRules` (`src/import/refusal.ts`) and the catalog\'s limit block (`src/vocab/laws.ts`); "Document entry" reads only the section refs that write an href that stays in the package (`sectionRefHrefs`); the oracle\'s Remote section ref (`src/test/oracle.ts`); held by `src/qti/tests.oracle.test.ts` and the box `src/test/gen/sites.test.ts` exhausts',
       status: "G",
     },
   ],
