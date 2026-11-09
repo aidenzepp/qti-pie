@@ -1636,11 +1636,11 @@ const flagCopies = flagCarriers.map(flagCopy);
  *   ({@link requiredFold}), their flags and scope; reading 79's `Selection_bound`, `select ≤
  *   members` unless the selection is with replacement, and info §4.2.2's `Selection_required`,
  *   `required ≤ select`;
- * - **the hrefs:** each site that writes one ({@link SitePath}, a row of its own, every section ref's
- *   in the package) has its href's `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`), an entry
- *   of the package, under the stated limit `Href_form`, but a site whose href resolves outside the
- *   package, marked `external` as its href's `Reference` proves; an item ref's is its target's
- *   (below);
+ * - **the hrefs:** each site that writes one ({@link SitePath}, a row of its own, which "Document
+ *   entry" demands of a section ref only where it writes an href that stays in the package) has its
+ *   href's `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`), an entry of the package, under
+ *   the stated limit `Href_form`, but a site whose href resolves outside the package, marked
+ *   `external` as its href's `Reference` proves; an item ref's is its target's (below);
  * - **the sites** ({@link Site}, {@link SiteTarget}): each names a document of the package, its
  *   target, a row of its own ("Include target", reading 115), but an external include, stored as
  *   written and never fetched; each section ref and section-level include names a section document;
