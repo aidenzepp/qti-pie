@@ -1342,54 +1342,57 @@ const CheckStatement = Schema.Struct({
 const checkKey = (relation: string, name: string): string => JSON.stringify([relation, name]);
 
 /**
- * Read the installed name of each check a schema states: grizzle's `constraintNamesOf(schema)`
- * lookup, the one constraint or trigger that discharges it, a row check's CHECK by its declared
- * name and a check over a derived relation's triggers by a digest (grizzle `b34dfbf9`).
- *
- * The lookup throws for a law that is no check of the schema, and a refusal may name one:
- * a CDN install's stored level states checks the default `Qti` does not (`#pantry/qti/cdn.ts`),
- * so a refusal read against another schema than the one the database installed names a check this
- * one lacks. Such a check has no installed name here, so the refusal still prints, with its text
- * and the name and rule the table gives it. Only a check the schema states is asked for.
- * `constraintNamesOf` compiles the schema's law model on every call, so each check's name is read
- * once per process, on the first refusal by it, and kept.
+ * Each check a schema states, by its relation and declared name ({@link checkKey}), read from its
+ * statements once per schema.
  *
  * @param schema - The schema the import ran against, `Qti`.
- * @returns The check's installed name, none for a check the schema does not state.
+ * @returns The checks' keys.
  */
-const installedNamesOf = Fn.memoize((schema: typeof Qti) => {
-  const stated: ReadonlySet<string> = new Set(
-    schema.statements.flatMap((statement) =>
-      Option.toArray(
-        Option.map(Schema.decodeUnknownOption(CheckStatement)(statement), ({ name, relation }) =>
-          checkKey(relation.name, name),
+const statedChecksOf = Fn.memoize(
+  (schema: typeof Qti): ReadonlySet<string> =>
+    new Set(
+      schema.statements.flatMap((statement) =>
+        Option.toArray(
+          Option.map(Schema.decodeUnknownOption(CheckStatement)(statement), ({ name, relation }) =>
+            checkKey(relation.name, name),
+          ),
         ),
       ),
     ),
-  );
-  const read = new Map<string, string>();
+);
 
-  return (law: LawOf<"check">): Option.Option<string> => {
-    const key = checkKey(law.relation, law.name);
-    if (!stated.has(key)) {
-      return Option.none();
-    }
+/**
+ * Grizzle's lookup of the name PostgreSQL holds each check of a schema under,
+ * `constraintNamesOf(schema)`, bound once per schema by the schema's identity, as
+ * {@link statementLawsOf} binds `lawsByStatement`'s: `constraintNamesOf` compiles the schema's law
+ * model, which takes seconds, and its lookup compiles nothing (grizzle `e3975d35`).
+ */
+const constraintNameLookupOf = Fn.memoize(constraintNamesOf);
 
-    const known = read.get(key);
-    if (known !== undefined) {
-      return Option.some(known);
-    }
-
-    const installed = constraintNamesOf(schema)(law);
-    read.set(key, installed);
-
-    return Option.some(installed);
-  };
-});
+/**
+ * The installed name of a check a schema states: grizzle's name for the one constraint or trigger
+ * that discharges it, a row check's CHECK by its declared name and a check over a derived
+ * relation's triggers by a digest (grizzle `b34dfbf9`).
+ *
+ * Grizzle's lookup throws for a law that is no check of the schema, and a refusal may name one: a
+ * CDN install's stored level states checks the default `Qti` does not (`#pantry/qti/cdn.ts`), so a
+ * refusal read against another schema than the one the database installed names a check this one
+ * lacks. Such a check has no installed name here, so the refusal still prints, with its text and
+ * the name and rule the table gives it. Only a check the schema states is asked for, so a refusal
+ * that names none compiles nothing.
+ *
+ * @param schema - The schema the import ran against, `Qti`.
+ * @param law - A check law a refusal names.
+ * @returns The check's installed name, none for a check the schema does not state.
+ */
+export const installedNameOf = (schema: typeof Qti, law: LawOf<"check">): Option.Option<string> =>
+  statedChecksOf(schema).has(checkKey(law.relation, law.name))
+    ? Option.some(constraintNameLookupOf(schema)(law))
+    : Option.none();
 
 /**
  * One law of a refusal as the refusal carries it: its display text, the installed name of a check
- * the import's schema states ({@link installedNamesOf}), and the name and rule the law table
+ * the import's schema states ({@link installedNameOf}), and the name and rule the law table
  * gives it.
  *
  * @param law - A law of an `invariant-rejected` outcome.
@@ -1397,7 +1400,7 @@ const installedNamesOf = Fn.memoize((schema: typeof Qti) => {
  */
 const lawFactOf = (law: Law): typeof RefusedLaw.Type => {
   const fact: Types.Mutable<typeof RefusedLaw.Type> = { text: Formatter.format(law) };
-  const installed = law.kind === "check" ? installedNamesOf(Qti)(law) : Option.none();
+  const installed = law.kind === "check" ? installedNameOf(Qti, law) : Option.none();
   if (Option.isSome(installed)) {
     fact.installed = installed.value;
   }
