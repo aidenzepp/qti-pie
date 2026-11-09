@@ -5,8 +5,8 @@
  * A model's positions are its element and wildcard particles, numbered from 1 in tree order (U4's
  * particle numbering); 0 is the start. A child's `Admission` row carries its position: the one
  * position its kind names, or 0 where its kind names none (character data, which carries its
- * predecessor's state) or several (a shared kind, whose position the state decides through
- * `Symbol`). The law reads one bit, whether `position` is in the follow set of `was`:
+ * predecessor's state) or several (a shared kind, whose position the state decides among its
+ * symbol set's). The law reads one bit, whether `position` is in the follow set of `was`:
  * `FollowMember(FollowSetOf(model, was), position)`, with `model` the family's
  * `ContentModelOf(version, parent)` and `was` the predecessor's position (0 for the first child),
  * and the last child reads `Last(model, state)`: the relations are keyed by automaton, each
@@ -164,14 +164,16 @@ type FamilyKey = readonly [IdField<"version", SchemaVersion>, IdField<"parent", 
 /**
  * The content grammar's relations, and the host's view of each automaton.
  *
- * `FollowSetOf`, `Last` and `Symbol` are keyed by the automaton, not by the (version, parent)
- * family: two families whose automata have the same positions, follow sets and `Last` are one
- * content model (rule 0: identical facts are one fact), and a family reads its model through
- * `ContentModelOf`; `Symbol` is keyed likewise by its shared model, through `SharedModelOf`. A
- * state's follow set is keyed by the set, through `FollowSetOf`, by the same rule: a repeated
- * choice of n particles has n + 1 states that follow to the same n positions, so its automaton's
- * transitions, n² + n of them, are one set of n. Where a family's row comes from is the family's,
- * not the model's, so {@link ContentGrammar.sourceOf} answers it by family and position.
+ * `FollowSetOf` and `Last` are keyed by the automaton, not by the (version, parent) family: two
+ * families whose automata have the same positions, follow sets and `Last` are one content model
+ * (rule 0: identical facts are one fact), and a family reads its model through `ContentModelOf`;
+ * `SymbolSetOf` is keyed likewise by its shared model, through `SharedModelOf`. A state's follow
+ * set is keyed by the set, through `FollowSetOf`, by the same rule: a repeated choice of n
+ * particles has n + 1 states that follow to the same n positions, so its automaton's transitions,
+ * n² + n of them, are one set of n; and so is a shared kind's set of positions, through
+ * `SymbolSetOf`, which 3,282 (model, kind) pairs share as 333 sets. Where a family's row comes from
+ * is the family's, not the model's, so {@link ContentGrammar.sourceOf} answers it by family and
+ * position.
  */
 export interface ContentGrammar {
   /**
@@ -242,21 +244,14 @@ export interface ContentGrammar {
    */
   readonly sharedModelOf: Indexed<FamilyKey, readonly [IdField<"model", string>]>;
   /**
-   * `SharedPositions`: shared model → positions, each shared model's position count, its start 0
-   * included, `Symbol`'s dependent size.
-   */
-  readonly sharedModelPositions: Closed<
-    readonly [IdField<"model", string>],
-    readonly [ValueField<"positions", number>]
-  >;
-  /**
    * The `SharedModel` roster: every distinct shared model in the code order of its first family,
    * each named as {@link ContentGrammar.models} names a model.
    */
   readonly sharedModels: Roster<string>;
   /**
-   * Read `Symbol`'s row of a kind: the positions a family's model names it at, where several
-   * positions name it and the state decides; none for a kind one position names, or none does.
+   * Read a kind's symbol set in a family: the positions its shared model names it at
+   * (`SymbolMember` of its `SymbolSetOf` set), where several positions name it and the state
+   * decides; none for a kind one position names, or none does.
    *
    * @param key - The family and the kind.
    * @returns The positions, ascending.
@@ -280,14 +275,6 @@ export interface ContentGrammar {
     readonly version: SchemaVersion;
   }) => Option.Option<Source>;
   /**
-   * `Symbol`: (shared model, kind, position) for the kinds several positions of a model name, whose
-   * position the state decides.
-   */
-  readonly symbol: Closed<
-    readonly [IdField<"model", string>, IdField<"kind", string>, DependentField<"position">],
-    readonly []
-  >;
-  /**
    * `StrictlyHeld`: (version, parent, child) for each foreign kind only `strict` wildcards of the
    * parent's model admit, each sourced to the wildcard. Such a child has no declaration its
    * document's schema set gives it, so it stands only where its `xsi:type` names a type that set
@@ -302,6 +289,27 @@ export interface ContentGrammar {
     ],
     readonly []
   >;
+  /**
+   * `SymbolMember`: (set, position) for each position a symbol set holds.
+   */
+  readonly symbolMember: Closed<
+    readonly [IdField<"set", string>, IdField<"position", string>],
+    readonly []
+  >;
+  /**
+   * `SymbolSetOf`: (shared model, kind) → set, for each kind several positions of the model name,
+   * whose position the state decides: the set of those positions.
+   */
+  readonly symbolSetOf: Indexed<
+    readonly [IdField<"model", string>, IdField<"kind", string>],
+    readonly [IdField<"set", string>]
+  >;
+  /**
+   * The `SymbolSet` roster: every distinct set of positions a shared model names a kind at,
+   * numbered from 0 in the order of the first (shared model, kind) that holds it, models in
+   * `SharedModel` code order (rule 0: identical facts are one fact).
+   */
+  readonly symbolSets: Roster<string>;
 }
 
 /**
@@ -1041,7 +1049,11 @@ export const contentOf = (input: {
         onNone: () => ({ automaton: noAutomaton, follows: emptyFollows }),
         onSome: (tree) => {
           const outline = outlineOf(tree);
-          const { ends, follows: sorted, next } = outlined.getOrInsertComputed(outline.key, () => {
+          const {
+            ends,
+            follows: sorted,
+            next,
+          } = outlined.getOrInsertComputed(outline.key, () => {
             const structure = structureOf(tree);
 
             return { ...structure, follows: followsOf(structure) };
@@ -1243,7 +1255,7 @@ export const contentOf = (input: {
                       .flatMap(({ kind, numbers }) => numbers.map((number) => `${kind}:${number}`))
                       .toSorted(),
                   ].join(" "),
-                  value: { positions: entry.automaton.next.length, shared },
+                  value: shared,
                 },
               ];
         }),
@@ -1271,9 +1283,28 @@ export const contentOf = (input: {
       })),
     );
     const followSet = idField("set", roster("FollowSet", [...setOf.values()]));
-    const sharedSizes = new Map(
-      sharedModels.models.map(({ handle, value }) => [handle, value.positions]),
+    // Each shared model's kinds' positions, each distinct set of positions once (rule 0), numbered
+    // in the order of the first (model, kind) that holds it, with the positions each holds,
+    // ascending as `sharedOf` reads them.
+    const symbolSetByText = new Map<string, string>();
+    const symbolMembers: { readonly position: string; readonly set: string }[] = [];
+    const symbolNumbers = new Map<string, readonly number[]>();
+    const symbolRows = sharedModels.models.flatMap(({ handle, value }) =>
+      value.map(({ kind, numbers }) => ({
+        kind,
+        model: handle,
+        set: symbolSetByText.getOrInsertComputed(numbers.join(" "), () => {
+          const fresh = String(symbolSetByText.size);
+          symbolMembers.push(
+            ...numbers.map((number) => ({ position: String(number), set: fresh })),
+          );
+          symbolNumbers.set(fresh, numbers);
+
+          return fresh;
+        }),
+      })),
     );
+    const symbolSet = idField("set", roster("SymbolSet", [...symbolSetByText.values()]));
     // A family's positions are 0, its start, then its model's own: the dependent sum Σ (P + 1).
     const position = dependentField(
       "position",
@@ -1334,22 +1365,14 @@ export const contentOf = (input: {
               Option.map(({ source }) => source),
             );
       });
-    const symbol = closed({
-      key: [
-        sharedModel,
-        idField("kind", input.kinds),
-        dependentField("position", positions, (prefix) =>
-          countOf(sharedSizes, prefixHandle(prefix, "model"), "SharedPositions"),
-        ),
-      ],
-      name: "Symbol",
-      payload: [],
-      rows: sharedModels.models.flatMap(({ handle, value }) =>
-        value.shared.flatMap(({ kind, numbers }) =>
-          numbers.map((number) => ({ kind, model: handle, position: String(number) })),
-        ),
-      ),
-    });
+    const symbolSetOf = indexed(
+      closed({
+        key: [sharedModel, idField("kind", input.kinds)],
+        name: "SymbolSetOf",
+        payload: [symbolSet],
+        rows: symbolRows,
+      }),
+    );
     const sharedModelOf = indexed(
       closed({
         key: [version, parent],
@@ -1358,8 +1381,6 @@ export const contentOf = (input: {
         rows: sharedModels.families,
       }),
     );
-    // `Symbol`'s positions by shared model and kind, for the host's step.
-    const sharedAt = Map.groupBy(symbol.rows, (row) => `${row.model} ${row.kind}`);
 
     return {
       admitted,
@@ -1421,19 +1442,15 @@ export const contentOf = (input: {
         models: model.roster,
         positions,
         sharedModelOf,
-        sharedModelPositions: closed({
-          key: [sharedModel],
-          name: "SharedPositions",
-          payload: [valueField("positions", sharedSizes.values())],
-          rows: [...sharedSizes].map(([handle, size]) => ({ model: handle, positions: size })),
-        }),
         sharedModels: sharedModel.roster,
         sharedPositions: ({ kind, parent: held, version: in_ }) =>
-          Option.match(sharedModelOf.lookup({ parent: held, version: in_ }), {
-            onNone: () => [],
-            onSome: ({ model: shared }) =>
-              rowsAt(sharedAt, `${shared} ${kind}`).map((row) => Number(row.position)),
-          }),
+          Option.match(
+            Option.flatMap(
+              sharedModelOf.lookup({ parent: held, version: in_ }),
+              ({ model: shared }) => symbolSetOf.lookup({ kind, model: shared }),
+            ),
+            { onNone: () => [], onSome: ({ set }) => symbolNumbers.get(set) ?? [] },
+          ),
         sourceOf,
         strictlyHeld: indexedSourced(
           sourced({
@@ -1449,7 +1466,14 @@ export const contentOf = (input: {
             ),
           }),
         ),
-        symbol,
+        symbolMember: closed({
+          key: [symbolSet, idField("position", positions)],
+          name: "SymbolMember",
+          payload: [],
+          rows: symbolMembers,
+        }),
+        symbolSetOf,
+        symbolSets: symbolSet.roster,
       },
     };
   });
@@ -1551,7 +1575,7 @@ export const contentFollows = (
 
 /**
  * Where a child stands in its family's content model, read once from its `Admission` position and
- * the family's `Symbol` rows. `Admission` installs one position per (version, parent, child), 0 for
+ * the family's symbol sets. `Admission` installs one position per (version, parent, child), 0 for
  * a kind that names no position or several; the host tells the two apart here, once.
  *
  * - `at`: the one position the child's kind names.
@@ -1575,7 +1599,7 @@ interface StepKey {
 /**
  * Read a child's placement from its `Admission` position.
  *
- * @param content - The content grammar, whose `Symbol` rows hold a shared kind's positions.
+ * @param content - The content grammar, whose symbol sets hold a shared kind's positions.
  * @param key - The family and the child.
  * @param position - The child's `Admission` position.
  * @returns The placement.

@@ -39,6 +39,7 @@ import {
 } from "effect";
 import type { Types } from "effect";
 
+import { rowsAt } from "#pantry/grammar/closed.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { followPairsOf } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -891,7 +892,7 @@ const contentOrderLaws: Readonly<
  * The content grammar as an explanation reads it, every lookup a map's: each family's content
  * model by `version parent` (`ContentModelOf`), `Follow`'s successors by `model position`, `Last`'s
  * ends by model, and the kinds at each position of each family by `version parent position`, those
- * its `Admission` gives the position and then those its shared model's `Symbol` does.
+ * its `Admission` gives the position and then those its shared model's symbol sets do.
  */
 interface ContentIndex {
   readonly ends: ReadonlyMap<string, readonly string[]>;
@@ -950,6 +951,8 @@ const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
   }
 
   const { admission, content } = constants;
+  const symbolsOf = Map.groupBy(content.symbolSetOf.rows, ({ model }) => model);
+  const membersOf = Map.groupBy(content.symbolMember.rows, ({ set }) => set);
   const index: ContentIndex = {
     ends: grouped(content.last.rows.map(({ model, position }) => [model, position] as const)),
     kinds: grouped([
@@ -957,13 +960,12 @@ const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
         ({ child, parent, position, version }) =>
           [positionKey(version, parent, position), child] as const,
       ),
-      // Each shared family's model's symbols, joined on the model in each side's own order: a
-      // scan, run once per grammar, so the index holds no lookup that can miss.
+      // Each shared family's model's kinds, each at every position of its symbol set.
       ...content.sharedModelOf.rows.flatMap(({ model, parent, version }) =>
-        content.symbol.rows.flatMap((symbol) =>
-          symbol.model === model
-            ? [[positionKey(version, parent, symbol.position), symbol.kind] as const]
-            : [],
+        rowsAt(symbolsOf, model).flatMap(({ kind, set }) =>
+          rowsAt(membersOf, set).map(
+            ({ position }) => [positionKey(version, parent, position), kind] as const,
+          ),
         ),
       ),
     ]),

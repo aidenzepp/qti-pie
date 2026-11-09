@@ -51,6 +51,7 @@ import { expandedNameOf, typeHandle } from "#pantry/grammar/xsi.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { closedName, flatten, handlePrefixes, handlePrefixOf } from "#pantry/model/xdm.ts";
+import { symbolRowsOf } from "#pantry/test/indexes.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import type {
   ClosedName,
@@ -435,8 +436,8 @@ const pushAt = <K, T>(map: Map<K, T[]>, key: K, value: T): void => {
 };
 
 /**
- * Gather each (version, parent)'s content automaton from the grammar's `Follow`, `Last` and
- * `Symbol`: each model's and each shared model's maps read once, and each family's automaton over
+ * Gather each (version, parent)'s content automaton from the grammar's `Follow`, `Last` and symbol
+ * sets: each model's and each shared model's maps read once, and each family's automaton over
  * its model's, with finishing costs of its own.
  *
  * @param grammar - The composed grammar.
@@ -463,7 +464,7 @@ const automataOf = (grammar: ComposedGrammar): ReadonlyMap<string, Automaton> =>
   }
 
   const shared = new Map<string, Map<string, number[]>>();
-  for (const row of grammar.content.symbol.rows) {
+  for (const row of symbolRowsOf(grammar.content.symbolSetOf, grammar.content.symbolMember)) {
     const own = shared.get(row.model) ?? new Map<string, number[]>();
     shared.set(row.model, own);
     pushAt(own, row.kind, Number(row.position));

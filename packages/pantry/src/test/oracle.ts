@@ -120,7 +120,7 @@ import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { Domain, WhiteSpace } from "#pantry/vocab/inventory/types.ts";
 import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantry/qti/limits.ts";
-import { contentEnds, indexesOf } from "#pantry/test/indexes.ts";
+import { contentEnds, indexesOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 import { datumText } from "#pantry/test/predicates.ts";
 import { keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
@@ -6888,7 +6888,7 @@ const countsShown = (min: number, max: number): string => {
 
 /**
  * The kinds that take a position of a parent's content model: those whose `Admission` row holds
- * it, and those `Symbol` places there.
+ * it, and those the family's shared model's symbol sets place there.
  *
  * @param grammar - The composed grammar.
  * @param version - The version.
@@ -6911,7 +6911,7 @@ const kindsAt = (
     ...Option.match(grammar.content.sharedModelOf.lookup({ parent, version }), {
       onNone: () => [],
       onSome: ({ model }) =>
-        grammar.content.symbol.rows
+        symbolRowsOf(grammar.content.symbolSetOf, grammar.content.symbolMember)
           .filter((row) => row.model === model && row.position === position)
           .map(({ kind }) => kind),
     }),

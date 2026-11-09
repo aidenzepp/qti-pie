@@ -62,6 +62,7 @@ import {
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
+import { symbolRowsOf } from "#pantry/test/indexes.ts";
 import { beginsWith, mergedAxes } from "#pantry/test/merged-axes.ts";
 import type { Axis } from "#pantry/test/merged-axes.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
@@ -1397,8 +1398,9 @@ const followed: ReadonlyMap<string, ReadonlySet<string>> = (() => {
 
 /**
  * The kinds at each position of each family, read from the rows directly, keyed `version parent
- * position`: those `Admission` gives the position, and those `Symbol` gives it in the family's
- * shared model (`SharedModelOf`), each family's read once here so that no case reads a relation.
+ * position`: those `Admission` gives the position, and those the family's shared model
+ * (`SharedModelOf`) names there, its symbol sets spelled out (`symbolRowsOf`), each family's read
+ * once here so that no case reads a relation.
  */
 const positionKinds: ReadonlyMap<string, ReadonlySet<string>> = (() => {
   const kinds = new Map<string, Set<string>>();
@@ -1409,7 +1411,10 @@ const positionKinds: ReadonlyMap<string, ReadonlySet<string>> = (() => {
     add(`${version} ${parent} ${position}`, child);
   }
 
-  const symbols = Map.groupBy(grammar.content.symbol.rows, ({ model }) => model);
+  const symbols = Map.groupBy(
+    symbolRowsOf(grammar.content.symbolSetOf, grammar.content.symbolMember),
+    ({ model }) => model,
+  );
   for (const { model, parent, version } of grammar.content.sharedModelOf.rows) {
     for (const { kind, position } of symbols.get(model) ?? []) {
       add(`${version} ${parent} ${position}`, kind);

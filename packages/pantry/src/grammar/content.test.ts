@@ -53,7 +53,7 @@ import {
   XsdOracleLayer,
   xsdContents,
 } from "#pantry/test/gen/grammar.ts";
-import { accepts, indexesOf } from "#pantry/test/indexes.ts";
+import { accepts, indexesOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 import type {
   Content,
   DrawnChild,
@@ -1565,7 +1565,10 @@ describe.skipIf(!cached)("the content grammar's sources", () => {
         // position a family's model names in `Follow`, `Last` or `Symbol`.
         const followed = Map.groupBy(followPairsOf(content), ({ model }) => model);
         const ended = Map.groupBy(content.last.rows, ({ model }) => model);
-        const shared = Map.groupBy(content.symbol.rows, ({ model }) => model);
+        const shared = Map.groupBy(
+          symbolRowsOf(content.symbolSetOf, content.symbolMember),
+          ({ model }) => model,
+        );
         const sharedOf = new Map(
           content.sharedModelOf.rows.map(({ model, parent, version }) => [
             `${version} ${parent}`,
@@ -1947,7 +1950,10 @@ describe("the installed automata", () => {
             model,
           ]),
         );
-        const sharedAt = Map.groupBy(content.symbol.rows, ({ model }) => model);
+        const sharedAt = Map.groupBy(
+          symbolRowsOf(content.symbolSetOf, content.symbolMember),
+          ({ model }) => model,
+        );
         const named = [
           ...followPairsOf(content).flatMap(({ from, model, to }) => [
             { model, position: from },
@@ -2028,7 +2034,10 @@ describe("the installed automata", () => {
         const positionsOf = new Map(
           content.modelPositions.rows.map(({ model, positions }) => [model, positions]),
         );
-        const symbolsOf = Map.groupBy(content.symbol.rows, ({ model }) => model);
+        const symbolsOf = Map.groupBy(
+          symbolRowsOf(content.symbolSetOf, content.symbolMember),
+          ({ model }) => model,
+        );
         const undecided = content.sharedModelOf.rows.flatMap(
           ({ model: shared, parent, version }) => {
             const model = Option.getOrThrow(contentModelOf(content, { parent, version }));

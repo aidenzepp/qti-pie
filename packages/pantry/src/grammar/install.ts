@@ -622,49 +622,15 @@ export const SharedModelOf = closed.relation(
 );
 
 /**
- * The positions each shared model names each of its kinds at (the content grammar's `Symbol`), each
- * distinct set of positions stated once (rule 0: identical facts are one fact), numbered from 0 in
- * the order of the first (model, kind) that holds it: 3,282 (model, kind) pairs hold 333 sets.
- * `SymbolSetOf` names each pair's set and `SymbolMember` each set's positions, so N5 reads a shared
- * kind's positions as `SymbolMember.row(SymbolSetOf.at("set", model, kind))`.
+ * The `SymbolSet` roster: every distinct set of positions a shared model names a kind at, as the
+ * content grammar numbers them (`#pantry/grammar/content.ts`): 3,282 (model, kind) pairs hold 333
+ * sets, so N5 reads a shared kind's positions as `SymbolMember.row(SymbolSetOf.at("set", model,
+ * kind))`.
  */
-const symbolSets = (() => {
-  const pairs = new Map<
-    string,
-    { readonly kind: Kind; readonly model: string; readonly positions: string[] }
-  >();
-  for (const { kind, model, position } of grammar.content.symbol.rows) {
-    pairs
-      .getOrInsertComputed(`${model} ${kind}`, () => ({
-        kind: memberOf(grammar.kinds.nodeKind, kind),
-        model,
-        positions: [],
-      }))
-      .positions.push(position);
-  }
-
-  const setOf = new Map<string, string>();
-  const members: { readonly position: string; readonly set: string }[] = [];
-  const rows = [...pairs.values()].map(({ kind, model, positions }) => {
-    const held = positions.toSorted((left, right) => Number(left) - Number(right));
-    const set = setOf.getOrInsertComputed(held.join(" "), () => {
-      const fresh = String(setOf.size);
-      members.push(...held.map((position) => ({ position, set: fresh })));
-
-      return fresh;
-    });
-
-    return { kind, model, set };
-  });
-
-  return { handles: [...setOf.values()], members, rows };
-})();
-
-/**
- * The `SymbolSet` roster: every distinct set of positions a shared model names a kind at
- * ({@link symbolSets}).
- */
-export const SymbolSet = closed("SymbolSet", nonEmpty("SymbolSet", symbolSets.handles));
+export const SymbolSet = closed(
+  "SymbolSet",
+  nonEmpty("SymbolSet", grammar.content.symbolSets.handles),
+);
 
 /**
  * `SymbolSetOf`: (model, kind) → set, the positions a shared model names the kind at, so the state
@@ -676,7 +642,11 @@ export const SymbolSetOf = closed.relation(
   "SymbolSetOf",
   { kind: closedId(NodeKind), model: closedId(SharedModel), set: closedId(SymbolSet) },
   ["model", "kind"],
-  symbolSets.rows,
+  grammar.content.symbolSetOf.rows.map(({ kind, model, set }) => ({
+    kind: memberOf(grammar.kinds.nodeKind, kind),
+    model,
+    set,
+  })),
 );
 
 /**
@@ -686,7 +656,7 @@ export const SymbolMember = closed.relation(
   "SymbolMember",
   { position: closedId(Position), set: closedId(SymbolSet) },
   ["set", "position"],
-  symbolSets.members,
+  grammar.content.symbolMember.rows,
 );
 
 /**

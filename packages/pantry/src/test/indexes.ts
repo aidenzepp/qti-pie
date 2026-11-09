@@ -197,13 +197,13 @@ export const admittedOf = <Parent extends string, Child extends string, Version 
 };
 
 /**
- * Spell the symbol sets `install.ts` declares out as the (model, kind, position) rows they state,
- * the content grammar's `Symbol`: each pair's set (`SymbolSetOf`) with each of its positions
- * (`SymbolMember`).
+ * Spell symbol sets out as the (shared model, kind, position) rows they state, the positions each
+ * shared model names each of its kinds at: each pair's set (`SymbolSetOf`) with each of its
+ * positions (`SymbolMember`), as the content grammar or `install.ts` states them.
  *
- * @param symbolSetOf - `SymbolSetOf`, as installed.
+ * @param symbolSetOf - `SymbolSetOf`.
  * @param symbolSetOf.rows - Its rows.
- * @param symbolMember - `SymbolMember`, as installed.
+ * @param symbolMember - `SymbolMember`.
  * @param symbolMember.rows - Its rows.
  * @returns The rows, by pair in `SymbolSetOf`'s order.
  */

@@ -220,6 +220,8 @@ const comparisons: readonly Comparison[] = [
     },
     name: "ContentModelOf",
   },
+  { expected: () => grammar.content.symbolSetOf.rows, name: "SymbolSetOf" },
+  { expected: () => grammar.content.symbolMember.rows, name: "SymbolMember" },
   {
     expected: () =>
       grammar.content.modelPositions.rows.map(({ model, positions }) => ({
@@ -631,18 +633,34 @@ describe("the installed relations", () => {
     assert.isBelow(install.AdmissionIn.rows.length, grammar.admission.rows.length);
   });
 
-  it("state Symbol as each (shared model, kind)'s symbol set and each set's positions: every (model, kind, position), and no other", () => {
-    // Oracle: the generator's `Symbol` rows, against the installed `SymbolSetOf` and `SymbolMember`
-    // spelled out (`symbolRowsOf`). N5 reads `SymbolMember.row(SymbolSetOf.at("set", m, k))`
-    // guarded by `SymbolSetOf.has(m, k)` where it read `Symbol.row(m, k)`, so the two agree
-    // exactly when these sets do.
-    const key = ["model", "kind", "position"];
-
-    assert.deepStrictEqual(
-      keyedSet("the symbol sets", key, symbolRowsOf(install.SymbolSetOf, install.SymbolMember)),
-      keyedSet("Symbol", key, grammar.content.symbol.rows),
+  it("state each shared model's kinds' positions as symbol sets, each distinct set of positions once, held by the pairs it names and by no other", () => {
+    // Oracle: rule 0, identical facts are one fact. The content grammar numbers each distinct set
+    // of positions a shared model names a kind at once (`SymbolSetOf`, `SymbolMember`), and
+    // install.ts states them one to one (the rows law above), so N5's
+    // `SymbolMember.row(SymbolSetOf.at("set", m, k))` reads exactly the positions of the pair. A
+    // set minted twice, a set no pair holds, or a position held twice in a set is a fact stated
+    // twice or one stated of nothing.
+    const { symbolMember, symbolSetOf, symbolSets } = grammar.content;
+    const members = Map.groupBy(symbolMember.rows, ({ set }) => set);
+    const spelled = symbolSets.handles.map((set) =>
+      (members.get(set) ?? []).map(({ position }) => position).join(" "),
     );
-    assert.isBelow(install.SymbolMember.rows.length, grammar.content.symbol.rows.length);
+    const held = new Set(symbolSetOf.rows.map(({ set }) => set));
+
+    keyedSet("SymbolMember", ["set", "position"], symbolMember.rows);
+    keyedSet("SymbolSetOf", ["model", "kind"], symbolSetOf.rows);
+    assert.strictEqual(
+      new Set(spelled).size,
+      spelled.length,
+      "two symbol sets hold one set of positions",
+    );
+    assert.isFalse(spelled.includes(""), "a symbol set holds no position");
+    assert.deepStrictEqual(
+      symbolSets.handles.filter((set) => !held.has(set)),
+      [],
+      "symbol sets no (model, kind) holds",
+    );
+    assert.isBelow(symbolMember.rows.length, symbolRowsOf(symbolSetOf, symbolMember).length);
   });
 
   it("state each (version, include parent)'s include alternatives as its include set and each set's kinds, in the grammar and as installed: every (version, parent, kind), and no other", () => {
