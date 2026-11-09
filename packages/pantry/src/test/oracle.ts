@@ -6458,6 +6458,49 @@ const assembliesOf = (
 };
 
 /**
+ * Judge the own attributes of each include a splicing document replaces by its target's root
+ * ({@link splicedTarget}), by the attribute laws of any element ({@link attributeBreaches}), over
+ * the document's unspliced view. The merged tree holds the target's root in the include's place, so
+ * the include's attributes are judged nowhere else, while the import keeps them as rows (reading 85
+ * binds `parse` to `xml`; reading 117 places the target and says nothing of the include's own
+ * attributes). An include of its own document is never replaced, the chain always holding the
+ * document, so it stands in the merged tree and is judged there. A placed fragment's include of a
+ * document further up its chain is not replaced either, so its breaches are listed twice, in place
+ * and here: the same laws, in a package "Inclusion cycle" refuses.
+ *
+ * @param sites - Every site of the package.
+ * @param grammar - The composed grammar.
+ * @param laws - The law tables.
+ * @param assembled - Each document's assembly's ids beyond its own, by path.
+ * @returns The breaches, document by document in site order, each at the include's path in its
+ *   own document.
+ */
+const splicedIncludeBreaches = (
+  sites: readonly SiteOf[],
+  grammar: ComposedGrammar,
+  laws: Laws,
+  assembled: (path: string) => ReadonlySet<string>,
+): readonly Breach[] => {
+  const replaced = Arr.groupBy(
+    sites.filter(
+      (site) =>
+        site.document.path !== Option.getOrUndefined(site.path) &&
+        Option.isSome(splicedTarget(grammar, site)),
+    ),
+    (site) => site.document.path,
+  );
+
+  return Object.values(replaced).flatMap((held) => {
+    const [{ view }] = held;
+    const includes = new Set(held.map(({ node }) => pathOf(view, node.id)));
+
+    return attributeBreaches(view, laws, assembled(view.path)).filter((breach) =>
+      includes.has(breach.keys["node"] ?? ""),
+    );
+  });
+};
+
+/**
  * Judge every listed document's own laws in place (reading 117): a document an include splices into
  * another is judged inside each document that splices it, and not alone; every other document is
  * judged with its includes spliced, as XInclude's result infoset reads it, so its included
@@ -6535,6 +6578,12 @@ const inPlaceBreaches = (
           }),
         ],
       }),
+    ),
+    ...splicedIncludeBreaches(
+      sites,
+      grammar,
+      laws,
+      (path) => assemblies.get(path)?.ids ?? new Set(),
     ),
     ...dedupedBreaches([...assemblies.values()].flatMap(({ breaches }) => breaches)),
   ];

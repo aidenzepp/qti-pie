@@ -1,8 +1,9 @@
 /**
  * The every-relation generator (`#pantry/test/gen/every-relation.ts`) against what it claims of
  * every package it draws: its entries are a keyed set by path that a reader reads back whole, its
- * import program writes a row of every stored relation of `Qti`, and the law oracle accepts it.
- * The list of relations is read from the schema, so a relation that joins `Qti` joins this test.
+ * import program writes a row of every stored relation of `Qti` but those only a refused package
+ * writes ({@link refusedOnly}), and the law oracle accepts it. The list of relations is read from
+ * the schema, so a relation that joins `Qti` joins this test.
  */
 import { writableNamesOf } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -18,6 +19,7 @@ import {
   everyRelationPackage,
   scopedPackage,
   memberCounts,
+  refusedOnly,
 } from "#pantry/test/gen/every-relation.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
@@ -91,8 +93,15 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/every-relatio
               assert.deepStrictEqual(yield* oracleVerdict(files), { kind: "accepted" });
 
               const counts = rowCountsOf(yield* readProgram(dir));
-              const unwritten = writableNamesOf(Qti).filter(
-                (name) => (counts.get(name) ?? 0) === 0,
+              const stored = writableNamesOf(Qti);
+              assert.includeMembers<string>(
+                [...stored],
+                [...refusedOnly.keys()],
+                "refused-only relations that are no stored relation of Qti",
+              );
+
+              const unwritten = stored.filter(
+                (name) => !refusedOnly.has(name) && (counts.get(name) ?? 0) === 0,
               );
 
               assert.deepStrictEqual(

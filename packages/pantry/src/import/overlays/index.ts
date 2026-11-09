@@ -298,6 +298,11 @@ export const overlayPartsOf = (
     })),
     assembled,
     built.flatMap(({ rows }) => [...rows.package.TypedHref.values()]),
+    new Set(
+      built.flatMap(({ rows }) =>
+        [...rows.package.UnreadTypePath.values()].map(({ path }) => path),
+      ),
+    ),
   );
   const named = new Map<string, NamedDocument>();
   for (const { document, rows } of built) {

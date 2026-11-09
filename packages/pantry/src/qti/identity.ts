@@ -19,11 +19,13 @@
  *   or holding whitespace inside, is no ID value: it has no row, binds nothing and names nothing,
  *   and its value domain or TextDomain refuses it alone (spec reading 156).
  * - **{@link IdBinding}** is the projection of the IDs onto (document, id, owner), keyed by its
- *   heading, and its key on (document, id) is cvc-id clause 2, "no ID/IDREF binding … whose
- *   [binding] has more than one member" (law "DocumentId key", rule `document-key`). An element
- *   whose two children are one ID's, or whose attribute and child are, is one binding, as the
- *   table's letter has it; the key over the ID-typed attributes' `node` is XML Schema's one ID
- *   attribute per element.
+ *   heading, and its key on (document, id) over the bindings of admitted elements is cvc-id clause
+ *   2, "no ID/IDREF binding … whose [binding] has more than one member" (law "DocumentId key", rule
+ *   `document-key`). An element the grammar does not admit where it stands keeps its
+ *   {@link DocumentId} but binds nothing, so "N5 admitted" alone refuses it, as the law oracle
+ *   judges it (R2). An element whose two children are one ID's, or whose attribute and child are,
+ *   is one binding, as the table's letter has it; the key over the ID-typed attributes' `node` is
+ *   XML Schema's one ID attribute per element.
  * - **Idref target** (rule `idref-target`): every `Idref` token, Q5.05's split of an IDREF or IDREFS
  *   attribute value, and every {@link TextIdref} token, this module's split of an IDREF or IDREFS
  *   element's text (C50), is an id of its document. Spec reading 14 follows the XSD, so a
@@ -131,6 +133,7 @@ import {
   AttributeModelOf,
   AttributeName,
   AttributeSlotOf,
+  ChildGrammar,
   GoverningOf,
   Identity,
   NodeKind,
@@ -207,11 +210,17 @@ const labelledRootVersion = "3.0.1";
  *   `owner`, the element's parent;
  * - **the host's:** `before`, `id` and `after`, the lexical form split around its value, which
  *   `E1_derived` proves, and for an attribute, `owner`, the node itself: a row whose `owner` is its
- *   `node` is an attribute's, every other a text's.
+ *   `node` is an attribute's, every other a text's; and `admitted`, whether the grammar admits the
+ *   element that carries it where it stands (`ChildGrammar`, {@link admittedNodes}), which
+ *   `E1_derived` proves both ways.
+ *
+ * Every ID has its row, an unadmitted element's too, so the copy from the attribute or the text
+ * stays complete; only an admitted element's ID is bound ({@link IdBinding}'s `admitted`).
  */
 export const DocumentId = relation(
   "DocumentId",
   {
+    admitted: pg.boolean,
     after: Space,
     before: Space,
     document: uuid,
@@ -225,11 +234,14 @@ export const DocumentId = relation(
 
 /**
  * One binding of the ID/IDREF table, a projection keyed by its heading (sets ruling 2): an id of a
- * document and the element it is bound to, `carriers` the IDs that bind it.
+ * document and the element it is bound to, `carriers` the IDs that bind it, and `admitted` its IDs'
+ * (`DocumentId.admitted`). Only an admitted binding is in the table ({@link admittedBindings}): an
+ * element the grammar does not admit where it stands is refused by "N5 admitted" alone, and the law
+ * oracle drops it with its attributes, so its ID binds nothing (R2).
  */
 export const IdBinding = relation(
   "IdBinding",
-  { carriers: drawn(natural), document: uuid, id: keyText, owner: uuid },
+  { admitted: pg.boolean, carriers: drawn(natural), document: uuid, id: keyText, owner: uuid },
   ["document", "id", "owner"],
 );
 
@@ -837,6 +849,42 @@ const attributeIds = select(DocumentId, (d) => d.eq(d.owner, d.node));
 const textIds = select(DocumentId, (d) => d.ne(d.owner, d.node));
 
 /**
+ * State that the grammar admits a node where it stands: its parent's content model names its kind
+ * (`ChildGrammar`'s key set, the guard decision 440 put in `#pantry/qti/node.ts` `positioned`).
+ * "N5 admitted" refuses every member it is false of.
+ *
+ * @param n - The row.
+ * @returns The statement.
+ */
+const admits = (n: RowScalars<typeof Node>) => ChildGrammar.has(n.version, n.parentKind, n.kind);
+
+/**
+ * The nodes the grammar admits where they stand, whose IDs bind.
+ */
+export const admittedNodes = select(Node, admits);
+
+/**
+ * The nodes the grammar does not admit where they stand, whose IDs bind nothing.
+ */
+const unadmittedNodes = select(Node, (n) => n.not(admits(n)));
+
+/**
+ * The IDs of admitted elements.
+ */
+const admittedIds = select(DocumentId, (d) => d.eq(d.admitted, true));
+
+/**
+ * The IDs of elements the grammar does not admit where they stand.
+ */
+const unadmittedIds = select(DocumentId, (d) => d.eq(d.admitted, false));
+
+/**
+ * The bindings of the ID/IDREF table: those of admitted elements' IDs, which "DocumentId key" holds
+ * to one element per (document, id) and "Idref target" resolves an IDREF among (R2).
+ */
+export const admittedBindings = select(IdBinding, (b) => b.eq(b.admitted, true));
+
+/**
  * Every element's `xml:lang`, the source of {@link XmlLang}.
  */
 const langAttributes = select(Attribute, (a) => a.eq(a.name, "xml:lang"));
@@ -1089,12 +1137,15 @@ export const ssmlLexiconReference = contained(
  *   with the key over that selection); each ID-typed text whose value is an NCName copied into its
  *   row, bound to the element's parent, and each text row such a text's; the value set apart from
  *   its outer whitespace (`E1_derived`);
- * - **IdBinding:** the projection's counted family, each binding carried, and "DocumentId key";
+ * - **IdBinding:** the projection's counted family, each binding carried and admitted as its IDs are,
+ *   each ID admitted exactly where its element is (`E1_derived`), and "DocumentId key" over the
+ *   admitted bindings;
  * - **IdentityText:** each element whose text is of an identity type copied into its row with its
  *   string value and its parent, and each row such an element's, its IDREF tokens concatenating to
  *   its text and an ID's none (`E1_derived`);
  * - **Idref target:** each IDREF token, an attribute's or a text's, names one of its document's
- *   {@link IdrefTarget} rows, each an id of its document where the document is in no assembly;
+ *   {@link IdrefTarget} rows, each an id an admitted element of its document binds where the
+ *   document is in no assembly;
  * - **in place** (spec reading 117): under each instance of each assembly, as many {@link PlacedId}
  *   and {@link PlacedIdref} rows as its document has IDs and IDREF targets, each its document's;
  *   their projection {@link AssembledId}, each binding carried, under "DocumentId key" over the
@@ -1151,7 +1202,7 @@ export const identityLawsByName = {
     contained(on(textIds, "node"), on(idTexts, "node")),
     key(on(idTexts, "node")),
     idBindingFamily,
-    key(on(IdBinding, "document", "id")),
+    key(on(admittedBindings, "document", "id")),
     key(on(AssembledId, "assembly", "id")),
     key(on(langAttributes, "node")),
     key(on(labelAttributes, "node")),
@@ -1165,6 +1216,14 @@ export const identityLawsByName = {
       ),
     ),
     check("E1_derived", IdBinding, (b) => b.gt(b.carriers, 0n)),
+    contained(
+      on(DocumentId, "document", "id", "owner", "admitted"),
+      on(IdBinding, "document", "id", "owner", "admitted"),
+    ),
+    // The admitted side reads `document` too, so the two sides differ where an identity drops each
+    // side's selection.
+    contained(on(admittedIds, "node", "document"), on(admittedNodes, "id", "document")),
+    contained(on(unadmittedIds, "node"), on(unadmittedNodes, "id")),
     contained(
       on(identityNodes, "id", "document", "parent", "stringValue"),
       on(IdentityText, "node", "document", "owner", "lexical"),
@@ -1343,7 +1402,7 @@ export const identityLawsByName = {
     contained(on(Idref, "document", "token"), on(IdrefTarget, "document", "id")),
     contained(on(TextIdref, "document", "token"), on(IdrefTarget, "document", "id")),
     contained(on(ShareFragment, "document", "id"), on(IdrefTarget, "document", "id")),
-    contained(on(unassembledTargets, "document", "id"), on(IdBinding, "document", "id")),
+    contained(on(unassembledTargets, "document", "id"), on(admittedBindings, "document", "id")),
     contained(on(PlacedIdref, "assembly", "id"), on(AssembledId, "assembly", "id")),
   ],
   "Label tools": [

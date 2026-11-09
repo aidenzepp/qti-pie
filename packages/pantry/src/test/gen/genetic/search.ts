@@ -100,6 +100,20 @@ export interface Reduced {
 }
 
 /**
+ * Build one class's finding, its package written from the genome it was reduced to, as both the
+ * breeding and the isolation phase report it.
+ *
+ * @param finding - The finding but its package.
+ * @returns The finding.
+ */
+export const reducedOf = Effect.fnUntraced(function* reducedOf(finding: Omit<Reduced, "package">) {
+  return {
+    ...finding,
+    package: shownEntries(yield* Effect.orDie(entriesOf(finding.genome))),
+  } satisfies Reduced;
+});
+
+/**
  * The isolation phase's budget: how many of the laws the run raised but never broke alone it
  * reduces a package of toward that law alone, the rarest first, and the tries each reduction takes.
  */
@@ -275,16 +289,15 @@ export const hunt = Effect.fnUntraced(function* hunt(
       );
       const last = yield* shown(genome);
 
-      return {
+      return yield* reducedOf({
         disagreement:
           last?.disagreements.find((disagreement) => signatureOf(disagreement) === signature) ??
           found.disagreement,
         genome,
         lineage: found.lineage,
-        package: shownEntries(yield* Effect.orDie(entriesOf(genome))),
         signature,
         tries: spent,
-      } satisfies Reduced;
+      });
     }),
   );
 
@@ -321,14 +334,15 @@ export const hunt = Effect.fnUntraced(function* hunt(
         alone.add(law);
       }
 
-      return last.disagreements.map((disagreement): Reduced => ({
-        disagreement,
-        genome,
-        lineage: [`isolated toward ${law} alone`],
-        package: "",
-        signature: signatureOf(disagreement),
-        tries: isolating.tries,
-      }));
+      return yield* Effect.forEach([...last.disagreements], (disagreement) =>
+        reducedOf({
+          disagreement,
+          genome,
+          lineage: [`isolated toward ${law} alone`],
+          signature: signatureOf(disagreement),
+          tries: isolating.tries,
+        }),
+      );
     }),
   );
   const shownSignatures = new Set(reduced.map(({ signature }) => signature));

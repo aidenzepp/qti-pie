@@ -27,8 +27,12 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as unit, layer } from "@effect/vitest";
 import { Console, Effect, FileSystem, Layer, Result } from "effect";
+import type { Option } from "effect";
 import { Digest } from "effect/crypto";
+import { readXml } from "@qti-pie/crust/read.ts";
+import type { Element } from "@qti-pie/crust/tree.ts";
 import { composed } from "#pantry/grammar/compose.ts";
+import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { readPackage } from "#pantry/package/read.ts";
@@ -45,6 +49,7 @@ import {
   elementGrainDifferences,
   emptyIdrefsRecord,
   foreignNamesOf,
+  gateHolds,
   isLaxXsiType,
   isNestedRoot,
   isNestedRootLaw,
@@ -55,14 +60,17 @@ import {
   libxml2Records,
   locationRecord,
   nestedRoot,
+  nilValueRecord,
+  paddedIdRecord,
   nestedRootLaw,
   paddedTypeRecord,
   reasonText,
   recordOf,
   recorded,
+  skippedContentRecord,
   validated,
 } from "#pantry/test/xsd-differential.ts";
-import type { Recorded } from "#pantry/test/xsd-differential.ts";
+import type { ForeignNames, Recorded } from "#pantry/test/xsd-differential.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import { OracleLayer, verdictsOf, xmllintValidate } from "#pantry/xml/oracle.ts";
 
@@ -130,6 +138,64 @@ interface Judged {
   readonly matches: readonly (Recorded | undefined)[];
   readonly version: SchemaVersion;
 }
+
+/**
+ * What a document's own rows say that libxml2's gated classes read: its {@link ForeignNames} and its
+ * root, none where the reader refuses it.
+ */
+interface DocumentRows {
+  readonly names: ForeignNames;
+  readonly root: Option.Option<Element>;
+}
+
+/**
+ * Read a document's {@link DocumentRows} in a version.
+ *
+ * @param bytes - The document.
+ * @param version - The version it is read in.
+ * @param grammar - The composed grammar.
+ * @returns Its names and its root.
+ */
+const documentRowsOf = Effect.fn("xsd.documentRowsOf")(function* documentRowsOf(
+  bytes: Uint8Array,
+  version: SchemaVersion,
+  grammar: ComposedGrammar,
+) {
+  const names = yield* foreignNamesOf(bytes, version, grammar);
+  const root = yield* readXml(bytes).pipe(
+    Effect.map((document) => document.root),
+    Effect.option,
+  );
+
+  return { names, root } satisfies DocumentRows;
+});
+
+/**
+ * Find the record a difference matches, holding libxml2's gated classes to the document's own rows
+ * by the gate the generated path judges by ({@link gateHolds}). Each such record's detail names
+ * less than its class, so by the detail alone it would match a difference of the same words but
+ * not the same shape.
+ *
+ * @param document - The document, by a zip and a path, as a record's `document` pattern reads it.
+ * @param version - The version it was judged in.
+ * @param difference - The difference.
+ * @param records - The records it may match.
+ * @param rows - The document's rows.
+ * @returns The first record that matches it and whose gate holds, or `undefined`.
+ */
+const gatedRecordOf = (
+  document: { readonly path: string; readonly zip: string },
+  version: SchemaVersion,
+  difference: Difference,
+  records: readonly Recorded[],
+  rows: DocumentRows,
+): Recorded | undefined =>
+  recordOf(
+    document,
+    version,
+    difference,
+    records.filter((held) => gateHolds(held, difference, rows.names, rows.root)),
+  );
 
 /**
  * Write rows as TSV: a header, then one line per row, each field's tabs and line breaks spaced
@@ -205,6 +271,7 @@ describe.skipIf(!settings.corpusRequested || !cached)(
             const documents = yield* corpusDocuments();
             const oracle = yield* writeXsdOracle(oracleRoot);
             const judged: Judged[] = [];
+            const records = [...recorded, ...libxml2Records];
 
             for (const version of schemaVersions) {
               const verdicts = yield* validated(oracle, version, documents);
@@ -222,15 +289,17 @@ describe.skipIf(!settings.corpusRequested || !cached)(
                   version,
                 });
                 const comparison = compareJudgments(xsd, law);
+                // The gated classes read the document's rows, which only a difference needs.
+                const matches =
+                  comparison.differences.length === 0
+                    ? []
+                    : yield* Effect.map(documentRowsOf(document.bytes, version, grammar), (rows) =>
+                        comparison.differences.map((difference) =>
+                          gatedRecordOf(document, version, difference, records, rows),
+                        ),
+                      );
 
-                judged.push({
-                  comparison,
-                  document,
-                  matches: comparison.differences.map((difference) =>
-                    recordOf(document, version, difference, [...recorded, ...libxml2Records]),
-                  ),
-                  version,
-                });
+                judged.push({ comparison, document, matches, version });
               }
             }
 
@@ -411,6 +480,45 @@ const exitProcessing = (exit: string): string =>
   `<qti-response-processing xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:t="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">${exit}</qti-response-processing>`;
 
 /**
+ * Response processing whose fragment's XInclude holds a foreign element, laxly assessed, holding a
+ * stimulus body that holds the given content, with the `xsi` prefix bound.
+ *
+ * @param typed - The foreign element's `xsi:type` attribute as written, empty for none.
+ * @param content - The stimulus body's content, as written.
+ * @returns The processing's text.
+ */
+const includedBody = (typed: string, content: string): string =>
+  `<qti-response-processing xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-processing-fragment><xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="f.xml"><widget xmlns="" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema"${typed}><qti-stimulus-body xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">${content}</qti-stimulus-body></widget></xi:include></qti-response-processing-fragment></qti-response-processing>`;
+
+/**
+ * {@link includedBody} with the foreign element typed `xs:ENTITIES`, a simple type, so libxml2
+ * refuses it under cvc-type clause 3.1.2 for holding the stimulus body and assesses nothing within.
+ *
+ * @param content - The stimulus body's content, as written.
+ * @returns The processing's text.
+ */
+const skippedUnder = (content: string): string => includedBody(` xsi:type="xs:ENTITIES"`, content);
+
+/**
+ * {@link includedBody} with the foreign element untyped, so libxml2 assesses the stimulus body by
+ * its global declaration.
+ *
+ * @param content - The stimulus body's content, as written.
+ * @returns The processing's text.
+ */
+const untypedUnder = (content: string): string => includedBody("", content);
+
+/**
+ * A stimulus whose body holds a division, an element no declaration makes nillable, carrying the
+ * given attribute, with the `xsi` prefix bound.
+ *
+ * @param attribute - The division's attribute, as written.
+ * @returns The stimulus's text.
+ */
+const stimulusDivision = (attribute: string): string =>
+  `<qti-assessment-stimulus xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="s" title="t"><qti-stimulus-body><div xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ${attribute}/></qti-stimulus-body></qti-assessment-stimulus>`;
+
+/**
  * Write control documents under the control folder, validate them with `xmllint` against the 3.0.0
  * XSDs, and judge them with the law oracle.
  *
@@ -449,7 +557,8 @@ const controlled = Effect.fn("test.controlled")(function* controlled(
         const xsd = verdicts[at] ?? (yield* Effect.die(new Error(`no verdict for ${file}`)));
         const law = yield* judgeDocument({ bytes, grammar, laws, path: file, version: "3.0.0" });
         const comparison = compareJudgments(xsd, law);
-        const names = yield* foreignNamesOf(bytes, "3.0.0", grammar);
+        const rows = yield* documentRowsOf(bytes, "3.0.0", grammar);
+        const { names } = rows;
         const document: CorpusDocument = {
           bytes,
           declared: "3.0.0",
@@ -471,7 +580,7 @@ const controlled = Effect.fn("test.controlled")(function* controlled(
 
             return isLaxXsiType(difference, new Set([...names.lax, ...names.outside]))
               ? laxXsiType
-              : recordOf(document, "3.0.0", difference, libxml2Records);
+              : gatedRecordOf(document, "3.0.0", difference, libxml2Records, rows);
           }),
         };
       }),
@@ -582,6 +691,13 @@ describe.skipIf(!cached)(
             const held = yield* controlled("libxml2", {
               "base64-short": bytes("zz"),
               "base64-stray": bytes("QUFh&lt;"),
+              "id-padded": markedItem(
+                `<widget xmlns="urn:w" xml:id="v"/><widget xmlns="urn:w" xml:id="&#x9;v "/>`,
+              ),
+              "id-plain": markedItem(
+                `<widget xmlns="urn:w" xml:id="v"/><widget xmlns="urn:w" xml:id="v"/>`,
+              ),
+              "id-skipped": skippedUnder(`<p><span id="d"/><span id="d"/></p>`),
               "idrefs-empty": controlItem("", `<p id="a" aria-labelledby="">x</p>`),
               "idrefs-whole": controlItem("", `<p id="a" aria-labelledby="a">x</p>`),
               "list-blank": markedItem(
@@ -598,6 +714,11 @@ describe.skipIf(!cached)(
               "location-pairs": locatedTest(`xsi:schemaLocation="urn:a a]b"`),
               "nil-lax": markedItem(`<widget xmlns="urn:w" xsi:nil="v">x</widget>`),
               "nil-lax-true": markedItem(`<widget xmlns="urn:w" xsi:nil="true">x</widget>`),
+              "nil-skipped": skippedUnder(`<div xsi:nil="false"/>`),
+              "nil-value": stimulusDivision(`xsi:nil=""`),
+              "nil-value-false": stimulusDivision(`xsi:nil="false"`),
+              "skipped-content": skippedUnder(`<h2 aria-level="x"/>`),
+              "skipped-untyped": untypedUnder(`<h2 aria-level="x"/>`),
               "type-padded": exitProcessing(
                 `<qti-exit-response xsi:type=" t:EmptyPrimitiveTypeDType&#x9;"/>`,
               ),
@@ -615,6 +736,9 @@ describe.skipIf(!cached)(
                 "refused by both",
                 "laws only",
                 "laws only",
+                "refused by both",
+                "refused by both",
+                "laws only",
                 "accepted by both",
                 "laws only",
                 "laws only",
@@ -624,17 +748,25 @@ describe.skipIf(!cached)(
                 "laws only",
                 "laws only",
                 "accepted by both",
+                "refused by both",
+                "refused by both",
+                "refused by both",
+                "refused by both",
+                "refused by both",
                 "xmllint only",
                 "xmllint only",
                 "accepted by both",
               ],
-              "xmllint refuses a base64 value of two letters and xml:base's value, as the law oracle does, and accepts a stray character in base64, an empty IDREFS, a blank NMTOKENS element, an empty ENTITIES element, the two xsi: locations' values and a lax xsi:nil's, which the law oracle refuses; it refuses a padded xsi:type, whose QName collapses to one it accepts unpadded, and an xsi:type naming no type on a lax element, which the law oracle accepts (reading 60)",
+              "xmllint refuses a base64 value of two letters, an xml:id twice and xml:base's value, as the law oracle does, and accepts a stray character in base64, an xml:id beside its padded form, an empty IDREFS, a blank NMTOKENS element, an empty ENTITIES element, the two xsi: locations' values and a lax xsi:nil's, which the law oracle refuses; it refuses a padded xsi:type, whose QName collapses to one it accepts unpadded, and an xsi:type naming no type on a lax element, which the law oracle accepts (reading 60); it refuses an xs:ENTITIES element holding an element, an xsi:nil on a division and an untyped element's aria-level, as the law oracle does, and assesses nothing within the first",
             );
             assert.deepStrictEqual(
               held.map(({ records }) => records),
               [
                 [],
                 [base64Record],
+                [paddedIdRecord],
+                [],
+                [blankListRecord, skippedContentRecord],
                 [emptyIdrefsRecord],
                 [],
                 [blankListRecord],
@@ -645,11 +777,16 @@ describe.skipIf(!cached)(
                 [locationRecord],
                 [laxNilRecord],
                 [],
+                [undefined],
+                [nilValueRecord],
+                [],
+                [skippedContentRecord, blankListRecord],
+                [],
                 [paddedTypeRecord],
                 [laxXsiType, absentTypeRecord],
                 [],
               ],
-              "each libxml2 record matches exactly its control's differences, and reading 60's the unresolved xsi:type's",
+              "each libxml2 record matches exactly its control's differences, and reading 60's the unresolved xsi:type's; a gated record matches only where the document holds its shape, so a repeated id that is no xml:id is the skipped content's and not a padded xml:id's, and a false xsi:nil is no unchecked value",
             );
           }),
         { timeout: controlTimeoutMs },

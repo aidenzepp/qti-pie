@@ -108,7 +108,7 @@ import {
   sectionRefKind,
   testKind,
 } from "#pantry/qti/tests.ts";
-import type { ItemRefDocument, ItemRefTarget } from "#pantry/qti/tests.ts";
+import type { ItemRefDocument, ItemRefHref, ItemRefTarget } from "#pantry/qti/tests.ts";
 import type { DeclarationCardinality, DeclarationIdentifier } from "#pantry/qti/declarations.ts";
 
 /**
@@ -1698,6 +1698,7 @@ export type AssembledReferenceRow = Addition<typeof AssembledReference> & {
 export interface AssembledExpressionRows {
   readonly AssembledReference: ReadonlyMap<string, AssembledReferenceRow>;
   readonly ItemRefDocument: ReadonlyMap<string, Addition<typeof ItemRefDocument>>;
+  readonly ItemRefHref: ReadonlyMap<string, Addition<typeof ItemRefHref>>;
   readonly ItemRefTarget: ReadonlyMap<string, Addition<typeof ItemRefTarget>>;
   readonly MappingItemRef: ReadonlyMap<string, Addition<typeof MappingItemRef>>;
   readonly MappingItemRefType: ReadonlyMap<string, Addition<typeof MappingItemRefType>>;
@@ -2347,42 +2348,51 @@ const templateDefaultsOf = (
 };
 
 /**
- * What each item ref names, by the item ref's node: its target, and its item where it names one.
+ * What each item ref names, by the item ref's node: its href, its target, and its item where it
+ * names one.
  */
 interface ItemRefRows {
   readonly itemRefDocuments: ReadonlyMap<string, Addition<typeof ItemRefDocument>>;
+  readonly itemRefHrefs: ReadonlyMap<string, Addition<typeof ItemRefHref>>;
   readonly itemRefTargets: ReadonlyMap<string, Addition<typeof ItemRefTarget>>;
 }
 
 /**
  * Write what each item ref names (the UP audit's B2 and B3), each a row only where the package
  * holds it (lane NIL's NS3: a missing value is a row of its own relation, never a sentinel): its
- * href's path and the type of the resource of the package whose href's path that is, an item's
- * before an LTI link's before any other, and none where no resource names it; and, for an item,
- * the document there, and none where the package holds no document at that path. "Item ref target"
- * refuses an item ref with no target, or of the item type with no document.
+ * href's path; the type of the resource of the package whose href's path that is, an item's
+ * before an LTI link's before any other, and none where no resource names it, or where none of
+ * the item type or an LTI type does and a resource of an unread type does, whose type no law can
+ * read (the law oracle's `itemRefTargetOf`); and, for an item, the document there, and none where
+ * the package holds no document at that path. "Item ref target" refuses an item ref with no
+ * target whose path no resource of an unread type names, or of the item type with no document.
  *
  * @param documents - Every document of the package.
- * @param resources - The package's resources.
- * @returns Each item ref's target, and each item ref's item, by the item ref's node.
+ * @param resources - The package's resources of a type the importer reads.
+ * @param unreadPaths - The paths the package's resources of an unread type name.
+ * @returns Each item ref's href, target and item, by the item ref's node.
  */
 const itemRefTargetsOf = (
   documents: readonly AssembledExpressionInput[],
   resources: Iterable<NamedResource>,
+  unreadPaths: ReadonlySet<string>,
 ): ItemRefRows => {
   const typesAt = Map.groupBy(resources, ({ path }) => path);
   const preferred = [itemResourceType, ...linkResourceTypes];
+  const itemRefHrefs = new Map<string, Addition<typeof ItemRefHref>>();
   const itemRefTargets = new Map<string, Addition<typeof ItemRefTarget>>();
   const itemRefDocuments = new Map<string, Addition<typeof ItemRefDocument>>();
   for (const { ids, tree } of documents) {
     for (const href of itemRefPathsOf(tree, ids)) {
+      itemRefHrefs.set(href.node, { node: href.node, package: href.package, path: href.path });
+
       const types = Option.getOrElse(Option.fromNullishOr(typesAt.get(href.path)), Arr.empty).map(
         ({ type }) => type,
       );
       const type = Option.getOrUndefined(
         Option.orElse(
           Arr.findFirst(preferred, (wanted) => types.includes(wanted)),
-          () => Arr.head(types),
+          () => (unreadPaths.has(href.path) ? Option.none() : Arr.head(types)),
         ),
       );
       if (type !== undefined) {
@@ -2406,7 +2416,7 @@ const itemRefTargetsOf = (
     }
   }
 
-  return { itemRefDocuments, itemRefTargets };
+  return { itemRefDocuments, itemRefHrefs, itemRefTargets };
 };
 
 /**
@@ -2682,14 +2692,17 @@ const placedRowsOf = (
  * @param assembled - The package's assemblies (`assembledRowsOf` of the test builder).
  * @param resources - The package's typed resources, each href's path and type (the package
  *   builder's `TypedHref` rows).
+ * @param unreadPaths - The paths the package's resources of an unread type name (the package
+ *   builder's `UnreadTypePath` rows).
  * @returns The rows.
  */
 export const assembledExpressionRowsOf = (
   documents: readonly AssembledExpressionInput[],
   assembled: AssembledRows,
   resources: Iterable<NamedResource>,
+  unreadPaths: ReadonlySet<string>,
 ): AssembledExpressionRows => {
-  const items = itemRefTargetsOf(documents, resources);
+  const items = itemRefTargetsOf(documents, resources, unreadPaths);
   const lookups = lookupsOf(documents, items);
   const sources = mappingSourcesOf(documents, lookups);
   forceNames(documents, assembled, lookups);
@@ -2702,6 +2715,7 @@ export const assembledExpressionRowsOf = (
   return {
     ...placed,
     ItemRefDocument: items.itemRefDocuments,
+    ItemRefHref: items.itemRefHrefs,
     ItemRefTarget: items.itemRefTargets,
     ...mappingItemRefsOf(documents, lookups),
     MappingLookup: lookups.mappings,

@@ -58,11 +58,31 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    - A test's prefixed `qti-variable` and an unweighted `qti-test-variables` with no `base-type`, typed `unknown` until
      an expression is typed once per assembly (reading 167, decision 435).
 
-   One limit changes no verdict, only the rule it is named by: where a manifest's path breaks two laws, the refusal
-   names the CHECK PostgreSQL judges first (reading 162).
+   Limits that change no verdict, only the laws a refused package is found to break, and at most the rule it is named
+   by:
+   - Where a manifest's path breaks two laws, the refusal names the CHECK PostgreSQL judges first (reading 162).
+   - A record file (`resourcemetadata/xml`) whose root is a `cp:manifest` and whose `cp:resource` owns a LOM record
+     also breaks "E1 derived", which the law oracle does not raise: the import writes a `LomResource` for the package
+     manifest's resources alone, while the record that resource owns is still read, and is held to a `LomResource`.
+     "RootOfType" refuses the file on both sides, since such a file's root is a `lom:lom`, so the rule stays
+     "RootOfType". Outlandish and absent from the official packages; lifted by reading no record a record file's
+     `cp:resource` owns (decision 449, stated here).
+   - An inclusion cycle closed only by an include that may not stand for its target's root breaks "Inclusion cycle"
+     in the law oracle and not in the import: XInclude still recurses through such an include (reading 85), but the
+     import places a child instance only at a site that places its target. Both refuse the package under "Include
+     root" (reading 116), so the rule stays "Include root"; a cycle every edge of which is a standing include breaks
+     "Inclusion cycle" on both sides. Outlandish and absent from the official packages; lifted by counting a
+     non-standing include as an edge of the import's cycle (decision 451, stated here).
+   - An element the grammar admits under its own parent, nested inside a forbidden element, such as a `cpx:variant`
+     inside a 3.0.1 `cpx:variant`'s metadata, binds its ID in the import, though the law oracle drops the forbidden
+     element's whole subtree. An ID it duplicates then breaks "DocumentId key" beside the ancestor's "N5 admitted",
+     which refuses the package on both sides, so the refusal can be named "DocumentId key", which ranks first, where
+     the law oracle names another rule. Outlandish and absent from the official packages; lifted by binding only an
+     ID whose every ancestor the grammar admits (decision 452, stated here).
 
    (2026-10-30, restated without exceptions 2026-11-03. Amended under the operator's ruling of 2026-11-07, register
-   D1, to defer to this list; the element-depth limit added by decision 445.)
+   D1, to defer to this list; the element-depth limit added by decision 445; the three limits that change no verdict
+   after reading 162's added by decisions 449, 451 and 452.)
 
 2. **MathML validity is the MathML 3 Recommendation**: its RelaxNG schema and its prose rules, not only the MathML XSD
    that QTI's schema imports. MathML that breaks a rule of the Recommendation, such as an operator applied to the wrong
