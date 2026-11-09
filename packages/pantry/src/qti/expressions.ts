@@ -1804,6 +1804,28 @@ const prefixedTableReaders = (kind: "qti-map-response" | "qti-map-response-point
   );
 
 /**
+ * An item's placed references by a table reader's `identifier` that resolve to a declaration among
+ * its item's declarations: the {@link PlacedVariableRefDeclaration} of a `qti-map-response`'s or a
+ * `qti-map-response-point`'s `identifier`, under every instance of the item's assembly. The placed
+ * twin of {@link prefixedTableReaders}: a reference in an included response rules fragment names
+ * nothing in the fragment's own document, so its only declaration is its item's, where "the
+ * content of the fragment must satisfy the requirements of the specification in the context of the
+ * item in which it is being included" (spec reading 117). Each reads its declaration's mapping or
+ * area mapping (reading 166), so each is a containment into {@link mappedDeclarations} or
+ * {@link areaMappedDeclarations}. It keeps every declaration kind: one that names an outcome finds
+ * no mapping and breaks the law, as the in-place check refuses it. The item's own document is an
+ * instance too, so an inline map response is held twice, here and by the in-place check over
+ * {@link VariableRefDeclaration}, under the one law.
+ *
+ * @param kind - The reader's kind.
+ * @returns The selection.
+ */
+const placedTableReaders = (kind: "qti-map-response" | "qti-map-response-point") =>
+  select(PlacedVariableRefDeclaration, (d) =>
+    d.and(d.eq(d.kind, kind), d.eq(d.attribute, "identifier")),
+  );
+
+/**
  * The built-in response variables, each with the root it is built into: a numAttempts or duration
  * of an item, the duration of a test. None has a declaration, so none holds a mapping or an area
  * mapping (decision 431, spec reading 166).
@@ -3258,6 +3280,16 @@ export const expressionLawsByName = {
     ),
     contained(
       on(prefixedTableReaders("qti-map-response-point"), "declaration"),
+      on(areaMappedDeclarations, "declaration"),
+    ),
+    // A placed one, an included rules fragment's or the item's own, reads the mapping or area
+    // mapping of the declaration it names among its item's (readings 117 and 166).
+    contained(
+      on(placedTableReaders("qti-map-response"), "declaration"),
+      on(mappedDeclarations, "declaration"),
+    ),
+    contained(
+      on(placedTableReaders("qti-map-response-point"), "declaration"),
       on(areaMappedDeclarations, "declaration"),
     ),
     // An unprefixed one never names a built-in response, which declares no table (reading 166).
