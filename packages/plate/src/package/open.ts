@@ -4931,18 +4931,22 @@ const judgeTest = (
 };
 
 /**
- * Judge the item refs and section refs of a section document a test reaches, once for the package
- * however many placements and tests reach it: each item ref that names neither an item nor an LTI
- * link is `item-ref-unresolved` and each section ref that names no path inside the package is
- * `package-path-outside` with `check: "remote-section"` (reading 170), as the test's own are
- * ({@link structureIn}); then their variable mappings by {@link judgeMappings} and their template
- * defaults by {@link judgeTemplateDefaults}, against the item each resolves to from the section
- * document's path, each refusal at the section document, as pantry contains a mapping's source and
- * a default's target in its item ref's item's declarations (the `Template default target` and
- * `Variable mapping source` laws in `packages/pantry/src/qti/expressions.ts`). A section document
- * no test reaches is judged by its own verdict alone.
+ * Judge the item refs and section refs of a section document the manifest lists, once for the
+ * package, whether a test reaches it or not and however many placements and tests reach it: each
+ * item ref that names neither an item nor an LTI link is `item-ref-unresolved` and each section ref
+ * that names no path inside the package is `package-path-outside` with `check: "remote-section"`
+ * (reading 170), as the test's own are ({@link structureIn}); then their variable mappings by
+ * {@link judgeMappings} and their template defaults by {@link judgeTemplateDefaults}, against the
+ * item each resolves to from the section document's path, each refusal at the section document, as
+ * pantry contains a mapping's source and a default's target in its item ref's item's declarations
+ * (the `Template default target` and `Variable mapping source` laws in
+ * `packages/pantry/src/qti/expressions.ts`). Pantry's rows are per node of every document it
+ * imports, placed or not (its `Remote section ref` law and `Site` relation,
+ * `packages/pantry/src/qti/tests.ts`), so a section document no test reaches is judged here alike.
+ * What reads its expressions under a test's scope is the reaching test's alone ({@link judgeTest}),
+ * so for a section document no test reaches only its own verdict judges them.
  *
- * @param section The reached section document.
+ * @param section The section document, with what it holds, read from its own path.
  * @param documents The package's documents.
  * @returns The refusals: the unresolved refs', the mappings', then the template defaults', each in
  *   document order.
@@ -5139,7 +5143,8 @@ const contentsOf = (
 
 /**
  * Judge a package whose manifest is read: the file rules, the documents, the roots, the LOM
- * metadata, the tests and the section documents they reach, then the verdict over them.
+ * metadata, the tests and the section documents they reach, the refs of every section document
+ * the manifest lists ({@link judgeReached}), then the verdict over them.
  *
  * @param manifest The manifest.
  * @param lom Each resource's LOM generals, keyed by its location.
@@ -5188,7 +5193,20 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
     }
   }
 
-  const sectionRefusals = [...reached.values()].flatMap((section) =>
+  // A section document the manifest lists and no test reaches is judged as a reached one is,
+  // after them, in the manifest's order.
+  const unreached = [...sectionPaths].flatMap((path): ReachedSection[] =>
+    reached.has(path)
+      ? []
+      : Option.toArray(
+          Option.map(sectionDocumentAt(path, sectionPaths, documents), (source) => ({
+            path,
+            source,
+            structure: structureIn(source, path, refTargets),
+          })),
+        ),
+  );
+  const sectionRefusals = [...reached.values(), ...unreached].flatMap((section) =>
     judgeReached(section, documents),
   );
 

@@ -1359,6 +1359,32 @@ const openPlacing = (processing: string, sectionRefs: string, itemRef = "") =>
   openPackage(location, packageOf(referringFiles(processing, sectionRefs, sectionXml(itemRef))));
 
 /**
+ * Open a package whose test `T`, {@link referringTestXml} setting `TOTAL` to 1, holds the given
+ * section refs after its section `SEC`, beside the section document `S2` at `sections/s2.xml`, a
+ * section resource, and the web page `shared/page.html`, a webcontent resource: with no section
+ * ref, no test places the section document.
+ *
+ * @param sectionRefs The test part's content after its section `SEC`, as written.
+ * @param section The section document's text.
+ * @returns The package's verdict.
+ */
+const openListing = (sectionRefs: string, section: string) =>
+  openPackage(
+    location,
+    packageOf({
+      ...referringFiles(settingTotal(oneFloat), sectionRefs, section),
+      [manifestFile]: manifestXml(
+        resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+        resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+        resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+        resourceXml("S", "imsqti_section_xmlv3p0", "sections/s2.xml"),
+        resourceXml("W", "webcontent", "shared/page.html"),
+      ),
+      "shared/page.html": "<p>page</p>",
+    }),
+  );
+
+/**
  * Write a `qti-branch-rule` to a target, whose expression is the boolean `true`.
  *
  * @param target The rule's `target`.
@@ -1488,6 +1514,65 @@ const remoteRefused = (file: string, at: string, href: string): Seen => ({
   location: { kind: "path", path: at },
   rule: "package-path-outside",
 });
+
+/**
+ * The path of the section document `S2`'s one item ref, as {@link sectionDocumentXml} writes it.
+ */
+const sectionItemRef = "qti-assessment-section/qti-assessment-item-ref";
+
+/**
+ * Each section document {@link openListing} is given that a judgement of its refs refuses: a label,
+ * the section document's text, and the refusals of the package, in order.
+ */
+const unreachedCases: readonly (readonly [label: string, section: string, refusals: Seen[]])[] = [
+  [
+    "an external section ref",
+    sectionXml("", sectionRefXml("R3", "https://example.com/s.xml")),
+    [
+      remoteRefused(
+        "sections/s2.xml",
+        "qti-assessment-section/qti-assessment-section-ref",
+        "https://example.com/s.xml",
+      ),
+    ],
+  ],
+  [
+    "an item ref naming a webcontent file",
+    sectionDocumentXml("S2", itemRefXml("I1", "../shared/page.html")),
+    [
+      {
+        detail: { href: "../shared/page.html", identifier: "I1", path: "shared/page.html" },
+        document: fileLocation(location, "sections/s2.xml"),
+        location: { kind: "path", path: sectionItemRef },
+        rule: "item-ref-unresolved",
+      },
+    ],
+  ],
+  [
+    "an item ref with an external href",
+    sectionDocumentXml("S2", itemRefXml("I1", "https://example.com/i.xml")),
+    [
+      {
+        detail: { href: "https://example.com/i.xml", identifier: "I1" },
+        document: fileLocation(location, "sections/s2.xml"),
+        location: { kind: "path", path: sectionItemRef },
+        rule: "item-ref-unresolved",
+      },
+    ],
+  ],
+  [
+    "a variable mapping from an undeclared source",
+    sectionXml('<qti-variable-mapping source-identifier="NOPE" target-identifier="X"/>'),
+    [
+      atSection("qti-variable-mapping", "source-identifier", {
+        attribute: "source-identifier",
+        element: "qti-variable-mapping",
+        expected: "outcome",
+        identifier: "NOPE",
+      }),
+    ],
+  ],
+];
 
 /**
  * The path of the section ref the test {@link referringTestXml} writes after its section `SEC`,
@@ -3748,7 +3833,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "[T-9] controls for a section judged under the reaching test: reached by no test it keeps its own verdict, under two tests each refusal is given once, and a pre-condition over TOTAL or I1.SCORE is accepted",
+      "[T-9] controls for a section judged under the reaching test: reached by no test its expressions keep its own verdict, under two tests each refusal is given once, and a pre-condition over TOTAL or I1.SCORE is accepted",
       () =>
         Effect.gen(function* sectionControls() {
           const unreached = yield* openPackage(
@@ -5847,6 +5932,30 @@ describe("package/open.ts", () => {
               },
             ],
           );
+        }),
+    );
+
+    it.effect(
+      'align-54 r11 unreached section documents finding 9: a section document the manifest lists and no test places is judged as a placed one is, each refusal at it: an external section ref is package-path-outside with check remote-section, an item ref naming a webcontent file or an external href is item-ref-unresolved, and a variable mapping whose source its item does not declare is undeclared-variable at its source-identifier (reading 170 ("A section ref whose href is external is refused under the stated limit "Remote section ref""); reading 155 ("the laws over what an item ref names judge every item ref"))',
+      () =>
+        Effect.gen(function* unreachedSections() {
+          for (const [label, section, refusals] of unreachedCases) {
+            assert.deepStrictEqual(refusalsOf(yield* openListing("", section)), refusals, label);
+          }
+        }),
+    );
+
+    it.effect(
+      "align-54 r11 unreached section documents finding 9, control: the same section document placed by a test gives each refusal once, as the placed document's judgement alone gives it",
+      () =>
+        Effect.gen(function* reachedSections() {
+          for (const [label, section, refusals] of unreachedCases) {
+            assert.deepStrictEqual(
+              refusalsOf(yield* openListing(sectionRefXml("R", "sections/s2.xml"), section)),
+              refusals,
+              label,
+            );
+          }
         }),
     );
 
