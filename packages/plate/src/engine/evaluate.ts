@@ -74,14 +74,16 @@ export type { EngineFailure } from "#plate/engine/failures.ts";
 export interface Variables {
   /**
    * The correct responses template processing set with `qti-set-correct-response`, by the
-   * response's identifier. A `qti-correct` reads a response's value here before its declaration's
-   * correct response; with none, or with no value of that response, it reads the declaration.
+   * response's identifier, a built-in response's among them (reading 111). A `qti-correct` reads a
+   * response's value here before its declaration's correct response; with none, or with no value
+   * of that response, it reads the declaration, and a built-in's NULL.
    */
   readonly correct?: Readonly<Record<string, Value>>;
   /**
    * The defaults template processing set with `qti-set-default-value`, by the variable's
-   * identifier. A `qti-default` reads a variable's value here before its declaration's default;
-   * with none, or with no value of that variable, it reads the declaration.
+   * identifier, a built-in's among them (reading 111). A `qti-default` reads a variable's value
+   * here before its declaration's default; with none, or with no value of that variable, it reads
+   * the declaration, and a built-in's NULL.
    */
   readonly defaults?: Readonly<Record<string, Value>>;
   /**
@@ -437,8 +439,9 @@ const lookUp = (table: LookupTable, value: Value): Option.Option<Single> => {
  * An outcome with no lookup table maps every value to NULL; the validator refuses a lookup of one
  * (`template-requirements`), so no checked item reaches it. An outcome the item does not declare
  * maps to NULL too, and {@link setOutcome} then fails it, unless it is the built-in
- * `completionStatus`, whose NULL it stores; the validator refuses a lookup of the built-in
- * (`undeclared-variable`'s `built-in-target` check).
+ * `completionStatus`, whose NULL it stores: the validator admits a lookup of the built-in, which
+ * stands as an outcome (reading 111, "a processing element's `identifier` names a variable of the
+ * kind the element reads or sets"), and no declaration gives it a lookup table.
  *
  * @param item The declarations holder, whose outcome declaration holds the table.
  * @param identifier The outcome's identifier.

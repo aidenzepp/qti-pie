@@ -351,28 +351,14 @@ const judged = (verdict: Verdict): Judgement => ({
 });
 
 /**
- * The judgement of a time-dependent item that reads `duration`: accepted, the read marked, because
- * the engine holds no item duration.
+ * The judgement of an item that reads `duration`, time dependent or not (reading 150, "an item's
+ * built-in `duration` may be read whether or not the item is time dependent"): accepted, the read
+ * marked, because the engine holds no item duration.
  */
-const timedRead: Judgement = {
+const durationRead: Judgement = {
   marks: ["variable:duration"],
   refusals: [],
   verdict: "accepted-with-unsupported",
-};
-
-/**
- * The judgement of an item that is not time dependent and reads `duration`: refused, pantry's
- * `item-duration`.
- */
-const untimedRead: Judgement = {
-  marks: [],
-  refusals: [
-    {
-      detail: { check: "untimed-duration", element: "qti-variable", identifier: "duration" },
-      rule: "undeclared-variable",
-    },
-  ],
-  verdict: "refused",
 };
 
 /**
@@ -427,10 +413,10 @@ const booleanPlacements: readonly BooleanPlacement[] = [
         durationProcessing,
       ),
     element: "qti-assessment-item",
-    expected: (value) => (value ? timedRead : untimedRead),
+    expected: () => durationRead,
     read: judged,
     title:
-      "time-dependent on an item whose response processing reads duration marks variable:duration when true and is refused untimed-duration when false",
+      "align-54 untimed duration D7: time-dependent on an item whose response processing reads duration marks variable:duration whether it is true or false",
   },
   {
     attribute: "adaptive",
@@ -614,37 +600,21 @@ describe("every xs:boolean attribute plate reads", () => {
   }
 
   it.effect(
-    'boolean attribute through the package: a test that reads I1.duration is accepted-with-unsupported when I1 is time-dependent="1", and refused untimed-duration at the test when it is "0"',
+    'align-54 untimed duration D7: boolean attribute through the package: a test that reads I1.duration is accepted-with-unsupported whether I1 is time-dependent="1" or "0"',
     () =>
       Effect.gen(function* throughPackage() {
         const timed = yield* openPackage(packageLocation, durationPackage("1"));
         const untimed = yield* openPackage(packageLocation, durationPackage("0"));
 
-        assert.strictEqual(timed.verdict, "accepted-with-unsupported");
         assert.deepStrictEqual(
-          untimed.verdict === "refused"
-            ? untimed.refusals.map(({ detail, document, location, rule }) => ({
-                detail,
-                document,
-                location,
-                rule,
-              }))
-            : untimed.verdict,
-          [
-            {
-              detail: {
-                check: "untimed-duration",
-                element: "qti-variable",
-                identifier: "I1.duration",
-              },
-              document: fileLocation(packageLocation, "test.xml"),
-              location: {
-                kind: "path",
-                path: "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-variable/@identifier",
-              },
-              rule: "undeclared-variable",
-            },
-          ],
+          [timed, untimed].map((verdict) =>
+            verdict.verdict === "refused" ? verdict.refusals.map(({ rule }) => rule) : [],
+          ),
+          [[], []],
+        );
+        assert.deepStrictEqual(
+          [timed.verdict, untimed.verdict],
+          ["accepted-with-unsupported", "accepted-with-unsupported"],
         );
       }),
   );

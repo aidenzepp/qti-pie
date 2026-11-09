@@ -21,10 +21,11 @@ import type { FamilyRules, KindRule, ReferenceEntry } from "#plate/model/express
 import type { FamilyReaders, ReaderSpec } from "#plate/model/expressions/read.ts";
 
 /**
- * The operand rule of every rounding kind: each operand must be a single number, so each operand
- * of another type is a mismatch that accepts `integer` and `float`, `single`. Numerical is integer
- * or float, never duration (9.5), as the qti package reads it (P23, `operandRules` in
- * `packages/pantry/src/processing/check.ts`).
+ * The operand rule of every rounding kind: each operand must be a single number, so each operand of
+ * another type is a mismatch that accepts `integer` and `float`, `single`. Numerical is integer or
+ * float, never duration (9.5), as the qti package reads it (P23, the `Operand fit` law in
+ * `packages/pantry/src/qti/expressions.ts`, over the kinds' typings in `expressionTypings`,
+ * `packages/pantry/src/grammar/expression.ts`).
  */
 const numericalSingle: KindRule["operandsAccept"] = everyOperand(["integer", "float"], ["single"]);
 

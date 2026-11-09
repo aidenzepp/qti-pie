@@ -13,6 +13,7 @@ import {
   cardinalities,
   cpVersions,
   interactionNames,
+  ltiLinkTypes,
   manifestNamespace,
   messageAttributes,
   navigationModes,
@@ -660,6 +661,19 @@ describe("M2's closed sets", () => {
     }
   });
 
+  it("align-54 LTI item ref E21: lists as LTI link types the LTI resource types of both profiles, 3.0.0's imsbasiclti_xmlv1p3 and 3.0.1's imslti_xmlv1p1 and imsltia_xmlv1p0, and no QTI type", () => {
+    assert.deepStrictEqual(
+      [...ltiLinkTypes],
+      ["imsbasiclti_xmlv1p3", "imslti_xmlv1p1", "imsltia_xmlv1p0"],
+    );
+    assert.sameMembers(
+      [...ltiLinkTypes],
+      [...new Set(cpVersions.flatMap((version) => resourceTypes[version]))].filter((type) =>
+        /^ims(?:basic)?ltia?_xmlv/u.test(type),
+      ),
+    );
+  });
+
   it("lists imslti_xmlv1p1 among the 3.0.1 resource types only", () => {
     assert.notInclude([...resourceTypes["3.0.0"]], "imslti_xmlv1p1");
     assert.include([...resourceTypes["3.0.1"]], "imslti_xmlv1p1");
@@ -731,8 +745,14 @@ describe("M2's closed sets", () => {
         "max-attempts:negative",
         "root:qti-assessment-section",
         "root:qti-assessment-stimulus",
+        "lti-link",
       ],
     );
+  });
+
+  it("align-54 LTI item ref E21: keys lti-link, the mark of an item ref that names an LTI link, which no element names", () => {
+    assert.include([...testMarks], "lti-link");
+    assert.isFalse("lti-link".startsWith("qti-"));
   });
 
   it("[T-9] keys neither outcome processing nor a weight, a variable mapping or a template default, which the test model reads and the session applies", () => {

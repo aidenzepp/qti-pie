@@ -623,9 +623,11 @@ export const coordsOf = (
   });
 
 /**
- * Read an `xs:double` attribute as the XSD reads it (readings 7 and 56): outer whitespace goes,
- * then the literal reads in the double's lexical space, one beyond the largest finite double naming
- * that double.
+ * Read an `xs:double` attribute as the XSD reads it, by reading 7 and reading 56 ("an `xs:double`
+ * literal beyond the largest finite double names the largest finite double of its sign"), which
+ * plate keeps until the renderer team moves it to reading 144: outer whitespace goes, then the
+ * literal reads in the double's lexical space, one beyond the largest finite double naming that
+ * double.
  *
  * @param build The build, which a {@link BuildDefect} names.
  * @param element The element.

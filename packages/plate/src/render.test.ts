@@ -1840,9 +1840,11 @@ describe("render, a record-bound control", () => {
     () =>
       Effect.gen(function* rendersRecordBoundControls() {
         const configuration = yield* defaults;
-        const recorded = yield* Effect.fromOption(acceptedItem(check(boundTo("record"), tables)));
+        const recorded = yield* Effect.fromOption(
+          acceptedItem(check(boundTo("record"), tables, Option.none())),
+        );
         const stringBound = yield* Effect.fromOption(
-          acceptedItem(check(boundTo("string"), tables)),
+          acceptedItem(check(boundTo("string"), tables, Option.none())),
         );
         const shown = redact(recorded);
         const rendered = yield* Effect.fromResult(render(shown, configuration, { instance }));
@@ -1947,7 +1949,7 @@ describe("render, a record value", () => {
       Effect.gen(function* restoresStringValue() {
         const configuration = yield* defaults;
         const recorded = redact(
-          yield* Effect.fromOption(acceptedItem(check(boundTo("record"), tables))),
+          yield* Effect.fromOption(acceptedItem(check(boundTo("record"), tables, Option.none()))),
         );
         const shownFor = (values: NonNullable<Options["values"]>) =>
           Effect.map(
@@ -1983,7 +1985,7 @@ describe("render, a record value", () => {
         const shownIn = (fields: readonly (readonly [string, string, string])[]) =>
           Effect.gen(function* solvedControl() {
             const accepted = yield* Effect.fromOption(
-              acceptedItem(check(solvedBy(fields), tables)),
+              acceptedItem(check(solvedBy(fields), tables, Option.none())),
             );
             const rendered = yield* Effect.fromResult(
               render(redact(accepted), configuration, {
@@ -2014,7 +2016,9 @@ describe("render, a record value", () => {
     "[Q-20] restores the record within the output budget: its stringValue counts as any restored text",
     () =>
       Effect.gen(function* recordWithinBudget() {
-        const accepted = yield* Effect.fromOption(acceptedItem(check(solvedBy([]), tables)));
+        const accepted = yield* Effect.fromOption(
+          acceptedItem(check(solvedBy([]), tables, Option.none())),
+        );
         const values = { NUMBER: typedRecord("y".repeat(500)) };
         const bare = yield* Effect.fromResult(
           render(redact(accepted), yield* defaults, { instance }),

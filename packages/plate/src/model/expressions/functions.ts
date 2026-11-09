@@ -38,10 +38,11 @@ const integerMathOperators: ReadonlySet<string> = new Set(["ceil", "floor", "sig
 /**
  * The rule of `qti-math-operator`: a single integer for `signum`, `floor` and `ceil`, a single
  * float for every other name, and a single of no known base type when its caller passes no name.
- * Its operands must each be a single integer or float, whatever the name's arity: an operand
- * count that is not the name's (two for `atan2`, one for every other) is NULL at run time, never a
- * refusal (9.22). The qti package types and refuses the same (`mathOperatorBase` in
- * `packages/pantry/src/processing/types.ts`, P23's `operandRules` in `check.ts`).
+ * Its operands must each be a single integer or float, whatever the name's arity: an operand count
+ * that is not the name's (two for `atan2`, one for every other) is NULL at run time, never a
+ * refusal (9.22). The qti package types and refuses the same (the kind's `attribute` typing and the
+ * table `integerMathOperators` in `packages/pantry/src/grammar/expression.ts`, and P23's `Operand
+ * fit` law in `packages/pantry/src/qti/expressions.ts`).
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMathOp
  */

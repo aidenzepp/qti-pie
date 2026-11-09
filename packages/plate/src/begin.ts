@@ -50,7 +50,10 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  *   The engine's failure cannot occur on a checked item: the validator refuses, or the item model
  *   marks, every cause on an accepted item (a read of a variable template processing holds no
  *   value of, a rule setting a variable the item does not declare in the kind the rule sets, a
- *   value of another type), so a host writes no handling for it. An item whose template processing
+ *   value of another type), so a host writes no handling for it. A built-in named as the kind it
+ *   stands as is no such cause (E22a, reading 111): a `qti-set-correct-response` of `numAttempts`
+ *   and a `qti-set-default-value` of `completionStatus` or `numAttempts` run, and the record holds
+ *   the built-in's correct response or default they set. An item whose template processing
  *   the model marks, because it holds an element the engine does not run or names a variable the
  *   engine does not hold (such as `QTI_CONTEXT`, a context variable or a template variable of a
  *   type plate does not model), does not run it: its record begins with each response and outcome

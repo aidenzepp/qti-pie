@@ -33,13 +33,15 @@ const cases = () => [
 ];
 
 /**
- * An encoded refusal for each rule the readings, the queued follow-ups, the count ruling and M2's
- * test and package stages add, written as a caller would send it rather than built through the
- * class, so decoding is what checks the rule against the roster.
+ * An encoded refusal for each rule the readings, the queued follow-ups, the count ruling, M2's test
+ * and package stages and align-54 add, written as a caller would send it rather than built through
+ * the class, so decoding is what checks the rule against the roster.
  */
 const addedRules = [
+  // Reading 38 ("a `qti-gap` appears only within a gap-match interaction"), cited by its number as
+  // every producer writes it.
   {
-    detail: { element: "qti-gap", reading: "reading 38" },
+    detail: { element: "qti-gap", reading: "38" },
     path: "qti-assessment-item/qti-item-body/p/qti-gap",
     rule: "misplaced-element",
   },
@@ -149,10 +151,35 @@ const addedRules = [
     path: "manifest/resources/resource/metadata/{http://ltsc.ieee.org/xsd/LOM}lom/{http://ltsc.ieee.org/xsd/LOM}general/{http://ltsc.ieee.org/xsd/LOM}title",
     rule: "lom-title",
   },
+  {
+    detail: {
+      chain: "tests/test.xml sections/a.xml sections/b.xml sections/a.xml",
+      href: "../sections/a.xml",
+      identifier: "toA",
+      reading: "85",
+    },
+    path: "qti-assessment-section/qti-assessment-section-ref",
+    rule: "inclusion-cycle",
+  },
+  {
+    detail: { reading: "87", reason: "backward", target: "Q1" },
+    path: "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[2]/qti-branch-rule/@target",
+    rule: "branch-target",
+  },
+  {
+    detail: { document: "items/q1.xml", language: "fr", listed: "en", reading: "134" },
+    path: "manifest/resources/resource/metadata/{http://ltsc.ieee.org/xsd/LOM}lom/{http://ltsc.ieee.org/xsd/LOM}general",
+    rule: "document-lang",
+  },
+  {
+    detail: { reading: "122", value: "exam" },
+    path: "manifest/resources/resource/metadata/{http://ltsc.ieee.org/xsd/LOM}lom/{http://ltsc.ieee.org/xsd/LOM}educational/{http://ltsc.ieee.org/xsd/LOM}learningResourceType",
+    rule: "lom-learning-resource-type",
+  },
 ] as const;
 
 describe("refusalRules", () => {
-  it("lists the validator's, the verdict's and the reader's nineteen rules, then M2's thirteen", () => {
+  it("lists the validator's, the verdict's and the reader's nineteen rules, M2's thirteen, align-54's four, then plate's own assembly-limit, 37 in all (align-54 r12 assembly limit)", () => {
     assert.deepStrictEqual(
       [...refusalRules],
       [
@@ -188,8 +215,14 @@ describe("refusalRules", () => {
         "resource-type-mismatch",
         "lom-identifier",
         "lom-title",
+        "inclusion-cycle",
+        "branch-target",
+        "document-lang",
+        "lom-learning-resource-type",
+        "assembly-limit",
       ],
     );
+    assert.strictEqual(refusalRules.length, 37);
   });
 
   it("holds no rule twice", () => {

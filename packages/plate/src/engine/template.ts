@@ -52,7 +52,8 @@ import type { Value } from "#plate/model/values.ts";
  * declarations are never changed, so a variable the rules did not set keeps its declared correct
  * response or default, which the evaluator reads behind these maps (`Variables.correct` and
  * `Variables.defaults` in `#plate/engine/evaluate.ts`). Every value is of its target's declared
- * base type and cardinality, a NULL included.
+ * base type and cardinality, or a built-in's own type for a built-in ({@link builtInTargets}), a
+ * NULL included.
  */
 export interface TemplateValues {
   readonly correct: Readonly<Record<string, Value>>;
@@ -161,26 +162,59 @@ const evaluateIn = (
   );
 
 /**
- * Give the declaration of the variable a setting rule sets: a template variable for
+ * The base type and cardinality of a variable a setting rule sets.
+ */
+type TargetType = Pick<TemplateDeclaration, "baseType" | "cardinality">;
+
+/**
+ * The built-in variables the engine holds that each setting rule may set, with their types: the
+ * built-in response `numAttempts`, a single integer, for `qti-set-correct-response`, and it and the
+ * built-in outcome `completionStatus`, a single identifier, for `qti-set-default-value`. A
+ * built-in stands as a declaration of its kind (reading 111, "a processing element's
+ * `identifier` names a variable of the kind the element reads or sets"). `duration` is not among
+ * them: the engine holds no item's time spent, and the item model marks a template processing that
+ * sets it, which then does not run. Written here, not read from `#plate/engine/refs.ts` or
+ * `#plate/model/record.ts`, so this module value-imports nothing more.
+ */
+const builtInTargets: Readonly<Record<SetRule["kind"], ReadonlyMap<string, TargetType>>> = {
+  "set-correct-response": new Map([
+    ["numAttempts", { baseType: "integer", cardinality: "single" }],
+  ]),
+  "set-default-value": new Map<string, TargetType>([
+    ["completionStatus", { baseType: "identifier", cardinality: "single" }],
+    ["numAttempts", { baseType: "integer", cardinality: "single" }],
+  ]),
+  "set-template-value": new Map(),
+};
+
+/**
+ * Give the type of the variable a setting rule sets: a template variable for
  * `qti-set-template-value`, a response for `qti-set-correct-response`, and a response or an
  * outcome for `qti-set-default-value`, as the information model names their targets and the
- * validator holds them (`templateTarget` in `#plate/validate/rules.ts`).
+ * validator holds them (`templateTarget` in `#plate/validate/rules.ts`): the item's declaration of
+ * it, else, when the item declares no variable by that name, a built-in of that kind
+ * ({@link builtInTargets}), typed as the built-in, whose correct response or default is then
+ * recorded as a declared variable's is. A declared variable wins over a built-in of the same name.
  *
  * @param item The item.
  * @param rule The setting rule.
  * @returns The target's base type and cardinality, or an {@link UnknownIdentifierError} when the
- *   item declares no variable of that kind by that name.
+ *   item declares no variable of that kind by that name and it names no built-in of that kind.
  */
-const targetOf = (
-  item: Item,
-  rule: SetRule,
-): Result.Result<Pick<TemplateDeclaration, "baseType" | "cardinality">, UnknownIdentifierError> => {
-  const found = {
-    "set-correct-response": () => item.responses.get(rule.identifier),
-    "set-default-value": () =>
-      item.responses.get(rule.identifier) ?? item.outcomes.get(rule.identifier),
-    "set-template-value": () => item.templates.get(rule.identifier),
-  }[rule.kind]();
+const targetOf = (item: Item, rule: SetRule): Result.Result<TargetType, UnknownIdentifierError> => {
+  const { identifier } = rule;
+  const declares =
+    item.responses.has(identifier) ||
+    item.outcomes.has(identifier) ||
+    item.templates.has(identifier) ||
+    item.records?.has(identifier) === true;
+  const found = declares
+    ? {
+        "set-correct-response": () => item.responses.get(identifier),
+        "set-default-value": () => item.responses.get(identifier) ?? item.outcomes.get(identifier),
+        "set-template-value": () => item.templates.get(identifier),
+      }[rule.kind]()
+    : builtInTargets[rule.kind].get(identifier);
 
   return Result.fromOption(
     Option.fromUndefinedOr(found),

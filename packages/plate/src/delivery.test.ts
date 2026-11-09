@@ -1193,7 +1193,8 @@ describe("the M2 witness: the packages a test is delivered from", { tags: ["corp
         const minFiles = yield* openCorpusPackage(corpusPackages.minFiles);
 
         // Its manifest's LOM gives its test another title, and its adaptive item another identifier
-        // and title, than their documents have (reading 62). That item also sets
+        // and title, than their documents have: reading 62 ("an item's or test's identifier and
+        // title are those its package's LOM metadata gives it"). That item also sets
         // `completion_status`, which it never declares and which is not the built-in
         // `completionStatus` (info.txt:8488), so the item is refused, while its test and its
         // hotspot item are accepted with their unsupported features marked.

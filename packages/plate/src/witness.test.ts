@@ -27,12 +27,13 @@ import type {
   ValidationMessage,
   Value,
 } from "#plate/index.ts";
+import type { BodyNode, ChoiceInteraction } from "#plate/model/item.ts";
 import { attribute, checkTree, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
-import { xhtmlItem, xhtmlProbe } from "#scripts/walk-corpus.ts";
+import { choicesItem, choicesProbe, xhtmlItem, xhtmlProbe } from "#scripts/walk-corpus.ts";
 
 /**
  * A case reads at most a few corpus documents, which takes well under a second here; the bound
@@ -88,13 +89,16 @@ const teaSteps = `<qti-assessment-item ${itemRoot} identifier="tea-steps" title=
 const ccPackageItem = "qtiv3-examples/packaging/ccPackage/testitems/QUE_102010.xml";
 
 /**
- * Three shuffled Choices of the corpus, each of the same six elements: `RESPONSE1` with
- * `max-choices="2"` and the author's `data-max-selections-message`, `RESPONSE2` with
- * `max-choices="2"`, and `RESPONSE3` with `min-choices="2"` and the author's
- * `data-min-selections-message`. The item has no response processing.
+ * The author's `data-max-selections-message` on `RESPONSE1`'s Choice of the walk corpus's shuffled
+ * Choices item, {@link choicesProbe}, whose `max-choices` is 2.
  */
-const limitedItem =
-  "qtiv3-examples/items/shared-vocabulary/Items/Item_QTI3_CompWater_03/composition_of_water_qti3.xml";
+const tooManyMessage = "Choose no more than two elements for table salt.";
+
+/**
+ * The author's `data-min-selections-message` on `RESPONSE3`'s Choice of {@link choicesProbe},
+ * whose `min-choices` is 2.
+ */
+const tooFewMessage = "Choose two metals or more.";
 
 /**
  * A shuffled single Choice of the corpus whose last choice, `ChoiceD`, is fixed, scored by
@@ -110,9 +114,29 @@ const fixedItem = "qtiv3-examples/packaging/items/choice_fixed.xml";
 const seed = "3";
 
 /**
- * The six elements each Choice of {@link limitedItem} offers, in document order.
+ * The six elements each Choice of {@link choicesProbe} offers, by response, as their choice
+ * identifiers in document order; no identifier is shared across the item.
  */
-const elements = ["H", "He", "C", "O", "N", "Cl"];
+const elements = {
+  RESPONSE1: ["SALT_NA", "SALT_CL", "SALT_K", "SALT_I", "SALT_CA", "SALT_F"],
+  RESPONSE2: ["GAS_HE", "GAS_NE", "GAS_AR", "GAS_H", "GAS_N", "GAS_O"],
+  RESPONSE3: ["METAL_FE", "METAL_CU", "METAL_ZN", "METAL_C", "METAL_S", "METAL_P"],
+} as const;
+
+/**
+ * Collect the Choices of an item body, in document order.
+ *
+ * @param nodes The body.
+ * @returns Each Choice interaction it holds.
+ */
+const choicesIn = (nodes: readonly BodyNode[]): readonly ChoiceInteraction[] =>
+  nodes.flatMap((node): readonly ChoiceInteraction[] => {
+    if (node.kind === "choice") {
+      return [node];
+    }
+
+    return node.kind === "element" ? choicesIn(node.children) : [];
+  });
 
 /**
  * An item `open` accepted, and its redaction, the one input `render` takes.
@@ -527,12 +551,49 @@ describe("the M1-R witness: each feature through the composition an author build
   );
 
   it.effect(
+    "align-54 choice witness W1: choices.xml is accepted, three shuffled multiple Choices of six elements each with no identifier shared: RESPONSE1 at most 2 with the author's message, RESPONSE2 at most 2, RESPONSE3 at least 2 with the author's message, and no outcome or response processing",
+    () =>
+      Effect.gen(function* choicesWitness() {
+        const { accepted } = yield* openAccepted(
+          choicesItem,
+          new TextEncoder().encode(choicesProbe),
+        );
+        const choices = choicesIn(accepted.item.body);
+        const identifiers = choices.flatMap((choice) =>
+          choice.choices.map((each) => each.identifier),
+        );
+
+        assert.deepStrictEqual(
+          choices.map((choice) => [
+            choice.response,
+            choice.cardinality,
+            choice.shuffle,
+            choice.maxChoices,
+            choice.minChoices,
+            Option.toArray(choice.messages.max),
+            Option.toArray(choice.messages.min),
+            choice.choices.map((each) => each.identifier),
+          ]),
+          [
+            ["RESPONSE1", "multiple", true, 2n, 0n, [tooManyMessage], [], [...elements.RESPONSE1]],
+            ["RESPONSE2", "multiple", true, 2n, 0n, [], [], [...elements.RESPONSE2]],
+            ["RESPONSE3", "multiple", true, 0n, 2n, [], [tooFewMessage], [...elements.RESPONSE3]],
+          ],
+        );
+        assert.lengthOf(new Set(identifiers), 18, "no choice identifier is shared");
+        assert.deepStrictEqual([...accepted.item.outcomes.keys()], [], "it declares no outcome");
+        assert.isTrue(Option.isNone(accepted.item.processing), "it has no response processing");
+        assert.deepStrictEqual(accepted.item.unsupported, [], "it shows no notice");
+      }),
+  );
+
+  it.effect(
     "[Q-2] [keyboard] shuffled corpus Choices keep their order across a refused post with one instance and seed, and the presented choices post",
     () =>
       Effect.gen(function* refusedShuffle() {
         const configuration = yield* configure({ seed, validateResponses: true });
-        const opened = yield* openCorpus(limitedItem);
-        const responses = ["RESPONSE1", "RESPONSE2", "RESPONSE3"];
+        const opened = yield* openAccepted(choicesItem, new TextEncoder().encode(choicesProbe));
+        const responses = ["RESPONSE1", "RESPONSE2", "RESPONSE3"] as const;
         const first = yield* firstPage(opened, configuration);
         const presentedIn = (page: Element) =>
           responses.map((response) => controlsOf(page, response).map(valueOf));
@@ -541,9 +602,12 @@ describe("the M1-R witness: each feature through the composition an author build
           presented[response]?.[position] ??
           assert.fail(`${responses[response] ?? ""} presents no choice ${String(position)}`);
 
-        for (const order of presented) {
-          assert.sameMembers([...order], elements, "each Choice presents the six elements");
-          assert.notDeepEqual(order, elements, "each Choice is presented shuffled");
+        for (const [index, response] of responses.entries()) {
+          const order = presented[index] ?? [];
+          const offered: readonly string[] = elements[response];
+
+          assert.sameMembers([...order], [...offered], "each Choice presents its six elements");
+          assert.notDeepEqual([...order], [...offered], "each Choice is presented shuffled");
         }
 
         const refused = submit(
@@ -554,8 +618,8 @@ describe("the M1-R witness: each feature through the composition an author build
         );
 
         assert.deepStrictEqual(refused.messages, [
-          { response: "RESPONSE1", text: "You've selected too many!" },
-          { response: "RESPONSE3", text: "Not enough selected! Please select at least two." },
+          { response: "RESPONSE1", text: tooManyMessage },
+          { response: "RESPONSE3", text: tooFewMessage },
         ]);
 
         const again = yield* refusedPage(opened, configuration, refused);
@@ -588,7 +652,6 @@ describe("the M1-R witness: each feature through the composition an author build
         assert.deepStrictEqual(valuesOf(record.responses, "RESPONSE2"), []);
         assert.sameMembers([...valuesOf(record.responses, "RESPONSE3")], [at(2, 0), at(2, 1)]);
       }),
-    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect(

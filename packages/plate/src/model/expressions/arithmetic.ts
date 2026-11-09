@@ -21,8 +21,9 @@ import type { FamilyReaders, ReaderSpec } from "#plate/model/expressions/read.ts
 
 /**
  * The base types every arithmetic operand must have: numerical is integer or float, never duration
- * (9.5), as the qti package reads it (P23, `operandRules` in
- * `packages/pantry/src/processing/check.ts`).
+ * (9.5), as the qti package reads it (P23, the `numerical` typing in
+ * `packages/pantry/src/grammar/expression.ts`, judged by the `Operand fit` law in
+ * `packages/pantry/src/qti/expressions.ts`).
  */
 const numerical = ["integer", "float"] as const;
 
@@ -31,7 +32,7 @@ const numerical = ["integer", "float"] as const;
  * when every operand that says its base type is an integer, else a single float. An operand of
  * base type `any`, `qti-null`'s NULL, says nothing and is passed over, so a kind of NULLs alone is
  * a float; one of base type `unknown` makes the result unknown. It is the qti package's numeric
- * aggregate (`numericBase` in `packages/pantry/src/processing/types.ts`).
+ * aggregate (the `numeric` typing in `packages/pantry/src/grammar/expression.ts`).
  *
  * @param operands The operands' types.
  * @returns The type.

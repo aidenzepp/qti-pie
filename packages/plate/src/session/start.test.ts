@@ -212,8 +212,8 @@ const templatedXml = (identifier: string): string =>
  * Write the text of a hand-built item whose template processing reads `QTI_CONTEXT`, which the
  * engine does not hold while template processing runs, so `check` marks it and it does not run:
  * one Choice over `A`, `B` and `C` bound to the single identifier `RESPONSE`, which declares the
- * default `B`, and the single boolean template variable `B`, which the one rule sets to whether
- * `QTI_CONTEXT` is NULL.
+ * default `B`, and the single boolean template variable `UNHELD`, which the one rule sets to
+ * whether `QTI_CONTEXT` is NULL. No choice shares a variable's identifier (reading 104, E19).
  *
  * @param identifier The item's identifier.
  * @returns The item's text.
@@ -223,8 +223,8 @@ const contextReadingXml = (identifier: string): string =>
     `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
     '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
     "<qti-default-value><qti-value>B</qti-value></qti-default-value></qti-response-declaration>",
-    '<qti-template-declaration identifier="B" cardinality="single" base-type="boolean"/>',
-    '<qti-template-processing><qti-set-template-value identifier="B">',
+    '<qti-template-declaration identifier="UNHELD" cardinality="single" base-type="boolean"/>',
+    '<qti-template-processing><qti-set-template-value identifier="UNHELD">',
     '<qti-is-null><qti-variable identifier="QTI_CONTEXT"/></qti-is-null>',
     "</qti-set-template-value></qti-template-processing>",
     '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" shuffle="false">',
@@ -373,6 +373,22 @@ const startedFromPackage = Effect.fnUntraced(function* startedFromPackage(place:
     now: startedAt,
   });
 });
+
+/**
+ * Name what {@link startedFromPackage} gave: `started`, or the reason `startTest` refused and the
+ * document it expected.
+ *
+ * @param outcome What `startTest` returned.
+ * @returns Its name.
+ */
+const outcomeName = (outcome: Effect.Success<ReturnType<typeof startedFromPackage>>): string =>
+  Result.match(outcome, {
+    onFailure: (failure) =>
+      failure._tag === "TestNotDeliverable"
+        ? `${failure.reason}: expected ${failure.expected}`
+        : failure._tag,
+    onSuccess: () => "started",
+  });
 
 /**
  * Start a session of a delivery, failing the test when `startTest` refuses.
@@ -738,22 +754,173 @@ describe("startTest", () => {
 
         const outcomes = yield* Effect.all(
           places.map(([label, place]) =>
-            Effect.map(startedFromPackage(place), (outcome) => [
-              label,
-              Result.match(outcome, {
-                onFailure: (failure) =>
-                  failure._tag === "TestNotDeliverable"
-                    ? `${failure.reason}: expected ${failure.expected}`
-                    : failure._tag,
-                onSuccess: () => "started",
-              }),
-            ]),
+            Effect.map(startedFromPackage(place), (outcome) => [label, outcomeName(outcome)]),
           ),
         );
 
         assert.deepStrictEqual(
           outcomes,
           places.map(([label]) => [label, "started"]),
+        );
+      }),
+  );
+
+  it.effect(
+    "align-54 hrefs and keys E17: startTest resolves an item ref holding %2F to the same item openPackage does, the decoded / kept in its segment",
+    () =>
+      Effect.gen(function* escapedSlashHref() {
+        const plain: PackagePlace = {
+          directory: "d",
+          directoryHref: "d",
+          item: "first.xml",
+          itemHref: "first.xml",
+          location: "pkgs/m2",
+        };
+        const places: readonly (readonly [string, PackagePlace])[] = [
+          ["an item named a%2Fb.xml", { ...plain, item: "a%2Fb.xml", itemHref: "a%2Fb.xml" }],
+          [
+            "an item named a%2fb c.xml",
+            { ...plain, item: "a%2fb c.xml", itemHref: "a%2fb%20c.xml" },
+          ],
+          ["a segment x%2Fy that one .. removes", { ...plain, itemHref: "x%2Fy/../first.xml" }],
+        ];
+
+        const outcomes = yield* Effect.all(
+          places.map(([label, place]) =>
+            Effect.map(startedFromPackage(place), (outcome) => [label, outcomeName(outcome)]),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          outcomes,
+          places.map(([label]) => [label, "started"]),
+        );
+      }),
+  );
+
+  it.effect(
+    'align-54 file references E18: startTest resolves an item ref against its test\'s location, the base openPackage resolves it through, since a test that writes an xml:base on any element from the test to the item ref is refused before a session can start (reading 103 ("an xml:base is a base, resolved and never a file reference"); reading 90 ("an attribute its XSD does not declare is a data- attribute, or the document is refused"))',
+    () =>
+      Effect.gen(function* basedItemRefs() {
+        const encoder = new TextEncoder();
+        const elements = [
+          "qti-assessment-test",
+          "qti-test-part",
+          "qti-assessment-section",
+          "qti-assessment-item-ref",
+        ];
+        const written = yield* Effect.all(
+          elements.map((element) => {
+            const based = testXml("based", [["first", "first.xml"]]).replace(
+              `<${element} `,
+              `<${element} xml:base="../items/" `,
+            );
+
+            return Effect.map(open(`d/tests/${element}.xml`, encoder.encode(based)), (verdict) =>
+              verdict.verdict === "refused"
+                ? verdict.refusals.flatMap((refusal) =>
+                    refusal.rule === "unknown-attribute" ? [refusal.detail] : [],
+                  )
+                : [],
+            );
+          }),
+        );
+
+        assert.deepStrictEqual(
+          written,
+          elements.map((element) => [{ attribute: "xml:base", element, reading: "90" }]),
+        );
+        assert.strictEqual(
+          outcomeName(
+            yield* startedFromPackage({
+              directory: "d",
+              directoryHref: "d",
+              item: "first.xml",
+              itemHref: "first.xml",
+              location: "pkgs/based",
+            }),
+          ),
+          "started",
+        );
+      }),
+  );
+
+  it.effect(
+    "align-54 LTI item ref E21: startTest delivers a package's test whose item ref lti names an LTI link with first and second alone, numbered 1 and 2, since the package marks the link lti-link and leaves it out; the test document's own test, which keeps it, is not deliverable with those items",
+    () =>
+      Effect.gen(function* linkedItemRef() {
+        const encoder = new TextEncoder();
+        const refs = ["first", "second"];
+        const manifest = [
+          `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema>`,
+          "<schemaversion>3.0.1</schemaversion></metadata><organizations/><resources>",
+          '<resource identifier="T" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource>',
+          ...refs.map(
+            (ref) =>
+              `<resource identifier="I-${ref}" type="imsqti_item_xmlv3p0" href="items/${ref}.xml"><file href="items/${ref}.xml"/></resource>`,
+          ),
+          '<resource identifier="L" type="imslti_xmlv1p1" href="links/lti.xml"><file href="links/lti.xml"/></resource>',
+          "</resources></manifest>",
+        ].join("");
+        const texts: readonly (readonly [path: string, text: string])[] = [
+          [manifestFile, manifest],
+          [
+            "test.xml",
+            testXml("linked", [
+              ["first", "items/first.xml"],
+              ["lti", "links/lti.xml"],
+              ["second", "items/second.xml"],
+            ]),
+          ],
+          ...refs.map(
+            (ref) =>
+              [
+                `items/${ref}.xml`,
+                itemXml(ref, { choices: ["A", "B"], defaultValue: false, shuffle: false }),
+              ] as const,
+          ),
+          [
+            "links/lti.xml",
+            '<cartridge_basiclti_link xmlns="http://www.imsglobal.org/xsd/imslticc_v1p0"/>',
+          ],
+        ];
+        const verdict = yield* openPackage(
+          "packages/linked",
+          new Map(texts.map(([path, text]) => [path, encoder.encode(text)] as const)),
+        );
+        const [found] =
+          verdict.verdict === "accepted-with-unsupported" ? verdict.accepted.tests.values() : [];
+        const delivery = found ?? assert.fail(`the package is ${verdict.verdict}`);
+        const alone = Option.getOrUndefined(
+          verdict.resources.find((resource) => resource.identifier === "T")?.verdict ??
+            Option.none(),
+        );
+        const unmarkedTest =
+          alone?.kind === "test" &&
+          (alone.verdict === "accepted" || alone.verdict === "accepted-with-unsupported")
+            ? alone.accepted
+            : assert.fail("the test document's own verdict accepts it");
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration);
+        const unmarked = startTest(unmarkedTest, delivery.items, configuration, {
+          instance,
+          now: startedAt,
+        });
+
+        assert.deepStrictEqual([...delivery.items.keys()], refs);
+        assert.deepStrictEqual(
+          session.items.map((item) => [item.ref, item.sequenceIndex]),
+          [
+            ["first", 1],
+            ["second", 2],
+          ],
+        );
+        assert.deepStrictEqual(
+          [
+            failureTagged(unmarked, "TestNotDeliverable").reason,
+            failureTagged(unmarked, "TestNotDeliverable").ref,
+          ],
+          ["item-missing", "lti"],
         );
       }),
   );
@@ -848,6 +1015,43 @@ describe("startTest", () => {
         );
         assert.deepStrictEqual(throughHost(delivery.test, seeded), seeded);
         assert.deepStrictEqual(throughHost(delivery.test, unseeded), unseeded);
+      }),
+  );
+
+  it.effect(
+    "align-54 empty section D1: delivers a test whose part holds a rubric-only section beside an item section, numbering the item section's one item and presenting it",
+    () =>
+      Effect.gen(function* rubricOnlySection() {
+        const encoder = new TextEncoder();
+        const test = yield* openTest(
+          "tests/rubric.xml",
+          encoder.encode(
+            [
+              '<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="rubric" title="rubric">',
+              '<qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">',
+              '<qti-assessment-section identifier="instructions" title="Instructions" visible="true">',
+              '<qti-rubric-block view="candidate"><qti-content-body><p>Read each question.</p></qti-content-body></qti-rubric-block>',
+              '</qti-assessment-section><qti-assessment-section identifier="questions" title="Questions" visible="true">',
+              '<qti-assessment-item-ref identifier="first" href="first.xml"/>',
+              "</qti-assessment-section></qti-test-part></qti-assessment-test>",
+            ].join(""),
+          ),
+        );
+        const item = yield* openItem(
+          "tests/first.xml",
+          encoder.encode(
+            itemXml("first", { choices: ["A", "B"], defaultValue: false, shuffle: false }),
+          ),
+        );
+        const session = started({ items: new Map([["first", item]]), test }, yield* configure({}));
+
+        assert.deepStrictEqual(
+          session.items.map((entry) => [entry.sequenceIndex, entry.ref, entry.presented]),
+          [[1, "first", true]],
+        );
+        assert.deepStrictEqual(session.parts, [{ identifier: "part", status: "current" }]);
+        assert.strictEqual(session.status, "interacting");
+        assert.deepStrictEqual(throughHost(test, session), session);
       }),
   );
 });
@@ -2399,6 +2603,121 @@ const closedOutcomes = Effect.fnUntraced(function* closedOutcomes(delivery: Deli
   return closed.outcomes;
 });
 
+/**
+ * What a hand-built package of the numbered reading cases below holds: its test's text, each item
+ * beside the test as its file name and its text, and, when the test references one, a section
+ * document's text at `package/section.xml`.
+ */
+interface NumberedPackage {
+  readonly items: readonly (readonly [file: string, text: string])[];
+  readonly section?: string;
+  readonly test: string;
+}
+
+/**
+ * Open, as one package, a hand-built test at `package/test.xml`, its items beside it, and the
+ * section document it references, when it references one.
+ *
+ * @param contents What the package holds.
+ * @returns The package's verdict.
+ */
+const numberedVerdict = ({ items, section, test }: NumberedPackage) => {
+  const encoder = new TextEncoder();
+  const files: readonly (readonly [path: string, type: string, text: string])[] = [
+    ["package/test.xml", "imsqti_test_xmlv3p0", test],
+    ...(section === undefined
+      ? []
+      : [["package/section.xml", "imsqti_section_xmlv3p0", section] as const]),
+    ...items.map(([file, text]) => [`package/${file}`, "imsqti_item_xmlv3p0", text] as const),
+  ];
+  const manifest = [
+    `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema>`,
+    "<schemaversion>3.0.0</schemaversion></metadata><organizations/><resources>",
+    ...files.map(
+      ([path, type], index) =>
+        `<resource identifier="R${String(index)}" type="${type}" href="${path}"><file href="${path}"/></resource>`,
+    ),
+    "</resources></manifest>",
+  ].join("");
+
+  return openPackage(
+    "packages/numbered",
+    new Map([
+      [manifestFile, encoder.encode(manifest)],
+      ...files.map(([path, , text]) => [path, encoder.encode(text)] as const),
+    ]),
+  );
+};
+
+/**
+ * Write the text of a hand-built item of the numbered reading cases below: the single float outcome
+ * `SCORE`, which declares a default, the declarations given after it, and a passage.
+ *
+ * @param identifier The item's identifier.
+ * @param score `SCORE`'s default, as written.
+ * @param declarations Further declarations, none by default.
+ * @returns The item's text.
+ */
+const scoredItemXml = (identifier: string, score: string, declarations = ""): string =>
+  [
+    `<qti-assessment-item xmlns="${qtiNamespace}" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">',
+    `<qti-default-value><qti-value>${score}</qti-value></qti-default-value></qti-outcome-declaration>`,
+    declarations,
+    "<qti-item-body><p>Read this passage.</p></qti-item-body></qti-assessment-item>",
+  ].join("");
+
+/**
+ * Write the text of a hand-built test of the numbered reading cases below: the single float outcome
+ * `TOTAL`, which defaults to 0, then one part `part`, nonlinear unless given, whose one section
+ * `section` holds what is given, then outcome processing of the rules given, when there are any.
+ *
+ * @param body What the section holds, as written.
+ * @param rules The rules of its `qti-outcome-processing`, none when empty.
+ * @param navigation The part's navigation mode, nonlinear by default.
+ * @returns The test's text.
+ */
+const numberedTestXml = (
+  body: string,
+  rules: string,
+  navigation: NavigationMode = "nonlinear",
+): string =>
+  [
+    `<qti-assessment-test xmlns="${qtiNamespace}" identifier="numbered" title="numbered">`,
+    '<qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float">',
+    "<qti-default-value><qti-value>0</qti-value></qti-default-value></qti-outcome-declaration>",
+    `<qti-test-part identifier="part" navigation-mode="${navigation}" submission-mode="individual">`,
+    `<qti-assessment-section identifier="section" title="Section" visible="true">${body}</qti-assessment-section>`,
+    "</qti-test-part>",
+    rules === "" ? "" : `<qti-outcome-processing>${rules}</qti-outcome-processing>`,
+    "</qti-assessment-test>",
+  ].join("");
+
+/**
+ * Write a `qti-assessment-item-ref` holding the children given.
+ *
+ * @param identifier Its identifier.
+ * @param href Its `href`.
+ * @param children Its children's text, none by default.
+ * @returns The element's text.
+ */
+const refXml = (identifier: string, href: string, children = ""): string =>
+  `<qti-assessment-item-ref identifier="${identifier}" href="${href}">${children}</qti-assessment-item-ref>`;
+
+/**
+ * The rule of the numbered reading cases below: `TOTAL` set to `a.2.SCORE`.
+ */
+const totalOfA2 = `<qti-set-outcome-value identifier="TOTAL">${read("a.2.SCORE")}</qti-set-outcome-value>`;
+
+/**
+ * The items `i1` and `i2`, whose `SCORE` defaults to 1 and to 7, which the item refs `a` and `a.2`
+ * of the numbered reading cases below name.
+ */
+const scoredItems: readonly (readonly [file: string, text: string])[] = [
+  ["i1.xml", scoredItemXml("i1", "1")],
+  ["i2.xml", scoredItemXml("i2", "7")],
+];
+
 describe("a package whose test reads a built-in's default or an unheld item variable", () => {
   it.effect(
     "[T-9] starts and ends the part of a package whose test sets D from qti-default of duration, with D NULL of a single duration: a built-in declares no default",
@@ -2726,6 +3045,542 @@ describe("a package whose test reads an item's context variable", () => {
 
         assert.deepStrictEqual(session.items[1]?.templateDefaults, Option.none());
         assert.deepStrictEqual([templates["T"], templates["DOUBLED"]], [integer(3n), integer(6n)]);
+      }),
+  );
+});
+
+/**
+ * Open a hand-built package as {@link numberedVerdict} does, start a fresh session of its test, and
+ * end its one part, as a host's `end-part` does, failing the test when the package is not accepted
+ * or either transition fails.
+ *
+ * @param contents What the package holds.
+ * @returns The package's verdict, its test and items, the session as it started, and the session
+ *   once the part ended.
+ */
+const numberedRun = Effect.fnUntraced(function* numberedRun(contents: NumberedPackage) {
+  const verdict = yield* numberedVerdict(contents);
+  const delivery = packagedDelivery(verdict);
+  const configuration = yield* configure({});
+  const session = started(delivery, configuration, "numbered");
+  const closed = Result.getOrElse(
+    advance(
+      delivery.test,
+      delivery.items,
+      session,
+      { intent: { kind: "end-part" } },
+      configuration,
+      { now: after(5000) },
+    ),
+    (failure) => assert.fail(`end-part refused: ${failure._tag}: ${failure.message}`),
+  );
+
+  return { closed, delivery, session, verdict: verdict.verdict };
+});
+
+describe("a package whose test reads a numbered name through an item ref", () => {
+  it.effect(
+    "align-54 r11 numbered reading counted once P1-1: a test with item refs a and a.2 and no selection with replacement sets TOTAL from a.2.SCORE, and end-part gives TOTAL item a.2's SCORE, 7",
+    () =>
+      Effect.gen(function* numberedOutcome() {
+        const { closed, delivery, verdict } = yield* numberedRun({
+          items: scoredItems,
+          test: numberedTestXml(refXml("a", "i1.xml") + refXml("a.2", "i2.xml"), totalOfA2),
+        });
+
+        assert.strictEqual(verdict, "accepted");
+        assert.strictEqual(delivery.test.test.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(closed.outcomes["TOTAL"], float(7));
+      }),
+  );
+
+  it.effect(
+    "align-54 r11 numbered reading counted once P1-1: item ref c's template default of T reads a.2.SCORE, which names item ref a.2's SCORE, so startTest succeeds and c is presented with T 7",
+    () =>
+      Effect.gen(function* numberedDefault() {
+        const { closed, delivery, session } = yield* numberedRun({
+          items: [
+            ...scoredItems,
+            [
+              "i3.xml",
+              scoredItemXml(
+                "i3",
+                "0",
+                '<qti-template-declaration identifier="T" cardinality="single" base-type="float"/>',
+              ),
+            ],
+          ],
+          test: numberedTestXml(
+            refXml("a", "i1.xml") +
+              refXml("a.2", "i2.xml") +
+              refXml("c", "i3.xml", defaultXml("T", read("a.2.SCORE"))),
+            "",
+          ),
+        });
+
+        assert.deepStrictEqual(
+          [...delivery.test.test.unsupported].map((feature) => feature.feature),
+          [],
+        );
+        // T is 7: with no selection with replacement above a, a.2.SCORE has no numbered reading
+        // through a, so it reads item ref a.2's SCORE alone, which a.2's record holds at its
+        // declared default 7 when the part starts and the template default is applied.
+        assert.deepStrictEqual(
+          templatesAt(presentedAt(delivery, session, 3, after(1000)), 3)["T"],
+          float(7),
+        );
+        assert.strictEqual(closed.status, "closed");
+      }),
+  );
+
+  it.effect(
+    "align-54 r11 numbered reading counted once P1-1: a test with its own a and a section document holding a.2 marks its processing that reads a.2.SCORE by name, and end-part leaves TOTAL at its default 0",
+    () =>
+      Effect.gen(function* numberedThroughSection() {
+        const { closed, delivery } = yield* numberedRun({
+          items: scoredItems,
+          section: [
+            `<qti-assessment-section xmlns="${qtiNamespace}" identifier="more" title="More" visible="true">`,
+            refXml("a.2", "i2.xml"),
+            "</qti-assessment-section>",
+          ].join(""),
+          test: numberedTestXml(
+            `${refXml(
+              "a",
+              "i1.xml",
+            )}<qti-assessment-section-ref identifier="referred" href="section.xml"/>`,
+            totalOfA2,
+          ),
+        });
+
+        assert.deepStrictEqual(delivery.test.test.outcomeProcessing, { kind: "marked" });
+        assert.isTrue(
+          delivery.test.test.unsupported.some(
+            (feature) => feature.feature === "variable:a.2.SCORE",
+          ),
+        );
+        assert.deepStrictEqual(closed.outcomes["TOTAL"], float(0));
+      }),
+  );
+
+  it.effect(
+    "align-54 r11 numbered reading counted once P1-1: the control: with a under a selection with replacement beside its own a.2, openPackage refuses a.2.SCORE as ambiguous-reference, through a first and a.2 second",
+    () =>
+      Effect.gen(function* numberedAmbiguous() {
+        const verdict = yield* numberedVerdict({
+          items: scoredItems,
+          test: numberedTestXml(
+            `<qti-selection select="2" with-replacement="true"/>${refXml(
+              "a",
+              "i1.xml",
+            )}${refXml("a.2", "i2.xml")}`,
+            totalOfA2,
+          ),
+        });
+        const ambiguous =
+          verdict.verdict === "refused"
+            ? verdict.refusals.filter((refusal) => refusal.rule === "ambiguous-reference")
+            : [];
+
+        assert.strictEqual(verdict.verdict, "refused");
+        assert.deepStrictEqual(
+          ambiguous.map((refusal) => [
+            refusal.detail["firstPrefix"],
+            refusal.detail["secondPrefix"],
+          ]),
+          [["a", "a.2"]],
+        );
+      }),
+  );
+});
+
+/**
+ * Write the text of the section document of the own-prefix cases below, `package/section.xml`: the
+ * section `more`, which holds one item ref to item `i2`, whose `SCORE` defaults to 7.
+ *
+ * @param identifier The item ref's identifier.
+ * @returns The document's text.
+ */
+const moreSectionXml = (identifier: string): string =>
+  [
+    `<qti-assessment-section xmlns="${qtiNamespace}" identifier="more" title="More" visible="true">`,
+    refXml(identifier, "i2.xml"),
+    "</qti-assessment-section>",
+  ].join("");
+
+/**
+ * The section ref of the own-prefix cases below, which places {@link moreSectionXml}'s section.
+ */
+const moreRefXml = '<qti-assessment-section-ref identifier="referred" href="section.xml"/>';
+
+/**
+ * The cases N1 names: a name read in a test that holds its own item ref `a`, part `part` and
+ * section `section`, and the item ref of the section document that gives the name's one resolving
+ * reading, which the session does not deliver. Through the test's own prefix, each name's rest is
+ * itself dotted, so it names no variable of the test's own items.
+ */
+const ownPrefixCases: readonly (readonly [name: string, sectionRef: string])[] = [
+  ["a.b.SCORE", "a.b"],
+  ["section.x.SCORE", "section.x"],
+  ["part.x.SCORE", "part.x"],
+  ["a.SCORE.SCORE", "a.SCORE"],
+];
+
+/**
+ * The items of the own-prefix cases below: {@link scoredItems}, and `i3`, which declares the float
+ * template variable `T` with no default and whose `SCORE` defaults to 0.
+ */
+const templatedItems: readonly (readonly [file: string, text: string])[] = [
+  ...scoredItems,
+  [
+    "i3.xml",
+    scoredItemXml(
+      "i3",
+      "0",
+      '<qti-template-declaration identifier="T" cardinality="single" base-type="float"/>',
+    ),
+  ],
+];
+
+/**
+ * Report the features a package's test marks, by name.
+ *
+ * @param delivery The test and its items.
+ * @returns The features, in the order the test gives them.
+ */
+const markedFeatures = (delivery: Delivery): readonly string[] =>
+  delivery.test.test.unsupported.map((feature) => feature.feature);
+
+describe("a package whose test reads a dotted name through its own prefix and a section document", () => {
+  it.effect(
+    "align-54 r12 own prefix through a section document N1: outcome processing that sets TOTAL from a.b.SCORE, section.x.SCORE, part.x.SCORE or a.SCORE.SCORE, whose one resolving reading is a section document's item ref, is marked by name, and end-part leaves TOTAL at its default 0",
+    () =>
+      Effect.gen(function* marksOwnPrefixReads() {
+        for (const [name, sectionRef] of ownPrefixCases) {
+          const { closed, delivery, verdict } = yield* numberedRun({
+            items: scoredItems,
+            section: moreSectionXml(sectionRef),
+            test: numberedTestXml(
+              refXml("a", "i1.xml") + moreRefXml,
+              `<qti-set-outcome-value identifier="TOTAL">${read(name)}</qti-set-outcome-value>`,
+            ),
+          });
+
+          assert.strictEqual(verdict, "accepted-with-unsupported", name);
+          assert.deepStrictEqual(delivery.test.test.outcomeProcessing, { kind: "marked" }, name);
+          assert.include(markedFeatures(delivery), `variable:${name}`, name);
+          assert.deepStrictEqual(closed.outcomes["TOTAL"], float(0), name);
+          assert.strictEqual(closed.status, "closed", name);
+        }
+      }),
+  );
+
+  it.effect(
+    "align-54 r12 own prefix through a section document N1: item ref c's template default of T that reads such a name is marked by name and left out, so startTest succeeds on a fresh session, in a nonlinear part, which end-part closes, and in a linear one that presents c first, which next closes",
+    () =>
+      Effect.gen(function* leavesOwnPrefixDefaults() {
+        const configuration = yield* configure({});
+        for (const [name, sectionRef] of ownPrefixCases) {
+          const reading = refXml("c", "i3.xml", defaultXml("T", read(name)));
+          for (const [navigation, body, intents] of [
+            ["nonlinear", refXml("a", "i1.xml") + reading + moreRefXml, ["end-part"]],
+            ["linear", reading + refXml("a", "i1.xml") + moreRefXml, ["next", "next"]],
+          ] as const) {
+            const label = `${name} in a ${navigation} part`;
+            const verdict = yield* numberedVerdict({
+              items: templatedItems,
+              section: moreSectionXml(sectionRef),
+              test: numberedTestXml(body, "", navigation),
+            });
+            const delivery = packagedDelivery(verdict);
+            const session = started(delivery, configuration, "own-prefix");
+            let closed = session;
+            for (const [index, kind] of intents.entries()) {
+              closed = Result.getOrElse(
+                advance(
+                  delivery.test,
+                  delivery.items,
+                  closed,
+                  { intent: { kind } },
+                  configuration,
+                  { now: after(1000 * (index + 1)) },
+                ),
+                (failure) => assert.fail(`${kind} refused: ${failure._tag}: ${failure.message}`),
+              );
+            }
+            const presented = session.items.find((item) => item.ref === "c");
+
+            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", label);
+            assert.include(markedFeatures(delivery), `variable:${name}`, label);
+            assert.deepStrictEqual(presented?.templateDefaults, Option.none(), label);
+            assert.strictEqual(closed.status, "closed", label);
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "align-54 r12 own prefix through a section document N1: the controls: beside a section document, own item refs a and a.b set TOTAL and T from a.b.SCORE, 7; through an a a selection with replacement can repeat, a.2.SCORE runs; with no section document, a.b.SCORE runs as before",
+    () =>
+      Effect.gen(function* keepsOwnReads() {
+        const configuration = yield* configure({});
+        const total = `<qti-set-outcome-value identifier="TOTAL">${read("a.b.SCORE")}</qti-set-outcome-value>`;
+        const ownAB = yield* numberedRun({
+          items: scoredItems,
+          section: moreSectionXml("other"),
+          test: numberedTestXml(
+            refXml("a", "i1.xml") + refXml("a.b", "i2.xml") + moreRefXml,
+            total,
+          ),
+        });
+        const defaulted = packagedDelivery(
+          yield* numberedVerdict({
+            items: templatedItems,
+            section: moreSectionXml("other"),
+            test: numberedTestXml(
+              refXml("a", "i1.xml") +
+                refXml("a.b", "i2.xml") +
+                refXml("c", "i3.xml", defaultXml("T", read("a.b.SCORE"))) +
+                moreRefXml,
+              "",
+            ),
+          }),
+        );
+        const fromDefault = started(defaulted, configuration, "own-prefix");
+        const repeatable = yield* numberedRun({
+          items: scoredItems,
+          section: moreSectionXml("other"),
+          test: numberedTestXml(
+            `<qti-selection select="1" with-replacement="true"/>${refXml("a", "i1.xml")}${moreRefXml}`,
+            totalOfA2,
+          ),
+        });
+        const apart = yield* numberedRun({
+          items: scoredItems,
+          test: numberedTestXml(refXml("a", "i1.xml") + refXml("a.b", "i2.xml"), total),
+        });
+
+        assert.deepStrictEqual(ownAB.delivery.test.test.outcomeProcessing.kind, "runs");
+        assert.notInclude(markedFeatures(ownAB.delivery), "variable:a.b.SCORE");
+        assert.deepStrictEqual(ownAB.closed.outcomes["TOTAL"], float(7));
+        assert.notInclude(markedFeatures(defaulted), "variable:a.b.SCORE");
+        assert.deepStrictEqual(
+          templatesAt(presentedAt(defaulted, fromDefault, 3, after(1000)), 3)["T"],
+          float(7),
+        );
+        assert.deepStrictEqual(repeatable.delivery.test.test.outcomeProcessing.kind, "runs");
+        assert.notInclude(markedFeatures(repeatable.delivery), "variable:a.2.SCORE");
+        assert.strictEqual(repeatable.closed.status, "closed");
+        assert.strictEqual(apart.verdict, "accepted");
+        assert.deepStrictEqual(apart.closed.outcomes["TOTAL"], float(7));
+      }),
+  );
+});
+
+/**
+ * The item `i1` of the counting reading cases below, which declares the single float outcome
+ * `OTHER`, defaulting to 1, and no `SCORE`.
+ */
+const unscoredItemXml = [
+  `<qti-assessment-item xmlns="${qtiNamespace}" identifier="i1" title="i1" adaptive="false" time-dependent="false">`,
+  '<qti-outcome-declaration identifier="OTHER" cardinality="single" base-type="float">',
+  "<qti-default-value><qti-value>1</qti-value></qti-default-value></qti-outcome-declaration>",
+  "<qti-item-body><p>Read this passage.</p></qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
+ * One case N1's residual names: a name the test reads whose reading through the test's own item
+ * ref counts in the test document alone, though that ref's item, {@link unscoredItemXml}, declares
+ * no `SCORE`, so the name's one counting reading is the section document's item ref, which names
+ * `i2`, which the session does not deliver.
+ */
+interface CountingCase {
+  /**
+   * What `i2` declares after its `SCORE`, as written.
+   */
+  readonly declarations: string;
+  /**
+   * The name read.
+   */
+  readonly name: string;
+  /**
+   * The test's own item ref, as written, which names `i1`.
+   */
+  readonly own: string;
+  /**
+   * The identifier of the section document's item ref.
+   */
+  readonly placed: string;
+}
+
+/**
+ * R1, `a.2.SCORE` beside an own `a` a selection with replacement can repeat and a section
+ * document's `a.2`, and R2, `x.y.SCORE` beside an own `x.y` and a section document's `x`, whose
+ * item declares `y.SCORE`.
+ */
+const countingCases: readonly CountingCase[] = [
+  {
+    declarations: "",
+    name: "a.2.SCORE",
+    own: [
+      '<qti-assessment-section identifier="drawn" title="Drawn" visible="true">',
+      '<qti-selection select="1" with-replacement="true"/>',
+      refXml("a", "i1.xml"),
+      "</qti-assessment-section>",
+    ].join(""),
+    placed: "a.2",
+  },
+  {
+    declarations: [
+      '<qti-outcome-declaration identifier="y.SCORE" cardinality="single" base-type="float">',
+      "<qti-default-value><qti-value>7</qti-value></qti-default-value></qti-outcome-declaration>",
+    ].join(""),
+    name: "x.y.SCORE",
+    own: refXml("x.y", "i1.xml"),
+    placed: "x",
+  },
+];
+
+/**
+ * The items of a counting reading case: `i1`, {@link unscoredItemXml}; `i2`, whose `SCORE`
+ * defaults to 7, with the case's further declarations; and `i3`, which declares the float template
+ * variable `T` with no default.
+ *
+ * @param declarations What `i2` declares after its `SCORE`, as written.
+ * @returns The items, each its file name and its text.
+ */
+const countingItems = (
+  declarations: string,
+): readonly (readonly [file: string, text: string])[] => [
+  ["i1.xml", unscoredItemXml],
+  ["i2.xml", scoredItemXml("i2", "7", declarations)],
+  [
+    "i3.xml",
+    scoredItemXml(
+      "i3",
+      "0",
+      '<qti-template-declaration identifier="T" cardinality="single" base-type="float"/>',
+    ),
+  ],
+];
+
+describe("a package whose test reads a name whose one counting reading is a section document's", () => {
+  it.effect(
+    "align-54 r12 counting reading in a section document N1: outcome processing that sets TOTAL from a.2.SCORE beside an own repeatable a whose item declares no SCORE, or from x.y.SCORE beside an own x.y whose item declares no SCORE, read through a section document's a.2 or x alone, is marked by name, and end-part leaves TOTAL at its default 0",
+    () =>
+      Effect.gen(function* marksCountingReads() {
+        for (const { declarations, name, own, placed } of countingCases) {
+          const { closed, delivery, verdict } = yield* numberedRun({
+            items: countingItems(declarations),
+            section: moreSectionXml(placed),
+            test: numberedTestXml(
+              own + moreRefXml,
+              `<qti-set-outcome-value identifier="TOTAL">${read(name)}</qti-set-outcome-value>`,
+            ),
+          });
+
+          assert.strictEqual(verdict, "accepted-with-unsupported", name);
+          assert.deepStrictEqual(delivery.test.test.outcomeProcessing, { kind: "marked" }, name);
+          assert.include(markedFeatures(delivery), `variable:${name}`, name);
+          assert.deepStrictEqual(closed.outcomes["TOTAL"], float(0), name);
+          assert.strictEqual(closed.status, "closed", name);
+        }
+      }),
+  );
+
+  it.effect(
+    "align-54 r12 counting reading in a section document N1: item ref c's template default of T that reads such a name is marked by name and left out, so startTest succeeds on a fresh session, in a nonlinear part, which end-part closes, and in a linear one that presents c first, which next closes",
+    () =>
+      Effect.gen(function* leavesCountingDefaults() {
+        const configuration = yield* configure({});
+        for (const { declarations, name, own, placed } of countingCases) {
+          const reading = refXml("c", "i3.xml", defaultXml("T", read(name)));
+          for (const [navigation, body, intents] of [
+            ["nonlinear", own + reading + moreRefXml, ["end-part"]],
+            ["linear", reading + own + moreRefXml, ["next", "next"]],
+          ] as const) {
+            const label = `${name} in a ${navigation} part`;
+            const verdict = yield* numberedVerdict({
+              items: countingItems(declarations),
+              section: moreSectionXml(placed),
+              test: numberedTestXml(body, "", navigation),
+            });
+            const delivery = packagedDelivery(verdict);
+            const session = started(delivery, configuration, "counting");
+            let closed = session;
+            for (const [index, kind] of intents.entries()) {
+              closed = Result.getOrElse(
+                advance(
+                  delivery.test,
+                  delivery.items,
+                  closed,
+                  { intent: { kind } },
+                  configuration,
+                  { now: after(1000 * (index + 1)) },
+                ),
+                (failure) => assert.fail(`${kind} refused: ${failure._tag}: ${failure.message}`),
+              );
+            }
+            const presented = session.items.find((item) => item.ref === "c");
+
+            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", label);
+            assert.include(markedFeatures(delivery), `variable:${name}`, label);
+            assert.deepStrictEqual(presented?.templateDefaults, Option.none(), label);
+            assert.strictEqual(closed.status, "closed", label);
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "align-54 r12 counting reading in a section document N1: the controls: beside a section document, own item refs a and a.b set TOTAL and T from a.b.SCORE, 7, and through an own a a selection with replacement can repeat, whose item declares SCORE, a.2.SCORE runs unmarked",
+    () =>
+      Effect.gen(function* keepsOwnCountingReads() {
+        const configuration = yield* configure({});
+        const ownAB = yield* numberedRun({
+          items: scoredItems,
+          section: moreSectionXml("other"),
+          test: numberedTestXml(
+            refXml("a", "i1.xml") + refXml("a.b", "i2.xml") + moreRefXml,
+            `<qti-set-outcome-value identifier="TOTAL">${read("a.b.SCORE")}</qti-set-outcome-value>`,
+          ),
+        });
+        const defaulted = packagedDelivery(
+          yield* numberedVerdict({
+            items: templatedItems,
+            section: moreSectionXml("other"),
+            test: numberedTestXml(
+              refXml("a", "i1.xml") +
+                refXml("a.b", "i2.xml") +
+                refXml("c", "i3.xml", defaultXml("T", read("a.b.SCORE"))) +
+                moreRefXml,
+              "",
+            ),
+          }),
+        );
+        const repeatable = yield* numberedRun({
+          items: scoredItems,
+          section: moreSectionXml("other"),
+          test: numberedTestXml(
+            `<qti-selection select="1" with-replacement="true"/>${refXml("a", "i1.xml")}${moreRefXml}`,
+            totalOfA2,
+          ),
+        });
+
+        assert.strictEqual(ownAB.delivery.test.test.outcomeProcessing.kind, "runs");
+        assert.notInclude(markedFeatures(ownAB.delivery), "variable:a.b.SCORE");
+        assert.deepStrictEqual(ownAB.closed.outcomes["TOTAL"], float(7));
+        assert.notInclude(markedFeatures(defaulted), "variable:a.b.SCORE");
+        assert.deepStrictEqual(
+          templatesAt(
+            presentedAt(defaulted, started(defaulted, configuration, "counting"), 3, after(1000)),
+            3,
+          )["T"],
+          float(7),
+        );
+        assert.strictEqual(repeatable.delivery.test.test.outcomeProcessing.kind, "runs");
+        assert.notInclude(markedFeatures(repeatable.delivery), "variable:a.2.SCORE");
+        assert.strictEqual(repeatable.closed.status, "closed");
       }),
   );
 });

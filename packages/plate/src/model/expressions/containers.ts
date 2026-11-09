@@ -7,8 +7,8 @@
  * their operands share; the readers (`qti-container-size`, `qti-index`, `qti-random`) take a
  * container of any base type; and `qti-member`, `qti-delete` and `qti-contains` relate their two
  * operands. A rule that relates its operands judges each against the base type the first operand
- * that says one sets, as the qti package's operand rules do (P23, `operandRules` in
- * `packages/pantry/src/processing/check.ts`). `qti-index`'s `n` and `qti-repeat`'s `number-repeats`
+ * that says one sets, as the qti package's operand rules do (P23, the `One base` law in
+ * `packages/pantry/src/qti/expressions.ts`). `qti-index`'s `n` and `qti-repeat`'s `number-repeats`
  * may name an integer variable, so their rules declare them in their reference facet, and the
  * validator, the walks and the engine check and resolve them from there. `qti-field-value` reads a
  * field of a record, whose `field-identifier` names a field inside the record, never a variable,
@@ -63,8 +63,8 @@ const concrete = (type: ExpressionType): BaseType | undefined =>
   type.baseType === "any" || type.baseType === "unknown" ? undefined : type.baseType;
 
 /**
- * Give the base type operands share, as the qti package joins them (`sharedBase` in
- * `packages/pantry/src/processing/types.ts`): `any` for no operands or only `any` ones, which
+ * Give the base type operands share, as the qti package joins them (the `container` typing in
+ * `packages/pantry/src/grammar/expression.ts`): `any` for no operands or only `any` ones, which
  * yield to the others; one base type when every other operand has it; `unknown` when any operand
  * is unknown or two differ, which the operand rule refuses on its own. So a container beside a
  * `qti-custom-operator`'s value is unknown, which every rule that takes it accepts, and the engine
@@ -288,11 +288,11 @@ const containsRule: KindRule = {
 /**
  * The rule of `qti-field-value`: a single of base type `unknown`, of a record operand. The field's
  * base type is the record's to say, so the rule leaves it unknown, as the qti package types the
- * kind (`resultType` in `packages/pantry/src/processing/types.ts`), and every rule that takes a
- * single accepts it. Its operand is a record, or of a cardinality not known yet, as `qti-null`'s
- * and `qti-custom-operator`'s are; one of any other cardinality is refused (P23), as the qti
- * package's operand rule of the kind refuses it (`operandRules` in
- * `packages/pantry/src/processing/check.ts`).
+ * kind (its typing in `expressionTypings`, `packages/pantry/src/grammar/expression.ts`), and every
+ * rule that takes a single accepts it. Its operand is a record, or of a cardinality not known yet,
+ * as `qti-null`'s and `qti-custom-operator`'s are; one of any other cardinality is refused (P23),
+ * as the qti package's operand rule of the kind refuses it (the `Operand fit` law in
+ * `packages/pantry/src/qti/expressions.ts`).
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpFieldValue
  */

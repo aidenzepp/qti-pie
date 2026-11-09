@@ -1,10 +1,16 @@
+import { readFile } from "node:fs/promises";
+import nodePath from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import type { Array as Arr } from "effect";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
-import { readManifest, resourceLom } from "#plate/package/manifest.ts";
+import { walk } from "#plate/document/source.ts";
+import type { SourceElement } from "#plate/document/source.ts";
+import { lomCaps, readManifest, resourceLom } from "#plate/package/manifest.ts";
 import type { LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
+import { xsdDirectory } from "#plate/test/xsd.ts";
+import type { XsdPath } from "#plate/test/xsd-layout.ts";
 import type { Refusal, RefusalRule } from "#plate/validate/refusal.ts";
 import { manifestNamespace } from "#plate/vocabulary.ts";
 
@@ -83,6 +89,50 @@ const itemXml = (identifier: string, inner = ""): string =>
  */
 const rootXml = (content: string): string =>
   `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata>${content}</manifest>`;
+
+/**
+ * The path of the one resource's own LOM record in a manifest {@link lomItemXml} writes.
+ */
+const resourceLomPath = `${cp}manifest/${cp}resources/${cp}resource/${cp}metadata/${lom}lom`;
+
+/**
+ * Write a 3.0.0 manifest whose one item resource carries one LOM record in its own metadata.
+ *
+ * @param content What the resource's `lom` holds.
+ * @param manifestMetadata What the manifest's own `metadata` holds after `schemaversion`.
+ * @returns The manifest's text.
+ */
+const lomItemXml = (content: string, manifestMetadata = ""): string =>
+  manifestXml(
+    "3.0.0",
+    `<resource identifier="a" type="imsqti_item_xmlv3p0" href="items/a.xml"><metadata><lom:lom>${content}</lom:lom></metadata><file href="items/a.xml"/></resource>`,
+    manifestMetadata,
+  );
+
+/**
+ * Write a LOM learning resource type.
+ *
+ * @param terms The `source` and `value` it holds.
+ * @returns The type's text.
+ */
+const typeXml = (terms: string): string =>
+  `<lom:learningResourceType>${terms}</lom:learningResourceType>`;
+
+/**
+ * Read an attribute in no namespace that an element must carry; the test fails when it has none.
+ *
+ * @param element The element.
+ * @param local The attribute's local name.
+ * @returns Its value.
+ */
+const attributeValue = (element: SourceElement, local: string): string => {
+  const found = element.attributes.find(
+    (candidate) => candidate.namespace === "" && candidate.local === local,
+  );
+  assert.isDefined(found, `${element.local} has ${local}`);
+
+  return found.value;
+};
 
 /**
  * Take the manifest of a reading; the test fails when it is refused.
@@ -558,38 +608,138 @@ describe("package/manifest.ts", () => {
         }),
     );
 
-    it.effect("an href that leaves the package's root is refused package-path-outside", () =>
-      Effect.gen(function* outside() {
-        const refusals = refusalsOf(
-          yield* readXml(
-            manifestXml(
-              "3.0.0",
-              [
-                '<resource identifier="up" type="webcontent" href="../a.xml"><file href="../a.xml"/></resource>',
-                '<resource identifier="rooted" type="webcontent"><file href="/b.xml"/><file href="items/../../c.xml"/></resource>',
-              ].join(""),
+    it.effect(
+      "align-54 hrefs and keys E17: an href and an xml:base are collapsed before they resolve, so a padded href names its file (p102pad)",
+      () =>
+        Effect.gen(function* padded() {
+          const manifest = manifestOf(
+            yield* readXml(
+              manifestXml(
+                "3.0.0",
+                [
+                  '<resource identifier="choice" type="imsqti_item_xmlv3p0" href=" items/choice.xml "><file href=" items/choice.xml "/><file href="&#9;images/sign.png&#10;"/></resource>',
+                  '<resource identifier="based" type="webcontent" xml:base=" shared/ " href="a  b.html"><file href=" a b.html"/></resource>',
+                ].join(""),
+              ),
             ),
-          ),
-        );
+          );
 
-        assert.deepStrictEqual(
-          refusals.map((refusal) => [refusal.rule, refusal.detail["path"]]),
-          [
-            ["package-path-outside", "../a.xml"],
-            ["package-path-outside", "../a.xml"],
-            ["package-path-outside", "/b.xml"],
-            ["package-path-outside", "items/../../c.xml"],
-          ],
-        );
-        assert.strictEqual(
-          pathOf(refusals[0]),
-          `${cp}manifest/${cp}resources/${cp}resource[1]/@href`,
-        );
-        assert.strictEqual(
-          pathOf(refusals[1]),
-          `${cp}manifest/${cp}resources/${cp}resource[1]/${cp}file/@href`,
-        );
-      }),
+          assert.deepStrictEqual(resourceOf(manifest, "choice").files, [
+            { href: " items/choice.xml ", path: Option.some("items/choice.xml") },
+            { href: "\timages/sign.png\n", path: Option.some("images/sign.png") },
+          ]);
+          assert.deepStrictEqual(
+            resourceOf(manifest, "based").href.pipe(Option.flatMap((href) => href.path)),
+            Option.some("shared/a b.html"),
+          );
+        }),
+    );
+
+    it.effect(
+      "align-54 hrefs and keys E17: a rooted or climbing file href, a non-document resource's and one under an xml:base that climbs out are external links, admitted with no path (p102root, p102climb)",
+      () =>
+        Effect.gen(function* external() {
+          const manifest = manifestOf(
+            yield* readXml(
+              manifestXml(
+                "3.0.0",
+                [
+                  '<resource identifier="choice" type="imsqti_item_xmlv3p0" href="items/choice.xml"><file href="items/choice.xml"/><file href="/abs.png"/><file href="items/../../outside.png"/></resource>',
+                  '<resource identifier="page" type="webcontent" href="../a.html?mode=1"><file href="../a.html"/></resource>',
+                  '<resource identifier="based" type="webcontent" xml:base="../up/" href="b.html"><file href="b.html"/></resource>',
+                ].join(""),
+              ),
+            ),
+          );
+
+          assert.deepStrictEqual(resourceOf(manifest, "choice").files, [
+            { href: "items/choice.xml", path: Option.some("items/choice.xml") },
+            { href: "/abs.png", path: Option.none() },
+            { href: "items/../../outside.png", path: Option.none() },
+          ]);
+          assert.deepStrictEqual(
+            ["page", "based"].map((identifier) => resourceOf(manifest, identifier).files),
+            [
+              [{ href: "../a.html", path: Option.none() }],
+              [{ href: "b.html", path: Option.none() }],
+            ],
+          );
+
+          const refusals = refusalsOf(
+            yield* readXml(
+              manifestXml(
+                "3.0.0",
+                '<resource identifier="page" type="webcontent" href="/a.html"><file href="/b.html"/></resource>',
+              ),
+            ),
+          );
+          assert.deepStrictEqual(
+            refusals.map((refusal) => [refusal.rule, refusal.detail["child"]]),
+            [["child-count", "file entry that references its href /a.html"]],
+          );
+        }),
+    );
+
+    it.effect(
+      "align-54 hrefs and keys E17: a document resource whose href is absolute, rooted or leads outside is refused package-path-outside, check document-entry (p102docext, p102docroot)",
+      () =>
+        Effect.gen(function* documentEntry() {
+          const refusals = refusalsOf(
+            yield* readXml(
+              manifestXml(
+                "3.0.0",
+                [
+                  itemXml("a"),
+                  '<resource identifier="ext" type="imsqti_item_xmlv3p0" href="http://example.com/x.xml"><file href="http://example.com/x.xml"/></resource>',
+                  '<resource identifier="rooted" type="imsqti_test_xmlv3p0" href="/x.xml"><file href="/x.xml"/></resource>',
+                  '<resource identifier="up" type="resourcemetadata/xml" href="../x.xml"><file href="../x.xml"/></resource>',
+                  '<resource identifier="based" type="imsqti_stimulus_xmlv3p0" xml:base="../" href="x.xml"><file href="x.xml"/></resource>',
+                ].join(""),
+              ),
+            ),
+          );
+
+          assert.deepStrictEqual(
+            refusals.map((refusal) => [refusal.rule, refusal.detail, pathOf(refusal)]),
+            (
+              [
+                ["http://example.com/x.xml", 2],
+                ["/x.xml", 3],
+                ["../x.xml", 4],
+                ["x.xml", 5],
+              ] as const
+            ).map(([href, index]) => [
+              "package-path-outside",
+              { check: "document-entry", path: href, reading: "102" },
+              `${cp}manifest/${cp}resources/${cp}resource[${index}]/@href`,
+            ]),
+          );
+        }),
+    );
+
+    it.effect(
+      "align-54 hrefs and keys E17: a decoded / keeps its segment, so a%2Fb.xml names the file a%2Fb.xml, never b.xml in a directory a",
+      () =>
+        Effect.gen(function* escapedSlash() {
+          const manifest = manifestOf(
+            yield* readXml(
+              manifestXml(
+                "3.0.0",
+                '<resource identifier="a" type="webcontent" href="items/a%2Fb.html"><file href="items/a%2Fb.html"/><file href="items/a%2fb%20c.html"/><file href="items/x%2Fy/../d.html"/><file href="items/a/b.html"/></resource>',
+              ),
+            ),
+          );
+
+          assert.deepStrictEqual(
+            resourceOf(manifest, "a").files.map((file) => file.path),
+            [
+              Option.some("items/a%2Fb.html"),
+              Option.some("items/a%2fb c.html"),
+              Option.some("items/d.html"),
+              Option.some("items/a/b.html"),
+            ],
+          );
+        }),
     );
 
     it.effect("xml:base on the resources and a resource places its files", () =>
@@ -732,7 +882,7 @@ describe("package/manifest.ts", () => {
 
   describe("resourceLom", () => {
     it.effect(
-      "gives each resource the identifier entries and title strings of its own LOM's general, as written, with where the first of each is (reading 62)",
+      "gives each resource the identifier entries, title strings and languages of its own LOM's general, as written, with where the general and the first of each are (reading 62, \"an item's or test's identifier and title are those its package's LOM metadata gives it\")",
       () =>
         Effect.gen(function* ownLom() {
           const general =
@@ -763,10 +913,14 @@ describe("package/manifest.ts", () => {
           assert.deepStrictEqual(lomOf.get(resourceOf(manifest, "a").location), [
             {
               identifier: Option.some<LomValues>({
+                languages: [Option.none(), Option.none()],
                 location: `${generalOf("a")}/${lom}identifier[1]`,
                 values: [" a ", "other"],
               }),
+              languages: [],
+              location: generalOf("a"),
               title: Option.some<LomValues>({
+                languages: [Option.some("en"), Option.some("de")],
                 location: `${generalOf("a")}/${lom}title`,
                 values: ["Item  A", "Aufgabe A"],
               }),
@@ -775,7 +929,10 @@ describe("package/manifest.ts", () => {
           assert.deepStrictEqual(lomOf.get(resourceOf(manifest, "b").location), [
             {
               identifier: Option.none(),
+              languages: [],
+              location: generalOf("b"),
               title: Option.some<LomValues>({
+                languages: [Option.none()],
                 location: `${generalOf("b")}/${lom}title`,
                 values: ["Item B"],
               }),
@@ -785,5 +942,318 @@ describe("package/manifest.ts", () => {
           assert.strictEqual(lomOf.size, 3);
         }),
     );
+    it.effect(
+      "align-54 LOM languages E34: gives each general's languages and each title string's language as written, padding and an empty language kept, every identifier entry with none",
+      () =>
+        Effect.gen(function* lomLanguages() {
+          const general =
+            '<lom:general><lom:identifier><lom:entry>a</lom:entry></lom:identifier><lom:title><lom:string language=" EN-gb ">Item A</lom:string><lom:string language="">Item A</lom:string><lom:string>Item A</lom:string></lom:title><lom:language>en</lom:language><lom:language> de </lom:language><lom:language/></lom:general>';
+          const source = yield* readSource(
+            location,
+            new TextEncoder().encode(
+              manifestXml(
+                "3.0.0",
+                `<resource identifier="a" type="imsqti_item_xmlv3p0" href="items/a.xml"><metadata><lom:lom>${general}</lom:lom></metadata><file href="items/a.xml"/></resource>`,
+              ),
+            ),
+          );
+          const manifest = manifestOf(readManifest(source));
+          const generalPath = `${resourceOf(manifest, "a").location}/${cp}metadata/${lom}lom/${lom}general`;
+          const [read] = resourceLom(source).get(resourceOf(manifest, "a").location) ?? [];
+
+          assert.deepStrictEqual(read?.languages, ["en", " de ", ""]);
+          assert.strictEqual(read?.location, generalPath);
+          assert.deepStrictEqual(
+            read?.identifier.pipe(Option.map((values) => values.languages)),
+            Option.some([Option.none()]),
+          );
+          assert.deepStrictEqual(
+            read?.title.pipe(Option.map((values) => values.languages)),
+            Option.some([Option.some(" EN-gb "), Option.some(""), Option.none()]),
+          );
+        }),
+    );
   });
+
+  describe("LOM vocabulary and caps (readings 122 and 130)", () => {
+    it.effect(
+      "align-54 LOM vocabulary E25: a learningResourceType of exam from the LOM vocabulary is refused lom-learning-resource-type at the type",
+      () =>
+        Effect.gen(function* lomExam() {
+          const refusals = refusalsOf(
+            yield* readXml(
+              lomItemXml(
+                `<lom:educational>${typeXml("<lom:source>LOMv1.0</lom:source><lom:value>exam</lom:value>")}</lom:educational>`,
+              ),
+            ),
+          );
+
+          assert.deepStrictEqual(
+            refusals.map((refusal) => [refusal.rule, pathOf(refusal), refusal.detail]),
+            [
+              [
+                "lom-learning-resource-type",
+                `${resourceLomPath}/${lom}educational/${lom}learningResourceType`,
+                { reading: "122", value: "exam" },
+              ],
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      "align-54 LOM vocabulary E25: self assessment is refused likewise, its source unwritten, empty or LOMv1.0 padded, its value collapsed, in a resource's LOM and the manifest's own",
+      () =>
+        Effect.gen(function* lomSelfAssessment() {
+          const types = [
+            typeXml("<lom:value> self  assessment </lom:value>"),
+            typeXml("<lom:source> </lom:source><lom:value>self assessment</lom:value>"),
+            typeXml("<lom:value>self assessment</lom:value><lom:source> LOMv1.0 </lom:source>"),
+          ].join("");
+          const refusals = refusalsOf(
+            yield* readXml(
+              lomItemXml(
+                `<lom:educational>${types}</lom:educational>`,
+                `<lom:lom><lom:educational>${typeXml("<lom:value>self assessment</lom:value>")}</lom:educational></lom:lom>`,
+              ),
+            ),
+          );
+          const typePath = `${resourceLomPath}/${lom}educational/${lom}learningResourceType`;
+
+          assert.deepStrictEqual(
+            refusals.map((refusal) => [refusal.rule, pathOf(refusal), refusal.detail["value"]]),
+            [
+              [
+                "lom-learning-resource-type",
+                `${cp}manifest/${cp}metadata/${lom}lom/${lom}educational/${lom}learningResourceType`,
+                "self assessment",
+              ],
+              ["lom-learning-resource-type", `${typePath}[1]`, "self assessment"],
+              ["lom-learning-resource-type", `${typePath}[2]`, "self assessment"],
+              ["lom-learning-resource-type", `${typePath}[3]`, "self assessment"],
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      "align-54 LOM vocabulary E25: an exam of another vocabulary's source, a LOM term in another case or spelling, and an interactivity type's exam are accepted",
+      () =>
+        Effect.gen(function* lomOtherVocabulary() {
+          const educational = [
+            typeXml("<lom:source>RDNLTSNType</lom:source><lom:value>exam</lom:value>"),
+            typeXml("<lom:source>LOMv1.0</lom:source><lom:value>Exam</lom:value>"),
+            typeXml("<lom:source>LOMv1.0</lom:source><lom:value>self-assessment</lom:value>"),
+            typeXml("<lom:source>LOMv1.0</lom:source><lom:value>exercise</lom:value>"),
+            "<lom:interactivityType><lom:source>LOMv1.0</lom:source><lom:value>exam</lom:value></lom:interactivityType>",
+          ].join("");
+          const manifest = manifestOf(
+            yield* readXml(lomItemXml(`<lom:educational>${educational}</lom:educational>`)),
+          );
+
+          assert.lengthOf(manifest.resources, 1);
+        }),
+    );
+
+    it.effect(
+      "align-54 LOM vocabulary E33: a LOM element past its cap is refused child-count at the element, and a type with two values is not read for its vocabulary",
+      () =>
+        Effect.gen(function* lomCapped() {
+          const general =
+            "<lom:general><lom:title><lom:string>A</lom:string></lom:title><lom:title><lom:string>B</lom:string></lom:title></lom:general>";
+          const technical =
+            "<lom:technical><lom:duration><lom:duration>PT1M</lom:duration><lom:duration>PT2M</lom:duration></lom:duration></lom:technical>";
+          const educational = `<lom:educational>${typeXml("<lom:value>exam</lom:value><lom:value>exam</lom:value>")}</lom:educational>`;
+          const refusals = refusalsOf(
+            yield* readXml(lomItemXml(`${general}${general}${technical}${educational}`)),
+          );
+          /**
+           * The facts of a refusal of one LOM element's count.
+           *
+           * @param child The child's local name.
+           * @param element The element's local name.
+           * @returns The facts.
+           */
+          const capped = (child: string, element: string) => ({
+            child: `${lom}${child}`,
+            element: `${lom}${element}`,
+            required: "at most one",
+            schemaversion: "3.0.0",
+            source: "reading 130",
+          });
+
+          assert.deepStrictEqual(
+            refusals.map((refusal) => [refusal.rule, pathOf(refusal), refusal.detail]),
+            [
+              ["child-count", resourceLomPath, capped("general", "lom")],
+              ["child-count", `${resourceLomPath}/${lom}general[1]`, capped("title", "general")],
+              ["child-count", `${resourceLomPath}/${lom}general[2]`, capped("title", "general")],
+              [
+                "child-count",
+                `${resourceLomPath}/${lom}technical/${lom}duration`,
+                capped("duration", "duration"),
+              ],
+              [
+                "child-count",
+                `${resourceLomPath}/${lom}educational/${lom}learningResourceType`,
+                capped("value", "learningResourceType"),
+              ],
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      "align-54 LOM vocabulary E33: the caps are the loose LOM binding's Schematron, its 43 rules' 94 asserts each capping one child at one",
+      () =>
+        Effect.gen(function* lomSchematron() {
+          const binding: XsdPath = "lom/imsmd_loose_v1p3p2.xsd";
+          const schematron = "http://purl.oclc.org/dsdl/schematron";
+          const capAssert = /^count\(lom:(?<child>[A-Za-z]+)\) = 0 or count\(lom:\k<child>\) = 1$/u;
+          const directory = yield* xsdDirectory;
+          const xsd = yield* readSource(
+            binding,
+            yield* Effect.tryPromise(() => readFile(nodePath.join(directory, binding))),
+          );
+          /**
+           * Take an element's Schematron children of one local name.
+           *
+           * @param element The element.
+           * @param local The children's local name.
+           * @returns The children, in document order.
+           */
+          const schematronChildren = (element: SourceElement, local: string) =>
+            element.children.filter(
+              (child): child is SourceElement =>
+                child.kind === "element" && child.namespace === schematron && child.local === local,
+            );
+          const rules = Array.from(walk(xsd), (visit) => visit.element).filter(
+            (element) => element.namespace === schematron && element.local === "rule",
+          );
+          const asserted = rules.map((rule) => {
+            const steps = attributeValue(rule, "context").split("/");
+            for (const step of steps) {
+              assert.match(step, /^lom:[A-Za-z]+$/u, "each context step is a LOM element");
+            }
+
+            const children = schematronChildren(rule, "assert").map((check) => {
+              const test = attributeValue(check, "test");
+              const matched = capAssert.exec(test);
+              assert.isNotNull(matched, `${test} caps one child at one`);
+
+              return matched.groups?.["child"] ?? "";
+            });
+
+            return [steps.map((step) => step.slice("lom:".length)).join("/"), children] as const;
+          });
+          const capped = asserted.filter(([, children]) => children.length > 0);
+
+          assert.lengthOf(rules, 43);
+          assert.lengthOf(
+            asserted.flatMap(([, children]) => children),
+            94,
+          );
+          assert.strictEqual(new Set(asserted.map(([context]) => context)).size, 43);
+          assert.deepStrictEqual(
+            asserted.filter(([, children]) => children.length === 0).map(([context]) => context),
+            ["lom/technical/requirement", "lom/relation/resource"],
+          );
+          assert.deepStrictEqual(
+            lomCaps,
+            Object.fromEntries(
+              capped.map(([context, children]) => [
+                context,
+                Object.fromEntries(children.map((child) => [child, 1])),
+              ]),
+            ),
+          );
+        }),
+      { tags: ["qti-xsd"] },
+    );
+
+    it.effect(
+      "align-54 LOM vocabulary E33: the elements the Schematron leaves unbounded repeat freely, in each category that repeats",
+      () =>
+        Effect.gen(function* lomUnbounded() {
+          const general =
+            "<lom:general><lom:identifier><lom:entry>a</lom:entry></lom:identifier><lom:identifier><lom:entry>b</lom:entry></lom:identifier><lom:language>en</lom:language><lom:language>fr</lom:language><lom:keyword><lom:string>x</lom:string></lom:keyword><lom:keyword><lom:string>y</lom:string></lom:keyword></lom:general>";
+          const educational = `<lom:educational>${typeXml("<lom:source>LOMv1.0</lom:source><lom:value>exercise</lom:value>")}${typeXml("<lom:value>questionnaire</lom:value>")}</lom:educational>`;
+          const classification =
+            "<lom:classification><lom:keyword><lom:string>k</lom:string></lom:keyword></lom:classification>";
+          const manifest = manifestOf(
+            yield* readXml(
+              lomItemXml(
+                `${general}${educational}${educational}${classification}${classification}`,
+              ),
+            ),
+          );
+
+          assert.lengthOf(manifest.resources, 1);
+        }),
+    );
+  });
+});
+
+/**
+ * The forms of a `dependency`'s `identifierref` that are no `xs:NCName`, each with the name a
+ * case's title gives it (reading 152 as amended).
+ */
+const namelessRefs = [
+  { form: "1a", name: "1a" },
+  { form: "a b", name: "a b" },
+  { form: "", name: "the empty string" },
+  { form: "   ", name: "whitespace alone" },
+  { form: "٠a", name: "U+0660 a" },
+] as const;
+
+describe("readManifest, align-54 r11 reading 152 names nothing: a dependency's identifierref names a resource as xs:IDREF reads it (reading 152 as amended)", () => {
+  it.effect.each(namelessRefs)(
+    "align-54 r11 reading 152 names nothing decision 457 (2): a dependency whose identifierref is $name names nothing, so it is refused attribute-type alone, not dependency-unresolved",
+    ({ form }) =>
+      Effect.gen(function* namelessDependency() {
+        const refusals = refusalsOf(
+          yield* readXml(
+            manifestXml("3.0.0", itemXml("a", `<dependency identifierref="${form}"/>`)),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          refusals.map((refusal) => [refusal.rule, pathOf(refusal)]),
+          [
+            [
+              "attribute-type",
+              `${cp}manifest/${cp}resources/${cp}resource/${cp}dependency/@identifierref`,
+            ],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "align-54 r11 reading 152 names nothing decision 457 (3): a dependency written ' a ' names the resource a, and one written a names the resource written ' a ', since xs:ID and xs:IDREF collapse their whitespace",
+    () =>
+      Effect.gen(function* paddedDependency() {
+        const paddedRef = manifestOf(
+          yield* readXml(
+            manifestXml(
+              "3.0.0",
+              `${itemXml("a")}${itemXml("c", '<dependency identifierref=" a "/>')}`,
+            ),
+          ),
+        );
+        const paddedResource = manifestOf(
+          yield* readXml(
+            manifestXml(
+              "3.0.0",
+              `<resource identifier=" a " type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/></resource>${itemXml("c", '<dependency identifierref="a"/>')}`,
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          [paddedRef.resources.length, paddedResource.resources.length],
+          [2, 2],
+        );
+      }),
+  );
 });

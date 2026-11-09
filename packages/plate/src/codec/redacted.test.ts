@@ -907,7 +907,6 @@ describe("the verdict and the codec on Extended Text containers", () => {
     ['max-strings="0"', []],
     ['min-strings="101" max-strings="200"', ["min-strings>100"]],
     ['min-strings="1000000000000" max-strings="1000000000000"', ["min-strings>100"]],
-    ['max-strings="5" min-strings="101"', ["min-strings>100"]],
   ] as const;
 
   for (const [counts, unsupported] of documents) {
@@ -926,6 +925,46 @@ describe("the verdict and the codec on Extended Text containers", () => {
         ),
     );
   }
+
+  it.effect(
+    'align-54 counts E2: [Q-5] an ordered Extended Text with max-strings="5" min-strings="101" is refused, count-range count-pair at its max-strings (reading 76)',
+    () =>
+      Effect.gen(function* leastAboveMost() {
+        const verdict = yield* open(
+          "items/text.xml",
+          textItemBytes(
+            '<qti-extended-text-interaction response-identifier="RESPONSE" max-strings="5" min-strings="101"/>',
+            "ordered",
+          ),
+        );
+
+        assert.strictEqual(verdict.verdict, "refused");
+        assert.deepStrictEqual(
+          verdict.verdict === "refused"
+            ? verdict.refusals.map((refusal) => ({
+                detail: refusal.detail,
+                path: refusal.location.kind === "path" ? refusal.location.path : "",
+                rule: refusal.rule,
+              }))
+            : [],
+          [
+            {
+              detail: {
+                check: "count-pair",
+                element: "qti-extended-text-interaction",
+                least: "min-strings",
+                leastValue: "101",
+                most: "max-strings",
+                mostValue: "5",
+                reading: "76",
+              },
+              path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction/@max-strings",
+              rule: "count-range",
+            },
+          ],
+        );
+      }),
+  );
 });
 
 describe("decodeRedacted", () => {
