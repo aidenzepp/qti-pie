@@ -226,8 +226,7 @@ const undeclaredWords: Readonly<Record<StoredVariable, string>> = {
 
 /**
  * The type a record's value of one variable must have: its declaration's base type and
- * cardinality, or, for the built-in `completionStatus`, which no declaration gives, the built-in's
- * (`builtIn`).
+ * cardinality, or, for a built-in, which no declaration gives, the built-in's (`builtIn`).
  */
 interface Expected extends Pick<OutcomeDeclaration, "baseType" | "cardinality"> {
   readonly builtIn: boolean;
@@ -237,6 +236,52 @@ interface Expected extends Pick<OutcomeDeclaration, "baseType" | "cardinality"> 
  * The type of the built-in `completionStatus`, a single identifier, as {@link Expected}.
  */
 const builtInCompletion: Expected = { ...completionStatusType, builtIn: true };
+
+/**
+ * The type of the built-in `numAttempts`, a single integer, as {@link Expected}.
+ */
+const builtInAttempts: Expected = { baseType: "integer", builtIn: true, cardinality: "single" };
+
+/**
+ * Give the type of a built-in whose correct response or default template processing may set, as
+ * {@link Expected}: one of the built-ins given, where the item holds it, declaring no response,
+ * outcome, template variable or record response by its name, so no declaration wins over it.
+ * Template processing sets the correct response of the built-in response `numAttempts` and the
+ * default of it and of the built-in outcome `completionStatus` (reading 111, "a processing
+ * element's `identifier` names a variable of the kind the element reads or sets"; `targetOf` in
+ * `#plate/engine/template.ts`).
+ *
+ * @param item The item.
+ * @param identifier The variable's identifier.
+ * @param named The built-ins the kind of value may name.
+ * @returns The built-in's type, or none when the identifier names none of them the item holds.
+ */
+const builtInSet = (
+  item: Item,
+  identifier: string,
+  named: ReadonlyMap<string, Expected>,
+): Option.Option<Expected> =>
+  item.responses.has(identifier) ||
+  item.outcomes.has(identifier) ||
+  item.templates.has(identifier) ||
+  item.records?.has(identifier) === true
+    ? Option.none()
+    : Option.fromUndefinedOr(named.get(identifier));
+
+/**
+ * The built-ins whose correct response template processing may set: the built-in response
+ * `numAttempts` ({@link builtInSet}).
+ */
+const correctBuiltIns: ReadonlyMap<string, Expected> = new Map([["numAttempts", builtInAttempts]]);
+
+/**
+ * The built-ins whose default template processing may set: the built-in response `numAttempts` and
+ * the built-in outcome `completionStatus` ({@link builtInSet}).
+ */
+const defaultBuiltIns: ReadonlyMap<string, Expected> = new Map([
+  [completionStatus, builtInCompletion],
+  ["numAttempts", builtInAttempts],
+]);
 
 /**
  * Give the type a declaration sets for a record's value of its variable.
@@ -391,9 +436,10 @@ const responseMisfit = (item: Item, record: ItemRecord): Option.Option<string> =
 /**
  * Find the first of the values template processing left in a record that does not fit: each
  * template value one of a template variable the item declares, each correct response one of a
- * response the item scores, and each default one of a response it scores or an outcome it
- * declares, as template processing sets them (`targetOf` in `#plate/engine/template.ts`), each of
- * its declaration's base type and cardinality.
+ * response the item scores or the built-in response `numAttempts`, and each default one of a
+ * response it scores, an outcome it declares or the built-in `numAttempts` or `completionStatus`,
+ * as template processing sets them (`targetOf` in `#plate/engine/template.ts`), each of its
+ * declaration's base type and cardinality, or the built-in's ({@link builtInSet}).
  *
  * A template variable the record lacks is not refused here: the record of an item whose
  * `qti-template-processing` the engine does not run holds none, and `results` and `advance` run
@@ -415,14 +461,21 @@ const templateMisfit = (item: Item, record: ItemRecord): Option.Option<string> =
     Option.orElse(() =>
       firstMisfit(
         "correct response",
-        (identifier) => declared(item.responses.get(identifier)),
+        (identifier) =>
+          Option.orElse(declared(item.responses.get(identifier)), () =>
+            builtInSet(item, identifier, correctBuiltIns),
+          ),
         record.correct,
       ),
     ),
     Option.orElse(() =>
       firstMisfit(
         "default",
-        (identifier) => declared(item.responses.get(identifier) ?? item.outcomes.get(identifier)),
+        (identifier) =>
+          Option.orElse(
+            declared(item.responses.get(identifier) ?? item.outcomes.get(identifier)),
+            () => builtInSet(item, identifier, defaultBuiltIns),
+          ),
         record.defaults,
       ),
     ),
@@ -553,12 +606,13 @@ const outcomeType = (item: Item, identifier: string): Option.Option<Expected> =>
  * or written into a result. It checks what `score` checks on the record it is handed, and the
  * declared outcomes too, which `score` leaves alone because an attempt resets them; every record
  * `begin` or `score` writes fits, since template processing and the engine set only declared
- * variables and the built-in `completionStatus`, each to a value of its type. A declared variable
- * the record lacks is not refused, nor is a record that lacks `completionStatus`, as one written
- * before the item held the built-in does: the attempt starts it at `unknown`. A declared template
- * variable the record of an item whose template processing runs lacks is {@link templatesHeld}'s
- * to refuse, which `restore` runs after this and whose check `score` runs too; `results` and
- * `advance` do not, since they fit the `fresh` record of an item never presented.
+ * variables, the built-in `completionStatus`, and the correct response or default of a built-in
+ * template processing may set, each to a value of its type. A declared variable the record lacks
+ * is not refused, nor is a record that lacks `completionStatus`, as one written before the item
+ * held the built-in does: the attempt starts it at `unknown`. A declared template variable the
+ * record of an item whose template processing runs lacks is {@link templatesHeld}'s to refuse,
+ * which `restore` runs after this and whose check `score` runs too; `results` and `advance` do
+ * not, since they fit the `fresh` record of an item never presented.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.

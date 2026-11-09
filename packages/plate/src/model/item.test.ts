@@ -5372,3 +5372,102 @@ describe("buildItem over the corpus", { tags: ["corpus"] }, () => {
     corpusTimeoutMs,
   );
 });
+
+/**
+ * Construct a rule that names a variable by its `identifier` and holds one expression.
+ *
+ * @param local The rule's local name.
+ * @param identifier The variable it names.
+ * @param expression The expression.
+ * @returns The rule.
+ */
+const naming = (local: string, identifier: string, expression: SourceElement): SourceElement =>
+  el(local, [attr("identifier", identifier)], [expression]);
+
+/**
+ * Construct a `qti-base-value`.
+ *
+ * @param baseType Its `base-type`.
+ * @param value Its text.
+ * @returns The expression.
+ */
+const literal = (baseType: string, value: string): SourceElement =>
+  el("qti-base-value", [attr("base-type", baseType)], [text(value)]);
+
+describe("align-54 built-ins by kind: the engine holds a built-in a rule names by its kind (reading 111)", () => {
+  it.effect(
+    "align-54 built-ins by kind E22a: runs template processing that sets a correct response of numAttempts and a default of numAttempts and of completionStatus, and response processing that reads a qti-correct of numAttempts, with no mark",
+    () =>
+      Effect.gen(function* runsBuiltInTargets() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              el(
+                "qti-response-processing",
+                [],
+                [
+                  naming(
+                    "qti-set-outcome-value",
+                    "N",
+                    el("qti-correct", [attr("identifier", "numAttempts")]),
+                  ),
+                ],
+              ),
+            ],
+            body: [],
+            declarations: [
+              declaration("qti-outcome-declaration", "N", "integer", "single"),
+              el(
+                "qti-template-processing",
+                [],
+                [
+                  naming("qti-set-correct-response", "numAttempts", literal("integer", "7")),
+                  naming("qti-set-default-value", "numAttempts", literal("integer", "5")),
+                  naming(
+                    "qti-set-default-value",
+                    "completionStatus",
+                    literal("identifier", "done"),
+                  ),
+                ],
+              ),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.isTrue(Option.isSome(built.templateProcessing), "the template processing runs");
+        assert.isTrue(Option.isSome(built.processing), "the response processing runs");
+      }),
+  );
+
+  it.effect(
+    "align-54 built-ins by kind E22a: still marks a set of duration, which the engine holds no value of, and a correct response of completionStatus, a built-in outcome",
+    () =>
+      Effect.gen(function* marksUnheldBuiltInTargets() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              el(
+                "qti-template-processing",
+                [],
+                [
+                  naming("qti-set-default-value", "duration", literal("float", "1")),
+                  naming(
+                    "qti-set-correct-response",
+                    "completionStatus",
+                    literal("identifier", "done"),
+                  ),
+                ],
+              ),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.unsupported.map(({ feature }) => feature),
+          ["variable:duration", "variable:completionStatus"],
+        );
+      }),
+  );
+});

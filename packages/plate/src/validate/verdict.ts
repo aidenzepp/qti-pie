@@ -1857,10 +1857,10 @@ const itemRefResponse = `name a response an item declares, through its item ref,
 /**
  * Word an `undeclared-variable` refusal with no `check` whose `expected` is exactly `response`,
  * when no declaration can give its name, so the sentence does not ask for a declaration that would
- * itself be wrong. `qti-map-response`, `qti-map-response-point` and `qti-correct` read a declared
- * response's mapping, area mapping or correct response, so a name that is not one is refused
- * there: by the rules (P8), in an item and in a test, and by `openPackage` for a test's dotted name
- * read through a ref.
+ * itself be wrong. `qti-map-response`, `qti-map-response-point` and `qti-correct` read a response:
+ * a declared one's mapping, area mapping or correct response, or, for `qti-correct`, a built-in
+ * response's (reading 111), so a name that is neither is refused there: by the rules (P8), in an
+ * item and in a test, and by `openPackage` for a test's dotted name read through a ref.
  *
  * - A dotted name a test reads through an item ref, test part or section: "Identifiers containing the
  *   period character are reserved for use in prefixing" (`info.txt:10122`), as reading 48 ("a
@@ -1870,10 +1870,12 @@ const itemRefResponse = `name a response an item declares, through its item ref,
  *   a template variable or a built-in. The fix is a response the item declares, written
  *   `ITEMREF.RESPONSE`.
  * - A built-in ({@link builtInIdentifiers}): no declaration may take its name, so it has no mapping
- *   and no correct response. `numAttempts` and `duration` are "built-in response variables"
- *   (`info.txt:8466`), so the sentence calls each the built-in and never says it is no response. In
- *   an item the fix is a declared response; with `declarer: "test"` it is an item's response read
- *   through its item ref ({@link itemRefResponse}).
+ *   and no declared correct response. The rules refuse here only the built-in outcome
+ *   `completionStatus`; `numAttempts` and `duration` are "built-in response variables"
+ *   (`info.txt:8466`), which a `qti-correct` reads (reading 111), and the sentence calls each the
+ *   built-in and never says it is no response. In an item the fix is a declared response; with
+ *   `declarer: "test"` it is an item's response read through its item ref
+ *   ({@link itemRefResponse}).
  * - Any other name with `declarer: "test"`: a test declares outcomes and context variables, and only
  *   its items declare responses, so the sentence says the test declares none and the fix is an
  *   item's response read through its item ref, never a declaration. A dotted name the test declares
@@ -1933,8 +1935,6 @@ const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<
  * - `reading` (pantry's `prefixed-ref`): a dotted name that resolves to no variable of an item ref,
  *   test part or section, under reading 48 ("a dotted reference is accepted when exactly one
  *   reading names a real item ref, test part or section and its variable").
- * - `built-in-target` (pantry's P9): a rule other than `qti-set-outcome-value` that sets a built-in,
- *   citing the information model's line its `source` names.
  * - `context-variable` (reading 92, E11a): a PCI's `qti-context-variable` names neither a context
  *   variable the item declares nor the built-in `QTI_CONTEXT`.
  * - `numbered` (reading 88, D6): a numbered `reference` such as `Q1.2.SCORE` whose `itemRef` no
@@ -1972,15 +1972,6 @@ const undeclaredVariable = (refusal: Refusal): string => {
         refusal,
         `${subject} names ${identifier}, which resolves to no item ref, test part or section variable${citation(refusal)}.`,
         `name a variable that an item ref, test part or section of the test declares`,
-      );
-    }
-    case "built-in-target": {
-      const setter = code("qti-set-outcome-value");
-
-      return sentence(
-        refusal,
-        `${subject} sets the built-in ${identifier}, which only a ${setter} may set${settled(refusal)}.`,
-        `set ${identifier} with a ${setter}, or name a declared outcome`,
       );
     }
     case "context-variable": {
@@ -2039,7 +2030,10 @@ const undeclaredVariable = (refusal: Refusal): string => {
  * `qti-area-mapping`, the expression needs. The sentence names the response as that item's, and
  * the fix gives it what it lacks in that item; it never asks for the dotted name to be declared,
  * since that item already declares the response. With no `prefix`, the item lacks the
- * declaration, and the fix is to declare it.
+ * declaration, and the fix is to declare it, but for a built-in ({@link builtInIdentifiers}), such
+ * as a `qti-map-response` of `numAttempts`: a built-in stands as a response (reading 111, "a
+ * processing element's `identifier` names a variable of the kind the element reads or sets") and
+ * no declaration may take its name, so it has no mapping, and the fix names a declared response.
  *
  * @param refusal The refusal.
  * @returns The sentence.
@@ -2058,7 +2052,8 @@ const templateRequirements = (refusal: Refusal): string => {
     ),
   ].join(" ");
   const lacking = needs === "" ? "" : ` ${needs}`;
-  const identifier = code(fact(refusal, "identifier", ""));
+  const written = fact(refusal, "identifier", "");
+  const identifier = code(written);
   const needer = Option.match(optionalFact(refusal, "template"), {
     onNone: () =>
       Option.match(optionalFact(refusal, "element"), {
@@ -2070,7 +2065,15 @@ const templateRequirements = (refusal: Refusal): string => {
 
   return Option.match(optionalFact(refusal, "prefix"), {
     onNone: () => {
-      const declared = `${identifier} in a ${code(fact(refusal, "declaration", "declaration"))}${lacking}`;
+      const declaration = `a ${code(fact(refusal, "declaration", "declaration"))}${lacking}`;
+      const declared = `${identifier} in ${declaration}`;
+      if (builtInIdentifiers.has(written)) {
+        return sentence(
+          refusal,
+          `${needer} needs ${declaration}, and names the built-in ${identifier}, which has no declaration.`,
+          `name a response the item declares in ${declaration}`,
+        );
+      }
 
       return sentence(
         refusal,

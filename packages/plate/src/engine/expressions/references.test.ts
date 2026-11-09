@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { begin } from "#plate/begin.ts";
+import { decodeRecord } from "#plate/codec/record.ts";
 import { attr, el, text } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import { evaluateExpression, runRules } from "#plate/engine/evaluate.ts";
@@ -13,6 +15,7 @@ import type { Item, OutcomeDeclaration, ResponseDeclaration } from "#plate/model
 import { outcomeDefaults } from "#plate/model/record.ts";
 import { isNull, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, RecordValue, Value } from "#plate/model/values.ts";
+import { score } from "#plate/score.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import {
   assertKindType,
@@ -25,6 +28,8 @@ import {
   scopeOf,
   setOutcomeElement,
 } from "#plate/test/processing.ts";
+import { open } from "#plate/validate/open.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * Construct a `qti-default-value` of the values written.
@@ -1324,4 +1329,152 @@ describe("the references family's value reads of a record response through its i
       isNull(readInRecordRun({ identifier: "ITEM3.REC", kind: "default", operands: [] })),
     );
   });
+});
+
+/**
+ * `choice`, `ITEM1` under the ref `choice`, whose record holds the correct response 4 and the
+ * default 9 its template processing set for the built-in `numAttempts`.
+ */
+const choiceItem: ScopeItem = {
+  ...firstItem,
+  record: {
+    ...firstItem.record,
+    correct: { numAttempts: integer(4n) },
+    defaults: { numAttempts: integer(9n) },
+  },
+  ref: "choice",
+};
+
+/**
+ * The variables of a test's run over `choice` and `ITEM2`, whose record sets nothing of
+ * `numAttempts`.
+ */
+const choiceRun: Variables = {
+  outcomes: {},
+  responses: {},
+  test: {
+    ...testScope,
+    items: [choiceItem, secondItem],
+    parts: new Map([["P1", ["choice", "ITEM2"]]]),
+  },
+};
+
+/**
+ * Give the value of an expression in {@link choiceRun}, which must succeed.
+ *
+ * @param expression The expression.
+ * @returns Its value.
+ */
+const inChoiceRun = (expression: Expression): Value =>
+  Result.getOrThrow(evaluateExpression(expression, testHolder, choiceRun));
+
+/**
+ * Open a hand-built item document, which `check` must accept with no unsupported feature, start
+ * its first record with `begin` and score one attempt with no response.
+ *
+ * @param children The root's children, as written.
+ * @returns The record `score` returned, decoded.
+ */
+const scoredBuiltIns = Effect.fnUntraced(function* scoredBuiltIns(children: string) {
+  const verdict = yield* open(
+    "items/built-ins.xml",
+    new TextEncoder().encode(
+      `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="builtins" title="Built-ins" adaptive="false" time-dependent="false">${children}</qti-assessment-item>`,
+    ),
+  );
+  assert.strictEqual(
+    verdict.verdict,
+    "accepted",
+    verdict.verdict === "refused"
+      ? JSON.stringify(verdict.refusals.map((each) => [each.rule, each.detail]))
+      : verdict.verdict,
+  );
+
+  const accepted = Option.getOrElse(acceptedItem(verdict), () => assert.fail("not an item"));
+  const started = yield* Effect.fromResult(begin(accepted, { instance: "q1", seed: "7" }));
+
+  return yield* Effect.fromResult(
+    decodeRecord(yield* Effect.fromResult(score(accepted, {}, started))),
+  );
+});
+
+describe("align-54 built-ins by kind: a qti-correct and a qti-default of a built-in read what template processing set (reading 111)", () => {
+  it.effect(
+    "align-54 built-ins by kind E22a: qti-correct of numAttempts reads the correct response template processing set, else NULL of a single integer, no longer a failure",
+    () =>
+      Effect.gen(function* readsBuiltInCorrect() {
+        const item = yield* declared();
+
+        assert.deepStrictEqual(
+          [
+            evaluated(correctOf("numAttempts"), item, {
+              ...changed,
+              correct: { numAttempts: integer(7n) },
+            }),
+            evaluated(correctOf("numAttempts"), item),
+          ],
+          [integer(7n), nullOf("integer", "single")],
+        );
+      }),
+  );
+
+  it.effect(
+    "align-54 built-ins by kind E22a: qti-default of numAttempts and of completionStatus reads the default template processing set, never the built-in's own value",
+    () =>
+      Effect.gen(function* readsBuiltInDefault() {
+        const item = yield* declared();
+        const set: Variables = {
+          ...changed,
+          defaults: { completionStatus: identifier("completed"), numAttempts: integer(5n) },
+          outcomes: { ...changed.outcomes, completionStatus: identifier("incomplete") },
+        };
+
+        assert.deepStrictEqual(
+          [
+            evaluated(defaultOf("numAttempts"), item, set),
+            evaluated(defaultOf("completionStatus"), item, set),
+          ],
+          [integer(5n), identifier("completed")],
+        );
+      }),
+  );
+
+  it("align-54 built-ins by kind E22a: a test's prefixed qti-correct and qti-default of choice.numAttempts read what the item's template processing set, else NULL of a single integer", () => {
+    assert.deepStrictEqual(
+      [
+        inChoiceRun(correctOf("choice.numAttempts")),
+        inChoiceRun(defaultOf("choice.numAttempts")),
+        inChoiceRun(correctOf("ITEM2.numAttempts")),
+        inChoiceRun(correctOf("choice.2.numAttempts")),
+      ],
+      [integer(4n), integer(9n), nullOf("integer", "single"), nullOf("integer", "single")],
+    );
+  });
+
+  it.effect(
+    "align-54 built-ins by kind E22a: begin and score of an accepted item read back the correct response its template processing set for numAttempts, and NULL with none set",
+    () =>
+      Effect.gen(function* readsBackBuiltInCorrect() {
+        const set = yield* scoredBuiltIns(
+          '<qti-outcome-declaration identifier="N" cardinality="single" base-type="integer"/><qti-template-processing><qti-set-correct-response identifier="numAttempts"><qti-base-value base-type="integer">7</qti-base-value></qti-set-correct-response></qti-template-processing><qti-item-body><p>x</p></qti-item-body><qti-response-processing><qti-set-outcome-value identifier="N"><qti-correct identifier="numAttempts"/></qti-set-outcome-value></qti-response-processing>',
+        );
+        const unset = yield* scoredBuiltIns(
+          '<qti-outcome-declaration identifier="B" cardinality="single" base-type="boolean"/><qti-item-body><p>x</p></qti-item-body><qti-response-processing><qti-set-outcome-value identifier="B"><qti-is-null><qti-correct identifier="numAttempts"/></qti-is-null></qti-set-outcome-value></qti-response-processing>',
+        );
+
+        assert.deepStrictEqual(
+          [set.correct, set.outcomes["N"], set.numAttempts, unset.outcomes["B"]],
+          [
+            { numAttempts: integer(7n) },
+            integer(7n),
+            1,
+            {
+              baseType: "boolean",
+              cardinality: "single",
+              values: [{ baseType: "boolean", value: true }],
+            },
+          ],
+        );
+      }),
+  );
 });

@@ -1169,6 +1169,17 @@ const outOfRange = (value: string, bound: "greatest" | "least", written: string)
   rule: "attribute-type" as const,
 });
 
+/**
+ * Construct a template rule that sets a variable, a correct response or a default to an expression.
+ *
+ * @param local The rule's local name.
+ * @param identifier The variable it names, as written.
+ * @param expression The expression.
+ * @returns The rule.
+ */
+const settingRule = (local: string, identifier: string, expression: SourceElement): SourceElement =>
+  el(local, [attr("identifier", identifier)], [expression]);
+
 describe("checkRules", () => {
   describe("undeclared-response", () => {
     it("[I-1] refuses an interaction naming RESP2 when only RESPONSE is declared", () => {
@@ -4101,7 +4112,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-9a] refuses a lookup that targets the built-in completionStatus, which only a qti-set-outcome-value sets, as undeclared-variable (pantry P9, info.txt:8488)", () => {
+    it("[I-9a] align-54 built-ins by kind E22a: accepts a lookup that targets the built-in completionStatus, as it accepts a qti-set-outcome-value of it: each sets an outcome, which the built-in stands as (reading 111)", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -4110,18 +4121,7 @@ describe("checkRules", () => {
             [processing(undefined, [lookup("completionStatus", baseValue("integer", "1"))])],
           ),
         ),
-        [
-          {
-            detail: {
-              check: "built-in-target",
-              element: "qti-lookup-outcome-value",
-              identifier: "completionStatus",
-              source: "info.txt:8488",
-            },
-            path: "qti-assessment-item/qti-response-processing/qti-lookup-outcome-value",
-            rule: "undeclared-variable",
-          },
-        ],
+        [],
       );
       assert.deepStrictEqual(
         judged(
@@ -4136,6 +4136,164 @@ describe("checkRules", () => {
           ),
         ),
         [],
+      );
+    });
+  });
+
+  describe("align-54 built-ins by kind: a built-in is named as the kind of variable it stands as (reading 111)", () => {
+    const responsePath = "qti-assessment-item/qti-response-processing";
+    const templatePath = "qti-assessment-item/qti-template-processing";
+
+    it("align-54 built-ins by kind E22a: accepts a qti-correct of the built-in responses numAttempts and duration", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("B", "boolean")],
+            [],
+            [
+              processing(undefined, [
+                setOutcome("B", nullOf(variable("numAttempts", "qti-correct"))),
+                setOutcome("B", nullOf(variable("duration", "qti-correct"))),
+              ]),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 built-ins by kind E22a: accepts a template qti-set-default-value of completionStatus and of numAttempts, and a qti-set-correct-response of numAttempts", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [
+              templateProcessing(
+                settingRule(
+                  "qti-set-default-value",
+                  "completionStatus",
+                  baseValue("identifier", "completed"),
+                ),
+                settingRule("qti-set-default-value", "numAttempts", baseValue("integer", "1")),
+                settingRule("qti-set-correct-response", "numAttempts", baseValue("integer", "1")),
+              ),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 built-ins by kind E22a: types a built-in a template rule sets as the built-in, refusing a float default of numAttempts as expression-type with the kind response (P20)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [
+              templateProcessing(
+                settingRule("qti-set-default-value", "numAttempts", baseValue("float", "1.5")),
+              ),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              element: "qti-set-default-value",
+              expressionBaseType: "float",
+              expressionCardinality: "single",
+              identifier: "numAttempts",
+              outcomeBaseType: "integer",
+              outcomeCardinality: "single",
+              targetKind: "response",
+            },
+            path: `${templatePath}/qti-set-default-value`,
+            rule: "expression-type",
+          },
+        ],
+      );
+    });
+
+    it("align-54 built-ins by kind E22a: still refuses a qti-map-response of numAttempts and a qti-map-response-point of duration, as template-requirements: a built-in declares no mapping (P27)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [
+              processing(undefined, [
+                setScore(variable("numAttempts", "qti-map-response")),
+                setScore(mapPoint("duration")),
+              ]),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response",
+              identifier: "numAttempts",
+            },
+            path: `${responsePath}/qti-set-outcome-value[1]/qti-map-response`,
+            rule: "template-requirements",
+          },
+          {
+            detail: {
+              baseType: "point",
+              child: "qti-area-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response-point",
+              identifier: "duration",
+            },
+            path: `${responsePath}/qti-set-outcome-value[2]/qti-map-response-point`,
+            rule: "template-requirements",
+          },
+        ],
+      );
+    });
+
+    it("align-54 built-ins by kind E22a: still refuses a qti-set-correct-response of the built-in outcome completionStatus and a qti-set-outcome-value of the built-in response numAttempts, as undeclared-variable", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [
+              templateProcessing(
+                settingRule(
+                  "qti-set-correct-response",
+                  "completionStatus",
+                  baseValue("identifier", "completed"),
+                ),
+              ),
+              processing(undefined, [setOutcome("numAttempts", baseValue("integer", "1"))]),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              element: "qti-set-correct-response",
+              expected: "response",
+              identifier: "completionStatus",
+            },
+            path: `${templatePath}/qti-set-correct-response`,
+            rule: "undeclared-variable",
+          },
+          {
+            detail: {
+              element: "qti-set-outcome-value",
+              expected: "outcome",
+              identifier: "numAttempts",
+            },
+            path: `${responsePath}/qti-set-outcome-value`,
+            rule: "undeclared-variable",
+          },
+        ],
       );
     });
   });
