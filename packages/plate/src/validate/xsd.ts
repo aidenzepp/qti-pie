@@ -35,9 +35,11 @@ export const xsdPath = Config.String("HOME").pipe(
 /**
  * The XML Schema built-in types a table records by name.
  *
- * They are the built-ins the QTI XSD uses, except `ID`, `IDREF` and `IDREFS`, which record as
- * `NCName` and a list of it: the tables check an identifier's spelling only, and whether it names a
- * declared variable is a prose rule.
+ * They are the built-ins the QTI XSD uses but `IDREFS`, which records as a list of `IDREF`. `ID`
+ * and `IDREF` record by their own names, each checked as the `NCName` it restricts, so that
+ * structural validation can keep a document's ID/IDREF table (XML Schema Part 1, section 3.15.5;
+ * readings 101 and 156): which values are IDs, and which name one, follows the type that governs
+ * each attribute (reading 84). Whether an identifier names a declared variable is a prose rule.
  */
 export const builtinNames = [
   "anyType",
@@ -45,6 +47,8 @@ export const builtinNames = [
   "boolean",
   "decimal",
   "double",
+  "ID",
+  "IDREF",
   "int",
   "integer",
   "NCName",
@@ -419,9 +423,7 @@ const anyString = builtinType("string");
  */
 const builtins: ReadonlyMap<string, AttributeType> = new Map([
   ...builtinNames.map((name) => [name, builtinType(name)] as const),
-  ["ID", builtinType("NCName")],
-  ["IDREF", builtinType("NCName")],
-  ["IDREFS", { item: builtinType("NCName"), kind: "list" }],
+  ["IDREFS", { item: builtinType("IDREF"), kind: "list" }],
 ]);
 
 /**

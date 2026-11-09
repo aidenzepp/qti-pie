@@ -46,7 +46,9 @@
  * `n`, the `tolerance` an absolute or relative `qti-equal` must carry, the identifiers the built-in
  * variables keep from every declaration, and the values a `tolerance` holds. The XSD's own order
  * and counts of children are not checked, but for the order of the two content models whose
- * repeated wildcard follows the particles that name their children (reading 96).
+ * repeated wildcard follows the particles that name their children (reading 96). Over QTI's
+ * elements it keeps the document's ID/IDREF table, as XML Schema does (readings 101, 109 and 156),
+ * and refuses a repeated ID and an IDREF that names no ID.
  *
  * @module
  */
@@ -248,9 +250,13 @@ const greatestInt = 2_147_483_647n;
  * built-in's lexical space.
  *
  * An integer kind's range is compared exactly as a `bigint`, never through a `Number`. `anyURI`,
- * `anyType` and the two string types admit any text.
+ * `anyType` and the two string types admit any text. `ID` and `IDREF` keep the lexical space of the
+ * `NCName` they restrict (XML Schema Part 2, section 3.3.8); what an ID's value means beyond its
+ * spelling is the document's ID/IDREF table's ({@link checkIds}).
  */
 const lexicalChecks = {
+  ID: isNcName,
+  IDREF: isNcName,
   NCName: isNcName,
   anyType: () => true,
   anyURI: () => true,
@@ -2310,14 +2316,106 @@ const isExtension = (table: ContentTable, attribute: SourceAttribute): boolean =
       )));
 
 /**
+ * What an attribute's type makes of its value in the document's ID/IDREF table (XML Schema Part 1,
+ * section 3.15.5): an ID, an IDREF, or a list of IDREFs.
+ */
+type IdRole = "id" | "idref" | "idrefs";
+
+/**
+ * Find the role a built-in gives a value in the ID/IDREF table.
+ *
+ * @param name The built-in.
+ * @returns `id` for `ID`, `idref` for `IDREF`, none for any other.
+ */
+const builtinRole = (name: BuiltinName): Option.Option<IdRole> => {
+  if (name === "ID") {
+    return Option.some("id");
+  }
+
+  return name === "IDREF" ? Option.some("idref") : Option.none();
+};
+
+/**
+ * Find the role an attribute's type gives its value in the ID/IDREF table: an atomic type derived
+ * from `ID` or `IDREF`, through any facet, gives its built-in's; a list of an `IDREF` type is
+ * `idrefs`, as `xs:IDREFS` is; a union takes no part.
+ *
+ * @param type The attribute's type, as its declaration gives it.
+ * @returns The role, or none for a type that is neither.
+ */
+const idRoleOf = (type: AttributeType): Option.Option<IdRole> => {
+  switch (type.kind) {
+    case "builtin": {
+      return builtinRole(type.name);
+    }
+    case "enumeration":
+    case "pattern": {
+      return builtinRole(type.base);
+    }
+    case "list": {
+      return Option.flatMap(idRoleOf(type.item), (role) =>
+        role === "idref" ? Option.some<IdRole>("idrefs") : Option.none(),
+      );
+    }
+    case "union": {
+      return Option.none();
+    }
+    default: {
+      return type satisfies never;
+    }
+  }
+};
+
+/**
+ * Report whether a table declares an attribute use of a type derived from `ID`, such as `id` of
+ * `UniqueIdentifierDType`, whether or not the element writes it.
+ *
+ * @param table The table that governs an element.
+ * @returns Whether one of its attribute uses is an ID.
+ */
+const declaresId = (table: ContentTable): boolean =>
+  table.attributes.some(
+    (declaration) =>
+      declaration.use !== "prohibited" &&
+      Option.exists(idRoleOf(declaration.type), (role) => role === "id"),
+  );
+
+/**
+ * Report whether an attribute the governing table does not declare is a wild ID: XML's `xml:id`,
+ * which `xml.xsd` declares of type `xs:ID`, admitted by an attribute wildcard that assesses it, a
+ * `lax` or a `strict` one (XML Schema Part 1, section 3.4.4, clause 5; reading 109). Under `skip`
+ * it is not assessed and is no ID. Only QTI's tables are read for IDs: a manifest's ID and IDREF
+ * typing is not applied ({@link checkIds}).
+ *
+ * @param governed The table that governs the element, with its tables' namespace.
+ * @param attribute The undeclared attribute.
+ * @returns Whether the attribute is a wild ID of the element.
+ */
+const isWildId = (governed: Governed, attribute: SourceAttribute): boolean => {
+  const wildcard = governed.table.anyAttribute;
+
+  return (
+    governed.namespace === qtiNamespace &&
+    attribute.namespace === xmlNamespace &&
+    attribute.local === "id" &&
+    wildcard !== undefined &&
+    wildcard.process !== "skip" &&
+    wildcardAdmits(wildcard, attribute.namespace, governed.namespace)
+  );
+};
+
+/**
  * Check one attribute the element's table does not declare.
  *
  * When the element's attribute wildcard matches its namespace it is allowed, unless a reading
  * refuses its name: then it is `unknown-attribute`, suggesting the name in lower case when that
  * name passes. On an element the Schematron's extension lists cover, the wildcard admits only an
  * extension ({@link isExtension}), and any other attribute it matches is `unknown-attribute`,
- * citing reading 90, as XML's `xml:id` and an attribute in another namespace are. Otherwise it is
- * `unknown-attribute`, with the misspelling table's suggestion when a row matches.
+ * citing reading 90, as XML's `xml:id` and an attribute in another namespace are. A wild ID
+ * ({@link isWildId}) on an element whose governing table declares an ID attribute use is
+ * `unknown-attribute` too, citing reading 109 ("an element whose type has an ID attribute use holds
+ * no wildcard `xml:id`"), even where the element writes no ID. Otherwise it is `unknown-attribute`,
+ * with the misspelling table's suggestion when a row matches.
  *
  * @param source The document.
  * @param element The attribute's element.
@@ -2347,6 +2445,15 @@ const checkUndeclared = (
       refuse(source, "unknown-attribute", attributePath(path, attribute), {
         ...detail,
         reading: "90",
+      }),
+    );
+  }
+
+  if (isWildId(governed, attribute) && declaresId(governed.table)) {
+    return Option.some(
+      refuse(source, "unknown-attribute", attributePath(path, attribute), {
+        ...detail,
+        reading: "109",
       }),
     );
   }
@@ -3708,6 +3815,313 @@ const refuseMistyped = (
 };
 
 /**
+ * The IDREFs a reading sets aside, by element and attribute, each with the reading: the XSD types
+ * them `xs:IDREF`, and the table does not resolve them.
+ *
+ * Reading 15 ("a `variable-identifier-ref` names an outcome declaration, not an `xs:ID`"): an
+ * outcome declaration's `variable-identifier-ref` names an external variable, so its value is read
+ * as the `NCName` it is spelled as, and never as a reference into the table.
+ */
+const idrefsSetAside: readonly { readonly attribute: string; readonly element: string }[] = [
+  { attribute: "variable-identifier-ref", element: "qti-outcome-declaration" },
+];
+
+/**
+ * The declarations whose identifier is one of the document's IDs: a response declaration's, typed
+ * `UniqueIdentifierDType`, an `xs:ID` (reading 14), and a context declaration's, typed `xs:NCName`,
+ * which reading 74 ("an identifier names one variable among the declarations of its document")
+ * makes unique among the document's IDs as the information model calls it a UniqueIdentifier. The
+ * value names the reading a repeat cites.
+ */
+const identifyingDeclarations: ReadonlyMap<string, string> = new Map([
+  ["qti-context-declaration", "74"],
+  ["qti-response-declaration", "14"],
+]);
+
+/**
+ * One attribute value of the document's ID/IDREF table, as the walk found it.
+ */
+interface IdEntry {
+  readonly attribute: SourceAttribute;
+  /**
+   * The reading a repeat cites when the attribute is the `identifier` of one of the root's
+   * {@link identifyingDeclarations}, none otherwise.
+   */
+  readonly declaration: Option.Option<string>;
+  readonly element: SourceElement;
+  readonly path: string;
+  readonly role: IdRole;
+}
+
+/**
+ * Find the role an attribute of an element the walk checks takes in the ID/IDREF table.
+ *
+ * A declared attribute takes its declaration's type's role ({@link idRoleOf}), but for an IDREF a
+ * reading sets aside ({@link idrefsSetAside}); XML's `xml:id` is an ID wherever a table declares
+ * it, since `xml.xsd` types it `xs:ID`; and a context declaration's `identifier` is an ID by
+ * reading 74 ({@link identifyingDeclarations}). An undeclared attribute is an ID only as a wild ID
+ * ({@link isWildId}) that stands: not on an element the Schematron's extension lists cover, where
+ * reading 90 refuses it, and not beside a declared ID attribute use, where reading 109 does.
+ *
+ * @param element The element.
+ * @param governed The table that governs it, with its tables' namespace.
+ * @param covered Whether the extension lists cover the element, by its name's table.
+ * @param attribute The attribute, which is no allowance, `xsi:type` or `xsi:nil`.
+ * @returns The role, or none for an attribute that takes no part.
+ */
+const roleOf = (
+  element: SourceElement,
+  governed: Governed,
+  covered: boolean,
+  attribute: SourceAttribute,
+): Option.Option<IdRole> => {
+  const declaration = governed.table.attributes.find(
+    (candidate) =>
+      candidate.use !== "prohibited" &&
+      candidate.namespace === attribute.namespace &&
+      candidate.local === attribute.local,
+  );
+  if (declaration === undefined) {
+    return isWildId(governed, attribute) && !covered && !declaresId(governed.table)
+      ? Option.some("id")
+      : Option.none();
+  }
+
+  if (attribute.namespace === xmlNamespace && attribute.local === "id") {
+    return Option.some("id");
+  }
+
+  const qti = element.namespace === qtiNamespace && attribute.namespace === "";
+  if (qti && attribute.local === "identifier" && element.local === "qti-context-declaration") {
+    return Option.some("id");
+  }
+
+  const setAside = idrefsSetAside.some(
+    (row) => qti && row.element === element.local && row.attribute === attribute.local,
+  );
+
+  return setAside ? Option.none() : idRoleOf(declaration.type);
+};
+
+/**
+ * Collect the ID/IDREF table's entries from the walk's steps, in document order.
+ *
+ * Only elements QTI's tables govern take part: a manifest's ID and IDREF typing is not applied, a
+ * limit by rule `db2ef322`, since the manifest's own rules already refuse a dependency that names
+ * no resource (`dependency-unresolved`). An attribute a reading withdraws takes no part.
+ *
+ * @param source The document.
+ * @param steps The walk's steps.
+ * @returns Each attribute with a role, with its element and the element's path.
+ */
+const idEntriesOf = (source: SourceDocument, steps: readonly Step[]): readonly IdEntry[] =>
+  steps.flatMap((step): readonly IdEntry[] => {
+    if (step.kind !== "check" || step.governed.namespace !== qtiNamespace) {
+      return [];
+    }
+
+    const { element, parent, path } = step.visit;
+    const covered = step.name.extensionCovered === true;
+    const atRoot = Option.exists(parent, (container) => container === source.root);
+
+    return element.attributes.flatMap((attribute): readonly IdEntry[] => {
+      if (
+        isAllowance(attribute) ||
+        isInstanceAttribute(attribute) ||
+        Option.isSome(withdrawnFrom(element, attribute))
+      ) {
+        return [];
+      }
+
+      const identifying =
+        atRoot && element.namespace === qtiNamespace && attribute.namespace === ""
+          ? Option.fromUndefinedOr(identifyingDeclarations.get(element.local))
+          : Option.none();
+      const declaration = attribute.local === "identifier" ? identifying : Option.none<string>();
+
+      return Option.toArray(
+        Option.map(roleOf(element, step.governed, covered, attribute), (role) => ({
+          attribute,
+          declaration,
+          element,
+          path,
+          role,
+        })),
+      );
+    });
+  });
+
+/**
+ * What the walk does not check that may hold IDs, so that an IDREF it cannot resolve is not refused
+ * for want of them.
+ */
+interface Unwalked {
+  /**
+   * The `id` and `xml:id` values of every element of a MathML or SSML island, collapsed: those
+   * languages type them `xs:ID`, and the walk keeps their elements without checking them.
+   */
+  readonly ids: ReadonlySet<string>;
+  /**
+   * Whether the document holds an XInclude element: an included fragment's IDs are its assembly's
+   * (reading 117, "an included fragment is judged in place"), so an IDREF may name an ID only the
+   * fragment holds.
+   */
+  readonly includes: boolean;
+}
+
+/**
+ * Find what the walk does not check that may hold IDs ({@link Unwalked}).
+ *
+ * @param source The document.
+ * @returns The islands' IDs and whether the document includes a fragment.
+ */
+const unwalkedOf = (source: SourceDocument): Unwalked => {
+  const islands = new Set<SourceElement>();
+  const ids = new Set<string>();
+  let includes = false;
+  for (const { element, parent } of walk(source)) {
+    includes ||= element.namespace === xincludeNamespace;
+    const island =
+      element.namespace === mathmlNamespace ||
+      element.namespace === ssmlNamespace ||
+      Option.exists(parent, (container) => islands.has(container));
+    if (!island) {
+      continue;
+    }
+
+    islands.add(element);
+    for (const attribute of element.attributes) {
+      const named =
+        attribute.local === "id" &&
+        (attribute.namespace === "" || attribute.namespace === xmlNamespace);
+      if (named) {
+        ids.add(collapse(attribute.value));
+      }
+    }
+  }
+
+  return { ids, includes };
+};
+
+/**
+ * Keep the document's ID/IDREF table (XML Schema Part 1, section 3.15.5, and section 3.3.4,
+ * Validation Root Valid (ID/IDREF); readings 101 and 156) and give each element its refusals.
+ *
+ * The table holds every attribute of an element QTI's tables govern whose type, the governing
+ * type's (reading 84), derives from `ID`, and so the response declarations' identifiers (reading
+ * 14); a context declaration's identifier (reading 74); and a wild `xml:id` that stands (reading
+ * 109). Only a value that is an NCName once collapsed is an ID; any other binds nothing and its
+ * value domain alone refuses it (reading 156). Then:
+ *
+ * - An ID a different element already gave is `duplicate-identifier` at the later attribute, its
+ *   detail the `identifier` and the reading that makes the two collide: 14 where a response
+ *   declaration's identifier is one of them (D3b), 74 where a context declaration's is (E1b), and
+ *   101 otherwise (cvc-id clause 2). Two of the root's declarations that share an identifier are
+ *   not refused here: the prose rules refuse them as two declarations of one name (E1a).
+ * - Each value of an IDREF, and each token of a list of IDREFs, that names no ID is `attribute-type`,
+ *   `check: "idref-target"`, at the attribute, its detail the token as the `value` (cvc-id clause
+ *   1, reading 156). One that is no NCName names no ID. An IDREF a reading sets aside is not
+ *   resolved ({@link idrefsSetAside}).
+ *
+ * Its limits, each recorded here: an ID an element's text carries under an `xsi:type` (reading 101)
+ * takes no part, since the walk does not check simply typed text (reading 60), so the table holds
+ * attributes alone, as reading 91 requires a rule a package cannot yet check to be recorded. A
+ * manifest's IDs and IDREFs are not judged ({@link idEntriesOf}). An IDREF is not refused where the
+ * table cannot be complete: in a document that includes a fragment, whose IDs are its assembly's
+ * (reading 117), and where an ID attribute's value holds an unexpanded entity reference; nor where
+ * it names an `id` or `xml:id` of a MathML or SSML island, which the walk keeps unchecked
+ * ({@link unwalkedOf}). An attribute whose value holds an unexpanded entity reference is unknown
+ * and not judged.
+ *
+ * @param source The document.
+ * @param steps The walk's steps.
+ * @returns Each element's ID and IDREF refusals, in the order of its attributes; an element with
+ *   none has no entry.
+ */
+const checkIds = (
+  source: SourceDocument,
+  steps: readonly Step[],
+): ReadonlyMap<SourceElement, readonly Refusal[]> => {
+  const entries = idEntriesOf(source, steps);
+  const unwalked = unwalkedOf(source);
+  const firsts = new Map<string, IdEntry>();
+  const repeats = new Map<IdEntry, Refusal>();
+  let complete = !unwalked.includes;
+  for (const entry of entries) {
+    if (entry.role !== "id") {
+      continue;
+    }
+
+    if (entry.attribute.references.length > 0) {
+      complete = false;
+      continue;
+    }
+
+    const value = collapse(entry.attribute.value);
+    if (!isNcName(value)) {
+      continue;
+    }
+
+    const earlier = firsts.get(value);
+    if (earlier === undefined) {
+      firsts.set(value, entry);
+      continue;
+    }
+
+    const bothDeclared = Option.isSome(earlier.declaration) && Option.isSome(entry.declaration);
+    if (earlier.element === entry.element || bothDeclared) {
+      continue;
+    }
+
+    const reading = Option.getOrElse(
+      Option.orElse(entry.declaration, () => earlier.declaration),
+      () => "101",
+    );
+    repeats.set(
+      entry,
+      refuse(source, "duplicate-identifier", attributePath(entry.path, entry.attribute), {
+        identifier: value,
+        reading,
+      }),
+    );
+  }
+
+  const refusals = new Map<SourceElement, Refusal[]>();
+  for (const entry of entries) {
+    const found: Refusal[] = [];
+    const repeat = repeats.get(entry);
+    if (repeat !== undefined) {
+      found.push(repeat);
+    }
+
+    if (entry.role !== "id" && complete && entry.attribute.references.length === 0) {
+      const lexical = collapse(entry.attribute.value);
+      const tokens =
+        entry.role === "idref" ? [lexical] : lexical.split(" ").filter((token) => token !== "");
+      for (const token of tokens) {
+        if (!firsts.has(token) && !unwalked.ids.has(token)) {
+          found.push(
+            refuse(source, "attribute-type", attributePath(entry.path, entry.attribute), {
+              attribute: attributeName(entry.attribute),
+              check: "idref-target",
+              element: elementName(entry.element),
+              reading: "156",
+              value: token,
+            }),
+          );
+        }
+      }
+    }
+
+    if (found.length > 0) {
+      refusals.set(entry.element, [...(refusals.get(entry.element) ?? []), ...found]);
+    }
+  }
+
+  return refusals;
+};
+
+/**
  * Give each element the structural walk checks with the table that governs it (AD-9).
  *
  * That is the element's name's table, or, after a valid `xsi:type` naming a type of QTI's tables
@@ -3746,7 +4160,10 @@ export const governingTables = (
  * among them. It refuses `unknown-element`, `unknown-attribute`, `missing-attribute`,
  * `attribute-type`, `padded-attribute` and `text-not-allowed`, and the readings'
  * `misplaced-element`, the order after a repeated wildcard among them (reading 96), `child-count`
- * and `count-range`, each at the path of the element or attribute at fault. The readings are QTI's
+ * and `count-range`, each at the path of the element or attribute at fault. Over QTI's elements it
+ * keeps the document's ID/IDREF table ({@link checkIds}): a repeated ID is `duplicate-identifier`,
+ * and an IDREF that names no ID is `attribute-type`, `check: "idref-target"`, after the element's
+ * other refusals. The readings are QTI's
  * and apply to QTI's elements only, but for the rows that read XML's own `xml:lang`, which hold on
  * every element the walk checks (reading 129). Each element is checked by the table
  * {@link governingTables} gives it, except one a simple type governs in lax wildcard content, whose
@@ -3770,6 +4187,7 @@ export const checkStructure = (
   const schemas = schemasOf(tables, others);
   const { governing, parents, steps } = walkTables(source, schemas);
   const misordered = misorderedOf(governing);
+  const identified = checkIds(source, steps);
 
   return steps.flatMap((step): readonly Refusal[] => {
     const { element, parent, path } = step.visit;
@@ -3777,6 +4195,7 @@ export const checkStructure = (
       return [
         ...checkOrder(source, element, path, parent, misordered),
         ...checkElement(source, element, path, step.name, step.governed, parents, schemas),
+        ...(identified.get(element) ?? []),
       ];
     }
 
