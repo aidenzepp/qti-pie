@@ -2154,3 +2154,142 @@ describe("checkTestRules, align-54 Data-SSML everywhere: a data-ssml value is Da
     );
   });
 });
+
+/**
+ * The places a test's and a section's rubric prose rule cases put their content, each with the
+ * path of the content body that holds it: a test's own rubric block, the rubric block of a section
+ * the test holds, a section document's rubric block, and a test feedback.
+ */
+const rubricPlaces = [
+  {
+    path: "qti-assessment-test/qti-rubric-block/qti-content-body",
+    place: "a test's rubric block",
+    source: (content: SourceElement) =>
+      assessmentTest([rubricBlock(content), part("P", [section("S", [itemRef("I1")])])]),
+  },
+  {
+    path: `${sectionPath}/qti-rubric-block/qti-content-body`,
+    place: "a section's rubric block in a test",
+    source: (content: SourceElement) => oneSection([rubricBlock(content), itemRef("I1")]),
+  },
+  {
+    path: "qti-assessment-section/qti-rubric-block/qti-content-body",
+    place: "a section document's rubric block",
+    source: (content: SourceElement) => sectionDocument("S", [rubricBlock(content), itemRef("I1")]),
+  },
+  {
+    path: "qti-assessment-test/qti-test-feedback/qti-content-body",
+    place: "a test feedback",
+    source: (content: SourceElement) =>
+      assessmentTest([
+        feedbackOutcome,
+        part("P", [section("S", [itemRef("I1")])]),
+        testFeedback(content),
+      ]),
+  },
+] as const;
+
+/**
+ * The content the rubric prose rule cases put in each of {@link rubricPlaces}, each with the one
+ * refusal it earns there, its path under the content body: a `td` whose `headers` names no header
+ * of its table (reading 126, E29) and a `q` a quotation mark stands against (reading 127, E30).
+ */
+const rubricProse = [
+  {
+    content: el("table", [], [el("tr", [], [el("td", [attr("headers", "zz")], [text("x")])])]),
+    name: "E29",
+    refusal: {
+      detail: {
+        attribute: "headers",
+        check: "headers",
+        element: "td",
+        reading: "126",
+        token: "zz",
+        value: "zz",
+      },
+      path: "table/tr/td/@headers",
+      rule: "attribute-type",
+    },
+  },
+  {
+    content: el("p", [], [text("“"), el("q", [], [text("hi")]), text("”")]),
+    name: "E30",
+    refusal: {
+      detail: { check: "quotation", element: "q", mark: "“", reading: "127", side: "before" },
+      path: "p/q",
+      rule: "text-not-allowed",
+    },
+  },
+] as const;
+
+describe("checkTestRules, align-54 r11 rubric prose rules: a test's and a section's rubric blocks and test feedback judge table headers and quotations as an item's body does (readings 126 and 127)", () => {
+  it.each(
+    rubricPlaces.flatMap(({ path, place, source }) =>
+      rubricProse.map(({ content, name, refusal }) => ({
+        expected: { ...refusal, path: `${path}/${refusal.path}` },
+        name,
+        place,
+        source: source(content),
+      })),
+    ),
+  )(
+    "align-54 r11 rubric prose rules $name: refuses the fault in $place, with the refusal an item's body earns",
+    ({ expected, source }) => {
+      assert.deepStrictEqual(judged(source), [expected]);
+    },
+  );
+
+  it("align-54 r11 rubric prose rules E29: accepts a cell naming a header of its own table and a q clear of quotation marks in each place (control)", () => {
+    const content = el(
+      "div",
+      [],
+      [
+        el(
+          "table",
+          [],
+          [
+            el("tr", [], [el("th", [attr("id", "h")], [text("Head")])]),
+            el("tr", [], [el("td", [attr("headers", "h")], [text("x")])]),
+          ],
+        ),
+        el("p", [], [text("She said "), el("q", [], [text("hi")]), text(".")]),
+      ],
+    );
+
+    assert.deepStrictEqual(
+      rubricPlaces.map(({ source }) => judged(source(content))),
+      rubricPlaces.map(() => []),
+    );
+  });
+
+  it("align-54 r11 rubric prose rules E30: a rubric block's choice interaction with two choices both A stays misplaced-element alone (reading 25; control)", () => {
+    assert.deepStrictEqual(
+      judged(
+        oneSection([
+          rubricBlock(
+            el(
+              "qti-choice-interaction",
+              [attr("response-identifier", "RESPONSE")],
+              [
+                el("qti-simple-choice", [attr("identifier", "A")], [text("Yes")]),
+                el("qti-simple-choice", [attr("identifier", "A")], [text("No")]),
+              ],
+            ),
+          ),
+          itemRef("I1"),
+        ]),
+      ),
+      [
+        {
+          detail: {
+            element: "qti-choice-interaction",
+            reading: "25",
+            requires: "outside a test's qti-rubric-block",
+          },
+          path: `${sectionPath}/qti-rubric-block/qti-content-body/qti-choice-interaction`,
+          rule: "misplaced-element",
+        },
+      ],
+    );
+  });
+});
