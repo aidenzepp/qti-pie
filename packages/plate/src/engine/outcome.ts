@@ -274,15 +274,18 @@ const entryOf = (
  * template values, and the correct responses and defaults its template processing set (no seed),
  * whether it was presented, and the attempts it has started under its item ref's limit
  * (`attemptsStarted`, the count the results report writes). The scope holds every part's and every
- * section's item refs at any depth, and the names the test declares: its outcomes' identifiers and
- * every identifier its outcome and context declarations declare (`Test.declared`).
+ * section's item refs at any depth, the names the test declares: its outcomes' identifiers and
+ * every identifier its outcome and context declarations declare (`Test.declared`), and the item
+ * refs a selection with replacement can repeat (`Test.repeatable`), through which alone a numbered
+ * name reads; a test that gives none, as one built by hand may, has none.
  *
  * A session and items that do not fit the test meet three fallbacks: an entry whose `ref` names no
  * item ref of the test has no category, weight or mapping, one whose item the map lacks declares
  * nothing, so a read through it names nothing of the item, and one whose `ref` the limits lack
  * counts its attempts as under no limit.
  *
- * @param test The test: its parts, its outcome declarations, and the identifiers it declares.
+ * @param test The test: its parts, its outcome declarations, the identifiers it declares, and its
+ *   repeatable item refs.
  * @param items The items the host passed, keyed by item ref identifier, as the session's
  *   transitions take them.
  * @param session The session.
@@ -294,15 +297,14 @@ const entryOf = (
  * @returns The scope.
  */
 export const testScopeOf = (
-  test: Pick<Test, "declared" | "outcomes" | "parts">,
+  test: Pick<Test, "declared" | "outcomes" | "parts" | "repeatable">,
   items: ReadonlyMap<string, DeliveredItem>,
   session: Pick<TestSession, "items">,
   limits: ReadonlyMap<string, number>,
   duration: Option.Option<number>,
 ): TestScope => {
   const { parts, refs, sections } = structureOf(test);
-
-  return {
+  const scope: TestScope = {
     declared: new Set([...test.outcomes.keys(), ...(test.declared ?? [])]),
     duration,
     items: session.items.map((sessionItem) =>
@@ -316,4 +318,6 @@ export const testScopeOf = (
     parts,
     sections,
   };
+
+  return test.repeatable === undefined ? scope : { ...scope, repeatable: test.repeatable };
 };

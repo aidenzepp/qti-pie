@@ -500,13 +500,15 @@ const secondItem: ScopeItem = {
 
 /**
  * A test of one part `P1` holding `ITEM1` and `ITEM2`, which declares the outcome `TOTAL` and ran
- * for 90.5 seconds.
+ * for 90.5 seconds. A selection with replacement can repeat `ITEM1`, so a numbered name reads
+ * through it.
  */
 const testScope: TestScope = {
   declared: new Set(["TOTAL"]),
   duration: Option.some(90.5),
   items: [firstItem, secondItem],
   parts: new Map([["P1", ["ITEM1", "ITEM2"]]]),
+  repeatable: new Set(["ITEM1"]),
   sections: new Map(),
 };
 
@@ -739,7 +741,7 @@ const openItem: ScopeItem = {
 
 /**
  * The variables of a test's run over `ITEM3` and `ITEM4`, whose own outcome `ITEM4.LOOSE` is
- * named as a read through an item ref would be.
+ * named as a read through an item ref would be. A selection with replacement can repeat `ITEM3`.
  */
 const recordRun: Variables = {
   outcomes: { "ITEM4.LOOSE": score, TOTAL: score },
@@ -749,6 +751,7 @@ const recordRun: Variables = {
     duration: Option.none(),
     items: [answeredItem, openItem],
     parts: new Map([["P1", ["ITEM3", "ITEM4"]]]),
+    repeatable: new Set(["ITEM3"]),
     sections: new Map(),
   },
 };
