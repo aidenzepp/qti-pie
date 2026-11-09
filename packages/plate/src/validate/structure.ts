@@ -35,7 +35,7 @@
  * `data-*` names, placements, child counts and the range of the count attributes, and beside them
  * the information model's own sentences the XSD does not hold: the floor of a literal `figures` or
  * `n`, the `tolerance` an absolute or relative `qti-equal` must carry, the identifiers the built-in
- * variables keep from every declaration, and the tokens a `tolerance` may hold. The XSD's own order
+ * variables keep from every declaration, and the values a `tolerance` holds. The XSD's own order
  * and counts of children are not checked.
  *
  * @module
@@ -816,39 +816,74 @@ const valuedAs =
     lexical !== "record" || !typedHere(identifier, inTests, element, path);
 
 /**
- * Report whether a collapsed `tolerance` holds only tokens the qti package's `toleranceList`
- * pattern admits (`packages/pantry/src/schema/patterns.ts:401`, refused there as P6): each an
- * `xs:double` or an NCName, one space apart, and the empty list too. The XSD's union of `xs:string`
- * and `xs:double` admits any token, but a token that is not a number names the variable that holds
- * one, and a variable's name is an NCName. The pattern bounds an NCName to 256 characters for the
- * qti package's keys; that bound is its storage's, not the standard's, so no length is compared.
- *
- * @param lexical The `tolerance`, collapsed.
- * @returns Whether every token is a number or a variable's name.
+ * A number in `xs:double`'s lexical space that is above 0 but for `INF`, read off the number as
+ * written (reading 121): no `-` sign and a mantissa digit other than 0. No character of the class
+ * crosses the exponent's `E` or `e`, so the digit is the mantissa's and `0e5` has none, and the
+ * pattern checks in linear time. `NaN` and `-INF` have no such digit.
  */
-const toleranceTokens = (lexical: string): boolean =>
-  lexical === "" ||
-  lexical.split(" ").every((token) => doubleLexical.test(token) || isNcName(token));
+const positiveMantissa = /^\+?[.0-9]*[1-9]/u;
 
 /**
- * A printed variable's `format` as the qti package's `printfFormat` pattern admits it
- * (`packages/pantry/src/schema/patterns.ts:343`, refused there as R38), over the whole attribute:
- * one conversion, a percent sign, flags from `#`, `0`, space, `+` and `-`, a width, a precision,
- * and one of `E e f G g r R i o X x`, with nothing around it.
+ * Report whether a collapsed `tolerance` is what reading 121 ("every `tolerance` is one or two
+ * values, each number among them above 0") reads the information model to allow: "two positive
+ * numbers, t0 and t1 ... If only one value is given it is used for both" (§5.46.2), each value of
+ * its ToleranceList "either strings (must not contain a space) or numbers" (§9.1.5).
  *
- * The precision is a point "followed by zero or more digits" (info.txt:8686), so `%.f` is
- * admitted. R38 requires a digit after the point and refuses `%.f`; the standard does not refuse
- * it, so this pattern admits it, a difference from the qti package that awaits the operator (G-R2,
- * pending). The information model does not address text around the conversion; the pattern
- * refuses it as R38 does, so when the qti package narrows R38 this pattern follows it.
+ * A value in `xs:double`'s lexical space under XML Schema 1.0 is a number; any other value is a
+ * string, which names a variable read at run time and is not judged here, so `1,5` and `+INF`,
+ * which XML Schema 1.0 does not admit as a double, are accepted. A number is positive as written,
+ * by its sign and a mantissa digit other than 0, not by its nearest double: `0`, `-0`, `0e5`, `-1`,
+ * `NaN` and `-INF` are refused, and `INF` and `1e-400` accepted. The count binds in every mode, so
+ * an empty `tolerance` holds no value and is refused, and so are three values. Pantry's "Equal
+ * tolerance" law (`packages/pantry/src/qti/operators.ts`) judges the count and the sign alike.
  *
- * The width cannot start with `0`, so no character can end the flags and start the width: R38's
- * pattern lets both match `0`, and a refused `%`, a run of zeros and a letter that is no code then
- * backtracks over every split of the run, quadratic time on an untrusted attribute (review
- * `079e8c44` P2-13). A `0` after the flags is a flag here, so the pattern admits exactly the
- * strings a width of any digits admits, and checks in linear time.
+ * @param lexical The `tolerance`, collapsed.
+ * @returns Whether it is one or two values, each a number above 0 or a variable's name.
  */
-const printfFormat = /^%[#0 +-]*(?:[1-9][0-9]*)?(?:\.[0-9]*)?[EefGgrRioXx]$/u;
+const toleranceTokens = (lexical: string): boolean => {
+  const values = lexical.split(" ");
+
+  return (
+    lexical !== "" &&
+    values.length <= 2 &&
+    values.every(
+      (value) => !doubleLexical.test(value) || value === "INF" || positiveMantissa.test(value),
+    )
+  );
+};
+
+/**
+ * One piece of a printed variable's `format` that begins with `%`: the escape `%%`, or a conversion
+ * specifier, a `%`, flags from `#`, `0`, space, `+` and `-`, a width, a precision of a point
+ * "followed by zero or more digits" (info.txt:8686), so `%.f` is one, and a conversion code.
+ *
+ * The codes are the information model's, `E e f G g r R i o X x` (reading 132), and `d`: the
+ * operator's ruling on P1 admits `%d`, which prints as `%i`, where readings 132 and 161 refuse it.
+ *
+ * The width cannot start with `0`, so no character can end the flags and start the width. A
+ * pattern whose flags and width both match `0` makes a refused `%`, a run of zeros and a letter
+ * that is no code backtrack over every split of the run, quadratic time on an untrusted attribute
+ * (review `079e8c44` P2-13). A `0` after the flags is a flag here, so the pattern admits exactly
+ * the pieces a width of any digits admits, and each attempt takes time linear in the run it reads.
+ */
+const printfPiece = /%(?:%|[#0 +-]*(?:[1-9][0-9]*)?(?:\.[0-9]*)?[EefGgrRioXxd])/gu;
+
+/**
+ * Report whether a printed variable's `format` is a printf format string, as reading 132 reads the
+ * information model's syntax (§2.3.4) and reading 161 its count: any text but `%`, the escape `%%`,
+ * and conversion specifiers ({@link printfPiece}), any number of them, none included. So `%d`,
+ * `%d %d`, `%i of %i`, `Score: %.1f`, `100%%` and a format of text alone are formats, and `%q`,
+ * `%u` and a trailing `%`, which ends in no code, are not (the operator's B2c).
+ *
+ * Every escape and specifier is removed, left to right; a `%` left over begins neither. Pantry's
+ * `printfFormat` grammar (`packages/pantry/src/grammar/attributes.ts`) is the same over the
+ * information model's codes alone, without `d`.
+ *
+ * @param lexical The `format`, its tabs and line breaks replaced.
+ * @returns Whether every `%` in it begins an escape or a conversion specifier.
+ */
+const printfFormat = (lexical: string): boolean =>
+  !lexical.replaceAll(printfPiece, "").includes("%");
 
 /**
  * Report whether an integer count, already in its XSD type, is at least 1.
@@ -1205,8 +1240,8 @@ const readingRows: readonly ReadingRow[] = [
   },
   // The information model's `qti-equal` (info.txt:24946): "If the tolerance mode is absolute or
   // relative then the tolerance must be specified", as pantry (P36) refuses an absolute or relative
-  // `Equal` with no `EqualTolerance` row. A `tolerance` written empty is specified, as pantry's
-  // `toleranceList` admits it; `tolerance-mode` defaults to `exact`, which needs none.
+  // `Equal` with no `Tolerance` row. A `tolerance` written empty is specified, and holds no value,
+  // which its own row refuses (reading 121); `tolerance-mode` defaults to `exact`, which needs none.
   {
     attribute: "tolerance",
     element: "qti-equal",
@@ -1276,33 +1311,33 @@ const readingRows: readonly ReadingRow[] = [
       },
     ],
   ),
-  // The information model's `tolerance` (info.txt:24946) is two numbers, t0 and t1, or one for
-  // both, and a token that is not a number names the variable that holds one. So each token is an
-  // `xs:double` or an NCName, as pantry's `toleranceList` pattern (P6) admits, where the XSD's
-  // `xs:string` member admits any token, such as `1,5`.
+  // Reading 121: the information model's `tolerance` (info.txt:24946) is two positive numbers, t0
+  // and t1, or one for both, in every mode, and a value that is not a number is a string that names
+  // a variable read at run time, such as `1,5`. The XSD's unbounded list of `xs:string` and
+  // `xs:double` bounds neither the count nor the sign (see toleranceTokens).
   {
     attribute: "tolerance",
     elements: ["qti-equal"],
-    expected: "a list of numbers (xs:double) and variable names (NCName), one space apart",
+    expected: "one or two values, one space apart, each a number above 0 or a variable's name",
     holds: toleranceTokens,
     kind: "narrowed-attribute",
-    settled: { check: "tolerance-token", pantry: "P6", source: "info.txt:24946" },
+    settled: { check: "tolerance-token", reading: "121" },
     whiteSpace: "collapse",
   },
   // The information model's printed variable `format` is "The format conversion specifier"
-  // (info.txt:70323), whose syntax is a C `printf` conversion (info.txt:8686). Pantry's R38 admits
-  // one whole conversion, with codes `E e f G g r R i o X x`, so `%d`, `%u` and `Score: %.1f` are
-  // refused as there. Pantry reads the `xs:normalizedString` with its tabs and line breaks
-  // replaced, not trimmed, so a padded format is refused too. A precision with no digit, `%.f`,
-  // is admitted, as the information model admits it and R38 does not (see printfFormat).
+  // (info.txt:70323), whose syntax is a C `printf` conversion (info.txt:8686). Readings 132 and 161
+  // read it as a printf format string of any number of conversions over the listed codes, and the
+  // operator's ruling on P1 adds `d`, so `%d`, `%i of %i`, `Score: %.1f` and `100%%` are formats,
+  // and `%q`, `%u` and a trailing `%` are not (see printfFormat). The `xs:normalizedString` is
+  // read with its tabs and line breaks replaced, so text around a conversion is any text.
   {
     attribute: "format",
     elements: ["qti-printed-variable"],
     expected:
-      "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
-    holds: (lexical) => printfFormat.test(lexical),
+      "a printf format: any text, %% for a percent sign, and conversions, each a %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the codes E, e, f, G, g, r, R, i, o, X, x and d",
+    holds: printfFormat,
     kind: "narrowed-attribute",
-    settled: { check: "printf-format", pantry: "R38", source: "info.txt:70323" },
+    settled: { check: "printf-format", reading: "132" },
     whiteSpace: "replace",
   },
   // Single cardinality is "a single value" (info.txt:73049, the information model's
