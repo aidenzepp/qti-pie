@@ -1032,6 +1032,143 @@ const badHeaders = (path: string, value: string, token: string) => ({
 const quoting = (before: string, inside: string, after: string): SourceElement =>
   el("p", [], [text(before), el("q", [], [text(inside)]), text(after)]);
 
+/**
+ * Construct a feedback element that shows when an outcome holds `A`.
+ *
+ * @param local The feedback element's local name.
+ * @param outcomeIdentifier Its `outcome-identifier`, as written.
+ * @param children Its children.
+ * @returns The feedback element.
+ */
+const feedback = (
+  local: string,
+  outcomeIdentifier: string,
+  children: readonly SourceChild[] = [text("Well done.")],
+): SourceElement =>
+  el(
+    local,
+    [
+      attr("outcome-identifier", outcomeIdentifier),
+      attr("identifier", "A"),
+      attr("show-hide", "show"),
+    ],
+    children,
+  );
+
+/**
+ * Construct an item that declares the identifier response `RESPONSE`, the float outcome `SCORE`,
+ * the identifier outcome `FEEDBACK` and the identifier template variable `T`, and whose body holds
+ * a feedback block naming an outcome.
+ *
+ * @param outcomeIdentifier The feedback block's `outcome-identifier`, as written.
+ * @returns The item.
+ */
+const feedbackItem = (outcomeIdentifier: string) =>
+  item(
+    [
+      response("RESPONSE", "single", "identifier"),
+      outcome("SCORE"),
+      outcome("FEEDBACK", "identifier"),
+      declaration("qti-template-declaration", "T", "single", "identifier"),
+    ],
+    [feedback("qti-feedback-block", outcomeIdentifier)],
+  );
+
+/**
+ * The refusal of a feedback element whose `outcome-identifier` names no outcome of the item
+ * (reading 77).
+ *
+ * @param element The feedback element's local name.
+ * @param path The `outcome-identifier` attribute's path.
+ * @param identifier The name it gives.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const noOutcome = (element: string, path: string, identifier: string) => ({
+  detail: {
+    attribute: "outcome-identifier",
+    element,
+    expected: "outcome",
+    identifier,
+    reading: "77",
+  },
+  path,
+  rule: "undeclared-variable" as const,
+});
+
+/**
+ * The refusal of a feedback element whose `outcome-identifier` names an outcome that is not a
+ * single or multiple identifier (reading 77).
+ *
+ * @param element The feedback element's local name.
+ * @param path The `outcome-identifier` attribute's path.
+ * @param identifier The outcome it names.
+ * @param type The outcome's base type and cardinality.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const feedbackType = (
+  element: string,
+  path: string,
+  identifier: string,
+  type: { readonly baseType: string; readonly cardinality: string },
+) => ({
+  detail: { ...type, check: "feedback-outcome", element, identifier, reading: "77" },
+  path,
+  rule: "expression-type" as const,
+});
+
+/**
+ * Check an item whose one response declaration maps the keys given.
+ *
+ * @param cardinality The declaration's `cardinality`.
+ * @param baseType The declaration's `base-type`, as written.
+ * @param keys The `map-key` of each entry, as written.
+ * @returns The refusals, reduced.
+ */
+const mapped = (cardinality: string, baseType: string, ...keys: readonly string[]) =>
+  judged(item([response("RESPONSE", cardinality, baseType, [mapping(...keys)])], []));
+
+/**
+ * Check an item whose float outcome `SCORE` carries the attributes given.
+ *
+ * @param attributes The declaration's further attributes, such as `mastery-value`.
+ * @returns The refusals, reduced.
+ */
+const mastered = (attributes: Readonly<Record<string, string>>) =>
+  judged(
+    item(
+      [
+        el("qti-outcome-declaration", [
+          attr("identifier", "SCORE"),
+          attr("cardinality", "single"),
+          attr("base-type", "float"),
+          ...Object.entries(attributes).map(([local, value]) => attr(local, value)),
+        ]),
+      ],
+      [],
+    ),
+  );
+
+/**
+ * The refusal of a `mastery-value` outside a written bound.
+ *
+ * @param value The `mastery-value`, as written.
+ * @param bound `least` for a `normal-minimum`, `greatest` for a `normal-maximum`.
+ * @param written The bound, as written.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const outOfRange = (value: string, bound: "greatest" | "least", written: string) => ({
+  detail: {
+    attribute: "mastery-value",
+    [bound]: written,
+    check: "mastery-range",
+    element: "qti-outcome-declaration",
+    reading: "9",
+    value,
+  },
+  path: "qti-assessment-item/qti-outcome-declaration/@mastery-value",
+  rule: "attribute-type" as const,
+});
+
 describe("checkRules", () => {
   describe("undeclared-response", () => {
     it("[I-1] refuses an interaction naming RESP2 when only RESPONSE is declared", () => {
@@ -2449,6 +2586,207 @@ describe("checkRules", () => {
     it("align-54 body content E30: accepts an apostrophe beside a q, a space between a mark and a q, and a mark inside it (reading 127)", () => {
       assert.deepStrictEqual(judged(item([], [quoting("the students’", "x", "' then")])), []);
       assert.deepStrictEqual(judged(item([], [quoting("He said “ ", "a “b” c", " ”")])), []);
+    });
+  });
+
+  describe("align-54 references and declarations: feedback names an outcome; repeated map keys and record fields; the mastery range", () => {
+    const body = "qti-assessment-item/qti-item-body";
+    const declarationPath = "qti-assessment-item/qti-response-declaration";
+    const blockOutcome = `${body}/qti-feedback-block/@outcome-identifier`;
+    const singleFloat = { baseType: "float", cardinality: "single" };
+
+    it("align-54 references and declarations E3a: refuses a feedback block naming a response, a template variable or nothing, as undeclared-variable expecting an outcome (reading 77)", () => {
+      assert.deepStrictEqual(judged(feedbackItem("RESPONSE")), [
+        noOutcome("qti-feedback-block", blockOutcome, "RESPONSE"),
+      ]);
+      assert.deepStrictEqual(judged(feedbackItem("T")), [
+        noOutcome("qti-feedback-block", blockOutcome, "T"),
+      ]);
+      assert.deepStrictEqual(judged(feedbackItem("NOTHING")), [
+        noOutcome("qti-feedback-block", blockOutcome, "NOTHING"),
+      ]);
+    });
+
+    it("align-54 references and declarations E3a: refuses feedback naming the built-in numAttempts, a response, as undeclared-variable expecting an outcome (reading 77)", () => {
+      assert.deepStrictEqual(judged(feedbackItem("numAttempts")), [
+        noOutcome("qti-feedback-block", blockOutcome, "numAttempts"),
+      ]);
+    });
+
+    it("align-54 references and declarations E3a: refuses a feedback block, a feedback inline and a modal feedback naming a float outcome, as expression-type feedback-outcome (reading 77)", () => {
+      assert.deepStrictEqual(judged(feedbackItem("SCORE")), [
+        feedbackType("qti-feedback-block", blockOutcome, "SCORE", singleFloat),
+      ]);
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [el("p", [], [feedback("qti-feedback-inline", "SCORE")])],
+            [
+              feedback("qti-modal-feedback", "SCORE", [
+                el("qti-content-body", [], [el("p", [], [text("Well done.")])]),
+              ]),
+            ],
+          ),
+        ),
+        [
+          feedbackType(
+            "qti-feedback-inline",
+            `${body}/p/qti-feedback-inline/@outcome-identifier`,
+            "SCORE",
+            singleFloat,
+          ),
+          feedbackType(
+            "qti-modal-feedback",
+            "qti-assessment-item/qti-modal-feedback/@outcome-identifier",
+            "SCORE",
+            singleFloat,
+          ),
+        ],
+      );
+    });
+
+    it("align-54 references and declarations E3a: refuses feedback naming an ordered identifier outcome, as expression-type feedback-outcome (reading 77)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [declaration("qti-outcome-declaration", "SEEN", "ordered", "identifier")],
+            [feedback("qti-feedback-block", "SEEN")],
+          ),
+        ),
+        [
+          feedbackType("qti-feedback-block", blockOutcome, "SEEN", {
+            baseType: "identifier",
+            cardinality: "ordered",
+          }),
+        ],
+      );
+    });
+
+    it("align-54 references and declarations E3a: accepts feedback naming a single or multiple identifier outcome, and the built-in completionStatus", () => {
+      assert.deepStrictEqual(judged(feedbackItem("FEEDBACK")), []);
+      assert.deepStrictEqual(judged(feedbackItem("completionStatus")), []);
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [declaration("qti-outcome-declaration", "SEEN", "multiple", "identifier")],
+            [feedback("qti-feedback-block", "SEEN")],
+          ),
+        ),
+        [],
+      );
+    });
+
+    /**
+     * The refusal of a map entry whose key repeats an earlier entry's.
+     *
+     * @param position The repeating entry's position among the mapping's entries.
+     * @param key Its `map-key`, as written.
+     * @param baseType The base type the keys were compared in, empty when compared as written.
+     * @param reading The reading that settles it.
+     * @returns The refusal, as {@link judged} reduces it.
+     */
+    const repeatedKey = (position: number, key: string, baseType: string, reading: string) => ({
+      detail: { baseType, check: "map-key", key, reading },
+      path: `${declarationPath}/qti-mapping/qti-map-entry[${String(position)}]`,
+      rule: "duplicate-identifier" as const,
+    });
+
+    it("align-54 references and declarations B5b: refuses 1 and 01 in an integer mapping, and +1 after them, each at the repeating entry (reading 98)", () => {
+      assert.deepStrictEqual(mapped("single", "integer", "1", "01", "+1"), [
+        repeatedKey(2, "01", "integer", "98"),
+        repeatedKey(3, "+1", "integer", "98"),
+      ]);
+    });
+
+    it("align-54 references and declarations B5b: refuses A B and B A in a pair mapping, and accepts them in a directed pair mapping (reading 98)", () => {
+      assert.deepStrictEqual(mapped("multiple", "pair", "A B", "B A"), [
+        repeatedKey(2, "B A", "pair", "98"),
+      ]);
+      assert.deepStrictEqual(mapped("multiple", "directedPair", "A B", "B A"), []);
+    });
+
+    it("align-54 references and declarations B5b: refuses 1e400 and 2e400, 1e400 and INF, and 0 and -0 in a float mapping, compared by their doubles (reading 154)", () => {
+      assert.deepStrictEqual(mapped("single", "float", "1e400", "2e400"), [
+        repeatedKey(2, "2e400", "float", "154"),
+      ]);
+      assert.deepStrictEqual(mapped("single", "float", "1e400", "INF"), [
+        repeatedKey(2, "INF", "float", "154"),
+      ]);
+      assert.deepStrictEqual(mapped("single", "float", "0", "-0"), [
+        repeatedKey(2, "-0", "float", "154"),
+      ]);
+    });
+
+    it("align-54 references and declarations B5b: refuses a key written twice under a base type that spells nothing, compared as written, and accepts 1 and 01 there (reading 160)", () => {
+      assert.deepStrictEqual(mapped("single", " string ", "a", "a"), [
+        repeatedKey(2, "a", "", "160"),
+      ]);
+      assert.deepStrictEqual(mapped("single", " integer ", "1", "01"), []);
+    });
+
+    it("align-54 references and declarations B5b: accepts York and york in a string mapping, and 1 and 2 in an integer mapping (reading 98)", () => {
+      assert.deepStrictEqual(mapped("single", "string", "York", "york"), []);
+      assert.deepStrictEqual(mapped("single", "integer", "1", "2"), []);
+    });
+
+    const fieldNamed = attr("field-identifier", "n");
+    const integerField = attr("base-type", "integer");
+
+    it("align-54 references and declarations B7: refuses a record value writing a field twice, as duplicate-identifier field at the second (reading 158)", () => {
+      assert.deepStrictEqual(
+        recordDefault([
+          field([fieldNamed, integerField], "5"),
+          field([fieldNamed, integerField], "6"),
+        ]),
+        [
+          {
+            detail: { check: "field", field: "n", reading: "158" },
+            path: `${declarationPath}/qti-default-value/qti-value[2]`,
+            rule: "duplicate-identifier",
+          },
+        ],
+      );
+    });
+
+    it("align-54 references and declarations B7: accepts one field in a record's correct response and again in its default value, each its own record value", () => {
+      const fields = [field([fieldNamed, integerField], "5")];
+
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "record", undefined, [
+                el("qti-correct-response", [], fields),
+                el("qti-default-value", [], fields),
+              ]),
+            ],
+            [],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 references and declarations E42a: refuses a mastery-value below a written normal-minimum and one above a written normal-maximum, as attribute-type mastery-range (reading 9)", () => {
+      assert.deepStrictEqual(mastered({ "mastery-value": "-1", "normal-minimum": "0" }), [
+        outOfRange("-1", "least", "0"),
+      ]);
+      assert.deepStrictEqual(mastered({ "mastery-value": "11", "normal-maximum": "1E1" }), [
+        outOfRange("11", "greatest", "1E1"),
+      ]);
+    });
+
+    it("align-54 references and declarations E42a: accepts a mastery-value within its written bounds or on one, and leaves one with no normal-minimum written to the version's floor (reading 149)", () => {
+      assert.deepStrictEqual(
+        mastered({ "mastery-value": "0.5", "normal-maximum": "1", "normal-minimum": "0" }),
+        [],
+      );
+      assert.deepStrictEqual(
+        mastered({ "mastery-value": "1", "normal-maximum": "1", "normal-minimum": "1" }),
+        [],
+      );
+      assert.deepStrictEqual(mastered({ "mastery-value": "-1" }), []);
     });
   });
 
