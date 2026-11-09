@@ -212,8 +212,8 @@ const templatedXml = (identifier: string): string =>
  * Write the text of a hand-built item whose template processing reads `QTI_CONTEXT`, which the
  * engine does not hold while template processing runs, so `check` marks it and it does not run:
  * one Choice over `A`, `B` and `C` bound to the single identifier `RESPONSE`, which declares the
- * default `B`, and the single boolean template variable `B`, which the one rule sets to whether
- * `QTI_CONTEXT` is NULL.
+ * default `B`, and the single boolean template variable `UNHELD`, which the one rule sets to
+ * whether `QTI_CONTEXT` is NULL. No choice shares a variable's identifier (reading 104, E19).
  *
  * @param identifier The item's identifier.
  * @returns The item's text.
@@ -223,8 +223,8 @@ const contextReadingXml = (identifier: string): string =>
     `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
     '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
     "<qti-default-value><qti-value>B</qti-value></qti-default-value></qti-response-declaration>",
-    '<qti-template-declaration identifier="B" cardinality="single" base-type="boolean"/>',
-    '<qti-template-processing><qti-set-template-value identifier="B">',
+    '<qti-template-declaration identifier="UNHELD" cardinality="single" base-type="boolean"/>',
+    '<qti-template-processing><qti-set-template-value identifier="UNHELD">',
     '<qti-is-null><qti-variable identifier="QTI_CONTEXT"/></qti-is-null>',
     "</qti-set-template-value></qti-template-processing>",
     '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" shuffle="false">',
