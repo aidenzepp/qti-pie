@@ -1026,32 +1026,6 @@ const responseBinding = (
 };
 
 /**
- * Find the cardinality of the text an interaction with a `string-identifier` captures, which the
- * response its `string-identifier` names must have.
- *
- * A Text Entry captures one string, so `single`. An Extended Text captures a string for each value
- * its own response holds, so the cardinality of the declaration its `response-identifier` names: a
- * `multiple` `float` binding captures a `multiple` `string`.
- *
- * @param visit The interaction's visit.
- * @param declarations The item's response declarations by identifier.
- * @param own The response its `response-identifier` names, none when it writes none.
- * @returns The cardinality, none for an Extended Text whose own response is undeclared or spells
- *   no cardinality.
- */
-const capturedCardinality = (
-  visit: Visit,
-  declarations: ReadonlyMap<string, SourceElement>,
-  own: Option.Option<string>,
-): Option.Option<Cardinality> =>
-  isQti(visit.element, (local) => local === "qti-text-entry-interaction")
-    ? Option.some<Cardinality>("single")
-    : own.pipe(
-        Option.flatMap((identifier) => Option.fromUndefinedOr(declarations.get(identifier))),
-        Option.flatMap(cardinalityOf),
-      );
-
-/**
  * Apply `undeclared-response`, reading 92's single binding and `binding` to a Text Entry's or an
  * Extended Text's `string-identifier`.
  *
@@ -1060,22 +1034,22 @@ const capturedCardinality = (
  * as a `response-identifier` is resolved: naming no declared response is `undeclared-response`,
  * its `attribute` naming the `string-identifier`. The response it names is "a second response
  * variable (of base-type string)" (info.txt:48078), and the information model asks nothing more of
- * it (rule `5b8ee08b`): align-54's D3a holds it to base type `string` and to the cardinality of
- * the text it captures ({@link capturedCardinality}), so another is `binding` with `check:
- * "string-binding"`. Reading 158 holds the base type to it only where it spells one; a declaration
- * whose `cardinality` spells nothing is not judged, nor its cardinality where the captured one is
- * unknown. A response bound already, the interaction's own among them, is bound a second time
- * ({@link boundOnce}).
+ * it (rule `5b8ee08b`), so it is held to that sentence alone, for a Text Entry and an Extended Text
+ * alike: a `record`, which has no base type, and a declaration that spells a base type other than
+ * `string` are each `binding` with `check: "string-binding"`, and any other cardinality fits,
+ * whatever the interaction's own response is. Reading 158 holds the base type to it only where it
+ * spells one; a declaration whose `cardinality` spells nothing is not judged. A response bound
+ * already, the interaction's own among them, is bound a second time ({@link boundOnce}).
  *
  * @param source The document.
  * @param visit The interaction's visit.
  * @param declarations The item's response declarations by identifier.
  * @param bound The responses earlier bindings bind.
  * @param attribute The interaction's `string-identifier`.
- * @param own The response its `response-identifier` names, none when it writes none or names
- *   nothing.
- * @returns The refusals of its binding, empty when it binds a string response of the captured
- *   cardinality that no other binding binds, and when its value names nothing ({@link nameOf}).
+ * @param own The response its `response-identifier` names, which sets the reading a second
+ *   binding of it cites; none when it writes none or names nothing.
+ * @returns The refusals of its binding, empty when it binds a `string` response that is not a
+ *   `record` and that no other binding binds, and when its value names nothing ({@link nameOf}).
  */
 const stringBinding = (
   source: SourceDocument,
@@ -1107,12 +1081,9 @@ const stringBinding = (
   const reading = Option.exists(own, (identifier) => identifier === response) ? "14" : "92";
   const cardinality = cardinalityOf(declaration);
   const { baseType, written } = baseTypeOf(declaration);
-  const captured = capturedCardinality(visit, declarations, own);
   const fits = Option.match(cardinality, {
     onNone: () => true,
-    onSome: (value) =>
-      !Option.exists(captured, (wanted) => wanted !== value) &&
-      !Option.exists(baseType, (type) => type !== "string"),
+    onSome: (value) => value !== "record" && !Option.exists(baseType, (type) => type !== "string"),
   });
 
   return [
