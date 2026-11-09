@@ -428,17 +428,18 @@ const refusal = (
   });
 
 /**
- * The choice classes whose identifiers share one pool across an item: the eight classes the
- * information model's prose calls choices. Each says of its identifier that it "must not be used by
- * any other choice or item variable" (SimpleChoice 5.132.1, `info.txt:42411`; InlineChoice 5.73.1,
- * `info.txt:31918`) or names its own noun ("any other image", "any other text", "any other
- * hotspot", "any other hottext choice"). Reading 104 reads each class as its own scope; the
- * overseer extended it (`9c42437e`, Appendix A line 25, E19) to pool the eight, so no two choices
- * of these classes in one item share an identifier, whichever interactions hold them. A `qti-gap`
- * stays outside the pool ({@link choicePool}).
+ * The choice classes whose identifiers share one pool across an item: the nine classes reading 104
+ * as amended names ("A choice's identifier is used by no other choice of any class in its
+ * document, and names no item variable"), `qti-gap` among them. Each says of its identifier that it
+ * "must not be used by any other choice or item variable" (SimpleChoice 5.132.1, `info.txt:42411`;
+ * InlineChoice 5.73.1, `info.txt:31918`) or names its own noun ("any other gap", "any other image",
+ * "any other text", "any other hotspot", "any other hottext choice"); the amended reading pools the
+ * nine, so no two choices of these classes in one item share an identifier, whichever interactions
+ * hold them, and a gap and a gap text of one Gap Match may not share one either.
  */
 const pooledChoices: ReadonlySet<string> = new Set([
   "qti-associable-hotspot",
+  "qti-gap",
   "qti-gap-img",
   "qti-gap-text",
   "qti-hotspot-choice",
@@ -450,38 +451,34 @@ const pooledChoices: ReadonlySet<string> = new Set([
 
 /**
  * The identifiers an item's choices have given so far, each with the class of the first element
- * that gave it: one pool for the {@link pooledChoices}, and one for the gaps.
+ * that gave it: one pool for every class of {@link pooledChoices}, gaps included.
  */
 interface ChoicePools {
   readonly choices: Map<string, string>;
-  readonly gaps: Map<string, string>;
 }
 
 /**
- * Find the pool an element's `identifier` is unique within, if it is a choice or a gap.
+ * Find the pool an element's `identifier` is unique within, if it is a choice.
  *
- * A gap is unique among the item's gaps, "any other gap" (Gap 5.55.1, reading 104), and outside the
- * choices' pool, so a gap and a gap text of one Gap Match may share an identifier.
+ * Reading 104 as amended gives every choice class one space of identifiers, so a gap shares the
+ * pool with the other eight classes: it repeats no gap's identifier, "any other gap" (Gap 5.55.1),
+ * and no other choice's, a gap text's of its own Gap Match included.
  *
  * @param element The element.
  * @param pools The item's pools.
- * @returns The pool, or none for an element that is neither.
+ * @returns The pool, or none for an element that is no choice.
  */
 const choicePool = (
   element: SourceElement,
   pools: ChoicePools,
-): Option.Option<Map<string, string>> => {
-  if (isQti(element, (local) => pooledChoices.has(local))) {
-    return Option.some(pools.choices);
-  }
-
-  return isQti(element, (local) => local === "qti-gap") ? Option.some(pools.gaps) : Option.none();
-};
+): Option.Option<Map<string, string>> =>
+  isQti(element, (local) => pooledChoices.has(local)) ? Option.some(pools.choices) : Option.none();
 
 /**
- * Apply `duplicate-identifier` to one choice or gap (reading 104, as extended, E19): its
- * `identifier` names no item variable, and no earlier element of its pool ({@link choicePool}) gave
- * it.
+ * Apply `duplicate-identifier` to one choice, a gap included (reading 104 as amended, "A choice's
+ * identifier is used by no other choice of any class in its document, and names no item variable",
+ * E19): its `identifier` names no item variable, and no earlier choice of the pool
+ * ({@link choicePool}) gave it.
  *
  * The item variables are its declarations of all four kinds and its built-ins, `completionStatus`,
  * `numAttempts`, `duration` and `QTI_CONTEXT`, which "are declared implicitly". A choice that names
@@ -491,10 +488,10 @@ const choicePool = (
  * @param source The document.
  * @param visit The element's visit.
  * @param variables The identifiers of the item's variables, declared and built in.
- * @param pools The identifiers each pool has given so far, which this adds the element's to.
+ * @param pools The identifiers the pool has given so far, which this adds the element's to.
  * @returns The refusal at the `identifier` attribute's path, with the element's `class` and, for a
- *   repeat of a choice of another class, its `otherClass`; none for an element that is no choice or
- *   gap, for a first occurrence that names no variable, and for an identifier that names nothing
+ *   repeat of a choice of another class, its `otherClass`; none for an element that is no choice,
+ *   for a first occurrence that names no variable, and for an identifier that names nothing
  *   ({@link nameOf}).
  */
 const choiceIdentifier = (
@@ -4807,8 +4804,9 @@ const dataSsml = (source: SourceDocument, visit: Visit, tables: Tables): readonl
  * binding, and a gap match's gaps. `count-range` judges a least count against its most (reading 76)
  * and an order interaction's counts against its choices (reading 18, {@link countRules}).
  * `duplicate-identifier` judges the item's declarations among themselves
- * ({@link duplicateDeclaration}), and each choice of the eight pooled classes and each gap against
- * its pool and the item's variables (reading 104, as extended, E19, {@link choiceIdentifier}), a
+ * ({@link duplicateDeclaration}), and each choice of the nine pooled classes, gaps among them,
+ * against the one pool and the item's variables (reading 104 as amended, E19,
+ * {@link choiceIdentifier}), a
  * mapping's keys, as written and as values of its base type (readings 98 and 160, B5b,
  * {@link repeatedMapKey}), and a record value's fields (B7, {@link repeatedField}).
  * `attribute-type` judges a `mastery-value` outside the bounds its outcome declaration writes
@@ -4895,7 +4893,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
   };
   const declared = new Set<string>();
   const written: Written = { fields: new Map(), keyValues: new Map(), keys: new Map() };
-  const pools: ChoicePools = { choices: new Map(), gaps: new Map() };
+  const pools: ChoicePools = { choices: new Map() };
   const variables = new Set([...context.variables.keys(), ...itemBuiltIns.keys()]);
   const bound = new Set<string>();
   const contexts = declarationsOf(source, "qti-context-declaration");

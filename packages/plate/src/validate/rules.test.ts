@@ -871,7 +871,8 @@ const pairRefusal = (
 });
 
 /**
- * Construct a pooled choice's or a gap's `duplicate-identifier` refusal (reading 104, E19).
+ * Construct a pooled choice's `duplicate-identifier` refusal, a gap's included (reading 104 as
+ * amended, E19).
  *
  * @param path The repeated `identifier` attribute's path.
  * @param choiceClass The refused choice's class.
@@ -2393,8 +2394,49 @@ describe("checkRules", () => {
       );
     });
 
-    it("align-54 choice identifiers E19: accepts a gap and a gap text sharing an identifier, a gap being outside the pool", () => {
-      assert.deepStrictEqual(judged(item([pairs], [gapping(["G"], ["G"])])), []);
+    it("align-54 R3 gap pool F1: refuses a gap sharing a gap text's identifier, at the gap, the second in document order (reading 104 as amended)", () => {
+      assert.deepStrictEqual(judged(item([pairs], [gapping(["G"], ["G"])])), [
+        repeated(
+          `${body}/qti-gap-match-interaction/p/qti-gap/@identifier`,
+          "qti-gap",
+          "G",
+          "qti-gap-text",
+        ),
+      ]);
+    });
+
+    it("align-54 R3 gap pool F1: refuses an inline choice sharing an earlier gap's identifier, at the inline choice, across two interactions (reading 104 as amended)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [pairs, response("RESPONSE", "single", "identifier")],
+            [gapping(["W"], ["A"]), el("p", [], [inlineChoice("RESPONSE", ["A", "B"])])],
+          ),
+        ),
+        [
+          repeated(
+            `${body}/p/qti-inline-choice-interaction/qti-inline-choice[1]/@identifier`,
+            "qti-inline-choice",
+            "A",
+            "qti-gap",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 R3 gap pool F1: refuses a gap named as a declared response, as choice-variable alone (reading 104 as amended)", () => {
+      assert.deepStrictEqual(judged(item([pairs], [gapping(["W"], ["PAIRS"])])), [
+        {
+          detail: {
+            check: "choice-variable",
+            class: "qti-gap",
+            identifier: "PAIRS",
+            reading: "104",
+          },
+          path: `${body}/qti-gap-match-interaction/p/qti-gap/@identifier`,
+          rule: "duplicate-identifier" as const,
+        },
+      ]);
     });
 
     it("align-54 choice identifiers E19: refuses two gaps sharing an identifier, at the second (reading 104)", () => {
