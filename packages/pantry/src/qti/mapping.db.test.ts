@@ -51,6 +51,7 @@ import {
   statedInserts,
   tableOf,
 } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -211,6 +212,40 @@ const typedKeyRule = (client: Parameters<typeof rowsOf>[0], table: string, side:
   );
 
 /**
+ * What a typed key case's database refuses, by Map key and Typed attribute value (readings 7, 45
+ * and 154): two keys of one value repeat, by the key over their query (23505); two of two values
+ * are kept; and a key that is no lexical form of its base type is refused on its own `MapKeyType`
+ * row by `Typed_attribute_value` (23514), before any key is read.
+ */
+type TypedKeyVerdict = "repeat" | "distinct" | "untyped";
+
+/**
+ * Assert a typed key case's verdict ({@link TypedKeyVerdict}).
+ *
+ * @param verdict - The server's error, none for accepted rows.
+ * @param rule - The key's trigger's name.
+ * @param expected - The case's verdict.
+ * @param label - The case, for a failure's message.
+ */
+const assertTypedKey = (
+  verdict: Parameters<typeof assertVerdict>[0],
+  rule: string,
+  expected: TypedKeyVerdict,
+  label: string,
+): void => {
+  if (expected === "untyped") {
+    assertVerdict(
+      verdict,
+      checkConstraintOf(Qti, MapKeyType.name, "Typed_attribute_value"),
+      true,
+      label,
+    );
+  } else {
+    assertVerdict(verdict, rule, expected === "repeat", label, "23505");
+  }
+};
+
+/**
  * A stray map key of a mapping of a base type, entry `at`, beside its base type: the row a typed
  * key's query reads.
  *
@@ -328,10 +363,11 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
           // the query reads, set immediate alone, which raises 23505 under the rule's name where
           // two entries of one mapping hold one value, the integer PostgreSQL parses each key's
           // text to (`Compute.parseDecimal`, XML Schema's lexical mapping, Part 2 §3.3.13); the
-          // controls name two integers, or hold a key the query's `integerKeyPattern` does not
-          // select, which no row of the query holds.
-          // Bound: 1 and 01, -0 and +0, and +7 and 007; -1 and 1, 10 and 1, -0 and -10, and 1 and
-          // 1.0.
+          // controls name two integers; and a key the query's `integerKeyPattern` does not select
+          // is no integer, so `Typed_attribute_value` refuses its `MapKeyType` row (readings 7 and
+          // 45: a map key of an integer mapping is an integer's lexical form), 23514.
+          // Bound: 1 and 01, -0 and +0, and +7 and 007; -1 and 1, 10 and 1, and -0 and -10; and 1
+          // and 1.0.
           Effect.gen(function* integerKeys() {
             const client = yield* loginSession;
             const rule = yield* typedKeyRule(
@@ -339,25 +375,24 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               MapKeyType.name,
               `${Qti.relations.MapKeyInteger.name}(mapping, value)`,
             );
-            for (const { keys, refused } of [
-              { keys: ["1", "01"], refused: true },
-              { keys: ["-0", "+0"], refused: true },
-              { keys: ["+7", "007"], refused: true },
-              { keys: ["-1", "1"], refused: false },
-              { keys: ["10", "1"], refused: false },
-              { keys: ["-0", "-10"], refused: false },
-              { keys: ["1", "1.0"], refused: false },
+            for (const { keys, verdict } of [
+              { keys: ["1", "01"], verdict: "repeat" },
+              { keys: ["-0", "+0"], verdict: "repeat" },
+              { keys: ["+7", "007"], verdict: "repeat" },
+              { keys: ["-1", "1"], verdict: "distinct" },
+              { keys: ["10", "1"], verdict: "distinct" },
+              { keys: ["-0", "-10"], verdict: "distinct" },
+              { keys: ["1", "1.0"], verdict: "untyped" },
             ] as const) {
-              assertVerdict(
+              assertTypedKey(
                 yield* judged(
                   client,
                   statedInserts(keys.map((key, n) => typedKeyFact("integer", n, key))),
                   [rule],
                 ),
                 rule,
-                refused,
+                verdict,
                 keys.join(" "),
-                "23505",
               );
             }
           }).pipe(Effect.scoped),
@@ -372,14 +407,16 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
           // alone, which raises 23505 under the rule's name where two entries of one mapping hold
           // one value, the double grizzle's `Compute.parseDouble` reads each key's text as, XML
           // Schema 1.1's doubleLexicalMap (readings 144 and 154), and `float8` equality, -0 equal to
-          // 0 and NaN to NaN; the controls name two doubles, or hold a key the query's
-          // `doublePattern` does not select (`+INF`, XML Schema 1.1's), which no row holds.
+          // 0 and NaN to NaN; the controls name two doubles; and `+INF`, XML Schema 1.1's, which
+          // the query's `doublePattern` does not select, is no float key of XML Schema 1.0's
+          // lexical space (readings 71 and 154), so `Typed_attribute_value` refuses its
+          // `MapKeyType` row, 23514.
           // Bound: 1 and 1.0, 1 and 10e-1, 0 and -0, 0.1 and .10, and past grizzle's former
           // bounded form: two overflows, an overflow and INF, an underflow and 0, a 17-digit key
           // and the 18-digit one that rounds with it, a tie to even, a 15-digit mantissa at 293
           // and the 1e+307 it spells, and two NaNs; against 1 and 2, 0.1 and 0.100000000000001
           // (apart in the fifteenth digit), 1 and the double one ulp above it, the greatest finite
-          // double and INF, the least subnormal and 0, INF and -INF, and INF and +INF.
+          // double and INF, the least subnormal and 0, and INF and -INF; and INF and +INF.
           Effect.gen(function* floatKeys() {
             const client = yield* loginSession;
             const rule = yield* typedKeyRule(
@@ -387,36 +424,35 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               MapKeyType.name,
               `${Qti.relations.MapKeyFloat.name}(mapping, value)`,
             );
-            for (const { keys, refused } of [
-              { keys: ["1", "1.0"], refused: true },
-              { keys: ["1", "10e-1"], refused: true },
-              { keys: ["0", "-0"], refused: true },
-              { keys: ["0.1", ".10"], refused: true },
-              { keys: ["1e400", "2e400"], refused: true },
-              { keys: ["INF", "1e400"], refused: true },
-              { keys: ["0", "1e-400"], refused: true },
-              { keys: ["1.2345678901234567", "1.23456789012345671"], refused: true },
-              { keys: ["9007199254740993", "9007199254740992"], refused: true },
-              { keys: ["100000000000000e293", "1e+307"], refused: true },
-              { keys: ["NaN", "NaN"], refused: true },
-              { keys: ["1", "2"], refused: false },
-              { keys: ["0.1", "0.100000000000001"], refused: false },
-              { keys: ["1", "1.0000000000000002"], refused: false },
-              { keys: ["1.7976931348623157e308", "1e309"], refused: false },
-              { keys: ["4.9e-324", "0"], refused: false },
-              { keys: ["INF", "-INF"], refused: false },
-              { keys: ["INF", "+INF"], refused: false },
+            for (const { keys, verdict } of [
+              { keys: ["1", "1.0"], verdict: "repeat" },
+              { keys: ["1", "10e-1"], verdict: "repeat" },
+              { keys: ["0", "-0"], verdict: "repeat" },
+              { keys: ["0.1", ".10"], verdict: "repeat" },
+              { keys: ["1e400", "2e400"], verdict: "repeat" },
+              { keys: ["INF", "1e400"], verdict: "repeat" },
+              { keys: ["0", "1e-400"], verdict: "repeat" },
+              { keys: ["1.2345678901234567", "1.23456789012345671"], verdict: "repeat" },
+              { keys: ["9007199254740993", "9007199254740992"], verdict: "repeat" },
+              { keys: ["100000000000000e293", "1e+307"], verdict: "repeat" },
+              { keys: ["NaN", "NaN"], verdict: "repeat" },
+              { keys: ["1", "2"], verdict: "distinct" },
+              { keys: ["0.1", "0.100000000000001"], verdict: "distinct" },
+              { keys: ["1", "1.0000000000000002"], verdict: "distinct" },
+              { keys: ["1.7976931348623157e308", "1e309"], verdict: "distinct" },
+              { keys: ["4.9e-324", "0"], verdict: "distinct" },
+              { keys: ["INF", "-INF"], verdict: "distinct" },
+              { keys: ["INF", "+INF"], verdict: "untyped" },
             ] as const) {
-              assertVerdict(
+              assertTypedKey(
                 yield* judged(
                   client,
                   statedInserts(keys.map((key, n) => typedKeyFact("float", n, key))),
                   [rule],
                 ),
                 rule,
-                refused,
+                verdict,
                 keys.join(" "),
-                "23505",
               );
             }
           }).pipe(Effect.scoped),
@@ -572,8 +608,13 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
           // which raises 23505 under the rule's name where two entries of one mapping hold one
           // value (information model §8.13: a pair undirected, a point and a directed pair
           // ordered, a point's integers each `Compute.parseDecimal`'s).
-          // Bound: points 1 2 and 01 +2, and 1 2 and 1, a tab, 2; pairs A B and B A, and U+E000
-          // U+10000 and its reverse; directed pairs A B and A, a tab, B; against points -1 2 and
+          // Each item is an identifier, so `Typed_attribute_value` keeps every `MapKeyType` row
+          // and the key alone decides (reading 7: a pair's items are identifiers, whose names are
+          // XML 1.0 Second Edition's, as XSD's `\i` and `\c` read them, so no character past
+          // U+FFFF and no private-use U+E000 is one; é and U+4E00 are, a BaseChar and an
+          // Ideographic).
+          // Bound: points 1 2 and 01 +2, and 1 2 and 1, a tab, 2; pairs A B and B A, and é U+4E00
+          // and its reverse; directed pairs A B and A, a tab, B; against points -1 2 and
           // 1 2, and 1 2 and 2 1, pairs A B and A C, and directed pairs A B and B A.
           Effect.gen(function* twoItemKeys() {
             const client = yield* loginSession;
@@ -600,7 +641,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               { baseType: "pair", keys: ["A B", "B A"], refused: true },
               {
                 baseType: "pair",
-                keys: ["\u{E000} \u{10000}", "\u{10000} \u{E000}"],
+                keys: ["\u{E9} \u{4E00}", "\u{4E00} \u{E9}"],
                 refused: true,
               },
               { baseType: "directedPair", keys: ["A B", "A\tB"], refused: true },
