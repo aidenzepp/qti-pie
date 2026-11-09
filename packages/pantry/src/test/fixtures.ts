@@ -4991,11 +4991,14 @@ const catalogSpecs: Record<(typeof catalogNames)[number], FixtureSpec> = {
       '<qti-catalog-info><qti-catalog id="catalog1"><qti-card support="keyword-translation"><qti-card-entry xml:lang="es"><qti-html-content>preciso</qti-html-content></qti-card-entry><qti-card-entry xml:lang="de"><qti-html-content>genau</qti-html-content></qti-card-entry></qti-card><qti-card support="linguistic-guidance" xml:lang="es"><qti-html-content xml:lang="es">Preciso significa <span xml:lang="fr">exact</span>.</qti-html-content></qti-card></qti-catalog></qti-catalog-info>',
     ),
   ]),
+  // The MIME type is not padded (decision 447): `MimeTypeDType` is an `xs:normalizedString`,
+  // whose whitespace is replaced and never collapsed, so a space or a tab in it stays and reading
+  // 135 refuses it. The other padded values (`id`, `default`, the href) are of types that collapse.
   "catalog-padded": overSimple(
     "catalog-padded",
     simpleWithCatalog(
       "catalog1",
-      '<qti-catalog-info><qti-catalog id=" catalog1 "><qti-card support="sign-language"><qti-card-entry default=" true "><qti-file-href mime-type="image/&#9;png"> images/sign.png </qti-file-href></qti-card-entry></qti-card></qti-catalog></qti-catalog-info>',
+      '<qti-catalog-info><qti-catalog id=" catalog1 "><qti-card support="sign-language"><qti-card-entry default=" true "><qti-file-href mime-type="image/png"> images/sign.png </qti-file-href></qti-card-entry></qti-card></qti-catalog></qti-catalog-info>',
     ),
   ),
   "cut-catalog-multiple": cutItem(

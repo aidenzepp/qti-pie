@@ -5,7 +5,13 @@ import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { examplesTarball, materialize, pciNames } from "#pantry/test/fixtures.ts";
+import {
+  catalogNames,
+  companionNames,
+  examplesTarball,
+  materialize,
+  pciNames,
+} from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { judge, lawsOf, shownBreach, verdictOf } from "#pantry/test/oracle.ts";
 
@@ -15,9 +21,17 @@ import { judge, lawsOf, shownBreach, verdictOf } from "#pantry/test/oracle.ts";
 const workDirectory = path.resolve(import.meta.dirname, "../../work");
 
 /**
- * Whether the examples tarball, which every PCI positive is cut from, is on this machine.
+ * Whether the examples tarball, which every positive here is cut or edited from, is on this
+ * machine.
  */
 const tarballPresent = existsSync(Effect.runSync(examplesTarball));
+
+/**
+ * The positives held to the law oracle: the catalog and companion-materials positives (decision
+ * 447) and the PCI positives (decision 446). A positive the oracle refuses fails here, without a
+ * lease.
+ */
+const positiveNames: readonly FixtureName[] = [...catalogNames, ...companionNames, ...pciNames];
 
 /**
  * The composed grammar every positive is judged by, composed once for the whole file.
@@ -35,14 +49,14 @@ const laws = lawsOf(grammar);
  * @param name - The fixture's name.
  * @returns The package's entries, as `readPackage` reads them.
  */
-const packageOf = Effect.fn("pci-positives.packageOf")(function* packageOf(name: FixtureName) {
+const packageOf = Effect.fn("positives.packageOf")(function* packageOf(name: FixtureName) {
   const fs = yield* FileSystem.FileSystem;
 
   yield* fs.makeDirectory(workDirectory, { recursive: true });
 
   const root = yield* fs.makeTempDirectoryScoped({
     directory: workDirectory,
-    prefix: "pci-positives-",
+    prefix: "positives-",
   });
   const config = ConfigProvider.layerAdd(
     ConfigProvider.fromUnknown({ GR8DES_QTI_FIXTURES: root }),
@@ -54,9 +68,9 @@ const packageOf = Effect.fn("pci-positives.packageOf")(function* packageOf(name:
 });
 
 layer(NodeServices.layer, { excludeTestServices: true })(
-  "the PCI positives (skipped without the examples tarball)",
+  "the catalog, companion and PCI positives (skipped without the examples tarball)",
   (it) => {
-    for (const name of pciNames) {
+    for (const name of positiveNames) {
       it.effect.skipIf(!tarballPresent)(`${name} is accepted by the law oracle`, () =>
         Effect.gen(function* positive() {
           const judgment = yield* judge(yield* packageOf(name), grammar, laws);
