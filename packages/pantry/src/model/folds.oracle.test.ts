@@ -746,6 +746,8 @@ const unconstructed = {
   "Condition type": "a condition's type, over expressions drawn without typing",
   "Context variable reference": "a reference, over identifiers drawn without reading",
   "Custom interaction version": "an interaction's version, drawn without reading",
+  "Data SSML":
+    "a data-ssml's JSON object (Data-SSML 1.0 §3.4, reading 177), a lexical form drawn without reading",
   "Declaration base type":
     "a declaration's base type against its cardinality, values drawn without reading",
   "Declaration key": "a declaration's identifier, a value drawn without reading",
@@ -932,6 +934,10 @@ const unconstructedCase = (
  * - One writes a qti-equal whose tolerance is empty, which holds no value where a tolerance holds one
  *   or two (reading 121): Aiden's red at TEST_SEED=3952699438, with "Equal tolerance" stated over a
  *   lexical form drawn without reading but not named among the unconstructed.
+ * - One writes a pre whose data-ssml is empty, no JSON object, so it has no `DataSsml` row (reading
+ *   177): the free suite's red at 9b91f27e, replayed here at TEST_SEED=593086602, from c91aec18,
+ *   which stated "Data SSML" over a lexical form drawn without reading but did not name it among
+ *   the unconstructed.
  */
 const unconstructedCases: readonly Kept<GeneratedXdm, Situation>[] = [
   unconstructedCase(
@@ -958,6 +964,11 @@ const unconstructedCases: readonly Kept<GeneratedXdm, Situation>[] = [
     "0.2.0.3.3.0.3.0.3.d.0.0.3.0.0.0.1.0.0.2.1.0.0.1.0.1.0.865.1.0.0.0.0.0.0.0.1en.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0",
     "a qti-equal writes an empty tolerance (TEST_SEED=3952699438)",
     "Equal tolerance",
+  ),
+  unconstructedCase(
+    "6.1.0.0.0.0.0.9.0.9.0.0.9.0.0.0.1.0.0.3.1.1.3.0.0.1.0.aa.0.2.0.0.0.0.5t.0.0.0.0.0.x8.0.0.0.0.0.0.2.0.3.0.0.1i.0.0.0.0.0.0.0.0.0",
+    "a pre writes an empty data-ssml (TEST_SEED=593086602)",
+    "Data SSML",
   ),
 ];
 
