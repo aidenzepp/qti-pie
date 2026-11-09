@@ -43,7 +43,7 @@ import type {
   SourceElement,
 } from "#plate/document/source.ts";
 import { xmlWhitespaceRun } from "#plate/model/attributes.ts";
-import { trimXmlSpace } from "#plate/model/values.ts";
+import { isNcName, trimXmlSpace } from "#plate/model/values.ts";
 import { packageOccurrences, packageTables } from "#plate/package/tables.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
@@ -75,7 +75,9 @@ export interface ManifestHref {
  */
 export interface ManifestResource {
   /**
-   * The `identifierref` of each `dependency`, each naming a resource of the same manifest.
+   * The `identifierref` of each `dependency` as written, each naming a resource of the same
+   * manifest, compared with the resource's `identifier` collapsed, as `xs:IDREF` and `xs:ID` read
+   * them.
    */
   readonly dependencies: readonly string[];
   /**
@@ -251,7 +253,8 @@ const keyOf = (target: Target): string => {
 /**
  * Read an `xs:anyURI` value as XML Schema's `collapse` whitespace facet reads it, as every manifest
  * `href` and every `xml:base` is typed: its outer XML whitespace removed and each inner run of it
- * one space (reading 102).
+ * one space (reading 102). A resource's `identifier`, an `xs:ID`, and a `dependency`'s
+ * `identifierref`, an `xs:IDREF`, collapse alike.
  *
  * @param value The value as written.
  * @returns The value, collapsed.
@@ -780,6 +783,13 @@ const documentTypes: ReadonlySet<string> = new Set([
  * `href` references one of its `file` entries (`child-count`, Content Packaging 1.2 section 6.6.2),
  * and each `dependency` names a resource (`dependency-unresolved`).
  *
+ * A `dependency`'s `identifierref` is an `xs:IDREF` and a resource's `identifier` an `xs:ID`, both
+ * of whose whitespace facet is `collapse`, so the two are compared collapsed: `identifierref=" a "`
+ * names the resource `a`. One that is no NCName names nothing (reading 152 as amended, "Any other
+ * value names nothing: no row holds it as a name"), so it is not `dependency-unresolved`: its value
+ * domain, the walk's `attribute-type`, refuses it alone. The refusal's facts keep the values as
+ * written.
+ *
  * An `href` leads outside when it is an absolute URI, starts with `/`, or climbs above the root
  * through the `xml:base` values above it and its own `..` segments. A `file`'s and a non-document
  * resource's `href` that does is an external link, admitted (reading 102); a document resource's is
@@ -796,7 +806,9 @@ const checkResources = (
 ): readonly Refusal[] => {
   const identifiers = new Set(
     entries.flatMap((entry) =>
-      Option.toArray(Option.map(attributeOf(entry.element, "identifier"), (id) => id.value)),
+      Option.toArray(
+        Option.map(attributeOf(entry.element, "identifier"), (id) => collapse(id.value)),
+      ),
     ),
   );
 
@@ -828,7 +840,11 @@ const checkResources = (
       ),
     );
     const unresolved = entry.dependencies
-      .filter((dependency) => !identifiers.has(dependency.identifier))
+      .filter((dependency) => {
+        const named = collapse(dependency.identifier);
+
+        return isNcName(named) && !identifiers.has(named);
+      })
       .map((dependency) =>
         refuse(source, "dependency-unresolved", dependency.at, {
           dependency: dependency.identifier,

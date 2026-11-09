@@ -355,13 +355,16 @@ const holdsInclude = (element: SourceElement): boolean =>
  *
  * Identifiers are compared as their `xs:NCName` type reads them, with the outer whitespace
  * collapsed, as the item rules compare theirs. A section document's identifiers are compared
- * within it, its root's included: any test that includes it holds them all.
+ * within it, its root's included: any test that includes it holds them all. An identifier that is
+ * no NCName names nothing (reading 152 as amended, "a value names something only where it is an
+ * NCName"): it shares no name with another, so its value domain, the structural validator's
+ * `attribute-type`, refuses it alone.
  *
  * @param source The document.
  * @param visit The element's visit.
  * @param seen The identifiers given so far, which this adds the element's to.
  * @returns The refusal at the repeated `identifier` attribute's path, or none for the first
- *   occurrence and for any other element.
+ *   occurrence, for an identifier that names nothing and for any other element.
  */
 const duplicateIdentifier = (
   source: SourceDocument,
@@ -374,6 +377,10 @@ const duplicateIdentifier = (
   }
 
   const identifier = trimXmlSpace(attribute.value.value);
+  if (!isNcName(identifier)) {
+    return [];
+  }
+
   if (!seen.has(identifier)) {
     seen.add(identifier);
 
@@ -497,14 +504,18 @@ const expressionPlacement = (
  * test's own declarations one namespace, as an item's are: two outcomes named `SCORE`, or a context
  * variable and an outcome of one name, would be two variables a variable expression could not tell
  * apart. Identifiers are compared as their `xs:NCName` type reads them, with the outer whitespace
- * collapsed. The parts' identifiers are another scope, {@link duplicateIdentifier}'s.
+ * collapsed. One that is no NCName names nothing (readings 152 and 157): it shares no name with
+ * another, and its value domain refuses it alone, as an item's declarations are read (`nameOf` in
+ * `#plate/validate/rules.ts`). The parts' identifiers are another scope, {@link
+ * duplicateIdentifier}'s.
  *
  * @param source The test.
  * @param visit The element's visit.
  * @param declared The identifiers the test's declarations have given so far, which this adds the
  *   element's to.
  * @returns The refusal at the repeated `identifier` attribute's path, or none for the first
- *   occurrence and for an element that is no declaration of the root.
+ *   occurrence, for an identifier that names nothing and for an element that is no declaration of
+ *   the root.
  */
 const duplicateDeclaration = (
   source: SourceDocument,
@@ -520,6 +531,10 @@ const duplicateDeclaration = (
   }
 
   const identifier = trimXmlSpace(attribute.value.value);
+  if (!isNcName(identifier)) {
+    return [];
+  }
+
   if (!declared.has(identifier)) {
     declared.add(identifier);
 
@@ -790,7 +805,10 @@ const rootScope: BranchScope = {
  * children's order when it shuffles or is loose under a parent whose order is drawn; it is loose
  * when it is invisible (`visible`, false when unwritten) and does not keep together
  * (`keep-together`, true when unwritten). An item ref or a section ref takes its parent's part and
- * replacement, and draws no order.
+ * replacement, and draws no order. Only an identifier that is an NCName gives a name: one that is
+ * not names nothing (reading 152 as amended), so no target resolves to it, and a rule its element
+ * owns is left to the assembled test, as one whose owner writes no identifier is ({@link
+ * branchTarget}).
  *
  * It reads the judged visits, where `openPackage`'s E8b (`layoutOf` in `#plate/package/open.ts`)
  * reads every element. The two differ only for an identified element in content the structural walk
@@ -839,7 +857,9 @@ const branchContext = (
       scopes.set(element, { ...outer, looseChain: false, mixes: false });
     }
 
-    const identifier = attributeOf(element, "identifier");
+    const identifier = attributeOf(element, "identifier").pipe(
+      Option.filter((written) => isNcName(trimXmlSpace(written.value))),
+    );
     const scope = scopes.get(element);
     if (scope !== undefined && Option.isSome(identifier)) {
       const name: BranchName = {
@@ -966,8 +986,9 @@ const branchFault = (
  * test, which may supply it. So is what only the placement of a section document decides: a
  * replacement or a shuffle above the section ref that places it. `openPackage` judges the same
  * rule over the assembled test (E8b), with the same detail at the same path, and does not give
- * again what this gives. A rule on an owner that writes no identifier is the structural
- * validator's.
+ * again what this gives. A rule on an owner that writes no identifier, or one that names nothing
+ * (reading 152 as amended: it is no NCName), is not judged here: the structural validator refuses
+ * the owner, and `openPackage` refuses the rule `unknown` over the assembled test (reading 147).
  *
  * @param source The document.
  * @param visit The element's visit.

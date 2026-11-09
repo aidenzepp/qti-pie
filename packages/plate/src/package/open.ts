@@ -3338,9 +3338,9 @@ interface ItemRefTarget {
 }
 
 /**
- * One item ref of a test or a section document that writes an identifier and resolves to an item
- * resource or an LTI link resource the manifest lists: its identifier, and whether a selection with
- * replacement in its own document can repeat it.
+ * One item ref of a test or a section document whose identifier names something, an NCName
+ * (reading 152), and that resolves to an item resource or an LTI link resource the manifest lists:
+ * its identifier, and whether a selection with replacement in its own document can repeat it.
  */
 interface ResolvedItemRef extends ItemRefTarget {
   readonly identifier: string;
@@ -3402,19 +3402,19 @@ interface StructureIdentifier {
  */
 interface DocumentStructure {
   /**
-   * The identifier of each of its parts, sections and item refs, in document order, an item ref's
-   * whether it resolves or not.
+   * The identifier of each of its parts, sections and item refs that names something, an NCName
+   * (reading 152), in document order, an item ref's whether it resolves or not.
    */
   readonly identifiers: readonly StructureIdentifier[];
   /**
-   * Each item ref that writes an identifier and resolves, against the document's path, to an item
-   * resource or an LTI link resource.
+   * Each item ref whose identifier is an NCName and that resolves, against the document's path, to
+   * an item resource or an LTI link resource.
    */
   readonly itemRefs: readonly ResolvedItemRef[];
   /**
-   * Each item ref that writes an identifier and resolves to an LTI link resource, with its own path
-   * in the document, in document order: what a package marks and leaves out of the test it
-   * delivers (reading 110).
+   * Each item ref whose identifier is an NCName and that resolves to an LTI link resource, with its
+   * own path in the document, in document order: what a package marks and leaves out of the test
+   * it delivers (reading 110).
    */
   readonly links: readonly LtiLink[];
   /**
@@ -3492,14 +3492,18 @@ const replacingSections = (visits: readonly Visit[]): ReadonlySet<SourceElement>
  * An item ref that resolves to no listed item resource and no listed LTI link resource is
  * `item-ref-unresolved` at the item ref, its detail the `identifier`, the `href` and, when the
  * `href` names a path inside the package, that `path`, bounded ({@link boundedPath}): one longer
- * than 1,024 characters keeps its first 512 and its last 511 around a `…`. An item ref that writes
- * no identifier names nothing, so it holds no place in the document's identifiers and no reading
- * resolves through it; its missing identifier is the test's own verdict's (reading 147). It is
- * otherwise judged like any other (reading 155, "the laws over what an item ref names judge every
+ * than 1,024 characters keeps its first 512 and its last 511 around a `…`. A part, section or item
+ * ref whose identifier is no NCName names nothing (reading 152 as amended, "Any other value names
+ * nothing: no row holds it as a name"), so it holds no place in the document's identifiers, no
+ * repeat of it is judged and no reading resolves through it; its value domain, its document's own
+ * `attribute-type`, refuses it alone. An item ref that writes no identifier names nothing too; its
+ * missing identifier is the test's own verdict's (reading 147). Either item ref is otherwise judged
+ * like any other (reading 155, "the laws over what an item ref names judge every
  * item ref, whether or not it ... write[s] an identifier"): one that resolves to neither is
- * `item-ref-unresolved` with `check: "unwritten"`, the missing `attribute`, the `href`, the `path`
- * when there is one, and `reading: "155"`, and one that resolves has its variable mappings and
- * template defaults judged (`targets`). An item ref that writes no `href` names nothing, and is the
+ * `item-ref-unresolved`, its detail the `identifier` as written for one that writes one, else
+ * `check: "unwritten"`, the missing `attribute`, the `href`, the `path` when there is one, and
+ * `reading: "155"`, and one that resolves has its variable mappings and template defaults judged
+ * (`targets`). An item ref that writes no `href` names nothing, and is the
  * test's own verdict's (reading 155). Each `href` is collapsed and resolved by {@link locate}
  * against the `xml:base` in scope, or else the document's path ({@link basesOf}, reading 103), so
  * one under an `xml:base` outside the package names no path inside it. The path it names is looked
@@ -3556,7 +3560,8 @@ const structureIn = (
     };
   };
   for (const { element, path } of visits) {
-    const identifier = Option.getOrUndefined(identifierOf(element));
+    const writtenIdentifier = identifierOf(element);
+    const identifier = Option.getOrUndefined(writtenIdentifier.pipe(Option.filter(isNcName)));
     const href = Option.getOrUndefined(attributeOf(element, "href"));
     const scope = isQti(element, durationScopes);
     if (identifier !== undefined && (scope || isQti(element, itemRefElements))) {
@@ -3624,15 +3629,16 @@ const structureIn = (
             source.location,
             "item-ref-unresolved",
             path,
-            identifier === undefined
-              ? {
-                  ...at,
-                  attribute: "identifier",
-                  check: "unwritten",
-                  href: written,
-                  reading: "155",
-                }
-              : { ...at, href: written, identifier },
+            Option.match(writtenIdentifier, {
+              onNone: () => ({
+                ...at,
+                attribute: "identifier",
+                check: "unwritten",
+                href: written,
+                reading: "155",
+              }),
+              onSome: (value) => ({ ...at, href: written, identifier: value }),
+            }),
           ),
         );
       }
@@ -3659,8 +3665,8 @@ interface OrderScope {
 
 /**
  * One element of a test or section document a branch rule may name ({@link branchNameElements})
- * that writes an identifier, with its place in its document: its pre-order interval among the
- * document's elements, its parent, and the scope it lies in.
+ * whose identifier is an NCName (reading 152), with its place in its document: its pre-order
+ * interval among the document's elements, its parent, and the scope it lies in.
  */
 interface BranchName extends OrderScope {
   readonly element: SourceElement;
@@ -3818,8 +3824,9 @@ const branchRuleOf = ({ element, parent, path }: Visit): Option.Option<BranchRul
 
 /**
  * Read what reading 87 reads of one test or section document, as pantry's law oracle reads a test
- * document (`testDocumentOf` in `packages/pantry/src/test/oracle-laws/assembly.ts`): each name,
- * with its section's scope ({@link orderScopesOf}) or, for an element that is not a section, its
+ * document (`testDocumentOf` in `packages/pantry/src/test/oracle-laws/assembly.ts`): each name, an
+ * identifier that is an NCName (reading 152 as amended: any other names nothing), with its
+ * section's scope ({@link orderScopesOf}) or, for an element that is not a section, its
  * parent's, no order of its own drawn, a test part its own part; each section ref, a site in its
  * parent's scope; and each branch rule that names a target ({@link branchRuleOf}).
  *
@@ -3858,7 +3865,7 @@ const layoutOf = (visits: readonly Visit[]): DocumentLayout => {
   const names = new Map<SourceElement, BranchName>();
   const sites = new Map<SourceElement, BranchSite>();
   for (const [start, { element, parent }] of visits.entries()) {
-    const identifier = Option.getOrUndefined(identifierOf(element));
+    const identifier = Option.getOrUndefined(identifierOf(element).pipe(Option.filter(isNcName)));
     if (identifier !== undefined && isQti(element, branchNameElements)) {
       const name: BranchName = {
         element,
@@ -4241,7 +4248,9 @@ const variablesThrough = (
  * `duplicate-identifier` at its `identifier` attribute, its detail the `identifier`, as the test
  * rules give one within a document. One a document gives twice is its own verdict's
  * (`duplicateIdentifier` in `#plate/validate/test-rules.ts`), so only a document's first occurrence
- * of an identifier is judged here, and a refusal is never given twice.
+ * of an identifier is judged here, and a refusal is never given twice. An identifier that is no
+ * NCName names nothing (reading 152 as amended) and is not among a document's identifiers
+ * ({@link structureIn}), so no repeat of it is judged: its value domain refuses it alone.
  *
  * @param test What the test's own document holds.
  * @param reached The section documents it reaches, in the order the walk reaches them.
@@ -5076,8 +5085,10 @@ const acrossFaults = (
  * A target its own document writes resolves in the rule's own placement, judged under this
  * placement's context ({@link viewFault}). Any other target resolves in a placement above, or
  * nowhere, and is judged once for the document over all its placements, at its first placement
- * ({@link acrossFaults}). A rule whose owner writes no identifier resolves from no source, and is
- * `unknown` beside the owner's own refusal (reading 147).
+ * ({@link acrossFaults}). A rule whose owner writes no identifier, or one that names nothing
+ * (reading 152 as amended: it is no NCName), resolves from no source, and is `unknown` beside the
+ * owner's own refusal (reading 147). A target that is no NCName resolves to no name ({@link
+ * layoutOf}), so it is judged as a target no document writes.
  *
  * @param index What the test's branch rules read of its placements.
  * @param here The placement judged.

@@ -351,6 +351,16 @@ M3.
   - A tab, line feed or carriage return in a `data-ssml` value's `break.time` or `prosody.rate` is
     refused `attribute-type`, check `data-ssml` (R7-a, a `data-ssml` value is Data-SSML JSON).
     Corpus: none.
+  - A test part's, section's, section ref's or item ref's `identifier`, and a `cp:dependency`'s
+    `identifierref`, that is no NCName names nothing, so its `attribute-type` is its only refusal
+    (reading 152 as amended, decision 457 (2)). Two such identifiers, in one document or across a
+    test's reach, and two test declarations of one such identifier, are no longer refused
+    `duplicate-identifier`, and such a dependency is no longer refused `dependency-unresolved`. No
+    branch rule's target resolves to such an identifier, so its rule is refused `branch-target`
+    `unknown`, and so is a rule whose owner writes one, as a rule whose owner writes no identifier
+    is (reading 147). A `dependency`'s `identifierref` names a resource as `xs:IDREF` and `xs:ID`
+    read them, collapsed, so `identifierref=" a "` names the resource `a` (decision 457 (3)).
+    Corpus: none.
 - Repairs after the phase's review, each moving no corpus document:
   - A session counts a numbered name such as `a.2.SCORE` as `openPackage` does, only through an
     item ref that a selection with replacement can repeat (reading 88). With item refs `a` and `a.2`

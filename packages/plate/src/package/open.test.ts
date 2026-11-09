@@ -7408,3 +7408,242 @@ describe("package/open.ts", () => {
     });
   });
 });
+
+/**
+ * The forms of a structure identifier that are no `xs:NCName`, each with the name a case's title
+ * gives it (reading 152 as amended).
+ */
+const namelessForms = [
+  { form: "1a", name: "1a" },
+  { form: "a b", name: "a b" },
+  { form: "", name: "the empty string" },
+  { form: "   ", name: "whitespace alone" },
+  { form: "٠a", name: "U+0660 a" },
+] as const;
+
+/**
+ * Write a linear, individual test part.
+ *
+ * @param identifier Its `identifier`, as written.
+ * @param content What it holds, as written.
+ * @returns The part's text.
+ */
+const namedPartXml = (identifier: string, content: string): string =>
+  `<qti-test-part identifier="${identifier}" navigation-mode="linear" submission-mode="individual">${content}</qti-test-part>`;
+
+/**
+ * Write a visible section of a test.
+ *
+ * @param identifier Its `identifier`, as written.
+ * @param content What it holds, as written.
+ * @returns The section's text.
+ */
+const namedSectionXml = (identifier: string, content: string): string =>
+  `<qti-assessment-section identifier="${identifier}" title="S" visible="true">${content}</qti-assessment-section>`;
+
+/**
+ * Open a package whose test `T`, at `test.xml`, holds the given parts, beside the items `a` and `b`
+ * at `items/a.xml` and `items/b.xml` and a section document at `sections/s.xml`, each listed as a
+ * resource of its type, the test first.
+ *
+ * @param parts The test's parts, as written.
+ * @param section The section document's text; the default places nothing the cases judge.
+ * @returns The package's verdict.
+ */
+const openNameless = (parts: string, section = sectionDocumentXml("S9", "")) =>
+  openPackage(
+    location,
+    packageOf({
+      "items/a.xml": itemXml("a"),
+      "items/b.xml": itemXml("b"),
+      [manifestFile]: manifestXml(
+        resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+        resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
+        resourceXml("B", "imsqti_item_xmlv3p0", "items/b.xml"),
+        resourceXml("S", "imsqti_section_xmlv3p0", "sections/s.xml"),
+      ),
+      "sections/s.xml": section,
+      "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T">${parts}</qti-assessment-test>`,
+    }),
+  );
+
+/**
+ * Write a part `P` that holds the given content and then the section ref `R`, which places the
+ * section document at `sections/s.xml`.
+ *
+ * @param content What the part holds before the section ref, as written.
+ * @returns The part's text.
+ */
+const placingPartXml = (content: string): string =>
+  namedPartXml("P", `${content}${sectionRefXml("R", "sections/s.xml")}`);
+
+/**
+ * Take each refusal's rule, document and path of a package verdict, for a case whose details are
+ * the structural walk's own.
+ *
+ * @param verdict The package verdict.
+ * @returns Each refusal's rule, document and path, in order.
+ */
+const sitesOf = (verdict: PackageVerdict): (readonly [string, string, string])[] =>
+  refusalsOf(verdict).map(({ document, location: at, rule }) => [
+    rule,
+    document,
+    at.kind === "path" ? at.path : at.kind,
+  ]);
+
+/**
+ * A refusal's rule, document and path at an attribute of the test at `test.xml`.
+ *
+ * @param rule The refusal's rule.
+ * @param at The attribute's path.
+ * @returns The site, as {@link sitesOf} gives it.
+ */
+const atTest = (rule: string, at: string) =>
+  [rule, fileLocation(location, "test.xml"), at] as const;
+
+describe("openPackage, align-54 r11 reading 152 names nothing: a structure identifier that is no NCName names nothing across a test's reach, so no law but its value domain judges it (reading 152 as amended)", () => {
+  it.effect.each(namelessForms)(
+    "align-54 r11 reading 152 names nothing decision 457 (2): an item ref, and a section, that write $name in the test and again in the section document it places are refused attribute-type at each, and not duplicate-identifier",
+    ({ form }) =>
+      Effect.gen(function* acrossDocuments() {
+        const twoItemRefs = yield* openNameless(
+          placingPartXml(namedSectionXml("S", itemRefXml(form, "items/a.xml"))),
+          sectionDocumentXml("S2", itemRefXml(form, "../items/b.xml")),
+        );
+        const sections = yield* openNameless(
+          placingPartXml(namedSectionXml(form, itemRefXml("I1", "items/a.xml"))),
+          `<qti-assessment-section xmlns="${qti}" identifier="${form}" title="S2" visible="true">${itemRefXml("I2", "../items/b.xml")}</qti-assessment-section>`,
+        );
+
+        assert.deepStrictEqual(
+          [sitesOf(twoItemRefs), sitesOf(sections)],
+          [
+            [
+              atTest(
+                "attribute-type",
+                "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref/@identifier",
+              ),
+              [
+                "attribute-type",
+                fileLocation(location, "sections/s.xml"),
+                "qti-assessment-section/qti-assessment-item-ref/@identifier",
+              ],
+            ],
+            [
+              atTest(
+                "attribute-type",
+                "qti-assessment-test/qti-test-part/qti-assessment-section/@identifier",
+              ),
+              [
+                "attribute-type",
+                fileLocation(location, "sections/s.xml"),
+                "qti-assessment-section/@identifier",
+              ],
+            ],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "align-54 r11 reading 152 names nothing decision 457 (2): a branch rule of a part 1a, or of an item ref 1a, to a later name is refused branch-target unknown beside the owner's attribute-type, as a rule whose owner writes no identifier is (reading 147)",
+    () =>
+      Effect.gen(function* namelessOwner() {
+        const ofPart = yield* openNameless(
+          `${namedPartXml("1a", `${branchRuleXml("Q")}${namedSectionXml("S1", itemRefXml("I1", "items/a.xml"))}`)}${namedPartXml("Q", namedSectionXml("S2", itemRefXml("I2", "items/b.xml")))}`,
+        );
+        const ofItemRef = yield* openNameless(
+          namedPartXml(
+            "P",
+            namedSectionXml(
+              "S",
+              `${itemRefXml("1a", "items/a.xml", branchRuleXml("I2"))}${itemRefXml("I2", "items/b.xml")}`,
+            ),
+          ),
+        );
+        const itemRefPath = "qti-assessment-test/qti-test-part/qti-assessment-section";
+
+        assert.deepStrictEqual(
+          [sitesOf(ofPart), sitesOf(ofItemRef)],
+          [
+            [
+              atTest(
+                "branch-target",
+                "qti-assessment-test/qti-test-part[1]/qti-branch-rule/@target",
+              ),
+              atTest("attribute-type", "qti-assessment-test/qti-test-part[1]/@identifier"),
+            ],
+            [
+              atTest(
+                "branch-target",
+                `${itemRefPath}/qti-assessment-item-ref[1]/qti-branch-rule/@target`,
+              ),
+              atTest("attribute-type", `${itemRefPath}/qti-assessment-item-ref[1]/@identifier`),
+            ],
+          ],
+        );
+        assert.deepStrictEqual(
+          [...refusedUnder(ofPart, "branch-target"), ...refusedUnder(ofItemRef, "branch-target")],
+          [
+            branchRefused(
+              "test.xml",
+              "qti-assessment-test/qti-test-part[1]/qti-branch-rule",
+              "Q",
+              "unknown",
+            ),
+            branchRefused(
+              "test.xml",
+              `${itemRefPath}/qti-assessment-item-ref[1]/qti-branch-rule`,
+              "I2",
+              "unknown",
+            ),
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "align-54 r11 reading 152 names nothing decision 457 (2): a branch rule of part P to target 1a is refused branch-target unknown, whether a part 1a lies before P or after it, since no target resolves to a name that is no NCName",
+    () =>
+      Effect.gen(function* namelessTarget() {
+        const first = namedPartXml("1a", namedSectionXml("S1", itemRefXml("I1", "items/a.xml")));
+        const branching = namedPartXml(
+          "P",
+          `${branchRuleXml("1a")}${namedSectionXml("S2", itemRefXml("I2", "items/b.xml"))}`,
+        );
+        const earlier = yield* openNameless(`${first}${branching}`);
+        const later = yield* openNameless(
+          `${branching}${namedPartXml("1a", namedSectionXml("S1", itemRefXml("I1", "items/a.xml")))}`,
+        );
+
+        assert.deepStrictEqual(
+          [refusedUnder(earlier, "branch-target"), refusedUnder(later, "branch-target")],
+          [
+            [
+              branchRefused(
+                "test.xml",
+                "qti-assessment-test/qti-test-part[2]/qti-branch-rule",
+                "1a",
+                "unknown",
+              ),
+            ],
+            [
+              branchRefused(
+                "test.xml",
+                "qti-assessment-test/qti-test-part[1]/qti-branch-rule",
+                "1a",
+                "unknown",
+              ),
+            ],
+          ],
+        );
+        assert.deepStrictEqual(
+          [sitesOf(earlier).map(([rule]) => rule), sitesOf(later).map(([rule]) => rule)],
+          [
+            ["attribute-type", "attribute-type", "branch-target"],
+            ["attribute-type", "attribute-type", "branch-target"],
+          ],
+        );
+      }),
+  );
+});
