@@ -13,10 +13,11 @@ is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (public, MIT-licens
 
 - Node 26 or later runs TypeScript source directly. There is no build step.
 - pnpm workspace. Effect is pinned to `4.1.2`, and the workspace must keep exactly one copy (`pnpm why effect -r`).
-- grizzle trunk at commit `21d595d` (`21d595db827f79a3a9dd214dcfc72ced6e4bde33`) is vendored as tarballs; see
+- grizzle trunk at commit `4402a73` (`4402a73bcf8124632bde33a40ebe8f684744226b`) is vendored as tarballs; see
   `vendor/README.md`.
-- Git LFS holds every `packages/*/migrations/**/snapshot.json` (`.gitattributes`). Install `git-lfs` before cloning;
-  without it the snapshot checks out as a pointer file and grizzle refuses it.
+- Git LFS holds every `packages/*/migrations/**/snapshot.json` and `manifest.json` (`.gitattributes`), the two files
+  of a grizzle snapshot. Install `git-lfs` before cloning; without it the snapshot checks out as pointer files and
+  grizzle refuses it.
 - Vite+ (`vp`) formats, lints and runs tests. TypeScript `7.0.2` typechecks under the strict settings in `tsconfig.json`.
 
 Run before completing implementation:
@@ -53,7 +54,7 @@ reads `grizzle.config.ts` from there.
 - The lint's `sort-keys` rule orders object keys, a relation's fields included, and field order is column order. Run
   `pnpm fix` before `grizzle generate`, or the lint fix becomes an ungenerated schema change that `grizzle check`
   refuses.
-- Read every drafted SQL file and resolve its markers. Never edit `snapshot.json` or `meta.json`.
+- Read every drafted SQL file and resolve its markers. Never edit `snapshot.json`, `manifest.json` or `meta.json`.
 - grizzle refuses what its README's Limits section lists: no nullable columns, no timestamp type, no outer joins, no
   window functions, no raw SQL at run time. Its field types (README, "Tables
   and types") include no JSON or XML type. Model within them.
