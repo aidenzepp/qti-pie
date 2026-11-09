@@ -179,7 +179,7 @@ const addedRules = [
 ] as const;
 
 describe("refusalRules", () => {
-  it("lists the validator's, the verdict's and the reader's nineteen rules, M2's thirteen, then align-54's four, 36 in all", () => {
+  it("lists the validator's, the verdict's and the reader's nineteen rules, M2's thirteen, align-54's four, then plate's own assembly-limit, 37 in all (align-54 r12 assembly limit)", () => {
     assert.deepStrictEqual(
       [...refusalRules],
       [
@@ -219,9 +219,10 @@ describe("refusalRules", () => {
         "branch-target",
         "document-lang",
         "lom-learning-resource-type",
+        "assembly-limit",
       ],
     );
-    assert.strictEqual(refusalRules.length, 36);
+    assert.strictEqual(refusalRules.length, 37);
   });
 
   it("holds no rule twice", () => {

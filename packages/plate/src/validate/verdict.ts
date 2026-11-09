@@ -2676,7 +2676,8 @@ const unwrittenLom = (refusal: Refusal): string => {
  * `language` it uses and the languages its LOM record has `listed`, space-separated (reading 134);
  * and `lom-learning-resource-type` the `value` (reading 122). Every other refusal align-54 adds
  * names a new `check` on an existing rule, and that rule's own wording has a branch for it, here
- * or in its named function.
+ * or in its named function. Plate's own `assembly-limit` reads the `bound` passed, its `limit` and
+ * the count `reached`.
  *
  * `attribute-type` and `missing-attribute` cite the `reading` that settles them, or else the
  * `source`, a line of QTI's information model, for the floor of a literal `figures` or `n`, the
@@ -2718,6 +2719,27 @@ const wordings = {
       first === "" || second === ""
         ? `rename the test's own variable ${reference}, or the item ref, test part or section ${code(first === "" ? second : first)}, so that only one reading names a variable`
         : `rename the identifier whose ${code(".")} lets ${reference} split two ways, so that only one reading names a variable`,
+    );
+  },
+  /**
+   * Plate's own stated limit on a package's assembled tests, no rule of QTI: its `bound` is
+   * `placements`, how many times the package's tests place section documents, or `bytes`, how many
+   * bytes of section documents they place, each document counted once for every test and context
+   * that places it. The count stops at the first bound it passes, so `reached` is where it stopped,
+   * the least count past the limit, and the sentence says "at least".
+   */
+  "assembly-limit": (refusal) => {
+    const limit = fact(refusal, "limit", "");
+    const reached = fact(refusal, "reached", "");
+    const past =
+      fact(refusal, "bound", "") === "bytes"
+        ? `plate's assembly limit of ${limit} bytes of section documents placed: they place at least ${reached} bytes of section documents`
+        : `plate's assembly limit of ${limit} placements of section documents: they place section documents at least ${reached} times`;
+
+    return sentence(
+      refusal,
+      `The package's tests assemble past ${past}, each document counted once for every test and context that places it; the limit is plate's own, not a rule of QTI.`,
+      "place fewer section documents in the package's tests, or split the package",
     );
   },
   "attribute-type": attributeType,

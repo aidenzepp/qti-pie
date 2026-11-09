@@ -31,7 +31,10 @@
  *   placements reach it (reading 170, "A section ref whose href is external is refused under the
  *   stated limit 'Remote section ref'"): a stated limit, not a rule of QTI, since plate assembles a
  *   test from its package's documents and never fetches a section; a fetch of the section at import
- *   would lift it. That reach is the test's own parts, sections and item refs and each placed
+ *   would lift it. Every test is assembled before any is judged, and across them the placements of
+ *   section documents are held to plate's assembly limit, 4,096 placements and 8 MiB placed: past
+ *   either, the package is refused `assembly-limit` and no test is judged, a stated limit and not a
+ *   rule of QTI. That reach is the test's own parts, sections and item refs and each placed
  *   document's. Through that reach:
  *
  *   - Each part's, section's and item ref's identifier is given once: one a section document gives
@@ -3967,10 +3970,127 @@ interface Assembly {
    */
   readonly cycles: readonly Refusal[];
   /**
+   * What the package's tests have placed, this test's assembly with every one assembled before it
+   * ({@link AssemblyBudget}).
+   */
+  readonly placed: Placed;
+  /**
    * Each placement, the test's first, in the order the walk first meets each.
    */
   readonly placements: readonly Placement[];
 }
+
+/**
+ * How many placements of section documents a package's assembled tests may hold, across all of its
+ * tests, before plate refuses the package `assembly-limit`: a placement is one section document
+ * under one test and one {@link PlacementContext}, and the test's own document is not one.
+ *
+ * It is plate's own stated limit, no rule of QTI, as the reader's limit of 256 nested elements is
+ * (rule `db2ef322`). A section document is judged once for each test and context that places it
+ * (reading 5, its references "resolve once for each test that includes the section"; reading 145, a
+ * fragment it splices "is judged in the test that places it, once per placement"), and its views
+ * and branch rules are read over the placements above it (readings 86 and 87), so the work of
+ * judging a package's tests follows its assembled tests, which its tests, its test parts, the
+ * contexts each places a document under and a chain of documents multiply past the package's own
+ * size. Within the limit each such shape measured opens in under 2 s of thread CPU. No placement
+ * for each test part, and a section document judged once across tests whose reaches agree, would
+ * lift it.
+ */
+const assemblyPlacementLimit = 4096;
+
+/**
+ * How many bytes of section documents a package's assembled tests may place, across all of its
+ * tests, before plate refuses the package `assembly-limit`, 8 MiB: each placement
+ * ({@link assemblyPlacementLimit}) counts its document's size in the package once. A few placements
+ * of one large section document cost what that many documents would, since each is judged again,
+ * so a count of placements alone does not bound the work.
+ */
+const assemblyByteLimit = 8 * 1024 * 1024;
+
+/**
+ * What a package's assembled tests have placed so far, counted across its tests toward the
+ * assembly limit ({@link assemblyPlacementLimit}, {@link assemblyByteLimit}).
+ */
+interface Placed {
+  /**
+   * The bytes of the section documents placed, each counted once for each placement.
+   */
+  readonly bytes: number;
+  /**
+   * The placements of section documents, the tests' own placements not counted.
+   */
+  readonly placements: number;
+}
+
+/**
+ * What a test's assembly counts toward the package's assembly limit.
+ */
+interface AssemblyBudget {
+  /**
+   * The package's location, which an `assembly-limit` refusal carries as its document.
+   */
+  readonly location: string;
+  /**
+   * What the tests assembled before this one placed.
+   */
+  readonly placed: Placed;
+  /**
+   * Give the size in bytes of the package's file at a path.
+   */
+  readonly sizeOf: (path: string) => number;
+}
+
+/**
+ * Construct the `assembly-limit` refusal of a package: its detail names the `bound` passed, its
+ * `limit` and the count `reached`, and it refuses the whole package, at the package's location.
+ *
+ * @param location The package's location.
+ * @param bound The bound passed.
+ * @param limit The bound's limit.
+ * @param reached The count that passed it.
+ * @returns The refusal.
+ */
+const assemblyLimit = (
+  location: string,
+  bound: "bytes" | "placements",
+  limit: number,
+  reached: number,
+): Refusal =>
+  new Refusal({
+    detail: { bound, limit: String(limit), reached: String(reached) },
+    document: location,
+    location: { kind: "document" },
+    readerRule: Option.none(),
+    rule: "assembly-limit",
+    suggestion: Option.none(),
+  });
+
+/**
+ * Give what a package's tests place once a test's assembly places one more section document, or
+ * the `assembly-limit` refusal when that passes a bound ({@link assemblyLimit}): the placements
+ * first, then the bytes, so a placement that passes both names the placements.
+ *
+ * @param budget What the assembly counts toward.
+ * @param placed What the package's tests placed before this placement.
+ * @param path The path of the section document placed.
+ * @returns What they place with it, or the refusal.
+ */
+const placeOne = (
+  budget: AssemblyBudget,
+  placed: Placed,
+  path: string,
+): Result.Result<Placed, Refusal> => {
+  const next = { bytes: placed.bytes + budget.sizeOf(path), placements: placed.placements + 1 };
+  if (next.placements > assemblyPlacementLimit) {
+    return Result.fail(
+      assemblyLimit(budget.location, "placements", assemblyPlacementLimit, next.placements),
+    );
+  }
+
+  return next.bytes > assemblyByteLimit
+    ? Result.fail(assemblyLimit(budget.location, "bytes", assemblyByteLimit, next.bytes))
+    : Result.succeed(next);
+};
 
 /**
  * Give the section document at a path, when a section resource names it and the reader read it
@@ -4018,6 +4138,49 @@ const contextUnder = (placement: Placement, site: SectionPlacement): PlacementCo
 };
 
 /**
+ * What a section document gives each placement of it: its source, its structure and its layout.
+ */
+type SectionReader = (
+  path: string,
+) => Option.Option<Omit<Placement, keyof PlacementContext | "path">>;
+
+/**
+ * Give what reads the section document at a path once for a package, with what it holds, for every
+ * test's assembly ({@link assemble}): its source, its structure ({@link structureIn}) and its
+ * layout ({@link layoutOf}), each a function of the document, its path and the package alone, so
+ * every test that places the document shares them, and a document many tests place is read once.
+ *
+ * @param sectionPaths The path of every section resource's document.
+ * @param refTargets What a ref may resolve to: the documents of every item resource, LTI link
+ *   resource and section resource.
+ * @param documents The package's documents.
+ * @returns The reader, which gives none where no section document is.
+ */
+const sectionReader = (
+  sectionPaths: ReadonlySet<string>,
+  refTargets: RefTargets,
+  documents: ReadonlyMap<string, Document>,
+): SectionReader => {
+  const read = new Map<string, Option.Option<Omit<Placement, keyof PlacementContext | "path">>>();
+
+  return (path) => {
+    const known = read.get(path);
+    if (known !== undefined) {
+      return known;
+    }
+
+    const found = Option.map(sectionDocumentAt(path, sectionPaths, documents), (source) => {
+      const structure = structureIn(source, path, refTargets);
+
+      return { layout: layoutOf(structure.visits), source, structure };
+    });
+    read.set(path, found);
+
+    return found;
+  };
+};
+
+/**
  * Count how many times the assembled test places each placement, up to 2, from the test's one:
  * each placement's count is the sum, over the section refs that place it, of the count of the
  * placement that holds the section ref, so the work is one pass over the section refs however many
@@ -4058,9 +4221,9 @@ const countsOf = (
  * The walk keeps one {@link Placement} for each document under each {@link PlacementContext} it
  * meets, and walks a placement's section refs only the first time it meets it: a later section ref
  * to the same document under the same context places it again, which {@link countsOf} counts up to
- * 2, but adds nothing new to judge. So the work is bounded by the documents, their section refs and
- * the few contexts each may be placed under, however many placements a chain of documents that
- * each place the next twice multiplies, and no limit is set on it. The walk keeps the placements
+ * 2, but adds nothing new to judge. So the walk's work is bounded by the documents, their section
+ * refs and the few contexts each may be placed under, however many placements a chain of documents
+ * that each place the next twice multiplies. The walk keeps the placements
  * still open in a list of its own rather than on the call stack, so no length of a chain of refs
  * overflows the stack either.
  *
@@ -4078,41 +4241,22 @@ const countsOf = (
  * `xi:include` is never fetched here (S-6), so a loop through includes is not seen, a recorded
  * limit (rule `db2ef322`).
  *
+ * Each new placement counts toward the package's assembly limit, across its tests
+ * ({@link placeOne}): the walk stops at the first placement that passes a bound and gives the
+ * `assembly-limit` refusal, so refusing costs what reaching the bound does. Within the limit the
+ * count changes nothing the walk does.
+ *
  * @param test The test's own placement.
- * @param sectionPaths The path of every section resource's document.
- * @param refTargets What a ref may resolve to: the documents of every item resource, LTI link
- *   resource and section resource.
- * @param documents The package's documents.
- * @returns The placements, the cycles' refusals, and how the placements place one another.
+ * @param readAt What gives the section document at a path ({@link sectionReader}).
+ * @param budget What the package's tests assembled before this one placed, and how to count.
+ * @returns The placements, the cycles' refusals, how the placements place one another and what
+ *   the tests have placed with them, or the `assembly-limit` refusal.
  */
 const assemble = (
   test: Placement,
-  sectionPaths: ReadonlySet<string>,
-  refTargets: RefTargets,
-  documents: ReadonlyMap<string, Document>,
-): Assembly => {
-  const read = new Map<string, Option.Option<Omit<Placement, keyof PlacementContext | "path">>>();
-  /**
-   * Read the section document at a path once, with what it holds.
-   *
-   * @param path The document's path.
-   * @returns Its source, structure and layout, none when no section document is there.
-   */
-  const readAt = (path: string) => {
-    const known = read.get(path);
-    if (known !== undefined) {
-      return known;
-    }
-
-    const found = Option.map(sectionDocumentAt(path, sectionPaths, documents), (source) => {
-      const structure = structureIn(source, path, refTargets);
-
-      return { layout: layoutOf(structure.visits), source, structure };
-    });
-    read.set(path, found);
-
-    return found;
-  };
+  readAt: SectionReader,
+  budget: AssemblyBudget,
+): Result.Result<Assembly, Refusal> => {
   const parts = new Map<SourceElement, number>();
   /**
    * Key a document's placement under a context.
@@ -4145,6 +4289,7 @@ const assemble = (
   // documents are the chain.
   const open: { readonly placement: Placement; next: number }[] = [{ next: 0, placement: test }];
   const onChain = new Set<string>([test.path]);
+  let total = budget.placed;
   for (let frame = open.at(-1); frame !== undefined; frame = open.at(-1)) {
     const { placement } = frame;
     const site = placement.structure.sectionRefs.at(frame.next);
@@ -4178,6 +4323,12 @@ const assemble = (
       placed.push({ placement: child, site });
       children.set(placement, placed);
       if (known === undefined) {
+        const counted = placeOne(budget, total, site.path);
+        if (Result.isFailure(counted)) {
+          return Result.fail(counted.failure);
+        }
+
+        total = counted.success;
         byKey.set(key, child);
         placements.push(child);
         onChain.add(site.path);
@@ -4186,7 +4337,13 @@ const assemble = (
     }
   }
 
-  return { children, counts: countsOf(test, children, finished), cycles, placements };
+  return Result.succeed({
+    children,
+    counts: countsOf(test, children, finished),
+    cycles,
+    placed: total,
+    placements,
+  });
 };
 
 /**
@@ -5465,34 +5622,17 @@ interface TestJudgement {
  * which reads no item, would hold it. A read in a reached section document is left alone: a
  * session delivers none of its items.
  *
- * @param source The test's source.
- * @param testPath The test's path.
- * @param refTargets What a ref may resolve to: the documents of every item resource, LTI link
- *   resource and section resource.
- * @param sectionPaths The path of every section resource's document.
+ * @param assembled The test, as its own placement, and its assembly ({@link assembleTests}).
  * @param documents The package's documents.
  * @returns Its own item refs' item paths, its own item refs that name an LTI link, the section
  *   documents it reaches, its refusals and theirs under it, and its reads through an item ref that
  *   the engine holds no value of.
  */
 const judgeTest = (
-  source: SourceDocument,
-  testPath: string,
-  refTargets: RefTargets,
-  sectionPaths: ReadonlySet<string>,
+  { assembly, test }: AssembledTest,
   documents: ReadonlyMap<string, Document>,
 ): TestJudgement => {
-  const own = structureIn(source, testPath, refTargets);
-  const test: Placement = {
-    layout: layoutOf(own.visits),
-    mixes: false,
-    part: Option.none(),
-    path: testPath,
-    replaced: false,
-    source,
-    structure: own,
-  };
-  const assembly = assemble(test, sectionPaths, refTargets, documents);
+  const { path: testPath, source, structure: own } = test;
   const { children, counts, cycles, placements } = assembly;
   const { durations, flags, itemRefs, names, placedAt, reached, repeats, written } = reachOf(
     test,
@@ -6164,9 +6304,84 @@ const contentsOf = (
 };
 
 /**
+ * One test document of a package with its assembled test ({@link assemble}).
+ */
+interface AssembledTest {
+  readonly assembly: Assembly;
+  /**
+   * The test document's own placement, under no part.
+   */
+  readonly test: Placement;
+}
+
+/**
+ * Assemble each test document of a package, in the manifest's order, before any is judged, with one
+ * count across them toward the package's assembly limit ({@link assemblyPlacementLimit},
+ * {@link assemblyByteLimit}): the first test whose assembly passes a bound stops the count, and the
+ * package is refused with that one `assembly-limit` refusal, whichever test passed it, so whether
+ * it is refused never depends on the manifest's order. No test is judged then, and refusing costs
+ * what reaching the bound does. A section document's size is its file's, in bytes, and the tests
+ * share one reading of each section document ({@link sectionReader}).
+ *
+ * @param manifest The manifest.
+ * @param documents The package's documents.
+ * @param refTargets What a ref may resolve to.
+ * @param sectionPaths The path of every section resource's document.
+ * @param held The package's files, keyed by normal form.
+ * @param location The package's location.
+ * @returns Each test document, by path, with its assembly, or the `assembly-limit` refusal.
+ */
+const assembleTests = (
+  manifest: Manifest,
+  documents: ReadonlyMap<string, Document>,
+  refTargets: RefTargets,
+  sectionPaths: ReadonlySet<string>,
+  held: ReadonlyMap<string, Uint8Array>,
+  location: string,
+): Result.Result<ReadonlyMap<string, AssembledTest>, Refusal> => {
+  const tests = new Map<string, AssembledTest>();
+  const readAt = sectionReader(sectionPaths, refTargets, documents);
+  // A section document the walk places is one the reader read, so the package holds its file.
+  const sizeOf = (path: string): number => held.get(path)?.byteLength ?? 0;
+  let placed: Placed = { bytes: 0, placements: 0 };
+  for (const path of pathsOfType(manifest, "imsqti_test_xmlv3p0")) {
+    const source = documents.get(path)?.source;
+    if (
+      source !== undefined &&
+      Result.isSuccess(source) &&
+      source.success.root.namespace === qtiNamespace &&
+      source.success.root.local === "qti-assessment-test"
+    ) {
+      const structure = structureIn(source.success, path, refTargets);
+      const test: Placement = {
+        layout: layoutOf(structure.visits),
+        mixes: false,
+        part: Option.none(),
+        path,
+        replaced: false,
+        source: source.success,
+        structure,
+      };
+      const assembly = assemble(test, readAt, { location, placed, sizeOf });
+      if (Result.isFailure(assembly)) {
+        return Result.fail(assembly.failure);
+      }
+
+      ({ placed } = assembly.success);
+      tests.set(path, { assembly: assembly.success, test });
+    }
+  }
+
+  return Result.succeed(tests);
+};
+
+/**
  * Judge a package whose manifest is read: the file rules, the documents, the roots, the LOM
  * metadata, the tests and the section documents they reach, the refs of every section document
- * the manifest lists ({@link judgeReached}), then the verdict over them.
+ * the manifest lists ({@link judgeReached}), then the verdict over them. Every test is assembled
+ * before any is judged ({@link assembleTests}); past the assembly limit no test and no section
+ * document is judged, and the one `assembly-limit` refusal stands in place of their refusals,
+ * beside every other rule's.
  *
  * @param manifest The manifest.
  * @param lom Each resource's LOM generals, keyed by its location.
@@ -6196,44 +6411,40 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
     kinds,
   };
   const tests = new Map<string, Pick<TestJudgement, "links" | "reads" | "refs">>();
+  const assembled = assembleTests(manifest, documents, refTargets, sectionPaths, held, location);
   const testRefusals: Refusal[] = [];
   // Each test's section refusals beyond those an earlier test gave, counted once across the tests.
   const underTests: Refusal[] = [];
   const heldUnderTests = holding([]);
   const reached = new Map<string, ReachedSection>();
-  for (const path of pathsOfType(manifest, "imsqti_test_xmlv3p0")) {
-    const source = documents.get(path)?.source;
-    if (
-      source !== undefined &&
-      Result.isSuccess(source) &&
-      source.success.root.namespace === qtiNamespace &&
-      source.success.root.local === "qti-assessment-test"
-    ) {
-      const judged = judgeTest(source.success, path, refTargets, sectionPaths, documents);
-      tests.set(path, judged);
-      testRefusals.push(...judged.refusals);
-      underTests.push(...heldUnderTests.keep(judged.sections));
-      for (const section of judged.reached) {
-        if (!reached.has(section.path)) {
-          reached.set(section.path, section);
-        }
+  for (const [path, test] of Result.getOrElse(assembled, () => new Map<string, AssembledTest>())) {
+    const judged = judgeTest(test, documents);
+    tests.set(path, judged);
+    testRefusals.push(...judged.refusals);
+    underTests.push(...heldUnderTests.keep(judged.sections));
+    for (const section of judged.reached) {
+      if (!reached.has(section.path)) {
+        reached.set(section.path, section);
       }
     }
   }
 
   // A section document the manifest lists and no test reaches is judged as a reached one is,
-  // after them, in the manifest's order.
-  const unreached = [...sectionPaths].flatMap((path): ReachedSection[] =>
-    reached.has(path)
-      ? []
-      : Option.toArray(
-          Option.map(sectionDocumentAt(path, sectionPaths, documents), (source) => ({
-            path,
-            source,
-            structure: structureIn(source, path, refTargets),
-          })),
-        ),
-  );
+  // after them, in the manifest's order. Past the assembly limit no test is judged, and neither is
+  // any section document.
+  const unreached = Result.isFailure(assembled)
+    ? []
+    : [...sectionPaths].flatMap((path): ReachedSection[] =>
+        reached.has(path)
+          ? []
+          : Option.toArray(
+              Option.map(sectionDocumentAt(path, sectionPaths, documents), (source) => ({
+                path,
+                source,
+                structure: structureIn(source, path, refTargets),
+              })),
+            ),
+      );
   const sectionRefusals = [...reached.values(), ...unreached].flatMap((section) =>
     judgeReached(section, documents),
   );
@@ -6256,6 +6467,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
     ...(Result.isFailure(fileRules) ? fileRules.failure : []),
     ...checkRoots(manifest, documents, fileLocation(location, manifestFile)),
     ...checkLom(manifest, lom, documents, fileLocation(location, manifestFile)),
+    ...(Result.isFailure(assembled) ? [assembled.failure] : []),
     ...testRefusals,
     ...sectionRefusals,
     ...underTests,
@@ -6346,7 +6558,10 @@ const readPackage = Effect.fnUntraced(function* readPackage(
  * It never fails, because a refusal is a verdict. A key that leaves the package's root, a package
  * without `imsmanifest.xml` at its root, a manifest the reader cannot read and a manifest
  * `readManifest` refuses each end the reading with those refusals and no resources. Otherwise every
- * rule runs and every refusal is reported. Nothing but its two inputs decides the result.
+ * rule runs and every refusal is reported, but where the package's tests assemble past plate's
+ * stated limit, 4,096 placements of section documents or 8 MiB of them placed, across all of its
+ * tests: then no test and no section document is judged, and one `assembly-limit` refusal stands
+ * for them. Nothing but its two inputs decides the result.
  *
  * @param location The package's location as the host named it. Each file's location is it, then
  *   `/`, then the file's path, which each document's verdict and each refusal of a file carry.

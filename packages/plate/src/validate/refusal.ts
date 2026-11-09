@@ -35,13 +35,28 @@ import { Schema } from "effect";
  * otherwise, which reading 62 ("an item's or test's identifier and title are those its package's
  * LOM metadata gives it") refuses.
  *
- * The last four are align-54's, under the qti package's names: `inclusion-cycle`, a chain of
+ * The next four are align-54's, under the qti package's names: `inclusion-cycle`, a chain of
  * section refs that leads back to a document already on it (reading 85), `branch-target`, a branch
  * rule's target that no branch rule may name (reading 87), `document-lang`, a language an item or
  * test uses that its resource's LOM record does not list (reading 134), and
  * `lom-learning-resource-type`, a LOM `learningResourceType` of `exam` or `self assessment`
  * (reading 122). Every other refusal align-54 adds is an existing rule with a new `check` in its
- * detail. Adding a rule here is the only way a stage gains a new refusal.
+ * detail.
+ *
+ * The last, `assembly-limit`, is plate's own stated limit and no rule of QTI: a package whose
+ * tests, taken together, place section documents more than 4,096 times, or place more than 8 MiB of
+ * them, counting a document once for each placement. Opening a package judges a section document
+ * once for each test and context that places it (reading 5, a section document's references
+ * "resolve once for each test that includes the section"; reading 145, a fragment a section
+ * document splices "is judged in the test that places it, once per placement"), so its cost follows
+ * the assembled tests, which a package can make far larger than itself. Its detail names the
+ * `bound` passed, `placements` or `bytes`, its `limit`, and the count `reached` when the count
+ * stopped. Whether a package is refused never depends on the order of its manifest's resources,
+ * since every test's placements count toward one total; which bound the refusal names, and its
+ * `reached`, may, since the count stops at the first bound it passes, in the manifest's order of
+ * the tests.
+ *
+ * Adding a rule here is the only way a stage gains a new refusal.
  */
 export const refusalRules = [
   "unknown-element",
@@ -80,6 +95,7 @@ export const refusalRules = [
   "branch-target",
   "document-lang",
   "lom-learning-resource-type",
+  "assembly-limit",
 ] as const;
 
 /**

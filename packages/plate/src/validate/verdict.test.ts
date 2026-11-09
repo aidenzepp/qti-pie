@@ -3570,6 +3570,16 @@ const stringBound = (interaction: string, cardinality: string) => ({
   response: "NOTES",
 });
 
+/**
+ * Construct the `assembly-limit` refusal of the package `package.zip`, which points at the whole
+ * package.
+ *
+ * @param detail The bound passed, its limit and the count reached.
+ * @returns The refusal.
+ */
+const limitRefusal = (detail: Readonly<Record<string, string>>): Refusal =>
+  refusalAt("assembly-limit", "package.zip", { kind: "document" }, detail);
+
 describe("describeRefusal", () => {
   it("words every rule in refusalRules", () => {
     for (const rule of refusalRules) {
@@ -3595,6 +3605,17 @@ describe("describeRefusal", () => {
     for (const fragment of says) {
       assert.include(sentence, fragment);
     }
+  });
+
+  it("align-54 r12 assembly limit: words a package whose tests assemble past the placements bound or the bytes bound with the limit and its number, the count reached, the cause and the remedy, as plate's own limit", () => {
+    assert.strictEqual(
+      describeRefusal(limitRefusal({ bound: "placements", limit: "4096", reached: "4097" })),
+      "**`package.zip`: refused.** The package's tests assemble past plate's assembly limit of 4096 placements of section documents: they place section documents at least 4097 times, each document counted once for every test and context that places it; the limit is plate's own, not a rule of QTI. Rule `assembly-limit`. To make it valid: place fewer section documents in the package's tests, or split the package.",
+    );
+    assert.strictEqual(
+      describeRefusal(limitRefusal({ bound: "bytes", limit: "8388608", reached: "8389120" })),
+      "**`package.zip`: refused.** The package's tests assemble past plate's assembly limit of 8388608 bytes of section documents placed: they place at least 8389120 bytes of section documents, each document counted once for every test and context that places it; the limit is plate's own, not a rule of QTI. Rule `assembly-limit`. To make it valid: place fewer section documents in the package's tests, or split the package.",
+    );
   });
 
   it("align-54 R3 wording F4: a file reference an attribute makes keeps its sentence, naming the attribute", () => {

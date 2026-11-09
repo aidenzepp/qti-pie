@@ -1084,8 +1084,9 @@ const testingDuration = (scope: string): string =>
   `<qti-outcome-condition><qti-outcome-if><qti-is-null>${variableXml(`${scope}.duration`)}</qti-is-null>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition>`;
 
 /**
- * Each long chain of section refs gets this bound, as its own: opening 8,000 section documents
- * takes about a second here, and the bound leaves room for a slow machine.
+ * Each long chain of section refs gets this bound, as its own: opening 8,000 section documents,
+ * or judging the 4,096 that plate's assembly limit admits, takes about a second here, and the
+ * bound leaves room for a slow machine.
  */
 const chainTimeoutMs = 120_000;
 
@@ -2204,13 +2205,28 @@ const namingPackage = (
   });
 
 /**
- * Open a package to its end, for a timing that runs the opening as plain code.
+ * Report whether a verdict is the refusal of a package whose tests assemble past plate's assembly
+ * limit.
+ *
+ * @param verdict The verdict.
+ * @returns Whether it carries an `assembly-limit` refusal.
+ */
+const pastLimit = (verdict: PackageVerdict): boolean =>
+  verdict.verdict === "refused" &&
+  verdict.refusals.some((refusal) => refusal.rule === "assembly-limit");
+
+/**
+ * Open a package to its end, for a timing that runs the opening as plain code: a package within
+ * plate's assembly limit, so that the timing measures its judgement, not the refusal of the limit.
  *
  * @param files The package's files.
- * @returns The opening, which checks nothing of the verdict.
+ * @returns The opening, which checks only that the package is within the assembly limit.
  */
 const opening = (files: ReadonlyMap<string, Uint8Array>) => (): void => {
-  Effect.runSync(openPackage(location, files));
+  assert.isFalse(
+    pastLimit(Effect.runSync(openPackage(location, files))),
+    "the package's tests assemble past the assembly limit, so the timing would measure no judgement",
+  );
 };
 
 /**
@@ -2373,17 +2389,10 @@ const fewerPlacingParts = 20;
 
 /**
  * The parts placing one section document, and the pre-conditions of its one item ref, in the
- * hostile-size case, the size the gate's review measured at 7.5 s against 0.12 s.
+ * hostile-size case, the size the gate's review measured at 7.5 s against 0.12 s. Its 640
+ * placements of the document pass plate's assembly limit of 8 MiB placed, so it is refused.
  */
 const hostilePlacingParts = 640;
-
-/**
- * The most the hostile-size case of a section document many parts place may take, as a multiple
- * of the thread CPU of the same section refs in one part: a judgement of the document's references
- * and processing for every part took many times as long, and one judgement leaves only each part's
- * own share.
- */
-const placingCpuLimit = 2;
 
 /**
  * How a package's section refs to one section document are placed: each in a test part of its
@@ -2773,13 +2782,16 @@ const branchingRefusals = (documents: number, writing: Writing): readonly Seen[]
 
 /**
  * The section documents, each writing a target of its own, and the branch rules of the smaller
- * growth check of rules whose distinct targets each document writes its own of.
+ * growth check of rules whose distinct targets each document writes its own of. Eight times as
+ * many, each placed 16 times, are the most within plate's assembly limit of 4,096 placements, so
+ * the larger check still judges its package.
  */
-const fewerTargetDocuments = 250;
+const fewerTargetDocuments = 31;
 
 /**
  * The section documents, each writing a target of its own, and the branch rules of the hostile-size
- * case of rules whose distinct targets each document writes its own of.
+ * case of rules whose distinct targets each document writes its own of, placed some 32,000 times,
+ * past plate's assembly limit of 4,096 placements, so it is refused.
  */
 const hostileTargetDocuments = 2000;
 
@@ -2820,8 +2832,8 @@ const targetRulesXml = (documents: number, targets: Targets, href: string): stri
   ).join("");
 
 /**
- * The files of a package whose test `T` holds {@link targetParts} test parts, each placing the
- * section document `sections/h.xml`, whose section `SA` draws its order (`qti-ordering
+ * The files of a package whose test `T` holds test parts, {@link targetParts} unless given, each
+ * placing the section document `sections/h.xml`, whose section `SA` draws its order (`qti-ordering
  * shuffle="true"`) and whose section `SB` does not, each holding a section ref to each section
  * document `sections/s<n>.xml`, which writes `X<n>`. So each section document is placed twice under
  * each part, once under a drawn order and once not. Each of the item refs `r<n>` to `items/a.xml`
@@ -2838,18 +2850,20 @@ const targetRulesXml = (documents: number, targets: Targets, href: string): stri
  * @param documents How many section documents and branch rules it holds.
  * @param targets Which identifier each rule targets.
  * @param rulesIn Where the rules lie.
+ * @param placing How many test parts place the hub, {@link targetParts} unless given.
  * @returns The package's files.
  */
 const targetsPackage = (
   documents: number,
   targets: Targets,
   rulesIn: RulesIn,
+  placing = targetParts,
 ): ReadonlyMap<string, Uint8Array> => {
   const indices = Array.from({ length: documents }, (_, index) => index);
   const refsFrom = (prefix: string): string =>
     indices.map((index) => sectionRefXml(`${prefix}${index}`, `s${index}.xml`)).join("");
   const placesRules = rulesIn === "a section document";
-  const parts = Array.from({ length: targetParts }, (_, part) =>
+  const parts = Array.from({ length: placing }, (_, part) =>
     partXml(
       `P${part}`,
       `${part === 0 && !placesRules ? `<qti-assessment-section identifier="SEC" title="SEC" visible="true">${targetRulesXml(documents, targets, "items/a.xml")}</qti-assessment-section>` : ""}${sectionRefXml(`H${part}`, "sections/h.xml")}`,
@@ -2932,6 +2946,13 @@ const targetsRefusals = (documents: number, targets: Targets, rulesIn: RulesIn):
 const hubParts = 64;
 
 /**
+ * The test parts of the growth check of {@link hubPackage}: under {@link hubParts}, eight times
+ * {@link fewerHubDocuments} would pass plate's assembly limit of 4,096 placements, and the larger
+ * check would judge nothing; under 4, the larger one places 4,004.
+ */
+const hubGrowthParts = 4;
+
+/**
  * The section documents, and the reads through them, of the smaller growth check of a test that
  * reads through every document a hub places.
  */
@@ -2941,25 +2962,10 @@ const fewerHubDocuments = 125;
  * The section documents, and the reads through them, of the hostile-size case of a test that reads
  * through every document a hub places, some 940 KB, the size the gate's re-review measured at 18.0
  * s and 5.4 GB of heap against 0.88 s for the same package reading the test's own outcome, past
- * the default heap.
+ * the default heap. Under {@link hubParts} it places 128,064 placements, past plate's assembly
+ * limit of 4,096, so it is refused.
  */
 const hostileHubDocuments = 2000;
-
-/**
- * The most the hostile-size case of a test that reads through every document a hub places may
- * take, as a multiple of the thread CPU of the same package reading the test's own outcome: a walk
- * of every placement for each document read took many times as long, and deciding each document's
- * views from the placements above the one judged leaves only each read's own share.
- */
-const hubCpuLimit = 2;
-
-/**
- * The most the heap may grow by while the hostile-size case's package opens, in bytes. A set of
- * every placement kept for each document read, 128,064 placements for each of 2,000 documents,
- * exhausted the default heap of some 4 GB; without them the opening holds about what the package
- * reading the test's own outcome holds.
- */
-const hubHeapLimit = 512 * 2 ** 20;
 
 /**
  * What the outcome processing of {@link hubPackage} sums, once for each section document:
@@ -2968,22 +2974,28 @@ const hubHeapLimit = 512 * 2 ** 20;
 type HubReads = "each document's item" | "the test's own";
 
 /**
- * The files of a package whose test `T` declares `TOTAL` and holds {@link hubParts} test parts
- * `P<p>`, each placing the section document `sections/h.xml` through a section ref of its own. Its
- * section `HUB` places the section documents `sections/s<n>.xml`, each of whose sections `X<n>`
- * holds the item ref `I<n>` to `items/b.xml` ({@link otherItemXml}), so each is placed once under
- * each part. The test's outcome processing sets `TOTAL` to a sum of one read for each document.
+ * The files of a package whose test `T` declares `TOTAL` and holds test parts `P<p>`,
+ * {@link hubParts} unless given, each placing the section document `sections/h.xml` through a
+ * section ref of its own. Its section `HUB` places the section documents `sections/s<n>.xml`, each
+ * of whose sections `X<n>` holds the item ref `I<n>` to `items/b.xml` ({@link otherItemXml}), so
+ * each is placed once under each part. The test's outcome processing sets `TOTAL` to a sum of one
+ * read for each document.
  *
  * @param documents How many section documents the hub places.
  * @param reads What each read of the sum reads.
+ * @param placing How many test parts place the hub, {@link hubParts} unless given.
  * @returns The package's files.
  */
-const hubPackage = (documents: number, reads: HubReads): ReadonlyMap<string, Uint8Array> => {
+const hubPackage = (
+  documents: number,
+  reads: HubReads,
+  placing = hubParts,
+): ReadonlyMap<string, Uint8Array> => {
   const indices = Array.from({ length: documents }, (_, index) => index);
   const sum = indices
     .map((index) => variableXml(reads === "the test's own" ? "TOTAL" : `I${index}.N`))
     .join("");
-  const parts = Array.from({ length: hubParts }, (_, part) =>
+  const parts = Array.from({ length: placing }, (_, part) =>
     partXml(`P${part}`, sectionRefXml(`H${part}`, "sections/h.xml")),
   ).join("");
 
@@ -3081,21 +3093,24 @@ const layeredChain = 70;
 
 /**
  * The test parts of the growth check of {@link layeredPackage}, each placing the hub, so each of
- * the hub's documents has as many placements.
+ * the hub's documents has as many placements. Under 64, eight times {@link fewerLayered} would
+ * pass plate's assembly limit of 4,096 placements, and the larger check would judge nothing; under
+ * 4, the larger one places 3,917.
  */
-const layeredParts = 64;
+const layeredParts = 4;
 
 /**
  * The branch rules, and the section documents the hub places, of the smaller growth check of
  * {@link layeredPackage}.
  */
-const fewerLayered = 128;
+const fewerLayered = 120;
 
 /**
  * The branch rules of the hostile-size case of {@link layeredPackage}: with
  * {@link hostileLayeredParts} and {@link hostileLayeredDocuments}, some 0.9 MB, the shape the gate's
  * re-review measured at 16.9 s and 5.4 GB of heap against 0.86 s with every rule to `X0`, past the
- * default heap.
+ * default heap. It places some 128,000 placements, past plate's assembly limit of 4,096, so it is
+ * refused.
  */
 const hostileLayeredTargets = 2000;
 
@@ -3108,22 +3123,6 @@ const hostileLayeredParts = 128;
  * The section documents the hub places in the hostile-size case of {@link layeredPackage}.
  */
 const hostileLayeredDocuments = 1000;
-
-/**
- * The most the hostile-size case of {@link layeredPackage} may take, as a multiple of the thread
- * CPU of the same package with every rule to `X0`: a walk of every placement for each target took
- * many times as long, and one walk up from `r`'s placement for the writers above it leaves only
- * each rule's own share.
- */
-const layeredCpuLimit = 2;
-
-/**
- * The most the heap may grow by while the hostile-size case of {@link layeredPackage} opens, in
- * bytes. A set of every placement kept for each target, some 128,000 placements for each of 2,000
- * targets, exhausted the default heap of some 4 GB; without them the opening holds about what the
- * package with every rule to `X0` holds.
- */
-const layeredHeapLimit = 512 * 2 ** 20;
 
 /**
  * Which identifier each branch rule of {@link layeredPackage} targets: `X<n>`, its own, or `X0`
@@ -3233,6 +3232,485 @@ const layeredRefusals = (
       ),
     ),
   ).flat();
+
+/**
+ * The most thread CPU, in milliseconds, opening a package one step past plate's assembly limit may
+ * take: the walk stops at the placement that passes the bound and no test is judged, so refusing
+ * costs what reading the package and reaching the bound do.
+ */
+const pastLimitMs = 100;
+
+/**
+ * The most thread CPU, in milliseconds, opening a package at the largest size plate's assembly
+ * limit admits may take: within the limit, judging the assembled tests costs seconds at most.
+ */
+const withinLimitMs = 2000;
+
+/**
+ * The most the heap may grow by while a package at the largest size the assembly limit admits
+ * opens, in bytes.
+ */
+const withinLimitHeap = 512 * 2 ** 20;
+
+/**
+ * The `assembly-limit` refusal of a package whose tests assemble past a bound, at the package.
+ *
+ * @param bound The bound passed.
+ * @param reached The count that passed it.
+ * @returns The refusal's facts.
+ */
+const limitRefused = (bound: "bytes" | "placements", reached: string): Seen => ({
+  detail: { bound, limit: bound === "bytes" ? "8388608" : "4096", reached },
+  document: location,
+  location: { kind: "document" },
+  rule: "assembly-limit",
+});
+
+/**
+ * Take the facts of every refusal the documents' own verdicts give a package, in the order of its
+ * resources: those a package past the assembly limit still gives beside the limit's, as no test
+ * is judged.
+ *
+ * @param verdict The package verdict.
+ * @returns The refusals' facts.
+ */
+const documentRefusals = (verdict: PackageVerdict): readonly Seen[] =>
+  verdict.resources.flatMap((resource) =>
+    Option.match(resource.verdict, {
+      onNone: () => [],
+      onSome: (judged) =>
+        judged.verdict === "refused" ? judged.refusals.map((refusal) => seen(refusal)) : [],
+    }),
+  );
+
+/**
+ * Open a package one step past the assembly limit and check that it is refused `assembly-limit`
+ * alone, but for the documents' own refusals, and fast: the thread CPU of the fastest of
+ * {@link growthRuns} openings is under a limit.
+ *
+ * @param files The package's files.
+ * @param refused The facts the `assembly-limit` refusal carries.
+ * @param limitMs The most thread CPU the opening may take, in milliseconds.
+ * @returns Nothing; the test fails when the package is refused otherwise, or slowly.
+ */
+const refusedFast = (files: ReadonlyMap<string, Uint8Array>, refused: Seen, limitMs: number) =>
+  Effect.gen(function* limitRefusedFast() {
+    const verdict = yield* openPackage(location, files);
+    assert.deepStrictEqual(refusalsOf(verdict), [refused, ...documentRefusals(verdict)]);
+
+    let fastest = Number.POSITIVE_INFINITY;
+    for (let run = 0; run < growthRuns; run += 1) {
+      fastest = Math.min(
+        fastest,
+        yield* cpuMillis(() => {
+          Effect.runSync(openPackage(location, files));
+        }),
+      );
+    }
+
+    assert.isBelow(fastest, limitMs, `the refusal took ${fastest.toFixed(0)} ms of thread CPU`);
+  });
+
+/**
+ * What the section documents of {@link ladderPackage}'s bottom read: `I<n>.N` through every rung's
+ * item ref, summed in one pre-condition, or a branch rule to each rung's item ref.
+ */
+type LadderReads = "a branch rule to each" | "every rung's item";
+
+/**
+ * The files of a package (N2, re-review `4cbe3e85`) whose test `T` holds test parts `P<p>`, each
+ * placing the section document `sections/d0.xml`, the top of a ladder of rungs `d<n>`: each holds
+ * the item ref `I<n>` to `items/b.xml` ({@link otherItemXml}), a section `Q<n>` and a section
+ * `M<n>` that draws its order, each with a section ref to the next rung, the last to
+ * `sections/bottom.xml`. So each rung below the top has two placements under each part, and the
+ * bottom's item ref `IB` reads through every rung.
+ *
+ * @param parts How many test parts place the ladder.
+ * @param rungs How many rungs it has.
+ * @param reads What the bottom reads.
+ * @returns The package's files.
+ */
+const ladderPackage = (
+  parts: number,
+  rungs: number,
+  reads: LadderReads,
+): ReadonlyMap<string, Uint8Array> => {
+  const indices = Array.from({ length: rungs }, (_, index) => index);
+  const bottom =
+    reads === "a branch rule to each"
+      ? indices.map((index) => branchRuleXml(`I${index}`)).join("")
+      : preConditionXml(
+          `<qti-gt><qti-sum>${indices.map((index) => variableXml(`I${index}.N`)).join("")}</qti-sum>${oneFloat}</qti-gt>`,
+        );
+
+  return packageOf({
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I", "imsqti_item_xmlv3p0", "items/b.xml"),
+      ...indices.map((index) =>
+        resourceXml(`S${index}`, "imsqti_section_xmlv3p0", `sections/d${index}.xml`),
+      ),
+      resourceXml("SB", "imsqti_section_xmlv3p0", "sections/bottom.xml"),
+    ),
+    "sections/bottom.xml": sectionDocumentXml("B", itemRefXml("IB", "../items/b.xml", bottom)),
+    ...Object.fromEntries(
+      indices.map((index) => {
+        const next = index + 1 < rungs ? `d${index + 1}.xml` : "bottom.xml";
+
+        return [
+          `sections/d${index}.xml`,
+          sectionDocumentXml(
+            `D${index}`,
+            `${itemRefXml(`I${index}`, "../items/b.xml")}<qti-assessment-section identifier="Q${index}" title="Q" visible="true">${sectionRefXml(`RQ${index}`, next)}</qti-assessment-section><qti-assessment-section identifier="M${index}" title="M" visible="true"><qti-ordering shuffle="true"/>${sectionRefXml(`RM${index}`, next)}</qti-assessment-section>`,
+          ),
+        ];
+      }),
+    ),
+    "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T">${Array.from(
+      { length: parts },
+      (_, part) => partXml(`P${part}`, sectionRefXml(`H${part}`, "sections/d0.xml")),
+    ).join("")}</qti-assessment-test>`,
+  });
+};
+
+/**
+ * What each section document of {@link chainedPartsPackage} reads: the next document's `I<n>.N` in
+ * a pre-condition, or a branch rule to `I0`.
+ */
+type ChainReads = "a branch rule to the first" | "the next document's item";
+
+/**
+ * The files of a package (N3, re-review `4cbe3e85`) whose test `T` holds test parts `P<p>`, each
+ * placing the head of a chain of section documents `sections/s<n>.xml`, each placing the next. Each
+ * holds the item ref `I<n>` to `items/b.xml` ({@link otherItemXml}), whose pre-condition reads
+ * through another document's item ref or which holds a branch rule, so every placement reads the
+ * placements above it.
+ *
+ * @param parts How many test parts place the chain.
+ * @param length How many section documents it holds.
+ * @param reads What each document reads.
+ * @returns The package's files.
+ */
+const chainedPartsPackage = (
+  parts: number,
+  length: number,
+  reads: ChainReads,
+): ReadonlyMap<string, Uint8Array> => {
+  const indices = Array.from({ length }, (_, index) => index);
+
+  return packageOf({
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I", "imsqti_item_xmlv3p0", "items/b.xml"),
+      ...indices.map((index) =>
+        resourceXml(`S${index}`, "imsqti_section_xmlv3p0", `sections/s${index}.xml`),
+      ),
+    ),
+    ...Object.fromEntries(
+      indices.map((index) => [
+        `sections/s${index}.xml`,
+        sectionDocumentXml(
+          `X${index}`,
+          `${itemRefXml(
+            `I${index}`,
+            "../items/b.xml",
+            reads === "a branch rule to the first"
+              ? branchRuleXml("I0")
+              : preConditionXml(greaterXml(`I${(index + 1) % length}.N`)),
+          )}${index + 1 < length ? sectionRefXml(`R${index + 1}`, `s${index + 1}.xml`) : ""}`,
+        ),
+      ]),
+    ),
+    "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T">${Array.from(
+      { length: parts },
+      (_, part) => partXml(`P${part}`, sectionRefXml(`H${part}`, "sections/s0.xml")),
+    ).join("")}</qti-assessment-test>`,
+  });
+};
+
+/**
+ * What places the hub of {@link readingHubPackage}: test parts of one test, or tests of their own.
+ */
+type HubPlacers = "parts" | "tests";
+
+/**
+ * The files of a package (N4 and N5, re-review `4cbe3e85` and head-cto `c2106c85`) that places
+ * the hub `sections/h.xml` a number of times: through test parts `P<p>` of the test `T`, or through
+ * tests `t<n>.xml` of their own. The hub places the section documents `sections/s<n>.xml`, each
+ * holding the item ref `I<n>` to `items/b.xml` ({@link otherItemXml}), and its own item ref `HI`
+ * reads `I<n>.N` through every one of them in a pre-condition.
+ *
+ * @param placedBy What places the hub.
+ * @param placings How many parts or tests place it.
+ * @param documents How many section documents the hub places.
+ * @returns The package's files.
+ */
+const readingHubPackage = (
+  placedBy: HubPlacers,
+  placings: number,
+  documents: number,
+): ReadonlyMap<string, Uint8Array> => {
+  const indices = Array.from({ length: documents }, (_, index) => index);
+  const placers = Array.from({ length: placings }, (_, index) => index);
+  const read = preConditionXml(
+    `<qti-gt><qti-sum>${indices.map((index) => variableXml(`I${index}.N`)).join("")}</qti-sum>${oneFloat}</qti-gt>`,
+  );
+  const tests =
+    placedBy === "parts"
+      ? {
+          "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T">${placers
+            .map((part) => partXml(`P${part}`, sectionRefXml(`H${part}`, "sections/h.xml")))
+            .join("")}</qti-assessment-test>`,
+        }
+      : Object.fromEntries(
+          placers.map((test) => [
+            `t${test}.xml`,
+            `<qti-assessment-test xmlns="${qti}" identifier="T${test}" title="T">${partXml("P", sectionRefXml("H", "sections/h.xml"))}</qti-assessment-test>`,
+          ]),
+        );
+
+  return packageOf({
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      ...(placedBy === "parts"
+        ? [resourceXml("T", "imsqti_test_xmlv3p0", "test.xml")]
+        : placers.map((test) => resourceXml(`T${test}`, "imsqti_test_xmlv3p0", `t${test}.xml`))),
+      resourceXml("I", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("H", "imsqti_section_xmlv3p0", "sections/h.xml"),
+      ...indices.map((index) =>
+        resourceXml(`S${index}`, "imsqti_section_xmlv3p0", `sections/s${index}.xml`),
+      ),
+    ),
+    "sections/h.xml": sectionDocumentXml(
+      "HUB",
+      `${itemRefXml("HI", "../items/b.xml", read)}${indices.map((index) => sectionRefXml(`R${index}`, `s${index}.xml`)).join("")}`,
+    ),
+    ...Object.fromEntries(
+      indices.map((index) => [
+        `sections/s${index}.xml`,
+        sectionDocumentXml(`X${index}`, itemRefXml(`I${index}`, "../items/b.xml")),
+      ]),
+    ),
+    ...tests,
+  });
+};
+
+/**
+ * The files of a package (N6, head-cto `c2106c85`) whose tests `t<n>.xml` each place one large
+ * section document `sections/s.xml`, of item refs `I<n>` to `items/b.xml` ({@link otherItemXml}),
+ * each with a pre-condition over its own `I<n>.N`. Each test judges the document again, so the
+ * work follows the bytes the tests place, however few placements there are.
+ *
+ * @param tests How many tests place the document.
+ * @param refs How many item refs it holds.
+ * @returns The package's files.
+ */
+const largeDocumentPackage = (tests: number, refs: number): ReadonlyMap<string, Uint8Array> => {
+  const placers = Array.from({ length: tests }, (_, index) => index);
+
+  return packageOf({
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      ...placers.map((test) => resourceXml(`T${test}`, "imsqti_test_xmlv3p0", `t${test}.xml`)),
+      resourceXml("I", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("S", "imsqti_section_xmlv3p0", "sections/s.xml"),
+    ),
+    "sections/s.xml": sectionDocumentXml(
+      "S",
+      Array.from({ length: refs }, (_, index) =>
+        itemRefXml(`I${index}`, "../items/b.xml", preConditionXml(greaterXml(`I${index}.N`))),
+      ).join(""),
+    ),
+    ...Object.fromEntries(
+      placers.map((test) => [
+        `t${test}.xml`,
+        `<qti-assessment-test xmlns="${qti}" identifier="T${test}" title="T">${partXml("P", sectionRefXml("H", "sections/s.xml"))}</qti-assessment-test>`,
+      ]),
+    ),
+  });
+};
+
+/**
+ * The bytes a package's tests place when they first pass the byte bound, placing a section
+ * document of a size over and over: the count stops at that placement.
+ *
+ * @param size The section document's size, in bytes.
+ * @returns The count reached, as the refusal's detail writes it.
+ */
+const bytesReached = (size: number): string => String((Math.floor(8_388_608 / size) + 1) * size);
+
+/**
+ * The files of a package with two tests, `t1.xml` and `t2.xml`, each of whose 32 test parts places
+ * the hub `sections/h.xml`, which places 63 section documents `sections/s<n>.xml` of one item ref
+ * each: 2,048 placements apiece, 4,096 in all, the most plate's assembly limit admits. With one
+ * more, `t2.xml` holds a 33rd part placing `sections/e.xml`, the 4,097th.
+ *
+ * @param more Whether `t2.xml` places one section document more.
+ * @param order Which test the manifest lists first: `t1.xml`, or `t2.xml`.
+ * @returns The package's files.
+ */
+const twoTestsPackage = (
+  more: boolean,
+  order: "first" | "second",
+): ReadonlyMap<string, Uint8Array> => {
+  const indices = Array.from({ length: 63 }, (_, index) => index);
+  const hubbed = Array.from({ length: 32 }, (_, part) =>
+    partXml(`P${part}`, sectionRefXml(`H${part}`, "sections/h.xml")),
+  ).join("");
+  const tests = [
+    resourceXml("T1", "imsqti_test_xmlv3p0", "t1.xml"),
+    resourceXml("T2", "imsqti_test_xmlv3p0", "t2.xml"),
+  ];
+
+  return packageOf({
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      ...(order === "first" ? tests : tests.toReversed()),
+      resourceXml("I", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("H", "imsqti_section_xmlv3p0", "sections/h.xml"),
+      resourceXml("E", "imsqti_section_xmlv3p0", "sections/e.xml"),
+      ...indices.map((index) =>
+        resourceXml(`S${index}`, "imsqti_section_xmlv3p0", `sections/s${index}.xml`),
+      ),
+    ),
+    "sections/e.xml": sectionDocumentXml("E", itemRefXml("IE", "../items/b.xml")),
+    "sections/h.xml": sectionDocumentXml(
+      "HUB",
+      indices.map((index) => sectionRefXml(`R${index}`, `s${index}.xml`)).join(""),
+    ),
+    ...Object.fromEntries(
+      indices.map((index) => [
+        `sections/s${index}.xml`,
+        sectionDocumentXml(`X${index}`, itemRefXml(`I${index}`, "../items/b.xml")),
+      ]),
+    ),
+    "t1.xml": `<qti-assessment-test xmlns="${qti}" identifier="T1" title="T">${hubbed}</qti-assessment-test>`,
+    "t2.xml": `<qti-assessment-test xmlns="${qti}" identifier="T2" title="T">${hubbed}${more ? partXml("PE", sectionRefXml("HE", "sections/e.xml")) : ""}</qti-assessment-test>`,
+  });
+};
+
+/**
+ * The files of a package whose test `T` holds 512 test parts, each placing the section document
+ * `sections/s.xml`, which holds one item ref and an XML comment that makes it exactly a size: at
+ * 16,384 bytes, the parts place 8 MiB, the most plate's assembly limit admits.
+ *
+ * @param size The section document's size, in bytes.
+ * @returns The package's files.
+ */
+const sizedPackage = (size: number): ReadonlyMap<string, Uint8Array> => {
+  const unpadded = sectionDocumentXml("S", `${itemRefXml("I0", "../items/b.xml")}<!---->`);
+
+  return packageOf({
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("S", "imsqti_section_xmlv3p0", "sections/s.xml"),
+    ),
+    "sections/s.xml": sectionDocumentXml(
+      "S",
+      `${itemRefXml("I0", "../items/b.xml")}<!--${"x".repeat(size - unpadded.length)}-->`,
+    ),
+    "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T">${Array.from(
+      { length: 512 },
+      (_, part) => partXml(`P${part}`, sectionRefXml(`H${part}`, "sections/s.xml")),
+    ).join("")}</qti-assessment-test>`,
+  });
+};
+
+/**
+ * One member of the family of shapes whose assembled tests grow faster than the package (head-cto
+ * `c2106c85`, the re-reviews `d7b4f8de` and `4cbe3e85`), each with a package one step past the
+ * bound it passes and one at the largest size the bounds admit.
+ */
+interface FamilyMember {
+  /**
+   * The package at the largest size the bounds admit, built when the case runs.
+   */
+  readonly at: () => ReadonlyMap<string, Uint8Array>;
+  /**
+   * The bound the package one step past passes.
+   */
+  readonly bound: "bytes" | "placements";
+  readonly id: string;
+  readonly name: string;
+  /**
+   * The package one step past the bound, built when the case runs.
+   */
+  readonly past: () => ReadonlyMap<string, Uint8Array>;
+}
+
+/**
+ * The family, each one step past its bound on the axis that passes it, where reading the package
+ * is cheap (64 parts or tests), and at the largest size the bounds admit where its cost was worst.
+ */
+const familyMembers: readonly FamilyMember[] = [
+  {
+    at: () => hubPackage(1023, "each document's item", 4),
+    bound: "placements",
+    id: "F17-A",
+    name: "a hub under parts, read by the test",
+    past: () => hubPackage(64, "each document's item", 64),
+  },
+  {
+    at: () => layeredPackage(2000, "each its own", 4, 1004),
+    bound: "placements",
+    id: "F17-B",
+    name: "branch rules below a long chain",
+    past: () => layeredPackage(128, "each its own", 64, 62),
+  },
+  {
+    at: () => ladderPackage(1, 2047, "every rung's item"),
+    bound: "placements",
+    id: "N2 bottom",
+    name: "a ladder read at its bottom",
+    past: () => ladderPackage(64, 32, "every rung's item"),
+  },
+  {
+    at: () => ladderPackage(1, 2047, "a branch rule to each"),
+    bound: "placements",
+    id: "N2 branch",
+    name: "a ladder branching at its bottom",
+    past: () => ladderPackage(64, 32, "a branch rule to each"),
+  },
+  {
+    at: () => chainedPartsPackage(1, 4096, "the next document's item"),
+    bound: "placements",
+    id: "N3 pre",
+    name: "a chain under parts, read through",
+    past: () => chainedPartsPackage(64, 65, "the next document's item"),
+  },
+  {
+    at: () => chainedPartsPackage(1, 4096, "a branch rule to the first"),
+    bound: "placements",
+    id: "N3 branch",
+    name: "a chain under parts, branching",
+    past: () => chainedPartsPackage(64, 65, "a branch rule to the first"),
+  },
+  {
+    at: () => readingHubPackage("parts", 4, 1023),
+    bound: "placements",
+    id: "N4",
+    name: "a hub under parts, reading its own",
+    past: () => readingHubPackage("parts", 64, 64),
+  },
+  {
+    at: () => readingHubPackage("tests", 4, 1023),
+    bound: "placements",
+    id: "N5",
+    name: "a hub under tests, reading its own",
+    past: () => readingHubPackage("tests", 64, 64),
+  },
+  {
+    at: () => largeDocumentPackage(8, 4451),
+    bound: "bytes",
+    id: "N6",
+    name: "tests placing one large document",
+    past: () => largeDocumentPackage(64, 561),
+  },
+];
 
 describe("package/open.ts", () => {
   describe("openPackage", () => {
@@ -4738,8 +5216,21 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "gives a verdict for a long chain of section refs, 8,000 section documents each naming the next, and does not throw (R5)",
-      () => acceptsChain(8000),
+      "gives a verdict for a long chain of section refs, 4,096 section documents each naming the next, the most plate's assembly limit admits, and does not throw (R5)",
+      () => acceptsChain(4096),
+      chainTimeoutMs,
+    );
+
+    it.effect(
+      "align-54 r12 assembly limit R5: a chain of 8,000 section documents each naming the next is refused assembly-limit naming the placements bound, and does not throw",
+      () =>
+        Effect.gen(function* longChainRefused() {
+          const verdict = yield* openPackage(location, chainPackage(8000));
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            limitRefused("placements", "4097"),
+            ...documentRefusals(verdict),
+          ]);
+        }),
       chainTimeoutMs,
     );
 
@@ -6541,28 +7032,22 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r11 placements judged once finding 10: 640 parts, each placing one section document whose item ref holds 640 dotted pre-conditions, open in under twice the thread CPU of the same 640 section refs in one part, with the same verdict",
+      "align-54 r12 assembly limit finding 10: 640 parts, each placing one section document whose item ref holds 640 dotted pre-conditions, are refused assembly-limit naming the bytes bound, in under the thread CPU of the same 640 section refs in one part, which opens within the limit with no refusal",
       () =>
-        Effect.gen(function* placingHostile() {
+        Effect.gen(function* placingRefused() {
           const one = placingPackage(hostilePlacingParts, "one part");
           const many = placingPackage(hostilePlacingParts, "a part each");
-          const oneVerdict = yield* openPackage(location, one);
-          const manyVerdict = yield* openPackage(location, many);
-          assert.deepStrictEqual(refusalsOf(manyVerdict), []);
-          assert.deepStrictEqual(refusalsOf(oneVerdict), []);
-          assert.strictEqual(manyVerdict.verdict, oneVerdict.verdict);
+          assert.deepStrictEqual(refusalsOf(yield* openPackage(location, one)), []);
 
           let oneMs = Number.POSITIVE_INFINITY;
-          let manyMs = Number.POSITIVE_INFINITY;
           for (let run = 0; run < growthRuns; run += 1) {
             oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
-            manyMs = Math.min(manyMs, yield* cpuMillis(opening(many)));
           }
 
-          assert.isBelow(
-            manyMs,
-            placingCpuLimit * oneMs,
-            `a part each took ${(manyMs / oneMs).toFixed(1)} times the CPU of one part`,
+          yield* refusedFast(
+            many,
+            limitRefused("bytes", bytesReached(many.get("sections/s2.xml")?.byteLength ?? 0)),
+            oneMs,
           );
         }),
       growthTimeoutMs,
@@ -6789,32 +7274,20 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r11 branch writers indexed finding 11: 2,000 branch rules, each to the target its own section document writes, open in under twice the thread CPU of the same package with every rule to the first document's target, with the rules in the test and in a section document below every target's writer, each rule refused branch-target ambiguous (reading 87 (\"one that two placements of a section document supply twice ... is refused as ambiguous\"))",
+      "align-54 r12 assembly limit finding 11: 2,000 branch rules, each to the target its own section document writes, each document placed 16 times by 8 parts, are refused assembly-limit naming the placements bound, in under the thread CPU of the same package placed by one part, which opens within the limit, with the rules in the test and in a section document below every target's writer",
       () =>
-        Effect.gen(function* distinctTargetsHostile() {
+        Effect.gen(function* distinctTargetsRefused() {
           for (const rulesIn of ["the test", "a section document"] as const) {
-            const one = targetsPackage(hostileTargetDocuments, "one", rulesIn);
-            const each = targetsPackage(hostileTargetDocuments, "each its own", rulesIn);
-            assert.deepStrictEqual(
-              refusalsOf(yield* openPackage(location, one)),
-              targetsRefusals(hostileTargetDocuments, "one", rulesIn),
-            );
-            assert.deepStrictEqual(
-              refusalsOf(yield* openPackage(location, each)),
-              targetsRefusals(hostileTargetDocuments, "each its own", rulesIn),
-            );
-
+            const one = targetsPackage(hostileTargetDocuments, "each its own", rulesIn, 1);
             let oneMs = Number.POSITIVE_INFINITY;
-            let eachMs = Number.POSITIVE_INFINITY;
             for (let run = 0; run < growthRuns; run += 1) {
               oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
-              eachMs = Math.min(eachMs, yield* cpuMillis(opening(each)));
             }
 
-            assert.isBelow(
-              eachMs,
-              branchingCpuLimit * oneMs,
-              `with the rules in ${rulesIn}, a target of its own for each rule took ${(eachMs / oneMs).toFixed(1)} times the CPU of one target for all`,
+            yield* refusedFast(
+              targetsPackage(hostileTargetDocuments, "each its own", rulesIn),
+              limitRefused("placements", "4097"),
+              oneMs,
             );
           }
         }),
@@ -6857,11 +7330,15 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r12 views without per-path sets: 8 times the section documents a hub places under each of 64 parts, each read through by the test's outcome processing, open in under 32 times the time, as whether the test reaches the placement judged through no placement of a document is decided from the placements above it, not from a set of every placement kept for each document read",
+      "align-54 r12 views without per-path sets: 8 times the section documents a hub places under each of 4 parts, each read through by the test's outcome processing, open in under 32 times the time, as whether the test reaches the placement judged through no placement of a document is decided from the placements above it, not from a set of every placement kept for each document read",
       () =>
         Effect.gen(function* hubGrowth() {
-          const fewer = hubPackage(fewerHubDocuments, "each document's item");
-          const more = hubPackage(fewerHubDocuments * growthFactor, "each document's item");
+          const fewer = hubPackage(fewerHubDocuments, "each document's item", hubGrowthParts);
+          const more = hubPackage(
+            fewerHubDocuments * growthFactor,
+            "each document's item",
+            hubGrowthParts,
+          );
           assert.deepStrictEqual(
             refusalsOf(yield* openPackage(location, fewer)),
             hubRefusals(fewerHubDocuments),
@@ -6878,34 +7355,19 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r12 views without per-path sets: 2,000 section documents a hub places under each of 64 parts, each read through by the test's outcome processing, open in under twice the thread CPU of the same package reading the test's own outcome, each read refused ambiguous-reference, and the heap grows by under 512 MiB while it opens",
+      "align-54 r12 assembly limit F17-A: 2,000 section documents a hub places under each of 64 parts, each read through by the test's outcome processing, are refused assembly-limit naming the placements bound, in under the thread CPU of the same package with one part, which opens within the limit",
       () =>
-        Effect.gen(function* hubHostile() {
-          const own = hubPackage(hostileHubDocuments, "the test's own");
-          const each = hubPackage(hostileHubDocuments, "each document's item");
-          acceptedOf(yield* openPackage(location, own));
-
-          const before = memoryUsage().heapUsed;
-          const verdict = yield* openPackage(location, each);
-          const grown = memoryUsage().heapUsed - before;
-          assert.deepStrictEqual(refusalsOf(verdict), hubRefusals(hostileHubDocuments));
-          assert.isBelow(
-            grown,
-            hubHeapLimit,
-            `the heap grew by ${(grown / 2 ** 20).toFixed(0)} MiB while the package opened`,
-          );
-
-          let ownMs = Number.POSITIVE_INFINITY;
-          let eachMs = Number.POSITIVE_INFINITY;
+        Effect.gen(function* hubRefused() {
+          const one = hubPackage(hostileHubDocuments, "each document's item", 1);
+          let oneMs = Number.POSITIVE_INFINITY;
           for (let run = 0; run < growthRuns; run += 1) {
-            ownMs = Math.min(ownMs, yield* cpuMillis(opening(own)));
-            eachMs = Math.min(eachMs, yield* cpuMillis(opening(each)));
+            oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
           }
 
-          assert.isBelow(
-            eachMs,
-            hubCpuLimit * ownMs,
-            `reading each document's item took ${(eachMs / ownMs).toFixed(1)} times the CPU of reading the test's own outcome`,
+          yield* refusedFast(
+            hubPackage(hostileHubDocuments, "each document's item"),
+            limitRefused("placements", "4097"),
+            oneMs,
           );
         }),
       growthTimeoutMs,
@@ -6936,7 +7398,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r12 branch fallback without per-target sets: 8 times the branch rules, each to its own target, and 8 times the section documents a hub places under each of 64 parts, beside rules below a chain of 70 section documents from two placements of their targets' writer, open in under 32 times the time, as the walk up from the rules' placement settles each target without a set of every placement kept for it",
+      "align-54 r12 branch fallback without per-target sets: 8 times the branch rules, each to its own target, and 8 times the section documents a hub places under each of 4 parts, beside rules below a chain of 70 section documents from two placements of their targets' writer, open in under 32 times the time, as the walk up from the rules' placement settles each target without a set of every placement kept for it",
       () =>
         Effect.gen(function* layeredGrowth() {
           const fewer = layeredPackage(fewerLayered, "each its own", layeredParts, fewerLayered);
@@ -6962,51 +7424,100 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r12 branch fallback without per-target sets: 2,000 branch rules, each to its own target, below a chain of 70 section documents from two placements of their targets' writer, beside 1,000 section documents a hub places under each of 128 parts, open in under twice the thread CPU of the same package with every rule to X0, each rule refused backward, and the heap grows by under 512 MiB while it opens",
+      "align-54 r12 assembly limit F17-B: 2,000 branch rules, each to its own target, below a chain of 70 section documents from two placements of their targets' writer, beside 1,000 section documents a hub places under each of 128 parts, are refused assembly-limit naming the placements bound, in under the thread CPU of the same package with the hub under one part, which opens within the limit",
       () =>
-        Effect.gen(function* layeredHostile() {
+        Effect.gen(function* layeredRefused() {
           const one = layeredPackage(
             hostileLayeredTargets,
-            "one",
-            hostileLayeredParts,
-            hostileLayeredDocuments,
-          );
-          const each = layeredPackage(
-            hostileLayeredTargets,
             "each its own",
-            hostileLayeredParts,
+            1,
             hostileLayeredDocuments,
           );
-          assert.deepStrictEqual(
-            refusalsOf(yield* openPackage(location, one)),
-            layeredRefusals(hostileLayeredTargets, "one", ["backward"]),
-          );
+          let oneMs = Number.POSITIVE_INFINITY;
+          for (let run = 0; run < growthRuns; run += 1) {
+            oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
+          }
 
+          yield* refusedFast(
+            layeredPackage(
+              hostileLayeredTargets,
+              "each its own",
+              hostileLayeredParts,
+              hostileLayeredDocuments,
+            ),
+            limitRefused("placements", "4097"),
+            oneMs,
+          );
+        }),
+      growthTimeoutMs,
+    );
+  });
+
+  describe("openPackage, the assembly limit across a package's tests", () => {
+    it.effect.each(familyMembers)(
+      "align-54 r12 assembly limit $id: $name, one step past the $bound bound, is refused assembly-limit naming it, with no test judged, in under 100 ms of thread CPU",
+      ({ bound, past }) => {
+        const files = past();
+
+        return refusedFast(
+          files,
+          limitRefused(
+            bound,
+            bound === "bytes" ? bytesReached(files.get("sections/s.xml")?.byteLength ?? 0) : "4097",
+          ),
+          pastLimitMs,
+        );
+      },
+      growthTimeoutMs,
+    );
+
+    it.effect.each(familyMembers)(
+      "align-54 r12 assembly limit $id: $name, at the largest size the bounds admit, opens within them in under 2 s of thread CPU, the heap growing by under 512 MiB",
+      ({ at }) =>
+        Effect.gen(function* withinLimit() {
+          const files = at();
           const before = memoryUsage().heapUsed;
-          const verdict = yield* openPackage(location, each);
+          const first = yield* cpuMillis(opening(files));
           const grown = memoryUsage().heapUsed - before;
-          assert.deepStrictEqual(
-            refusalsOf(verdict),
-            layeredRefusals(hostileLayeredTargets, "each its own", ["backward"]),
+          const fastest = Math.min(first, yield* cpuMillis(opening(files)));
+          assert.isBelow(
+            fastest,
+            withinLimitMs,
+            `the package took ${fastest.toFixed(0)} ms of thread CPU`,
           );
           assert.isBelow(
             grown,
-            layeredHeapLimit,
+            withinLimitHeap,
             `the heap grew by ${(grown / 2 ** 20).toFixed(0)} MiB while the package opened`,
           );
+        }),
+      growthTimeoutMs,
+    );
 
-          let oneMs = Number.POSITIVE_INFINITY;
-          let eachMs = Number.POSITIVE_INFINITY;
-          for (let run = 0; run < growthRuns; run += 1) {
-            oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
-            eachMs = Math.min(eachMs, yield* cpuMillis(opening(each)));
+    it.effect(
+      "align-54 r12 assembly limit: two tests whose placements sum to 4,096 are accepted, and to 4,097 refused naming the placements bound, whichever the manifest lists first, the limit counted across a package's tests",
+      () =>
+        Effect.gen(function* acrossTests() {
+          for (const order of ["first", "second"] as const) {
+            acceptedOf(yield* openPackage(location, twoTestsPackage(false, order)));
+            assert.deepStrictEqual(
+              refusalsOf(yield* openPackage(location, twoTestsPackage(true, order))),
+              [limitRefused("placements", "4097")],
+              order,
+            );
           }
+        }),
+      growthTimeoutMs,
+    );
 
-          assert.isBelow(
-            eachMs,
-            layeredCpuLimit * oneMs,
-            `a target of its own for each rule took ${(eachMs / oneMs).toFixed(1)} times the CPU of every rule to X0`,
-          );
+    it.effect(
+      "align-54 r12 assembly limit: 512 placements of a section document of 16,384 bytes, 8 MiB placed, are accepted, and of one of 16,385 bytes refused naming the bytes bound at the 512th, 8,389,120 bytes",
+      () =>
+        Effect.gen(function* placedBytes() {
+          acceptedOf(yield* openPackage(location, sizedPackage(16_384)));
+          assert.deepStrictEqual(refusalsOf(yield* openPackage(location, sizedPackage(16_385))), [
+            limitRefused("bytes", "8389120"),
+          ]);
         }),
       growthTimeoutMs,
     );
