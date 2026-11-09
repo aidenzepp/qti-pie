@@ -9,6 +9,7 @@
  * does not defer it, judged at the end of the member's INSERT, so the writer sends the owner first.
  * An owner axis grizzle defers is judged only where a case sets it immediate.
  */
+import { roleNameOf, schemaNameOf } from "@bjornpagen/grizzle";
 import type { AnyRelation, DbConnection } from "@bjornpagen/grizzle";
 import { NodeFileSystem } from "@effect/platform-node";
 import { assert } from "@effect/vitest";
@@ -16,22 +17,33 @@ import { Array as Arr, Effect, Match, Option, Predicate, Redacted, Schema } from
 import { Client } from "pg";
 import type { DatabaseError, QueryResultRow } from "pg";
 import { loginConnection } from "#pantry/db/connection.ts";
+import { QtiBase } from "#pantry/qti/base.ts";
+import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Author } from "#pantry/qti/roles.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
 /**
- * The author login's PostgreSQL role, `<schema>__<login>`.
+ * The author login's PostgreSQL role, the one its session logs in as.
  */
-const authorAppRole = "qti__author_app";
+const authorAppRole = roleNameOf(AuthorApp);
 
 /**
- * The author role's PostgreSQL role, which is also the schema of its views.
+ * The author role's PostgreSQL role, the one a direct writer's `SET ROLE` names, which holds
+ * SELECT, INSERT and DELETE on every table of `Qti` it writes whole, every stored relation's
+ * (grizzle's README, "Exactly what a role holds").
  */
-export const authorRole = "qti__author";
+export const authorRole = roleNameOf(Author);
 
 /**
- * The PostgreSQL schema of `Qti`'s tables.
+ * The author role's own PostgreSQL schema, which holds a view of each of its relations.
  */
-export const qtiSchema = "qti";
+export const authorViews = schemaNameOf(Author);
+
+/**
+ * The PostgreSQL schema of `Qti`'s tables, its stored level's (`#pantry/qti/base.ts`): grizzle
+ * installs each level in a schema of its own, and every table is the stored level's.
+ */
+export const qtiSchema = schemaNameOf(QtiBase);
 
 /**
  * The password a connection authenticates with, read once.
@@ -49,7 +61,7 @@ const passwordText = (password: DbConnection["password"]) =>
  * with its scope: a direct SQL writer.
  */
 export const loginSession = Effect.gen(function* loginSession() {
-  const connection = yield* loginConnection(authorAppRole);
+  const connection = (yield* loginConnection)(AuthorApp);
   const password = yield* passwordText(connection.password);
   const client = new Client({
     database: connection.database,

@@ -73,6 +73,7 @@ import {
   constraintDescribed,
   judged,
   loginSession,
+  qtiSchema,
   rowsOf,
   statedInserts,
   tableOf,
@@ -1187,7 +1188,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             const keys = yield* rowsOf<{ readonly name: string }>(
               client,
               `SELECT c.conname AS name FROM pg_catalog.pg_constraint c
-                WHERE c.conrelid = 'qti.reading'::regclass AND c.contype = 'u'
+                WHERE c.conrelid = '${qtiSchema}.reading'::regclass AND c.contype = 'u'
                   AND pg_catalog.cardinality(c.conkey) = 3
                   AND pg_catalog.obj_description(c.oid, 'pg_constraint') LIKE 'key Reading(assembly where %'`,
             );

@@ -1,10 +1,20 @@
 import path from "node:path";
+import { schemaNameOf } from "@bjornpagen/grizzle";
 import { Effect, FileSystem } from "effect";
+import { QtiBase } from "#pantry/qti/base.ts";
 
 /**
- * The folder of the Qti schema's committed migrations, one subfolder per migration.
+ * The folder of the Qti schema's committed migrations, one subfolder per migration: grizzle names
+ * an installation's migrations folder by its root's PostgreSQL schema, the stored level's (README,
+ * "Levels").
  */
-export const qtiMigrations = path.resolve(import.meta.dirname, "..", "..", "migrations", "qti");
+export const qtiMigrations = path.resolve(
+  import.meta.dirname,
+  "..",
+  "..",
+  "migrations",
+  schemaNameOf(QtiBase),
+);
 
 /**
  * One SQL file of a migration: the migration's folder name, the file's name, and its text.
@@ -37,7 +47,7 @@ export type FunctionKind = "constant" | "decode" | "law" | "live" | "names" | "o
  *
  * The counts add up the `CREATE` and `INSERT` statements of every migration, so they describe the
  * installed schema while every migration only adds, which holds for one `_init` folder. Statements
- * are read as grizzle prints them: one per line start, in the `qti` schema, but a function's head,
+ * are read as grizzle prints them: one per line start, in `Qti`'s schema, but a function's head,
  * which a `DO` block's `EXECUTE` may hold, and an `INSERT INTO`, counted wherever it stands.
  */
 export interface Census {
@@ -158,9 +168,20 @@ export interface Census {
 }
 
 /**
- * A `CREATE TABLE` in the `qti` schema: its name and the body between its parentheses.
+ * The PostgreSQL schema grizzle installs `Qti`'s tables, domains and functions in, its stored
+ * level's (`#pantry/qti/base.ts`), as its printed SQL quotes it, escaped for a pattern.
+ *
+ * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/packages/engine/src/program/names.ts#L78-L100
  */
-const tablePattern = /^CREATE TABLE "qti"\."(?<name>[a-z0-9_]+)" \((?<body>[\s\S]*?)\n\);/gmu;
+const installed = `"${RegExp.escape(schemaNameOf(QtiBase))}"`;
+
+/**
+ * A `CREATE TABLE` in `Qti`'s schema: its name and the body between its parentheses.
+ */
+const tablePattern = new RegExp(
+  String.raw`^CREATE TABLE ${installed}\."(?<name>[a-z0-9_]+)" \((?<body>[\s\S]*?)\n\);`,
+  "gmu",
+);
 
 /**
  * A column line of a table's body.
@@ -178,10 +199,12 @@ const uniquePattern = /(?:PRIMARY KEY|UNIQUE) \((?<columns>[^)]*)\)/gu;
 const foreignKeyPattern = /CONSTRAINT "[^"]+" FOREIGN KEY \((?<columns>[^)]*)\)/gu;
 
 /**
- * A foreign key added to a `qti` table, with the table and its referencing column list.
+ * A foreign key added to a table of `Qti`'s schema, with the table and its referencing column list.
  */
-const addedForeignKeyPattern =
-  /^ALTER TABLE "qti"\."(?<table>[a-z0-9_]+)" ADD CONSTRAINT "[^"]+" FOREIGN KEY \((?<columns>[^)]*)\)/gmu;
+const addedForeignKeyPattern = new RegExp(
+  String.raw`^ALTER TABLE ${installed}\."(?<table>[a-z0-9_]+)" ADD CONSTRAINT "[^"]+" FOREIGN KEY \((?<columns>[^)]*)\)`,
+  "gmu",
+);
 
 /**
  * A family's hidden column, which grizzle fills on every write: its axes' keys hold one.
@@ -208,8 +231,10 @@ const lawFamilies: readonly (readonly [LawFamily, RegExp])[] = [
  * follows it. A head is read wherever it stands, since a closed relation's constant is created by
  * an `EXECUTE` inside the `DO` block that packs it.
  */
-const functionPattern =
-  /(?<![\w"])CREATE (?:OR REPLACE )?FUNCTION "qti"\."(?<name>[^"]+)"\((?<parameters>[^)]*)\) RETURNS (?<returns>.+?)(?=\s+(?:AS|BEGIN|IMMUTABLE|LANGUAGE|PARALLEL|RETURN|SECURITY|SET|STABLE|STRICT|VOLATILE)\b|$)/gmu;
+const functionPattern = new RegExp(
+  String.raw`(?<![\w"])CREATE (?:OR REPLACE )?FUNCTION ${installed}\."(?<name>[^"]+)"\((?<parameters>[^)]*)\) RETURNS (?<returns>.+?)(?=\s+(?:AS|BEGIN|IMMUTABLE|LANGUAGE|PARALLEL|RETURN|SECURITY|SET|STABLE|STRICT|VOLATILE)\b|$)`,
+  "gmu",
+);
 
 /**
  * A function's head, with its return type unqualified and unquoted (`"pg_catalog"."trigger"` reads
@@ -248,9 +273,17 @@ const functionKinds: readonly (readonly [FunctionKind, (head: FunctionHead) => b
 ];
 
 /**
- * A one-line `CREATE DOMAIN` in the `qti` schema, with its definition after `AS`.
+ * A one-line `CREATE DOMAIN` in `Qti`'s schema, with its definition after `AS`.
  */
-const domainPattern = /^CREATE DOMAIN "qti"\."[a-z0-9_]+" AS (?<definition>.*)$/gmu;
+const domainPattern = new RegExp(
+  String.raw`^CREATE DOMAIN ${installed}\."[a-z0-9_]+" AS (?<definition>.*)$`,
+  "gmu",
+);
+
+/**
+ * A `CREATE TYPE … AS ENUM` in `Qti`'s schema.
+ */
+const enumPattern = new RegExp(String.raw`^CREATE TYPE ${installed}\."[^"]+" AS ENUM `, "gmu");
 
 /**
  * A `CREATE POLICY` statement, up to its terminating semicolon.
@@ -258,17 +291,22 @@ const domainPattern = /^CREATE DOMAIN "qti"\."[a-z0-9_]+" AS (?<definition>.*)$/
 const policyPattern = /^CREATE POLICY [^;]*;/gmu;
 
 /**
- * A one-line `INSERT … VALUES` into a `qti` relation, with the relation's name and the value list.
+ * A one-line `INSERT … VALUES` into a relation of `Qti`'s schema, with the relation's name and the
+ * value list.
  */
-const insertPattern =
-  /^INSERT INTO "qti"\."(?<relation>[a-z0-9_]+)" \([^)]*\) VALUES (?<values>.*);$/gmu;
+const insertPattern = new RegExp(
+  String.raw`^INSERT INTO ${installed}\."(?<relation>[a-z0-9_]+)" \([^)]*\) VALUES (?<values>.*);$`,
+  "gmu",
+);
 
 /**
  * An `admission` row as the seed prints it, among the others of its value list: version, parent
  * kind, child kind.
  */
-const admissionPattern =
-  /\('(?<version>[^']*)'::"qti"\."schema_version", '(?<parent>[^']*)'::"qti"\."node_kind", '(?<child>[^']*)'::"qti"\."node_kind"\)/gu;
+const admissionPattern = new RegExp(
+  String.raw`\('(?<version>[^']*)'::${installed}\."schema_version", '(?<parent>[^']*)'::${installed}\."node_kind", '(?<child>[^']*)'::${installed}\."node_kind"\)`,
+  "gu",
+);
 
 /**
  * Count the matches of `pattern` in `sql`.
@@ -473,7 +511,7 @@ export const census = (files: readonly MigrationFile[]): Census => {
         encoder.encode(definitions.join("")).length - encoder.encode([...firsts].join("")).length,
       total: definitions.length,
     },
-    enums: occurrences(sql, /^CREATE TYPE "qti"\."[^"]+" AS ENUM /gmu),
+    enums: occurrences(sql, enumPattern),
     foreignKeys: {
       axes: tallyBy(
         added.filter(({ columns }) => familyColumnPattern.test(columns)).map(({ table }) => table),

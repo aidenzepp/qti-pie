@@ -17,7 +17,7 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { NodeKind } from "#pantry/grammar/install.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
-import { authorRole, loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
+import { authorRole, authorViews, loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 describe.skipIf(!hasLease)("qti/schema.db.test.ts, on the lease", () => {
@@ -46,7 +46,7 @@ describe.skipIf(!hasLease)("qti/schema.db.test.ts, on the lease", () => {
             }>(
               client,
               "SELECT column_name, ordinal_position FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'node' ORDER BY ordinal_position",
-              [authorRole],
+              [authorViews],
             );
             const ordinal = (name: string) =>
               columns.find((column) => column.column_name === name)?.ordinal_position;
@@ -57,7 +57,7 @@ describe.skipIf(!hasLease)("qti/schema.db.test.ts, on the lease", () => {
 
             const rows = yield* rowsOf<{ readonly kind: number; readonly kind_name: string }>(
               client,
-              `SELECT kind::integer AS kind, kind_name FROM ${authorRole}.node`,
+              `SELECT kind::integer AS kind, kind_name FROM ${authorViews}.node`,
             );
 
             for (const row of rows) {

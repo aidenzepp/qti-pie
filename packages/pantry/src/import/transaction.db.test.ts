@@ -17,18 +17,15 @@
  * @see {@link https://www.postgresql.org/docs/19/ddl-system-columns.html | PostgreSQL 19, §5.6 System Columns}
  */
 import { CommitUnknown, Db, writableNamesOf } from "@bjornpagen/grizzle";
-import type { DbConnection } from "@bjornpagen/grizzle";
-import { NodeFileSystem, NodeServices } from "@effect/platform-node";
+import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage, requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, FileSystem, Layer, Option, Path, Redacted, Ref, Schedule } from "effect";
-import { Client } from "pg";
-import type { QueryResultRow } from "pg";
+import { Duration, Effect, FileSystem, Layer, Option, Path, Ref, Schedule } from "effect";
+import type { Client, QueryResultRow } from "pg";
 import { describe } from "vitest";
-import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
@@ -43,23 +40,13 @@ import {
   memberCounts,
 } from "#pantry/test/gen/every-relation.ts";
 import type { MemberCounts } from "#pantry/test/gen/every-relation.ts";
+import {
+  authorRole,
+  loginSession,
+  qtiSchema,
+  rowsOf as sessionRows,
+} from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
-
-/**
- * The author login's PostgreSQL role, `<schema>__<login>`.
- */
-const authorAppRole = "qti__author_app";
-
-/**
- * The author role's PostgreSQL role, which holds SELECT, INSERT and DELETE on every table of `Qti`
- * it writes whole, every stored relation's (grizzle's README, "Exactly what a role holds").
- */
-const authorRole = "qti__author";
-
-/**
- * The PostgreSQL schema of `Qti`'s tables.
- */
-const qtiSchema = "qti";
 
 /**
  * `Package`'s table, by grizzle's conversion of a relation's name (`grizzle names`).
@@ -77,40 +64,13 @@ const boxTimeoutMs = 900_000;
 const memberBox = "every count of 2 or 3 choices, 1 or 2 hottexts and 1 or 2 hotspots";
 
 /**
- * The password a connection authenticates with, read once.
- *
- * @param password - The connection's password.
- * @returns The password's text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
  * A session of the author login on the lease, over verify-full TLS against the cluster's CA, as the
  * author role, closed with its scope: a direct reader of the catalog and the tables.
  */
-const authorSession = Effect.gen(function* authorSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-  const opened = yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-
-  yield* Effect.tryPromise(() => opened.query(`SET ROLE ${authorRole}`));
-
-  return opened;
-}).pipe(Effect.provide(NodeFileSystem.layer), Effect.orDie);
+const authorSession = loginSession.pipe(
+  Effect.tap((client) => sessionRows(client, `SET ROLE ${authorRole}`)),
+  Effect.orDie,
+);
 
 /**
  * Run one statement on a session and return its rows; a failure is the test's defect.
@@ -124,11 +84,7 @@ const rowsOf = <R extends QueryResultRow>(
   client: Client,
   text: string,
   values: readonly string[] = [],
-) =>
-  Effect.tryPromise(() => client.query<R>(text, [...values])).pipe(
-    Effect.map(({ rows }) => rows),
-    Effect.orDie,
-  );
+) => sessionRows<R>(client, text, values).pipe(Effect.orDie);
 
 /**
  * List the tables of the installation the author role reads, each by its quoted qualified name.

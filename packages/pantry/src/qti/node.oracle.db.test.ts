@@ -14,8 +14,8 @@
  * A `Node` tree commits only with its package (the document node's `Document` row, the character
  * arms, the attribute family): those laws are deferred to COMMIT and belong to other slices, so
  * every case is judged at its INSERT's end and rolled back. A law that is itself deferred, the
- * tree's last axis, is set immediate for the case once the rows are in (`SET CONSTRAINTS "qti".…
- * IMMEDIATE`, named with its schema). A lawful document raises nothing; a corruption raises the
+ * tree's last axis, is set immediate for the case once the rows are in (`SET CONSTRAINTS <schema>.…
+ * IMMEDIATE`, named with `Qti`'s schema). A lawful document raises nothing; a corruption raises the
  * SQLSTATE and a constraint that maps to its law (C22: membership, since one row may break several
  * laws whose constraints PostgreSQL checks in an order it does not promise).
  *
@@ -69,6 +69,7 @@ import {
   accumulatorOf,
   assertVerdict,
   authorRole,
+  authorViews,
   constraintDescribed,
   judged,
   loginSession,
@@ -430,7 +431,7 @@ const constraintsOf = (client: Client, table = "node") =>
                     JOIN pg_catalog.pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.n) AS columns
        FROM pg_catalog.pg_constraint c
       WHERE c.conrelid = pg_catalog.to_regclass($1)`,
-    [`qti.${table}`],
+    [`${qtiSchema}.${table}`],
   ).pipe(
     Effect.map((constraints) =>
       constraints.map((constraint): Constraint => ({
@@ -1563,7 +1564,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
             const client = yield* loginSession;
             const constraints = yield* constraintsOf(client);
             const foreign = constraints.filter(({ kind }) => kind === "f");
-            const intoNode = foreign.filter(({ target }) => target === "qti.node");
+            const intoNode = foreign.filter(({ target }) => target === `${qtiSchema}.node`);
 
             assert.sameMembers(intoNode.map(roleOf), [
               "owner axis",
@@ -1572,7 +1573,9 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
             ]);
             assert.deepStrictEqual(
               countPerName(
-                foreign.filter(({ target }) => target !== "qti.node").map(targetRelationOf),
+                foreign
+                  .filter(({ target }) => target !== `${qtiSchema}.node`)
+                  .map(targetRelationOf),
               ),
               outOfNode(Qti),
             );
@@ -1622,8 +1625,8 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
             assert.include(ordered, order?.name, "T1's UNIQUE leads with (document, start)");
 
             const reads = [
-              `SELECT id, start FROM ${authorRole}.node WHERE document = $1 AND start > $2 AND start < $3 ORDER BY start`,
-              `SELECT id, at FROM ${authorRole}.node WHERE document = $1 AND start > $2 AND start < $3 AND parent = $4 ORDER BY start`,
+              `SELECT id, start FROM ${authorViews}.node WHERE document = $1 AND start > $2 AND start < $3 ORDER BY start`,
+              `SELECT id, at FROM ${authorViews}.node WHERE document = $1 AND start > $2 AND start < $3 AND parent = $4 ORDER BY start`,
             ];
             yield* rowsOf(client, "BEGIN");
             yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);

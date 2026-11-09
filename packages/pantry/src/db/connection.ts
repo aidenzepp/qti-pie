@@ -5,8 +5,13 @@
  * src/db/layer.ts).
  */
 import net from "node:net";
-import { CredentialError } from "@bjornpagen/grizzle";
-import type { DbConnection, MigrationConnectionConfig, Transport } from "@bjornpagen/grizzle";
+import { CredentialError, roleNameOf } from "@bjornpagen/grizzle";
+import type {
+  AnyLogin,
+  DbConnection,
+  MigrationConnectionConfig,
+  Transport,
+} from "@bjornpagen/grizzle";
 import * as NodeChildProcessSpawner from "@effect/platform-node/NodeChildProcessSpawner";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
@@ -303,38 +308,46 @@ export const migrationConnection = clusterConnection.pipe(
 );
 
 /**
- * Build a login's connection to the cluster, for its `DbLayer`: the cluster's connection with the
- * login's password at each connection attempt, from the password command where
- * `GR8DES_PG_PASSWORD_COMMAND` names one, run for the login's role, else the one scripts/db.sh gave
- * the login, read from `<GR8DES_PG_SECRETS>/<login>.password`.
+ * Read the cluster's settings and its CA, and give from them each login's connection to the
+ * cluster, for its `DbLayer`: the cluster's connection with the login's password at each
+ * connection attempt, from the password command where `GR8DES_PG_PASSWORD_COMMAND` names one, run
+ * for the login's role, else the one scripts/db.sh gave the login, read from
+ * `<GR8DES_PG_SECRETS>/<role>.password`. `<role>` is the PostgreSQL role grizzle installs for the
+ * login (`roleNameOf`), the one `scripts/db.sh migrate` sets the password on and names the file
+ * after.
+ *
+ * The login is given only once the settings are read, so a caller that loads its login after them
+ * (src/db/layer.ts) never loads it for a build that fails on them. `roleNameOf` throws for a value
+ * grizzle's `login` did not build, a defect of the caller.
  *
  * A missing password, a password file absent or a command that fails, is not found here: it fails
  * each connection attempt with grizzle's `CredentialError`.
  *
- * @param login - The login's PostgreSQL role, `<schema>__<login>`, which names its password file.
- * @returns The connection, which fails to build with Effect's `ConfigError` for a missing or
- *   malformed setting, before any file is read, and with a {@link ClusterConfigError} when the CA
- *   is unreadable.
+ * It fails with Effect's `ConfigError` for a missing or malformed setting, before any file is read,
+ * and with a {@link ClusterConfigError} when the CA is unreadable.
+ *
+ * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/packages/engine/src/program/names.ts#L61-L76
  */
-export const loginConnection = Effect.fn("db.loginConnection")(function* loginConnection(
-  login: string,
-) {
+export const loginConnection = Effect.gen(function* loginConnection() {
   const fs = yield* FileSystem.FileSystem;
   const { commandPassword, connection, secrets } = yield* clusterConnection;
-  const result: DbConnection = {
-    ...connection,
-    password: Option.match(commandPassword, {
-      onNone: () =>
-        fs.readFileString(`${secrets}/${login}.password`).pipe(
-          Effect.map((text) => Redacted.make(text.trim())),
-          Effect.mapError((cause) => new CredentialError({ cause })),
-        ),
-      onSome: (passwordOf) => passwordOf(login),
-    }),
-  };
 
-  return result;
-});
+  return (login: AnyLogin): DbConnection => {
+    const role = roleNameOf(login);
+
+    return {
+      ...connection,
+      password: Option.match(commandPassword, {
+        onNone: () =>
+          fs.readFileString(`${secrets}/${role}.password`).pipe(
+            Effect.map((text) => Redacted.make(text.trim())),
+            Effect.mapError((cause) => new CredentialError({ cause })),
+          ),
+        onSome: (passwordOf) => passwordOf(role),
+      }),
+    };
+  };
+}).pipe(Effect.withSpan("db.loginConnection"));
 
 /**
  * The services building either connection reads: the file system its CA and the logins' password

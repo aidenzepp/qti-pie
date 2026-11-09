@@ -40,7 +40,7 @@ import { importPackage } from "#pantry/import/package.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
-import { loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
+import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { deepItem, deepItemPath, deepManifest } from "#pantry/test/deep-item.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
@@ -265,7 +265,7 @@ describe.skipIf(!hasLease)(
               const key = yield* rowsOf<{ readonly name: string }>(
                 client,
                 `SELECT c.conname AS name FROM pg_catalog.pg_constraint c
-                  WHERE c.conrelid = 'qti.node'::regclass AND c.contype = 'u'
+                  WHERE c.conrelid = '${qtiSchema}.node'::regclass AND c.contype = 'u'
                     AND pg_catalog.obj_description(c.oid, 'pg_constraint') = 'key Node(document, start)'`,
               );
               const byDocument = yield* rowsOf<{
@@ -281,7 +281,7 @@ describe.skipIf(!hasLease)(
                                ORDER BY k.o) AS columns
                    FROM pg_catalog.pg_index x
                    JOIN pg_catalog.pg_class i ON i.oid = x.indexrelid
-                  WHERE x.indrelid = 'qti.node'::regclass`,
+                  WHERE x.indrelid = '${qtiSchema}.node'::regclass`,
               ).pipe(Effect.map((rows) => rows.filter(({ columns }) => columns[0] === "document")));
 
               assert.lengthOf(key, 1, "the key Node(document, start)");

@@ -64,7 +64,7 @@ import {
 import { Qti } from "#pantry/qti/schema.ts";
 import {
   assertVerdict,
-  authorRole,
+  authorViews,
   foreignKeysBetween,
   judged,
   judgedCase,
@@ -389,7 +389,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
               inserts: statedInserts([{ fact: row, relation: StatisticDate }]),
               reads: [
                 {
-                  text: `SELECT date::text AS date FROM ${authorRole}.statistic_date WHERE node = $1`,
+                  text: `SELECT date::text AS date FROM ${authorViews}.statistic_date WHERE node = $1`,
                   values: [row.node],
                 },
               ],

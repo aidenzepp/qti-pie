@@ -29,8 +29,8 @@ const noInputs: PackageInputs = pipe(
 );
 
 /**
- * Build the author application's login over a `Qti` schema, `qti__author_app` where it is
- * installed, over its author role (`#pantry/qti/roles.ts` `authorRoleOf`), with two workloads:
+ * Build the author application's login over a `Qti` schema, over its author role
+ * (`#pantry/qti/roles.ts` `authorRoleOf`), with two workloads:
  *
  * - **the export's reads**: one document's ordered scan, the documents of a package and a package's
  *   record (`#pantry/export/scan.ts` `exportQueriesOf`), each compiled once when the login's
@@ -43,11 +43,15 @@ const noInputs: PackageInputs = pipe(
  *   stratum no order of its statements keeps every key at (`UnorderableStratum`).
  *
  * Its name is the one every earlier installation used, so a migration from scratch needs no
- * `--rename @…`. Built once per schema value, since grizzle puts a role in one login only.
+ * `--rename @…`. Where it is installed, its PostgreSQL role is the one grizzle's `roleNameOf` gives
+ * it, named by the level of `Qti` it is over, and its connection's password is that role's
+ * (`#pantry/db/connection.ts`). Built once per schema value, since grizzle puts a role in one login
+ * only.
  *
  * @param qti - The `Qti` schema, built for an install's policy or none
  *   (`#pantry/qti/schema.ts` `qtiSchema`).
  * @returns The login.
+ * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/packages/engine/src/program/names.ts#L61-L76
  */
 export const authorAppOf = Fn.memoize((qti: typeof Qti) => {
   const author = authorRoleOf(qti);

@@ -33,12 +33,6 @@ const SnapshotText = Schema.fromJsonString(
 );
 
 /**
- * The PostgreSQL role grizzle installs for the author login, `<schema>__<login>` (`qti` and
- * `author_app`), which names the password file scripts/db.sh writes for it.
- */
-const authorAppRole = "qti__author_app";
-
-/**
  * The author application's session pool: at most 10 sessions, 1 kept open once opened, and the
  * others closed 5,000 ms after their last use.
  *
@@ -68,12 +62,13 @@ const snapshotPath = Option.match(installed, {
 
 /**
  * The author application's pool on the local cluster: the login's connection
- * (`#pantry/db/connection.ts`), its pool, and its install's migrations snapshot, read from disk.
+ * (`#pantry/db/connection.ts`), with the password of the role grizzle installs for the login, its
+ * pool, and its install's migrations snapshot, read from disk.
  *
  * The login (`#pantry/qti/logins.ts`) is a resource of this layer, loaded once the settings, the
- * CA and the snapshot are read: grizzle builds its workload when that module is evaluated, so a
- * build that fails on its settings never pays for the workload. Nothing this module imports
- * statically may reach the login (`src/cli/startup.test.ts`).
+ * CA and the snapshot are read, and only then given to the connection: grizzle builds its workload
+ * when that module is evaluated, so a build that fails on its settings never pays for the
+ * workload. Nothing this module imports statically may reach the login (`src/cli/startup.test.ts`).
  *
  * The login's type is the dynamic import's, so the layer provides `DbLayer` for exactly the author
  * role: grizzle's `DbLayerService` is invariant in its role, and a layer built for `AnyLogin` would
@@ -87,13 +82,18 @@ const snapshotPath = Option.match(installed, {
 export const AuthorAppLayer = Layer.unwrap(
   Effect.gen(function* AuthorAppLayer() {
     const fs = yield* FileSystem.FileSystem;
-    const connection = yield* loginConnection(authorAppRole);
+    const connectionOf = yield* loginConnection;
     const snapshot = yield* fs.readFileString(snapshotPath).pipe(
       Effect.flatMap(Schema.decodeUnknownEffect(SnapshotText)),
       Effect.mapError((reason) => new SnapshotLoadError({ path: snapshotPath, reason })),
     );
     const { AuthorApp } = yield* Effect.promise(() => import("#pantry/qti/logins.ts"));
 
-    return DbLayer.make({ ...connection, login: AuthorApp, pool: authorAppPool, snapshot });
+    return DbLayer.make({
+      ...connectionOf(AuthorApp),
+      login: AuthorApp,
+      pool: authorAppPool,
+      snapshot,
+    });
   }),
 ).pipe(Layer.provide(connectionServices));

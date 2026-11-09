@@ -39,7 +39,7 @@ import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
-import { authorRole, loginSession, rowsOf } from "#pantry/test/direct-sql.ts";
+import { authorRole, loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
@@ -87,7 +87,7 @@ const recordTransactions = (client: Client, id: string) =>
       `SELECT count(*)::text AS entries,
               count(DISTINCT e.xmin::text)::text AS transactions,
               count(*) FILTER (WHERE e.xmin::text = p.xmin::text)::text AS ours
-         FROM qti.entry e JOIN qti.package p ON p.id = e.package
+         FROM ${qtiSchema}.entry e JOIN ${qtiSchema}.package p ON p.id = e.package
         WHERE p.id = $1`,
       [id],
     ),
