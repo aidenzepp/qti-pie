@@ -160,7 +160,8 @@ operator ruling. A new reading lands here by pull request, and a package that ne
 
    (2026-10-30, restated without exceptions 2026-11-03. Amended under the operator's ruling of 2026-11-07, register
    D1, to defer to this list; the element-depth limit added by decision 445; the three limits that change no verdict
-   after reading 162's added by decisions 449, 451 and 452; the limits added by decision 463.)
+   after reading 162's added by decisions 449, 451 and 452; the limits added by decision 463; the rule fragment limit
+   that moves a verdict stated by decisions 465 and 466.)
 
 2. **MathML validity is the MathML 3 Recommendation**: its RelaxNG schema and its prose rules, not only the MathML XSD
    that QTI's schema imports. MathML that breaks a rule of the Recommendation, such as an operator applied to the wrong

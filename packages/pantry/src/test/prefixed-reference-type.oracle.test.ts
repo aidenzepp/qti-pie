@@ -16,10 +16,9 @@
  * reads `ref1.N` (or `ref1.F`, `ref1.numAttempts`) in an integer attribute: gr4-0's
  * `O4-item-idx-float` and its control `O4-item-idx`, then a multiple cardinality, an item template,
  * a mapped float and a mapped integer, an item built-in, `qti-round-to@figures` over a float, and
- * gr4-0's `O4-lti-idx-301`: 9 cases, exhausted. Every case but the LTI link's breaks `Reference
- * type` on both sides or on neither. The LTI link's breaks it in the oracle on neither side once
- * gr4-2b exempts it on the host; until then the host alone breaks it, so its case holds the
- * oracle's side only.
+ * gr4-0's `O4-lti-idx-301`: 9 cases, exhausted. Every case breaks `Reference type` on both sides
+ * or on neither; the LTI link's breaks it on neither, since gr4-2b exempts it on the host as the
+ * oracle does.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -265,7 +264,7 @@ const cases: readonly Case[] = [
       type: linkType,
       version: "3.0.1",
     }),
-    held: "oracle",
+    held: "both",
     name: "qti-index n=ref1.N through an LTI link, 3.0.1 (O4-lti-idx-301)",
     raised: false,
   },
