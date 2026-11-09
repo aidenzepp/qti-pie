@@ -84,6 +84,7 @@ const payloadOf = (body: readonly PayloadNode[]): Payload => ({
   instance,
   lang: "en",
   messages: [],
+  modalFeedback: [],
   mode: "answering",
   notices: [],
   title: "Item",

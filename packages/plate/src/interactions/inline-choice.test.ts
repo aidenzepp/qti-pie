@@ -15,7 +15,7 @@ import type {
   Item,
   TemplateVisibility,
 } from "#plate/model/item.ts";
-import type { ResponsesRecord } from "#plate/model/record.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, postings, redactItem } from "#plate/payload.ts";
@@ -304,6 +304,7 @@ const pageOf = (mode: RenderMode = "answering", finished = false): Payload => ({
   instance,
   lang: "en",
   messages: [],
+  modalFeedback: [],
   mode,
   notices: [],
   title: "Fruits",
@@ -825,7 +826,10 @@ const byVisible = (showHide: TemplateVisibility["showHide"]): TemplateVisibility
  * @param identifier What `VISIBLE` holds.
  * @returns The record part.
  */
-const visibleAs = (identifier: string): ResponsesRecord => ({
+const visibleAs = (identifier: string): RedactRecord => ({
+  attempt: "none",
+  defaults: {},
+  outcomes: {},
   templates: { VISIBLE: chosen(identifier) },
 });
 
@@ -924,7 +928,7 @@ describe("checkResponses", () => {
         const configuration = yield* configure({});
         const accepted = acceptForTest(templatedOf(templatedFruits));
         const hiding = visibleAs("C");
-        const redacted = redactItem(accepted.item, { outcomes: {}, ...hiding });
+        const redacted = redactItem(accepted.item, hiding);
         const shown = payload(redacted, {
           finished: false,
           instance,

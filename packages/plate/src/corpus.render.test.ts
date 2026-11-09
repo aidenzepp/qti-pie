@@ -7,6 +7,7 @@ import { message } from "#plate/messages.ts";
 import type {
   BodyElement,
   BodyNode,
+  FeedbackVisibility,
   InlineChoiceInteraction,
   Item,
   PrintedVariable,
@@ -138,7 +139,7 @@ const choiceNotice = "template-identifier";
  * record for an item whose template processing runs, none with no record; and, for any other
  * item, rendered with no record, the values its first attempt starts with (H3): each template
  * variable at its declared default, else NULL, none where its template processing does not run,
- * and each outcome at its starting value.
+ * and each outcome at its starting value, no attempt processed.
  *
  * @param item The item.
  * @param state The record state, for an item whose template processing runs; none for any other.
@@ -148,6 +149,8 @@ const valuesOf = (item: Item, state: Option.Option<RecordState>): Option.Option<
   Option.match(state, {
     onNone: () =>
       Option.some({
+        attempt: "none",
+        defaults: {},
         outcomes: outcomeDefaults(item),
         templates: unrunTemplateProcessing(item)
           ? {}
@@ -203,6 +206,10 @@ const parameterOf = (item: Item, node: BodyElement): Option.Option<string> =>
  * some choice with a template visibility. With no values, every such part is withheld. A part
  * inside content the page does not see (a block or inline the values hide or withhold, a withheld
  * `param`, or a choice they hide or withhold) gives none, since the page shows none of it.
+ * A feedback block or inline is decided the same way by the outcome values its feedback reads, the
+ * record's own once response processing has run and each outcome's starting value before, and a
+ * modal feedback shows, or gives `qti-modal-feedback` when they hold no value of its outcome, only
+ * once response processing has run.
  *
  * @param item The item.
  * @param values The values the item is shown by.
@@ -218,6 +225,36 @@ const withheldOf = (item: Item, values: Option.Option<RedactRecord>): readonly s
     values.pipe(
       Option.filter(() => holdsTemplate(visibility.templateIdentifier)),
       Option.map((record) => templateShows(visibility, identifier, record.templates)),
+    );
+  // The outcome values feedback reads: the record's own once response processing has run, else
+  // each outcome's starting value, the default template processing set where it set one (7.19.3).
+  const feedback = values.pipe(
+    Option.map((record) =>
+      record.attempt === "submitted"
+        ? record.outcomes
+        : {
+            ...outcomeDefaults(item),
+            ...Object.fromEntries(
+              Object.entries(record.defaults).filter(([identifier]) =>
+                item.outcomes.has(identifier),
+              ),
+            ),
+          },
+    ),
+  );
+  const feedbackShown = (
+    visibility: FeedbackVisibility,
+    identifier: string,
+  ): Option.Option<boolean> =>
+    feedback.pipe(
+      Option.flatMap((outcomes) => Option.fromUndefinedOr(outcomes[visibility.outcomeIdentifier])),
+      Option.map(
+        (value) =>
+          value.values.some(
+            (single) => single.baseType === "identifier" && single.value === identifier,
+          ) ===
+          (visibility.showHide === "show"),
+      ),
     );
   let choiceWithheld = false;
   const walk = (nodes: readonly BodyNode[]): readonly string[] =>
@@ -235,6 +272,13 @@ const withheldOf = (item: Item, values: Option.Option<RedactRecord>): readonly s
         case "template-block":
         case "template-inline": {
           return Option.match(shown(node.templateVisibility, node.identifier), {
+            onNone: () => [`qti-${node.kind}`],
+            onSome: (visible) => (visible ? walk(node.content) : []),
+          });
+        }
+        case "feedback-block":
+        case "feedback-inline": {
+          return Option.match(feedbackShown(node.feedbackVisibility, node.identifier), {
             onNone: () => [`qti-${node.kind}`],
             onSome: (visible) => (visible ? walk(node.content) : []),
           });
@@ -278,7 +322,20 @@ const withheldOf = (item: Item, values: Option.Option<RedactRecord>): readonly s
       }
     });
 
-  return walk(item.body);
+  // Modal feedback shows only once response processing has run (5.93), after the body.
+  const submitted = Option.exists(values, (record) => record.attempt === "submitted");
+
+  return [
+    ...walk(item.body),
+    ...(item.modalFeedback ?? []).flatMap((modal): readonly string[] =>
+      submitted
+        ? Option.match(feedbackShown(modal.feedbackVisibility, modal.identifier), {
+            onNone: () => ["qti-modal-feedback"],
+            onSome: (visible) => (visible ? walk(modal.content) : []),
+          })
+        : [],
+    ),
+  ];
 };
 
 /**
@@ -498,7 +555,8 @@ const treeProblems = (_rendering: Rendering, where: string, root: Element): read
 /**
  * Collect the Inline Choices an item's body renders, in document order: those in its body and its
  * body elements. An interaction inside a Prompt or a choice's content is not counted, nor one
- * inside a template block or inline, which renders only where a template value shows it.
+ * inside a template block or inline, which renders only where a template value shows it, nor one
+ * inside a feedback block or inline, which renders only where an outcome value shows it.
  *
  * @param nodes The body nodes.
  * @returns The Inline Choices.
@@ -514,6 +572,8 @@ const inlineChoicesOf = (nodes: readonly BodyNode[]): readonly InlineChoiceInter
       }
       case "choice":
       case "extended-text":
+      case "feedback-block":
+      case "feedback-inline":
       case "printed-variable":
       case "template-block":
       case "template-inline":

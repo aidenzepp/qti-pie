@@ -290,7 +290,7 @@ const namesOf = (element: BodyElement): readonly string[] =>
 
 /**
  * Write a body's nodes compactly: an element as its tag with its children, text as itself, a
- * printed variable as `printed:<identifier>@<path>`, a template block or inline as
+ * printed variable as `printed:<identifier>@<path>`, a template or feedback block or inline as
  * `<kind>:<identifier>@<path>` with its content, and a notice as `notice:<feature>@<path>`.
  *
  * @param nodes The nodes.
@@ -311,6 +311,8 @@ const outline = (nodes: readonly BodyNode[]): readonly unknown[] =>
       case "printed-variable": {
         return `printed:${node.identifier}@${node.path}`;
       }
+      case "feedback-block":
+      case "feedback-inline":
       case "template-block":
       case "template-inline": {
         return { [`${node.kind}:${node.identifier}@${node.path}`]: outline(node.content) };

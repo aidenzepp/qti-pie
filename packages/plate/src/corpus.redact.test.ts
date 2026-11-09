@@ -15,8 +15,10 @@ import type {
   ChoiceInteraction,
   Expression,
   ExtendedTextInteraction,
+  FeedbackVisibility,
   InlineChoiceInteraction,
   Item,
+  ModalFeedback,
   PrintedVariable,
   ResponseDeclaration,
   Rule,
@@ -24,6 +26,7 @@ import type {
   TemplateDeclaration,
   TemplateVisibility,
 } from "#plate/model/item.ts";
+import { outcomeDefaults } from "#plate/model/record.ts";
 import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import { format } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -565,10 +568,78 @@ const decided = (
   );
 
 /**
- * What the sweep decides a redacted body from: the values `redact` showed the item by, and the
- * item's template declarations, which say which `param` stands in for a template variable.
+ * Give the outcome values an item's feedback reads, decided from the item and the values alone:
+ * none with no values; the record's own outcomes once response processing has run in the attempt
+ * it shows (`attempt` `submitted`); and before it has, each declared outcome's starting value,
+ * the default template processing set for it where it set one, since before response processing
+ * the page is the body "displayed to the candidate at the start of each attempt", "with the
+ * visibility of any integrated feedback determined by the default values of the outcome variables"
+ * (the information model's ItemSessionControl `allow-review`, section 7.19.3).
+ *
+ * @param item The item, whose outcome declarations give the starting values.
+ * @param values The values `redact` showed the item by, none when it had none.
+ * @returns The outcome values, or none when there are no values.
+ */
+const feedbackValuesOf = (
+  item: Item,
+  values: Option.Option<RedactRecord>,
+): Option.Option<RedactRecord["outcomes"]> =>
+  values.pipe(
+    Option.map((record) =>
+      record.attempt === "submitted"
+        ? record.outcomes
+        : {
+            ...outcomeDefaults(item),
+            ...Object.fromEntries(
+              Object.entries(record.defaults).filter(([identifier]) =>
+                item.outcomes.has(identifier),
+              ),
+            ),
+          },
+    ),
+  );
+
+/**
+ * Decide whether the page sees a feedback block, inline or modal feedback, from the outcome values
+ * its feedback reads: the outcome's value matches the element's identifier when it holds a single
+ * of base type identifier equal to it, as the value or one of its members, and `show` shows the
+ * element exactly when it matches, `hide` exactly when it does not (the information model's
+ * FeedbackBlock `show-hide`, section 5.49.3, FeedbackInline 5.52.3 and ModalFeedback 5.93.2).
+ * Some true when they show it, some false when they hide it, none when there are no values or
+ * they hold no value of its outcome, so the element is withheld.
+ *
+ * @param feedback The outcome values ({@link feedbackValuesOf}).
+ * @param visibility The element's `outcome-identifier` and `show-hide`.
+ * @param identifier The element's `identifier`.
+ * @returns Whether the element is shown, or none when it is withheld.
+ */
+const feedbackDecided = (
+  feedback: Option.Option<RedactRecord["outcomes"]>,
+  visibility: FeedbackVisibility,
+  identifier: string,
+): Option.Option<boolean> =>
+  feedback.pipe(
+    Option.flatMap((outcomes) => own(outcomes, visibility.outcomeIdentifier)),
+    Option.map(
+      (value) =>
+        value.values.some(
+          (single) => single.baseType === "identifier" && single.value === identifier,
+        ) ===
+        (visibility.showHide === "show"),
+    ),
+  );
+
+/**
+ * What the sweep decides a redacted body from: the values `redact` showed the item by, the outcome
+ * values its feedback reads, and the item's template declarations, which say which `param` stands
+ * in for a template variable.
  */
 interface Showing {
+  /**
+   * The outcome values the item's feedback reads ({@link feedbackValuesOf}), none when the
+   * redaction has no values.
+   */
+  readonly feedback: Option.Option<RedactRecord["outcomes"]>;
   readonly templates: Item["templates"];
   /**
    * The values `redact` showed the item by: the record, or none with no record. The template sweep
@@ -751,7 +822,9 @@ const elementSlot = (node: BodyElement, showing: Showing): BodyNode =>
  * Give the nodes the page must see for a run of the item's body nodes, each decided from the
  * values, never from `redact`'s output: a printed variable as {@link printedSlots} decides it; a
  * template block or inline as its content's nodes where the values show it, nothing where they
- * hide it, and its notice where they cannot say; a body element as {@link elementSlot} gives it;
+ * hide it, and its notice where they cannot say; a feedback block or inline the same way by the
+ * outcome values its feedback reads ({@link feedbackDecided}); a body element as
+ * {@link elementSlot} gives it;
  * any other node as itself. A written node's descendants are decided again where it is matched.
  *
  * @param nodes The item's body nodes.
@@ -771,6 +844,18 @@ const slotsOf = (nodes: readonly BodyNode[], showing: Showing): readonly BodyNod
         ],
         onSome: (shown) => (shown ? slotsOf(node.content, showing) : []),
       });
+    }
+
+    if (node.kind === "feedback-block" || node.kind === "feedback-inline") {
+      return Option.match(
+        feedbackDecided(showing.feedback, node.feedbackVisibility, node.identifier),
+        {
+          onNone: (): readonly BodyNode[] => [
+            { feature: `qti-${node.kind}`, kind: "unsupported", path: node.path },
+          ],
+          onSome: (shown) => (shown ? slotsOf(node.content, showing) : []),
+        },
+      );
     }
 
     return [node.kind === "element" ? elementSlot(node, showing) : node];
@@ -897,7 +982,8 @@ const interactionFits = (
 /**
  * Report whether a redacted node is the node the page must see: every field as {@link slotsOf}
  * gives it, and its children, Prompt, Label or choices fitting the item's again. No node
- * {@link slotsOf} gives is a printed variable or a template block or inline.
+ * {@link slotsOf} gives is a printed variable, a template block or inline or a feedback block or
+ * inline.
  *
  * @param written The node the page must see.
  * @param shown The redacted node.
@@ -918,6 +1004,8 @@ const nodeFits = (written: BodyNode, shown: BodyNode, showing: Showing): boolean
     case "inline-choice": {
       return interactionFits(written, shown, showing);
     }
+    case "feedback-block":
+    case "feedback-inline":
     case "printed-variable":
     case "template-block":
     case "template-inline": {
@@ -944,6 +1032,31 @@ const nodeFits = (written: BodyNode, shown: BodyNode, showing: Showing): boolean
  */
 const beneath = (path: string, above: ReadonlySet<string>): boolean =>
   [...above].some((top) => path === top || path.startsWith(`${top}/`));
+
+/**
+ * The feature a withheld modal feedback's notice names: its element's name.
+ */
+const modalNotice = "qti-modal-feedback";
+
+/**
+ * Decide whether the page sees a modal feedback: never before response processing has run, since
+ * modal feedback "is shown to the candidate directly following response processing" (the
+ * information model's ModalFeedback, section 5.93), so not with no values nor under a record whose
+ * `attempt` is `none`; once it has, as {@link feedbackDecided} decides any feedback element.
+ *
+ * @param values The values `redact` showed the item by.
+ * @param feedback The outcome values its feedback reads ({@link feedbackValuesOf}).
+ * @param modal The modal feedback.
+ * @returns Whether it is shown, or none when it is withheld.
+ */
+const modalDecided = (
+  values: Option.Option<RedactRecord>,
+  feedback: Option.Option<RedactRecord["outcomes"]>,
+  modal: ModalFeedback,
+): Option.Option<boolean> =>
+  Option.exists(values, (record) => record.attempt === "submitted")
+    ? feedbackDecided(feedback, modal.feedbackVisibility, modal.identifier)
+    : Option.some(false);
 
 /**
  * What one body node gives the notices, decided from the values alone: the notice it gives in its
@@ -998,17 +1111,20 @@ const choicesStep = (
  * Give one body node's step: a `param` the values withhold gives `param` and hides its children; a
  * printed variable {@link printedSlots} shows as its notice gives `qti-printed-variable`; a
  * template block or inline hides its content unless the values show it, and gives its notice when
- * they cannot decide it; a Choice or an Inline Choice is {@link choicesStep}'s; any other node
- * gives nothing and hides nothing.
+ * they cannot decide it; a feedback block or inline does the same by the outcome values its
+ * feedback reads; a Choice or an Inline Choice is {@link choicesStep}'s; any other node gives
+ * nothing and hides nothing.
  *
  * @param item The item, whose template declarations say which `param` stands in for a variable.
  * @param values The values `redact` showed the item by.
+ * @param feedback The outcome values its feedback reads ({@link feedbackValuesOf}).
  * @param node The body node.
  * @returns The node's step.
  */
 const noticeStep = (
   item: Item,
   values: Option.Option<RedactRecord>,
+  feedback: Option.Option<RedactRecord["outcomes"]>,
   node: BodyNode,
 ): NoticeStep => {
   switch (node.kind) {
@@ -1035,6 +1151,17 @@ const noticeStep = (
     case "template-block":
     case "template-inline": {
       const shown = decided(values, node.templateVisibility, node.identifier);
+      const visible = Option.getOrElse(shown, () => false);
+
+      return {
+        hides: !visible,
+        notice: Option.isNone(shown) ? Option.some(`qti-${node.kind}`) : Option.none(),
+        runs: [[node.content, visible]],
+      };
+    }
+    case "feedback-block":
+    case "feedback-inline": {
+      const shown = feedbackDecided(feedback, node.feedbackVisibility, node.identifier);
       const visible = Option.getOrElse(shown, () => false);
 
       return {
@@ -1070,7 +1197,11 @@ const noticeStep = (
  * at or below the path of any node in it is not named. The values give `qti-printed-variable` for
  * each printed variable {@link printedSlots} shows as its notice, `qti-template-block` or
  * `qti-template-inline` for each one they cannot decide, `param` for each `param` they withhold,
- * and `template-identifier` once when they cannot decide some choice ({@link noticeStep}).
+ * and `template-identifier` once when they cannot decide some choice ({@link noticeStep}). A
+ * feedback block or inline is decided as a template block is, by the outcome values its feedback
+ * reads, and gives `qti-feedback-block` or `qti-feedback-inline` when they cannot decide it. A
+ * modal feedback's content is seen only where {@link modalDecided} shows it, and one it cannot
+ * decide gives `qti-modal-feedback`.
  *
  * @param item The item, with the paths its source gives (never the JSON form's, which holds none).
  * @param values The values `redact` showed the item by.
@@ -1080,9 +1211,10 @@ const noticeStep = (
 const noticesOf = (item: Item, values: Option.Option<RedactRecord>): readonly string[] => {
   const unseen = new Set<string>();
   const given: string[] = [];
+  const feedback = feedbackValuesOf(item, values);
   const walk = (nodes: readonly BodyNode[], seen: boolean): void => {
     for (const node of nodes) {
-      const step = noticeStep(item, values, node);
+      const step = noticeStep(item, values, feedback, node);
       if (node.kind !== "text" && (step.hides || !seen)) {
         unseen.add(node.path);
       }
@@ -1098,6 +1230,21 @@ const noticesOf = (item: Item, values: Option.Option<RedactRecord>): readonly st
     }
   };
   walk(item.body, true);
+  for (const modal of item.modalFeedback ?? []) {
+    const shown = modalDecided(values, feedback, modal);
+    if (Option.isNone(shown)) {
+      given.push(modalNotice);
+    }
+
+    if (!Option.getOrElse(shown, () => false)) {
+      unseen.add(modal.path);
+    }
+
+    walk(
+      modal.content,
+      Option.getOrElse(shown, () => false),
+    );
+  }
 
   return [
     ...item.unsupported
@@ -1112,7 +1259,9 @@ const noticesOf = (item: Item, values: Option.Option<RedactRecord>): readonly st
  * identifier, `lang`, title and response bindings as the item holds them; a body that
  * {@link fits} the nodes {@link slotsOf} decides, so a template value shows only as the text a
  * printed variable prints from the values, and no hidden template content, template visibility,
- * template-set correct response or default, seed or template rule shows at all; no record of a
+ * template-set correct response or default, seed or template rule shows at all; each modal
+ * feedback {@link modalDecided} shows, its content fitting the item's as the body does, a withheld
+ * one as its notice, and no other; no record of a
  * text past its bound, since no corpus item prints one; and notices that are, as a multiset, the
  * ones {@link noticesOf} decides.
  *
@@ -1128,7 +1277,25 @@ const fieldsFit = (
   values: Option.Option<RedactRecord>,
   notices: readonly string[],
 ): boolean => {
-  const showing: Showing = { templates: item.templates, values };
+  const showing: Showing = {
+    feedback: feedbackValuesOf(item, values),
+    templates: item.templates,
+    values,
+  };
+  const modal = (item.modalFeedback ?? []).flatMap((feedback) =>
+    Option.match(modalDecided(values, showing.feedback, feedback), {
+      onNone: () => [
+        {
+          content: [
+            { feature: modalNotice, kind: "unsupported", path: feedback.path } satisfies BodyNode,
+          ],
+          title: feedback.title,
+        },
+      ],
+      onSome: (shown) =>
+        shown ? [{ content: slotsOf(feedback.content, showing), title: feedback.title }] : [],
+    }),
+  );
 
   return (
     isDeepStrictEqual(
@@ -1137,6 +1304,7 @@ const fieldsFit = (
         document: item.document,
         identifier: item.identifier,
         lang: item.lang,
+        modalFeedback: fields.modalFeedback,
         notices: fields.notices,
         responses: Array.from(item.responses.values(), ({ baseType, cardinality, identifier }) => ({
           baseType,
@@ -1149,14 +1317,24 @@ const fieldsFit = (
       { ...fields },
     ) &&
     fits(slotsOf(item.body, showing), fields.body, showing) &&
+    modal.length === fields.modalFeedback.length &&
+    modal.every((expected, index) => {
+      const shown = fields.modalFeedback[index];
+
+      return (
+        shown !== undefined &&
+        isDeepStrictEqual(expected.title, shown.title) &&
+        fits(expected.content, shown.content, showing)
+      );
+    }) &&
     isDeepStrictEqual(fields.notices.toSorted(), notices.toSorted())
   );
 };
 
 /**
  * Give body nodes with every path `""`, at any depth: an element's children, a Prompt, a Label, a
- * choice's content and a template block's or inline's content included, as the redacted JSON
- * decodes them, since it holds no path (review P2-6).
+ * choice's content and a template or feedback block's or inline's content included, as the redacted
+ * JSON decodes them, since it holds no path (review P2-6).
  *
  * @param nodes The body nodes, with their paths.
  * @returns The same nodes, each path `""`.
@@ -1196,6 +1374,8 @@ const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
           prompt: node.prompt.pipe(Option.map((prompt) => withoutPaths(prompt))),
         };
       }
+      case "feedback-block":
+      case "feedback-inline":
       case "template-block":
       case "template-inline": {
         return { ...node, content: withoutPaths(node.content), path: "" };
@@ -1236,7 +1416,15 @@ const templateProblems = (subject: Subject): readonly string[] => {
       onFailure: () => [],
       onSuccess: (fields) =>
         fieldsFit(
-          { ...subject.item, body: withoutPaths(subject.item.body) },
+          {
+            ...subject.item,
+            body: withoutPaths(subject.item.body),
+            modalFeedback: (subject.item.modalFeedback ?? []).map((feedback) => ({
+              ...feedback,
+              content: withoutPaths(feedback.content),
+              path: "",
+            })),
+          },
           fields,
           subject.record,
           notices,
@@ -1326,6 +1514,10 @@ const templatePartsOf = (nodes: readonly BodyNode[]): readonly TemplatePart[] =>
       }
       case "extended-text": {
         return Option.toArray(node.prompt).flatMap((lead) => templatePartsOf(lead));
+      }
+      case "feedback-block":
+      case "feedback-inline": {
+        return templatePartsOf(node.content);
       }
       case "printed-variable":
       case "text":

@@ -1200,6 +1200,8 @@ describe("redact, a printed variable", () => {
     Effect.gen(function* printsRecorded() {
       const configuration = yield* defaults;
       const recorded = redact(acceptForTest(counting), {
+        attempt: "none",
+        defaults: {},
         outcomes: {},
         templates: { N: one({ baseType: "integer", value: 7n }) },
       });
@@ -1331,6 +1333,8 @@ describe("render, the output budget", () => {
    * A record whose `S` is {@link sprawlingLength} characters long.
    */
   const sprawlingRecord: RedactRecord = {
+    attempt: "none",
+    defaults: {},
     outcomes: {},
     templates: { S: one({ baseType: "string", value: "y".repeat(sprawlingLength) }) },
   };
@@ -1379,6 +1383,8 @@ describe("render, the output budget", () => {
           identifier: "slotted",
         });
         const record: RedactRecord = {
+          attempt: "none",
+          defaults: {},
           outcomes: {},
           templates: { S: one({ baseType: "string", value: "y".repeat(100) }) },
         };
@@ -1567,6 +1573,8 @@ const hiding: Item = {
  * @returns The record.
  */
 const strings = (templates: Readonly<Record<string, string>>): RedactRecord => ({
+  attempt: "none",
+  defaults: {},
   outcomes: {},
   templates: Object.fromEntries(
     Object.entries(templates).map(([identifier, value]) => [
@@ -1583,6 +1591,8 @@ describe("render, a printed text past its bound", () => {
       Effect.gen(function* failsPastWidth() {
         const configuration = yield* defaults;
         const shown = redact(acceptForTest(widened), {
+          attempt: "none",
+          defaults: {},
           outcomes: {},
           templates: { N: one({ baseType: "integer", value: 5n }) },
         });
@@ -1649,6 +1659,8 @@ describe("render, a printed text past its bound", () => {
         const hidden = yield* Effect.fromResult(
           render(
             redact(acceptForTest(hiding), {
+              attempt: "none",
+              defaults: {},
               outcomes: {},
               templates: {
                 S: one({ baseType: "string", value: "y".repeat(1_000_001) }),

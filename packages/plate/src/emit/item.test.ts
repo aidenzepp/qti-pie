@@ -39,6 +39,7 @@ const payloadOf = (finished: boolean, mode: RenderMode = "answering"): Payload =
   instance,
   lang: "en-GB",
   messages: [],
+  modalFeedback: [],
   mode,
   notices: [],
   title: "Colours",

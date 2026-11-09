@@ -731,6 +731,8 @@ const referencingNode = (node: BodyNode, ids: string): BodyNode => {
         ),
       };
     }
+    case "feedback-block":
+    case "feedback-inline":
     case "inline-choice":
     case "printed-variable":
     case "template-block":
@@ -1022,7 +1024,12 @@ describe("redactItem on printed variables", () => {
       tables,
     );
     const accepted = Option.getOrThrow(acceptedItem(verdict));
-    const withheld = redact(accepted, { outcomes: {}, templates: {} });
+    const withheld = redact(accepted, {
+      attempt: "none",
+      defaults: {},
+      outcomes: {},
+      templates: {},
+    });
     const link = `${bodyPath}/p/a`;
 
     assert.deepStrictEqual(accepted.unsupported, [
@@ -1496,6 +1503,8 @@ const choicesShown = (redaction: Redacted): readonly string[] => {
  * @returns The record's part `redact` reads.
  */
 const holding = (templates: Readonly<Record<string, Value>>): RedactRecord => ({
+  attempt: "none",
+  defaults: {},
   outcomes: {},
   templates,
 });
