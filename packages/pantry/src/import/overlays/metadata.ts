@@ -429,8 +429,9 @@ const resourceNamer =
     );
 
 /**
- * Build a document's {@link LomResource} rows: one per `cp:resource`, `named` the type of the
- * document it names ({@link resourceNamer}).
+ * Build the manifest's {@link LomResource} rows: one per `cp:resource`, `named` the type of the
+ * document it names ({@link resourceNamer}). {@link rowsOf} builds them for the manifest alone
+ * ({@link manifestType}).
  *
  * @param tree - The document's tree.
  * @param namedOf - The type each resource names.

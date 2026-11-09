@@ -1905,7 +1905,8 @@ const foundNames = select(NameLookup, (n) => n.eq(n.found, true));
  * The item refs an assembly holds that name a resource of the package, with its type. One whose
  * lookup names `none`, NameLookup's null object for "no resource" (`representation-gaps.md` §4.3),
  * has no target to copy: it writes no href, which AL3 alone refuses (spec reading 155), or its
- * href names no resource, which "Item ref target" refuses over its target (`#pantry/qti/tests.ts`).
+ * href names no resource of a type the importer reads, which "Item ref target" refuses over its
+ * href unless a resource of an unread type names its path (`#pantry/qti/tests.ts` `ItemRefHref`).
  */
 const targetedItemRefs = select(NameLookup, (n) =>
   n.and(n.eq(n.found, true), n.eq(n.kind, itemRefKind), n.ne(n.resourceType, "none")),

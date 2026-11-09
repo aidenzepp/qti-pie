@@ -20,11 +20,11 @@
  * reading 117), and each instance has exactly one child per site of its document that places its
  * target, the instance of the document that site names: a section ref, or an include that may stand
  * for its target's root (`IncludeRoot`, reading 114), whatever its parent ({@link sitesFold}). A
- * chain of section refs and includes that returns to a document
- * already on it would need infinitely many instances, so no finite tree holds it: the count law
- * `children = sites` refuses one a head reaches, and `TestDocument.instances` above 0 one no head
- * reaches, whose documents no assembly places (reading 85). Under a test's root,
- * each instance carries one {@link InstanceName} per name of its document, and their projection
+ * chain of section refs and includes that returns to a document already on it would need
+ * infinitely many instances, so no finite tree holds it: the count law `children = sites` refuses
+ * one a head reaches, and `TestDocument.instances` above 0 one no head reaches, whose documents no
+ * assembly places (reading 85). Under a test's root, each instance carries one
+ * {@link InstanceName} per name of its document, and their projection
  * {@link AssembledName} holds each written element once per test, so a section document placed
  * twice names nothing twice, and the key on `(assembly, identifier)` is reading 86's one namespace.
  * Each branch rule of each instance resolves once ({@link BranchResolution}), to its target
@@ -955,8 +955,8 @@ export const linkResourceTypes: readonly (typeof ResourceType.handles)[number][]
  * target either. An item it names is an {@link ItemRefDocument} row of its own.
  *
  * In the corpus, feedbackTest's item ref `Example03-feedbackBlock-solution/...` names no file of
- * its package, and testWithLti's two item refs name LTI links; both packages are refused at the
- * codec today (`unmodeled-vocabulary`), so no verdict moves.
+ * its package, which "Item ref target" refuses (`item-ref-target`, the verdict file's rule for it),
+ * and testWithLti's two item refs name LTI links, a package refused under another rule.
  */
 export const ItemRefTarget = relation(
   "ItemRefTarget",
