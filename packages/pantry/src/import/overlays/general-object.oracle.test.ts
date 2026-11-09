@@ -5,18 +5,19 @@
  * of the package names none: there is nothing to read it against, and "Document entry" refuses the
  * `href` (IMS Content Packaging 1.2 §6.6.2: "A value declared by a Resource{ Href } object is a
  * launchable URI"; reading 93). The import holds it so: a record names the document a resource
- * lists at its `href`'s path (`namingRecords`, `#pantry/qti/queries.ts`), never the manifest, so
- * no `GeneralObject` row stands for a record whose `href` names none. The genetic differential
- * found the import giving such a record the manifest as its document (NS6), which broke "E1
- * derived" and the record's laws where the law oracle raises "Document entry" alone.
+ * lists at its `href`'s path (`namingRecords`, `#pantry/qti/queries.ts`), never the manifest, so no
+ * general category of a record whose `href` names none describes a document. The genetic
+ * differential found the import giving such a record the manifest as its document (NS6), which
+ * broke "E1 derived" and the record's laws where the law oracle raises "Document entry" alone.
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`), and
  * both against §2.7.1 and readings 93 and 146 as stated above: the two agree on every case, and
  * each raises "Document entry" exactly where the `href` names no document a resource names.
- * "Document entry" (over `TypedHref`), `lom-identifier` and `lom-title` are rules over queries,
- * which only the database judges (the host judge leaves them unjudged), so the oracle's side alone
- * is held to them here, and the database tests hold the database to them through the importer.
+ * "Document entry" (over `TypedHref`), `lom-identifier`, `lom-title` and `document-lang` are rules
+ * over queries, which only the database judges (the host judge leaves them unjudged), so the
+ * oracle's side alone is held to them here, and the database tests hold the database to them
+ * through the importer.
  *
  * Bound: a package of one resource, of the item type or the test type, whose `href` names each of
  * the listed document of its type, a path no entry holds, a path outside the package, the

@@ -8,72 +8,56 @@
  *
  * Every reader of the schema, the author role, its login and the importer among them, reads `Qti`,
  * the top level, so a refusal by a rule over a query is its own law, never a law of a level above.
+ *
+ * Loading this module builds no schema: it exports the builders, and each call builds its own,
+ * which its caller holds. This package's own install holds its one in `#pantry/qti/own.ts`, and an
+ * install outside it builds and holds its own for its policy.
  */
 import { schema } from "@bjornpagen/grizzle";
-import { Option } from "effect";
+import type { Option } from "effect";
 import type { CdnPolicy } from "#pantry/db/install.ts";
-import { installedPolicy } from "#pantry/db/install.ts";
-import { QtiBase, qtiBaseOf } from "#pantry/qti/base.ts";
+import { qtiBaseOf } from "#pantry/qti/base.ts";
 import { cdnLawsByName } from "#pantry/qti/cdn.ts";
-import { queryLaws, queryRelations } from "#pantry/qti/queries.ts";
+import { queriesOf } from "#pantry/qti/queries.ts";
 
 /**
- * Build the QTI 3.0 schema over a stored level: the level `QtiQueries`, holding every query and
- * every rule over one.
+ * Build the QTI 3.0 schema's levels for an install's policy, or none for this package's own
+ * install: the stored level, every module's relations and laws and the policy's single-CDN laws
+ * (`#pantry/qti/cdn.ts`); over it the level `QtiQueries`, every query and every rule over one, each
+ * defined over that stored level; and the groups of the statements this call built, the policy's
+ * and the queries', by the law each states, which the importer names a refusal of this schema by
+ * (`#pantry/import/refusal.ts` `namedLaws`), since it knows a statement by its identity.
  *
- * Each query is defined over this package's own stored level (`#pantry/qti/queries.ts`), and holds
- * over a policy's as well: a definition reads relations by name, and every stored level holds the
- * same relations, a policy adding only row checks. grizzle's `schema.extend` refuses a statement
- * list typed `any` or holding a member typed `any`, at that argument (grizzle `1387c79d`), which
- * would type every statement of `Qti` `any` and every nested member's count with it.
+ * Each call builds its own schema, statements and queries: one install builds once and holds the
+ * result.
  *
- * @param base - The stored level, built for an install's policy or none.
- * @returns The schema.
+ * @param policy - The install's policy, none for this package's own install.
+ * @returns The stored level (`base`), the schema (`qti`) and the groups of the statements built
+ *   with it (`lawsByName`).
  */
-const qtiOf = (base: typeof QtiBase) =>
-  schema.extend(base, "QtiQueries", queryRelations, queryLaws);
+export const qtiLevelsOf = (policy: Option.Option<CdnPolicy>) => {
+  const cdn = cdnLawsByName(policy);
+  const base = qtiBaseOf(Object.values(cdn).flat());
+  const queries = queriesOf(base);
+
+  return {
+    base,
+    lawsByName: [cdn, ...queries.lawsByName] as const,
+    qti: schema.extend(base, "QtiQueries", queries.relations, queries.laws),
+  };
+};
 
 /**
- * The QTI 3.0 schema of this package's own install: no policy, so its statements are exactly the
- * modules' and the committed migrations install it.
- */
-const ownQti = qtiOf(QtiBase);
-
-/**
- * The QTI 3.0 schema built for each origin so far, by origin.
- */
-const builtSchemas = new Map<string, typeof ownQti>();
-
-/**
- * Build the QTI 3.0 schema for an install's policy, or none for this package's own install: every
- * module's relations and laws, the policy's single-CDN laws (`#pantry/qti/cdn.ts`) on the stored
- * level, and the queries and their rules over it.
- *
- * One schema value stands for each policy, built at its first call, so an install outside this
- * package that composes `Qti` for a policy holds the very value this package's runtime opens with
- * that policy, and its statements are the ones the importer names refusals by.
+ * Build the QTI 3.0 schema for an install's policy, or none for this package's own install
+ * ({@link qtiLevelsOf}): each call its own, which the install holds.
  *
  * @param policy - The install's policy, none for this package's own install.
  * @returns The schema.
  */
-export const qtiSchema = (policy: Option.Option<CdnPolicy>): typeof ownQti =>
-  Option.match(policy, {
-    onNone: () => ownQti,
-    onSome: ({ cdn }) => {
-      const known = builtSchemas.get(cdn);
-      if (known !== undefined) {
-        return known;
-      }
-
-      const built = qtiOf(qtiBaseOf(Object.values(cdnLawsByName(policy)).flat()));
-      builtSchemas.set(cdn, built);
-
-      return built;
-    },
-  });
+export const qtiSchema = (policy: Option.Option<CdnPolicy>) => qtiLevelsOf(policy).qti;
 
 /**
- * The QTI 3.0 schema this process opens: built for the policy of the install `GR8DES_QTI_INSTALL`
- * names (`#pantry/db/install.ts`), and this package's own where it names none.
+ * The QTI 3.0 schema, whatever policy built it: what the author role, its login and the export's
+ * reads are built over.
  */
-export const Qti = qtiSchema(installedPolicy);
+export type QtiSchema = ReturnType<typeof qtiSchema>;

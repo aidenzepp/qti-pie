@@ -35,8 +35,8 @@
 import { Option, Result, Schema } from "effect";
 import { idField, roster, sourced, sourceIn } from "#pantry/grammar/closed.ts";
 import type {
-  ClosedRelationError,
   IdField,
+  RepeatedValue,
   Roster,
   Sourced,
   SourcedRow,
@@ -206,9 +206,10 @@ export class UnderivedType extends Schema.TaggedError<UnderivedType>()("Underive
 }
 
 /**
- * The ways the `xsi:type` relations have no constant.
+ * The ways the `xsi:type` relations are not generated: a roster that lists a handle twice, or a
+ * declared type no derivation lists.
  */
-export type XsiTypeError = ClosedRelationError | UnderivedType;
+export type XsiTypeError = RepeatedValue | UnderivedType;
 
 /**
  * The derivations read for lookup: each (version, type)'s derived names, the `TypeName` roster's
@@ -274,8 +275,8 @@ const derivationIndexOf = (derivations: readonly TypeDerivation[]): DerivationIn
  * @param input.models - The content models, each with its declared type and the namespace of its
  *   kind's elements, in which a derived type stands with no schema set's help.
  * @param input.versions - The `SchemaVersion` roster.
- * @returns The relations, or the first model whose type no derivation lists, or the first row no
- *   constant can hold.
+ * @returns The relations, or the first model whose type no derivation lists, or a `RepeatedValue`
+ *   from the `TypeName` roster.
  */
 export const xsiTypesOf = (input: {
   readonly derivations: readonly TypeDerivation[];
@@ -323,7 +324,7 @@ export const xsiTypesOf = (input: {
     const typeName = yield* roster("TypeName", names);
 
     return {
-      anonymousType: yield* sourced({
+      anonymousType: sourced({
         key: [idField("version", input.versions), idField("kind", input.kinds)],
         name: "AnonymousType",
         payload: [],
@@ -334,7 +335,7 @@ export const xsiTypesOf = (input: {
       definedIn: (version, handle) =>
         Option.exists(Option.fromNullishOr(namesIn.get(version)), (held) => held.has(handle)),
       typeName,
-      xsiType: yield* sourced({
+      xsiType: sourced({
         key: [
           idField("version", input.versions),
           idField("kind", input.kinds),

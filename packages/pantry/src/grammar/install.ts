@@ -190,15 +190,6 @@ export const toolLabelKinds: readonly Kind[] = toolLabelKindsOf({
 // Rosters, each a generator's in code order. Codes are history: a vocabulary appends.
 
 /**
- * The `ResourceType` handle `none`: the null object that `NameLookup`'s probes and a name that is
- * no item ref of a resource hold, and the records' `named` where a record names no resource,
- * which no lexical form spells. Each is a join copy that grizzle's rules over queries delete (the
- * coordinator's ruling of 2026-11-08). No document's type is it: a document's type is
- * {@link DocumentType}'s.
- */
-const noResourceType = "none";
-
-/**
  * The `DocumentType` handle of the package's manifest, the IMS Content Packaging manifest document,
  * which is no resource's (spec readings 146 and 167).
  */
@@ -264,14 +255,15 @@ export const Cardinality = closed(
 const asCardinality = handleLookup("Cardinality", Cardinality.handles);
 
 /**
- * The `ResourceType` roster: `none` ({@link noResourceType}) at code 0, then the 21 types a
- * `cp:resource` may name, each spelled as its lexical form (`package.ts`). No `RootOfType` or
- * `ResourceTypeLexical` row names `none`, and a lexical form no handle spells is outside the
- * attribute's value domain, so a resource that carries it is refused.
+ * The `ResourceType` roster: the 21 types a `cp:resource` may name, each spelled as its lexical
+ * form (`package.ts`). A lexical form no handle spells is outside the attribute's value domain, so
+ * a resource that carries it is refused. No handle stands for no type: a resource whose `type`
+ * spells none has no `ResourceTyped` row, and an item ref whose href names no resource has no
+ * `ItemRefTarget` (a missing value is a row of its own relation, or no row).
  */
 export const ResourceType = closed(
   "ResourceType",
-  nonEmpty("ResourceType", [noResourceType, ...grammar.package.resourceType.handles]),
+  nonEmpty("ResourceType", grammar.package.resourceType.handles),
 );
 
 /**
@@ -1875,16 +1867,13 @@ export const CardinalityLexical = closed.relation(
 );
 
 /**
- * `ResourceTypeLexical`: code → lexical, each resource type's lexical form; `none` has none, since
- * nothing writes it from a lexical form.
+ * `ResourceTypeLexical`: code → lexical, each resource type's lexical form.
  */
 export const ResourceTypeLexical = closed.relation(
   "ResourceTypeLexical",
   { code: closedId(ResourceType), lexical: anyText },
   ["code"],
-  ResourceType.handles
-    .filter((code) => code !== noResourceType)
-    .map((code) => ({ code, lexical: code })),
+  ResourceType.handles.map((code) => ({ code, lexical: code })),
 );
 
 /**

@@ -15,17 +15,19 @@
  * and was refused under "Document lang" beside its value domain unless the record wrote that
  * value.
  *
- * The genetic judge (`judgeOne`) cannot hold this: its host never holds "Document lang", since the
- * law reads counts the database draws through a selection by pattern. So the import's rows are
- * judged here by the schema's statements of R26 on the host, its counts drawn from the rows.
+ * The genetic judge (`judgeOne`) cannot hold this: R26 is a rule over a query, which its host
+ * leaves to the database. So the import's rows are judged here by the database's statement of R26
+ * restated on the host: each stated form's compared value (`DocumentLang.value`,
+ * `AssembledLang.value`), under each category of a record that names its document, is one of the
+ * category's languages.
  *
  * An assessment object's `ObjectLang` row is the root's `xml:lang`, copied both ways: a row planted
  * for a root that writes none is refused under "E1 derived".
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
- * schema's R26 over the import's rows (`documentLang` and `assembledLang` of
- * `#pantry/qti/identity.ts`, its witnesses' containments into their categories' languages and
- * their `E1_derived`), and both against §2.7.1.3 under readings 134 and 164 as stated above, each
+ * database's R26 over the import's rows (`DescribedLang` and `DescribedAssembledLang` contained in
+ * `ResourceLomLanguageSet`, `#pantry/qti/queries.ts`), and both against §2.7.1.3 under readings
+ * 134 and 164 as stated above, each
  * form's tagness read off RFC 5646 by hand: the three refuse one set of forms under "Document
  * lang", and the oracle refuses a form under its value domain exactly where it lies outside it. And
  * the host verdict over the import's rows with an `ObjectLang` row planted.
@@ -46,10 +48,12 @@ import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { statedLanguagePattern } from "#pantry/qti/identity.ts";
+import { objectTypes, resourceMetadata } from "#pantry/qti/metadata.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostVerdictOf, viewOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import type { Row } from "#pantry/test/gen/genetic/host-laws.ts";
+import { generatedFields } from "#pantry/test/host-judge.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
@@ -217,76 +221,117 @@ const textOf = (row: Row, field: string): string => {
 };
 
 /**
- * Count the rows of a relation whose fields hold the given texts.
+ * The resource types whose records name their document, as a set.
+ */
+const namingTypes: ReadonlySet<string> = new Set(objectTypes);
+
+/**
+ * Read the general categories of the records that name a document, as the database reads them
+ * (`namingGenerals`, `#pantry/qti/queries.ts`): a category of a `lom:lom` of a resource's
+ * `cp:metadata`, its resource of an item's or a test's type, and the document a resource lists at
+ * the path its href is compared by.
  *
- * @param rows - The relation's rows.
- * @param fields - The fields and their texts.
- * @returns The count.
+ * @param rowsOf - The rows of a relation.
+ * @returns Each category's document, by the category.
  */
-const countOf = (rows: readonly Row[], fields: Readonly<Record<string, string>>): number =>
-  rows.filter((row) => Object.entries(fields).every(([field, text]) => textOf(row, field) === text))
-    .length;
+const describingOf = (
+  rowsOf: (relation: string) => readonly Row[],
+): ReadonlyMap<string, string> => {
+  const typed = new Set(
+    rowsOf("ResourceTyped").flatMap((row) =>
+      namingTypes.has(textOf(row, "type")) ? [textOf(row, "node")] : [],
+    ),
+  );
+  const listed = new Map(
+    rowsOf("ResourceDocument").map(
+      (row) =>
+        [
+          JSON.stringify([textOf(row, "package"), textOf(row, "path")]),
+          textOf(row, "node"),
+        ] as const,
+    ),
+  );
+  const documents = new Map(
+    rowsOf("ResourceHref").flatMap((row) =>
+      typed.has(textOf(row, "node"))
+        ? Option.toArray(
+            Option.fromUndefinedOr(
+              listed.get(JSON.stringify([textOf(row, "package"), textOf(row, "path")])),
+            ),
+          ).map((document) => [textOf(row, "node"), document] as const)
+        : [],
+    ),
+  );
+  const named = new Map(
+    rowsOf("LomRecord").flatMap((row) =>
+      textOf(row, "owner") === resourceMetadata
+        ? Option.toArray(Option.fromUndefinedOr(documents.get(textOf(row, "ownerParent")))).map(
+            (document) => [textOf(row, "node"), document] as const,
+          )
+        : [],
+    ),
+  );
+
+  return new Map(
+    rowsOf("LomGeneral").flatMap((row) =>
+      Option.toArray(Option.fromUndefinedOr(named.get(textOf(row, "parent")))).map(
+        (document) => [textOf(row, "node"), document] as const,
+      ),
+    ),
+  );
+};
 
 /**
- * What the schema's R26 says of a package's rows on the host: the forms it refuses, as written, and
- * the forms of the witnesses that state no language.
+ * Read a form's compared value as the database generates it: `DocumentLang`'s or
+ * `AssembledLang`'s `value`, the term the schema states evaluated over the row
+ * (`#pantry/test/host-judge.ts` `generatedFields`), so the host judges R26 by the database's own
+ * derivation.
+ *
+ * @param relation - `DocumentLang` or `AssembledLang`.
+ * @param form - The form's row, as the import writes it.
+ * @returns The value; fails the test where the schema generates none.
  */
-interface HostDocumentLang {
-  readonly refused: readonly string[];
-  readonly unstated: readonly string[];
-}
+const comparedValueOf = (relation: string, form: Row): string => {
+  const value = generatedFields.get(relation)?.get("value")?.(form);
+
+  return Predicate.isString(value) ? value : assert.fail(`${relation} generates no value`);
+};
 
 /**
- * Judge the schema's R26 on the host over a package's rows: each form that states a language
- * ({@link stated}) counts as many witnesses, a document's (`GeneralLang`) and an assembly's
- * (`PlacedGeneralLang`), as general categories describe its document (`GeneralObject`), the counts
- * the database draws; each witness's value is a language its category lists
- * (`ResourceLomLanguageSet`), its containment; and every witness is a stated form's (its
- * `E1_derived`).
+ * Judge the database's R26 on the host over a package's rows: each form that states a language
+ * ({@link stated}), a document's (`DocumentLang`) or an item's assembly's (`AssembledLang`), its
+ * compared value ({@link comparedValueOf}), under each category describing its document
+ * ({@link describingOf}), is a language that category lists (`ResourceLomLanguageSet`).
  *
  * @param view - The rows by relation.
- * @returns The forms the law refuses, and the witnesses of a form that states none.
+ * @returns The forms the law refuses, as written.
  */
-const documentLangOf = (view: ReadonlyMap<string, readonly Row[]>): HostDocumentLang => {
+const documentLangOf = (view: ReadonlyMap<string, readonly Row[]>): readonly string[] => {
   const rowsOf = (relation: string): readonly Row[] => view.get(relation) ?? [];
-  const objects = rowsOf("GeneralObject");
-  const witnesses = [...rowsOf("GeneralLang"), ...rowsOf("PlacedGeneralLang")];
+  const describing = [...describingOf(rowsOf)];
   const listed = new Set(
     rowsOf("ResourceLomLanguageSet").map((row) =>
       JSON.stringify([textOf(row, "general"), textOf(row, "lang")]),
     ),
   );
-  const unlisted = witnesses.filter(
-    (witness) =>
-      !listed.has(JSON.stringify([textOf(witness, "general"), textOf(witness, "value")])),
-  );
-  const documentForms = rowsOf("DocumentLang").filter(
-    (form) =>
+  const refusedOf = (relation: string, owner: string): readonly string[] =>
+    rowsOf(relation).flatMap((form) =>
       stated.test(textOf(form, "lang")) &&
-      countOf(rowsOf("GeneralLang"), {
-        document: textOf(form, "document"),
-        lang: textOf(form, "lang"),
-      }) !== countOf(objects, { document: textOf(form, "document") }),
-  );
-  const assembledForms = rowsOf("AssembledLang").filter(
-    (form) =>
-      stated.test(textOf(form, "lang")) &&
-      countOf(rowsOf("PlacedGeneralLang"), {
-        assembly: textOf(form, "assembly"),
-        lang: textOf(form, "lang"),
-      }) !== countOf(objects, { document: textOf(form, "assembly") }),
-  );
+      describing.some(
+        ([general, document]) =>
+          document === textOf(form, owner) &&
+          !listed.has(JSON.stringify([general, comparedValueOf(relation, form)])),
+      )
+        ? [textOf(form, "lang")]
+        : [],
+    );
 
-  return {
-    refused: [
-      ...new Set(
-        [...documentForms, ...assembledForms, ...unlisted].map((form) => textOf(form, "lang")),
-      ),
-    ],
-    unstated: witnesses
-      .map((witness) => textOf(witness, "lang"))
-      .filter((lang) => !stated.test(lang)),
-  };
+  return [
+    ...new Set([
+      ...refusedOf("DocumentLang", "document"),
+      ...refusedOf("AssembledLang", "assembly"),
+    ]),
+  ];
 };
 
 layer(NodeServices.layer, { excludeTestServices: true })(
@@ -353,7 +398,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   const { inputs } = yield* Effect.orDie(readProgram(dir, mint));
                   yield* fs.remove(dir, { recursive: true });
 
-                  const host = documentLangOf(viewOf(inputs));
+                  const refused = documentLangOf(viewOf(inputs));
 
                   assert.deepStrictEqual(
                     breaches
@@ -362,8 +407,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     expected,
                     `${said}: the law oracle`,
                   );
-                  assert.deepStrictEqual(host.refused, expected, `${said}: the import's rows`);
-                  assert.deepStrictEqual(host.unstated, [], `${said}: a witness of no language`);
+                  assert.deepStrictEqual(refused, expected, `${said}: the import's rows`);
                   assert.strictEqual(
                     breaches.some(({ law }) => law === "value domain"),
                     outsideDomain(of),

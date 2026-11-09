@@ -21,13 +21,7 @@
  */
 import { Array as Arr, Option, Result } from "effect";
 import { closed, idField, roster, rowsAt, valueField } from "#pantry/grammar/closed.ts";
-import type {
-  Closed,
-  ClosedRelationError,
-  IdField,
-  Roster,
-  ValueField,
-} from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, RepeatedValue, Roster, ValueField } from "#pantry/grammar/closed.ts";
 import type { KindSet, SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { attributeDeclarations, textTypes } from "#pantry/vocab/inventory/attributes.ts";
 import { contentModels } from "#pantry/vocab/inventory/models.ts";
@@ -1071,17 +1065,17 @@ const restrictionOf = (reference: ReferenceRow): readonly string[] =>
  * @param input.kinds - The `NodeKind` roster.
  * @param input.names - The `AttributeName` roster.
  * @param input.versions - The `SchemaVersion` roster.
- * @returns The relations, or the first reason one has no constant: a declaration kind or built-in
- *   variable stated twice (`RepeatedValue`); two rows at one key, such as two spellings of one
- *   reference or two bounds on one kind (`KeyCollision`); or a kind, attribute or declaration kind
- *   outside its roster (`OutsideCodeSpace`).
+ * @returns The relations, or a declaration kind or built-in variable stated twice
+ *   (`RepeatedValue`). Two rows at one key, such as two spellings of one reference or two bounds on
+ *   one kind, and a kind, attribute or declaration kind outside its roster are faults of the rows
+ *   (`faultOf`), which the tests find and grizzle refuses.
  */
 export const references = (input: {
   readonly facets: readonly ReferenceFacet[];
   readonly kinds: Roster<string>;
   readonly names: Roster<string>;
   readonly versions: Roster<SchemaVersion>;
-}): Result.Result<References, ClosedRelationError> =>
+}): Result.Result<References, RepeatedValue> =>
   Result.gen(function* generateReferences() {
     const { facets } = input;
     const kind = idField("kind", input.kinds);
@@ -1106,7 +1100,7 @@ export const references = (input: {
     const rows = facets.flatMap((facet) => facet.references);
 
     return {
-      builtIn: yield* closed({
+      builtIn: closed({
         key: [idField("root", input.kinds), idField("variable", builtInVariable)],
         name: "BuiltInVariable",
         payload: [
@@ -1123,7 +1117,7 @@ export const references = (input: {
           variable,
         })),
       }),
-      builtInBaseType: yield* closed({
+      builtInBaseType: closed({
         key: [idField("root", input.kinds), idField("variable", builtInVariable)],
         name: "BuiltInBaseType",
         payload: [
@@ -1135,7 +1129,7 @@ export const references = (input: {
         rows: typedBuiltIns,
       }),
       builtInVariable,
-      choiceBound: yield* closed({
+      choiceBound: closed({
         key: [kind],
         name: "ChoiceBound",
         payload: [
@@ -1145,13 +1139,13 @@ export const references = (input: {
         ],
         rows: facets.flatMap((facet) => facet.choiceBounds),
       }),
-      choiceCount: yield* closed({
+      choiceCount: closed({
         key: [kind],
         name: "ChoiceCount",
         payload: [idField("choice", input.kinds)],
         rows: facets.flatMap((facet) => facet.choiceCounts),
       }),
-      contentReference: yield* closed({
+      contentReference: closed({
         key: [kind, attribute, declaration],
         name: "ContentReference",
         payload: [],
@@ -1164,13 +1158,13 @@ export const references = (input: {
         ),
       }),
       declarationKind,
-      declares: yield* closed({
+      declares: closed({
         key: [kind],
         name: "Declares",
         payload: [declaration],
         rows: declarationKind.handles.map((handle) => ({ declaration: handle, kind: handle })),
       }),
-      referenceAttribute: yield* closed({
+      referenceAttribute: closed({
         key: [idField("version", input.versions), kind, idField("name", input.names)],
         name: "ReferenceAttribute",
         payload: [idField("form", referenceForm)],
@@ -1181,14 +1175,14 @@ export const references = (input: {
           ),
       }),
       referenceForm,
-      sectionPart: yield* closed({
+      sectionPart: closed({
         key: [kind],
         name: "SectionPart",
         payload: [],
         rows: facets.flatMap((facet) => facet.sectionParts).map((part) => ({ kind: part })),
       }),
       spelling,
-      variableReference: yield* closed({
+      variableReference: closed({
         key: [kind, attribute],
         name: "VariableReference",
         payload: [idField("spelling", spelling)],

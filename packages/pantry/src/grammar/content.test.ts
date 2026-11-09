@@ -10,9 +10,9 @@ import { searched } from "@grizzle/testing/vitest";
 import { runOfProcess } from "@grizzle/testing/vitest/run";
 import { Array as Arr, Duration, Effect, FileSystem, Formatter, Option, Result } from "effect";
 import { int8Max } from "#pantry/grammar/closed.ts";
-import { composed } from "#pantry/grammar/compose.ts";
+import { composed, namespaceOfKind, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { accepts, contentModelOf } from "#pantry/grammar/content.ts";
+import { accepts, contentModelOf, editedBy } from "#pantry/grammar/content.ts";
 import {
   documentLayer,
   fragmentRoots,
@@ -28,6 +28,7 @@ import type {
   Source,
 } from "#pantry/vocab/inventory/types.ts";
 import { asiNamespace, vocabularyNamespaces } from "#pantry/vocab/namespaces.ts";
+import { automatonOf, breachesOf } from "#pantry/vocab/sequencing.ts";
 import type { NamespaceClass } from "#pantry/vocab/namespaces.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import {
@@ -1969,6 +1970,86 @@ describe("the installed automata", () => {
 
         assert.isAbove(families.size, 0);
         assert.deepStrictEqual([...new Set(dead)].slice(0, 20), []);
+      }),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "decide every child's position: from no state of a family's model do two of the positions its kind is named at follow",
+    () =>
+      // Oracle: the installed rows alone. A kind one position names is placed there; a kind several
+      // name is placed by the state, at the one of its `Symbol` positions (through `SharedModelOf`)
+      // that `Follow` allows from its predecessor's. Were two to follow one state, no state would
+      // decide the child's position, and an XSD's Unique Particle Attribution keeps a kind from that
+      // only where the kind carries what the XSD tells its particles apart by. The composition
+      // never checks it: the models are fixed, so this test is where a model that breaks it fails.
+      Effect.gen(function* decided() {
+        const { content } = yield* grammar;
+        const follows = new Set(
+          content.follow.rows.map(({ from, model, to }) => `${model} ${from} ${to}`),
+        );
+        const positionsOf = new Map(
+          content.modelPositions.rows.map(({ model, positions }) => [model, positions]),
+        );
+        const symbolsOf = Map.groupBy(content.symbol.rows, ({ model }) => model);
+        const undecided = content.sharedModelOf.rows.flatMap(
+          ({ model: shared, parent, version }) => {
+            const model = Option.getOrThrow(contentModelOf(content, { parent, version }));
+            const states = Option.getOrThrow(Option.fromNullishOr(positionsOf.get(model)));
+            const byKind = Map.groupBy(
+              Option.getOrThrow(Option.fromNullishOr(symbolsOf.get(shared))),
+              ({ kind }) => kind,
+            );
+
+            return [...byKind].flatMap(([kind, named]) =>
+              Arr.range(0, states - 1).flatMap((from) => {
+                const next = named.filter(({ position }) =>
+                  follows.has(`${model} ${String(from)} ${position}`),
+                );
+
+                return next.length > 1
+                  ? [
+                      `${version} ${parent}: ${kind} from ${String(from)} at ${next.map(({ position }) => position).join(" and ")}`,
+                    ]
+                  : [];
+              }),
+            );
+          },
+        );
+
+        assert.isAbove(content.sharedModelOf.rows.length, 0);
+        assert.deepStrictEqual(undecided.slice(0, 20), []);
+      }),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "keep Unique Particle Attribution in every model of the composition, each reading's edits applied",
+    () =>
+      // Oracle: XML Schema 1.0 Part 1 §3.8.6, as `breachesOf` reads it. `sequencing.test.ts` reads
+      // the XSDs' own models; this reads every model the composition builds an automaton of, as
+      // `contentOf` builds it: the facets' own models among them, and every model a reading edits
+      // or restates. The composition never checks it: the models are fixed, so this test is where
+      // a model or a reading that breaks it fails.
+      Effect.gen(function* unique() {
+        const { kinds } = yield* grammar;
+        const namespaceOf = (kind: string) => namespaceOfKind(kinds, kind);
+        const edits = vocabularies.flatMap(({ facets }) => facets.content.edits);
+        const breaches = vocabularies
+          .flatMap((entry) => [...entry.models, ...entry.facets.content.models])
+          .flatMap(({ content, kind, versions }) =>
+            content._tag === "element-only" || content._tag === "mixed"
+              ? breachesOf(
+                  automatonOf(editedBy(content.particle, edits, kind, new Set())),
+                  namespaceOf,
+                  namespaceOf(kind),
+                ).map(
+                  (breach) => `${kind} in ${versions.join(" and ")}: ${Formatter.format(breach)}`,
+                )
+              : [],
+          );
+
+        assert.deepStrictEqual(breaches.slice(0, 20), []);
       }),
     testTimeoutMs,
   );

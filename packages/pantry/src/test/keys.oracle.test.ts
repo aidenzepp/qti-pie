@@ -31,7 +31,7 @@ import { ruleOfLaw, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { keyText, keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { SideSchema } from "#pantry/test/predicates.ts";
 import type { Datum } from "#pantry/test/predicates.ts";

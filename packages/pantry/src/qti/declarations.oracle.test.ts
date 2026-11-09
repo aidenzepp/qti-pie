@@ -57,8 +57,8 @@ import {
 } from "#pantry/qti/declarations.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
-import { QtiBase } from "#pantry/qti/base.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/test/host-judge.ts";
@@ -88,8 +88,8 @@ const overlays = {
 };
 
 describe("qti/declarations.ts, declared", () => {
-  it("builds a schema of QtiBase's relations and the O2 overlays with every law, each statement once", () => {
-    const built = schema("DeclarationLayer", { ...QtiBase.relations, ...overlays }, [
+  it("builds a schema of the schema's relations and the O2 overlays with every law, each statement once", () => {
+    const built = schema("DeclarationLayer", { ...qtiRelations, ...overlays }, [
       ...nodeLaws,
       ...chardataLaws,
       ...attributeLaws,

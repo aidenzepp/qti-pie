@@ -43,7 +43,7 @@ import { shred } from "#pantry/model/shred.ts";
 import { AriaRange } from "#pantry/qti/interactions.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { breaks, checksOf, closedOf } from "#pantry/test/predicates.ts";
 import type { Row } from "#pantry/test/predicates.ts";
 

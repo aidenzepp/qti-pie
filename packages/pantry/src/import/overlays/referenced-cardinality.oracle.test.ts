@@ -122,7 +122,7 @@ const conditionOn = (expression: string): string =>
  * includes (`SectionFeedbackRef`); and a test's template default and variable mapping on its item
  * ref (`TemplateDefaultTarget`, `MappingSourceDeclaration`), its outcome processing's prefixed
  * reading of the item's `V` (`Reading`, `ReadingCardinality`), and its own `V` set unsplit
- * (`VariableLookup`).
+ * (`Reading`, `DeclaredReading` of `#pantry/qti/queries.ts`).
  */
 const references: readonly Reference[] = [
   {

@@ -1,8 +1,10 @@
 /**
  * A content model's positions and its Glushkov automaton (review U4): {@link automatonOf} numbers
- * a model's element and wildcard particles in tree order, links each to the positions that may come
- * after it, and finds the states where Unique Particle Attribution fails. `grammar/content.ts`
- * installs each model's automaton as the content grammar.
+ * a model's element and wildcard particles in tree order and links each to the positions that may
+ * come after it, and `grammar/content.ts` installs each model's automaton as the content grammar.
+ * {@link breachesOf} finds the states where Unique Particle Attribution fails: the models are fixed
+ * data, so the tests over them read it (`sequencing.test.ts` over the XSDs' models,
+ * `grammar/content.test.ts` over the composition's), and no load runs it.
  */
 import { Option } from "effect";
 import type {
@@ -78,20 +80,17 @@ export interface Position {
  *   entry more than `positions`.
  * - `ends`: the states a family may end in, 0 among them exactly when the empty word is in the
  *   language.
- * - `ambiguous`: Unique Particle Attribution's breaches (XML Schema 1.0 Part 1, 3.8.6): a state from
- *   which one kind, or a wildcard and a kind it admits, leads to two positions. A breach is a
- *   finding about the XSD, never repaired here.
  */
 export interface Automaton {
-  readonly ambiguous: readonly Ambiguity[];
   readonly ends: ReadonlySet<number>;
   readonly next: readonly ReadonlySet<number>[];
   readonly positions: readonly Position[];
 }
 
 /**
- * One breach of Unique Particle Attribution: the state it is in (0 for the start, else the
- * position the word stands at) and the two positions one child could take.
+ * One breach of Unique Particle Attribution (XML Schema 1.0 Part 1, 3.8.6): the state it is in (0
+ * for the start, else the position the word stands at) and the two positions one child could take.
+ * A breach is a finding about a model, never repaired here.
  */
 export interface Ambiguity {
   readonly positions: readonly [number, number];
@@ -285,16 +284,9 @@ const bodyOf = (
  * Build a content model's positions and Glushkov automaton.
  *
  * @param particle - The model's particle.
- * @param namespaceOf - The namespace each kind's element is in, which decides what a wildcard
- *   admits.
- * @param own - The namespace of the model's own kind, a wildcard's own.
  * @returns The automaton.
  */
-export const automatonOf = (
-  particle: Particle,
-  namespaceOf: (kind: string) => NamespaceOfKind,
-  own: NamespaceOfKind,
-): Automaton => {
+export const automatonOf = (particle: Particle): Automaton => {
   // The start, before any child; then one state per position, the state after a child there.
   const start: State = { follows: new Set() };
   const states: PositionState[] = [];
@@ -353,18 +345,34 @@ export const automatonOf = (
   // State 0 is the start; state `n` is the one after a child at position `n`.
   const ordered: readonly State[] = [start, ...states];
   const numberOf = ({ position }: PositionState): number => position.number;
-  const ambiguous = ordered.flatMap((state, at) =>
-    clashesIn(
-      [...state.follows].map(({ position }) => position),
-      namespaceOf,
-      own,
-    ).map((pair): Ambiguity => ({ positions: pair, state: at })),
-  );
 
   return {
-    ambiguous,
     ends: new Set([...(whole.nullable ? [0] : []), ...[...whole.last].map(numberOf)]),
     next: ordered.map(({ follows }) => new Set([...follows].map(numberOf))),
     positions: states.map(({ position }) => position),
   };
 };
+
+/**
+ * Find an automaton's breaches of Unique Particle Attribution (XML Schema 1.0 Part 1, 3.8.6): each
+ * state from which one kind, or a wildcard and a kind it admits, or two wildcards, lead to two
+ * positions. A model is fixed data, so this is a test's reading of it, never a load's.
+ *
+ * @param automaton - The model's automaton.
+ * @param namespaceOf - Each kind's namespace: a kind that names no element is none a wildcard
+ *   admits by its namespace (`admitsNamespace`).
+ * @param own - The namespace of the model's own kind, a wildcard's own.
+ * @returns The breaches, by state; none for a deterministic model.
+ */
+export const breachesOf = (
+  automaton: Automaton,
+  namespaceOf: (kind: string) => NamespaceOfKind,
+  own: NamespaceOfKind,
+): readonly Ambiguity[] =>
+  automaton.next.flatMap((next, state) =>
+    clashesIn(
+      automaton.positions.filter(({ number }) => next.has(number)),
+      namespaceOf,
+      own,
+    ).map((pair): Ambiguity => ({ positions: pair, state })),
+  );

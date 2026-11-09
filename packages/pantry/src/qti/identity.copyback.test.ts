@@ -43,7 +43,7 @@ import {
   DocumentType,
   GoverningOf,
 } from "#pantry/grammar/install.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
 import type { Containment } from "#pantry/test/host-judge.ts";
 

@@ -32,7 +32,7 @@ import {
   operatorRelations,
   positivePattern,
 } from "#pantry/qti/operators.ts";
-import { QtiBase } from "#pantry/qti/base.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
 import {
   collapsedText,
   doubleReadingOf,
@@ -52,7 +52,7 @@ import type { Breach, Judgment, LawName } from "#pantry/test/oracle.ts";
 const testTimeoutMs = 600_000;
 
 /**
- * How long building a schema over every relation of `QtiBase` may take: its statements are planned
+ * How long building a schema over every relation of the schema may take: its statements are planned
  * whole, which takes some seconds beside the composed grammar.
  * Measured 2026-11-07: 2.8 s at a load average of 63 to 73.
  */
@@ -60,7 +60,7 @@ const buildTimeout = 60_000;
 
 describe("qti/operators.ts, declared", { timeout: buildTimeout }, () => {
   it("builds a schema of Node, the character data, the attribute layer and the operator overlays with every law, each statement once", () => {
-    const built = schema("OperatorLayer", { ...QtiBase.relations, ...operatorRelations }, [
+    const built = schema("OperatorLayer", { ...qtiRelations, ...operatorRelations }, [
       ...nodeLaws,
       ...chardataLaws,
       ...attributeLaws,

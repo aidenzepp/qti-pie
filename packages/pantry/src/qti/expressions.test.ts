@@ -79,7 +79,8 @@ import {
 } from "#pantry/qti/expressions.ts";
 import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { QtiBase } from "#pantry/qti/base.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { itemRefKind, linkResourceTypes } from "#pantry/qti/tests.ts";
 
 /**
@@ -133,7 +134,7 @@ describe("qti/expressions.ts, declared", () => {
       const built = schema(
         "ExpressionLayer",
         {
-          ...QtiBase.relations,
+          ...qtiRelations,
           AreaMapping,
           BaseTypePattern,
           Declaration,
@@ -192,10 +193,19 @@ describe("qti/expressions.ts, declared", () => {
   );
 
   it("names each check by a law whose rule it keeps", () => {
-    // Oracle: the rule table of plan §2.2 (P2, P8, P20 to P27, P29) and the C17 proofs' `derived`.
-    const named = new Set(
-      expressionLaws.flatMap((statement) => (statement.kind === "check" ? [statement.name] : [])),
-    );
+    // Oracle: the rule table of plan §2.2 (P2, P8, P20 to P27, P29) and the C17 proofs' `derived`,
+    // over the module's checks and the checks over its query `HeldType` (`#pantry/qti/queries.ts`),
+    // as `Qti` holds them.
+    const named = new Set([
+      ...expressionLaws.flatMap((statement) =>
+        statement.kind === "check" ? [statement.name] : [],
+      ),
+      ...Qti.statements.flatMap((statement) =>
+        statement.kind === "check" && statement.relation === Qti.relations.HeldType
+          ? [statement.name]
+          : [],
+      ),
+    ]);
 
     assert.deepStrictEqual([...named].toSorted(), Object.keys(checkRules).toSorted());
   });

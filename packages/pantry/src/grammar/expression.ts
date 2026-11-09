@@ -4,23 +4,18 @@
  *
  * Each generator is a function of a composition's rosters and its vocabularies' facets, which
  * state the rows in the shape the QTI vocabulary states them. A row naming a handle the
- * composition has no code for is refused by {@link closed}.
+ * composition has no code for is a fault of the rows (`faultOf`), which the tests find and grizzle
+ * refuses.
  *
  * None of the four has a version digit, because each holds in 3.0.0 and 3.0.1 alike: the ASI 3.0
  * and 3.0.1 XSDs give the same arity rows, which `expression.test.ts` checks over the pinned XSD
  * cache, and the binding and mapping rules are stated once for both versions.
  */
 import { Option } from "effect";
-import type { Array as Arr, Result } from "effect";
+import type { Array as Arr } from "effect";
 import { closed, idField, int8Max, valueField } from "#pantry/grammar/closed.ts";
 import { maxOccursOf } from "#pantry/grammar/content.ts";
-import type {
-  Closed,
-  ClosedRelationError,
-  IdField,
-  Roster,
-  ValueField,
-} from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Roster, ValueField } from "#pantry/grammar/closed.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
 
 /**
@@ -200,13 +195,12 @@ const withoutMapKey: ReadonlySet<string> = new Set(["duration", "file"]);
  * @param input - The `NodeKind` roster and each vocabulary's facet.
  * @param input.kinds - The `NodeKind` roster.
  * @param input.facets - The vocabularies' facets.
- * @returns The relation, or the reason it has no constant, such as an expression kind the
- *   composition does not hold.
+ * @returns The relation.
  */
 export const operatorArity = (input: {
   readonly facets: readonly ExpressionFacet[];
   readonly kinds: Roster<string>;
-}): Result.Result<OperatorArity, ClosedRelationError> => {
+}): OperatorArity => {
   const rows = input.facets.flatMap((facet) => facet.arities);
 
   return closed({
@@ -233,13 +227,12 @@ export const operatorArity = (input: {
  * @param input - The rosters and each vocabulary's facet.
  * @param input.rosters - The `BaseType`, `TypedCardinality` and `NodeKind` rosters.
  * @param input.facets - The vocabularies' facets.
- * @returns The relation, or the reason it has no constant, such as an interaction kind the
- *   composition does not hold.
+ * @returns The relation.
  */
 export const bindingFit = (input: {
   readonly facets: readonly ExpressionFacet[];
   readonly rosters: Rosters;
-}): Result.Result<BindingFit, ClosedRelationError> =>
+}): BindingFit =>
   closed({
     key: [
       idField("baseType", input.rosters.baseTypes),
@@ -263,12 +256,12 @@ export const bindingFit = (input: {
  * @param input - The `NodeKind` roster and each vocabulary's facet.
  * @param input.kinds - The `NodeKind` roster.
  * @param input.facets - The vocabularies' facets.
- * @returns The relation, or the reason it has no constant.
+ * @returns The relation.
  */
 export const recordBindingFit = (input: {
   readonly facets: readonly ExpressionFacet[];
   readonly kinds: Roster<string>;
-}): Result.Result<RecordBindingFit, ClosedRelationError> =>
+}): RecordBindingFit =>
   closed({
     key: [idField("kind", input.kinds)],
     name: "RecordBindingFit",
@@ -281,11 +274,9 @@ export const recordBindingFit = (input: {
  * every base type that has a map key.
  *
  * @param baseTypes - The `BaseType` roster.
- * @returns The relation, or the reason it has no constant.
+ * @returns The relation.
  */
-export const mappableBaseType = (
-  baseTypes: Roster<string>,
-): Result.Result<MappableBaseType, ClosedRelationError> =>
+export const mappableBaseType = (baseTypes: Roster<string>): MappableBaseType =>
   closed({
     key: [idField("baseType", baseTypes)],
     name: "MappableBaseType",

@@ -3486,9 +3486,18 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      under which an order interaction bound to a variable of another type was refused under "BindingFit", and one bound
      to a record under "RecordBindingFit". In the corpus, each of the 9 order interactions, in 5 zips, binds an
      identifier response of ordered cardinality, so no verdict moves. This binds pantry and plate alike. It matches
-     reading 165 of PR #55. (Decided 2026-11-09 by the overseer under the operator's delegation, decision 448, overseer
-     mail f74ee547.)
-163. **A section's visibility is its own `visible` alone: a section that writes none is neither visible nor invisible,
+     reading 165 of PR #55, which this reading now holds. That reading adds: the sentence states no requirement as
+     reading 150 reads section 2.2.2.2's sentence on `duration`; every other interaction class with a binding states it
+     in its own (section 5.30, ChoiceInteraction, "must be bound to a response variable with a base-type of identifier
+     and single or multiple cardinality", and the others `BindingFit`'s law source cites); the XML binding's
+     `OrderInteractionDType` states none (section 4.5.97, `bind.txt` line 328632); and the ASI XSDs' Schematron rules
+     for it state only the attributes it admits, the interactions it may not hold (8Aa) and its counts (8Ba). With it,
+     the law oracle's "Binding unique", which read only the interactions a fit relation names, reads every interaction,
+     the custom ones among them. This is not a case of documents in conflict: the normative sources agree. (Decided
+     2026-11-09 by the overseer under the operator's delegation, decision 448, overseer mail f74ee547; and, as PR #55's
+     reading 165, decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat
+     SWEEP-A1ORDER.)
+173. **A section's visibility is its own `visible` alone: a section that writes none is neither visible nor invisible,
      so AL3 alone refuses it, and no law reads a visibility it never wrote.** The ASI XSD requires the attribute, with
      no default: `<xs:attribute name="visible" use="required" type="xs:boolean" />` in `AssessmentSectionDType`
      (`imsqti_asiv3p0_v1p0.xsd` line 24711), and the information model gives it multiplicity `[1]`: "The visibility of
@@ -3509,7 +3518,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      the 14 zips that hold one writes `visible` (4 of them false, none of them with `keep-together="false"`), by a scan
      of their XML entries. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
      2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat SWEEP-VISIBLE.)
-164. **An `xml:lang` that is no language tag once collapsed states no language, so `document-lang` asks no record to
+174. **An `xml:lang` that is no language tag once collapsed states no language, so `document-lang` asks no record to
      list it, and its value domain alone refuses it.** QTI 3.0 Metadata asks for "one value for each of the languages
      referred to by the language attributes on the associated assessmentItem, test or object bank and its
      'bodyElements'" (section 2.7.1.3, normative by its section 1.2). An `xml:lang` refers to a language by a language
@@ -3527,31 +3536,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      importer writes them by the same test (`statesLanguage`, `src/import/overlays/metadata.ts`). This binds pantry and
      plate alike. This is not a case of documents in conflict. (Decided 2026-11-08 by the coordinator, under the
      operator's standing ruling of 2026-11-05, from seat SWEEP-DELETELANG.)
-165. **An order interaction may be bound to a response variable of any base type and cardinality: its class
-     description states no binding.** The one sentence that binds it, "The qti-order-interaction must be bound to a
-     response variable with a base-type of identifier and ordered cardinality only" (section 2.4.1.2, `info.txt` line
-     8762, `info301.txt` line 9371), stands in section 2, Key Data Model Features, which both versions of the information
-     model mark "This Section is NOT NORMATIVE" (`info.txt` line 8350, `info301.txt` line 8791). So it states no
-     requirement, as reading 150 reads section 2.2.2.2's sentence on `duration`. The normative sources state none: the
-     OrderInteraction class description gives the candidate's task and nothing of the variable it is bound to (section
-     5.97, `info.txt` line 36011, `info301.txt` line 51523), where every other interaction class with a binding states
-     it in its own (section 5.30, ChoiceInteraction, "must be bound to a response variable with a base-type of
-     identifier and single or multiple cardinality", and the others `BindingFit`'s law source cites); the XML binding's
-     `OrderInteractionDType` states none (section 4.5.97, `bind.txt` line 328632); and the ASI XSDs' Schematron rules
-     for it state only the attributes it admits, the interactions it may not hold (8Aa) and its counts (8Ba). So an
-     order interaction binds a declared response variable of any base type and cardinality, as the custom and portable
-     custom interactions do (reading 75): neither `BindingFit` nor `RecordBindingFit` holds a row of it, which makes it
-     one of `anyTypeKinds` (`typedFits`, `src/grammar/facets.ts`; `src/qti/interactions.ts`), and "Binding declared" and
-     "Binding unique" judge it as any other interaction (readings 75 and 92). This sets aside `BindingFit`'s
-     (identifier, ordered, `qti-order-interaction`) row, under which an order interaction bound to a variable of another
-     type was refused under "BindingFit", and one bound to a record under "RecordBindingFit". With it, the law oracle's
-     "Binding unique", which read only the interactions a fit relation names, reads every interaction, the custom ones
-     among them, as the schema's key over `BoundVariable` does (`src/test/oracle.ts`). The corpus moves no verdict: each
-     of the 9 order interactions in the 5 zips that hold one binds an identifier response of ordered cardinality, by a
-     scan of their XML entries. This binds pantry and plate alike. This is not a case of documents in conflict: the
-     normative sources agree. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05,
-     from seat SWEEP-A1ORDER.)
-166. **A reference that names no declaration holds no declaration row, and stands as no declaration kind: a test's
+175. **A reference that names no declaration holds no declaration row, and stands as no declaration kind: a test's
      reading of a built-in variable, of nothing, or through a variable mapping whose source its item declares nothing
      under has no declaration, and a processing reference that claims no table of its declaration has no claim.** The
      information model maps a name to the item's own variable: "Variable mappings allow outcome variables declared with
@@ -3580,7 +3565,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      none of its 29 zips writes a variable mapping, by a scan of their XML entries. This binds pantry and plate alike.
      This is not a case of documents in conflict. (Decided 2026-11-08 by the coordinator, under the operator's standing
      ruling of 2026-11-05, from seat SWEEP-REFNONE.)
-167. **A document's type in its package is total: the manifest is of type `manifest`, every other document of the type of
+176. **A document's type in its package is total: the manifest is of type `manifest`, every other document of the type of
      the resource that lists it, and a document's resource type, where a resource lists it, is a row of its own.** IMS
      Content Packaging 1.2 gives a package two roles of document: "The InterchangePackage shall include a Manifest
      object and may include content files and control files" (Information Model, Version 1.2 Public Draft v2.0,

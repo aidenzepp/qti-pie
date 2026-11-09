@@ -53,7 +53,6 @@ import { flatten } from "#pantry/model/xdm.ts";
 import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import {
   expressionKinds,
-  heldKinds,
   processingReferences,
   rootLanguages,
   ruleKindHandles,
@@ -67,14 +66,11 @@ import type {
   AssembledReference,
   Expression,
   ExpressionAttribute,
-  HeldType,
   Literal,
   LiteralTyped,
   MappingItemRef,
   MappingItemRefType,
-  MappingLookup,
   MappingSourceDeclaration,
-  NameLookup,
   Operand,
   PlacedDocument,
   PlacedReference,
@@ -92,7 +88,6 @@ import type {
   TemplateDefaultCardinality,
   TemplateDefaultTarget,
   TestReference,
-  VariableLookup,
   VariableRef,
   VariableRefCardinality,
   VariableRefDeclaration,
@@ -136,7 +131,6 @@ export interface ExpressionIds {
 export interface ExpressionRows {
   readonly Expression: ReadonlyMap<string, Addition<typeof Expression>>;
   readonly ExpressionAttribute: ReadonlyMap<string, Addition<typeof ExpressionAttribute>>;
-  readonly HeldType: ReadonlyMap<string, Addition<typeof HeldType>>;
   readonly Literal: ReadonlyMap<string, Addition<typeof Literal>>;
   readonly LiteralTyped: ReadonlyMap<string, Addition<typeof LiteralTyped>>;
   readonly Operand: ReadonlyMap<string, Addition<typeof Operand>>;
@@ -145,7 +139,6 @@ export interface ExpressionRows {
   readonly ReferenceDocument: ReadonlyMap<string, Addition<typeof ReferenceDocument>>;
   readonly SectionIdentifier: ReadonlyMap<string, Addition<typeof SectionIdentifier>>;
   readonly TestReference: ReadonlyMap<string, Addition<typeof TestReference>>;
-  readonly VariableLookup: ReadonlyMap<string, Addition<typeof VariableLookup>>;
   readonly VariableRef: ReadonlyMap<string, Addition<typeof VariableRef>>;
   readonly VariableRefCardinality: ReadonlyMap<string, Addition<typeof VariableRefCardinality>>;
   readonly VariableRefDeclaration: ReadonlyMap<string, Addition<typeof VariableRefDeclaration>>;
@@ -253,11 +246,6 @@ const rules: ReadonlySet<string> = new Set(ruleKindHandles);
  * The language each root opens.
  */
 const rootLanguage: ReadonlyMap<string, Language> = new Map(rootLanguages);
-
-/**
- * The setters and the lookup, whose one expression's type is a {@link HeldType} row of its own.
- */
-const holders: ReadonlySet<string> = new Set(heldKinds);
 
 /**
  * Each processing reference's spelling, by `kind attribute`.
@@ -1242,55 +1230,8 @@ const withTypes = (
 };
 
 /**
- * Write the type each setter and lookup that names a variable sets it to, as a row of its own: its
- * first expression's `exprRef` tuple, beside its reference's fields. One that holds no expression
- * has none, and one that names no variable has no reference to hold one by, so its expression is
- * refused by AL3 or its value domain alone (spec reading 152).
- *
- * @param references - The document's references, their types filled.
- * @param typedRows - The document's expression rows, in document order.
- * @returns The rows, by the holder's node.
- */
-const heldTypesOf = (
-  references: ReadonlyMap<string, Addition<typeof VariableRef>>,
-  typedRows: ReadonlyMap<string, Addition<typeof Expression>>,
-): ReadonlyMap<string, Addition<typeof HeldType>> => {
-  const held = new Map<string, Addition<typeof Expression>>();
-  for (const expression of typedRows.values()) {
-    if (holders.has(expression.parentKind) && !held.has(expression.parent)) {
-      held.set(expression.parent, expression);
-    }
-  }
-
-  return new Map(
-    [...references.values()].flatMap((reference) => {
-      const expression = held.get(reference.node);
-
-      return reference.attribute !== "identifier" || expression === undefined
-        ? []
-        : [
-            [
-              reference.node,
-              {
-                baseType: reference.baseType,
-                cardinality: reference.cardinality,
-                expression: expression.node,
-                expressionKind: expression.kind,
-                heldBase: expression.baseType,
-                heldCardinality: expression.cardinality,
-                kind: reference.kind,
-                language: expression.language,
-                node: reference.node,
-                resolution: reference.resolution,
-              },
-            ] as const,
-          ];
-    }),
-  );
-};
-
-/**
- * The key text of a (document, name)-keyed row, a lookup's.
+ * The key text of a name in a document, a test's assembly or an item ref's mappings, by which the
+ * package-level builder looks it up.
  *
  * @param document - The document, or the test or item ref, the name is looked up in.
  * @param name - The name.
@@ -1298,51 +1239,6 @@ const heldTypesOf = (
  */
 export const lookupKey = (document: NodeId, name: string): string =>
   JSON.stringify([document, name]);
-
-/**
- * A declaration lookup's row where the document declares no such name: its verdict, the row's one
- * datum (M2: the claim is proved by the key). A declared name's row says `declared` and no more;
- * its declaration is its `DeclarationIdentifier`'s.
- *
- * @param document - The document.
- * @param name - The name.
- * @returns The row.
- */
-const absentLookup = (document: NodeId, name: string): Addition<typeof VariableLookup> => ({
-  declared: false,
-  document,
-  name,
-});
-
-/**
- * Write a document's declaration lookups: one forced in per name it declares, by collapsed
- * identifier, and one absent row per name a reference claims it does not declare, one built in or
- * none (M2: the claim is proved by the key).
- *
- * @param doc - The document.
- * @param references - Its references.
- * @returns The rows, by `[document, name]`.
- */
-const variableLookupsOf = (
-  doc: Document,
-  references: ReadonlyMap<string, Addition<typeof VariableRef>>,
-): ReadonlyMap<string, Addition<typeof VariableLookup>> => {
-  const lookups = new Map<string, Addition<typeof VariableLookup>>();
-  for (const name of doc.declarations.keys()) {
-    lookups.set(lookupKey(doc.id, name), { declared: true, document: doc.id, name });
-  }
-
-  for (const reference of references.values()) {
-    if (reference.resolution !== "declared") {
-      lookups.set(
-        lookupKey(doc.id, reference.identifier),
-        absentLookup(doc.id, reference.identifier),
-      );
-    }
-  }
-
-  return lookups;
-};
 
 /**
  * A document's declared references' declarations, each a row of its own, their declarations'
@@ -1561,14 +1457,12 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
 
   return {
     ...built,
-    HeldType: heldTypesOf(references, built.Expression),
     ReferenceDocument:
       doc.rootKind === itemKind
         ? new Map<string, Addition<typeof ReferenceDocument>>()
         : new Map([[doc.id, { document: doc.id }]]),
     SectionIdentifier: sectionIdentifiers,
     TestReference: testReferencesOf(doc, references, sectionIdentifiers),
-    VariableLookup: variableLookupsOf(doc, references),
     VariableRefCardinality: declared.cardinalities,
     VariableRefDeclaration: declared.declarations,
     VariableRefTable: declared.tables,
@@ -1592,7 +1486,8 @@ export interface AssembledExpressionInput {
 
 /**
  * A resource of the package as an item ref's target reads it: the path its href names and its
- * type (`TypedHref`'s, the package builder's).
+ * type, a row of the query `TypedHref` as the package builder reads it on the host
+ * (`#pantry/import/overlays/package.ts` `typedHrefsOf`).
  */
 export interface NamedResource {
   readonly path: string;
@@ -1616,9 +1511,7 @@ export type AssembledReferenceRow = Addition<typeof AssembledReference> & {
 
 /**
  * The rows a package's documents build together, one keyed set per relation: what a test reads
- * of every document it places, and what its item refs read of the items they name. A
- * `VariableLookup` row here is a probe of a name no document's own rows hold; every other key of it
- * is the document builder's.
+ * of every document it places, and what its item refs read of the items they name.
  */
 export interface AssembledExpressionRows {
   readonly AssembledReference: ReadonlyMap<string, AssembledReferenceRow>;
@@ -1626,9 +1519,7 @@ export interface AssembledExpressionRows {
   readonly ItemRefTarget: ReadonlyMap<string, Addition<typeof ItemRefTarget>>;
   readonly MappingItemRef: ReadonlyMap<string, Addition<typeof MappingItemRef>>;
   readonly MappingItemRefType: ReadonlyMap<string, Addition<typeof MappingItemRefType>>;
-  readonly MappingLookup: ReadonlyMap<string, Addition<typeof MappingLookup>>;
   readonly MappingSourceDeclaration: ReadonlyMap<string, Addition<typeof MappingSourceDeclaration>>;
-  readonly NameLookup: ReadonlyMap<string, Addition<typeof NameLookup>>;
   readonly PlacedDocument: ReadonlyMap<string, Addition<typeof PlacedDocument>>;
   readonly PlacedReference: ReadonlyMap<string, Addition<typeof PlacedReference>>;
   readonly Reading: ReadonlyMap<string, Addition<typeof Reading>>;
@@ -1640,15 +1531,7 @@ export interface AssembledExpressionRows {
     Addition<typeof TemplateDefaultCardinality>
   >;
   readonly TemplateDefaultTarget: ReadonlyMap<string, Addition<typeof TemplateDefaultTarget>>;
-  readonly VariableLookup: ReadonlyMap<string, Addition<typeof VariableLookup>>;
 }
-
-/**
- * The resource type of a name that names no resource: `none`, `NameLookup`'s null object for a name
- * that is no item ref, or an item ref whose href names no resource of the package (its
- * `E1_derived`).
- */
-const noResource = "none" satisfies Addition<typeof NameLookup>["resourceType"];
 
 /**
  * The setters, whose prefixed readings resolve nothing.
@@ -1666,7 +1549,29 @@ const durationScopes: ReadonlySet<string> = new Set([partKind, sectionKind, sect
 const digits = /^[0-9]+$/u;
 
 /**
- * The lookups the package-level builder reads and the probes it writes.
+ * A reading's scope: the written element of its test's assembly its scope names, with its kind,
+ * its placements and whether a replacement can repeat it in an instance that places it (as
+ * `FoundName` of `#pantry/qti/queries.ts` joins them); the test itself for an unsplit reading; and
+ * for a scope the assembly holds no element of, not `found`, the test as a document placed
+ * nowhere, the null objects `Reading`'s `E1_derived` states of it.
+ */
+interface Scope {
+  readonly found: boolean;
+  readonly kind: Addition<typeof Reading>["namedKind"];
+  readonly node: NodeId;
+  readonly placements: bigint;
+  readonly replaced: boolean;
+}
+
+/**
+ * The resource types of an LTI link, through whose item ref a name is read unchecked (spec reading
+ * 110).
+ */
+const linkTypes: ReadonlySet<string> = new Set(linkResourceTypes);
+
+/**
+ * What the package-level builder reads of a package's documents and assemblies, each by
+ * {@link lookupKey}.
  */
 interface Lookups {
   /**
@@ -1677,24 +1582,36 @@ interface Lookups {
   /**
    * Each document's named declarations by `[document, name]`, the first of a repeated name (which
    * `Declaration key` refuses), as the document builder resolves a reference (`declarationsOf`):
-   * the declaration a declared reading reads, through `declarationIdentifierRef`.
+   * the declaration a declared reading reads.
    */
   readonly declarations: ReadonlyMap<string, Addition<typeof DeclarationIdentifier>>;
+  /**
+   * The item each item ref names, by the item ref's node, where the package holds its document.
+   */
   readonly items: ReadonlyMap<string, NodeId>;
-  readonly mappings: Map<string, Addition<typeof MappingLookup>>;
+  /**
+   * The item refs that name an LTI link, by node: a name read through one is read unchecked (spec
+   * reading 110), its reading's source `link`.
+   */
+  readonly links: ReadonlySet<string>;
+  /**
+   * The names each item ref maps, by `[item ref, target]`.
+   */
+  readonly mapped: ReadonlySet<string>;
   /**
    * Each mapping whose source its item declares, by its item ref and its target: the declaration a
    * mapped reading reads.
    */
   readonly mappingSources: Map<string, Addition<typeof MappingSourceDeclaration>>;
-  readonly names: Map<string, Addition<typeof NameLookup>>;
-  readonly probes: Map<string, Addition<typeof VariableLookup>>;
-  readonly targets: ReadonlyMap<string, Addition<typeof ItemRefTarget>["type"]>;
+  /**
+   * Each test's written elements by `[assembly, identifier]`, each a found scope.
+   */
+  readonly names: ReadonlyMap<string, Scope>;
 }
 
 /**
  * Read a declaration's cardinality, where it has one: none for a declaration whose cardinality is
- * unwritten or spells nothing, and for a node that declares nothing, the document a probe names.
+ * unwritten or spells nothing.
  *
  * @param lookups - The lookups.
  * @param declaration - The declaration's node.
@@ -1710,90 +1627,41 @@ const cardinalityAt = (
   );
 
 /**
- * Look a name up in a document's declarations, writing an absent probe where it declares none.
+ * Look a name up in a document's declarations.
  *
  * @param lookups - The lookups.
  * @param document - The document.
  * @param name - The name.
  * @returns The declaration of that name, or none.
  */
-const declarationProbe = (
+const declarationOf = (
   lookups: Lookups,
   document: NodeId,
   name: string,
-): Option.Option<Addition<typeof DeclarationIdentifier>> => {
-  const key = lookupKey(document, name);
-  const held = Option.fromNullishOr(lookups.declarations.get(key));
-  if (Option.isNone(held)) {
-    lookups.probes.set(key, absentLookup(document, name));
-  }
-
-  return held;
-};
+): Option.Option<Addition<typeof DeclarationIdentifier>> =>
+  Option.fromNullishOr(lookups.declarations.get(lookupKey(document, name)));
 
 /**
- * Look a name up in an item ref's mappings, writing an absent probe where it maps none.
- *
- * @param lookups - The lookups.
- * @param itemRef - The item ref.
- * @param name - The name.
- * @returns The lookup's row.
- */
-const mappingProbe = (
-  lookups: Lookups,
-  itemRef: NodeId,
-  name: string,
-): Addition<typeof MappingLookup> => {
-  const key = lookupKey(itemRef, name);
-  const held = lookups.mappings.get(key);
-  if (held !== undefined) {
-    return held;
-  }
-
-  const absent: Addition<typeof MappingLookup> = { itemRef, mapped: false, name };
-  lookups.mappings.set(key, absent);
-
-  return absent;
-};
-
-/**
- * Look a name up in a test's assembly, writing an absent probe where it holds none.
+ * Look a name up in a test's assembly: its written element, or, where the assembly holds none,
+ * the null objects of a scope not found ({@link Scope}).
  *
  * @param lookups - The lookups.
  * @param assembly - The test's document node.
  * @param name - The name.
- * @returns The lookup's row.
+ * @returns The scope.
  */
-const nameProbe = (
-  lookups: Lookups,
-  assembly: NodeId,
-  name: string,
-): Addition<typeof NameLookup> => {
-  const key = lookupKey(assembly, name);
-  const held = lookups.names.get(key);
-  if (held !== undefined) {
-    return held;
-  }
-
-  const absent: Addition<typeof NameLookup> = {
-    assembly,
+const nameOf = (lookups: Lookups, assembly: NodeId, name: string): Scope =>
+  Option.getOrElse(Option.fromNullishOr(lookups.names.get(lookupKey(assembly, name))), () => ({
     found: false,
-    instance: assembly,
-    itemDocument: assembly,
     kind: "document",
-    name,
     node: assembly,
     placements: 0n,
     replaced: false,
-    resourceType: noResource,
-  };
-  lookups.names.set(key, absent);
-
-  return absent;
-};
+  }));
 
 /**
- * One reading's text before its probes: its form, the dot it splits at, and its pieces.
+ * One reading's text before its scope and its variable are read: its form, the dot it splits at,
+ * and its pieces.
  */
 interface ReadingText {
   readonly form: Addition<typeof Reading>["form"];
@@ -1849,33 +1717,17 @@ export const readingTextsOf = (
 };
 
 /**
- * A reading's scope as its name probe reads it.
- */
-type Scope = Pick<
-  Addition<typeof NameLookup>,
-  "found" | "itemDocument" | "kind" | "node" | "placements" | "replaced" | "resourceType"
->;
-
-/**
  * Read a reading's scope: the test itself for an unsplit reading, else its name in the assembly.
  *
- * @param lookups - The lookups, which this adds probes to.
+ * @param lookups - The lookups.
  * @param assembly - The test's document node.
  * @param text - The reading's text.
  * @returns The scope.
  */
 const scopeOf = (lookups: Lookups, assembly: NodeId, text: ReadingText): Scope =>
   text.form === "unsplit"
-    ? {
-        found: true,
-        itemDocument: assembly,
-        kind: testKind,
-        node: assembly,
-        placements: 1n,
-        replaced: false,
-        resourceType: noResource,
-      }
-    : nameProbe(lookups, assembly, text.scope);
+    ? { found: true, kind: testKind, node: assembly, placements: 1n, replaced: false }
+    : nameOf(lookups, assembly, text.scope);
 
 /**
  * Whether a reading's variable is a built-in its scope holds: the test's, unsplit; the item's,
@@ -1904,20 +1756,28 @@ const holdsBuiltIn = (text: ReadingText, scope: Scope, itemScoped: boolean): boo
 };
 
 /**
- * What a reading's variable is: declared, else mapped, else built in, else none.
+ * What a reading's variable is: declared, else, through an LTI link, built in or else read
+ * unchecked as `link` (spec reading 110), whatever the link's item ref maps; else mapped, else
+ * built in, else none.
  *
  * @param declared - Whether the document it reads declares it.
  * @param mapped - Whether its item ref maps it.
  * @param builtIn - Whether it names a built-in of its scope.
+ * @param linked - Whether it reads through an item ref that names an LTI link.
  * @returns The source.
  */
 const sourceOf = (
   declared: boolean,
   mapped: boolean,
   builtIn: boolean,
+  linked: boolean,
 ): Addition<typeof Reading>["source"] => {
   if (declared) {
     return "declared";
+  }
+
+  if (linked) {
+    return builtIn ? "builtIn" : "link";
   }
 
   if (mapped) {
@@ -2002,13 +1862,41 @@ const readingResolves = (reading: Addition<typeof Reading>): boolean =>
     (reading.replaced && /^[0-9]*[1-9][0-9]*$/u.test(reading.number)));
 
 /**
- * Read one reading of a reference by one test: its scope in the assembly, its variable in the
- * test's or the item's declarations and the item ref's mappings, and the source those give; and,
- * where it resolves, the declaration its declared or mapped variable reads, a row of its own. A
- * reading of a built-in variable or of nothing, one through a mapping whose source its item
- * declares nothing under, and one that does not resolve hold none.
+ * Read the document whose declarations a reading reads its variable in: the test's own, unsplit;
+ * through a found item ref, the item it names, where the package holds its document; and none
+ * through an item ref of an LTI link or of an item the package lacks, or through any other scope.
  *
- * @param lookups - The lookups, which this adds probes to.
+ * @param lookups - The lookups.
+ * @param assembly - The test's document node.
+ * @param text - The reading's text.
+ * @param scope - Its scope.
+ * @returns The document, or none.
+ */
+const documentRead = (
+  lookups: Lookups,
+  assembly: NodeId,
+  text: ReadingText,
+  scope: Scope,
+): Option.Option<NodeId> => {
+  if (text.form === "unsplit") {
+    return Option.some(assembly);
+  }
+
+  return text.form !== "name" && scope.found && scope.kind === itemRefKind
+    ? Option.fromNullishOr(lookups.items.get(scope.node))
+    : Option.none();
+};
+
+/**
+ * Read one reading of a reference by one test: its scope in the assembly, its variable in the
+ * declarations of the document it reads, the test's (unsplit) or its item ref's item's, and in the
+ * item ref's mappings, and the source those give; and, where it resolves, the declaration its
+ * declared or mapped variable reads, a row of its own. An item ref that names an LTI link, or an
+ * item whose document the package lacks, names no declarations. A reading of a built-in variable
+ * or of nothing, one through a mapping whose source its item declares nothing under, and one that
+ * does not resolve hold none.
+ *
+ * @param lookups - The lookups.
  * @param assembly - The test's document node.
  * @param reference - The reference.
  * @param text - The reading's text.
@@ -2023,32 +1911,32 @@ const readingOf = (
   const scope = scopeOf(lookups, assembly, text);
   const itemScoped =
     text.form !== "unsplit" && text.form !== "name" && scope.found && scope.kind === itemRefKind;
-  const itemHeld = itemScoped && scope.resourceType === itemResourceType;
-  const declared =
-    text.form === "unsplit" || itemHeld
-      ? declarationProbe(lookups, scope.itemDocument, text.variable)
-      : Option.none();
-  const mapped = itemScoped && mappingProbe(lookups, scope.node, text.variable).mapped;
+  const declared = documentRead(lookups, assembly, text, scope).pipe(
+    Option.flatMap((document) => declarationOf(lookups, document, text.variable)),
+  );
+  const mapped = itemScoped && lookups.mapped.has(lookupKey(scope.node, text.variable));
+  const linked = itemScoped && lookups.links.has(scope.node);
   const reading: Addition<typeof Reading> = {
     assembly,
     attribute: reference.attribute,
-    declared: Option.isSome(declared),
     form: text.form,
     found: scope.found,
     identifier: reference.identifier,
     kind: reference.kind,
-    lookupDocument: scope.itemDocument,
-    mapped,
     named: scope.node,
     namedKind: scope.kind,
     node: reference.node,
     number: text.number,
     placements: scope.placements,
     replaced: scope.replaced,
-    resourceType: scope.resourceType,
     role: reference.role,
     scope: text.scope,
-    source: sourceOf(Option.isSome(declared), mapped, holdsBuiltIn(text, scope, itemScoped)),
+    source: sourceOf(
+      Option.isSome(declared),
+      mapped,
+      holdsBuiltIn(text, scope, itemScoped),
+      linked,
+    ),
     split: BigInt(text.split),
     variable: text.variable,
   };
@@ -2070,7 +1958,6 @@ const readingOf = (
         attribute: reading.attribute,
         form: reading.form,
         kind: reading.kind,
-        lookupDocument: reading.lookupDocument,
         named: reading.named,
         node: reading.node,
         source: reading.source,
@@ -2385,15 +2272,59 @@ const namedDeclarationsOf = (
 };
 
 /**
- * Read the lookups a package's documents hold: each document's named declarations and their
- * cardinalities, and what each item ref names.
+ * Read each test's written elements as the scopes its readings read, by `[assembly, identifier]`:
+ * each element's node, its kind and its placements, and whether a replacement can repeat it in the
+ * first instance that places it, the first element of a repeated name (which `Test_name_key`
+ * refuses). `FoundName` of `#pantry/qti/queries.ts` admits any instance's.
+ *
+ * @param assembled - The package's assemblies.
+ * @returns The scopes.
+ * @throws {Error} When a written element has no instance that places it, which `AssembledName`, a
+ *   projection of `InstanceName`, rules out: a defect of the assembly's rows.
+ */
+const namesOf = (assembled: AssembledRows): ReadonlyMap<string, Scope> => {
+  const placed = Map.groupBy(assembled.InstanceName.values(), ({ assembly, node }) =>
+    keyOf([assembly, node]),
+  );
+  const names = new Map<string, Scope>();
+  for (const name of assembled.AssembledName.values()) {
+    const key = lookupKey(name.assembly, name.identifier);
+    const unplaced = () =>
+      new Error(
+        `The written element ${name.node} of the assembly ${name.assembly} has no instance that places it, and AssembledName projects InstanceName. Build the names from the same assembly's rows.`,
+      );
+    const placements = Option.getOrThrowWith(
+      Option.fromNullishOr(placed.get(keyOf([name.assembly, name.node]))),
+      unplaced,
+    );
+    const placement = Option.getOrThrowWith(Arr.head(placements), unplaced);
+    if (!names.has(key)) {
+      names.set(key, {
+        found: true,
+        kind: placement.kind,
+        node: name.node,
+        placements: BigInt(placements.length),
+        replaced: placement.replaced,
+      });
+    }
+  }
+
+  return names;
+};
+
+/**
+ * Read what a package's documents and assemblies hold that a test's readings and its item refs'
+ * declarations read: each document's named declarations and their cardinalities, the item each
+ * item ref names, the names each item ref maps, and each test's written elements.
  *
  * @param documents - Every document of the package.
+ * @param assembled - The package's assemblies.
  * @param items - What each item ref names.
- * @returns The lookups, no probe written yet.
+ * @returns The lookups, no mapping source read yet.
  */
 const lookupsOf = (
   documents: readonly AssembledExpressionInput[],
+  assembled: AssembledRows,
   items: ItemRefRows,
 ): Lookups => ({
   cardinalities: new Map(documents.flatMap((input) => [...input.cardinalities])),
@@ -2401,18 +2332,25 @@ const lookupsOf = (
   items: new Map(
     [...items.itemRefDocuments.values()].map(({ document, node }) => [node, document]),
   ),
+  links: new Set(
+    [...items.itemRefTargets.values()].flatMap(({ node, type }) =>
+      linkTypes.has(type) ? [node] : [],
+    ),
+  ),
+  mapped: new Set(
+    documents.flatMap((input) =>
+      [...input.tests.VariableMapping.values()].map(({ parent, target }) =>
+        lookupKey(parent, target),
+      ),
+    ),
+  ),
   mappingSources: new Map(),
-  mappings: new Map(),
-  names: new Map(),
-  probes: new Map(),
-  targets: new Map([...items.itemRefTargets.values()].map(({ node, type }) => [node, type])),
+  names: namesOf(assembled),
 });
 
 /**
  * Write each variable mapping's source in the item it maps, where its item ref names an item that
- * declares a variable of its source's name, with that declaration and whether the item declares
- * its target too; and force its target into the item ref's mapping lookups, a mapping whose source
- * is undeclared included, since the item ref maps the name all the same. A mapping with no source
+ * declares a variable of its source's name, with that declaration. A mapping with no source
  * declaration has none: no value stands for it, so "Variable mapping source" refuses it.
  *
  * @param documents - Every document of the package.
@@ -2426,9 +2364,6 @@ const mappingSourcesOf = (
   const sources = new Map<string, Addition<typeof MappingSourceDeclaration>>();
   for (const input of documents) {
     for (const mapping of input.tests.VariableMapping.values()) {
-      const key = lookupKey(mapping.parent, mapping.target);
-      lookups.mappings.set(key, { itemRef: mapping.parent, mapped: true, name: mapping.target });
-
       const itemDocument = lookups.items.get(mapping.parent);
       const source =
         itemDocument === undefined
@@ -2446,10 +2381,9 @@ const mappingSourcesOf = (
           node: mapping.node,
           source: mapping.source,
           target: mapping.target,
-          targetDeclared: Option.isSome(declarationProbe(lookups, itemDocument, mapping.target)),
         };
         sources.set(mapping.node, row);
-        lookups.mappingSources.set(key, row);
+        lookups.mappingSources.set(lookupKey(mapping.parent, mapping.target), row);
       }
     }
   }
@@ -2465,20 +2399,20 @@ const mappingSourcesOf = (
  * row, so grizzle draws its `types` as 0, and "Variable mapping source" judges it (decision 428).
  *
  * @param documents - Every document of the package.
- * @param lookups - The lookups, which hold each item ref's target.
+ * @param targets - Each item ref's `ItemRefTarget`, by the item ref's node, where it has a target.
  * @returns The mappings' item refs and their types, each by the mapping's node.
  */
 const mappingItemRefsOf = (
   documents: readonly AssembledExpressionInput[],
-  lookups: Lookups,
+  targets: ReadonlyMap<string, Addition<typeof ItemRefTarget>>,
 ): Pick<AssembledExpressionRows, "MappingItemRef" | "MappingItemRefType"> => {
   const mappings = documents.flatMap((input) => [...input.tests.VariableMapping.values()]);
   const types = mappings.flatMap((mapping) => {
-    const type = lookups.targets.get(mapping.parent);
+    const target = targets.get(mapping.parent);
 
-    return type === undefined
+    return target === undefined
       ? []
-      : [[mapping.node, { itemRef: mapping.parent, node: mapping.node, type }] as const];
+      : [[mapping.node, { itemRef: mapping.parent, node: mapping.node, type: target.type }] as const];
   });
 
   return {
@@ -2489,74 +2423,6 @@ const mappingItemRefsOf = (
     ),
     MappingItemRefType: new Map(types),
   };
-};
-
-/**
- * Force every written element of every test's assembly into the name lookups: its node, kind and
- * placements, one instance that places it and whether a replacement can repeat it there, and,
- * for an item ref, what it names. An item ref of the item type whose item the package holds no
- * document of takes the test itself as its item, `NameLookup`'s null object for "no item"
- * (`representation-gaps.md` §4.3), which `ItemRefDocument` holds no row of, so "Item ref target"
- * refuses it as it refuses the item ref; and an item ref whose href names no resource has
- * {@link noResource} for its type, which no `ItemRefTarget` row holds.
- *
- * @param documents - Every document of the package.
- * @param assembled - The package's assemblies.
- * @param lookups - The lookups, which this adds to.
- * @throws {Error} When a written element has no instance that places it or no `Named` row, which
- *   `AssembledName`, a projection of `InstanceName` over `Named`, rules out: a defect of the
- *   assembly's rows.
- */
-const forceNames = (
-  documents: readonly AssembledExpressionInput[],
-  assembled: AssembledRows,
-  lookups: Lookups,
-): void => {
-  const kinds = new Map(
-    documents.flatMap((input) =>
-      [...input.tests.Named.values()].map(({ kind, node }) => [node, kind] as const),
-    ),
-  );
-  const placed = Map.groupBy(assembled.InstanceName.values(), ({ assembly, node }) =>
-    keyOf([assembly, node]),
-  );
-  for (const name of assembled.AssembledName.values()) {
-    const key = lookupKey(name.assembly, name.identifier);
-    const unplaced = () =>
-      new Error(
-        `The written element ${name.node} of the assembly ${name.assembly} has no instance that places it or no Named row, and AssembledName projects InstanceName over Named. Build the names from the same assembly's rows.`,
-      );
-    const placements = Option.getOrThrowWith(
-      Option.fromNullishOr(placed.get(keyOf([name.assembly, name.node]))),
-      unplaced,
-    );
-    const placement = Option.getOrThrowWith(Arr.head(placements), unplaced);
-    const kind = Option.getOrThrowWith(Option.fromNullishOr(kinds.get(name.node)), unplaced);
-    const resourceType =
-      kind === itemRefKind
-        ? Option.getOrElse(Option.fromNullishOr(lookups.targets.get(name.node)), () => noResource)
-        : noResource;
-    const holdsItem = kind === itemRefKind && resourceType === itemResourceType;
-    if (!lookups.names.has(key)) {
-      lookups.names.set(key, {
-        assembly: name.assembly,
-        found: true,
-        instance: placement.instance,
-        itemDocument: holdsItem
-          ? Option.getOrElse(
-              Option.fromNullishOr(lookups.items.get(name.node)),
-              () => name.assembly,
-            )
-          : name.assembly,
-        kind,
-        name: name.identifier,
-        node: name.node,
-        placements: BigInt(placements.length),
-        replaced: placement.replaced,
-        resourceType,
-      });
-    }
-  }
 };
 
 /**
@@ -2579,7 +2445,7 @@ interface PlacedRows {
  *
  * @param documents - Every document of the package.
  * @param assembled - The package's assemblies.
- * @param lookups - The lookups, which this adds probes to.
+ * @param lookups - The lookups.
  * @returns The rows.
  */
 const placedRowsOf = (
@@ -2655,15 +2521,15 @@ const placedRowsOf = (
  * readings 5, 48 and 88): each mapping's and template default's item declarations, and for each
  * test, every reference of every document it places, placed once per instance, read once, split
  * into its name's pieces, and read in every reading, each reading's scope, variable and source
- * looked up, absent names written as probes. Where the documents break a law, the rows still say
+ * looked up. Where the documents break a law, the rows still say
  * what they hold, so the law that refuses them is the one their rows name: two readings that
  * resolve are both written, and a reference no reading resolves has none that does.
  *
  * @param documents - Every document of one package, with its rows ({@link rowsOf} and the test
  *   builder's), its tree and its ids.
  * @param assembled - The package's assemblies (`assembledRowsOf` of the test builder).
- * @param resources - The package's typed resources, each href's path and type (the package
- *   builder's `TypedHref` rows).
+ * @param resources - The package's typed resources, each href's path and type, as the package
+ *   builder reads them on the host (`#pantry/import/overlays/package.ts` `typedHrefsOf`).
  * @returns The rows.
  */
 export const assembledExpressionRowsOf = (
@@ -2672,9 +2538,8 @@ export const assembledExpressionRowsOf = (
   resources: Iterable<NamedResource>,
 ): AssembledExpressionRows => {
   const items = itemRefTargetsOf(documents, resources);
-  const lookups = lookupsOf(documents, items);
+  const lookups = lookupsOf(documents, assembled, items);
   const sources = mappingSourcesOf(documents, lookups);
-  forceNames(documents, assembled, lookups);
 
   const placed = placedRowsOf(documents, assembled, lookups);
   const templateDefaults = documents.flatMap((input) =>
@@ -2685,14 +2550,11 @@ export const assembledExpressionRowsOf = (
     ...placed,
     ItemRefDocument: items.itemRefDocuments,
     ItemRefTarget: items.itemRefTargets,
-    ...mappingItemRefsOf(documents, lookups),
-    MappingLookup: lookups.mappings,
+    ...mappingItemRefsOf(documents, items.itemRefTargets),
     MappingSourceDeclaration: sources,
-    NameLookup: lookups.names,
     TemplateDefault: new Map(templateDefaults.flatMap((rows) => rows.templateDefaults)),
     TemplateDefaultCardinality: new Map(templateDefaults.flatMap((rows) => rows.cardinalities)),
     TemplateDefaultTarget: new Map(templateDefaults.flatMap((rows) => rows.targets)),
-    VariableLookup: lookups.probes,
   };
 };
 
@@ -2712,7 +2574,7 @@ export const resolvingReadingsOf = (
 
 /**
  * A package's variable references placed under each instance of an item's assembly (spec reading
- * 117), and the declaration lookups their claims of no declaration read.
+ * 117), and the declaration each declared one names.
  */
 export interface PlacedVariableRows {
   readonly PlacedVariableRef: ReadonlyMap<string, Addition<typeof PlacedVariableRef>>;
@@ -2720,7 +2582,6 @@ export interface PlacedVariableRows {
     string,
     Addition<typeof PlacedVariableRefDeclaration>
   >;
-  readonly VariableLookup: ReadonlyMap<string, Addition<typeof VariableLookup>>;
 }
 
 /**
@@ -2746,7 +2607,7 @@ const placedResolutionOf = (
  * item's assembly, every `VariableRef` of the instance's document, its name resolved as an item's
  * own is, among the item's declarations, whatever their cardinality spells (spec reading 159),
  * else to one of an item's built-in variables, else to nothing, which "Variable declared" refuses;
- * and for each name that resolves to no declaration, the item's absent lookup that proves it.
+ * and the declaration each declared one names.
  *
  * @param input - The package's rows the placed references read.
  * @param input.declarations - Every named declaration of the package, with its counts of
@@ -2767,7 +2628,6 @@ export const placedVariableRowsOf = (input: {
   const referencesOf = Map.groupBy(input.references, ({ document }) => document);
   const placed = new Map<string, Addition<typeof PlacedVariableRef>>();
   const placedDeclarations = new Map<string, Addition<typeof PlacedVariableRefDeclaration>>();
-  const lookups = new Map<string, Addition<typeof VariableLookup>>();
   for (const root of input.instances) {
     for (const instance of root.assemblyKind === itemKind ? instancesIn(root) : []) {
       for (const reference of Option.getOrElse(
@@ -2787,12 +2647,7 @@ export const placedVariableRowsOf = (input: {
           resolution: placedResolutionOf(declaration, reference.identifier),
           rootKind: itemKind,
         });
-        if (declaration === undefined) {
-          lookups.set(
-            lookupKey(root.assembly, reference.identifier),
-            absentLookup(root.assembly, reference.identifier),
-          );
-        } else {
+        if (declaration !== undefined) {
           placedDeclarations.set(at, {
             assembly: root.assembly,
             attribute: reference.attribute,
@@ -2813,6 +2668,5 @@ export const placedVariableRowsOf = (input: {
   return {
     PlacedVariableRef: placed,
     PlacedVariableRefDeclaration: placedDeclarations,
-    VariableLookup: lookups,
   };
 };

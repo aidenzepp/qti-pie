@@ -106,11 +106,10 @@ export const noPackageRows: PackageRows = {
 type ResourceTypeHandle = Addition<typeof ResourceTyped>["type"];
 
 /**
- * The `ResourceType` handles a lexical form can spell: every one but the null object `none`, which
- * no lexical form writes (`ResourceTypeLexical` holds no row for it).
+ * The `ResourceType` handles, each by the lexical form that spells it (`ResourceTypeLexical`).
  */
 const spelledTypes: ReadonlyMap<string, ResourceTypeHandle> = new Map(
-  ResourceType.handles.flatMap((handle) => (handle === "none" ? [] : [[handle, handle] as const])),
+  ResourceType.handles.map((handle) => [handle, handle] as const),
 );
 
 /**

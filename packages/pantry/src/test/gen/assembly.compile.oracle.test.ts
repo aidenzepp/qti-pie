@@ -22,7 +22,7 @@
  * the schema, never on the rows bound at run time, so two packages with one list have one program.
  * The layer needs the committed snapshot to be the schema's, as every `DbLayer` does,
  * and the import's write program is also declared in the author login's workload
- * (`#pantry/qti/logins.ts` `importWork`).
+ * (`#pantry/qti/own-login.ts` `importWork`).
  */
 import { DbLayer, login, OpenError, workload } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -41,8 +41,8 @@ import { readProgram } from "#pantry/import/program.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { Author } from "#pantry/qti/roles.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
+import { Author } from "#pantry/qti/own-login.ts";
 import {
   assemblyLiteral,
   assemblyPackage,

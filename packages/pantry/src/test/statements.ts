@@ -5,7 +5,7 @@
  * typed `kind` and `name`, never off grizzle's statement shapes.
  */
 import { schemaLawsOf } from "#pantry/import/refusal.ts";
-import type { Qti } from "#pantry/qti/schema.ts";
+import type { Qti } from "#pantry/qti/own.ts";
 
 /**
  * A foreign key as the laws give it: from one relation into another, by their declared names.

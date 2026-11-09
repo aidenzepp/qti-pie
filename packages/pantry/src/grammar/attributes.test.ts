@@ -40,7 +40,7 @@ import {
   specReadings,
 } from "#pantry/grammar/attributes.ts";
 import type { AttributeGrammar, Declared, ValueDomain } from "#pantry/grammar/attributes.ts";
-import { roster } from "#pantry/grammar/closed.ts";
+import { faultOf, roster } from "#pantry/grammar/closed.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
@@ -1971,24 +1971,32 @@ const toyGenerate = (declarations: readonly Declared[], kinds: Roster<string>) =
 describe("The attribute grammar's refusals", () => {
   const kinds = Result.getOrThrow(roster("NodeKind", ["k"]));
 
-  it("refuse a kind that declares a name twice in a version", () => {
+  it("state a kind that declares a name twice in a version as a fault of AttributeGrammar's rows", () => {
+    // The generator checks no row (`closed.ts`, `faultOf`): grizzle refuses the key when it
+    // declares the relation, and the tests find it here.
     const result = toyGenerate(
       [toyDeclaration("k", "a", "x"), toyDeclaration("k", "a", "y")],
       kinds,
     );
 
-    assert.isTrue(Result.isFailure(result) && result.failure._tag === "KeyCollision");
+    assert.isTrue(
+      Result.isSuccess(result) &&
+        Option.exists(faultOf(result.success.admission), ({ _tag }) => _tag === "KeyCollision"),
+    );
   });
 
-  it("refuse a kind or a name outside its roster", () => {
-    for (const declared of [toyDeclaration("j", "a", "x"), toyDeclaration("k", "c", "x")]) {
-      const result = toyGenerate([declared], kinds);
+  it("state a kind outside its roster as a fault of AttributeGrammar's rows, and refuse a name outside AttributeName, which a position is read from", () => {
+    const outsideKind = toyGenerate([toyDeclaration("j", "a", "x")], kinds);
+    const outsideName = toyGenerate([toyDeclaration("k", "c", "x")], kinds);
 
-      assert.isTrue(
-        Result.isFailure(result) && result.failure._tag === "OutsideCodeSpace",
-        `${declared.kind}@${declared.name}`,
-      );
-    }
+    assert.isTrue(
+      Result.isSuccess(outsideKind) &&
+        Option.exists(
+          faultOf(outsideKind.success.admission),
+          (fault) => fault._tag === "OutsideCodeSpace" && fault.field === "kind",
+        ),
+    );
+    assert.isTrue(Result.isFailure(outsideName) && outsideName.failure._tag === "OutsideCodeSpace");
   });
 
   it("refuse a declaration whose domain does not compile, naming it", () => {

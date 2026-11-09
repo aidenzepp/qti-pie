@@ -24,9 +24,9 @@ import { readProgram } from "#pantry/import/program.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { AuthorApp } from "#pantry/qti/own-login.ts";
 import { Package } from "#pantry/qti/package.ts";
-import type { Author } from "#pantry/qti/roles.ts";
+import type { Author } from "#pantry/qti/own-login.ts";
 
 /**
  * The longest the retries of one database call run, in total.

@@ -515,7 +515,10 @@ The command line's own refusals, by stage:
   lies in, which compilation proves; translate in a query only over a pattern that bounds its length. For XML
   Schema's whiteSpace facets use `Compute.replaceWhitespace(x)` (tab, LF and CR to spaces) and `Compute.collapse(x)`
   (runs to one space, none at either end), never a regex of your own; cast a collapse into a refined text the same
-  way, such as `str.regex("^(?:[^ \\t\\n\\r]+(?: [^ \\t\\n\\r]+)*)?$", "su")` for any text. A query's
+  way, such as `str.regex("^(?:[^ \\t\\n\\r]+(?: [^ \\t\\n\\r]+)*)?$", "su")` for any text. A collapse, a
+  translation and a concatenation keep their operands' byte bound, a translation to wider characters by the most its
+  image can take, so a `str.bytes` text normalized from one casts back into it:
+  `generated(Key, Compute.cast(Compute.lowerAscii(Compute.collapse(row.lang)), Key))` for `lang` a `Key`. A query's
   `Compute.matches` and `Compute.collapse`, like its translate, need a pattern that bounds the subject's length:
   PostgreSQL's regex engine widens its subject fourfold. Fold an ordered family's texts with `Monoid.concat`, naming its
   `(before, after)` pair, and write each member's separator into its own step value; type the accumulators by a
@@ -598,10 +601,11 @@ The command line's own refusals, by stage:
 - Every installed object is named from what it is. Declared names are snake_case: the schema, tables, derived
   relations, rosters, contracts, columns, row checks and a role's views keep their converted names, a contract's CHECK
   is `check`, and a login's or role's role and a role's schema join the schema's name and their own (roleNameOf,
-  schemaNameOf). `constraintNameOf(schema, law)` gives a check's installed name from
-  its law, `constraintNameOf(Credits, { kind: "check", relation: "Grant", name: "WithinGrant" })` is `"within_grant"`,
-  and a check over a derived relation's is its triggers' digest name: a direct writer or a test that matches a refusal's
-  constraint takes it from there, never spelling it. Two declared names that
+  schemaNameOf). `constraintNamesOf(schema)` compiles once and gives a lookup of each check's installed name from its
+  law: `const constraintNameOf = constraintNamesOf(Credits)`, then
+  `constraintNameOf({ kind: "check", relation: "Grant", name: "WithinGrant" })` is `"within_grant"`, and a check over a
+  derived relation's is its triggers' digest name: a direct writer or a test that matches a refusal's constraint takes it
+  from there, never spelling it. Two declared names that
   convert alike are one name (two fields of a relation, two head fields of a derived relation or a role's query, two
   relations of a role, two logins or roles of a schema, a contract a context names beside a relation, roster or
   contract of the schema), a name may not start with `_`, a conversion (a login's or role's with its schema's) must

@@ -17,15 +17,8 @@
  * texts and nothing else: its alternatives are literals, anchored at both ends.
  */
 import { Array as Arr, Option, Order } from "effect";
-import type { Result } from "effect";
 import { closed, idField, valueField } from "#pantry/grammar/closed.ts";
-import type {
-  Closed,
-  ClosedRelationError,
-  IdField,
-  Roster,
-  ValueField,
-} from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Roster, ValueField } from "#pantry/grammar/closed.ts";
 import { isForeignKind } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { namespaceNameOf } from "#pantry/vocab/namespaces.ts";
@@ -137,7 +130,7 @@ export type NamesUnder = Closed<
  * @param input.nameOf - A kind's expanded name, none for a kind that is no element of a
  *   vocabulary.
  * @param input.versions - The `SchemaVersion` roster.
- * @returns The relation, or the reason it has no constant.
+ * @returns The relation.
  */
 export const namesUnder = (input: {
   readonly admitted: readonly {
@@ -150,7 +143,7 @@ export const namesUnder = (input: {
     kind: string,
   ) => Option.Option<{ readonly local: string; readonly namespace: string }>;
   readonly versions: Roster<SchemaVersion>;
-}): Result.Result<NamesUnder, ClosedRelationError> => {
+}): NamesUnder => {
   const families = Object.values(
     Arr.groupBy(input.admitted, ({ parent, version }) => `${version} ${parent}`),
   );
@@ -209,7 +202,7 @@ export type TypesAvailable = Closed<
  * @param input.types - The `TypeName` roster.
  * @param input.vocabularies - The vocabularies' namespaces, as crust's tree spells them, the texts
  *   a pattern holds.
- * @returns The relation, or the reason it has no constant.
+ * @returns The relation.
  */
 export const typesAvailable = (input: {
   readonly available: (parent: NamespaceOfKind, type: NamespaceName) => boolean;
@@ -217,7 +210,7 @@ export const typesAvailable = (input: {
   readonly namespaceOf: (type: string) => NamespaceName;
   readonly types: Roster<string>;
   readonly vocabularies: readonly string[];
-}): Result.Result<TypesAvailable, ClosedRelationError> => {
+}): TypesAvailable => {
   const patternOf = (namespace: NamespaceName): string =>
     textsPattern(
       input.vocabularies.filter((parent) => input.available(namespaceNameOf(parent), namespace)),
@@ -286,7 +279,7 @@ export type HeldRootsUnder = NamesUnder;
  * @param input.roots - Each root, its name as crust's tree spells it, and the versions it is
  *   declared globally in.
  * @param input.versions - The `SchemaVersion` roster.
- * @returns The relation, or the reason it has no constant.
+ * @returns The relation.
  */
 export const heldRootsUnder = (input: {
   readonly classOf: (namespace: NamespaceName, parent: NamespaceOfKind) => string;
@@ -305,7 +298,7 @@ export const heldRootsUnder = (input: {
     readonly versions: readonly SchemaVersion[];
   }[];
   readonly versions: Roster<SchemaVersion>;
-}): Result.Result<HeldRootsUnder, ClosedRelationError> => {
+}): HeldRootsUnder => {
   const families = Object.values(
     Arr.groupBy(input.held, ({ parent, version }) => `${version} ${parent}`),
   );

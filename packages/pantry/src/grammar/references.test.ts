@@ -26,7 +26,7 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
-import { roster } from "#pantry/grammar/closed.ts";
+import { faultOf, roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import {
@@ -595,12 +595,32 @@ describe("references", () => {
               const names = yield* Effect.fromResult(roster("AttributeName", toyNames));
               const versions = yield* Effect.fromResult(roster("SchemaVersion", schemaVersions));
               const outcome = references({ facets, kinds, names, versions });
+              // A roster's refusal is the generator's; a row outside its code space or a key stated
+              // twice is a fault of the rows, which `faultOf` finds and grizzle refuses.
+              const found = Result.match(outcome, {
+                onFailure: ({ _tag }) => _tag,
+                onSuccess: (held) =>
+                  Option.match(
+                    Arr.findFirst(
+                      [
+                        held.builtIn,
+                        held.builtInBaseType,
+                        held.choiceBound,
+                        held.choiceCount,
+                        held.contentReference,
+                        held.declares,
+                        held.referenceAttribute,
+                        held.sectionPart,
+                        held.variableReference,
+                      ],
+                      faultOf,
+                    ),
+                    { onNone: () => "succeeded", onSome: ({ _tag }) => _tag },
+                  ),
+              });
 
-              assert.strictEqual(
-                Result.isSuccess(outcome) ? "succeeded" : outcome.failure._tag,
-                refusalOf[fault],
-              );
-              if (Result.isFailure(outcome)) {
+              assert.strictEqual(found, refusalOf[fault]);
+              if (Result.isFailure(outcome) || found !== "succeeded") {
                 return;
               }
 

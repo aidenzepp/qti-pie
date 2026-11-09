@@ -6,7 +6,7 @@ import {
   closed,
   closedId,
   Compute,
-  constraintNameOf,
+  constraintNamesOf,
   contained,
   counted,
   drawn,
@@ -63,7 +63,7 @@ import {
   textLaws,
 } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { beginsWith, mergedAxes } from "#pantry/test/merged-axes.ts";
 import type { Axis } from "#pantry/test/merged-axes.ts";
@@ -778,7 +778,7 @@ describe("the merged axes and the laws no row states", () => {
   it(
     "gives a check its installed name only where Qti states it, so a refusal by a CDN install's check prints with its name and rule and no installed name",
     () => {
-      // Oracle: grizzle's `constraintNameOf(Qti, law)` for the check Qti states, AL1's admission on
+      // Oracle: grizzle's `constraintNamesOf(Qti)` lookup for the check Qti states, AL1's admission on
       // Attribute, and the law table's name and rule for both. A CDN install's stored level states
       // `CDN_origin` (`#pantry/qti/cdn.ts`), which the default Qti does not, so a refusal read
       // against Qti names a check it lacks: the refusal still carries its text, its name and its
@@ -802,7 +802,7 @@ describe("the merged axes and the laws no row states", () => {
       assert.strictEqual(refused.origin._tag, "Database");
       assert.deepStrictEqual(refused.origin._tag === "Database" ? refused.origin.laws : [], [
         {
-          installed: constraintNameOf(Qti, stated),
+          installed: constraintNamesOf(Qti)(stated),
           name: "AL1 admission",
           rule: lawTable["AL1 admission"].rule,
           text: Formatter.format(stated),

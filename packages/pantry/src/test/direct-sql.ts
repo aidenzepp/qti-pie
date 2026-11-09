@@ -17,10 +17,8 @@ import { Array as Arr, Effect, Match, Option, Predicate, Redacted, Schema } from
 import { Client } from "pg";
 import type { DatabaseError, QueryResultRow } from "pg";
 import { loginConnection } from "#pantry/db/connection.ts";
-import { QtiBase } from "#pantry/qti/base.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
-import { Author } from "#pantry/qti/roles.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti, QtiBase } from "#pantry/qti/own.ts";
+import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 
 /**
  * The author login's PostgreSQL role, the one its session logs in as.

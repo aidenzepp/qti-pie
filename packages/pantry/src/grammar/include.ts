@@ -26,7 +26,7 @@
  */
 import { Result } from "effect";
 import { closed, idField, roster } from "#pantry/grammar/closed.ts";
-import type { Closed, ClosedRelationError, IdField, Roster } from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, RepeatedValue, Roster } from "#pantry/grammar/closed.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
 
@@ -214,14 +214,15 @@ export interface IncludeGrammar {
  * @param input.alternatives - The include alternatives, {@link includeAlternativesOf}'s.
  * @param input.kinds - The `NodeKind` roster.
  * @param input.versions - The `SchemaVersion` roster.
- * @returns The relations, or an `OutsideCodeSpace` naming a version or kind the rosters do not
- *   hold.
+ * @returns The relations, or a `RepeatedValue` from the `IncludeParent` roster. A version or kind
+ *   the rosters do not hold is a fault of the rows (`faultOf`), which the tests find and grizzle
+ *   refuses.
  */
 export const includeGrammar = (input: {
   readonly alternatives: readonly IncludeAlternative[];
   readonly kinds: Roster<string>;
   readonly versions: Roster<SchemaVersion>;
-}): Result.Result<IncludeGrammar, ClosedRelationError> =>
+}): Result.Result<IncludeGrammar, RepeatedValue> =>
   Result.gen(function* generateInclude() {
     const parents = [...new Set(input.alternatives.map(({ parent }) => parent))];
     const includeParent = yield* roster("IncludeParent", parents);
@@ -229,13 +230,13 @@ export const includeGrammar = (input: {
 
     return {
       includeParent,
-      includeParentKind: yield* closed({
+      includeParentKind: closed({
         key: [parent],
         name: "IncludeParentKind",
         payload: [idField("kind", input.kinds)],
         rows: parents.map((handle) => ({ kind: handle, parent: handle })),
       }),
-      includeRoot: yield* closed({
+      includeRoot: closed({
         key: [idField("version", input.versions), parent, idField("kind", input.kinds)],
         name: "IncludeRoot",
         payload: [],

@@ -1,9 +1,9 @@
 import path from "node:path";
-import { constraintNameOf } from "@bjornpagen/grizzle";
+import { constraintNamesOf } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, beforeAll, layer } from "@effect/vitest";
-import { Effect, Exit, FileSystem, Formatter, Schema } from "effect";
+import { Effect, Exit, FileSystem, Formatter, Function as Fn, Schema } from "effect";
 import { Command } from "effect/cli";
 import { inject } from "vitest";
 import { RoundtripDiffers } from "#pantry/cli/errors.ts";
@@ -212,10 +212,22 @@ layer(NodeServices.layer, { excludeTestServices: true })("the JSON error shape",
 const matchesCommittedError = matchesCommitted("error");
 
 /**
- * The timeout, in milliseconds, of this file's tests that read a check's installed name: grizzle's
- * `constraintNameOf` compiles `Qti`'s law model on every call, once for the refusal
- * (`#pantry/import/refusal.ts` `installedNamesOf`, kept for the process) and once for the oracle. A
- * hang guard, never a budget. Measured 2026-11-08: 18.1 s, its slowest such test.
+ * The oracle of a refusal's installed names: grizzle's lookup of the name PostgreSQL holds each
+ * check of a schema under, bound once per schema by the schema's identity, since
+ * `constraintNamesOf` compiles the schema's law model, which takes seconds, and its lookup compiles
+ * nothing (grizzle `e3975d35`).
+ */
+const constraintNamesOnce = Fn.memoize(constraintNamesOf);
+
+/**
+ * The timeout, in milliseconds, of this file's tests that read a check's installed name: a hang
+ * guard, never a budget. A test compiles `Qti`'s law model at most twice, once for the refusal
+ * (`#pantry/import/refusal.ts` `installedNameOf`, its lookup bound once per schema) and once for
+ * the oracle ({@link constraintNamesOnce}), each only where no test before it in the run has: the
+ * slowest is two compiles and the import, and grizzle puts one compile of a large schema at 15 to
+ * 45 s (`e3975d35`). 18.1 s was its slowest such test on 2026-11-08, at a load no run recorded.
+ * Measurement owed at a load average of at least 60, under Bjorn's moratorium of 2026-11-08, which
+ * runs no test: until then it holds over three times two of grizzle's slowest compiles.
  */
 const lawModelTestTimeoutMs = 300_000;
 
@@ -324,13 +336,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
     () =>
       // Oracle: the law table, read directly by the name each law was built from: its text, the law
       // as grizzle names a check, written by Effect's Formatter, its installed name as grizzle's
-      // `constraintNameOf` names the check `Qti` states, and the name and rule the table gives it; a
-      // check of no law, which `Qti` does not state, has its text alone, and carries no rule. The
-      // outcome's `some` and the witness kind the refusal was built under, and the committed schema
-      // of the error object.
+      // `constraintNamesOf` lookup names the check `Qti` states, and the name and rule the table
+      // gives it; a check of no law, which `Qti` does not state, has its text alone, and carries no
+      // rule. The outcome's `some` and the witness kind the refusal was built under, and the
+      // committed schema of the error object.
       Effect.gen(function* json() {
         const { checkNameOf } = yield* Effect.promise(() => import("#pantry/import/refusal.ts"));
-        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/schema.ts"));
+        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
         const [first] = refusedLaws(checkNameOf("AL1 admission"));
         const { stderr, stdout } = yield* captureCli(["--json"], { command: refusing });
         const error = errorLine(stderr);
@@ -344,7 +356,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
         assert.strictEqual(error.refused_kind, "some");
         assert.deepStrictEqual(error.laws, [
           {
-            installed: constraintNameOf(Qti, first),
+            installed: constraintNamesOnce(Qti)(first),
             name: "AL1 admission",
             rule: "attribute-admission",
             text: Formatter.format(first),
@@ -452,7 +464,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
           () => import("#pantry/import/refusal.ts"),
         );
         const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
-        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/schema.ts"));
+        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/own.ts"));
         const { rule, source } = lawTable["AL1 admission"];
         const law = {
           kind: "check",
@@ -460,7 +472,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
           relation: "Attribute",
         } as const;
         const lawFact = {
-          installed: constraintNameOf(Qti, law),
+          installed: constraintNamesOnce(Qti)(law),
           name: "AL1 admission",
           rule,
           text: Formatter.format(law),

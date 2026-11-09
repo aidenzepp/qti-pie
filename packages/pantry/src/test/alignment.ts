@@ -268,7 +268,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     48,
     {
       owner:
-        "PE's RG4 (`src/qti/expressions.ts`): `ReferenceSegment`'s pieces, `Reading`'s readings counted exactly, `NameLookup`, `VariableLookup` and `MappingLookup` (M2), and the key and the containment over the resolving readings (M3); the oracle's Prefixed reference",
+        "PE's RG4 (`src/qti/expressions.ts`): `ReferenceSegment`'s pieces, `Reading`'s readings counted exactly, its scope and source read through `FoundName`, `DeclaredReading` and `MappedReading` (M2, `src/qti/queries.ts`), and the key and the containment over the resolving readings (M3); the oracle's Prefixed reference",
       status: "G",
     },
   ],
@@ -441,7 +441,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     88,
     {
       owner:
-        "PE's numbered `Reading` (`src/qti/expressions.ts`): its item ref's `InstanceName.replaced` through `NameLookup`, and a number of at least 1; the oracle's Prefixed reference",
+        "PE's numbered `Reading` (`src/qti/expressions.ts`): its item ref's `InstanceName.replaced` through `FoundName` (`src/qti/queries.ts`), and a number of at least 1; the oracle's Prefixed reference",
       status: "G",
     },
   ],
@@ -499,7 +499,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     97,
     {
       owner:
-        "Q5.13's `VariableMapping` (`src/qti/tests.ts`): the key (item ref, target) and `Variable_mapping_target`, no session variable; PE's `MappingSource` (`src/qti/expressions.ts`): no other variable of the item, through `ItemRefDocument` and `VariableLookup`",
+        "Q5.13's `VariableMapping` (`src/qti/tests.ts`): the key (item ref, target) and `Variable_mapping_target`, no session variable; PE's `MappingSource` (`src/qti/expressions.ts`): no other variable of the item, through `ItemRefDocument` and `DeclaredTarget` (`src/qti/queries.ts`)",
       status: "G",
     },
   ],
@@ -579,7 +579,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     107,
     {
       owner:
-        "PE's `MappingSource` and `MappingLookup` (`src/qti/expressions.ts`): a mapped name and its source both resolve; the oracle's Variable mapping source and Prefixed reference",
+        "PE's `MappingSource` (`src/qti/expressions.ts`) and `MappedReading` (`src/qti/queries.ts`): a mapped name and its source both resolve; the oracle's Variable mapping source and Prefixed reference",
       status: "G",
     },
   ],
@@ -659,7 +659,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     117,
     {
       owner:
-        "IN's document context (`Document.context`, `contextNearest`, `src/qti/chardata.ts`, through its document node's fixed target; `SiteTarget`'s fold and `Fragment_context`, `src/qti/tests.ts`), `PlacedBinding`, `PlacedChoice`, `PlacedHottext`, `ChoiceVariableName`'s placed counts and the section references' fragment placements (`SectionScope`, `SectionTemplateRef`, `SectionContextRef`, `src/qti/interactions.ts`) `IdrefTarget`, `PlacedId`, `AssembledId`, `PlacedIdref`, `PlacedXmlLang`, `AssembledLang` and `PlacedGeneralLang` (`src/qti/identity.ts`), `PlacedVariableRef` (`src/qti/expressions.ts`) and `CatalogTarget`, `PlacedCatalogRef` and `AssembledCatalog` (`src/qti/catalog.ts`), `PlacedMathRank` and `PlacedShareTarget` (`src/qti/mathml-share.ts`), ranked per assembly by `placedShareRowsOf`, under Q5.13's `Instance`; the importer's `contextsOf` (`src/import/context.ts`); the oracle's in-place splice (`inPlaceBreaches`), Fragment context and Document lang over the merged item, and its catalog resolution over the assembly (`Assembly.catalogs`); the laws it lists are known under-refusals",
+        "IN's document context (`Document.context`, `contextNearest`, `src/qti/chardata.ts`, through its document node's fixed target; `SiteTarget`'s fold and `Fragment_context`, `src/qti/tests.ts`), `PlacedBinding`, `PlacedChoice`, `PlacedHottext`, `ChoiceVariableName`'s placed counts and the section references' fragment placements (`SectionScope`, `SectionTemplateRef`, `SectionContextRef`, `src/qti/interactions.ts`) `IdrefTarget`, `PlacedId`, `AssembledId`, `PlacedIdref`, `PlacedXmlLang` and `AssembledLang` (`src/qti/identity.ts`), `PlacedVariableRef` (`src/qti/expressions.ts`) and `CatalogTarget`, `PlacedCatalogRef` and `AssembledCatalog` (`src/qti/catalog.ts`), `PlacedMathRank` and `PlacedShareTarget` (`src/qti/mathml-share.ts`), ranked per assembly by `placedShareRowsOf`, under Q5.13's `Instance`; the importer's `contextsOf` (`src/import/context.ts`); the oracle's in-place splice (`inPlaceBreaches`), Fragment context and Document lang over the merged item, and its catalog resolution over the assembly (`Assembly.catalogs`); the laws it lists are known under-refusals",
       status: "G",
     },
   ],
@@ -794,7 +794,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     134,
     {
       owner:
-        "R26 `document-lang` (identity.ts `GeneralLang`'s `value`, `lowerAscii(collapse(lang))`, and `LomLanguage`'s `tag`, `lowerAscii(lang)`; `documentLang`); the oracle's Document lang",
+        "R26 `document-lang` (identity.ts `DocumentLang`'s and `AssembledLang`'s generated `value`, `lowerAscii(collapse(lang))`, and `LomLanguage`'s `tag`, `lowerAscii(lang)`; `DescribedLang` and `DescribedAssembledLang`, `src/qti/queries.ts`); the oracle's Document lang",
       status: "G",
     },
   ],
@@ -1102,7 +1102,6 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
-  // MERGE-OPEN: ours' readings 163, 164, 166 and 167 renumbered 173 to 176 after upstream's 163 to 172, and ours' 165 folded into upstream's 172 (the same ruling, decision 448); docs/spec-readings.md must number them the same
   [
     173,
     {
@@ -1115,7 +1114,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     174,
     {
       owner:
-        "the schema's stated `xml:lang` forms, `statedLanguagePattern` over the grammar's one `languageTag`, read by `statedLangs`, `statedAssembledLangs` and R26's witnesses' `E1_derived` (`GeneralLang`, `PlacedGeneralLang`, `src/qti/identity.ts`); the import's `statesLanguage` (`src/import/overlays/metadata.ts`), read by `languageRowsOf` and `placedLanguageRowsOf` (`src/import/overlays/identity.ts`) and by lom-title's `inLanguage`; the oracle's Document lang (`documentLangBreaches`, `languageTagForm`, `src/test/oracle.ts`); held by `src/import/overlays/document-lang.oracle.test.ts`",
+        "the schema's stated `xml:lang` forms, `statedLanguagePattern` over the grammar's one `languageTag`, read by R26's rules over queries (`DescribedLang`, `DescribedAssembledLang`, `src/qti/queries.ts`); the oracle's Document lang (`documentLangBreaches`, `languageTagForm`, `src/test/oracle.ts`); held by `src/import/overlays/document-lang.oracle.test.ts`",
       status: "G",
     },
   ],

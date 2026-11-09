@@ -23,13 +23,13 @@ import { array, element } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import type { Law } from "@bjornpagen/grizzle";
+import type { Law, Statement } from "@bjornpagen/grizzle";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import type { CdnPolicy } from "#pantry/db/install.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { checkNameOf, lawNames, refusalOf } from "#pantry/import/refusal.ts";
 import { cdnLawsByName, governorsOf } from "#pantry/qti/cdn.ts";
-import { Qti, qtiSchema } from "#pantry/qti/schema.ts";
+import { qtiLevelsOf, qtiSchema } from "#pantry/qti/schema.ts";
 import { policyLaws } from "#pantry/test/oracle-laws.ts";
 import type { Datum } from "#pantry/test/predicates.ts";
 import { judgedOf } from "#pantry/test/host-judge.ts";
@@ -769,6 +769,15 @@ describe("qti/cdn.ts, CDN foreign", () => {
   );
 });
 
+/**
+ * Every statement of a record of statements by law, in the record's order.
+ *
+ * @param byName - The statements by law.
+ * @returns The statements.
+ */
+const flat = (byName: Readonly<Partial<Record<string, readonly Statement[]>>>) =>
+  Object.values(byName).flatMap((statements) => statements ?? []);
+
 describe("qti/cdn.ts, the laws a policy states", () => {
   it("names each law by a row of the law table, each check by its law, and a refusal under any one by the table's rule, so an import refused by one is reported, never unowned", () => {
     for (const policy of policies) {
@@ -806,36 +815,32 @@ describe("qti/cdn.ts, the laws a policy states", () => {
     }
   });
 
-  it("builds Qti for no policy as the schema the committed migrations install, and for a policy as one value per origin, its statements every module's then the policy's", () => {
-    const own = qtiSchema(Option.none());
-    const built = qtiSchema(Option.some(ownPolicy));
-    const cdnLaws: readonly unknown[] = Object.values(cdnLawsByName(Option.some(ownPolicy))).flat();
-    const ownStatements: readonly unknown[] = own.statements;
-    const builtStatements: readonly unknown[] = built.statements;
+  it("builds Qti for no policy and for a policy, each call its own: every module's statements, then the policy's, then its queries' rules", () => {
+    const own = qtiLevelsOf(Option.none());
+    const built = qtiLevelsOf(Option.some(ownPolicy));
+    const [ownCdn, ...ownQueries] = own.lawsByName;
+    const [builtCdn, ...builtQueries] = built.lawsByName;
+    const moduleStatements: readonly unknown[] = own.base.statements;
+    const builtStatements: readonly unknown[] = built.qti.statements;
+    const expected = [...moduleStatements, ...flat(builtCdn), ...builtQueries.flatMap(flat)];
 
     assert.deepStrictEqual(cdnLawsByName(Option.none()), {});
-    assert.strictEqual(qtiSchema(Option.some({ cdn: ownPolicy.cdn })), built, "one per origin");
-    assert.strictEqual(builtStatements.length, ownStatements.length + cdnLaws.length);
+    assert.deepStrictEqual(flat(ownCdn), []);
+    assert.notStrictEqual(qtiSchema(Option.some(ownPolicy)), built.qti, "each call its own");
+    assert.strictEqual(builtStatements.length, expected.length);
     assert.isTrue(
-      builtStatements.every(
-        (statement, at) =>
-          statement ===
-          (at < ownStatements.length ? ownStatements[at] : cdnLaws[at - ownStatements.length]),
-      ),
-      "every module's statements, then the policy's, each the very statement",
+      builtStatements.every((statement, at) => statement === expected[at]),
+      "every module's statements, then the policy's, then the queries' rules, each the very statement this build holds",
     );
-    assert.sameOrderedMembers(Object.keys(built.relations), Object.keys(own.relations));
+    assert.strictEqual(builtQueries.flatMap(flat).length, ownQueries.flatMap(flat).length);
+    assert.sameOrderedMembers(Object.keys(built.qti.relations), Object.keys(own.qti.relations));
     assert.isTrue(
-      Object.entries(built.relations).every(
+      Object.entries(built.base.relations).every(
         ([name, relation]) =>
-          Object.getOwnPropertyDescriptor(own.relations, name)?.value === relation,
+          Object.getOwnPropertyDescriptor(own.base.relations, name)?.value === relation,
       ),
-      "the same relations",
+      "the same stored relations",
     );
-    assert.notInclude(ownStatements, cdnLaws[0]);
-    if (Qti === own) {
-      assert.strictEqual(qtiSchema(Option.none()), Qti);
-    }
   });
 });
 

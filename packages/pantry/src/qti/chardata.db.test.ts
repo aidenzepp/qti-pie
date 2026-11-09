@@ -37,9 +37,8 @@ import {
   SdDecl,
 } from "#pantry/qti/chardata.ts";
 import { governorOf } from "#pantry/import/fold.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
-import { Author } from "#pantry/qti/roles.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   authorRole,

@@ -3,9 +3,10 @@
  * The mapping overlays' rows against a second reading of the same tree: a direct walk of the XDM
  * document that numbers its nodes in document order as the tree's rows are numbered, collects one
  * map key per `qti-map-entry` from its attributes, and splits each typed key as its base type
- * reads it, an integer's magnitude by JavaScript's `BigInt`. The walk shares no code with the
- * builder, which reads the tree's flat rows (`flatten`). Each typed key's value is PostgreSQL's,
- * generated from the split, so `#pantry/qti/mapping.db.test.ts` judges it.
+ * reads it, a point's integers' magnitudes by JavaScript's `BigInt`. The walk shares no code with
+ * the builder, which reads the tree's flat rows (`flatten`). Each typed key's value is
+ * PostgreSQL's, generated from the split or, for an integer key, parsed by the query
+ * `MapKeyInteger` from its `MapKeyType` row, so `#pantry/qti/mapping.db.test.ts` judges it.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -234,11 +235,12 @@ const situationsOf = (input: MappingCase): readonly KeySituation[] => {
 
 describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () => {
   it.effect(
-    "writes one MapKey row per qti-map-entry, distinct by node, even where two entries are identical, and each typed key's row by its base type",
+    "writes one MapKey row per qti-map-entry, distinct by node, even where two entries are identical, and each typed key's row by its base type, an integer key none",
     (ctx) =>
       // Oracle: a second implementation, a direct walk of the XDM tree that numbers its entries in
-      // document order, against the builder's read of the flat rows; each integer key's selection
-      // by the deleted `xsInteger`, and every float key, whose row `FloatKey`'s pattern law judges.
+      // document order, against the builder's read of the flat rows; every float key, whose row
+      // `FloatKey`'s pattern law judges; and no integer key, whose typed value is the query
+      // `MapKeyInteger`'s, read from its `MapKeyType` row.
       // Bound: every mapping of 3 base types with at most 4 entries over 3 keys and 2 values,
       // 4,665.
       searched(
@@ -286,14 +288,7 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
                 [...walked].map(([node, { key, mapping }]) => [node, mapping, key, input.baseType]),
               );
 
-              assert.deepStrictEqual(
-                [...rows.MapKeyInteger].map(([node, row]) => [node, row.key]),
-                input.baseType === "integer"
-                  ? [...walked].flatMap(([node, { key }]) =>
-                      xsInteger.test(key) ? [[node, key]] : [],
-                    )
-                  : [],
-              );
+              assert.notProperty(rows, "MapKeyInteger");
               assert.deepStrictEqual(
                 [...rows.MapKeyFloat].map(([node, row]) => [node, row.key]),
                 input.baseType === "float" ? [...walked].map(([node, { key }]) => [node, key]) : [],
@@ -420,53 +415,57 @@ const situationOfInteger = (signed: boolean, magnitude: string): IntegerSituatio
   return signed ? "signed" : "plain";
 };
 
-describe("import/overlays/mapping.ts, an integer key's split", { timeout: searchTimeout }, () => {
-  it.effect(
-    "splits every xs:integer key into the parts E1_derived proves, its digits the magnitude of the integer it names",
-    (ctx) =>
-      // Oracle: a second implementation, JavaScript's `BigInt` of the key, whose magnitude's
-      // decimal string is the digits of XML Schema's canonical form of xs:integer (no leading
-      // zero); the parts against E1_derived's equality, restated.
-      // Bound: every sign or none before every run of 1 to 3 digits over 0, 1 and 9, 117.
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: "every optional sign before 1 to 3 digits over 0, 1 and 9",
-            caseHang: Duration.seconds(10),
-            coverage: requiredInSpace<IntegerSituation>([
-              "signed",
-              "padded",
-              "signed zero",
-              "plain",
-            ]),
-            generator: (source) =>
-              `${source.draw(element(["", "+", "-"] as const))}${source
-                .draw(array(element(["0", "1", "9"] as const), { max: 3, min: 1 }))
-                .join("")}`,
-            limit: 200,
-            literal: (key) => JSON.stringify(key),
-            oracle: { kind: "second-implementation", name: "JavaScript's BigInt of the key" },
-            suite: "pantry/import/overlays-mapping-integer",
-          },
-          (key: string, c) =>
-            Effect.sync(() => {
-              const signed = key.startsWith("+") || key.startsWith("-");
-              const magnitude = signed ? key.slice(1) : key;
-              c.note(situationOfInteger(signed, magnitude));
+describe(
+  "import/overlays/mapping.ts, a point's integer's split",
+  { timeout: searchTimeout },
+  () => {
+    it.effect(
+      "splits every xs:integer, a point key's item, into the parts E1_derived proves, its digits the magnitude of the integer it names",
+      (ctx) =>
+        // Oracle: a second implementation, JavaScript's `BigInt` of the key, whose magnitude's
+        // decimal string is the digits of XML Schema's canonical form of xs:integer (no leading
+        // zero); the parts against E1_derived's equality, restated.
+        // Bound: every sign or none before every run of 1 to 3 digits over 0, 1 and 9, 117.
+        searched(
+          ctx,
+          exhaust(
+            {
+              box: "every optional sign before 1 to 3 digits over 0, 1 and 9",
+              caseHang: Duration.seconds(10),
+              coverage: requiredInSpace<IntegerSituation>([
+                "signed",
+                "padded",
+                "signed zero",
+                "plain",
+              ]),
+              generator: (source) =>
+                `${source.draw(element(["", "+", "-"] as const))}${source
+                  .draw(array(element(["0", "1", "9"] as const), { max: 3, min: 1 }))
+                  .join("")}`,
+              limit: 200,
+              literal: (key) => JSON.stringify(key),
+              oracle: { kind: "second-implementation", name: "JavaScript's BigInt of the key" },
+              suite: "pantry/import/overlays-mapping-integer",
+            },
+            (key: string, c) =>
+              Effect.sync(() => {
+                const signed = key.startsWith("+") || key.startsWith("-");
+                const magnitude = signed ? key.slice(1) : key;
+                c.note(situationOfInteger(signed, magnitude));
 
-              const parts = integerPartsOf(key);
-              const integer = BigInt(key);
-              assert.isDefined(parts, key);
-              if (parts !== undefined) {
-                assert.strictEqual(parts.digits, String(integer < 0n ? -integer : integer), key);
-                assert.strictEqual(`${parts.sign}${parts.zeros}${parts.digits}`, key);
-              }
-            }),
+                const parts = integerPartsOf(key);
+                const integer = BigInt(key);
+                assert.isDefined(parts, key);
+                if (parts !== undefined) {
+                  assert.strictEqual(parts.digits, String(integer < 0n ? -integer : integer), key);
+                  assert.strictEqual(`${parts.sign}${parts.zeros}${parts.digits}`, key);
+                }
+              }),
+          ),
         ),
-      ),
-  );
-});
+    );
+  },
+);
 
 /**
  * The keys a two-item mapping draws from: a pair and its reverse, the pair with a tab between, a
@@ -563,9 +562,9 @@ describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTim
     (ctx) =>
       // Oracle: the schema's selection patterns, `integerKeyPattern`, `pointKeyPattern` and
       // `pairKeyPattern`, which select the keys whose typed row the database mirrors, and `Item`'s,
-      // the type of a pair's items, read by JavaScript's engine. The integer and point parses
-      // decide whether the builder writes a typed row, so each holds a key exactly where its
-      // pattern does; the pair split is wider, and the two part exactly on a key that holds
+      // the type of a pair's items, read by JavaScript's engine. The point parse decides whether
+      // the builder writes a typed row, and the integer parse splits each of a point's items, so
+      // each holds a text exactly where its pattern does; the pair split is wider, and the two part exactly on a key that holds
       // U+0001, whose split holds an item that is no `Item`, so the builder writes it no typed row
       // and `Typed_attribute_value` refuses the key.
       // Bound: every key of 1 to 4 characters over `keyCharacters`, 4,680; residual: longer keys,

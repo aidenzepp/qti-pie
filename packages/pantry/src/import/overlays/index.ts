@@ -33,14 +33,12 @@ import type {
 import { rowsOf as htmlRowsOf } from "#pantry/import/overlays/html.ts";
 import type { HtmlRows } from "#pantry/import/overlays/html.ts";
 import {
-  languageRowsOf,
   placedIdRowsOf,
   placedLanguageRowsOf,
   rowsOf as identityRowsOf,
 } from "#pantry/import/overlays/identity.ts";
 import type {
   IdentityRows,
-  LanguageRows,
   PlacedIdRows,
   PlacedLanguageRows,
 } from "#pantry/import/overlays/identity.ts";
@@ -96,7 +94,6 @@ export type OverlayRows = AssembledExpressionRows &
   HtmlRows &
   IdentityRows &
   InteractionRows &
-  LanguageRows &
   MappingRows &
   MathmlRows &
   MetadataRows &
@@ -337,7 +334,6 @@ export const overlayPartsOf = (
     ]),
     assembled,
     referenced,
-    languageRowsOf(built.map(({ rows }) => rows.identity)),
     placedLanguageRowsOf(
       built.map(({ rows }) => rows.identity),
       assembled.Instance.values(),
@@ -393,11 +389,10 @@ export const overlayPartsOf = (
  * Build every overlay's rows of one package: each document builder over each document, under its
  * ids, then those that read the whole package: the assemblies from every document's test rows
  * (`assembledRowsOf`), the sections' placements under each test from the declarations, the
- * assemblies and the sections' and fragments' references (`sectionRowsOf`), and the LOM languages'
- * witnesses from every document's identity rows (`languageRowsOf`), and in place under each item's
- * assembly (`placedLanguageRowsOf`). The results are merged into one keyed set per relation by
- * {@link unionsOf}, over the overlay relations `#pantry/import/roster.ts` reads from the schema
- * (`overlayRelations`).
+ * assemblies and the sections' and fragments' references (`sectionRowsOf`), and the languages in
+ * place under each item's assembly (`placedLanguageRowsOf`). The results are merged into one keyed
+ * set per relation by {@link unionsOf}, over the overlay relations `#pantry/import/roster.ts` reads
+ * from the schema (`overlayRelations`).
  *
  * @param documents - The package's documents, each listed and under its ids; the manifest is the
  *   one no resource names (type `manifest`).

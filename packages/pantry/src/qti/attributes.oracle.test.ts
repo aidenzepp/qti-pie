@@ -38,7 +38,7 @@ import {
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { namespaceText } from "#pantry/qti/limits.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { QtiBase } from "#pantry/qti/base.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
@@ -76,7 +76,7 @@ const slots: ReadonlyMap<string, number> = new Map(
 
 describe("qti/attributes.ts, declared", () => {
   it("builds a schema of the closed relations, Node, the character data and the attribute layer with every law, each statement once", () => {
-    const built = schema("AttributeLayer", { ...QtiBase.relations }, [
+    const built = schema("AttributeLayer", { ...qtiRelations }, [
       ...nodeLaws,
       ...chardataLaws,
       ...attributeLaws,

@@ -647,9 +647,9 @@ const branchLawsOf = (assembled: Assembled): readonly Breach[] =>
   );
 
 /**
- * What a test's assembly holds under one name (`NameLookup`): the written element with that
- * identifier, its kind, how many instances place it, whether a replacement can repeat it in one of
- * them, and, for an item ref, the type of what it names and its item.
+ * What a test's assembly holds under one name (the schema's `FoundName`): the written element with
+ * that identifier, its kind, how many instances place it, whether a replacement can repeat it in
+ * one of them, and, for an item ref, the type of what it names and its item.
  */
 interface Looked {
   readonly item: Option.Option<ListedRows>;

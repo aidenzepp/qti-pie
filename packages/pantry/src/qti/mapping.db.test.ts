@@ -10,6 +10,12 @@
  * (membership, since a merged native names several, C22); whether the host or PostgreSQL's UNIQUE
  * finds a key's repeat is outside the contract.
  *
+ * The key over the query `MapKeyInteger` (`#pantry/qti/queries.ts`) is a deferred constraint
+ * trigger, which `db.apply` would judge at COMMIT behind the stray rows' foreign keys, so its case
+ * is judged by a direct SQL writer (`#pantry/test/direct-sql.ts`, README "Direct SQL access"): the
+ * `MapKeyType` rows the query reads, every deferrable constraint deferred and rolled back
+ * unchecked but the rule's trigger, set immediate alone.
+ *
  * The cases over a whole imported item need the importer's ChangeSet (Q5.15), and are stated in
  * Q5.11's report for the network seat's probe: accepted, a string mapping keyed `York` and `york`
  * and a directed pair mapping keyed `A B` and `B A`; refused, a record's mapping, an integer
@@ -18,13 +24,13 @@
  * mapping keyed `abc`, and an integer outcome's match table entry targeting `x`.
  */
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { Addition, Fact, Law } from "@bjornpagen/grizzle";
+import type { Fact, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { lawNameOf } from "#pantry/import/refusal.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 import {
   AreaMappingCardinality,
   LookupTableCardinality,
@@ -32,15 +38,23 @@ import {
   MapKey,
   MapKeyDirectedPair,
   MapKeyFloat,
-  MapKeyInteger,
   MapKeyPair,
   MapKeyPoint,
   MapKeyType,
   MappingBaseType,
   MappingCardinality,
 } from "#pantry/qti/mapping.ts";
-import { Author } from "#pantry/qti/roles.ts";
-import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { Qti } from "#pantry/qti/own.ts";
+import {
+  assertVerdict,
+  judged,
+  loginSession,
+  qtiSchema,
+  rowsOf,
+  statedInserts,
+  tableOf,
+} from "#pantry/test/direct-sql.ts";
+import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * A uuid no stored row holds: the declaration, mapping and document every stray row names.
@@ -172,17 +186,46 @@ const mapKeyRow = (at: number, key: string, baseType = "string"): Fact<typeof Ma
 });
 
 /**
- * A stray integer key of one mapping, entry `at`, with its split, from which PostgreSQL generates
- * its value.
+ * The name of the trigger the key over the query `MapKeyInteger` (`#pantry/qti/queries.ts`) is on
+ * `MapKeyType`, the one table the query reads: a rule over a query is a deferred constraint
+ * trigger on each table its query reads, which grizzle names from a digest and describes by its
+ * comment, `trigger of rule` and the rule as its law spells it (grizzle's `lawsOf`), and grizzle's
+ * `constraintNamesOf` names a check alone.
+ *
+ * @param client - The session.
+ * @returns The trigger's name, the constraint `SET CONSTRAINTS` sets immediate; none or several
+ *   fail the case.
+ */
+const integerKeyRule = (client: Parameters<typeof rowsOf>[0]) =>
+  rowsOf<{ readonly tgname: string }>(
+    client,
+    `SELECT t.tgname FROM pg_catalog.pg_trigger t
+      WHERE t.tgrelid = pg_catalog.to_regclass($1)
+        AND pg_catalog.obj_description(t.oid, 'pg_trigger') LIKE $2`,
+    [
+      `${qtiSchema}.${tableOf(MapKeyType.name)}`,
+      `trigger of rule key ${Qti.relations.MapKeyInteger.name}(mapping, value)%`,
+    ],
+  ).pipe(
+    Effect.map((rows) => {
+      assert.lengthOf(rows, 1, "the key over MapKeyInteger(mapping, value)");
+
+      return rows[0]?.tgname ?? "";
+    }),
+  );
+
+/**
+ * A stray map key of an integer mapping, entry `at`, beside its base type: the row the query
+ * `MapKeyInteger` reads.
  *
  * @param at - The entry's number.
- * @param parts - Its key and the split E1_derived reads.
- * @returns The row.
+ * @param key - Its key.
+ * @returns The fact, of `MapKeyType`.
  */
-const integer = (
-  at: number,
-  parts: Omit<Addition<typeof MapKeyInteger>, "mapping" | "node">,
-): Addition<typeof MapKeyInteger> => ({ ...parts, mapping: stray, node: strayNode(at) });
+const integerKeyFact = (at: number, key: string) => ({
+  fact: { baseType: "integer", key, mapping: stray, node: strayNode(at) },
+  relation: MapKeyType,
+});
 
 /**
  * The mapping and node of a stray typed key, entry `n`.
@@ -253,97 +296,41 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses two integer keys of one mapping that name one integer, by the key on (mapping, value)",
+        "refuses two integer keys of one mapping that name one integer, by the key over the query MapKeyInteger, and keeps two that name two integers",
         () =>
-          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyInteger, "mapping", "value")) over the
-          // value it generates from each row's split, true to E1_derived; the canonical forms are
-          // XML Schema's.
-          // Bound: 1 and 01, -0 and +0, and +7 and 007.
-          Effect.gen(function* integerRepeat() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const rows of [
-              [
-                integer(0, { digits: "1", key: "1", sign: "", zeros: "" }),
-                integer(1, { digits: "1", key: "01", sign: "", zeros: "0" }),
-              ],
-              [
-                integer(0, { digits: "0", key: "-0", sign: "-", zeros: "" }),
-                integer(1, { digits: "0", key: "+0", sign: "+", zeros: "" }),
-              ],
-              [
-                integer(0, { digits: "7", key: "+7", sign: "+", zeros: "" }),
-                integer(1, { digits: "7", key: "007", sign: "", zeros: "00" }),
-              ],
-            ]) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(MapKeyInteger, rows),
-                {},
-              );
-
-              assert.isTrue(rejectedBy(outcome, keyOver("MapKeyInteger", ["mapping", "value"])));
-            }
-          }),
-      );
-
-      it.effect(
-        "keeps two integer keys of one mapping that name two integers, the key on (mapping, value) unbroken",
-        () =>
-          // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyInteger, "mapping", "value")) over the
-          // value it generates, against XML Schema's canonical forms, which differ: the control of
-          // the repeat above. A stray row's deferred containments may still refuse the write at
-          // commit, so the key alone is read.
-          // Bound: -1 and 1, 10 and 1, and -0 and -10.
-          Effect.gen(function* integerDistinct() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            for (const rows of [
-              [
-                integer(0, { digits: "1", key: "-1", sign: "-", zeros: "" }),
-                integer(1, { digits: "1", key: "1", sign: "", zeros: "" }),
-              ],
-              [
-                integer(0, { digits: "10", key: "10", sign: "", zeros: "" }),
-                integer(1, { digits: "1", key: "1", sign: "", zeros: "" }),
-              ],
-              [
-                integer(0, { digits: "0", key: "-0", sign: "-", zeros: "" }),
-                integer(1, { digits: "10", key: "-10", sign: "-", zeros: "" }),
-              ],
-            ]) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(MapKeyInteger, rows),
-                {},
-              );
-
-              assert.isFalse(
-                rejectedBy(outcome, keyOver("MapKeyInteger", ["mapping", "value"])),
-                rows.map(({ key }) => key).join(" "),
+          // Oracle: PostgreSQL, the key over the query `MapKeyInteger` (`src/qti/queries.ts`;
+          // README, "Rules over queries"): a deferred constraint trigger on `MapKeyType`, the table
+          // the query reads, set immediate alone, which raises 23505 under the rule's name where
+          // two entries of one mapping hold one value, the integer PostgreSQL parses each key's
+          // text to (`Compute.parseDecimal`, XML Schema's lexical mapping, Part 2 §3.3.13); the
+          // controls name two integers, or hold a key the query's `integerKeyPattern` does not
+          // select, which no row of the query holds.
+          // Bound: 1 and 01, -0 and +0, and +7 and 007; -1 and 1, 10 and 1, -0 and -10, and 1 and
+          // 1.0.
+          Effect.gen(function* integerKeys() {
+            const client = yield* loginSession;
+            const rule = yield* integerKeyRule(client);
+            for (const { keys, refused } of [
+              { keys: ["1", "01"], refused: true },
+              { keys: ["-0", "+0"], refused: true },
+              { keys: ["+7", "007"], refused: true },
+              { keys: ["-1", "1"], refused: false },
+              { keys: ["10", "1"], refused: false },
+              { keys: ["-0", "-10"], refused: false },
+              { keys: ["1", "1.0"], refused: false },
+            ] as const) {
+              assertVerdict(
+                yield* judged(client, statedInserts(keys.map((key, n) => integerKeyFact(n, key))), [
+                  rule,
+                ]),
+                rule,
+                refused,
+                keys.join(" "),
+                "23505",
               );
             }
-          }),
-      );
-
-      it.effect("refuses an integer key whose split does not spell it, by E1_derived", () =>
-        // Oracle: PostgreSQL, the E1_derived CHECK on MapKeyInteger, judged as the row is
-        // inserted.
-        // Bound: a padded key's zeros dropped from its split, a negative key's sign dropped, and a
-        // magnitude that is not the key's.
-        Effect.gen(function* integerDerived() {
-          const db = yield* Db.open(AuthorApp.roles.author, {});
-          for (const row of [
-            { digits: "1", key: "01", sign: "", zeros: "" },
-            { digits: "5", key: "-5", sign: "", zeros: "" },
-            { digits: "6", key: "5", sign: "", zeros: "" },
-          ] as const) {
-            const outcome = yield* db.apply(
-              ChangeSet.empty(Author).insert(MapKeyInteger, [
-                { ...row, mapping: stray, node: strayNode(0) },
-              ]),
-              {},
-            );
-
-            assert.isTrue(rejectedBy(outcome, checkNamed("MapKeyInteger", "E1_derived")), row.key);
-          }
-        }),
+          }).pipe(Effect.scoped),
+        { timeout: leaseTestTimeoutMs },
       );
 
       it.effect(

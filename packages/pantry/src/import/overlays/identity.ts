@@ -1,20 +1,21 @@
 /**
  * The identity overlays' rows (plan §1.7 O1, §C's `rowsOf`): from one document's XDM tree and the
- * ids its nodes are written under, the rows of every relation `#pantry/qti/identity.ts` declares
- * but R26's witnesses, each relation's rows a keyed set; and, from every document's rows, the
- * package's witnesses ({@link languageRowsOf}).
+ * ids its nodes are written under, the rows of every relation `#pantry/qti/identity.ts` declares,
+ * each relation's rows a keyed set; and, from every document's rows, those placed under each
+ * assembly ({@link placedIdRowsOf}, {@link placedLanguageRowsOf}).
  *
  * The rows restate what the tree says and nothing else: each ID's lexical form as written and split
  * around its value, with the element its binding names; each element's text of an identity type and
  * its IDREF tokens; each `xml:lang`'s and each `label`'s element, each `xml:lang`'s catalog scope
  * and each element on the way up to it (reading R9-c), each LOM general language's string value,
  * each SSML attribute reading 3 reads with its fragment and each element on the way up to that
- * fragment, and the projections those rows carry, each value once (sets ruling 2). The database
- * proves every one of them (`identityLaws`), so a row this builder gets wrong is refused, never
- * accepted.
+ * fragment, and the projections those rows carry, each value once (sets ruling 2). Which document
+ * a LOM record names is no row's: the database reads it (R26's rule over a query,
+ * `#pantry/qti/queries.ts`). The database proves every one of them (`identityLaws`), so a row this
+ * builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
+import type { DocumentContext } from "#pantry/import/context.ts";
 import { Option } from "effect";
 import { collapse, isNcName } from "#pantry/grammar/domains.ts";
 import type { DocumentType } from "#pantry/grammar/install.ts";
@@ -24,13 +25,7 @@ import {
   toolLabelKinds,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import {
-  lowerAscii,
-  piecesOf,
-  statesLanguage,
-  stringValuesOf,
-} from "#pantry/import/overlays/metadata.ts";
-import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
+import { lowerAscii, piecesOf, stringValuesOf } from "#pantry/import/overlays/metadata.ts";
 import { foldAt, foldOf, governorOf } from "#pantry/import/fold.ts";
 import type { Folds } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -40,12 +35,9 @@ import type {
   AssembledLang,
   BodyXmlLang,
   CatalogScope,
-  DocumentGenerals,
   DocumentId,
   DocumentLang,
   FragmentValue,
-  GeneralLang,
-  GeneralObject,
   AssembledId,
   IdBinding,
   IdentityText,
@@ -53,7 +45,6 @@ import type {
   LabelUse,
   LomLanguage,
   PlacedBodyXmlLang,
-  PlacedGeneralLang,
   PlacedId,
   PlacedIdref,
   PlacedXmlLang,
@@ -64,14 +55,13 @@ import type {
   TextIdref,
   XmlLang,
 } from "#pantry/qti/identity.ts";
-import { objectTypes, recordDocumentTypes } from "#pantry/qti/metadata.ts";
+import { recordDocumentTypes } from "#pantry/qti/metadata.ts";
 import { itemKind, testKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes' and attributes', drawn by
- * the number `flatten` gives it, and the document a resource names at each path of its package,
- * which a resource's `href` names.
+ * the number `flatten` gives it.
  *
  * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
  * the tree's rows name each node by one id.
@@ -95,14 +85,6 @@ export interface IdentityIds {
    */
   readonly documentType: (typeof DocumentType.handles)[number];
   readonly idOf: (index: number) => NodeId;
-  /**
-   * The document a resource names at a path of the package, none where no resource names one
-   * there, the manifest's included, by which a resource's records name a document.
-   *
-   * @param path - A path in the package, as `ResourceHref` compares it.
-   * @returns The document's node.
-   */
-  readonly targetAt: (path: string) => Option.Option<Pick<ListedTarget, "node">>;
 }
 
 /**
@@ -126,11 +108,9 @@ export type IdentityTextRow = Addition<typeof IdentityText> & {
 export interface IdentityRows {
   readonly BodyXmlLang: ReadonlyMap<string, Addition<typeof BodyXmlLang>>;
   readonly CatalogScope: ReadonlyMap<string, Addition<typeof CatalogScope>>;
-  readonly DocumentGenerals: ReadonlyMap<string, Addition<typeof DocumentGenerals>>;
   readonly DocumentId: ReadonlyMap<string, Addition<typeof DocumentId>>;
   readonly DocumentLang: ReadonlyMap<string, Addition<typeof DocumentLang>>;
   readonly FragmentValue: ReadonlyMap<string, Addition<typeof FragmentValue>>;
-  readonly GeneralObject: ReadonlyMap<string, Addition<typeof GeneralObject>>;
   readonly IdBinding: ReadonlyMap<string, Addition<typeof IdBinding>>;
   readonly IdentityText: ReadonlyMap<string, IdentityTextRow>;
   readonly IdrefTarget: ReadonlyMap<string, Addition<typeof IdrefTarget>>;
@@ -154,20 +134,12 @@ export interface PlacedIdRows {
 }
 
 /**
- * A package's R26 witnesses, one keyed set, each by its heading `[general, lang]`.
- */
-export interface LanguageRows {
-  readonly GeneralLang: ReadonlyMap<string, Addition<typeof GeneralLang>>;
-}
-
-/**
  * A package's languages placed under each instance of an item's assembly (spec reading 117), one
  * keyed set per relation.
  */
 export interface PlacedLanguageRows {
   readonly AssembledLang: ReadonlyMap<string, Addition<typeof AssembledLang>>;
   readonly PlacedBodyXmlLang: ReadonlyMap<string, Addition<typeof PlacedBodyXmlLang>>;
-  readonly PlacedGeneralLang: ReadonlyMap<string, Addition<typeof PlacedGeneralLang>>;
   readonly PlacedXmlLang: ReadonlyMap<string, Addition<typeof PlacedXmlLang>>;
 }
 
@@ -208,17 +180,6 @@ const textIdentityAt: ReadonlyMap<string, string> = new Map(
  * The types of the documents a package's records are read from (`recordDocumentTypes`).
  */
 const recordTypes: ReadonlySet<string> = new Set(recordDocumentTypes);
-
-/**
- * The lexical forms of a resource's `type` by which its records name a document, each spelled as
- * written (C17): an item's and a test's (Q5.12's `objectTypes`).
- */
-const namingTypes: ReadonlySet<string> = new Set(objectTypes);
-
-/**
- * The kind of a resource's `cp:metadata`, the owner whose records name the resource.
- */
-const resourceMetadata = "cp:metadata.resource";
 
 /**
  * The schema version whose item root's own `label` is a `LabelUse` (spec reading 128, 3.0.1's
@@ -497,64 +458,31 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
 
 /**
  * Build the rows a document's LOM general categories give: each `lom:language`'s `LomLanguage`,
- * with its tag case-folded, and its category's language set, by those tags; and, for a category of
- * a resource's record that names a document, its `GeneralObject`. A record names the document its
- * resource's `href` names, where the resource's type is an item's or a test's and a resource names
- * a document at that path (reading 62, as `NamingGeneral` of `#pantry/qti/queries.ts` reads it); a
- * record whose `href` names none names nothing, and "Document entry" refuses the href. A document
- * of a type no package record is read from (`recordDocumentTypes`) gives none: its `lom:*` elements
- * are no record's (170356bd's ruling).
+ * with its tag case-folded, and its category's language set, by those tags. A document of a type no
+ * package record is read from (`recordDocumentTypes`) gives none: its `lom:*` elements are no
+ * record's (170356bd's ruling).
  *
  * @param tree - The document's tree.
- * @param ids - The ids its rows are written under, whose `targetAt` resolves a resource's href.
+ * @param ids - The ids its rows are written under.
  * @returns The rows, each by its key text.
  */
 const lomRowsOf = (
   tree: Tree,
   ids: IdentityIds,
-): Pick<IdentityRows, "GeneralObject" | "LomLanguage" | "ResourceLomLanguageSet"> => {
+): Pick<IdentityRows, "LomLanguage" | "ResourceLomLanguageSet"> => {
   const lomLanguages = new Map<string, Addition<typeof LomLanguage>>();
   const lomSets = new Map<string, Addition<typeof ResourceLomLanguageSet>>();
-  const objects = new Map<string, Addition<typeof GeneralObject>>();
-  const rows = {
-    GeneralObject: objects,
-    LomLanguage: lomLanguages,
-    ResourceLomLanguageSet: lomSets,
-  };
+  const rows = { LomLanguage: lomLanguages, ResourceLomLanguageSet: lomSets };
   if (!recordTypes.has(ids.documentType)) {
     return rows;
   }
 
-  // Each resource's href resolved as its `ResourceHref` is, by which its records name a document.
-  const resourcePaths = resourcePathsOf(tree.rows);
-
   for (const node of tree.rows.nodes) {
-    const parent = tree.nodeAt(node.parent);
-    if (node.kind === "lom:language" && parent.kind === "lom:general") {
+    if (node.kind === "lom:language" && tree.nodeAt(node.parent).kind === "lom:general") {
       const text = tree.stringValueOf(node.id);
       const tag = lowerAscii(text);
       lomLanguages.set(node.id, { general: node.parent, lang: text, node: node.id, tag });
       lomSets.set(headingKey([node.parent, tag]), { general: node.parent, lang: tag });
-    }
-
-    if (node.kind !== "lom:general" || parent.kind !== "lom:lom") {
-      continue;
-    }
-
-    const owner = tree.nodeAt(parent.parent);
-    if (owner.kind !== resourceMetadata) {
-      continue;
-    }
-
-    // The document the record names: the one a resource names at its resource's `href`'s path,
-    // where its `type` spells an item's or a test's handle.
-    const named = Option.fromNullishOr(tree.valueOf(owner.parent, "type")).pipe(
-      Option.filter((type) => namingTypes.has(type)),
-      Option.flatMap(() => Option.fromNullishOr(resourcePaths.get(owner.parent))),
-      Option.flatMap(ids.targetAt),
-    );
-    for (const { node: document } of Option.toArray(named)) {
-      objects.set(node.id, { document, general: node.id });
     }
   }
 
@@ -734,17 +662,11 @@ const langRowsOf = (
  * projection one row per value, so a value an element repeats is one row. A copied text past
  * `keyText`'s bound keeps its row, whatever its length: `keyText`'s own check refuses it in the
  * database under "Key text bound", the one rule a key text past its bound is refused by, as the law
- * oracle names it. Every document has its
- * {@link DocumentGenerals} row, whose count the database draws.
- *
- * A general category of a resource's record describes the document its record names: the one a
- * resource names at the path the resource's `ResourceHref` compares its `href` by (reading 102),
- * where its `type` spells an item's or a test's handle. A category whose `href` names no document
- * describes none, and "Document entry" refuses the href.
+ * oracle names it.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
- * @returns Every identity relation's rows but R26's witnesses.
+ * @returns Every identity relation's rows.
  */
 export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRows => {
   const rows = flatten(doc, ids.idOf);
@@ -787,7 +709,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
     ...lomRowsOf(tree, ids),
     ...langRowsOf(tree),
     ...ssmlRowsOf(tree),
-    DocumentGenerals: new Map([[tree.document, { document: tree.document }]]),
     DocumentId: documentIds,
     IdBinding: new Map(
       [...documentIds.values()].map(({ document, id, owner }) => [
@@ -918,43 +839,10 @@ export const placedIdRowsOf = (input: {
 };
 
 /**
- * Build a package's R26 witnesses from every document's identity rows: for each general category
- * that describes a document ({@link IdentityRows.GeneralObject}, the manifest's) and each of the
- * document's `xml:lang` forms that states a language, a language tag once collapsed
- * ({@link statesLanguage}, spec reading 164), a {@link GeneralLang} row of the form's value,
- * collapsed and case-folded. Whether the category lists that value is the database's to judge: a
- * witness whose value is none of its category's case-folded languages
- * ({@link IdentityRows.ResourceLomLanguageSet}) breaks its containment into them, and the database
- * refuses it under "Document lang".
- *
- * @param documents - Each document's identity rows, the manifest's among them.
- * @returns The witnesses, by their heading.
- */
-export const languageRowsOf = (documents: readonly IdentityRows[]): LanguageRows => {
-  const witnesses = new Map<string, Addition<typeof GeneralLang>>();
-
-  for (const [{ document, general }, { lang }] of joined(
-    documents.flatMap((rows) => [...rows.GeneralObject.values()]),
-    documents.flatMap((rows) => [...rows.DocumentLang.values()]),
-    (object) => object.document,
-    (form) => form.document,
-  )) {
-    const value = lowerAscii(collapse(lang));
-    if (statesLanguage(value)) {
-      witnesses.set(headingKey([general, lang]), { document, general, lang, value });
-    }
-  }
-
-  return { GeneralLang: witnesses };
-};
-
-/**
  * Build a package's languages in place (spec reading 117): under each instance of an item's
- * assembly, every `xml:lang` carrier of the instance's document; each form the assembly carries,
- * once; and R26's witnesses in place, for each general category that describes the item and each
- * form of its assembly that states a language, a {@link PlacedGeneralLang} row of the form's value,
- * collapsed and case-folded. A witness whose value its category does not list breaks its
- * containment into the category's languages, and the database refuses it under "Document lang".
+ * assembly, every `xml:lang` carrier of the instance's document; and each form the assembly
+ * carries, once, whose compared value the database derives and R26 reads (`DescribedAssembledLang`,
+ * `#pantry/qti/queries.ts`).
  *
  * @param documents - Each document's identity rows, the manifest's among them.
  * @param instances - Every assembly's root instance, its tree nested (Q5.13's `assembledRowsOf`).
@@ -967,7 +855,6 @@ export const placedLanguageRowsOf = (
   const placed = new Map<string, Addition<typeof PlacedXmlLang>>();
   const placedBody = new Map<string, Addition<typeof PlacedBodyXmlLang>>();
   const assembled = new Map<string, Addition<typeof AssembledLang>>();
-  const witnesses = new Map<string, Addition<typeof PlacedGeneralLang>>();
   for (const [{ instance, root }, { lang, node, scope }] of joined(
     [...instances].flatMap((assembly) =>
       assembly.assemblyKind === itemKind
@@ -998,22 +885,5 @@ export const placedLanguageRowsOf = (
     }
   }
 
-  for (const [{ assembly, lang }, { general }] of joined(
-    assembled.values(),
-    documents.flatMap((rows) => [...rows.GeneralObject.values()]),
-    (form) => form.assembly,
-    (object) => object.document,
-  )) {
-    const value = lowerAscii(collapse(lang));
-    if (statesLanguage(value)) {
-      witnesses.set(headingKey([general, lang]), { assembly, general, lang, value });
-    }
-  }
-
-  return {
-    AssembledLang: assembled,
-    PlacedBodyXmlLang: placedBody,
-    PlacedGeneralLang: witnesses,
-    PlacedXmlLang: placed,
-  };
+  return { AssembledLang: assembled, PlacedBodyXmlLang: placedBody, PlacedXmlLang: placed };
 };

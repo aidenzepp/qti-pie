@@ -21,8 +21,8 @@ import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
-import { QtiBase } from "#pantry/qti/base.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { collapsedPattern, testLaws, testRelations } from "#pantry/qti/tests.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
@@ -31,7 +31,7 @@ import { judge as judgeOracle, lawNames, lawsOf, ruleOf } from "#pantry/test/ora
 
 describe("qti/tests.ts, declared", () => {
   it("builds a schema of Node, the character data, the attributes, the package and the test layer with every law, each statement once", () => {
-    const built = schema("TestLayer", { ...QtiBase.relations }, [
+    const built = schema("TestLayer", { ...qtiRelations }, [
       ...nodeLaws,
       ...chardataLaws,
       ...attributeLaws,

@@ -11,22 +11,26 @@
  * package (the W5 amendment's C19), which `db.apply` compiles for its call from the same
  * Description.
  */
-import { login, workload } from "@bjornpagen/grizzle";
-import { Function as Fn, pipe, Record as Rec } from "effect";
+import { insertableNamesOf, login, workload } from "@bjornpagen/grizzle";
+import { pipe, Record as Rec, Struct } from "effect";
 import { exportQueriesOf } from "#pantry/export/scan.ts";
-import { writtenRelations } from "#pantry/import/roster.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { authorRoleOf } from "#pantry/qti/roles.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import type { QtiSchema } from "#pantry/qti/schema.ts";
 
 /**
- * A package's inputs with no row: each written relation's empty keyed set.
+ * A package's inputs with no row: each relation an import writes, grizzle's `insertableNamesOf`,
+ * with its empty keyed set.
+ *
+ * @param qti - The `Qti` schema.
+ * @returns The inputs.
  */
-const noInputs: PackageInputs = pipe(
-  writtenRelations,
-  Rec.map(() => new Map<string, never>()),
-);
+const noInputsOf = (qti: QtiSchema): PackageInputs =>
+  pipe(
+    Struct.pick(qti.relations, insertableNamesOf(qti)),
+    Rec.map(() => new Map<string, never>()),
+  );
 
 /**
  * Build the author application's login over a `Qti` schema, over its author role
@@ -45,31 +49,22 @@ const noInputs: PackageInputs = pipe(
  * Its name is the one every earlier installation used, so a migration from scratch needs no
  * `--rename @…`. Where it is installed, its PostgreSQL role is the one grizzle's `roleNameOf` gives
  * it, named by the level of `Qti` it is over, and its connection's password is that role's
- * (`#pantry/db/connection.ts`). Built once per schema value, since grizzle puts a role in one login
- * only.
+ * (`#pantry/db/connection.ts`). Each call builds a login, a role and workloads of its own, and
+ * grizzle puts a role in one login only: an install builds its login once and holds it
+ * (`#pantry/qti/own.ts` for this package's own).
  *
  * @param qti - The `Qti` schema, built for an install's policy or none
  *   (`#pantry/qti/schema.ts` `qtiSchema`).
  * @returns The login.
  * @see https://github.com/bjornpagen/grizzle/blob/4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a/packages/engine/src/program/names.ts#L61-L76
  */
-export const authorAppOf = Fn.memoize((qti: typeof Qti) => {
+export const authorAppOf = (qti: QtiSchema) => {
   const author = authorRoleOf(qti);
 
   return login(qti, "author_app", [author], {
     workload: [
       workload(author, exportQueriesOf(qti)),
-      workload(author, { importWrite: changeSetOf(author, noInputs) }),
+      workload(author, { importWrite: changeSetOf(author, noInputsOf(qti)) }),
     ],
   });
-});
-
-/**
- * The author application's login over the `Qti` this process opens.
- */
-export const AuthorApp = authorAppOf(Qti);
-
-/**
- * The author application's workloads: the export's reads, and the import's write program.
- */
-export const [exportWork, importWork] = AuthorApp.workload;
+};

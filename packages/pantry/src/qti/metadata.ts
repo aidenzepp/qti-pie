@@ -58,10 +58,10 @@
  * space, where a tab, a line feed and a carriage return each read as a space (XML Schema 1.0 Part 2
  * §4.3.6, whiteSpace `replace`), and a language tag without regard to case (RFC 5646 §2.1.1), whose
  * subtags are ASCII (§2.1). So each side carries its compared form beside its written one, which
- * `E1_derived` proves: a title its `Compute.replaceWhitespace` ({@link AssessmentObject}'s
- * `titleValue`, {@link LomTitleString}'s `textValue`), the root's `xml:lang` its value collapsed
- * (an `xs:language`) and case-folded by `Compute.lowerAscii` (`langTag`), and a string's
- * `language`, an `xs:string`, case-folded as written (`languageTag`).
+ * `E1_derived` proves: a title its `Compute.replaceWhitespace` ({@link ObjectTitle}'s `titleValue`,
+ * {@link LomTitleString}'s `textValue`), the root's `xml:lang` its value collapsed (an
+ * `xs:language`) and case-folded by `Compute.lowerAscii` ({@link ObjectLang}'s `langTag`), and a
+ * string's `language`, an `xs:string`, case-folded as written ({@link LomString}'s `languageTag`).
  *
  * "Compared collapsed" is stated with G-concat's pieces: a text is `lead ‖ token ‖ trail`, its
  * outer whitespace set apart. A document's identifier holds no whitespace (an `IdentifierDType`,
@@ -70,10 +70,13 @@
  * identifier, and neither does its trimmed form. So the law compares trimmed tokens, and no padding
  * is refused (reading 1).
  *
- * The record's facts are copied down its tree once, by the nodes' {@link nodeRef} tuples:
- * {@link LomRecord} climbs from each `lom:lom` to its owner and the owner's parent (the
- * `cp:resource` where the owner is a resource's `cp:metadata`), and each element below copies from
- * its record.
+ * Each overlay row holds its own node's {@link nodeRef} tuple, {@link LomRecord} its owner's too,
+ * whose parent is the `cp:resource` where the owner is a resource's `cp:metadata`, and
+ * {@link LomEntry} its identifier's, whose parent is the identifier's holder. No row copies a fact
+ * down from its record or across from another row: the queries of `#pantry/qti/queries.ts` join
+ * each row to its parent's, a title's string to its {@link LomTitle}, a title or an entry's holder
+ * to its {@link LomGeneral}, whose parent is the record, and a string to its {@link LomString} for
+ * its language.
  *
  * The other metadata the package carries has no overlay, since no law reads it across rows: QTI
  * metadata, curriculum standards metadata and the rest of LOM are judged by their content models
@@ -243,10 +246,12 @@ export const LomGeneral = relation(
 
 /**
  * A LOM identifier's entry, keyed by its `lom:entry` node (a `CharacterString`, whose parent is
- * always a `lom:identifier`): its {@link nodeRef} tuple, its identifier's kind, start and parent
- * (the holder: a general category, the meta-metadata or a related resource), the holder's kind,
- * start and parent (the record, for a general or meta-metadata identifier), and its string value
- * in pieces.
+ * always a `lom:identifier`): its {@link nodeRef} tuple, its identifier's kind and start and its
+ * identifier's parent `holder` (a general category, the meta-metadata or a related resource), and
+ * its string value in pieces. `lom-identifier` joins `holder` to its {@link LomGeneral} for the
+ * record, and the identifier's tuple is the one copy up the tree it keeps: a query that read the
+ * identifier's {@link Node} instead would put a rule's deferred trigger on every `Node` row and an
+ * index on `Node`'s `parent`, which `grizzle generate` installs for it.
  *
  * - `text` is the entry's string value, `Node.stringValue`, which `copiedTextKinds` folds
  *   (`#pantry/qti/node.ts`);
@@ -258,9 +263,6 @@ export const LomEntry = relation(
   {
     document: uuid,
     holder: uuid,
-    holderKind: closedId(NodeKind),
-    holderParent: uuid,
-    holderStart: natural,
     identifierKind: closedId(NodeKind),
     identifierStart: natural,
     kind: closedId(NodeKind),
@@ -279,20 +281,17 @@ export const LomEntry = relation(
 
 /**
  * A LOM title, keyed by its `lom:title` node (a `LangString`, whose parent is always a general
- * category): its {@link nodeRef} tuple, and its general category's kind, start and parent (the
- * record).
+ * category, by the LOM binding's content model): its {@link nodeRef} tuple, its `parent` that
+ * category's node, which `lom-title` joins to its {@link LomGeneral} for the record.
  */
 export const LomTitle = relation(
   "LomTitle",
   {
     document: uuid,
-    generalKind: closedId(NodeKind),
-    generalStart: natural,
     kind: closedId(NodeKind),
     nearest: uuid,
     node: uuid,
     parent: uuid,
-    record: uuid,
     start: natural,
     version: closedId(SchemaVersion),
   },
@@ -332,21 +331,19 @@ export const lomStringLanguages = counted(
 
 /**
  * A string of a LOM title, keyed by its `lom:string` node: its {@link nodeRef} tuple (its parent the
- * title), its title's record, its string value `text`, `Node.stringValue` folded by
- * `copiedTitleText` (`#pantry/qti/node.ts`), and the host's two compared forms, `textValue`, the
- * text in `xs:normalizedString`'s value space (`Compute.replaceWhitespace`), and `languageTag`, its
- * language as {@link LomString} holds it.
+ * title), its string value `text`, `Node.stringValue` folded by `copiedTitleText`
+ * (`#pantry/qti/node.ts`), and `textValue`, the text in `xs:normalizedString`'s value space
+ * (`Compute.replaceWhitespace`), as `lom-title` compares it. Its language is its
+ * {@link LomString}'s, which `lom-title` joins by the node.
  */
 export const LomTitleString = relation(
   "LomTitleString",
   {
     document: uuid,
     kind: closedId(NodeKind),
-    languageTag: keyText,
     nearest: uuid,
     node: uuid,
     parent: uuid,
-    record: uuid,
     start: natural,
     text: keyText,
     textValue: keyText,
@@ -357,22 +354,18 @@ export const LomTitleString = relation(
 
 /**
  * An assessment object, keyed by the `qti-assessment-item` or `qti-assessment-test` root, whatever
- * it writes: its {@link nodeRef} tuple; its count of `xml:lang` attributes (0 or 1, as
- * {@link ObjectLang} holds them), the one total fact of whether the optional attribute exists; and
- * `langTag`, its `xml:lang`'s compared form, which `lom-title` reads as a language where it is a
- * tag ({@link languageTagPattern}): its {@link ObjectLang}'s where it writes one, {@link noLanguage}
- * where it writes none. Its required `identifier` and `title` are rows of their own,
- * {@link ObjectIdentifier} and {@link ObjectTitle}, so a root that writes neither still has its row
- * and AL3 alone refuses it, and no LOM entry or title string matches what it does not write (spec
- * reading 148).
+ * it writes: its {@link nodeRef} tuple. Its required `identifier` and `title` and its optional
+ * `xml:lang` are rows of their own, {@link ObjectIdentifier}, {@link ObjectTitle} and
+ * {@link ObjectLang}, so a root that writes neither of the first two still has its row and AL3
+ * alone refuses it, and no LOM entry or title string matches what it does not write (spec reading
+ * 148); a root that writes no `xml:lang` has no {@link ObjectLang}, which `lom-title` reads as no
+ * language stated.
  */
 export const AssessmentObject = relation(
   "AssessmentObject",
   {
     document: uuid,
     kind: closedId(NodeKind),
-    langTag: keyText,
-    langs: drawn(natural),
     nearest: uuid,
     node: uuid,
     parent: uuid,
@@ -414,18 +407,14 @@ export const ObjectTitle = relation(
 /**
  * An assessment object's `xml:lang`, keyed by its root: its lexical form as written, and `langTag`,
  * its value collapsed (an `xs:language`) and case-folded (`Compute.lowerAscii`), as `lom-title`
- * compares it. A root has a row exactly where it writes the attribute: copied from it here, and
- * back into every `xml:lang` (`#pantry/qti/identity.ts`), whose key over `node` the way back reads,
- * since this selection states none of its own.
+ * compares it, which reads it as a language where it is a tag ({@link languageTagPattern}). A root
+ * has a row exactly where it writes the attribute: copied from it here, and back into every
+ * `xml:lang` (`#pantry/qti/identity.ts`), whose key over `node` the way back reads, since this
+ * selection states none of its own.
  */
 export const ObjectLang = relation("ObjectLang", { lang: keyText, langTag: keyText, node: uuid }, [
   "node",
 ]);
-
-/**
- * Each object's `xml:lang`, counted by {@link AssessmentObject}'s `langs`.
- */
-export const objectLangs = counted(on(ObjectLang, "node"), fin(AssessmentObject, "langs"));
 
 /**
  * The text type of a usage statistic's day, `lexical(date)`: the language `DateDType` states,
@@ -764,18 +753,19 @@ const spelledUsageValues = select(UsageValue, (u) => u.in(u.baseTypeLexical, bas
  * - **the general categories:** each `lom:general` has its {@link LomGeneral}, whose tuple is its
  *   node's.
  * - **the entries:** each `lom:entry` has its {@link LomEntry}, whose `text` is its string value,
- *   whose three tuples are its nodes', and whose pieces concatenate to its text.
- * - **the titles and strings:** each `lom:title` has its {@link LomTitle}, whose tuples are its
- *   nodes'; each `lom:string` its {@link LomString}, whose `languages` counts its `language`,
- *   copied both ways, so no {@link LomStringLanguage} stands without its attribute; and each
- *   title's string its {@link LomTitleString}, whose `text` is its string value, whose `language`
- *   is its {@link LomString}'s, and whose compared forms are those two's ("E1 derived").
- * - **the objects:** each item's and test's root has its {@link AssessmentObject}, one per document,
- *   with `langs` counting its `xml:lang` and its language's compared form; and each of its
- *   `identifier` (in pieces), `title` and `xml:lang` is copied into its own row,
+ *   whose two tuples are its node's and its identifier's, and whose pieces concatenate to its
+ *   text.
+ * - **the titles and strings:** each `lom:title` has its {@link LomTitle}, whose tuple is its node's;
+ *   each `lom:string` its {@link LomString}, whose `languages` counts its `language`, copied both
+ *   ways, so no {@link LomStringLanguage} stands without its attribute; and each title's string its
+ *   {@link LomTitleString}, whose `text` is its string value, whose parent has its
+ *   {@link LomTitle}, and whose compared form is that text's ("E1 derived").
+ * - **the objects:** each item's and test's root has its {@link AssessmentObject}, one per document;
+ *   and each of its `identifier` (in pieces), `title` and `xml:lang` is copied into its own row,
  *   {@link ObjectIdentifier}, {@link ObjectTitle} or {@link ObjectLang}, with its compared form,
  *   and no such row stands without its attribute, an {@link ObjectLang} by the way back
- *   `#pantry/qti/identity.ts` states ("E1 derived", spec reading 148).
+ *   `#pantry/qti/identity.ts` states, and on its object's root by the containment into
+ *   {@link AssessmentObject} ("E1 derived", spec reading 148).
  * - **`lom-identifier` and `lom-title`** read the document a record names, which no row here holds,
  *   so each is a rule over a query (`metadataQueryLawsByName`, `#pantry/qti/queries.ts`).
  * - **the learning resource types:** each `lom:value` and each `lom:source` of a
@@ -846,19 +836,6 @@ export const metadataLawsByName = {
       ),
       nodeRef,
     ),
-    contained(
-      on(
-        LomEntry,
-        "holder",
-        "document",
-        "holderKind",
-        "holderStart",
-        "nearest",
-        "version",
-        "holderParent",
-      ),
-      nodeRef,
-    ),
     contained(on(entryNodes, "id", "stringValue"), on(LomEntry, "node", "text")),
     check("E1_derived", LomEntry, (e) =>
       e.and(
@@ -873,23 +850,8 @@ export const metadataLawsByName = {
       on(LomTitle, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
-    contained(
-      on(
-        LomTitle,
-        "parent",
-        "document",
-        "generalKind",
-        "generalStart",
-        "nearest",
-        "version",
-        "record",
-      ),
-      nodeRef,
-    ),
     contained(on(titleNodes, "id"), on(LomTitle, "node")),
-    check("E1_derived", LomTitle, (t) =>
-      t.and(t.eq(t.kind, "lom:title"), t.eq(t.generalKind, "lom:general")),
-    ),
+    check("E1_derived", LomTitle, (t) => t.eq(t.kind, "lom:title")),
     mirrors(on(LomString, "node"), on(stringNodes, "id")),
     lomStringLanguages,
     contained(
@@ -916,8 +878,7 @@ export const metadataLawsByName = {
       nodeRef,
     ),
     contained(on(titleStringNodes, "id", "stringValue"), on(LomTitleString, "node", "text")),
-    contained(on(LomTitleString, "parent", "record"), on(LomTitle, "node", "record")),
-    contained(on(LomTitleString, "node", "languageTag"), on(LomString, "node", "languageTag")),
+    contained(on(LomTitleString, "parent"), on(LomTitle, "node")),
     check("E1_derived", LomTitleString, (s) =>
       s.and(s.eq(s.kind, "lom:string"), s.eq(s.textValue, Compute.replaceWhitespace(s.text))),
     ),
@@ -927,11 +888,7 @@ export const metadataLawsByName = {
     ),
     key(on(AssessmentObject, "document")),
     check("E1_derived", AssessmentObject, (o) =>
-      o.and(
-        o.in(o.kind, objectKinds),
-        o.eq(o.parent, o.document),
-        o.or(o.eq(o.langs, 1n), o.eq(o.langTag, noLanguage)),
-      ),
+      o.and(o.in(o.kind, objectKinds), o.eq(o.parent, o.document)),
     ),
     contained(on(objectIdentifiers, "node", "lexical"), on(ObjectIdentifier, "node", "lexical")),
     contained(on(ObjectIdentifier, "node"), on(objectIdentifiers, "node")),
@@ -948,18 +905,10 @@ export const metadataLawsByName = {
     contained(on(ObjectTitle, "node", "document"), on(AssessmentObject, "node", "document")),
     key(on(ObjectTitle, "document")),
     check("E1_derived", ObjectTitle, (o) => o.eq(o.titleValue, Compute.replaceWhitespace(o.title))),
-    objectLangs,
     contained(on(objectLangAttributes, "node", "lexical"), on(ObjectLang, "node", "lang")),
+    contained(on(ObjectLang, "node"), on(AssessmentObject, "node")),
     check("E1_derived", ObjectLang, (o) =>
       o.eq(o.langTag, Compute.lowerAscii(Compute.collapse(o.lang))),
-    ),
-    contained(
-      on(
-        select(AssessmentObject, (o) => o.eq(o.langs, 1n)),
-        "node",
-        "langTag",
-      ),
-      on(ObjectLang, "node", "langTag"),
     ),
     contained(
       on(resourceTypeValues, "id", "parent", "stringValue"),

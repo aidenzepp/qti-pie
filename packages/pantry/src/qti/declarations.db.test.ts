@@ -53,9 +53,8 @@ import {
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
 import { ChoiceVariableName } from "#pantry/qti/interactions.ts";
-import { AuthorApp } from "#pantry/qti/logins.ts";
-import { Author } from "#pantry/qti/roles.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
+import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 import {
   assertVerdict,
   constraintDescribed,

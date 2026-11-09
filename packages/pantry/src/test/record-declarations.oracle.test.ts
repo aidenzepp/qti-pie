@@ -31,7 +31,7 @@ import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { lawNameOf, rulesOf } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/test/host-judge.ts";

@@ -13,7 +13,7 @@
  *
  * Both the import (`#pantry/import/package.ts`) and the dry run (`#pantry/import/preview.ts`) read
  * through {@link readProgram}, so a dry run reads exactly what an import writes. Nothing here
- * reaches the author login (`#pantry/qti/logins.ts`), whose workload grizzle builds when that
+ * reaches the author login (`#pantry/qti/own-login.ts`), whose workload grizzle builds when that
  * module is evaluated.
  */
 import type { Uuid } from "@bjornpagen/grizzle";

@@ -179,9 +179,12 @@ export const ReadingForm = closed("ReadingForm", readingForms);
  * What a reading's variable is, in code order: `none`, no variable of its scope; `declared`, a
  * declaration of the scope's document (the test's for an unsplit reading, the item's for an item
  * ref); `mapped`, an item ref's variable mapping target (information model §7.48); `builtIn`, a
- * built-in variable of the scope (§2.2.2, §2.2.2.1; spec reading 29).
+ * built-in variable of the scope (§2.2.2, §2.2.2.1; spec reading 29); `link`, a name read through a
+ * found item ref that names an LTI link, which has no declarations, no template variables and no
+ * mappings' sources to resolve it against, so it is accepted unchecked (spec reading 110). `link`
+ * comes last, so the codes the snapshot holds keep their handles.
  */
-export const readingSources = ["none", "declared", "mapped", "builtIn"] as const;
+export const readingSources = ["none", "declared", "mapped", "builtIn", "link"] as const;
 
 /**
  * The `ReadingSource` roster.

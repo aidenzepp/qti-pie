@@ -54,10 +54,7 @@ describe("a document's type", () => {
   it("is the manifest's role or a resource type, and names no absent one", () => {
     assert.strictEqual(Arr.headNonEmpty(DocumentType.handles), "manifest");
     assert.notInclude(DocumentType.handles, "none");
-    assert.deepStrictEqual(
-      DocumentType.handles.slice(1),
-      ResourceType.handles.filter((handle) => handle !== "none"),
-    );
+    assert.deepStrictEqual(DocumentType.handles.slice(1), [...ResourceType.handles]);
     assert.deepStrictEqual(
       ResourceDocumentType.rows.map(({ documentType, type }) => [type, documentType]),
       DocumentType.handles.slice(1).map((type) => [type, type]),

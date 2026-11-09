@@ -19,13 +19,13 @@ import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { identityLaws, identityRelations, idValuePattern } from "#pantry/qti/identity.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { QtiBase } from "#pantry/qti/base.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
 /**
- * How long building a schema over every relation of `QtiBase` may take: its statements are planned
+ * How long building a schema over every relation of the schema may take: its statements are planned
  * whole, which takes some seconds beside the composed grammar.
  * Measured 2026-11-07: 16.7 s at a load average of 63 to 73.
  */
@@ -33,7 +33,7 @@ const buildTimeout = 60_000;
 
 describe("qti/identity.ts, declared", { timeout: buildTimeout }, () => {
   it("builds a schema of Node, the character data, the attribute layer and the identity overlays with every law, each statement once", () => {
-    const built = schema("IdentityLayer", { ...QtiBase.relations, ...identityRelations }, [
+    const built = schema("IdentityLayer", { ...qtiRelations, ...identityRelations }, [
       ...nodeLaws,
       ...chardataLaws,
       ...attributeLaws,

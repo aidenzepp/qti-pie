@@ -454,6 +454,12 @@ export const termOf = (stored: StoredTerm): Term => {
           return { arg: termOf(arg), kind: "cast", to: "double" };
         }
 
+        // A cast into a text type is total only where its argument's language lies inside the
+        // target's, which grizzle proves when the schema compiles, so it changes no value.
+        if (to?.kind === "text") {
+          return termOf(arg);
+        }
+
         return to?.kind === "numeric" ? { arg: termOf(arg), kind: "cast", to: "numeric" } : unread;
       },
     ],

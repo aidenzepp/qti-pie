@@ -26,7 +26,7 @@ import { layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { BranchTarget, Section, SectionSelection, TestFlag, TestToken } from "#pantry/qti/tests.ts";
 import { assertVerdict, judged, loginSession, statedInserts } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";

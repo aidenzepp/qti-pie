@@ -16,13 +16,7 @@ import { Option, Result, Schema } from "effect";
 import type { Admission } from "#pantry/grammar/admission.ts";
 import { UnadmittedChild } from "#pantry/grammar/admission.ts";
 import { idField, sourced } from "#pantry/grammar/closed.ts";
-import type {
-  ClosedRelationError,
-  IdField,
-  Roster,
-  Sourced,
-  SourcedRow,
-} from "#pantry/grammar/closed.ts";
+import type { IdField, Roster, Sourced, SourcedRow } from "#pantry/grammar/closed.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 
 /**
@@ -102,7 +96,7 @@ export class SplitMembers extends Schema.TaggedError<SplitMembers>()("SplitMembe
 /**
  * The ways the barrings have no relation.
  */
-export type ChildError = ClosedRelationError | SplitMembers | UnadmittedChild;
+export type ChildError = SplitMembers | UnadmittedChild;
 
 /**
  * Generate `ChildBarredBy` from the vocabularies' barrings, each barred kind at its `Admission`
@@ -116,7 +110,8 @@ export type ChildError = ClosedRelationError | SplitMembers | UnadmittedChild;
  * @param input.positions - The `Position` roster.
  * @param input.versions - The `SchemaVersion` roster.
  * @returns The relation, or the first barring of a kind its parent does not admit or of kinds at
- *   several positions, or a parent barred under two attributes (`KeyCollision`).
+ *   several positions. A parent barred under two attributes is a fault of the rows (`faultOf`),
+ *   which the tests find and grizzle refuses.
  */
 export const barredByOf = (input: {
   readonly admission: Admission;
@@ -165,7 +160,7 @@ export const barredByOf = (input: {
       }
     }
 
-    return yield* sourced({
+    return sourced({
       key: [idField("version", input.versions), idField("parent", input.kinds)],
       name: "ChildBarredBy",
       payload: [idField("name", input.attributes), idField("position", input.positions)],

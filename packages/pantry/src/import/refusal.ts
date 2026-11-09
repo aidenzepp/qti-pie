@@ -23,7 +23,7 @@
  *   grammar's rows; for a content-order law it names the positions `Follow` allows next, each with
  *   its XSD particle. There is no catalog of messages.
  */
-import { constraintNameOf, lawsByStatement, lawsOf, sameLaw } from "@bjornpagen/grizzle";
+import { constraintNamesOf, lawsByStatement, lawsOf, sameLaw } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, Refused, RegexText, Statement, Witness } from "@bjornpagen/grizzle";
 import {
   Array as Arr,
@@ -87,18 +87,16 @@ import {
 import { DayForm, metadataLawsByName, metadataRelations } from "#pantry/qti/metadata.ts";
 import { Chars, EndCharacter, nodeLawsByName, Prefix } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
-import { installedCdnLawsByName } from "#pantry/qti/cdn.ts";
 import { catalogLawsByName, catalogRelations } from "#pantry/qti/catalog.ts";
 import { htmlLawsByName, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLawsByName } from "#pantry/qti/identity.ts";
 import { mathmlLawsByName, mathmlRelations } from "#pantry/qti/mathml.ts";
 import { operatorLawsByName, operatorRelations } from "#pantry/qti/operators.ts";
 import { HrefParams, packageLawsByName } from "#pantry/qti/package.ts";
-import { queryLawsByName } from "#pantry/qti/queries.ts";
 import { quotationLawsByName, quotationRelations } from "#pantry/qti/quotation.ts";
 import { SelectForm, testLawsByName } from "#pantry/qti/tests.ts";
 import type { testRelations } from "#pantry/qti/tests.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { builtLawsByName, Qti } from "#pantry/qti/own.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
 import type { ZipRefusal } from "#pantry/package/zip.ts";
 import type { Source } from "#pantry/vocab/inventory/types.ts";
@@ -387,12 +385,8 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
     "E1 derived",
     "XmlLang",
     "DocumentLang",
-    "GeneralObject",
-    "DocumentGenerals",
-    "GeneralLang",
     "PlacedXmlLang",
     "AssembledLang",
-    "PlacedGeneralLang",
     "SsmlAttribute",
     "BodyXmlLang",
     "PlacedBodyXmlLang",
@@ -433,7 +427,6 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
     "MappingCardinality",
     "MapKey",
     "MapKeyType",
-    "MapKeyInteger",
     "MapKeyFloat",
     "MapKeyPoint",
     "MapKeyPair",
@@ -496,6 +489,9 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
  *   float key's `Compute.parseDouble`, which its key's pattern law, named by FloatKey's row of
  *   {@link textLaws}, holds to `xs:double`'s lexical space, inside the `doubleText` the parse reads
  *   total. No term reads a closed relation, so none is NULL.
+ * - A document's and an item's assembly's `xml:lang` form's compared `value` is the form collapsed
+ *   and case-folded, cast into the form's own key text, a cast the schema proves total: a written
+ *   text, never NULL.
  */
 export const generatedNames: readonly (readonly [string, LawName])[] = [
   ...namedBy(
@@ -512,14 +508,14 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
   ...namedBy("value domain", "StatisticDate.date"),
   ...namedBy(
     "E1 derived",
-    "MapKeyInteger.negative",
-    "MapKeyInteger.value",
     "MapKeyFloat.value",
     "MapKeyPoint.value",
     "MapKeyPoint.xNegative",
     "MapKeyPoint.yNegative",
     "MapKeyPair.value",
     "MapKeyDirectedPair.value",
+    "DocumentLang.value",
+    "AssembledLang.value",
   ),
 ];
 
@@ -691,10 +687,10 @@ type LawsByName = { readonly [Name in LawName]?: readonly Statement[] };
 
 /**
  * The modules that name their laws where they state them, each a {@link LawsByName}: the stored
- * level's, then each domain's rules over the queries (`#pantry/qti/queries.ts`).
+ * level's, then the groups built with `Qti` (`#pantry/qti/own.ts` `builtLawsByName`), its policy's
+ * and each domain's rules over the queries (`#pantry/qti/queries.ts`).
  */
 export const namedLaws: readonly LawsByName[] = [
-  installedCdnLawsByName,
   nodeLawsByName,
   chardataLawsByName,
   attributeLawsByName,
@@ -712,7 +708,7 @@ export const namedLaws: readonly LawsByName[] = [
   catalogLawsByName,
   mathmlLawsByName,
   testLawsByName,
-  ...queryLawsByName,
+  ...builtLawsByName,
 ];
 
 /**
@@ -1363,54 +1359,57 @@ const CheckStatement = Schema.Struct({
 const checkKey = (relation: string, name: string): string => JSON.stringify([relation, name]);
 
 /**
- * Read the installed name of each check a schema states: grizzle's `constraintNameOf(schema,
- * law)`, the one constraint or trigger that discharges it, a row check's CHECK by its declared
- * name and a check over a derived relation's triggers by a digest (grizzle `b34dfbf9`).
- *
- * `constraintNameOf` throws for a law that is no check of the schema, and a refusal may name one:
- * a CDN install's stored level states checks the default `Qti` does not (`#pantry/qti/cdn.ts`),
- * so a refusal read against another schema than the one the database installed names a check this
- * one lacks. Such a check has no installed name here, so the refusal still prints, with its text
- * and the name and rule the table gives it. Only a check the schema states is asked for.
- * `constraintNameOf` compiles the schema's law model on every call, so each check's name is read
- * once per process, on the first refusal by it, and kept.
+ * Each check a schema states, by its relation and declared name ({@link checkKey}), read from its
+ * statements once per schema.
  *
  * @param schema - The schema the import ran against, `Qti`.
- * @returns The check's installed name, none for a check the schema does not state.
+ * @returns The checks' keys.
  */
-const installedNamesOf = Fn.memoize((schema: typeof Qti) => {
-  const stated: ReadonlySet<string> = new Set(
-    schema.statements.flatMap((statement) =>
-      Option.toArray(
-        Option.map(Schema.decodeUnknownOption(CheckStatement)(statement), ({ name, relation }) =>
-          checkKey(relation.name, name),
+const statedChecksOf = Fn.memoize(
+  (schema: typeof Qti): ReadonlySet<string> =>
+    new Set(
+      schema.statements.flatMap((statement) =>
+        Option.toArray(
+          Option.map(Schema.decodeUnknownOption(CheckStatement)(statement), ({ name, relation }) =>
+            checkKey(relation.name, name),
+          ),
         ),
       ),
     ),
-  );
-  const read = new Map<string, string>();
+);
 
-  return (law: LawOf<"check">): Option.Option<string> => {
-    const key = checkKey(law.relation, law.name);
-    if (!stated.has(key)) {
-      return Option.none();
-    }
+/**
+ * Grizzle's lookup of the name PostgreSQL holds each check of a schema under,
+ * `constraintNamesOf(schema)`, bound once per schema by the schema's identity, as
+ * {@link statementLawsOf} binds `lawsByStatement`'s: `constraintNamesOf` compiles the schema's law
+ * model, which takes seconds, and its lookup compiles nothing (grizzle `e3975d35`).
+ */
+const constraintNameLookupOf = Fn.memoize(constraintNamesOf);
 
-    const known = read.get(key);
-    if (known !== undefined) {
-      return Option.some(known);
-    }
-
-    const installed = constraintNameOf(schema, law);
-    read.set(key, installed);
-
-    return Option.some(installed);
-  };
-});
+/**
+ * The installed name of a check a schema states: grizzle's name for the one constraint or trigger
+ * that discharges it, a row check's CHECK by its declared name and a check over a derived
+ * relation's triggers by a digest (grizzle `b34dfbf9`).
+ *
+ * Grizzle's lookup throws for a law that is no check of the schema, and a refusal may name one: a
+ * CDN install's stored level states checks the default `Qti` does not (`#pantry/qti/cdn.ts`), so a
+ * refusal read against another schema than the one the database installed names a check this one
+ * lacks. Such a check has no installed name here, so the refusal still prints, with its text and
+ * the name and rule the table gives it. Only a check the schema states is asked for, so a refusal
+ * that names none compiles nothing.
+ *
+ * @param schema - The schema the import ran against, `Qti`.
+ * @param law - A check law a refusal names.
+ * @returns The check's installed name, none for a check the schema does not state.
+ */
+export const installedNameOf = (schema: typeof Qti, law: LawOf<"check">): Option.Option<string> =>
+  statedChecksOf(schema).has(checkKey(law.relation, law.name))
+    ? Option.some(constraintNameLookupOf(schema)(law))
+    : Option.none();
 
 /**
  * One law of a refusal as the refusal carries it: its display text, the installed name of a check
- * the import's schema states ({@link installedNamesOf}), and the name and rule the law table
+ * the import's schema states ({@link installedNameOf}), and the name and rule the law table
  * gives it.
  *
  * @param law - A law of an `invariant-rejected` outcome.
@@ -1418,7 +1417,7 @@ const installedNamesOf = Fn.memoize((schema: typeof Qti) => {
  */
 const lawFactOf = (law: Law): typeof RefusedLaw.Type => {
   const fact: Types.Mutable<typeof RefusedLaw.Type> = { text: Formatter.format(law) };
-  const installed = law.kind === "check" ? installedNamesOf(Qti)(law) : Option.none();
+  const installed = law.kind === "check" ? installedNameOf(Qti, law) : Option.none();
   if (Option.isSome(installed)) {
     fact.installed = installed.value;
   }
