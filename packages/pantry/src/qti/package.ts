@@ -14,10 +14,17 @@
  * `identifier` has no {@link ManifestId}, and a `cp:resource` none no {@link ResourceId}, so AL3
  * refuses the element alone and no law compares an identifier it does not have.
  *
- * Three relations are projections, keyed by their heading, each owning a counted family whose count
+ * A resource's `type` that is written but spells no `ResourceType` handle is unread: the resource
+ * has no {@link ResourceTyped} and its href no {@link TypedHref}, and its href has an
+ * {@link UnreadTypeHref} instead, a row of its own rather than a sentinel code, so a law can read
+ * that a resource names the path with a type the importer could not read (the oracle's
+ * `itemRefTargetOf` names no target there).
+ *
+ * Four relations are projections, keyed by their heading, each owning a counted family whose count
  * is above 0, so each holds exactly the values some member row holds: {@link FileHref}, the hrefs a
- * package's files name; {@link ResourceFile}, the hrefs each resource's files name; and
- * {@link NamedHref}, the (href, type) pairs the package's resources name. They state the
+ * package's files name; {@link ResourceFile}, the hrefs each resource's files name;
+ * {@link NamedHref}, the (href, type) pairs the package's resources name; and
+ * {@link UnreadTypePath}, the paths the package's resources of an unread type name. They state the
  * existentials a key cannot: a file may be listed by several resources and twice by one (spec
  * reading 36), so no file href is a key.
  *
@@ -337,6 +344,30 @@ export const NamedHref = relation(
 );
 
 /**
+ * The href of a resource whose `type` is written and spells no `ResourceType` handle, keyed by the
+ * resource's node: its {@link ResourceHref}'s package and path, and its {@link Resource}'s `type` as
+ * written, which is nonempty and spells no handle, so the resource has no {@link ResourceTyped} and
+ * its href no {@link TypedHref} (spec reading 67: AL1's value domain refuses the `type` alone). A
+ * resource that writes no `type` has none (AL3 refuses it alone), and neither has one that writes
+ * no `href`, which names no path.
+ */
+export const UnreadTypeHref = relation(
+  "UnreadTypeHref",
+  { node: uuid, package: uuid, path: keyText, typeLexical: keyText },
+  ["node"],
+);
+
+/**
+ * The paths a package's resources of an unread type name, a projection keyed by its heading: one
+ * row per path, its `names` the resources whose href's path it is ({@link UnreadTypeHref}).
+ */
+export const UnreadTypePath = relation(
+  "UnreadTypePath",
+  { names: drawn(natural), package: uuid, path: keyText },
+  ["package", "path"],
+);
+
+/**
  * A file's overlay, keyed by the `cp:file` node: its {@link nodeRef} tuple, its `resource` the
  * node's parent, its resource's package, its `href`'s lexical form, its {@link HrefScope}, and
  * `path`, what it is compared by as {@link ResourceHref}'s is: the entry path it resolves to in
@@ -535,6 +566,14 @@ export const namedHrefFamily = counted(
 );
 
 /**
+ * The paths a package's resources of an unread type name, counted per path.
+ */
+export const unreadTypePathFamily = counted(
+  on(UnreadTypeHref, "package", "path"),
+  fin(UnreadTypePath, "names"),
+);
+
+/**
  * Select the attributes of one name on elements of one kind in the package's manifest: the source
  * of an overlay's copy (C18). The manifest is the package's one `imsmanifest.xml` (IMS Content
  * Packaging 1.2), the one document of type `none` (`RootOfType`'s check), and a content packaging
@@ -648,6 +687,14 @@ const typedResourceHrefs = select(ResourceHref, (h) =>
 );
 
 /**
+ * The hrefs of the resources whose `type` is written and spells no handle: each has its
+ * {@link UnreadTypeHref}.
+ */
+const unreadTypeResourceHrefs = select(ResourceHref, (h) =>
+  h.and(h.ne(h.typeLexical, ""), h.not(Compute.matches(h.typeLexical, spelledResourceTypes))),
+);
+
+/**
  * The files the importer resolved in the package: each names an entry (`file-exists`). An external
  * href is left out (reading 35), and so is one that names its own document, the manifest.
  */
@@ -739,9 +786,12 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  * - **P4 `manifest-id-space` ("Manifest id space"):** no resource's identifier is its manifest's: the
  *   two are one (package, identifier) of {@link ManifestIdSpace}, each side's rows exactly its
  *   written identifiers, and every row but the manifest's a resource's.
- * - **C17 ("E1 derived"):** a resource's type code is the one its lexical form spells, or `none`; a
- *   path resolved in the package holds no dot segment ({@link resolvedPathPattern}); a reference is
- *   its written pieces, external where its target has a scheme or a leading `/`, and its own
+ * - **C17 ("E1 derived"):** a resource's type code is the one its lexical form spells, or `none`; an
+ *   href whose resource writes a `type` that spells no handle is one {@link UnreadTypeHref}, copied
+ *   from its {@link ResourceHref} and its {@link Resource}, and no other href has one, so none
+ *   stands beside a {@link ResourceTyped}; each path such hrefs name is one {@link UnreadTypePath};
+ *   a path resolved in the package holds no dot segment ({@link resolvedPathPattern}); a reference
+ *   is its written pieces, external where its target has a scheme or a leading `/`, and its own
  *   document's only where its target is empty.
  * - **`href-form` ("Href form"), a stated limit:** no href is one the importer reads no name from
  *   (`unresolved`), and a `srcset` is one candidate, its URL alone.
@@ -809,6 +859,20 @@ export const packageLawsByName = {
       on(TypedHref, "node", "package", "type"),
       on(ResourceTyped, "node", "package", "type"),
     ),
+    check("E1_derived", UnreadTypeHref, (h) =>
+      h.and(h.ne(h.typeLexical, ""), h.not(Compute.matches(h.typeLexical, spelledResourceTypes))),
+    ),
+    contained(on(unreadTypeResourceHrefs, "node"), on(UnreadTypeHref, "node")),
+    contained(
+      on(UnreadTypeHref, "node", "package", "path"),
+      on(ResourceHref, "node", "package", "path"),
+    ),
+    contained(
+      on(UnreadTypeHref, "node", "package", "typeLexical"),
+      on(Resource, "node", "package", "typeLexical"),
+    ),
+    unreadTypePathFamily,
+    check("E1_derived", UnreadTypePath, (h) => h.gt(h.names, 0n)),
     check("E1_derived", ResourceHref, (h) =>
       h.or(h.ne(h.scope, "entry"), Compute.matches(h.path, resolvedPathPattern)),
     ),

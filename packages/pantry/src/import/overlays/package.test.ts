@@ -102,8 +102,10 @@ const manifestHrefOf = (href: string, bases: readonly string[]) => {
 };
 
 /**
- * Expect a resource's `href` rows: its `ResourceHref`, resolved by the oracle; and where its type
- * spells a handle, its `TypedHref` and the `NamedHref` of its compared path and type.
+ * Expect a resource's `href` rows: its `ResourceHref`, resolved by the oracle; where its type
+ * spells a handle, its `TypedHref` and the `NamedHref` of its compared path and type; and where its
+ * type is written and spells none, its `UnreadTypeHref` and the `UnreadTypePath` of its compared
+ * path.
  *
  * @param expected - The walk's rows so far.
  * @param resource - The resource's href, node, package, type and its lexical form, and the bases
@@ -132,6 +134,11 @@ const expectHref = (
   for (const code of Option.toArray(type)) {
     expected.TypedHref.set(node, { node, package: pkg, path: at, scope, type: code });
     expected.NamedHref.set(heading([pkg, at, code]), { package: pkg, path: at, type: code });
+  }
+
+  if (Option.isNone(type) && typeLexical !== "") {
+    expected.UnreadTypeHref.set(node, { node, package: pkg, path: at, typeLexical });
+    expected.UnreadTypePath.set(heading([pkg, at]), { package: pkg, path: at });
   }
 };
 
@@ -192,6 +199,8 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     ResourceId: new Map(),
     ResourceTyped: new Map(),
     TypedHref: new Map(),
+    UnreadTypeHref: new Map(),
+    UnreadTypePath: new Map(),
   };
   const document = ids.idOf(0);
   const interactions = new Set<string>(interactionKinds);
@@ -327,6 +336,8 @@ const relationNames = [
   "ResourceFile",
   "ResourceHref",
   "ResourceId",
+  "UnreadTypeHref",
+  "UnreadTypePath",
 ] as const satisfies readonly (keyof PackageRows)[];
 
 /**
@@ -643,6 +654,41 @@ const declaredVersion = (manifest: XmlDocument): Option.Option<string> =>
       .at(0),
   );
 
+/**
+ * Build a manifest of resources, each its own identifier, its href listed as its one file and the
+ * type it writes, if any, and read the rows the builder writes for unread types.
+ *
+ * @param resources - Each resource's href and type, none where it writes no type.
+ * @returns The (path, type as written) of each `UnreadTypeHref`, the path of each `UnreadTypePath`
+ *   and of each `TypedHref`.
+ */
+const unreadOf = (
+  resources: readonly { readonly href: string; readonly type: string | undefined }[],
+) => {
+  const rows = rowsOf(
+    treeOf({
+      manifestBase: undefined,
+      manifestIdentifier: "m",
+      resources: resources.map(({ href, type }) => ({
+        base: undefined,
+        dependencies: [],
+        files: [href],
+        href,
+        identifier: "own",
+        type,
+      })),
+      resourcesBase: undefined,
+    }),
+    ids,
+  );
+
+  return {
+    hrefs: [...rows.UnreadTypeHref.values()].map(({ path, typeLexical }) => [path, typeLexical]),
+    paths: [...rows.UnreadTypePath.values()].map(({ path }) => path),
+    typed: [...rows.TypedHref.values()].map(({ path }) => path),
+  };
+};
+
 describe("import/overlays/package.ts", () => {
   it.effect("writes each overlay's rows as the walk of the manifest's tree names them", (ctx) =>
     // Oracle: a second implementation, a direct walk of the XDM document that numbers its nodes in
@@ -706,6 +752,42 @@ describe("import/overlays/package.ts", () => {
       ),
     ),
   );
+
+  it("writes an UnreadTypeHref and an UnreadTypePath for a resource whose written type spells no handle, and none for a typed or untyped one", () => {
+    // Oracle: R-O6's manifest (the genetic repair's gr-5a): its first resource's type carries a
+    // trailing space, so it spells no handle; the test resource's spells one. A `bogus` type is
+    // unread too; a resource that writes no type has neither row, and AL3 refuses it alone.
+    assert.deepStrictEqual(
+      unreadOf([
+        { href: "item.xml", type: "resourceextmetadata/xml " },
+        { href: "test.xml", type: "imsqti_test_xmlv3p0" },
+      ]),
+      {
+        hrefs: [["item.xml", "resourceextmetadata/xml "]],
+        paths: ["item.xml"],
+        typed: ["test.xml"],
+      },
+      "R-O6",
+    );
+    assert.deepStrictEqual(
+      unreadOf([{ href: "item.xml", type: "bogus" }]),
+      { hrefs: [["item.xml", "bogus"]], paths: ["item.xml"], typed: [] },
+      "bogus",
+    );
+    assert.deepStrictEqual(
+      unreadOf([{ href: "item.xml", type: undefined }]),
+      { hrefs: [], paths: [], typed: [] },
+      "no type",
+    );
+    assert.deepStrictEqual(
+      unreadOf([
+        { href: "item.xml", type: "bogus" },
+        { href: "item.xml", type: "bogus" },
+      ]).paths,
+      ["item.xml"],
+      "two unread resources of one path, one UnreadTypePath",
+    );
+  });
 });
 
 layer(TestLayer, { excludeTestServices: true })("import/overlays/package.ts, fixtures", (suite) => {

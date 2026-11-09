@@ -223,6 +223,8 @@ import {
   TextReference,
   TextReferencePath,
   TypedHref,
+  UnreadTypeHref,
+  UnreadTypePath,
 } from "#pantry/qti/package.ts";
 import { catalogLaws, catalogRelations } from "#pantry/qti/catalog.ts";
 import { quotationLaws, quotationRelations } from "#pantry/qti/quotation.ts";
@@ -386,6 +388,8 @@ const packageRelations = {
   TextReference,
   TextReferencePath,
   TypedHref,
+  UnreadTypeHref,
+  UnreadTypePath,
 };
 
 /**
