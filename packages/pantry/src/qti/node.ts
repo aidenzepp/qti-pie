@@ -519,24 +519,24 @@ export const nodeRef = on(Node, "id", "document", "kind", "start", "nearest", "v
 /**
  * A node's context (spec readings 85 and 117): the fields the tree's owner axis copies to its
  * children, with its id, children, document and start, and its document's type, which every node
- * of a document holds alike. It is exactly the column set the owner
- * axis's foreign key targets, so a containment into it shares that UNIQUE on `Node` and adds no
- * index: a document's `Document` row states its document node's context through it, and an
- * include's site copies the include's ancestry and nearest interaction through it.
+ * of a document holds alike. It is exactly the columns the owner axis's foreign key targets, in the
+ * order grizzle carries them, by their declared places (grizzle `85ec7ecf`), so a containment into
+ * it shares that UNIQUE on `Node` and adds no index: an include's site copies the include's
+ * ancestry and nearest interaction through it.
  */
 export const nodeContext = on(
   Node,
   "id",
   "children",
-  "ancestry",
+  "start",
   "document",
+  "ancestry",
   "documentType",
   "governor",
   "kind",
   "nearest",
   "nearestKind",
   "parentKind",
-  "start",
   "version",
 );
 
@@ -656,7 +656,7 @@ const stringValueFold = fold(
  *   key, planned from the plain `parent`, holds the root to itself, which leaves `parentAncestry`
  *   free, since `Enters(document)` is empty (C10). So the root's copies and `state` are pinned
  *   here. Its ancestry and nearest interaction are its document's context (spec reading 117), which
- *   its `Document` row states through {@link nodeContext}: none and itself for every document but
+ *   its `Document` row states (`#pantry/qti/chardata.ts`): none and itself for every document but
  *   an included fragment, whose content is judged in the context its includes stand in.
  * - **N3:** the parent copies, riding the owner axis.
  * - **N5:** the predecessor copy, riding the predecessor axis; `N5_Follow`, one `Follow` bit of its

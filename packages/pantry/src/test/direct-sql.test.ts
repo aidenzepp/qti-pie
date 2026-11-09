@@ -701,8 +701,8 @@ describe("the direct writer's copies across containments", () => {
     (ctx) =>
       // Oracle: the specification as a checker, Qti's statements: T3 holds a tree member's
       // documentType to its parent's, AL1 owner an attribute's to its element's, and the
-      // `Document` row's containment into `nodeContext` the root's to its documentType, so every
-      // node and attribute of a document holds the one type.
+      // `Document` row's containment into its document node the root's to its documentType, so
+      // every node and attribute of a document holds the one type.
       // Bound: trees of up to 8 nodes with up to two attributes each, the type stated on the root
       // or on its Document row, in a drawn order of all the facts.
       searched(

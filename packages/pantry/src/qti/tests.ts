@@ -496,10 +496,10 @@ export const SectionOrdering = relation(
  * gives an Include (spec reading 114), each the place where the document it names is merged into
  * its own (information model §7.5 and §2.12).
  *
- * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`,
- *   `ancestry`, `document`, `documentType`, `governor`, `kind`, `nearest`, `nearestKind`,
- *   `parentKind`, `start`, `version`), which also holds its {@link nodeRef} fields but `parent`;
- *   `parent`; and the scope it is placed in, its parent's: `part`, `replaced` (its parent section's
+ * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`, `start`,
+ *   `document`, `ancestry`, `documentType`, `governor`, `kind`, `nearest`, `nearestKind`,
+ *   `parentKind`, `version`), which also holds its {@link nodeRef} fields but `parent`; `parent`;
+ *   and the scope it is placed in, its parent's: `part`, `replaced` (its parent section's
  *   `replacing`), `parentMixes` and `parentLooseChain`.
  *
  * Its `part` is the test part it sits in: its parent section's under a section, its parent under a
@@ -2298,15 +2298,15 @@ export const testLawsByName = {
         Site,
         "node",
         "children",
-        "ancestry",
+        "start",
         "document",
+        "ancestry",
         "documentType",
         "governor",
         "kind",
         "nearest",
         "nearestKind",
         "parentKind",
-        "start",
         "version",
       ),
       nodeContext,
