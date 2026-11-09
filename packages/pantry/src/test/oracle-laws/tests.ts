@@ -400,14 +400,17 @@ const itemRefLawsOf = (
       .flatMap((mapping): readonly Breach[] => {
         const written = typedValueOf(rows, mapping.id, "source-identifier");
         const source = Option.getOrElse(written, () => "");
-        const mapped = Option.getOrElse(
-          typedValueOf(rows, mapping.id, "target-identifier"),
-          () => "",
-        );
+        const targeted = typedValueOf(rows, mapping.id, "target-identifier");
+        const mapped = Option.getOrElse(targeted, () => "");
         // An unwritten or unread source-identifier names nothing: AL3 refuses it alone, as the
-        // importer writes no row for an absent attribute (reading 155).
+        // importer writes no row for an absent attribute (reading 155). Neither half of a pair with
+        // one half unwritten or unread names anything, as the importer writes a mapping's row only
+        // where both are written.
         const sourced =
-          linked || Option.isNone(written) || kindsOf(source).includes("qti-outcome-declaration")
+          linked ||
+          Option.isNone(written) ||
+          Option.isNone(targeted) ||
+          kindsOf(source).includes("qti-outcome-declaration")
             ? []
             : [breachAt(rows, mapping, "Variable mapping source", { itemRef, source })];
         const shadowed =
