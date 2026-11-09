@@ -358,8 +358,10 @@ const stimulusRefKeyOf = (listed: ListedRows): readonly Breach[] => {
  * Judge what each item ref of a test or section document names, whether or not it writes an
  * identifier: its href, where it writes one, names an item or an LTI link of the package (B2, B3),
  * and one that writes none names nothing, which AL3 alone refuses (spec reading 155); each variable
- * mapping's source an outcome its item declares and its target no other variable of it (A34,
- * reading 97); and each template default's template a template its item declares (A37).
+ * mapping's source, where it writes one, an outcome its item declares and its target no other
+ * variable of it (A34, reading 97); and each template default's template, where it writes one, a
+ * template its item declares (A37). An unwritten or unread identifier names nothing, which AL3
+ * alone refuses.
  *
  * @param input - The package.
  * @param document - The document.

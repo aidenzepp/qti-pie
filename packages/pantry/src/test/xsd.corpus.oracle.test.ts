@@ -26,7 +26,8 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as unit, layer } from "@effect/vitest";
-import { Console, Effect, FileSystem, Layer, Option, Result } from "effect";
+import { Console, Effect, FileSystem, Layer, Result } from "effect";
+import type { Option } from "effect";
 import { Digest } from "effect/crypto";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
@@ -48,12 +49,10 @@ import {
   elementGrainDifferences,
   emptyIdrefsRecord,
   foreignNamesOf,
-  holdsNilValue,
-  holdsPaddedId,
+  gateHolds,
   isLaxXsiType,
   isNestedRoot,
   isNestedRootLaw,
-  isSkippedContent,
   judgeDocument,
   laxNilRecord,
   laxXsiType,
@@ -173,11 +172,9 @@ const documentRowsOf = Effect.fn("xsd.documentRowsOf")(function* documentRowsOf(
 
 /**
  * Find the record a difference matches, holding libxml2's gated classes to the document's own rows
- * as `generatedRecordOf` holds a generated document's: its unchecked nillability only where the
- * document holds an `xsi:nil` that is no `xs:boolean`, its skipped content only at the places its
- * rows show libxml2 skipped, and its padded `xml:id` only where the two holders' `xml:id`s are one
- * padded. Each record's detail names less than its class, so by the detail alone a record would
- * match a difference of the same words but not the same shape.
+ * by the gate the generated path judges by ({@link gateHolds}). Each such record's detail names
+ * less than its class, so by the detail alone it would match a difference of the same words but
+ * not the same shape.
  *
  * @param document - The document, by a zip and a path, as a record's `document` pattern reads it.
  * @param version - The version it was judged in.
@@ -197,13 +194,7 @@ const gatedRecordOf = (
     document,
     version,
     difference,
-    records.filter(
-      (held) =>
-        (held !== nilValueRecord ||
-          Option.exists(rows.root, (root) => holdsNilValue(difference, root))) &&
-        (held !== skippedContentRecord || isSkippedContent(difference, rows.names)) &&
-        (held !== paddedIdRecord || holdsPaddedId(difference, rows.names)),
-    ),
+    records.filter((held) => gateHolds(held, difference, rows.names, rows.root)),
   );
 
 /**

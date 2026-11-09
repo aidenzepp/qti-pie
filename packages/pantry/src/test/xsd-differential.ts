@@ -161,8 +161,9 @@ const unadmittedNil =
  * the value is a valid `xs:boolean` (`xmlschemas.c:25264-25287` in v2.9.13). With a boolean value
  * it says "The element is not 'nillable'.", which the catalog classes `attribute-allowed`, so the
  * two oracles agree. The law oracle's refusal is the codec's, which names the attribute and not
- * its value, so the detail cannot tell the two apart: a generated document's difference matches
- * only where the document holds such an `xsi:nil` that is no `xs:boolean` ({@link holdsNilValue}).
+ * its value, so the detail cannot tell the two apart: a difference matches only where the document
+ * holds such an `xsi:nil` that is no `xs:boolean` ({@link holdsNilValue}, through
+ * {@link gateHolds}).
  */
 export const nilValueRecord: Recorded = {
   class: "attribute-allowed",
@@ -354,8 +355,8 @@ const documentKeyDetail =
  * are two IDs to it, and so are `&#x9;v ` twice, the second keyed collapsed beside the first's raw
  * form. XML Schema keys the collapsed value (Part 1, 3.3.4, cvc-id.2; `xs:ID` collapses its
  * whitespace, Part 2, 3.3.8), and so do the xml:id Recommendation and the law oracle. The detail
- * names the collapsed ID alone, so a generated document's difference matches only where both
- * holders carry an `xml:id` and one of the two is padded ({@link holdsPaddedId}).
+ * names the collapsed ID alone, so a difference matches only where both holders carry an `xml:id`
+ * and one of the two is padded ({@link holdsPaddedId}, through {@link gateHolds}).
  */
 export const paddedIdRecord: Recorded = {
   class: "identity",
@@ -424,9 +425,9 @@ export const holdsPaddedId = (
  *
  * Only an element a wildcard or the codec leaves to lax assessment reaches such a refusal, since
  * the codec refuses a strictly assessed element whose `xsi:type` names no type, so the detail is a
- * law refusal at a node within a foreign element. The corpus matches it by that alone; a generated
- * document's difference matches it only at the places the document's rows show libxml2 skipped
- * ({@link isSkippedContent}).
+ * law refusal at a node within a foreign element. A difference of the corpus or of a generated
+ * document matches it only at the places the document's rows show libxml2 skipped
+ * ({@link isSkippedContent}, through {@link gateHolds}).
  */
 export const skippedContentRecord: Recorded = {
   detail:
@@ -778,6 +779,32 @@ export const isSkippedContent = (
 };
 
 /**
+ * Decide whether a record's gate holds for a difference. Three of libxml2's classes name less in
+ * their detail than in their class, so each is held to the document's own rows:
+ * {@link nilValueRecord} where the document holds an `xsi:nil` that is no `xs:boolean`
+ * ({@link holdsNilValue}), {@link skippedContentRecord} at the places its rows show libxml2 skipped
+ * ({@link isSkippedContent}), and {@link paddedIdRecord} where the two holders' `xml:id`s are one
+ * padded ({@link holdsPaddedId}). Every other record has no gate. The corpus and the generated path
+ * ({@link generatedRecordOf}) both judge by it.
+ *
+ * @param held - The record.
+ * @param difference - The difference.
+ * @param names - The document's names.
+ * @param root - The document's root, or none where it could not be read.
+ * @returns Whether the record may account for the difference.
+ */
+export const gateHolds = (
+  held: Recorded,
+  difference: Difference,
+  names: Pick<ForeignNames, "skippedPaths" | "skippedValues" | "xmlIds">,
+  root: Option.Option<Element>,
+): boolean =>
+  (held !== nilValueRecord ||
+    Option.exists(root, (element) => holdsNilValue(difference, element))) &&
+  (held !== skippedContentRecord || isSkippedContent(difference, names)) &&
+  (held !== paddedIdRecord || holdsPaddedId(difference, names));
+
+/**
  * Decide whether a difference is reading 81's limit ({@link outsideSet}): the law oracle refuses an
  * element whose kind's namespace, or an `xml:` or XLink attribute whose namespace, the document's
  * schema set does not declare, and a kind that stands in more than one set read it: a foreign
@@ -1110,7 +1137,7 @@ export const generatedRecorded: readonly Recorded[] = [
     reason: {
       _tag: "specification",
       source:
-        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateBlock (§5.145, info.txt:44712 and info301.txt:65416: 'A qti-template-block must not contain any interactions, either directly or indirectly'); VD's ruling of 2026-11-07, its reading to come at schema slot 7",
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateBlock (§5.145: 'A qti-template-block must not contain any interactions, either directly or indirectly'); VD's ruling of 2026-11-07, its reading to come at schema slot 7",
       why: "a template block holds no interaction at any depth; the XSD admits one its content's HTML holds",
     },
     rule: "ancestry-ban",
@@ -1123,7 +1150,7 @@ export const generatedRecorded: readonly Recorded[] = [
     reason: {
       _tag: "specification",
       source:
-        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_ModalFeedback (§5.93, info.txt:35232 and info-v3p0p1.txt:35686: 'The content of the modalFeedback must not contain any interactions')",
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_ModalFeedback (§5.93: 'The content of the modalFeedback must not contain any interactions')",
       why: "a modal feedback holds no interaction at any depth; the XSD admits one its content body's HTML holds",
     },
     rule: "ancestry-ban",
@@ -2376,10 +2403,8 @@ export interface GeneratedContext {
  * Find the record a generated or bred document's difference matches: reading 114's fragment root,
  * reading 6's nested roots on `xmllint`'s side and on the law oracle's, reading 61's ordering slot,
  * reading 81's schema set by the rows or by an edit the codec refused, reading 60's lax
- * `xsi:type`, and then the corpus's, libxml2's and the generated records, libxml2's unchecked
- * nillability only where the document holds an `xsi:nil` that is no `xs:boolean`, its skipped
- * content only at the places its rows show libxml2 skipped, and its padded `xml:id` only where the
- * two holders' `xml:id`s are one padded.
+ * `xsi:type`, and then the corpus's, libxml2's and the generated records, each held to its gate
+ * ({@link gateHolds}).
  *
  * @param difference - The difference.
  * @param context - What the classes read of the document.
@@ -2421,18 +2446,19 @@ export const generatedRecordOf = (
     return laxXsiType;
   }
 
+  const holds = (held: Recorded): boolean => gateHolds(held, difference, names, Option.some(root));
+  // WHY: nilValueRecord's gate is judged after the match, so a difference it matches by detail in a
+  // document that holds no such xsi:nil is matched by no record rather than by a later one.
   const record = recordOf(
     context.document,
     context.version,
     difference,
     [...recorded, ...libxml2Records, ...generatedRecorded].filter(
-      (held) =>
-        (held !== skippedContentRecord || isSkippedContent(difference, names)) &&
-        (held !== paddedIdRecord || holdsPaddedId(difference, names)),
+      (held) => held === nilValueRecord || holds(held),
     ),
   );
 
-  return record === nilValueRecord && !holdsNilValue(difference, root) ? undefined : record;
+  return record === undefined || holds(record) ? record : undefined;
 };
 
 /**
