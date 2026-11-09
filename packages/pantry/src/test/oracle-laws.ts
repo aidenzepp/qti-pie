@@ -166,7 +166,7 @@ export const policyLaws = {
   "CDN origin":
     "the policy holds every fetched address to its origin, which this package's own install leaves free; cdn.test.ts holds its patterns to the URL Standard and to HTML's srcset parser",
   "CDN style":
-    "the policy refuses a style that fetches, which this package's own install admits; cdn.test.ts holds its pattern to the text it names",
+    "the policy refuses a style that fetches, which this package's own install admits; cdn.test.ts holds its pattern to the texts it names and the backslash",
 } as const satisfies Readonly<Record<string, string>>;
 
 /**

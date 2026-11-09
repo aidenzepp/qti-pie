@@ -286,7 +286,7 @@ export const lawTable = {
   "CDN style": {
     rule: "cdn-style",
     source:
-      "a single-CDN install's policy (#pantry/db/install.ts, policy.json): no style attribute makes the player fetch, so none holds url( or @import, in any case (https://www.w3.org/TR/css-syntax-3/#consume-ident-like-token, https://www.w3.org/TR/css-cascade-4/#at-import) (cdn.ts CDN_style)",
+      "a single-CDN install's policy (#pantry/db/install.ts, policy.json): no style attribute makes the player fetch, so none holds url(, @import, image-set( or src(, in any case, or a backslash, which begins an escape that could spell any of them (https://www.w3.org/TR/css-syntax-3/#consume-ident-like-token, https://www.w3.org/TR/css-syntax-3/#consume-escaped-code-point, https://www.w3.org/TR/css-cascade-4/#at-import, https://www.w3.org/TR/css-images-4/#image-set-notation, https://www.w3.org/TR/css-values-4/#urls) (cdn.ts CDN_style)",
   },
   "Choice bounds": {
     rule: "choice-bounds",

@@ -17,7 +17,8 @@
  *   of an address list (`xsi:schemaLocation`). A `srcset`'s candidates and a media URL's are
  *   fetched fields, typed `URLDType` rather than `xs:anyURI`, which CDN origin holds to the
  *   origin.
- * - **CDN style** (rule `cdn-style`): no `style` attribute holds `url(` or `@import`, in any case.
+ * - **CDN style** (rule `cdn-style`): no `style` attribute holds `url(`, `@import`, `image-set(` or
+ *   `src(`, in any case, or a backslash, which begins a CSS escape ({@link styleFetch}).
  * - **CDN foreign** (rule `cdn-foreign`): no markup pantry keeps but cannot interpret, which could
  *   carry an address no law above reads: no foreign element, of any of the three namespace classes
  *   (`foreignKinds` of `#pantry/grammar/kinds.ts`), and no attribute of an open class but `data-*`,
@@ -85,9 +86,16 @@ export const dataScheme = `^[${leadingStripped}]*[dD][${tabOrNewline}]*[aA][${ta
 export const dataToken = `(?:^|[${tabOrNewline} ])[${leadingStripped}]*[dD][aA][tT][aA]:`;
 
 /**
- * A style that makes the player fetch: CSS's `url(` or an `@import`, in any case.
+ * A style that makes the player fetch, or could spell a fetch past this pattern, in any case: CSS's
+ * `url(`, an `@import`, `image-set(` (`-webkit-image-set(` among them) and `src(`, each of which
+ * takes an address as a plain string, and any backslash, which begins a CSS escape, so no escaped
+ * spelling such as `\75 rl(` names a function the pattern does not read.
+ *
+ * @see {@link https://www.w3.org/TR/css-syntax-3/#consume-escaped-code-point | CSS Syntax 3, consume an escaped code point}
+ * @see {@link https://www.w3.org/TR/css-images-4/#image-set-notation | CSS Images 4, image-set()}
+ * @see {@link https://www.w3.org/TR/css-values-4/#urls | CSS Values 4, src()}
  */
-export const styleFetch = String.raw`[uU][rR][lL]\(|@[iI][mM][pP][oO][rR][tT]`;
+export const styleFetch = String.raw`[uU][rR][lL]\(|@[iI][mM][pP][oO][rR][tT]|[iI][mM][aA][gG][eE]-[sS][eE][tT]\(|[sS][rR][cC]\(|\\`;
 
 /**
  * Write an origin as the text a pattern matches literally: its dots escaped, the only operator a

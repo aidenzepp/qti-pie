@@ -8,7 +8,7 @@
  *   Standard's leading strip; and every value it admits against the URL Standard's own parser
  *   (Node's `URL`), which must resolve it on the origin;
  * - **CDN data** against the URL Standard's scheme, Node's `URL`'s protocol;
- * - **CDN style** against the text it names, in any case;
+ * - **CDN style** against the texts it names, in any case, and the backslash;
  * - **CDN foreign** against the three foreign kinds and the three open classes it names, over every
  *   kind and every attribute name.
  *
@@ -295,7 +295,7 @@ const fetchedFields: readonly FetchedField[] = fetchedAttributes.flatMap(({ form
 
 /**
  * Attributes the player never fetches, which CDN origin leaves free: a link, identifiers written as
- * URIs, an image's text, response processing's template, and a MathML annotation's source.
+ * URIs, an image's text, response processing's template, and a MathML element's link.
  */
 const freeFields = [
   { governor: "a", name: "href" },
@@ -303,7 +303,7 @@ const freeFields = [
   { governor: "img", name: "alt" },
   { governor: "qti-portable-custom-interaction", name: "custom-interaction-type-identifier" },
   { governor: "qti-response-processing", name: "template" },
-  { governor: "m:annotation", name: "src" },
+  { governor: "m:mglyph", name: "href" },
 ] as const;
 
 /**
@@ -625,7 +625,7 @@ describe("qti/cdn.ts, CDN data", () => {
 
 describe("qti/cdn.ts, CDN style", () => {
   it.effect(
-    "refuses a style attribute exactly when it holds url( or @import, in any case, and leaves every other attribute free",
+    "refuses a style attribute exactly when it holds url(, @import, image-set( or src(, in any case, or a backslash, and leaves every other attribute free",
     (ctx) =>
       searched(
         ctx,
@@ -655,6 +655,15 @@ describe("qti/cdn.ts, CDN style", () => {
                       "@ import",
                       "@im",
                       "port",
+                      "image-set(",
+                      "-WebKit-Image-Set(",
+                      "image-set (",
+                      "src(",
+                      "SRC(",
+                      "sr",
+                      "c(",
+                      "\\",
+                      "\\75 rl(",
                       "color: red",
                       ";",
                       "x",
@@ -668,7 +677,7 @@ describe("qti/cdn.ts, CDN style", () => {
             literal: Formatter.format,
             oracle: {
               kind: "specification",
-              name: "the texts the law names, url( and @import, in any case",
+              name: "the texts the law names, url(, @import, image-set( and src(, in any case, and the backslash",
             },
             runs: 2000,
             shrink: completeShrink,
@@ -678,8 +687,8 @@ describe("qti/cdn.ts, CDN style", () => {
           ({ name, policy, value }, c) =>
             Effect.sync(() => {
               const lowered = value.toLowerCase();
-              const admitted =
-                name !== "style" || !(lowered.includes("url(") || lowered.includes("@import"));
+              const fetching = ["url(", "@import", "image-set(", "src(", "\\"];
+              const admitted = name !== "style" || !fetching.some((text) => lowered.includes(text));
               const verdict = checkOf(
                 policy,
                 "CDN style",

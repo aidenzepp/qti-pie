@@ -43,8 +43,9 @@ export interface FetchedAttribute {
  * - `img`'s `src`, and a `source`'s `src` and `srcset`, in a `picture`, an `audio` or a `video`;
  * - `audio`'s, `video`'s and `track`'s `src`, and `video`'s `poster`;
  * - `object`'s `data`;
- * - MathML's `mglyph` `src` and `math` `altimg`;
- * - SSML's `audio` `src`;
+ * - MathML's `mglyph` `src`, `math` `altimg`, and `annotation`, `annotation-xml` and `share` `src`,
+ *   an annotation's or a shared subtree's address a renderer may load;
+ * - SSML's `audio` `src`, and `lexicon` `uri`, the pronunciation lexicon a synthesizer loads;
  * - `qti-stylesheet`'s `href`;
  * - A portable custom interaction's modules: each `qti-interaction-module`'s `primary-path` and
  *   `fallback-path`, and `qti-interaction-modules`'s `primary-configuration` and
@@ -61,7 +62,11 @@ export const fetchedAttributes = [
   { form: "address", kind: "object", name: "data" },
   { form: "address", kind: "m:mglyph", name: "src" },
   { form: "address", kind: "m:math", name: "altimg" },
+  { form: "address", kind: "m:annotation", name: "src" },
+  { form: "address", kind: "m:annotation-xml", name: "src" },
+  { form: "address", kind: "m:share", name: "src" },
   { form: "address", kind: "ssml:audio", name: "src" },
+  { form: "address", kind: "ssml:lexicon", name: "uri" },
   { form: "address", kind: "qti-stylesheet", name: "href" },
   { form: "address", kind: "qti-interaction-module", name: "primary-path" },
   { form: "address", kind: "qti-interaction-module", name: "fallback-path" },
