@@ -35,6 +35,29 @@ import { comparedPathOf, entryPathOf, hrefResolverOf } from "#pantry/import/over
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import type {
+  AssembledName,
+  BranchResolution,
+  BranchRule,
+  BranchShuffle,
+  BranchTarget,
+  Inclusion,
+  Instance,
+  InstanceName,
+  Named,
+  Section,
+  SectionMember,
+  SectionOrdering,
+  SectionSelection,
+  Site,
+  SitePath,
+  SiteTarget,
+  StimulusRef,
+  TestDocument,
+  TestFlag,
+  TestToken,
+  VariableMapping,
+} from "#pantry/qti/tests.ts";
 import {
   assembledRoots,
   branchRuleKind,
@@ -53,31 +76,8 @@ import {
   splicingParents,
   stimulusRefKind,
   testKind,
-} from "#pantry/qti/tests.ts";
-import type {
-  AssembledName,
-  BranchResolution,
-  BranchRule,
-  BranchShuffle,
-  BranchTarget,
-  FlagName,
-  Inclusion,
-  Instance,
-  InstanceName,
-  Named,
-  Section,
-  SectionMember,
-  SectionOrdering,
-  SectionSelection,
-  Site,
-  SitePath,
-  SiteTarget,
-  StimulusRef,
-  TestDocument,
-  TestFlag,
-  TestToken,
-  VariableMapping,
-} from "#pantry/qti/tests.ts";
+} from "#pantry/vocab/terms/tests.ts";
+import type { FlagName } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * What one document's rows are written under: its nodes' ids, its package's id, its entry's path,

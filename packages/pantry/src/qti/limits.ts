@@ -21,7 +21,15 @@
  *
  * @see {@link https://github.com/postgres/postgres/blob/REL_19_STABLE/src/include/access/nbtree.h | PostgreSQL, nbtree.h BTMaxItemSize}
  */
-import { closedId, keyTextBytes as bytesBeside, natural, str, uuid } from "@bjornpagen/grizzle";
+import {
+  closedId,
+  keyTextBytes as bytesBeside,
+  lexicalForm,
+  natural,
+  pg,
+  str,
+  uuid,
+} from "@bjornpagen/grizzle";
 import { anyText, Position } from "#pantry/grammar/install.ts";
 
 /**
@@ -109,3 +117,14 @@ const utf8 = new TextEncoder();
  * @returns Its bytes.
  */
 export const utf8Length = (text: string): number => utf8.encode(text).length;
+
+/**
+ * The lexical form of an integer `Compute.cast` reads exactly: `xs:integer`'s, within PostgreSQL's
+ * signed 64-bit range, a stated limit of the representation as the key-text bounds are. Spec
+ * reading 46 holds a `qti-equal-rounded` `figures` to that range, so every integer AL1's lexical
+ * half admits is in it, and a MathML alignment `selection` outside it counts as 0, which no child
+ * has. The schema's casts (`#pantry/qti/operators.ts`, `#pantry/qti/mathml-align.ts`) and the
+ * importer's reading of a selection (`#pantry/import/overlays/mathml-align.ts`) share this one
+ * statement.
+ */
+export const integerForm = lexicalForm(pg.bigint);

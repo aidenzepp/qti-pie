@@ -51,17 +51,6 @@ import type { Folds } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import {
-  expressionKinds,
-  processingReferences,
-  rootLanguages,
-  ruleKindHandles,
-  setterKinds,
-  typings,
-  valueBaseOf,
-  valueCardinalityOf,
-} from "#pantry/qti/expression-types.ts";
-import { optionallyTypedKinds } from "#pantry/qti/expressions.ts";
 import type {
   AssembledReference,
   Expression,
@@ -93,6 +82,19 @@ import type {
   VariableRefDeclaration,
   VariableRefTable,
 } from "#pantry/qti/expressions.ts";
+import type { ItemRefDocument, ItemRefHref, ItemRefTarget } from "#pantry/qti/tests.ts";
+import type { DeclarationCardinality, DeclarationIdentifier } from "#pantry/qti/declarations.ts";
+import {
+  expressionKinds,
+  processingReferences,
+  rootLanguages,
+  ruleKindHandles,
+  setterKinds,
+  typings,
+  valueBaseOf,
+  valueCardinalityOf,
+} from "#pantry/vocab/terms/expression-types.ts";
+import { optionallyTypedKinds } from "#pantry/vocab/terms/expressions.ts";
 import {
   itemKind,
   itemRefKind,
@@ -102,9 +104,7 @@ import {
   sectionKind,
   sectionRefKind,
   testKind,
-} from "#pantry/qti/tests.ts";
-import type { ItemRefDocument, ItemRefHref, ItemRefTarget } from "#pantry/qti/tests.ts";
-import type { DeclarationCardinality, DeclarationIdentifier } from "#pantry/qti/declarations.ts";
+} from "#pantry/vocab/terms/tests.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number

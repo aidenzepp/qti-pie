@@ -16,8 +16,9 @@ import { assert, describe, it } from "@effect/vitest";
 import { Result } from "effect";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import { ObjectIdentifier, objectKinds } from "#pantry/qti/metadata.ts";
-import { itemKind, testKind } from "#pantry/qti/tests.ts";
+import { ObjectIdentifier } from "#pantry/qti/metadata.ts";
+import { objectKinds } from "#pantry/vocab/terms/metadata.ts";
+import { itemKind, testKind } from "#pantry/vocab/terms/tests.ts";
 
 describe("qti/metadata.ts ObjectIdentifier, the root identifier a program keys by", () => {
   it("copies the identifier of a test's root, as of an item's", () => {

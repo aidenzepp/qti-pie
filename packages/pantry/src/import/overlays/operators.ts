@@ -18,7 +18,6 @@ import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { equalRoundedMode, roundingKinds } from "#pantry/qti/operators.ts";
 import type {
   Rounding,
   RoundingFigures,
@@ -27,6 +26,7 @@ import type {
   Tolerance,
   ToleranceToken,
 } from "#pantry/qti/operators.ts";
+import { equalRoundedMode, roundingKinds } from "#pantry/vocab/terms/operators.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number

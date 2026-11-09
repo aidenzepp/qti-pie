@@ -72,7 +72,6 @@ import {
 } from "#pantry/qti/interactions.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
 import {
   assertVerdict,
   foreignKeysBetween,
@@ -83,6 +82,7 @@ import {
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * A uuid no stored row holds: the document and the declaration every stray row names.

@@ -35,25 +35,20 @@ import {
   BaseTypePattern,
   booleanValuePattern,
   domainValues,
-  expressionKinds,
   Language,
   LeadCardinality,
   OperandBase,
   pairValuePattern,
   pointValuePattern,
-  processingReferences,
   ReferenceBase,
   ReferenceDeclaration,
-  referenceDeclarations,
   setKindHandles,
-  setterKinds,
   lookupKindHandle,
   ReferencedTable,
   ReferenceResolution,
   ResultBase,
   ResultCardinality,
   RpTemplate,
-  ruleKindHandles,
   TableReader,
   TailCardinality,
   unjudgedBaseTypes,
@@ -81,8 +76,15 @@ import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { qtiRelations } from "#pantry/qti/base.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { itemRefKind, linkResourceTypes } from "#pantry/qti/tests.ts";
 import { contentEnds } from "#pantry/test/indexes.ts";
+import {
+  expressionKinds,
+  processingReferences,
+  referenceDeclarations,
+  setterKinds,
+  ruleKindHandles,
+} from "#pantry/vocab/terms/expression-types.ts";
+import { itemRefKind, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

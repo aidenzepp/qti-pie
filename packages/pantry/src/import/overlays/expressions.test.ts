@@ -62,7 +62,6 @@ import {
   conditionKindHandles,
   containerKinds,
   declaredKinds,
-  expressionKinds,
   firstKinds,
   LeadCardinality,
   lookupKindHandle,
@@ -72,11 +71,8 @@ import {
   OperandBase,
   outcomeOnlyKinds,
   ReferenceBase,
-  referenceDeclarations,
   ResultBase,
   ResultCardinality,
-  rootLanguages,
-  ruleKindHandles,
   secondKinds,
   setKindHandles,
   TailCardinality,
@@ -85,6 +81,12 @@ import {
   ValueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import {
+  expressionKinds,
+  referenceDeclarations,
+  rootLanguages,
+  ruleKindHandles,
+} from "#pantry/vocab/terms/expression-types.ts";
 
 /**
  * The fixtures' directory.

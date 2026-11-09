@@ -53,7 +53,6 @@ import {
   fold,
   generated,
   key,
-  lexicalForm,
   mirrors,
   Monoid,
   natural,
@@ -67,25 +66,9 @@ import {
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { idValuePattern, spacePattern } from "#pantry/qti/identity.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { integerForm, keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
-
-/**
- * The kinds of the rounding operators, whose `figures` reading 119 reads.
- */
-export const roundingKinds = ["qti-equal-rounded", "qti-round-to"] as const;
-
-/**
- * The rounding modes, the values of `RoundingModeEnum` (info §8.26).
- */
-export const roundingModes = ["decimalPlaces", "significantFigures"] as const;
-
-/**
- * The `rounding-mode` in force on a `qti-equal-rounded` that writes none: the XSD's default
- * (`EqualRoundedDType`'s `rounding-mode`, `default="significantFigures"`; info §5.47.1). A
- * `qti-round-to` has none, since `RoundToDType` requires the attribute (§5.119.1).
- */
-export const equalRoundedMode = "significantFigures" satisfies (typeof roundingModes)[number];
+import { equalRoundedMode, roundingKinds, roundingModes } from "#pantry/vocab/terms/operators.ts";
 
 /**
  * Which of reading 119's two inputs a rounding operator has, its {@link Rounding} row's `holds`:
@@ -103,13 +86,6 @@ export const RoundingHolds = closed("RoundingHolds", ["neither", "mode", "figure
  * `tolerance` (info §5.46.2).
  */
 export const rangeModes = ["absolute", "relative"] as const;
-
-/**
- * The lexical form of a `figures` that `Compute.cast` reads exactly: `xs:integer`'s, within the
- * signed 64-bit range spec reading 46 holds `figures` to, so every integer AL1's lexical half
- * admits is in it.
- */
-export const integerForm = lexicalForm(pg.bigint);
 
 /**
  * `xs:double`'s lexical space, pantry's one statement of it: XML Schema 1.0's (Part 2 §3.2.5.1),

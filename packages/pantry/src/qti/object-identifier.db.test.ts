@@ -21,10 +21,11 @@ import { ImportRefused } from "#pantry/import/refusal.ts";
 import { keyTextBytes } from "#pantry/qti/limits.ts";
 import { ObjectIdentifier } from "#pantry/qti/metadata.ts";
 import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
-import { TestDocument, testKind } from "#pantry/qti/tests.ts";
+import { TestDocument } from "#pantry/qti/tests.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { testKind } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * The test documents of a package whose root writes an identifier, by the package and that

@@ -24,13 +24,8 @@ import {
 import {
   anyTypeKinds,
   cardinalityKinds,
-  choiceKinds,
-  countDefault,
-  hotspotKinds,
   interactionLaws,
   interactionRelations,
-  readAttributes,
-  references,
 } from "#pantry/qti/interactions.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { readPackage } from "#pantry/package/read.ts";
@@ -52,6 +47,13 @@ import {
   shown,
 } from "#pantry/test/probe.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import {
+  choiceKinds,
+  countDefault,
+  hotspotKinds,
+  readAttributes,
+  references,
+} from "#pantry/vocab/terms/interactions.ts";
 
 /**
  * The fixtures the global setup materializes: `simple` among them.

@@ -67,7 +67,6 @@ import {
   LomString,
   LomTitle,
   LomTitleString,
-  noLanguage,
   ObjectIdentifier,
   ObjectLang,
   ObjectTitle,
@@ -81,12 +80,12 @@ import {
   AssembledName,
   InstanceName,
   ItemRefDocument,
-  itemRefKind,
   ItemRefTarget,
-  linkResourceTypes,
   untargetedItemRefs,
   VariableMapping,
 } from "#pantry/qti/tests.ts";
+import { noLanguage } from "#pantry/vocab/terms/metadata.ts";
+import { itemRefKind, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * Build every query `Qti` names over a stored level, and every rule over one: each query under its

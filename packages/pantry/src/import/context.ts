@@ -29,7 +29,7 @@ import { entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts"
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { assembledRoots } from "#pantry/qti/tests.ts";
+import { assembledRoots } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * An ancestry flag's handle.

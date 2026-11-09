@@ -46,8 +46,8 @@ import type {
   PlacedShareTarget,
   ShareTarget,
 } from "#pantry/qti/mathml-share.ts";
-import { splicingParents, testKind } from "#pantry/qti/tests.ts";
 import type { Site } from "#pantry/qti/tests.ts";
+import { splicingParents, testKind } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * A document's share rows, one keyed set per relation, each keyed by its node's id.

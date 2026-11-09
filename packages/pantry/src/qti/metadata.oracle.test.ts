@@ -47,7 +47,6 @@ import {
   ObjectLang,
   ObjectTitle,
   StatisticDate,
-  statisticKinds,
   trimmedPattern,
   UsageBaseType,
   UsageValue,
@@ -78,6 +77,7 @@ import {
   ruleOf,
   typedTextHolds,
 } from "#pantry/test/oracle.ts";
+import { statisticKinds } from "#pantry/vocab/terms/metadata.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

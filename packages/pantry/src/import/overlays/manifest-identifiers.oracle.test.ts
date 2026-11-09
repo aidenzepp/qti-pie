@@ -37,11 +37,11 @@ import { readProgram } from "#pantry/import/program.ts";
 import { rulesOf } from "#pantry/import/refusal.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 import { item } from "#pantry/test/probe.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * The composed grammar every case is judged by.

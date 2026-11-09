@@ -67,7 +67,6 @@ import {
   fin,
   fold,
   key,
-  lexicalForm,
   mirrors,
   Monoid,
   natural,
@@ -79,7 +78,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import { NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { integerForm, keyText } from "#pantry/qti/limits.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 
@@ -105,12 +104,6 @@ export const directionSpellings = [
   ["ltr", Compute.pattern("^[ \\t\\n\\r]*ltr[ \\t\\n\\r]*$")],
   ["rtl", Compute.pattern("^[ \\t\\n\\r]*rtl[ \\t\\n\\r]*$")],
 ] as const;
-
-/**
- * The lexical form of a `selection` that `Compute.cast` reads exactly: `xs:integer`'s, within the
- * signed 64-bit range. A selection outside it counts as 0, which no child has.
- */
-const integerForm = lexicalForm(pg.bigint);
 
 /**
  * The kinds that let an alignment group through to its cell whatever their direction

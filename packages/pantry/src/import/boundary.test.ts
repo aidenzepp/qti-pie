@@ -79,7 +79,10 @@ const databaseSide = [
  * (`qti/own.ts`, which holds what `qti/schema.ts` held before it built nothing at load), which will
  * hold `PackageRows`, the installed
  * constants and rosters, the inventory data, the scan, and the database layer the command line
- * provides. S10 adds `ingest` when it splits it out of `import/package.ts`.
+ * provides. S10 adds `ingest` when it splits it out of `import/package.ts`. The terms the schema and
+ * the row builders both read (`vocab/terms/`) and the representation's stated limits
+ * (`qti/limits.ts`) are here too: each builds no relation, so the row builders read them without
+ * evaluating the schema.
  *
  * `vocab/open.ts` is not here: S10 splits it into its generator and the reader that shred runs.
  * Nor is `vocab/derive/`, which runs offline.
@@ -88,12 +91,14 @@ const handoff = [
   "db/layer.ts",
   "export/scan.ts",
   "grammar/install.ts",
+  "qti/limits.ts",
   "qti/own.ts",
   "qti/schema.ts",
   "vocab/inventory/*.ts",
   "vocab/laws.ts",
   "vocab/namespaces.ts",
   "vocab/sequencing.ts",
+  "vocab/terms/*.ts",
 ];
 
 /**
@@ -191,7 +196,6 @@ const crossings: ByStep = [
     "S11",
     [
       "import/context.ts: #pantry/grammar/compose.ts",
-      "import/context.ts: #pantry/qti/tests.ts",
       "import/fold.ts: #pantry/grammar/compose.ts",
       "import/fold.ts: #pantry/grammar/content.ts",
       "import/overlays/catalog.ts: #pantry/grammar/domains.ts",
@@ -202,29 +206,22 @@ const crossings: ByStep = [
       "import/overlays/declarations.ts: #pantry/grammar/attributes.ts",
       "import/overlays/declarations.ts: #pantry/grammar/compose.ts",
       "import/overlays/declarations.ts: #pantry/qti/declarations.ts",
-      "import/overlays/declarations.ts: #pantry/qti/expression-types.ts",
       "import/overlays/expressions.ts: #pantry/grammar/domains.ts",
       "import/overlays/expressions.ts: #pantry/grammar/expression.ts",
       "import/overlays/expressions.ts: #pantry/grammar/references.ts",
       "import/overlays/expressions.ts: #pantry/qti/declarations.ts",
-      "import/overlays/expressions.ts: #pantry/qti/expression-types.ts",
       "import/overlays/expressions.ts: #pantry/qti/expressions.ts",
       "import/overlays/expressions.ts: #pantry/qti/tests.ts",
       "import/overlays/html.ts: #pantry/qti/html.ts",
       "import/overlays/identity.ts: #pantry/grammar/domains.ts",
       "import/overlays/identity.ts: #pantry/qti/identity.ts",
-      "import/overlays/identity.ts: #pantry/qti/metadata.ts",
-      "import/overlays/identity.ts: #pantry/qti/tests.ts",
-      "import/overlays/index.ts: #pantry/qti/package.ts",
       "import/overlays/interactions.ts: #pantry/grammar/domains.ts",
       "import/overlays/interactions.ts: #pantry/qti/declarations.ts",
       "import/overlays/interactions.ts: #pantry/qti/interactions.ts",
-      "import/overlays/interactions.ts: #pantry/qti/tests.ts",
       "import/overlays/mapping.ts: #pantry/grammar/domains.ts",
       "import/overlays/mapping.ts: #pantry/qti/mapping.ts",
       "import/overlays/mathml-align.ts: #pantry/grammar/domains.ts",
       "import/overlays/mathml-align.ts: #pantry/qti/mathml-align.ts",
-      "import/overlays/mathml-align.ts: #pantry/qti/operators.ts",
       "import/overlays/mathml-apply.ts: #pantry/grammar/expression.ts",
       "import/overlays/mathml-apply.ts: #pantry/qti/mathml-apply.ts",
       "import/overlays/mathml-cn.ts: #pantry/grammar/domains.ts",
@@ -243,7 +240,6 @@ const crossings: ByStep = [
       "import/overlays/quotation.ts: #pantry/qti/quotation.ts",
       "import/overlays/tests.ts: #pantry/grammar/compose.ts",
       "import/overlays/tests.ts: #pantry/qti/tests.ts",
-      "import/program.ts: #pantry/qti/package.ts",
       "import/record.ts: #pantry/qti/package.ts",
       "import/roster.ts: #pantry/qti/chardata.ts",
       "import/roster.ts: #pantry/qti/node.ts",

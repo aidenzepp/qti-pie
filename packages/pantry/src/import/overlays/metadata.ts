@@ -21,13 +21,6 @@ import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import {
-  noLanguage,
-  objectKinds,
-  recordDocumentTypes,
-  statisticKinds,
-  usageValueKind,
-} from "#pantry/qti/metadata.ts";
 import type {
   AssessmentObject,
   LomEntry,
@@ -47,6 +40,13 @@ import type {
   UsageValue,
   UsageValueBaseType,
 } from "#pantry/qti/metadata.ts";
+import {
+  noLanguage,
+  objectKinds,
+  recordDocumentTypes,
+  statisticKinds,
+  usageValueKind,
+} from "#pantry/vocab/terms/metadata.ts";
 
 /**
  * The ids a document's rows are written under: its package's, and each of its tree's nodes',

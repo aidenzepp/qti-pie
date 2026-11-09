@@ -31,7 +31,6 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect } from "effect";
 import { grammar, interactionKinds } from "#pantry/grammar/install.ts";
 import { declarationKinds } from "#pantry/qti/declarations.ts";
-import { bindingAttributes } from "#pantry/qti/interactions.ts";
 import { everyRelationPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
@@ -40,6 +39,7 @@ import type { Signature } from "#pantry/test/gen/genetic/judge.ts";
 import { known } from "#pantry/test/gen/genetic/known.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { bindingAttributes } from "#pantry/vocab/terms/interactions.ts";
 
 /**
  * The oracle's law tables over the composed grammar.

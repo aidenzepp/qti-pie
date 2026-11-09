@@ -29,7 +29,6 @@ import { ownContext } from "#pantry/import/fold.ts";
 import { rowsOf } from "#pantry/import/overlays/operators.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
-import { equalRoundedMode } from "#pantry/qti/operators.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
 import { judgeOne, recordsClassOf, shownDisagreement } from "#pantry/test/gen/genetic/judge.ts";
@@ -38,6 +37,7 @@ import { known } from "#pantry/test/gen/genetic/known.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { equalRoundedMode } from "#pantry/vocab/terms/operators.ts";
 
 /**
  * The oracle's law tables over the installed grammar.

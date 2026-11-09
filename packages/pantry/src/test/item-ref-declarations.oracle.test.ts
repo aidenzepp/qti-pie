@@ -41,7 +41,6 @@ import { readProgram } from "#pantry/import/program.ts";
 import { lawOfCheck, ruleOfLaw, statedLaws } from "#pantry/import/refusal.ts";
 import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { itemResourceType, linkResourceTypes } from "#pantry/qti/tests.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
 import type {
   DeclarationBaseType,
@@ -70,6 +69,7 @@ import type { ItemRefPackage, Named } from "#pantry/test/gen/item-ref-declaratio
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
+import { itemResourceType, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

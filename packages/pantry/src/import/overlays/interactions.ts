@@ -31,24 +31,7 @@ import type {
   DeclarationCardinality,
   DeclarationIdentifier,
 } from "#pantry/qti/declarations.ts";
-import { itemKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
-import {
-  adaptiveName,
-  ariaNames,
-  bindingAttributes,
-  choiceKinds,
-  countDefault,
-  gapKind,
-  hotspotKinds,
-  hottextKind,
-  modulesKind,
-  pciKind,
-  readAttributes,
-  references,
-  referringRoots,
-  sliderKind,
-} from "#pantry/qti/interactions.ts";
 import type {
   AriaElement,
   AriaRange,
@@ -107,6 +90,23 @@ import type {
   TemplateRefCardinality,
   TemplateRefDeclaration,
 } from "#pantry/qti/interactions.ts";
+import { itemKind } from "#pantry/vocab/terms/tests.ts";
+import {
+  adaptiveName,
+  ariaNames,
+  bindingAttributes,
+  choiceKinds,
+  countDefault,
+  gapKind,
+  hotspotKinds,
+  hottextKind,
+  modulesKind,
+  pciKind,
+  readAttributes,
+  references,
+  referringRoots,
+  sliderKind,
+} from "#pantry/vocab/terms/interactions.ts";
 
 /**
  * The ids a document's rows are written under: each node's, drawn by the number `flatten` gives

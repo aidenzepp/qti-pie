@@ -52,10 +52,10 @@ import type {
   XdmClosedElement,
   XdmDocument,
 } from "#pantry/model/xdm.ts";
-import { exits, sectionParts } from "#pantry/qti/tests.ts";
 import type { BranchShuffle, BranchTarget } from "#pantry/qti/tests.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { comparedPath, oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
+import { exits, sectionParts } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * An element's attributes, as (name, lexical) pairs in order.

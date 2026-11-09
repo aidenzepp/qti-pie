@@ -25,9 +25,9 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
+import { integerForm } from "#pantry/qti/limits.ts";
 import {
   doublePattern,
-  integerForm,
   operatorLaws,
   operatorRelations,
   positivePattern,

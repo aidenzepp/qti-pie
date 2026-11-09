@@ -65,7 +65,6 @@ import {
 } from "#pantry/qti/expressions.ts";
 import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
 import {
   assertVerdict,
   constraintDescribed,
@@ -82,6 +81,7 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { itemRefPackageEntries } from "#pantry/test/gen/item-ref-declarations.ts";
 import type { ItemRefPackage, ItemTarget } from "#pantry/test/gen/item-ref-declarations.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * The queries `DeclaredTarget` and `HeldType` as `Qti` holds them (`#pantry/qti/queries.ts`).

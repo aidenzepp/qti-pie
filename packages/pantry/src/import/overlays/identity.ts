@@ -56,9 +56,9 @@ import type {
   TextIdref,
   XmlLang,
 } from "#pantry/qti/identity.ts";
-import { recordDocumentTypes } from "#pantry/qti/metadata.ts";
-import { itemKind, testKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
+import { recordDocumentTypes } from "#pantry/vocab/terms/metadata.ts";
+import { itemKind, testKind } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes' and attributes', drawn by

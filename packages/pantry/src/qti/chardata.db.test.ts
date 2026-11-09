@@ -38,7 +38,6 @@ import {
 } from "#pantry/qti/chardata.ts";
 import { governorOf } from "#pantry/import/fold.ts";
 import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   authorRole,
@@ -54,6 +53,7 @@ import type { Stated } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * Read the type one of `Qti`'s columns casts its values to: a grizzle text domain for a field of a

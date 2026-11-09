@@ -146,10 +146,12 @@ import {
 import { Attribute, Idref, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import { ObjectLang, recordDocumentTypes } from "#pantry/qti/metadata.ts";
+import { ObjectLang } from "#pantry/qti/metadata.ts";
 import { admitsHere, Node, nodeRef } from "#pantry/qti/node.ts";
 import { ManifestId, ResourceId } from "#pantry/qti/package.ts";
-import { Instance, itemKind, testKind } from "#pantry/qti/tests.ts";
+import { Instance } from "#pantry/qti/tests.ts";
+import { recordDocumentTypes } from "#pantry/vocab/terms/metadata.ts";
+import { itemKind, testKind } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * XML whitespace `S`, possibly none: what an ID's lexical form holds around its value, the

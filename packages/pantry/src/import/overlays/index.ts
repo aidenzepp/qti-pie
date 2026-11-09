@@ -83,7 +83,7 @@ import type { PlacedDocument } from "#pantry/import/write.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { overlayRelations } from "#pantry/import/roster.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * Every overlay's rows of a package, one keyed set per relation: each document builder's, and the

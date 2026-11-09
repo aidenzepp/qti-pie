@@ -37,8 +37,8 @@ import type {
   XdmDocument,
   NodeId,
 } from "#pantry/model/xdm.ts";
-import { splicingParents } from "#pantry/qti/tests.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import { splicingParents } from "#pantry/vocab/terms/tests.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower test states: a hang guard, never a budget.

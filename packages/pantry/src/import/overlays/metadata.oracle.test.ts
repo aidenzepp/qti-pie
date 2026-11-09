@@ -37,12 +37,7 @@ import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import {
-  languageTagPattern,
-  noLanguage,
-  objectTypes,
-  resourceMetadata,
-} from "#pantry/qti/metadata.ts";
+import { languageTagPattern, objectTypes, resourceMetadata } from "#pantry/qti/metadata.ts";
 import type {
   LomEntry,
   LomTitleString,
@@ -62,6 +57,7 @@ import type {
   TypeSketch,
 } from "#pantry/test/gen/lom-resource-type.ts";
 import { caseHang, searchTimeout } from "#pantry/test/gen/xdm.ts";
+import { noLanguage } from "#pantry/vocab/terms/metadata.ts";
 
 /**
  * The fixtures the global setup materializes: `metaData` among them.

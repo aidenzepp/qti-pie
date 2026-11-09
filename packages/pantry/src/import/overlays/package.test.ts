@@ -58,14 +58,10 @@ import { readPackage } from "#pantry/package/read.ts";
 import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import type { FixtureName, NamedPackage } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
-import {
-  hrefParamsPattern,
-  hrefPathPattern,
-  manifestPath,
-  srcsetCandidatePattern,
-} from "#pantry/qti/package.ts";
+import { hrefParamsPattern, hrefPathPattern, srcsetCandidatePattern } from "#pantry/qti/package.ts";
 import { comparedPath, oracleValueOf, resolve, resolveAttribute } from "#pantry/test/resolution.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * The file system and processes the fixtures' materializer and `readPackage` need.

@@ -41,10 +41,11 @@ import type {
   DeclarationCardinality,
   DeclarationIdentifier,
 } from "#pantry/qti/declarations.ts";
-import { choiceKinds, hottextInteraction, hottextKind } from "#pantry/qti/interactions.ts";
+import { hottextInteraction } from "#pantry/qti/interactions.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { integerOf } from "#pantry/test/oracle-view.ts";
+import { choiceKinds, hottextKind } from "#pantry/vocab/terms/interactions.ts";
 
 /**
  * The ids every case writes its rows under: each node's by its number, in the context of a

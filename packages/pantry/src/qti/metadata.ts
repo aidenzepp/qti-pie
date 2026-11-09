@@ -116,7 +116,7 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
-import type { DocumentType, ResourceType } from "#pantry/grammar/install.ts";
+import type { ResourceType } from "#pantry/grammar/install.ts";
 import {
   AttributeGrammar,
   AttributeModelOf,
@@ -130,6 +130,13 @@ import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
+import {
+  noLanguage,
+  objectKinds,
+  recordDocumentTypes,
+  statisticKinds,
+  usageValueKind,
+} from "#pantry/vocab/terms/metadata.ts";
 
 /**
  * The resource types whose LOM record names its document (reading 62): an item's and a test's.
@@ -138,30 +145,6 @@ export const objectTypes = [
   "imsqti_item_xmlv3p0",
   "imsqti_test_xmlv3p0",
 ] as const satisfies readonly (typeof ResourceType.handles)[number][];
-
-/**
- * The root kinds of the documents of {@link objectTypes}, whose `identifier`, `title` and
- * `xml:lang` a record is compared with.
- */
-export const objectKinds = [
-  "qti-assessment-item",
-  "qti-assessment-test",
-] as const satisfies readonly (typeof NodeKind.handles)[number][];
-
-/**
- * The usage statistics, the kinds that carry `lastUpdated` (`imsqti_usagedatav3p0_v1p0.xsd`,
- * `CategorizedStatisticDType` and `OrdinaryStatisticDType`).
- */
-export const statisticKinds = [
-  "ud:ordinaryStatistic",
-  "ud:categorizedStatistic",
-] as const satisfies readonly (typeof NodeKind.handles)[number][];
-
-/**
- * A usage statistic's value, `ValueDType` of `imsqti_usagedatav3p0_v1p0.xsd`, which may name its
- * base type in `baseType`.
- */
-export const usageValueKind = "ud:value" satisfies (typeof NodeKind.handles)[number];
 
 /**
  * The owner whose records name a resource: a resource's `cp:metadata`, whose parent is the
@@ -488,17 +471,6 @@ export const UsageBaseType = relation("UsageBaseType", { lexical: keyText, node:
 export const lomVocabulary = "LOMv1.0";
 
 /**
- * The compared form of a language that states none: the empty text. An empty `xml:lang` states no
- * language, "just as if xml:lang had not been specified" (XML 1.0 §2.12), so a root that writes no
- * `xml:lang` and one whose `xml:lang` collapses to the empty text compare alike (`lom-title`, and
- * R26's forms in `#pantry/qti/identity.ts`); a `lom:string`'s empty `language` is read alike. The
- * empty text is no language tag, so `lom-title`'s {@link languageTagPattern} reads it as none.
- *
- * @see {@link https://www.w3.org/TR/xml/#sec-lang-tag | XML 1.0, §2.12 Language Identification}
- */
-export const noLanguage = "";
-
-/**
  * The sources, collapsed, under which a learning resource type is a term of the LOM vocabulary
  * (spec reading 122): `LOMv1.0`, and the empty source the binding's default fills. A source of
  * whitespace alone collapses to the empty one.
@@ -558,21 +530,6 @@ export const metadataRelations = {
   UsageValue,
   UsageValueBaseType,
 };
-
-/**
- * The types of the documents a package's records are read from: its manifest's, `manifest`, the one
- * document of that type (`RootOfType`'s check), whose `cp:metadata` holds the package's and each
- * resource's records; and an external record file's, `resourcemetadata/xml`, whose root is a
- * `lom:lom` (spec reading 81: an external LOM metadata file, assessed against the loose LOM
- * binding; spec reading 122 places a record in a resource's metadata, the manifest's own or such
- * a file, `#pantry/test/gen/lom-resource-type.ts`). The manifest is the package's one
- * `imsmanifest.xml` (IMS Content Packaging 1.2), and a `cp:metadata` of any other document
- * describes no part of the package (170356bd's ruling), so its `lom:*` elements are no record's.
- */
-export const recordDocumentTypes = [
-  "manifest",
-  "resourcemetadata/xml",
-] as const satisfies readonly (typeof DocumentType.handles)[number][];
 
 /**
  * Whether a node is of a document a package's records are read from ({@link recordDocumentTypes}).

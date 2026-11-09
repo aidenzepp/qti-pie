@@ -90,17 +90,12 @@ import { Attribute, namingPattern, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * A `#` anywhere in a text: an `xi:include`'s parameters that hold a fragment identifier.
  */
 const fragmentMark = Compute.pattern("#");
-
-/**
- * The path of a package's manifest, the one entry no `cp:file` need list and the one document that
- * is no resource's (spec reading 146).
- */
-export const manifestPath = "imsmanifest.xml";
 
 /**
  * A package: its id, its name, and its count of entries, which the family draws. Its name is the

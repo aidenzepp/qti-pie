@@ -80,6 +80,7 @@ import {
 } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
+import { cellKinds } from "#pantry/vocab/terms/html.ts";
 
 /**
  * The nil uuid: the start of a header token's owner-axis copy of its cell's table, which every
@@ -91,11 +92,6 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  * The kinds of the media elements, whose `source` children carry `src` (reading 124).
  */
 export const mediaKinds = ["audio", "video"] as const;
-
-/**
- * The kinds of the table cells, whose `headers` reading 126 reads.
- */
-export const cellKinds = ["td", "th"] as const;
 
 /**
  * One element on the way from a table cell an overlay reads up to the table it takes part in,

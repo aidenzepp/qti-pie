@@ -16,8 +16,8 @@ import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { cellKinds } from "#pantry/qti/html.ts";
 import type { CellHeaders, HeaderToken, TableHeader, TableScope } from "#pantry/qti/html.ts";
+import { cellKinds } from "#pantry/vocab/terms/html.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes' and attributes', drawn by

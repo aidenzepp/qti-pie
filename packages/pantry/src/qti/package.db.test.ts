@@ -42,7 +42,6 @@ import {
   File,
   FileHref,
   ManifestIdSpace,
-  manifestPath,
   Package,
   Reference,
   ReferencePath,
@@ -63,6 +62,7 @@ import {
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * A uuid no stored row holds: every stray row below names it as its node, package or resource.

@@ -29,7 +29,6 @@ import { stringValuesOf } from "#pantry/import/overlays/string-values.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
 import type {
   Dependency,
   DependencyTarget,
@@ -48,6 +47,7 @@ import type {
   TextReferencePath,
 } from "#pantry/qti/package.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * The ids a manifest's rows are written under: its package's, and each of its tree's nodes', drawn

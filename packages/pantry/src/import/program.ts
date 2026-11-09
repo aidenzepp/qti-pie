@@ -42,8 +42,8 @@ import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { PackageReadError, readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { manifestPath } from "#pantry/qti/package.ts";
 import { cpNamespace } from "#pantry/vocab/namespaces.ts";
+import { manifestPath } from "#pantry/vocab/terms/package.ts";
 
 /**
  * One document of the package as the import writes it: as listed, and under its ids.

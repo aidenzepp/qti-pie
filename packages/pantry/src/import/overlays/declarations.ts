@@ -41,8 +41,8 @@ import type {
   ValueSet,
   ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
-import { normalMinimumDefaults } from "#pantry/qti/declarations.ts";
-import { valueBaseOf } from "#pantry/qti/expression-types.ts";
+import { normalMinimumDefaults } from "#pantry/vocab/terms/declarations.ts";
+import { valueBaseOf } from "#pantry/vocab/terms/expression-types.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
