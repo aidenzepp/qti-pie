@@ -45,6 +45,7 @@ import { readingRefusals, readingSpellings, readingUses } from "#pantry/grammar/
 import type { Use, ValueDomain } from "#pantry/grammar/attributes.ts";
 import { coveredBy } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
+import { followPairsOf } from "#pantry/grammar/content.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -1419,7 +1420,7 @@ const indexOf = (grammar: ComposedGrammar): Index => {
 
   // The content models whose automata state a row, every model but that of no model.
   const stated = new Set(
-    [...grammar.content.follow.rows, ...grammar.content.last.rows].map(({ model }) => model),
+    [...followPairsOf(grammar.content), ...grammar.content.last.rows].map(({ model }) => model),
   );
 
   return {

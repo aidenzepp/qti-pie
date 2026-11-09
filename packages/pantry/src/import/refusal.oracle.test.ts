@@ -41,6 +41,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Result, Schema } from "effect";
 import { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import { composed } from "#pantry/grammar/compose.ts";
+import { followPairsOf } from "#pantry/grammar/content.ts";
 import {
   checkNameOf,
   contractNames,
@@ -1342,7 +1343,7 @@ const modelStates: Arr.NonEmptyReadonlyArray<ModelState> = (() => {
   const add = (model: string, state: string): void => {
     states.set(model, (states.get(model) ?? new Set()).add(state));
   };
-  for (const { from, model } of grammar.content.follow.rows) {
+  for (const { from, model } of followPairsOf(grammar.content)) {
     add(model, from);
   }
 
@@ -1388,7 +1389,7 @@ const models: Arr.NonEmptyReadonlyArray<Arr.NonEmptyReadonlyArray<ModelState>> =
  */
 const followed: ReadonlyMap<string, ReadonlySet<string>> = (() => {
   const next = new Map<string, Set<string>>();
-  for (const { from, model, to } of grammar.content.follow.rows) {
+  for (const { from, model, to } of followPairsOf(grammar.content)) {
     const at = `${model} ${from}`;
     next.set(at, new Set([...(next.get(at) ?? []), to]));
   }

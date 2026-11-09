@@ -12,7 +12,7 @@ import { Array as Arr, Duration, Effect, FileSystem, Formatter, Option, Result }
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { composed, namespaceOfKind, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { accepts, contentModelOf, editedBy } from "#pantry/grammar/content.ts";
+import { accepts, contentModelOf, editedBy, followPairsOf } from "#pantry/grammar/content.ts";
 import {
   documentLayer,
   fragmentRoots,
@@ -1553,7 +1553,7 @@ describe.skipIf(!cached)("the content grammar's sources", () => {
 
         // A model's rows are its families', each family's sourced to its own particles: every
         // position a family's model names in `Follow`, `Last` or `Symbol`.
-        const followed = Map.groupBy(content.follow.rows, ({ model }) => model);
+        const followed = Map.groupBy(followPairsOf(content), ({ model }) => model);
         const ended = Map.groupBy(content.last.rows, ({ model }) => model);
         const shared = Map.groupBy(content.symbol.rows, ({ model }) => model);
         const sharedOf = new Map(
@@ -1895,7 +1895,7 @@ describe("the installed automata", () => {
 
           return held;
         };
-        for (const { from, model, to } of content.follow.rows) {
+        for (const { from, model, to } of followPairsOf(content)) {
           const { edges } = familyOf(model);
           edges.set(from, (edges.get(from) ?? new Set()).add(to));
         }
@@ -1912,7 +1912,7 @@ describe("the installed automata", () => {
         );
         const sharedAt = Map.groupBy(content.symbol.rows, ({ model }) => model);
         const named = [
-          ...content.follow.rows.flatMap(({ from, model, to }) => [
+          ...followPairsOf(content).flatMap(({ from, model, to }) => [
             { model, position: from },
             { model, position: to },
           ]),
@@ -1986,7 +1986,7 @@ describe("the installed automata", () => {
       Effect.gen(function* decided() {
         const { content } = yield* grammar;
         const follows = new Set(
-          content.follow.rows.map(({ from, model, to }) => `${model} ${from} ${to}`),
+          followPairsOf(content).map(({ from, model, to }) => `${model} ${from} ${to}`),
         );
         const positionsOf = new Map(
           content.modelPositions.rows.map(({ model, positions }) => [model, positions]),
@@ -2270,7 +2270,7 @@ const automatonRowsOf = (
   [
     ...Option.toArray(contentModelOf(composedGrammar.content, { parent, version })).flatMap(
       (model) => [
-        ...composedGrammar.content.follow.rows
+        ...followPairsOf(composedGrammar.content)
           .filter((row) => row.model === model)
           .map(({ from, to }) => `follow ${from} ${to}`),
         ...composedGrammar.content.last.rows

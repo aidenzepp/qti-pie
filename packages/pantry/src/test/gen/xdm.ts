@@ -44,6 +44,7 @@ import type { Swarm } from "@grizzle/testing/swarm";
 import { flags } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
+import { followPairsOf } from "#pantry/grammar/content.ts";
 import { foreignKinds, isForeignKind, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { ForeignKind } from "#pantry/grammar/kinds.ts";
 import { expandedNameOf, typeHandle } from "#pantry/grammar/xsi.ts";
@@ -444,7 +445,7 @@ const pushAt = <K, T>(map: Map<K, T[]>, key: K, value: T): void => {
 const automataOf = (grammar: ComposedGrammar): ReadonlyMap<string, Automaton> => {
   const follow = new Map<string, Map<number, Set<number>>>();
   const into = new Map<string, Map<number, number[]>>();
-  for (const row of grammar.content.follow.rows) {
+  for (const row of followPairsOf(grammar.content)) {
     const from = Number(row.from);
     const to = Number(row.to);
     const own = follow.get(row.model) ?? new Map<number, Set<number>>();

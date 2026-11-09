@@ -6,15 +6,17 @@
  * particle numbering); 0 is the start. A child's `Admission` row carries its position: the one
  * position its kind names, or 0 where its kind names none (character data, which carries its
  * predecessor's state) or several (a shared kind, whose position the state decides through
- * `Symbol`). The law reads one bit, `Follow(model, was, position)`, with `model` the family's
+ * `Symbol`). The law reads one bit, whether `position` is in the follow set of `was`:
+ * `FollowMember(FollowSetOf(model, was), position)`, with `model` the family's
  * `ContentModelOf(version, parent)` and `was` the predecessor's position (0 for the first child),
  * and the last child reads `Last(model, state)`: the relations are keyed by automaton, each
- * distinct automaton stated once, however many families share it. Under Unique Particle Attribution
- * the automaton enforces order, required particles, at-most-once and exclusive choice; a bound of
- * 2…n, which a position automaton relaxes, is a count law, `Counted(version, parent, position) →
- * (min, max)`. So is a reading's cap, a particle of at most one that an enclosing group repeats,
- * which the automaton reads per repeat and the reading reads as the family's total: `Counted` holds
- * it as `(0, 1)` (spec reading 130, the loose LOM binding's Schematron).
+ * distinct automaton stated once, however many families share it, and each state's follow set by
+ * its set, each distinct set stated once, however many states share it. Under Unique Particle
+ * Attribution the automaton enforces order, required particles, at-most-once and exclusive choice;
+ * a bound of 2…n, which a position automaton relaxes, is a count law, `Counted(version, parent,
+ * position) → (min, max)`. So is a reading's cap, a particle of at most one that an enclosing group
+ * repeats, which the automaton reads per repeat and the reading reads as the family's total:
+ * `Counted` holds it as `(0, 1)` (spec reading 130, the loose LOM binding's Schematron).
  *
  * A group's bound of 2…n the automaton relaxes too, to `1..n` (`automatonOf` links a repeatable
  * group's last positions to its first, whatever its bounds), and no position carries it, so
@@ -159,12 +161,14 @@ type FamilyKey = readonly [IdField<"version", SchemaVersion>, IdField<"parent", 
 /**
  * The content grammar's relations, and the host's view of each automaton.
  *
- * `Follow`, `Last` and `Symbol` are keyed by the automaton, not by the (version, parent) family:
- * two families whose automata have the same positions, `Follow` and `Last` are one content model
- * (rule 0: identical facts are one fact), and a family reads its model through `ContentModelOf`;
- * `Symbol` is keyed likewise by its shared model, through `SharedModelOf`. Where a family's row
- * comes from is the family's, not the model's, so {@link ContentGrammar.sourceOf} answers it by
- * family and position.
+ * `FollowSetOf`, `Last` and `Symbol` are keyed by the automaton, not by the (version, parent)
+ * family: two families whose automata have the same positions, follow sets and `Last` are one
+ * content model (rule 0: identical facts are one fact), and a family reads its model through
+ * `ContentModelOf`; `Symbol` is keyed likewise by its shared model, through `SharedModelOf`. A
+ * state's follow set is keyed by the set, through `FollowSetOf`, by the same rule: a repeated
+ * choice of n particles has n + 1 states that follow to the same n positions, so its automaton's
+ * transitions, n² + n of them, are one set of n. Where a family's row comes from is the family's,
+ * not the model's, so {@link ContentGrammar.sourceOf} answers it by family and position.
  */
 export interface ContentGrammar {
   /**
@@ -182,12 +186,26 @@ export interface ContentGrammar {
     readonly [ValueField<"min", number>, ValueField<"max", number>]
   >;
   /**
-   * `Follow`: (model, from, to) where a child at position `to` may follow one at `from`, `from` 0
-   * the start, in the content model's automaton.
+   * `FollowMember`: (set, to) for each position `to` a follow set holds.
    */
-  readonly follow: Closed<
-    readonly [IdField<"model", string>, DependentField<"from">, DependentField<"to">],
+  readonly followMember: Closed<
+    readonly [IdField<"set", string>, IdField<"to", string>],
     readonly []
+  >;
+  /**
+   * The `FollowSet` roster: every distinct follow set of a content model's state, numbered from 0
+   * in the order of the first (model, state) that holds it, models in `ContentModel` code order
+   * and each model's states ascending.
+   */
+  readonly followSets: Roster<string>;
+  /**
+   * `FollowSetOf`: (model, from) → set, total over each content model's states, `from` 0 the
+   * start: the positions a child may take after one at `from`, in the model's automaton. A state
+   * nothing follows holds the empty set, which `FollowMember` holds no row of.
+   */
+  readonly followSetOf: Closed<
+    readonly [IdField<"model", string>, DependentField<"from">],
+    readonly [IdField<"set", string>]
   >;
   /**
    * `Last`: (model, at) where a family of the model may end at position `at`, 0 when it may be
@@ -199,7 +217,7 @@ export interface ContentGrammar {
   >;
   /**
    * `ModelPositions`: model → positions, each content model's position count, its start 0
-   * included, `Follow`'s and `Last`'s dependent sizes.
+   * included, `FollowSetOf`'s and `Last`'s dependent sizes.
    */
   readonly modelPositions: Closed<
     readonly [IdField<"model", string>],
@@ -248,7 +266,7 @@ export interface ContentGrammar {
   /**
    * Find where a family's position comes from: its particle in the XSD of its version, or the
    * reading or specification that states it; position 0 is the family's model as a whole. A content
-   * refusal reads it, for the positions `Follow` allows next and the model they belong to.
+   * refusal reads it, for the positions a follow set allows next and the model they belong to.
    *
    * @param key - The family and the position.
    * @returns The source, or none for a position the family's model has not.
@@ -608,8 +626,8 @@ export const editedBy = (
 
 /**
  * Narrow an automaton by the readings' endings of its kind: a family may end only at a position
- * whose kinds an ending lists, every ending's, and never empty. `Follow` is untouched, so the
- * family's other children keep the model's order. A family's last state is its last child's
+ * whose kinds an ending lists, every ending's, and never empty. The follow sets are untouched, so
+ * the family's other children keep the model's order. A family's last state is its last child's
  * position, so an ending is exact only where each position names kinds all of which or none of
  * which it lists; a position it lists in part is refused as {@link MixedEnding}.
  *
@@ -763,6 +781,11 @@ interface Installed {
    */
   readonly positions: readonly Placed[];
   /**
+   * Each state's follow set, ascending ({@link followsOf}), which the signature and the model's
+   * `FollowSetOf` read.
+   */
+  readonly follows: Follows;
+  /**
    * The automaton's signature ({@link signatureOf}), one per model, which its versions share.
    */
   readonly signature: string;
@@ -815,27 +838,47 @@ const familiesOf = (rosters: {
   );
 
 /**
- * Write what makes two automata one content model: the position count, start included, the pairs
- * `Follow` holds and the positions `Last` holds, each list sorted, so two automata of one language
- * built apart write the same text exactly when they state the same rows.
+ * Each state's follow set, the start's first: the positions a child may take after one at the
+ * state, ascending.
+ */
+type Follows = readonly (readonly number[])[];
+
+/**
+ * Read an automaton's follow sets, each ascending, so two automata of one language built apart
+ * hold equal lists exactly when they hold equal sets.
  *
  * @param automaton - The automaton.
+ * @returns Each state's follow set, the start's first.
+ */
+const followsOf = (automaton: Automaton): Follows =>
+  automaton.next.map((next) => [...next].toSorted((left, right) => left - right));
+
+/**
+ * Write what makes two automata one content model: the state count, start included, each state's
+ * follow set and the positions `Last` holds, each in order, so two automata of one language built
+ * apart write the same text exactly when they state the same rows.
+ *
+ * @param follows - The automaton's follow sets ({@link followsOf}).
+ * @param ends - The states `Last` holds.
  * @returns Its signature.
  */
-const signatureOf = (automaton: Automaton): string =>
+const signatureOf = (follows: Follows, ends: ReadonlySet<number>): string =>
   [
-    String(automaton.next.length),
-    automaton.next
-      .flatMap((next, from) => [...next].map((to) => `${String(from)}>${String(to)}`))
-      .toSorted()
-      .join(" "),
-    [...automaton.ends].map(String).toSorted().join(" "),
+    String(follows.length),
+    follows.map((held) => held.join(" ")).join(","),
+    [...ends].toSorted((left, right) => left - right).join(" "),
   ].join("|");
 
 /**
- * The signature of {@link emptyLanguage}, the model of every family no content model holds.
+ * The follow sets of {@link emptyLanguage}, the model of every family no content model holds: its
+ * start's, which nothing follows.
  */
-const emptySignature = signatureOf(emptyLanguage);
+const emptyFollows: Follows = followsOf(emptyLanguage);
+
+/**
+ * The signature of {@link emptyLanguage}.
+ */
+const emptySignature = signatureOf(emptyFollows, emptyLanguage.ends);
 
 /**
  * A family's model as {@link modelsOf} reads it: the signature that makes two families one model,
@@ -986,7 +1029,8 @@ export const contentOf = (input: {
         model.kind,
       );
       const caps = yield* cappedBy(automaton, edits, model.kind);
-      const signature = signatureOf(automaton);
+      const follows = followsOf(automaton);
+      const signature = signatureOf(follows, automaton.ends);
       const named = new Set(
         automaton.positions.flatMap(({ symbol }) => (symbol._tag === "kinds" ? symbol.kinds : [])),
       );
@@ -1063,6 +1107,7 @@ export const contentOf = (input: {
           automaton,
           caps,
           data,
+          follows,
           parent: model.kind,
           positions,
           signature,
@@ -1175,12 +1220,20 @@ export const contentOf = (input: {
     // Every (version, parent) family, which both models' readings walk.
     const families = familiesOf(input);
     // The models, read once per family in (version, parent) code order: a family's automaton is its
-    // model's whenever an earlier family's has the same positions, `Follow` and `Last`.
+    // model's whenever an earlier family's has the same positions, follow sets and `Last`.
     const contentModels = modelsOf(
       families.map((family) =>
         Option.match(installedAt(family), {
-          onNone: () => ({ family, signature: emptySignature, value: emptyLanguage }),
-          onSome: (entry) => ({ family, signature: entry.signature, value: entry.automaton }),
+          onNone: () => ({
+            family,
+            signature: emptySignature,
+            value: { automaton: emptyLanguage, follows: emptyFollows },
+          }),
+          onSome: (entry) => ({
+            family,
+            signature: entry.signature,
+            value: { automaton: entry.automaton, follows: entry.follows },
+          }),
         }),
       ),
     );
@@ -1210,8 +1263,25 @@ export const contentOf = (input: {
     const model = idField("model", yield* roster("ContentModel", contentModels.handles));
     const sharedModel = idField("model", yield* roster("SharedModel", sharedModels.handles));
     const modelSizes = new Map(
-      contentModels.models.map(({ handle, value }) => [handle, value.next.length]),
+      contentModels.models.map(({ handle, value }) => [handle, value.follows.length]),
     );
+    // Each model's states' follow sets, each distinct set once (rule 0), numbered in the order of
+    // the first (model, state) that holds it, and the positions each holds.
+    const setOf = new Map<string, string>();
+    const members: { readonly set: string; readonly to: string }[] = [];
+    const statedSets = contentModels.models.flatMap(({ handle, value }) =>
+      value.follows.map((held, from) => ({
+        from: String(from),
+        model: handle,
+        set: setOf.getOrInsertComputed(held.join(" "), () => {
+          const fresh = String(setOf.size);
+          members.push(...held.map((to) => ({ set: fresh, to: String(to) })));
+
+          return fresh;
+        }),
+      })),
+    );
+    const followSet = idField("set", yield* roster("FollowSet", [...setOf.values()]));
     const sharedSizes = new Map(
       sharedModels.models.map(({ handle, value }) => [handle, value.positions]),
     );
@@ -1324,22 +1394,25 @@ export const contentOf = (input: {
           ],
           rows: countedRows,
         }),
-        follow: closed({
-          key: [model, modelPosition("from"), modelPosition("to")],
-          name: "Follow",
+        followMember: closed({
+          key: [followSet, idField("to", positions)],
+          name: "FollowMember",
           payload: [],
-          rows: contentModels.models.flatMap(({ handle, value }) =>
-            value.next.flatMap((next, from) =>
-              [...next].map((to) => ({ from: String(from), model: handle, to: String(to) })),
-            ),
-          ),
+          rows: members,
         }),
+        followSetOf: closed({
+          key: [model, modelPosition("from")],
+          name: "FollowSetOf",
+          payload: [followSet],
+          rows: statedSets,
+        }),
+        followSets: followSet.roster,
         last: closed({
           key: [model, modelPosition("position")],
           name: "Last",
           payload: [],
           rows: contentModels.models.flatMap(({ handle, value }) =>
-            [...value.ends].map((state) => ({ model: handle, position: String(state) })),
+            [...value.automaton.ends].map((state) => ({ model: handle, position: String(state) })),
           ),
         }),
         modelPositions: closed({
@@ -1397,8 +1470,64 @@ export const contentModelOf = (
 ): Option.Option<string> => Option.map(content.contentModelOf.lookup(key), ({ model }) => model);
 
 /**
- * Whether a child at one position may follow one at another in a family: `Follow`'s cell under the
- * family's model.
+ * Spell a content grammar's follow sets out as the transitions they state, (model, from, to): each
+ * state's set's positions, the empty set's none. An explanation lists the positions a state allows
+ * by them (`#pantry/import/refusal.ts`), and the tests read the automata by them; no load does.
+ *
+ * @param content - `FollowSetOf` and `FollowMember`, the content grammar's or `install.ts`'s.
+ * @param content.followSetOf - `FollowSetOf`.
+ * @param content.followMember - `FollowMember`.
+ * @returns The transitions, by model and state as `FollowSetOf` orders them, each set's positions
+ *   as `FollowMember` does.
+ */
+export const followPairsOf = (content: {
+  readonly followMember: {
+    readonly rows: readonly { readonly set: string; readonly to: string }[];
+  };
+  readonly followSetOf: {
+    readonly rows: readonly {
+      readonly from: string;
+      readonly model: string;
+      readonly set: string;
+    }[];
+  };
+}): readonly { readonly from: string; readonly model: string; readonly to: string }[] => {
+  const members = Map.groupBy(content.followMember.rows, ({ set }) => set);
+
+  return content.followSetOf.rows.flatMap(({ from, model, set }) =>
+    rowsAt(members, set).map(({ to }) => ({ from, model, to })),
+  );
+};
+
+/**
+ * Read a model's follow set at a state: `FollowSetOf`'s cell.
+ *
+ * @param content - The content grammar.
+ * @param model - The model.
+ * @param from - The state, 0 for the start.
+ * @returns The set's handle, or none for a state the model has not.
+ */
+const followSetAt = (content: ContentGrammar, model: string, from: string): Option.Option<string> =>
+  Option.map(content.followSetOf.lookup({ from, model }), ({ set }) => set);
+
+/**
+ * Whether a model's follow set at a state holds a position, as N5 reads it:
+ * `FollowMember(FollowSetOf(model, from), to)`.
+ *
+ * @param content - The content grammar.
+ * @param model - The model.
+ * @param from - The state, 0 for the start.
+ * @param to - The position.
+ * @returns Whether a child at `to` may follow one at `from`.
+ */
+const followHolds = (content: ContentGrammar, model: string, from: string, to: string): boolean =>
+  Option.exists(followSetAt(content, model, from), (set) =>
+    Option.isSome(content.followMember.lookup({ set, to })),
+  );
+
+/**
+ * Whether a child at one position may follow one at another in a family: whether the follow set
+ * of the predecessor's position, under the family's model, holds the child's.
  *
  * @param content - The content grammar.
  * @param key - The family and the two positions.
@@ -1406,7 +1535,7 @@ export const contentModelOf = (
  * @param key.parent - The parent's kind.
  * @param key.from - The predecessor's position, 0 for the start.
  * @param key.to - The child's position.
- * @returns Whether `Follow` holds the pair.
+ * @returns Whether `FollowMember` holds the pair, under `FollowSetOf`.
  */
 export const contentFollows = (
   content: ContentGrammar,
@@ -1418,7 +1547,7 @@ export const contentFollows = (
   },
 ): boolean =>
   Option.exists(contentModelOf(content, key), (model) =>
-    Option.isSome(content.follow.lookup({ from: key.from, model, to: key.to })),
+    followHolds(content, model, key.from, key.to),
   );
 
 /**
@@ -1487,9 +1616,9 @@ export const placementOf = (
 
 /**
  * Step a family's automaton by one placed child, as `Node`'s position derives (the host's
- * evaluation of the law the database proves): an `at` child moves to its position where `Follow`
- * allows, a `shared` one to the one of its positions `Follow` allows, and a `carries` one keeps its
- * predecessor's state.
+ * evaluation of the law the database proves): an `at` child moves to its position where its
+ * predecessor's follow set holds it, a `shared` one to the one of its positions the set holds, and
+ * a `carries` one keeps its predecessor's state.
  *
  * @param content - The content grammar.
  * @param key - The family and the child.
@@ -1505,9 +1634,7 @@ export const placedStep = (
 ): Option.Option<number> => {
   const model = contentModelOf(content, key);
   const follows = (to: number) =>
-    Option.exists(model, (held) =>
-      Option.isSome(content.follow.lookup({ from: String(was), model: held, to: String(to) })),
-    );
+    Option.exists(model, (held) => followHolds(content, held, String(was), String(to)));
 
   switch (placement._tag) {
     case "at": {

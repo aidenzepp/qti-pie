@@ -4,12 +4,14 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter } from "effect";
+import { followPairsOf } from "#pantry/grammar/content.ts";
 import { documentRoots, fragmentRoots } from "#pantry/grammar/facets.ts";
 import { includeKind } from "#pantry/grammar/include.ts";
 import {
   ChildGrammar,
   ContentModelOf,
-  Follow,
+  FollowMember,
+  FollowSetOf,
   grammar,
   IncludeParentKind,
   IncludeRoot,
@@ -39,14 +41,19 @@ const modelOf = new Map(
 );
 
 /**
- * Each model's Follow, as `model from` to the set of positions that follow.
+ * Each model's transitions, its follow sets spelled out (`followPairsOf`).
  */
-const follows = Map.groupBy(Follow.rows, (row) => `${row.model} ${row.from}`);
+const transitions = followPairsOf({ followMember: FollowMember, followSetOf: FollowSetOf });
 
 /**
- * Each model's Follow read backward, as `model to` to the positions it follows.
+ * Each model's transitions, as `model from` to the set of positions that follow.
  */
-const precedes = Map.groupBy(Follow.rows, (row) => `${row.model} ${row.to}`);
+const follows = Map.groupBy(transitions, (row) => `${row.model} ${row.from}`);
+
+/**
+ * Each model's transitions read backward, as `model to` to the positions it follows.
+ */
+const precedes = Map.groupBy(transitions, (row) => `${row.model} ${row.to}`);
 
 /**
  * Each model's last positions, as `model position`.

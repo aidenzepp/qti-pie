@@ -39,6 +39,7 @@ import {
 import type { Types } from "effect";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
+import { followPairsOf } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { NotQti3, UnmodeledVocabulary } from "#pantry/model/shred.ts";
@@ -1058,7 +1059,7 @@ const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
       ),
     ),
     next: grouped(
-      content.follow.rows.map(({ from, model, to }) => [`${model} ${from}`, to] as const),
+      followPairsOf(content).map(({ from, model, to }) => [`${model} ${from}`, to] as const),
     ),
   };
   contentIndexes.set(constants, index);

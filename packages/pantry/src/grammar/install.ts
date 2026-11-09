@@ -13,10 +13,11 @@
  * `grizzle check` decodes, the one form grizzle writes (README, "Closed relations"); a generator
  * builds the rows and the generators' tests review them.
  *
- * `Follow` and `Last` are keyed by their automaton ({@link ContentModel}), and `Symbol` by its
- * shared model ({@link SharedModel}), as the content grammar generates them (`content.ts`): a
- * family reads its model through {@link ContentModelOf} or {@link SharedModelOf}, so each is stated
- * one to one.
+ * `FollowSetOf` and `Last` are keyed by their automaton ({@link ContentModel}), `FollowMember`
+ * by its follow set ({@link FollowSet}), and `Symbol` by its shared model ({@link SharedModel}), as
+ * the content grammar generates them (`content.ts`): a family reads its model through
+ * {@link ContentModelOf} or {@link SharedModelOf}, and a state its set through {@link FollowSetOf},
+ * so each is stated one to one.
  *
  * Where grizzle's surface differs from the generators' shapes, the declaration restates the
  * relation and says why:
@@ -429,7 +430,7 @@ export const BoundZero = closed(
 
 /**
  * The `ContentModel` roster: every distinct content automaton, named by its first family's parent
- * kind, `Follow` and `Last` keyed by it (the content grammar's own key, `content.ts`).
+ * kind, `FollowSetOf` and `Last` keyed by it (the content grammar's own key, `content.ts`).
  */
 export const ContentModel = closed(
   "ContentModel",
@@ -464,7 +465,7 @@ export const ContentModelOf = closed.relation(
 
 /**
  * `ModelPositions`: model → positions, the number of content positions of each automaton, its start
- * 0 included, so the model of a family with no model, or an empty one, has 1. `Follow`'s and
+ * 0 included, so the model of a family with no model, or an empty one, has 1. `FollowSetOf`'s and
  * `Last`'s slots are its counts (README, "Closed relations").
  */
 export const ModelPositions = closed.relation(
@@ -526,14 +527,37 @@ export const ChildGrammar = closed.relation(
 );
 
 /**
- * `Follow`: the set of (model, from, to) where a child at position `to` may follow one at `from`,
- * `from` 0 the start, in the content model's automaton.
+ * The `FollowSet` roster: every distinct follow set of a content model's state, numbered from 0
+ * (`content.ts`): `FollowSetOf` names one per state, and `FollowMember` holds each set's positions
+ * once, however many states of however many models share it.
  */
-export const Follow = closed.relation(
-  "Follow",
-  { from: familyPosition, model: closedId(ContentModel), to: familyPosition },
-  ["model", "from", "to"],
-  grammar.content.follow.rows.map(({ from, model, to }) => ({ from, model, to })),
+export const FollowSet = closed(
+  "FollowSet",
+  nonEmpty("FollowSet", grammar.content.followSets.handles),
+);
+
+/**
+ * `FollowSetOf`: (model, from) → set, total over each content model's states, `from` 0 the start:
+ * the set of the positions a child may take after one at `from`, in the model's automaton. N5 reads
+ * `FollowMember.row(FollowSetOf.at("set", model, was))`, which holds exactly the positions the
+ * automaton's transitions from `was` reach.
+ */
+export const FollowSetOf = closed.relation(
+  "FollowSetOf",
+  { from: familyPosition, model: closedId(ContentModel), set: closedId(FollowSet) },
+  ["model", "from"],
+  grammar.content.followSetOf.rows.map(({ from, model, set }) => ({ from, model, set })),
+);
+
+/**
+ * `FollowMember`: the set of (set, to) where a follow set holds position `to`. The empty set, a
+ * state nothing follows, has no row.
+ */
+export const FollowMember = closed.relation(
+  "FollowMember",
+  { set: closedId(FollowSet), to: closedId(Position) },
+  ["set", "to"],
+  grammar.content.followMember.rows.map(({ set, to }) => ({ set, to })),
 );
 
 /**
@@ -1072,8 +1096,8 @@ const modelSlot = slot(closedId(AttributeSlot), fin(AttributeSlots, "slots"));
 
 /**
  * `AttributeGrammar`: (model, slot) → (name, domain, use), each attribute a model admits at its
- * slot, keyed by the model's own slots as `Follow` is by its model's positions, so each model's
- * block holds its own attributes and no other's: its name, its value domain and its use.
+ * slot, keyed by the model's own slots as `FollowSetOf` is by its model's positions, so each
+ * model's block holds its own attributes and no other's: its name, its value domain and its use.
  */
 export const AttributeGrammar = closed.relation(
   "AttributeGrammar",

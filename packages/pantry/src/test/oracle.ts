@@ -73,7 +73,12 @@ import {
 } from "#pantry/grammar/attributes.ts";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { contentEnds, contentFollows, contentModelOf } from "#pantry/grammar/content.ts";
+import {
+  contentEnds,
+  contentFollows,
+  contentModelOf,
+  followPairsOf,
+} from "#pantry/grammar/content.ts";
 import {
   cnDefaultType,
   cnForms,
@@ -5228,7 +5233,7 @@ const automataOf = (grammar: ComposedGrammar): Automata => {
     return held;
   }
 
-  const { rows } = grammar.content.follow;
+  const rows = followPairsOf(grammar.content);
   const automata: Automata = {
     ends: new Set(grammar.content.last.rows.map(({ model, position }) => `${model} ${position}`)),
     follows: new Map(

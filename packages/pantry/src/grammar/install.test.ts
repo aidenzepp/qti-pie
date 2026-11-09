@@ -213,7 +213,8 @@ const comparisons: readonly Comparison[] = [
       })),
     name: "ModelPositions",
   },
-  { expected: () => grammar.content.follow.rows, name: "Follow" },
+  { expected: () => grammar.content.followSetOf.rows, name: "FollowSetOf" },
+  { expected: () => grammar.content.followMember.rows, name: "FollowMember" },
   { expected: () => grammar.content.last.rows, name: "Last" },
   { expected: () => grammar.content.sharedModelOf.rows, name: "SharedModelOf" },
   {

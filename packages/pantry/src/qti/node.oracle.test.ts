@@ -34,7 +34,7 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Effect, Formatter, Option, Predicate } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { stepOf } from "#pantry/grammar/content.ts";
+import { followPairsOf, stepOf } from "#pantry/grammar/content.ts";
 import * as install from "#pantry/grammar/install.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
 import { readProgram } from "#pantry/import/program.ts";
@@ -117,7 +117,9 @@ const scratchSchema = () =>
       ElementType,
       Enters: install.Enters,
       Flag: install.Flag,
-      Follow: install.Follow,
+      FollowMember: install.FollowMember,
+      FollowSet: install.FollowSet,
+      FollowSetOf: install.FollowSetOf,
       GoverningOf: install.GoverningOf,
       Governor: install.Governor,
       KindGovernor: install.KindGovernor,
@@ -367,10 +369,18 @@ const modelPositions: ReadonlyMap<string, number> = new Map(
 );
 
 /**
- * `Follow`'s rows as installed, each `<model> <from> <to>`.
+ * The transitions `FollowSetOf` and `FollowMember` install, each `<model> <from> <to>`.
+ */
+const transitions = followPairsOf({
+  followMember: install.FollowMember,
+  followSetOf: install.FollowSetOf,
+});
+
+/**
+ * The installed transitions as a set of `<model> <from> <to>`.
  */
 const follow: ReadonlySet<string> = new Set(
-  install.Follow.rows.map(({ from, model, to }) => `${model} ${from} ${to}`),
+  transitions.map(({ from, model, to }) => `${model} ${from} ${to}`),
 );
 
 /**
@@ -1010,7 +1020,7 @@ const familyWith = (holds: (family: Family, kind: string, position: string) => b
     const kind = [...(childGrammar.get(family) ?? [])].find(
       ([child, position]) => !nonElements.has(child) && holds(at, child, position),
     )?.[0];
-    const from = install.Follow.rows.find((row) => row.model === model)?.from;
+    const from = transitions.find((row) => row.model === model)?.from;
     if (kind !== undefined && from !== undefined) {
       return { ...at, from, kind, model };
     }
@@ -1118,7 +1128,7 @@ const memberships: readonly Membership[] = [
   {
     field: "state",
     held: new Set(
-      install.Follow.rows
+      transitions
         .filter(({ from, model }) => model === sharedFamily.model && from === sharedFamily.from)
         .map(({ to }) => to),
     ),

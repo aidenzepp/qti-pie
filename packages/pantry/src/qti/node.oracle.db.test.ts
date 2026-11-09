@@ -29,12 +29,14 @@ import { Array as Arr, Effect, Formatter, Option, Order } from "effect";
 import type { Client, DatabaseError } from "pg";
 import { describe } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
+import { followPairsOf } from "#pantry/grammar/content.ts";
 import {
   AttributeSlot,
   Banned,
   ContentModelOf,
   Flag,
-  Follow,
+  FollowMember,
+  FollowSetOf,
   grammar,
   nonElementKinds,
   Position,
@@ -1190,7 +1192,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                 .map(({ position }) => position),
             );
             const followed = new Set<string>(
-              Follow.rows
+              followPairsOf({ followMember: FollowMember, followSetOf: FollowSetOf })
                 .filter((row) => row.model === contentModel && row.from === second["was"])
                 .map(({ to }) => to),
             );

@@ -41,7 +41,8 @@ const work: Work = { automata: 0, stated: new Map() };
 const contentRelations = [
   "ContentModelOf",
   "ModelPositions",
-  "Follow",
+  "FollowSetOf",
+  "FollowMember",
   "Last",
   "SharedModelOf",
   "SharedPositions",

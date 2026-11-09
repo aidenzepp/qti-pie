@@ -64,7 +64,8 @@ import {
   DocumentType,
   Enters,
   Flag,
-  Follow,
+  FollowMember,
+  FollowSetOf,
   GoverningOf,
   Governor,
   interactionKinds,
@@ -672,12 +673,13 @@ const stringValueFold = fold(
  *   its `Document` row states (`#pantry/qti/chardata.ts`): none and itself for every document but
  *   an included fragment, whose content is judged in the context its includes stand in.
  * - **N3:** the parent copies, riding the owner axis.
- * - **N5:** the predecessor copy, riding the predecessor axis; `N5_Follow`, one `Follow` bit of its
- *   parent's model (`ContentModelOf`) for every member that steps its parent's automaton, a row
- *   check, since a side names fields and the model is a closed read; and `N5_admitted`, which holds
- *   each member's state to its position: the one its kind's particle names, its predecessor's for
- *   character data no particle names, or one of `Symbol`'s for a kind several particles name. An
- *   unadmitted kind reads no position and is refused.
+ * - **N5:** the predecessor copy, riding the predecessor axis; `N5_Follow`, one bit of its
+ *   predecessor's follow set in its parent's model (`FollowMember` of `FollowSetOf`, under
+ *   `ContentModelOf`) for every member that steps its parent's automaton, a row check, since a side
+ *   names fields and the set is a closed read; and `N5_admitted`, which holds each member's state
+ *   to its position: the one its kind's particle names, its predecessor's for character data no
+ *   particle names, or one of `Symbol`'s for a kind several particles name. An unadmitted kind
+ *   reads no position and is refused.
  * - **E1:** `ancestry` is `parentAncestry ∪ Enters(kind)`, only character data has characters,
  *   `first` and `last` are the first and last code points of `chars` (each one code point by its
  *   type, so `startsWith` and `endsWith` pin it), and both empty exactly where `chars` is; the
@@ -771,7 +773,9 @@ export const nodeLawsByName = {
         n.eq(
           Compute.subset(
             Compute.singleton(n.state),
-            Follow.row(ContentModelOf.at("model", n.version, n.parentKind), n.was),
+            FollowMember.row(
+              FollowSetOf.at("set", ContentModelOf.at("model", n.version, n.parentKind), n.was),
+            ),
           ),
           true,
         ),
