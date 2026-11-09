@@ -4048,6 +4048,24 @@ const unwalkedOf = (source: SourceDocument): Unwalked => {
 };
 
 /**
+ * Find the ID an entry of the ID/IDREF table binds: its value collapsed, where the entry is an ID
+ * whose value holds no unexpanded entity reference and is an NCName once collapsed. Any other value
+ * binds nothing (reading 156).
+ *
+ * @param entry The entry.
+ * @returns The ID it binds, or none.
+ */
+const boundIdOf = (entry: IdEntry): Option.Option<string> => {
+  if (entry.role !== "id" || entry.attribute.references.length > 0) {
+    return Option.none();
+  }
+
+  const value = collapse(entry.attribute.value);
+
+  return isNcName(value) ? Option.some(value) : Option.none();
+};
+
+/**
  * Keep the document's ID/IDREF table (XML Schema Part 1, section 3.15.5, and section 3.3.4,
  * Validation Root Valid (ID/IDREF); readings 101 and 156) and give each element its refusals.
  *
@@ -4092,20 +4110,16 @@ const checkIds = (
   const repeats = new Map<IdEntry, Refusal>();
   let complete = !unwalked.includes;
   for (const entry of entries) {
-    if (entry.role !== "id") {
-      continue;
-    }
-
-    if (entry.attribute.references.length > 0) {
+    if (entry.role === "id" && entry.attribute.references.length > 0) {
       complete = false;
+    }
+
+    const bound = boundIdOf(entry);
+    if (Option.isNone(bound)) {
       continue;
     }
 
-    const value = collapse(entry.attribute.value);
-    if (!isNcName(value)) {
-      continue;
-    }
-
+    const { value } = bound;
     const earlier = firsts.get(value);
     if (earlier === undefined) {
       firsts.set(value, entry);
@@ -4163,6 +4177,36 @@ const checkIds = (
   }
 
   return refusals;
+};
+
+/**
+ * Give the document's IDs as its ID/IDREF table binds them ({@link checkIds}), each with the
+ * element that holds it: the declared ID attributes of the elements QTI's tables govern, a response
+ * declaration's identifier among them (reading 14), a context declaration's identifier (reading
+ * 74) and a wild `xml:id` that stands (reading 109), as {@link idEntriesOf} finds them, each
+ * collapsed and an NCName ({@link boundIdOf}). An ID two elements give is held by the first, in
+ * document order, as the table resolves an IDREF to it. The `id` and `xml:id` of a MathML or SSML
+ * island are not among them, since the walk keeps those elements unchecked ({@link unwalkedOf}).
+ *
+ * It walks the document again, so a caller asks for it only where it needs it.
+ *
+ * @param source The document.
+ * @param tables The tables generated from the QTI XSD.
+ * @returns Each ID, keyed by its value, with the element that holds it.
+ */
+export const idHoldersOf = (
+  source: SourceDocument,
+  tables: Tables,
+): ReadonlyMap<string, SourceElement> => {
+  const holders = new Map<string, SourceElement>();
+  for (const entry of idEntriesOf(source, walkTables(source, schemasOf(tables)).steps)) {
+    const bound = boundIdOf(entry);
+    if (Option.isSome(bound) && !holders.has(bound.value)) {
+      holders.set(bound.value, entry.element);
+    }
+  }
+
+  return holders;
 };
 
 /**

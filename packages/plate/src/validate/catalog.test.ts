@@ -216,6 +216,75 @@ const manyDefaults = (path: string, support: string, count: string): Seen => ({
   rule: "child-count",
 });
 
+/**
+ * The path of the body paragraph that carries the `data-catalog-idref` in {@link referencing}.
+ */
+const referencePath = `${root}/qti-item-body/p/@data-catalog-idref`;
+
+/**
+ * Construct an item that declares the response `RESPONSE`, whose body is a paragraph naming a
+ * token in its `data-catalog-idref` and a choice interaction whose one choice has the `id`
+ * `choice-a`, and whose catalog container holds the catalog `glossary`.
+ *
+ * @param token The `data-catalog-idref` as written.
+ * @returns The item, at `item.xml`.
+ */
+const referencing = (token: string): SourceDocument =>
+  doc(
+    "item.xml",
+    el(
+      root,
+      [attr("identifier", "item-1"), attr("time-dependent", "false"), attr("title", "Catalogs")],
+      [
+        el("qti-response-declaration", [
+          attr("base-type", "identifier"),
+          attr("cardinality", "single"),
+          attr("identifier", "RESPONSE"),
+        ]),
+        el(
+          "qti-item-body",
+          [],
+          [
+            el("p", [attr("data-catalog-idref", token)], [text("Text")]),
+            el(
+              "qti-choice-interaction",
+              [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
+              [
+                el(
+                  "qti-simple-choice",
+                  [attr("id", "choice-a"), attr("identifier", "A")],
+                  [text("A")],
+                ),
+              ],
+            ),
+          ],
+        ),
+        el("qti-catalog-info", [], [catalog("glossary", [card("spoken")])]),
+      ],
+    ),
+  );
+
+/**
+ * The refusal F3b gives the body paragraph's `data-catalog-idref` in {@link referencing} where its
+ * token is the ID of an element other than a catalog.
+ *
+ * @param value The token, collapsed.
+ * @param target The local name of the element whose ID it is.
+ * @returns The refusal's facts.
+ */
+const misdirected = (value: string, target: string): Seen => ({
+  detail: {
+    attribute: "data-catalog-idref",
+    check: "catalog-reference",
+    element: "p",
+    source: "info.txt:21437",
+    target,
+    value,
+  },
+  location: { kind: "path", path: referencePath },
+  rule: "attribute-type",
+});
+
 describe("validate/catalog.ts", () => {
   it("align-54 R3 catalog cards F3a: refuses a second spoken card in one catalog, at its support", () => {
     const document = item([catalog("glossary", [card("spoken"), card("spoken")])]);
@@ -303,5 +372,50 @@ describe("validate/catalog.ts", () => {
       repeatedSupport(`${infoPath}/qti-catalog/qti-card[2]/@support`, "glossary", "spoken"),
     ]);
     assert.notStrictEqual(check(distinct, tables, Option.none()).verdict, "refused");
+  });
+
+  it("align-54 R3 catalog references F3b: refuses a data-catalog-idref naming a qti-simple-choice's id, collapsed, and check gives that refusal alone", () => {
+    const document = referencing(" choice-a ");
+
+    assert.deepStrictEqual(seen(checkCatalogs(document, tables)), [
+      misdirected("choice-a", "qti-simple-choice"),
+    ]);
+    assert.deepStrictEqual(refusalsOf(check(document, tables, Option.none())), [
+      misdirected("choice-a", "qti-simple-choice"),
+    ]);
+  });
+
+  it("align-54 R3 catalog references F3b: refuses a data-catalog-idref naming a response declaration's identifier", () => {
+    assert.deepStrictEqual(seen(checkCatalogs(referencing("RESPONSE"), tables)), [
+      misdirected("RESPONSE", "qti-response-declaration"),
+    ]);
+  });
+
+  it("align-54 R3 catalog references F3b: accepts a data-catalog-idref naming a catalog, collapsed", () => {
+    for (const token of ["glossary", " glossary "]) {
+      const document = referencing(token);
+
+      assert.deepStrictEqual(checkCatalogs(document, tables), []);
+      assert.notStrictEqual(check(document, tables, Option.none()).verdict, "refused");
+    }
+  });
+
+  it("align-54 R3 catalog references F3b: leaves a data-catalog-idref naming no ID to the ID table, so check gives only its idref-target", () => {
+    const document = referencing("nowhere");
+
+    assert.deepStrictEqual(checkCatalogs(document, tables), []);
+    assert.deepStrictEqual(refusalsOf(check(document, tables, Option.none())), [
+      {
+        detail: {
+          attribute: "data-catalog-idref",
+          check: "idref-target",
+          element: "p",
+          reading: "156",
+          value: "nowhere",
+        },
+        location: { kind: "path", path: referencePath },
+        rule: "attribute-type",
+      },
+    ]);
   });
 });
