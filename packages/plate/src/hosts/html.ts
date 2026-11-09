@@ -12,7 +12,8 @@
  * restores no Choice's checked state from its form cache or its back-forward cache over what the
  * host rendered.
  *
- * It imports only `#plate/index.ts`, so it uses nothing a host outside the package could not. The
+ * It imports only plate's public entries, `#plate/index.ts` and `#plate/validate/open.ts`
+ * (`@qti-pie/plate/open`), so it uses nothing a host outside the package could not. The
  * dev playground mounts it at `/hosts/html` and serves the sheet at `/styles.css`; the core never
  * reaches it (`src/boundary.test.ts` forbids `#plate/hosts/`).
  *
@@ -22,7 +23,6 @@ import {
   checkResponses,
   configure,
   decode,
-  open,
   partition,
   postings,
   redact,
@@ -40,6 +40,7 @@ import type {
   StoredRecord,
   ValidationMessage,
 } from "#plate/index.ts";
+import { open } from "#plate/validate/open.ts";
 
 /**
  * A Fetch handler: it answers one request with the page, or with a short page saying why not.

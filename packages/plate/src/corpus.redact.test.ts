@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option, Predicate, Result, Schema } from "effect";
 import { RedactedSchema } from "#plate/codec/redacted.ts";
-import { configure, encodeRedacted, open, redact } from "#plate/index.ts";
+import { configure, encodeRedacted, redact } from "#plate/index.ts";
 import type { Accepted, Configuration, RedactedJson } from "#plate/index.ts";
 import { formatPrinted } from "#plate/engine/format.ts";
 import { integerOf } from "#plate/engine/numbers.ts";
@@ -41,6 +41,7 @@ import {
   threeStates,
 } from "#plate/test/sweep.ts";
 import type { Member, RecordState, RenderState } from "#plate/test/sweep.ts";
+import { open } from "#plate/validate/open.ts";
 
 /**
  * Opening the corpus (about 800 members) and rendering every accepted item in three states runs

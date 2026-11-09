@@ -9,6 +9,19 @@ changes. [`docs/spec-readings.md`](../../docs/spec-readings.md) numbers the read
 The first entry lists the surface of M1 and M2, and what M3 adds to it. plate is not published,
 and each of its entry points is unstable until M3.
 
+### Serving admitted content without the XSD tables (2026-11-09)
+
+- `openAdmitted(location, bytes)`, in `@qti-pie/plate`, opens a document the host's content store
+  has already admitted, through a check of its own, and returns the verdict `open` gives on it. It
+  runs none of `open`'s checks (the structural walk, the item and the test prose rules), and it
+  secures an item by the securing tables, a 148 KB projection of the XSD tables, in place of the
+  full 5 MB. E3 and the URL checks still run on the same values, so an `Accepted` it gives renders
+  and scores as `open`'s does. Give it only bytes the store admitted: it accepts what `open`'s
+  checks would refuse.
+- `open` moves from `@qti-pie/plate` to a new entry, `@qti-pie/plate/open`. Import it from there.
+  A host that imports only `@qti-pie/plate` no longer loads the XSD tables.
+- Only `check`, or `checkAdmitted` for content admission already checked, makes an `Accepted`.
+
 ### Content packages on their own entry (2026-11-09)
 
 - `openPackage` and the types of its verdict, `AcceptedPackage`, `PackageResource`, `PackageTest`

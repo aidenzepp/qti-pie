@@ -16,7 +16,6 @@ import {
   encodeSession,
   entryName,
   intentName,
-  open,
   results,
   startTest,
 } from "#plate/index.ts";
@@ -29,6 +28,7 @@ import type {
   Value,
 } from "#plate/index.ts";
 import { readImports } from "#plate/test/imports.ts";
+import * as openEntry from "#plate/validate/open.ts";
 
 /**
  * The README's opening, rule `17b156bd`: the title, the quoted tagline and the one-line summary,
@@ -382,8 +382,8 @@ const serverAction = Effect.fnUntraced(function* serverAction() {
  */
 const byteDelivery = Effect.fnUntraced(function* byteDelivery() {
   const encoder = new TextEncoder();
-  const tested = yield* open("tests/readme.xml", encoder.encode(byteTestXml));
-  const opened = yield* open("tests/byte.xml", encoder.encode(byteItemXml));
+  const tested = yield* openEntry.open("tests/readme.xml", encoder.encode(byteTestXml));
+  const opened = yield* openEntry.open("tests/byte.xml", encoder.encode(byteItemXml));
   const test =
     (tested.verdict === "accepted" || tested.verdict === "accepted-with-unsupported") &&
     tested.kind === "test"
@@ -452,6 +452,20 @@ describe("README.md", () => {
     assert.isAbove(imported.length, 0);
     for (const name of imported) {
       assert.isTrue(exported.has(name), `${name} is imported from ${packageName}`);
+    }
+  });
+
+  it("imports from @qti-pie/plate/open only names src/validate/open.ts exports, open among them", () => {
+    const exported = new Set(Object.keys(openEntry));
+    const imported = codeBlocks(readme()).flatMap((block) =>
+      readImports(scriptOf(block)).imports.flatMap(({ names, specifier }) =>
+        specifier === `${packageName}/open` ? names.map(({ name }) => name) : [],
+      ),
+    );
+
+    assert.include(imported, "open");
+    for (const name of imported) {
+      assert.isTrue(exported.has(name), `${name} is imported from ${packageName}/open`);
     }
   });
 

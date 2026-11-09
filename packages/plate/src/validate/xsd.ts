@@ -263,6 +263,68 @@ export const Tables = Schema.Struct({
 export type Tables = typeof Tables.Type;
 
 /**
+ * The part of an element's table or a named type's entry that the structural walk reads to decide
+ * which elements it checks and which table governs each: the children it names, its element
+ * wildcard, and, for an element, whether it is declared globally and the types it is declared with,
+ * and for a type, what it derives from. `governingTables` in `src/validate/structure.ts` reads
+ * these fields and no others, so any tables that hold them give the same governing tables.
+ */
+export interface WalkContent {
+  readonly anyElement?: Wildcard;
+  readonly children: readonly ChildName[];
+}
+
+/**
+ * An element's table as the structural walk reads it.
+ */
+export interface WalkElement extends WalkContent {
+  readonly global: boolean;
+  readonly types: readonly ChildName[];
+}
+
+/**
+ * A named type's entry as the structural walk reads it: its base and derivation, or a union with
+ * no base.
+ */
+export type WalkType = WalkContent &
+  (
+    | { readonly base: ChildName; readonly derivation: "extension" | "restriction" }
+    | { readonly derivation: "union" }
+  );
+
+/**
+ * Tables as the structural walk reads them, keyed as {@link Tables} is. {@link Tables} are walk
+ * tables, and so are the securing tables (`src/validate/securing.ts`).
+ */
+export interface WalkTables {
+  readonly elements: { readonly [local: string]: WalkElement };
+  readonly types: { readonly [local: string]: WalkType };
+}
+
+/**
+ * The part of an attribute's table that E3 reads: the attribute's name and its `use`.
+ */
+export type AttributeUse = Pick<AttributeTable, "local" | "namespace" | "use">;
+
+/**
+ * What securing an item reads of a table: the walk's fields and the attributes it declares by
+ * name, each with its `use`.
+ */
+export interface SecuringContent {
+  readonly attributes: readonly AttributeUse[];
+}
+
+/**
+ * Tables as securing an item reads them: the walk's tables with each table's declared attributes.
+ * {@link Tables} are securing tables, so `secure` in `src/validate/verdict.ts` reads the full
+ * tables and the securing tables' projection of them alike.
+ */
+export interface SecuringTables extends WalkTables {
+  readonly elements: { readonly [local: string]: SecuringContent & WalkElement };
+  readonly types: { readonly [local: string]: SecuringContent & WalkType };
+}
+
+/**
  * The Schema of how many times a table admits one child it names: the child's namespace and local
  * name, and the least and the greatest number of times its content model admits it, as XML
  * Schema's `minOccurs` and `maxOccurs` spell them.

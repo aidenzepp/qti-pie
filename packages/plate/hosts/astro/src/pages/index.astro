@@ -26,7 +26,6 @@ import {
   checkResponses,
   configure,
   decode,
-  open,
   partition,
   postings,
   redact,
@@ -35,6 +34,7 @@ import {
   score,
 } from "#plate/index.ts";
 import type { Entry, Options, ResponseValue, StatusInput, StoredRecord, ValidationMessage } from "#plate/index.ts";
+import { open } from "#plate/validate/open.ts";
 
 /**
  * Render the page on each request, never at build time: it reads the corpus and takes posts.

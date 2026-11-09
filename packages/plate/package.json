@@ -10,6 +10,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./open": "./src/validate/open.ts",
     "./package": "./src/package/index.ts",
     "./styles.css": "./src/styles.css"
   },

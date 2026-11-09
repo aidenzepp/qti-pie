@@ -1,0 +1,7091 @@
+{
+  "attributeLists": [
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      49, 50, 51, 52, 53, 54, 55, 56, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      49, 50, 52, 53, 54, 55, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 55, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 59, 46, 60,
+      61, 47, 48, 50, 52, 53, 54, 62, 63, 64, 65, 55, 66, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 55, 67, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 68, 46, 47,
+      48, 49, 50, 52, 53, 54, 55, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 55, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 55, 70, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 55, 70, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 71, 55, 58
+    ],
+    [
+      72, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24,
+      25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+      48, 50, 73, 52, 53, 54, 74, 55, 75, 76, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 77, 47,
+      48, 49, 50, 73, 52, 53, 54, 55, 78, 76, 57, 58
+    ],
+    [79, 56, 80, 81],
+    [51, 82],
+    [],
+    [83, 84],
+    [85, 86, 87],
+    [88, 89, 90],
+    [91, 82, 53, 92, 93, 94, 95, 58],
+    [96, 46, 97, 51, 82, 98],
+    [46, 97, 82, 99, 98, 93, 100],
+    [46, 51, 82],
+    [82, 53, 93, 94, 95, 58],
+    [51, 82, 67],
+    [46, 82, 93, 94, 95],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 85, 47,
+      48, 50, 101, 52, 82, 53, 54, 102, 103, 104, 55, 87, 105, 106, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 107, 108, 109, 55, 110, 57, 58
+    ],
+    [111],
+    [112],
+    [53, 113],
+    [114, 58],
+    [115, 58],
+    [116],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 117,
+      118, 48, 50, 52, 53, 54, 119, 120, 121, 109, 55, 110, 57, 58
+    ],
+    [122, 123, 82],
+    [82],
+    [124],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 109, 55, 57, 58
+    ],
+    [46, 125],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 126, 47,
+      48, 50, 52, 53, 54, 109, 55, 93, 57, 58
+    ],
+    [127, 128, 129, 130],
+    [131, 132],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 133, 46, 47,
+      134, 48, 50, 135, 136, 137, 52, 53, 54, 138, 139, 140, 141, 109, 55, 142, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      49, 50, 52, 82, 53, 54, 143, 55, 105, 57, 58
+    ],
+    [144],
+    [113],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 82, 53, 54, 102, 98, 55, 105, 106, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 82, 53, 54, 145, 102, 103, 104, 146, 55, 105, 106, 147, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 148,
+      117, 118, 48, 50, 52, 53, 54, 107, 108, 109, 55, 110, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 82, 53, 54, 102, 103, 104, 55, 105, 106, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 107, 108, 109, 55, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 148,
+      117, 118, 48, 50, 52, 53, 54, 107, 108, 109, 55, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 119, 120, 109, 55, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 85, 47,
+      48, 50, 101, 52, 82, 53, 54, 55, 87, 105, 106, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 117,
+      118, 48, 50, 52, 53, 54, 119, 120, 109, 55, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      49, 50, 52, 82, 53, 54, 55, 105, 106, 57, 58
+    ],
+    [58],
+    [149],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 97, 52, 82, 53, 54, 55, 105, 106, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 118,
+      150, 48, 50, 52, 53, 54, 120, 98, 109, 55, 110, 57, 58
+    ],
+    [85, 87],
+    [151, 116, 152],
+    [153, 154],
+    [88],
+    [155, 156, 157],
+    [46, 47, 50, 52, 53, 58],
+    [158, 159, 160, 161, 162, 163, 164],
+    [165],
+    [166, 167, 86],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 168,
+      117, 118, 48, 50, 52, 53, 54, 107, 108, 109, 55, 110, 57, 58
+    ],
+    [156, 157],
+    [79],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 169, 46, 170,
+      47, 48, 50, 52, 53, 54, 62, 171, 172, 109, 55, 57, 58
+    ],
+    [82, 143, 173, 67],
+    [174, 175, 176],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 148,
+      117, 118, 48, 50, 52, 53, 54, 119, 120, 121, 109, 55, 110, 57, 58
+    ],
+    [110],
+    [122, 123, 177, 82, 124, 178, 179, 180, 181, 182, 183],
+    [174, 175, 143, 176, 184],
+    [185],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 186, 47,
+      48, 50, 52, 53, 54, 187, 109, 55, 57, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 188, 46, 47,
+      48, 50, 52, 53, 54, 119, 120, 109, 55, 58
+    ],
+    [52],
+    [133, 46, 189, 190, 137, 52, 82, 191, 53, 192, 193, 57, 58],
+    [83, 194],
+    [83, 194, 195],
+    [196],
+    [197, 198],
+    [131, 199],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      49, 50, 52, 53, 54, 55, 200, 201, 57, 58
+    ],
+    [202, 203],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 97, 52, 82, 53, 54, 102, 103, 104, 55, 105, 106, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 204, 121, 109, 205, 55, 195, 206, 207, 57, 58
+    ],
+    [208, 209],
+    [51, 210, 67, 78],
+    [208],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      49, 50, 52, 82, 53, 54, 55, 105, 211, 57, 58
+    ],
+    [122, 123, 82, 212, 213],
+    [211],
+    [214, 82, 143, 173, 67],
+    [46, 82, 215, 216, 67],
+    [122, 174, 175, 176, 217, 184],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 133, 46, 47,
+      134, 48, 50, 135, 137, 52, 53, 54, 140, 141, 109, 55, 142, 57, 58
+    ],
+    [218, 219, 220],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 109, 55, 56, 57, 58
+    ],
+    [122, 221],
+    [82, 184],
+    [222, 223],
+    [82, 80],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 210, 55, 224, 66, 225, 56, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      49, 50, 52, 53, 54, 55, 226, 57, 58
+    ],
+    [
+      227, 228, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+      23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
+      229, 46, 230, 47, 48, 50, 231, 52, 53, 54, 55, 232, 233, 234, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      115, 50, 52, 235, 53, 54, 55, 75, 236, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 59, 46, 60,
+      61, 47, 48, 50, 73, 52, 53, 54, 62, 63, 64, 237, 65, 55, 66, 76, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 55
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 55
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 69, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 55, 58
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      50, 52, 53, 54, 109, 55, 58
+    ],
+    [238],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      49, 50, 52, 53, 54, 55, 239, 201, 57, 58
+    ]
+  ],
+  "attributes": [
+    {
+      "local": "aria-activedescendant",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-atomic",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-autocomplete",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-busy",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-checked",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-colcount",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-colindex",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-colspan",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-controls",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-current",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-describedby",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-details",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-disabled",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-errormessage",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-expanded",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-flowto",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-haspopup",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-hidden",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-invalid",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-keyshortcuts",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-label",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-labelledby",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-level",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-live",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-modal",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-multiline",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-multiselectable",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-orientation",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-owns",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-placeholder",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-posinset",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-pressed",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-readonly",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-relevant",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-required",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-roledescription",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-rowcount",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-rowindex",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-rowspan",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-selected",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-setsize",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-sort",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-valuemax",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-valuemin",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-valuenow",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-valuetext",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "class",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "data-catalog-idref",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "data-qti-suppress-tts",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "data-ssml",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "dir",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "href",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "id",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "label",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "lang",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "role",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "type",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "base",
+      "namespace": 1,
+      "use": "optional"
+    },
+    {
+      "local": "lang",
+      "namespace": 1,
+      "use": "optional"
+    },
+    {
+      "local": "autoplay",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "controls",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "crossorigin",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "loop",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "mediagroup",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "muted",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "preload",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "src",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "title",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "cite",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "aria-keyshorts",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "span",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "open",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "alt",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "height",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "longdesc",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "src",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "width",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "data",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "type",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "name",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "value",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "valuetype",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "identifier",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "max",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "min",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "coords",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "mapped-value",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "shape",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "default-value",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "lower-bound",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "upper-bound",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "adaptive",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "time-dependent",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "title",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "tool-name",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "tool-version",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "category",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "fixed",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "required",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "keep-together",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "visible",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "hotspot-label",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "match-group",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "match-max",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "match-min",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "show-hide",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "template-identifier",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "max-associations",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "min-associations",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "response-identifier",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "shuffle",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "base-type",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "target",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "mime-type",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "support",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "default",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "id",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "data-max-selections-message",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "data-min-selections-message",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "max-choices",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "min-choices",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "orientation",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "base-type",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "cardinality",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "interpretation",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "definition",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "count-attempt",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "include-lower-bound",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "include-upper-bound",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "tolerance",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "tolerance-mode",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "figures",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "rounding-mode",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "base",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "data-patternmask-message",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "expected-length",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "expected-lines",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "format",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "max-strings",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "min-strings",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "pattern-mask",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "placeholder-text",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "string-identifier",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "outcome-identifier",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "field-identifier",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "left",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "object-label",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "top",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "data-choices-container-width",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "n",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "data-prompt",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "fallback-path",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "primary-path",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "primary-configuration",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "secondary-configuration",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "include-boundary",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "source-value",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "target-value",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "allow-comment",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "allow-review",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "allow-skipping",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "max-attempts",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "show-feedback",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "show-solution",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "validate-responses",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "unit",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "case-sensitive",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "map-key",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "data-first-column-header",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "autostart",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "coords",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "max-plays",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "min-plays",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "show-hide",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "exclude-category",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "include-category",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "section-identifier",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "external-scored",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "long-interpretation",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "mastery-value",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "normal-maximum",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "normal-minimum",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "variable-identifier-ref",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "view",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "weight-identifier",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "pattern",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "custom-interaction-type-identifier",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "module",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "center-point",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "delimiter",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "field",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "index",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "mapping-indicator",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "power-form",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "min",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "step",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "number-repeats",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "template",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "template-location",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "rounding-mode",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "use",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "view",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "select",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "with-replacement",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "lower-bound",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "reverse",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "step-label",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "upper-bound",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "case-sensitive",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "substring",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "media",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "template-identifier",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "math-variable",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "param-variable",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "access",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "navigation-mode",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "submission-mode",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "variable-identifier",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "allow-late-submission",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "max-time",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "min-time",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "field-identifier",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "source-identifier",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "target-identifier",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "sizes",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "srcset",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "summary",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "abbr",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "align",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "axis",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "colspan",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "headers",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "rowspan",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "scope",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "valign",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "kind",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "srclang",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "poster",
+      "namespace": 0,
+      "use": "optional"
+    },
+    {
+      "local": "mime-type",
+      "namespace": 0,
+      "use": "required"
+    },
+    {
+      "local": "use",
+      "namespace": 0,
+      "use": "required"
+    }
+  ],
+  "elements": {
+    "a": {
+      "attributes": 0,
+      "children": 0,
+      "global": true,
+      "types": 1
+    },
+    "abbr": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "acronym": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "address": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "article": {
+      "attributes": 2,
+      "children": 3,
+      "global": true,
+      "types": 4
+    },
+    "aside": {
+      "attributes": 2,
+      "children": 3,
+      "global": true,
+      "types": 4
+    },
+    "audio": {
+      "attributes": 3,
+      "children": 5,
+      "global": true,
+      "types": 6
+    },
+    "b": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "bdi": {
+      "attributes": 2,
+      "children": 7,
+      "global": true,
+      "types": 8
+    },
+    "bdo": {
+      "attributes": 4,
+      "children": 9,
+      "global": true,
+      "types": 10
+    },
+    "big": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "blockquote": {
+      "attributes": 5,
+      "children": 7,
+      "global": true,
+      "types": 11
+    },
+    "br": {
+      "attributes": 6,
+      "children": 12,
+      "global": true,
+      "types": 13
+    },
+    "caption": {
+      "attributes": 2,
+      "children": 3,
+      "global": true,
+      "types": 14
+    },
+    "cite": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "code": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "col": {
+      "attributes": 7,
+      "children": 12,
+      "global": true,
+      "types": 15
+    },
+    "colgroup": {
+      "attributes": 8,
+      "children": 16,
+      "global": true,
+      "types": 17
+    },
+    "dd": {
+      "attributes": 1,
+      "children": 3,
+      "global": true,
+      "types": 18
+    },
+    "details": {
+      "attributes": 9,
+      "children": 19,
+      "global": true,
+      "types": 20
+    },
+    "dfn": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "div": {
+      "attributes": 1,
+      "children": 21,
+      "global": true,
+      "types": 22
+    },
+    "dl": {
+      "attributes": 1,
+      "children": 23,
+      "global": true,
+      "types": 24
+    },
+    "dt": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 25
+    },
+    "em": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "figcaption": {
+      "attributes": 2,
+      "children": 3,
+      "global": true,
+      "types": 4
+    },
+    "figure": {
+      "attributes": 2,
+      "children": 26,
+      "global": true,
+      "types": 27
+    },
+    "footer": {
+      "attributes": 2,
+      "children": 3,
+      "global": true,
+      "types": 4
+    },
+    "h1": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "h2": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "h3": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "h4": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "h5": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "h6": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "header": {
+      "attributes": 2,
+      "children": 3,
+      "global": true,
+      "types": 4
+    },
+    "hr": {
+      "attributes": 6,
+      "children": 12,
+      "global": true,
+      "types": 28
+    },
+    "i": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "img": {
+      "attributes": 10,
+      "children": 12,
+      "global": true,
+      "types": 29
+    },
+    "kbd": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "label": {
+      "attributes": 2,
+      "children": 3,
+      "global": true,
+      "types": 4
+    },
+    "li": {
+      "attributes": 2,
+      "children": 3,
+      "global": true,
+      "types": 30
+    },
+    "nav": {
+      "attributes": 2,
+      "children": 3,
+      "global": true,
+      "types": 4
+    },
+    "object": {
+      "attributes": 11,
+      "children": 31,
+      "global": true,
+      "types": 32
+    },
+    "ol": {
+      "attributes": 1,
+      "children": 33,
+      "global": true,
+      "types": 34
+    },
+    "p": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "param": {
+      "attributes": 12,
+      "children": 12,
+      "global": false,
+      "types": 35
+    },
+    "picture": {
+      "attributes": 2,
+      "children": 36,
+      "global": true,
+      "types": 37
+    },
+    "pre": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "q": {
+      "attributes": 5,
+      "children": 0,
+      "global": true,
+      "types": 38
+    },
+    "qti-adaptive-engine-ref": {
+      "attributes": 13,
+      "children": 12,
+      "global": false,
+      "types": 39
+    },
+    "qti-adaptive-selection": {
+      "attributes": 14,
+      "children": 40,
+      "global": false,
+      "types": 41
+    },
+    "qti-adaptive-settings-ref": {
+      "attributes": 13,
+      "children": 12,
+      "global": false,
+      "types": 39
+    },
+    "qti-and": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 43
+    },
+    "qti-any-n": {
+      "attributes": 15,
+      "children": 42,
+      "global": false,
+      "types": 44
+    },
+    "qti-area-map-entry": {
+      "attributes": 16,
+      "children": 12,
+      "global": false,
+      "types": 45
+    },
+    "qti-area-mapping": {
+      "attributes": 17,
+      "children": 46,
+      "global": false,
+      "types": 47
+    },
+    "qti-assessment-item": {
+      "attributes": 18,
+      "children": 48,
+      "global": true,
+      "types": 49
+    },
+    "qti-assessment-item-ref": {
+      "attributes": 19,
+      "children": 50,
+      "global": false,
+      "types": 51
+    },
+    "qti-assessment-section": {
+      "attributes": 20,
+      "children": 52,
+      "global": true,
+      "types": 53
+    },
+    "qti-assessment-section-ref": {
+      "attributes": 21,
+      "children": 12,
+      "global": false,
+      "types": 54
+    },
+    "qti-assessment-stimulus": {
+      "attributes": 22,
+      "children": 55,
+      "global": true,
+      "types": 56
+    },
+    "qti-assessment-stimulus-ref": {
+      "attributes": 23,
+      "children": 12,
+      "global": false,
+      "types": 57
+    },
+    "qti-assessment-test": {
+      "attributes": 24,
+      "children": 58,
+      "global": true,
+      "types": 59
+    },
+    "qti-associable-hotspot": {
+      "attributes": 25,
+      "children": 12,
+      "global": false,
+      "types": 60
+    },
+    "qti-associate-interaction": {
+      "attributes": 26,
+      "children": 61,
+      "global": false,
+      "types": 62
+    },
+    "qti-base-value": {
+      "attributes": 27,
+      "children": 12,
+      "global": false,
+      "types": 63
+    },
+    "qti-branch-rule": {
+      "attributes": 28,
+      "children": 42,
+      "global": false,
+      "types": 64
+    },
+    "qti-calculator": {
+      "attributes": 14,
+      "children": 65,
+      "global": false,
+      "types": 66
+    },
+    "qti-calculator-info": {
+      "attributes": 29,
+      "children": 67,
+      "global": false,
+      "types": 68
+    },
+    "qti-calculator-type": {
+      "attributes": 14,
+      "children": 12,
+      "global": false,
+      "types": 12
+    },
+    "qti-card": {
+      "attributes": 30,
+      "children": 69,
+      "global": false,
+      "types": 70
+    },
+    "qti-card-entry": {
+      "attributes": 31,
+      "children": 71,
+      "global": false,
+      "types": 72
+    },
+    "qti-catalog": {
+      "attributes": 32,
+      "children": 73,
+      "global": false,
+      "types": 74
+    },
+    "qti-catalog-info": {
+      "attributes": 14,
+      "children": 75,
+      "global": false,
+      "types": 76
+    },
+    "qti-choice-interaction": {
+      "attributes": 33,
+      "children": 77,
+      "global": false,
+      "types": 78
+    },
+    "qti-companion-materials-info": {
+      "anyElement": {
+        "namespace": "##other",
+        "process": "strict"
+      },
+      "attributes": 14,
+      "children": 79,
+      "global": false,
+      "types": 80
+    },
+    "qti-container-size": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 81
+    },
+    "qti-contains": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-content-body": {
+      "attributes": 14,
+      "children": 83,
+      "global": false,
+      "types": 84
+    },
+    "qti-context-declaration": {
+      "attributes": 34,
+      "children": 85,
+      "global": false,
+      "types": 86
+    },
+    "qti-context-variable": {
+      "attributes": 35,
+      "children": 12,
+      "global": false,
+      "types": 87
+    },
+    "qti-correct": {
+      "attributes": 35,
+      "children": 12,
+      "global": false,
+      "types": 88
+    },
+    "qti-correct-response": {
+      "attributes": 36,
+      "children": 89,
+      "global": false,
+      "types": 90
+    },
+    "qti-custom-interaction": {
+      "anyElement": {
+        "namespace": "##any",
+        "process": "lax"
+      },
+      "attributes": 37,
+      "children": 12,
+      "global": false,
+      "types": 91
+    },
+    "qti-custom-operator": {
+      "anyElement": {
+        "namespace": "##other",
+        "process": "lax"
+      },
+      "attributes": 38,
+      "children": 42,
+      "global": false,
+      "types": 92
+    },
+    "qti-default": {
+      "attributes": 35,
+      "children": 12,
+      "global": false,
+      "types": 93
+    },
+    "qti-default-value": {
+      "attributes": 36,
+      "children": 89,
+      "global": false,
+      "types": 94
+    },
+    "qti-delete": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-description": {
+      "attributes": 14,
+      "children": 12,
+      "global": false,
+      "types": 95
+    },
+    "qti-digital-material": {
+      "attributes": 29,
+      "children": 67,
+      "global": false,
+      "types": 68
+    },
+    "qti-divide": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-drawing-interaction": {
+      "attributes": 37,
+      "children": 96,
+      "global": false,
+      "types": 97
+    },
+    "qti-duration-gte": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-duration-lt": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-end-attempt-interaction": {
+      "attributes": 39,
+      "children": 12,
+      "global": false,
+      "types": 98
+    },
+    "qti-equal": {
+      "attributes": 40,
+      "children": 42,
+      "global": false,
+      "types": 99
+    },
+    "qti-equal-rounded": {
+      "attributes": 41,
+      "children": 42,
+      "global": false,
+      "types": 100
+    },
+    "qti-exit-response": {
+      "attributes": 14,
+      "children": 12,
+      "global": false,
+      "types": 101
+    },
+    "qti-exit-template": {
+      "attributes": 14,
+      "children": 12,
+      "global": false,
+      "types": 101
+    },
+    "qti-exit-test": {
+      "attributes": 14,
+      "children": 12,
+      "global": false,
+      "types": 101
+    },
+    "qti-extended-text-interaction": {
+      "attributes": 42,
+      "children": 102,
+      "global": false,
+      "types": 103
+    },
+    "qti-feedback-block": {
+      "attributes": 43,
+      "children": 104,
+      "global": false,
+      "types": 105
+    },
+    "qti-feedback-inline": {
+      "attributes": 43,
+      "children": 106,
+      "global": false,
+      "types": 107
+    },
+    "qti-field-value": {
+      "attributes": 44,
+      "children": 42,
+      "global": false,
+      "types": 108
+    },
+    "qti-file-href": {
+      "attributes": 45,
+      "children": 12,
+      "global": false,
+      "types": 109
+    },
+    "qti-gap": {
+      "attributes": 46,
+      "children": 12,
+      "global": false,
+      "types": 110
+    },
+    "qti-gap-img": {
+      "attributes": 47,
+      "children": 111,
+      "global": false,
+      "types": 112
+    },
+    "qti-gap-match-interaction": {
+      "attributes": 48,
+      "children": 113,
+      "global": false,
+      "types": 114
+    },
+    "qti-gap-text": {
+      "attributes": 49,
+      "children": 115,
+      "global": false,
+      "types": 116
+    },
+    "qti-gcd": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 43
+    },
+    "qti-graphic-associate-interaction": {
+      "attributes": 50,
+      "children": 117,
+      "global": false,
+      "types": 118
+    },
+    "qti-graphic-gap-match-interaction": {
+      "attributes": 51,
+      "children": 119,
+      "global": false,
+      "types": 120
+    },
+    "qti-graphic-order-interaction": {
+      "attributes": 52,
+      "children": 121,
+      "global": false,
+      "types": 122
+    },
+    "qti-gt": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-gte": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-hotspot-choice": {
+      "attributes": 53,
+      "children": 12,
+      "global": false,
+      "types": 123
+    },
+    "qti-hotspot-interaction": {
+      "attributes": 54,
+      "children": 121,
+      "global": false,
+      "types": 124
+    },
+    "qti-hottext": {
+      "attributes": 55,
+      "children": 115,
+      "global": false,
+      "types": 125
+    },
+    "qti-hottext-interaction": {
+      "attributes": 54,
+      "children": 126,
+      "global": false,
+      "types": 127
+    },
+    "qti-html-content": {
+      "attributes": 56,
+      "children": 128,
+      "global": false,
+      "types": 129
+    },
+    "qti-increment-si": {
+      "attributes": 14,
+      "children": 130,
+      "global": false,
+      "types": 131
+    },
+    "qti-increment-us": {
+      "attributes": 14,
+      "children": 130,
+      "global": false,
+      "types": 132
+    },
+    "qti-index": {
+      "attributes": 57,
+      "children": 42,
+      "global": false,
+      "types": 133
+    },
+    "qti-inline-choice": {
+      "attributes": 58,
+      "children": 115,
+      "global": false,
+      "types": 134
+    },
+    "qti-inline-choice-interaction": {
+      "attributes": 59,
+      "children": 135,
+      "global": false,
+      "types": 136
+    },
+    "qti-inside": {
+      "attributes": 60,
+      "children": 42,
+      "global": false,
+      "types": 137
+    },
+    "qti-integer-divide": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-integer-modulus": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-integer-to-float": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 81
+    },
+    "qti-interaction-markup": {
+      "attributes": 14,
+      "children": 138,
+      "global": false,
+      "types": 139
+    },
+    "qti-interaction-module": {
+      "attributes": 61,
+      "children": 12,
+      "global": false,
+      "types": 140
+    },
+    "qti-interaction-modules": {
+      "attributes": 62,
+      "children": 141,
+      "global": false,
+      "types": 142
+    },
+    "qti-interpolation-table": {
+      "attributes": 63,
+      "children": 143,
+      "global": false,
+      "types": 144
+    },
+    "qti-interpolation-table-entry": {
+      "attributes": 64,
+      "children": 12,
+      "global": false,
+      "types": 145
+    },
+    "qti-is-null": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 81
+    },
+    "qti-item-body": {
+      "attributes": 65,
+      "children": 146,
+      "global": false,
+      "types": 147
+    },
+    "qti-item-session-control": {
+      "attributes": 66,
+      "children": 12,
+      "global": false,
+      "types": 148
+    },
+    "qti-label": {
+      "attributes": 1,
+      "children": 115,
+      "global": false,
+      "types": 149
+    },
+    "qti-lcm": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 43
+    },
+    "qti-lookup-outcome-value": {
+      "attributes": 35,
+      "children": 42,
+      "global": false,
+      "types": 150
+    },
+    "qti-lt": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-lte": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-major-increment": {
+      "attributes": 67,
+      "children": 12,
+      "global": false,
+      "types": 151
+    },
+    "qti-map-entry": {
+      "attributes": 68,
+      "children": 12,
+      "global": false,
+      "types": 152
+    },
+    "qti-map-response": {
+      "attributes": 35,
+      "children": 12,
+      "global": false,
+      "types": 153
+    },
+    "qti-map-response-point": {
+      "attributes": 35,
+      "children": 12,
+      "global": false,
+      "types": 153
+    },
+    "qti-mapping": {
+      "attributes": 17,
+      "children": 154,
+      "global": false,
+      "types": 155
+    },
+    "qti-match": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-match-interaction": {
+      "attributes": 69,
+      "children": 156,
+      "global": false,
+      "types": 157
+    },
+    "qti-match-table": {
+      "attributes": 63,
+      "children": 158,
+      "global": false,
+      "types": 159
+    },
+    "qti-match-table-entry": {
+      "attributes": 70,
+      "children": 12,
+      "global": false,
+      "types": 160
+    },
+    "qti-math-constant": {
+      "attributes": 71,
+      "children": 12,
+      "global": false,
+      "types": 161
+    },
+    "qti-math-operator": {
+      "attributes": 71,
+      "children": 42,
+      "global": false,
+      "types": 162
+    },
+    "qti-max": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 43
+    },
+    "qti-media-interaction": {
+      "attributes": 72,
+      "children": 163,
+      "global": false,
+      "types": 164
+    },
+    "qti-member": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-metadata-ref": {
+      "attributes": 13,
+      "children": 12,
+      "global": false,
+      "types": 39
+    },
+    "qti-min": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 43
+    },
+    "qti-minimum-length": {
+      "attributes": 14,
+      "children": 12,
+      "global": false,
+      "types": 165
+    },
+    "qti-minor-increment": {
+      "attributes": 67,
+      "children": 12,
+      "global": false,
+      "types": 151
+    },
+    "qti-modal-feedback": {
+      "attributes": 73,
+      "children": 104,
+      "global": false,
+      "types": 166
+    },
+    "qti-multiple": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 167
+    },
+    "qti-not": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 81
+    },
+    "qti-null": {
+      "attributes": 14,
+      "children": 12,
+      "global": false,
+      "types": 101
+    },
+    "qti-number-correct": {
+      "attributes": 74,
+      "children": 12,
+      "global": false,
+      "types": 168
+    },
+    "qti-number-incorrect": {
+      "attributes": 74,
+      "children": 12,
+      "global": false,
+      "types": 168
+    },
+    "qti-number-presented": {
+      "attributes": 74,
+      "children": 12,
+      "global": false,
+      "types": 168
+    },
+    "qti-number-responded": {
+      "attributes": 74,
+      "children": 12,
+      "global": false,
+      "types": 168
+    },
+    "qti-number-selected": {
+      "attributes": 74,
+      "children": 12,
+      "global": false,
+      "types": 168
+    },
+    "qti-or": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 43
+    },
+    "qti-order-interaction": {
+      "attributes": 75,
+      "children": 77,
+      "global": false,
+      "types": 169
+    },
+    "qti-ordered": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 167
+    },
+    "qti-ordering": {
+      "anyElement": {
+        "namespace": "##other",
+        "process": "lax"
+      },
+      "attributes": 76,
+      "children": 12,
+      "global": false,
+      "types": 170
+    },
+    "qti-outcome-condition": {
+      "attributes": 14,
+      "children": 171,
+      "global": false,
+      "types": 172
+    },
+    "qti-outcome-declaration": {
+      "attributes": 77,
+      "children": 173,
+      "global": true,
+      "types": 174
+    },
+    "qti-outcome-else": {
+      "attributes": 14,
+      "children": 175,
+      "global": false,
+      "types": 176
+    },
+    "qti-outcome-else-if": {
+      "attributes": 14,
+      "children": 177,
+      "global": false,
+      "types": 178
+    },
+    "qti-outcome-if": {
+      "attributes": 14,
+      "children": 177,
+      "global": false,
+      "types": 178
+    },
+    "qti-outcome-maximum": {
+      "attributes": 78,
+      "children": 12,
+      "global": false,
+      "types": 179
+    },
+    "qti-outcome-minimum": {
+      "attributes": 78,
+      "children": 12,
+      "global": false,
+      "types": 179
+    },
+    "qti-outcome-processing": {
+      "attributes": 14,
+      "children": 175,
+      "global": true,
+      "types": 180
+    },
+    "qti-outcome-processing-fragment": {
+      "attributes": 14,
+      "children": 175,
+      "global": false,
+      "types": 181
+    },
+    "qti-pattern-match": {
+      "attributes": 79,
+      "children": 42,
+      "global": false,
+      "types": 182
+    },
+    "qti-physical-material": {
+      "attributes": 14,
+      "children": 12,
+      "global": false,
+      "types": 95
+    },
+    "qti-portable-custom-interaction": {
+      "attributes": 80,
+      "children": 183,
+      "global": false,
+      "types": 184
+    },
+    "qti-position-object-interaction": {
+      "attributes": 81,
+      "children": 111,
+      "global": false,
+      "types": 185
+    },
+    "qti-position-object-stage": {
+      "attributes": 82,
+      "children": 186,
+      "global": false,
+      "types": 187
+    },
+    "qti-power": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-pre-condition": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 81
+    },
+    "qti-printed-variable": {
+      "attributes": 83,
+      "children": 12,
+      "global": false,
+      "types": 188
+    },
+    "qti-product": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 43
+    },
+    "qti-prompt": {
+      "attributes": 2,
+      "children": 189,
+      "global": false,
+      "types": 190
+    },
+    "qti-protractor": {
+      "attributes": 14,
+      "children": 191,
+      "global": false,
+      "types": 192
+    },
+    "qti-random": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 81
+    },
+    "qti-random-float": {
+      "attributes": 84,
+      "children": 12,
+      "global": false,
+      "types": 193
+    },
+    "qti-random-integer": {
+      "attributes": 85,
+      "children": 12,
+      "global": false,
+      "types": 194
+    },
+    "qti-repeat": {
+      "attributes": 86,
+      "children": 42,
+      "global": false,
+      "types": 195
+    },
+    "qti-resource-icon": {
+      "attributes": 14,
+      "children": 12,
+      "global": false,
+      "types": 196
+    },
+    "qti-response-condition": {
+      "attributes": 14,
+      "children": 197,
+      "global": false,
+      "types": 198
+    },
+    "qti-response-declaration": {
+      "attributes": 34,
+      "children": 199,
+      "global": false,
+      "types": 200
+    },
+    "qti-response-else": {
+      "attributes": 14,
+      "children": 201,
+      "global": false,
+      "types": 202
+    },
+    "qti-response-else-if": {
+      "attributes": 14,
+      "children": 203,
+      "global": false,
+      "types": 204
+    },
+    "qti-response-if": {
+      "attributes": 14,
+      "children": 203,
+      "global": false,
+      "types": 204
+    },
+    "qti-response-processing": {
+      "attributes": 87,
+      "children": 201,
+      "global": true,
+      "types": 205
+    },
+    "qti-response-processing-fragment": {
+      "attributes": 14,
+      "children": 201,
+      "global": false,
+      "types": 206
+    },
+    "qti-round": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 81
+    },
+    "qti-round-to": {
+      "attributes": 88,
+      "children": 42,
+      "global": false,
+      "types": 207
+    },
+    "qti-rubric-block": {
+      "attributes": 89,
+      "children": 208,
+      "global": false,
+      "types": 209
+    },
+    "qti-rule": {
+      "attributes": 14,
+      "children": 210,
+      "global": false,
+      "types": 211
+    },
+    "qti-rule-system-si": {
+      "attributes": 14,
+      "children": 212,
+      "global": false,
+      "types": 213
+    },
+    "qti-rule-system-us": {
+      "attributes": 14,
+      "children": 212,
+      "global": false,
+      "types": 214
+    },
+    "qti-select-point-interaction": {
+      "attributes": 52,
+      "children": 96,
+      "global": false,
+      "types": 215
+    },
+    "qti-selection": {
+      "anyElement": {
+        "namespace": "##other",
+        "process": "lax"
+      },
+      "attributes": 90,
+      "children": 12,
+      "global": false,
+      "types": 216
+    },
+    "qti-set-correct-response": {
+      "attributes": 35,
+      "children": 42,
+      "global": false,
+      "types": 217
+    },
+    "qti-set-default-value": {
+      "attributes": 35,
+      "children": 42,
+      "global": false,
+      "types": 217
+    },
+    "qti-set-outcome-value": {
+      "attributes": 35,
+      "children": 42,
+      "global": false,
+      "types": 217
+    },
+    "qti-set-template-value": {
+      "attributes": 35,
+      "children": 42,
+      "global": false,
+      "types": 217
+    },
+    "qti-simple-associable-choice": {
+      "attributes": 91,
+      "children": 218,
+      "global": false,
+      "types": 219
+    },
+    "qti-simple-choice": {
+      "attributes": 58,
+      "children": 218,
+      "global": false,
+      "types": 220
+    },
+    "qti-simple-match-set": {
+      "attributes": 82,
+      "children": 221,
+      "global": false,
+      "types": 222
+    },
+    "qti-slider-interaction": {
+      "attributes": 92,
+      "children": 102,
+      "global": false,
+      "types": 223
+    },
+    "qti-stats-operator": {
+      "attributes": 71,
+      "children": 42,
+      "global": false,
+      "types": 224
+    },
+    "qti-stimulus-body": {
+      "attributes": 2,
+      "children": 225,
+      "global": false,
+      "types": 226
+    },
+    "qti-string-match": {
+      "attributes": 93,
+      "children": 42,
+      "global": false,
+      "types": 227
+    },
+    "qti-stylesheet": {
+      "attributes": 94,
+      "children": 12,
+      "global": false,
+      "types": 228
+    },
+    "qti-substring": {
+      "attributes": 95,
+      "children": 42,
+      "global": false,
+      "types": 229
+    },
+    "qti-subtract": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 82
+    },
+    "qti-sum": {
+      "attributes": 14,
+      "children": 230,
+      "global": false,
+      "types": 231
+    },
+    "qti-template-block": {
+      "attributes": 96,
+      "children": 104,
+      "global": false,
+      "types": 232
+    },
+    "qti-template-condition": {
+      "attributes": 14,
+      "children": 233,
+      "global": false,
+      "types": 234
+    },
+    "qti-template-constraint": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 235
+    },
+    "qti-template-declaration": {
+      "attributes": 97,
+      "children": 85,
+      "global": false,
+      "types": 236
+    },
+    "qti-template-default": {
+      "attributes": 98,
+      "children": 42,
+      "global": false,
+      "types": 237
+    },
+    "qti-template-else": {
+      "attributes": 14,
+      "children": 238,
+      "global": false,
+      "types": 239
+    },
+    "qti-template-else-if": {
+      "attributes": 14,
+      "children": 240,
+      "global": false,
+      "types": 241
+    },
+    "qti-template-if": {
+      "attributes": 14,
+      "children": 240,
+      "global": false,
+      "types": 241
+    },
+    "qti-template-inline": {
+      "attributes": 96,
+      "children": 242,
+      "global": false,
+      "types": 243
+    },
+    "qti-template-processing": {
+      "attributes": 14,
+      "children": 238,
+      "global": false,
+      "types": 244
+    },
+    "qti-template-variable": {
+      "attributes": 98,
+      "children": 12,
+      "global": false,
+      "types": 245
+    },
+    "qti-test-feedback": {
+      "attributes": 99,
+      "children": 104,
+      "global": false,
+      "types": 246
+    },
+    "qti-test-part": {
+      "attributes": 100,
+      "children": 247,
+      "global": false,
+      "types": 248
+    },
+    "qti-test-variables": {
+      "attributes": 101,
+      "children": 12,
+      "global": false,
+      "types": 249
+    },
+    "qti-text-entry-interaction": {
+      "attributes": 102,
+      "children": 12,
+      "global": false,
+      "types": 250
+    },
+    "qti-time-limits": {
+      "attributes": 103,
+      "children": 12,
+      "global": false,
+      "types": 251
+    },
+    "qti-truncate": {
+      "attributes": 14,
+      "children": 42,
+      "global": false,
+      "types": 81
+    },
+    "qti-upload-interaction": {
+      "attributes": 104,
+      "children": 102,
+      "global": false,
+      "types": 252
+    },
+    "qti-usagedata-ref": {
+      "attributes": 13,
+      "children": 12,
+      "global": false,
+      "types": 39
+    },
+    "qti-value": {
+      "attributes": 105,
+      "children": 12,
+      "global": false,
+      "types": 253
+    },
+    "qti-variable": {
+      "attributes": 106,
+      "children": 12,
+      "global": false,
+      "types": 254
+    },
+    "qti-variable-mapping": {
+      "attributes": 107,
+      "children": 12,
+      "global": false,
+      "types": 255
+    },
+    "qti-weight": {
+      "attributes": 108,
+      "children": 12,
+      "global": false,
+      "types": 256
+    },
+    "rb": {
+      "attributes": 2,
+      "children": 257,
+      "global": true,
+      "types": 258
+    },
+    "rp": {
+      "attributes": 2,
+      "children": 257,
+      "global": true,
+      "types": 258
+    },
+    "rt": {
+      "attributes": 2,
+      "children": 257,
+      "global": true,
+      "types": 258
+    },
+    "rtc": {
+      "attributes": 2,
+      "children": 259,
+      "global": true,
+      "types": 260
+    },
+    "ruby": {
+      "attributes": 2,
+      "children": 261,
+      "global": true,
+      "types": 262
+    },
+    "samp": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "section": {
+      "attributes": 2,
+      "children": 3,
+      "global": true,
+      "types": 4
+    },
+    "small": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "source": {
+      "attributes": 109,
+      "children": 12,
+      "global": true,
+      "types": 263
+    },
+    "span": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "strong": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "sub": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "summary": {
+      "attributes": 2,
+      "children": 257,
+      "global": true,
+      "types": 258
+    },
+    "sup": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "table": {
+      "attributes": 110,
+      "children": 264,
+      "global": true,
+      "types": 265
+    },
+    "tbody": {
+      "attributes": 2,
+      "children": 266,
+      "global": true,
+      "types": 267
+    },
+    "td": {
+      "attributes": 111,
+      "children": 3,
+      "global": true,
+      "types": 268
+    },
+    "template": {
+      "anyElement": {
+        "namespace": "##any",
+        "process": "lax"
+      },
+      "attributes": 14,
+      "children": 12,
+      "global": true,
+      "types": 269
+    },
+    "tfoot": {
+      "attributes": 2,
+      "children": 266,
+      "global": true,
+      "types": 267
+    },
+    "th": {
+      "attributes": 111,
+      "children": 3,
+      "global": true,
+      "types": 268
+    },
+    "thead": {
+      "attributes": 2,
+      "children": 266,
+      "global": true,
+      "types": 267
+    },
+    "tr": {
+      "attributes": 2,
+      "children": 270,
+      "global": true,
+      "types": 271
+    },
+    "track": {
+      "attributes": 112,
+      "children": 12,
+      "global": true,
+      "types": 272
+    },
+    "tt": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "ul": {
+      "attributes": 1,
+      "children": 33,
+      "global": true,
+      "types": 34
+    },
+    "var": {
+      "attributes": 1,
+      "children": 0,
+      "global": true,
+      "types": 2
+    },
+    "video": {
+      "attributes": 113,
+      "children": 5,
+      "global": true,
+      "types": 273
+    }
+  },
+  "nameLists": [
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+      26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      49, 50
+    ],
+    [51],
+    [52],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 75, 76, 19, 77, 20, 78, 79, 21,
+      80, 81, 82, 83, 84, 23, 85, 24, 86, 87, 88, 89, 25, 90, 91, 92, 26, 27, 93, 28, 29, 94, 30,
+      31, 32, 33, 34, 95, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [98],
+    [99, 100],
+    [101],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 28, 29, 94, 30, 31, 32, 33, 34,
+      95, 35, 96, 36, 97, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49
+    ],
+    [102],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 28, 29, 30, 31, 32, 33, 34,
+      35, 36, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49
+    ],
+    [103],
+    [104],
+    [],
+    [105],
+    [106],
+    [107],
+    [108],
+    [109],
+    [110],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 28, 29, 94, 30, 31, 32, 33, 111,
+      34, 95, 35, 96, 36, 97, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49
+    ],
+    [112],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 75, 76, 19, 77, 20, 78, 79, 21,
+      80, 81, 82, 83, 84, 23, 85, 24, 86, 87, 88, 89, 113, 25, 90, 91, 92, 26, 27, 93, 28, 29, 94,
+      30, 31, 32, 33, 34, 95, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [114],
+    [115, 116],
+    [117],
+    [118],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 119, 61, 62, 63, 64, 65,
+      66, 67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 28, 29, 94, 30, 31, 32, 33,
+      34, 95, 35, 96, 36, 97, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49
+    ],
+    [120],
+    [121],
+    [122],
+    [123],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 124, 17, 74, 18, 28, 29, 94, 30, 31, 32, 33,
+      34, 95, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [125],
+    [126],
+    [127],
+    [128],
+    [13, 99],
+    [129],
+    [130],
+    [131],
+    [132, 133, 134, 135],
+    [136],
+    [
+      137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155,
+      156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174,
+      175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193,
+      194, 195, 196, 197, 198, 199, 200
+    ],
+    [201],
+    [202],
+    [203],
+    [204],
+    [205],
+    [206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217],
+    [218],
+    [219, 220, 221, 222, 223, 224, 225],
+    [226],
+    [227, 228, 229, 230, 219, 220, 231, 221, 232, 233, 223, 50],
+    [234],
+    [235],
+    [207, 236, 215],
+    [237],
+    [238],
+    [209, 212, 239, 232, 215, 240, 241, 223],
+    [242],
+    [243],
+    [244, 245],
+    [246],
+    [247],
+    [248],
+    [249, 250, 251],
+    [252],
+    [253, 254],
+    [255],
+    [256, 253, 257],
+    [258],
+    [253, 257],
+    [259],
+    [260],
+    [261],
+    [262],
+    [263],
+    [244, 264],
+    [265],
+    [266, 267, 268, 269, 270],
+    [271],
+    [272],
+    [273],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 75, 76, 19, 77, 78, 79, 21, 80,
+      81, 82, 83, 84, 23, 85, 86, 87, 88, 89, 113, 25, 90, 91, 92, 26, 93, 28, 29, 94, 30, 31, 32,
+      33, 34, 95, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [274, 275, 276, 277, 278, 279, 280],
+    [281],
+    [282],
+    [283],
+    [284],
+    [285],
+    [286],
+    [287],
+    [288],
+    [289],
+    [290],
+    [291],
+    [13, 16, 17, 244],
+    [292],
+    [293],
+    [294],
+    [295],
+    [296],
+    [244],
+    [297],
+    [207, 298, 215],
+    [299, 300],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 25, 26, 28, 29, 30, 31, 32,
+      33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [301],
+    [302],
+    [303, 304],
+    [305],
+    [13, 16, 17],
+    [306],
+    [
+      53, 54, 55, 56, 57, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 79, 307,
+      308, 244, 92, 94, 95, 96, 97, 37, 50
+    ],
+    [309],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 25, 26, 28, 29, 30, 31,
+      32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [310],
+    [13, 16, 17, 311, 244],
+    [312],
+    [13, 16, 17, 311, 307, 308, 244],
+    [313],
+    [13, 16, 17, 314, 244],
+    [315],
+    [316],
+    [317],
+    [318],
+    [
+      53, 54, 55, 56, 57, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 79, 244,
+      92, 94, 95, 96, 97, 37, 50
+    ],
+    [319],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 28, 29, 94, 30, 31, 32, 33, 34,
+      95, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49
+    ],
+    [320],
+    [321, 322],
+    [323],
+    [324],
+    [325],
+    [326],
+    [327, 328],
+    [329],
+    [330],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 79, 21, 25, 92, 26, 28, 29, 94,
+      30, 31, 32, 33, 34, 95, 331, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+      49, 50
+    ],
+    [332],
+    [333],
+    [334],
+    [335],
+    [336],
+    [337],
+    [338],
+    [
+      53, 54, 55, 56, 57, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
+      19, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 113, 232, 90, 91, 92, 93, 94, 95, 96,
+      97, 37, 50
+    ],
+    [339],
+    [340],
+    [341],
+    [342],
+    [343, 344, 345, 346],
+    [347],
+    [348],
+    [349],
+    [350],
+    [244, 351],
+    [352],
+    [353],
+    [354],
+    [355],
+    [356],
+    [357],
+    [56, 16, 244, 97],
+    [358],
+    [359],
+    [360],
+    [361],
+    [362],
+    [363],
+    [364],
+    [365, 366, 367],
+    [368],
+    [281, 369, 370],
+    [371],
+    [372, 373, 374, 375, 376, 50],
+    [377],
+    [
+      137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 372, 151, 152, 153, 154,
+      155, 156, 157, 158, 159, 160, 161, 373, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172,
+      173, 174, 175, 176, 177, 178, 179, 180, 181, 374, 182, 183, 375, 184, 185, 186, 187, 188, 189,
+      190, 191, 192, 376, 193, 194, 195, 196, 197, 198, 199, 200, 50
+    ],
+    [378],
+    [379],
+    [380],
+    [381],
+    [382],
+    [207, 383, 384, 385, 244, 215, 386],
+    [387],
+    [388],
+    [13, 16, 17, 389],
+    [390],
+    [391],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 28, 29, 94, 30, 31, 32, 33, 34,
+      95, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [392],
+    [251, 393, 394],
+    [395],
+    [396],
+    [397],
+    [398],
+    [399],
+    [400, 401, 402],
+    [403],
+    [404, 405, 281, 406],
+    [407],
+    [408, 373, 409, 410, 376, 50],
+    [411],
+    [
+      137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 408, 151, 152, 153, 154,
+      155, 156, 157, 158, 159, 160, 161, 373, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172,
+      173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 409,
+      410, 191, 192, 376, 193, 194, 195, 196, 197, 198, 199, 200, 50
+    ],
+    [412],
+    [413],
+    [414],
+    [415],
+    [207, 298, 25, 215],
+    [416, 417],
+    [251, 418, 419],
+    [420],
+    [321, 421, 322],
+    [422],
+    [423],
+    [424],
+    [425],
+    [426],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 79, 21, 25, 92, 26, 28, 29, 94,
+      30, 31, 32, 33, 34, 95, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [427],
+    [428],
+    [245],
+    [429],
+    [430],
+    [431],
+    [
+      53, 54, 55, 56, 57, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 94, 95,
+      96, 97, 37, 50
+    ],
+    [432],
+    [433],
+    [434],
+    [435],
+    [
+      139, 140, 142, 143, 144, 145, 146, 151, 152, 155, 157, 158, 159, 161, 164, 165, 167, 168, 169,
+      171, 172, 174, 175, 176, 177, 178, 179, 181, 182, 183, 185, 186, 187, 188, 189, 190, 191, 192,
+      193, 196, 197, 198, 199, 200
+    ],
+    [436],
+    [437, 438],
+    [439, 440, 441],
+    [442],
+    [443],
+    [444],
+    [445],
+    [446, 447, 448, 449, 450, 451],
+    [452],
+    [
+      137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 446, 151, 152, 153, 154,
+      155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173,
+      174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192,
+      447, 448, 449, 193, 194, 195, 196, 197, 450, 451, 198, 199, 200
+    ],
+    [453],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 23, 25, 26, 28, 29,
+      30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [454, 455],
+    [456],
+    [457],
+    [458],
+    [229, 230, 219, 220, 221, 232, 240, 223],
+    [459],
+    [460],
+    [461],
+    [462],
+    [463],
+    [464],
+    [465],
+    [466],
+    [467],
+    [
+      0, 1, 56, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 28, 29, 30, 31, 32, 33, 34,
+      36, 97
+    ],
+    [468],
+    [
+      0, 1, 56, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 469, 28, 29, 30, 31, 32, 33,
+      34, 36, 97
+    ],
+    [470],
+    [
+      0, 1, 56, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 471, 472, 469, 473, 28, 29,
+      30, 31, 32, 33, 34, 36, 97
+    ],
+    [474],
+    [475],
+    [476, 108, 477, 478, 479, 480, 481],
+    [482],
+    [481],
+    [483],
+    [484],
+    [485],
+    [486, 487],
+    [488],
+    [489],
+    [490],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66, 67,
+      68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 75, 76, 19, 77, 78, 79, 21, 80, 81,
+      82, 83, 84, 85, 86, 87, 88, 89, 113, 25, 90, 91, 92, 26, 93, 28, 29, 94, 30, 31, 32, 33, 34,
+      95, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 23, 25, 92, 26, 28, 29, 94, 30,
+      31, 32, 33, 34, 95, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 25, 92, 26, 28, 29, 94, 30, 31,
+      32, 33, 34, 95, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [
+      0, 1, 2, 53, 54, 55, 56, 3, 4, 5, 6, 57, 7, 8, 9, 58, 10, 59, 60, 11, 61, 62, 63, 64, 65, 66,
+      67, 68, 69, 70, 12, 13, 14, 15, 71, 16, 72, 73, 17, 74, 18, 25, 28, 29, 94, 30, 31, 32, 33,
+      34, 95, 35, 96, 36, 97, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 25, 28, 29, 30, 31, 32, 33,
+      34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ]
+  ],
+  "names": [
+    {
+      "local": "a",
+      "namespace": 2
+    },
+    {
+      "local": "abbr",
+      "namespace": 2
+    },
+    {
+      "local": "acronym",
+      "namespace": 2
+    },
+    {
+      "local": "b",
+      "namespace": 2
+    },
+    {
+      "local": "bdi",
+      "namespace": 2
+    },
+    {
+      "local": "bdo",
+      "namespace": 2
+    },
+    {
+      "local": "big",
+      "namespace": 2
+    },
+    {
+      "local": "br",
+      "namespace": 2
+    },
+    {
+      "local": "cite",
+      "namespace": 2
+    },
+    {
+      "local": "code",
+      "namespace": 2
+    },
+    {
+      "local": "dfn",
+      "namespace": 2
+    },
+    {
+      "local": "em",
+      "namespace": 2
+    },
+    {
+      "local": "i",
+      "namespace": 2
+    },
+    {
+      "local": "img",
+      "namespace": 2
+    },
+    {
+      "local": "kbd",
+      "namespace": 2
+    },
+    {
+      "local": "label",
+      "namespace": 2
+    },
+    {
+      "local": "object",
+      "namespace": 2
+    },
+    {
+      "local": "picture",
+      "namespace": 2
+    },
+    {
+      "local": "q",
+      "namespace": 2
+    },
+    {
+      "local": "qti-custom-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-end-attempt-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-feedback-inline",
+      "namespace": 2
+    },
+    {
+      "local": "qti-gap",
+      "namespace": 2
+    },
+    {
+      "local": "qti-hottext",
+      "namespace": 2
+    },
+    {
+      "local": "qti-inline-choice-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-printed-variable",
+      "namespace": 2
+    },
+    {
+      "local": "qti-template-inline",
+      "namespace": 2
+    },
+    {
+      "local": "qti-text-entry-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "ruby",
+      "namespace": 2
+    },
+    {
+      "local": "samp",
+      "namespace": 2
+    },
+    {
+      "local": "small",
+      "namespace": 2
+    },
+    {
+      "local": "span",
+      "namespace": 2
+    },
+    {
+      "local": "strong",
+      "namespace": 2
+    },
+    {
+      "local": "sub",
+      "namespace": 2
+    },
+    {
+      "local": "sup",
+      "namespace": 2
+    },
+    {
+      "local": "tt",
+      "namespace": 2
+    },
+    {
+      "local": "var",
+      "namespace": 2
+    },
+    {
+      "local": "math",
+      "namespace": 3
+    },
+    {
+      "local": "audio",
+      "namespace": 4
+    },
+    {
+      "local": "break",
+      "namespace": 4
+    },
+    {
+      "local": "emphasis",
+      "namespace": 4
+    },
+    {
+      "local": "mark",
+      "namespace": 4
+    },
+    {
+      "local": "p",
+      "namespace": 4
+    },
+    {
+      "local": "phoneme",
+      "namespace": 4
+    },
+    {
+      "local": "prosody",
+      "namespace": 4
+    },
+    {
+      "local": "s",
+      "namespace": 4
+    },
+    {
+      "local": "say-as",
+      "namespace": 4
+    },
+    {
+      "local": "speak",
+      "namespace": 4
+    },
+    {
+      "local": "sub",
+      "namespace": 4
+    },
+    {
+      "local": "voice",
+      "namespace": 4
+    },
+    {
+      "local": "include",
+      "namespace": 5
+    },
+    {
+      "local": "ADType",
+      "namespace": 2
+    },
+    {
+      "local": "HTMLTextDType",
+      "namespace": 2
+    },
+    {
+      "local": "address",
+      "namespace": 2
+    },
+    {
+      "local": "article",
+      "namespace": 2
+    },
+    {
+      "local": "aside",
+      "namespace": 2
+    },
+    {
+      "local": "audio",
+      "namespace": 2
+    },
+    {
+      "local": "blockquote",
+      "namespace": 2
+    },
+    {
+      "local": "details",
+      "namespace": 2
+    },
+    {
+      "local": "div",
+      "namespace": 2
+    },
+    {
+      "local": "dl",
+      "namespace": 2
+    },
+    {
+      "local": "figure",
+      "namespace": 2
+    },
+    {
+      "local": "footer",
+      "namespace": 2
+    },
+    {
+      "local": "h1",
+      "namespace": 2
+    },
+    {
+      "local": "h2",
+      "namespace": 2
+    },
+    {
+      "local": "h3",
+      "namespace": 2
+    },
+    {
+      "local": "h4",
+      "namespace": 2
+    },
+    {
+      "local": "h5",
+      "namespace": 2
+    },
+    {
+      "local": "h6",
+      "namespace": 2
+    },
+    {
+      "local": "header",
+      "namespace": 2
+    },
+    {
+      "local": "hr",
+      "namespace": 2
+    },
+    {
+      "local": "nav",
+      "namespace": 2
+    },
+    {
+      "local": "ol",
+      "namespace": 2
+    },
+    {
+      "local": "p",
+      "namespace": 2
+    },
+    {
+      "local": "pre",
+      "namespace": 2
+    },
+    {
+      "local": "qti-associate-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-choice-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-drawing-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-extended-text-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-feedback-block",
+      "namespace": 2
+    },
+    {
+      "local": "qti-gap-match-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-graphic-associate-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-graphic-gap-match-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-graphic-order-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-hotspot-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-hottext-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-match-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-media-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-order-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-portable-custom-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-select-point-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-slider-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "qti-template-block",
+      "namespace": 2
+    },
+    {
+      "local": "qti-upload-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "section",
+      "namespace": 2
+    },
+    {
+      "local": "table",
+      "namespace": 2
+    },
+    {
+      "local": "ul",
+      "namespace": 2
+    },
+    {
+      "local": "video",
+      "namespace": 2
+    },
+    {
+      "local": "BaseHTML5FlowDType",
+      "namespace": 2
+    },
+    {
+      "local": "source",
+      "namespace": 2
+    },
+    {
+      "local": "track",
+      "namespace": 2
+    },
+    {
+      "local": "AudioDType",
+      "namespace": 2
+    },
+    {
+      "local": "BDIDType",
+      "namespace": 2
+    },
+    {
+      "local": "BDODType",
+      "namespace": 2
+    },
+    {
+      "local": "BlockQuoteDType",
+      "namespace": 2
+    },
+    {
+      "local": "BRDType",
+      "namespace": 2
+    },
+    {
+      "local": "CaptionDType",
+      "namespace": 2
+    },
+    {
+      "local": "ColDType",
+      "namespace": 2
+    },
+    {
+      "local": "col",
+      "namespace": 2
+    },
+    {
+      "local": "ColGroupDType",
+      "namespace": 2
+    },
+    {
+      "local": "DDDType",
+      "namespace": 2
+    },
+    {
+      "local": "summary",
+      "namespace": 2
+    },
+    {
+      "local": "DetailsDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-position-object-stage",
+      "namespace": 2
+    },
+    {
+      "local": "DivDType",
+      "namespace": 2
+    },
+    {
+      "local": "dd",
+      "namespace": 2
+    },
+    {
+      "local": "dt",
+      "namespace": 2
+    },
+    {
+      "local": "DLDType",
+      "namespace": 2
+    },
+    {
+      "local": "DTDType",
+      "namespace": 2
+    },
+    {
+      "local": "figcaption",
+      "namespace": 2
+    },
+    {
+      "local": "FigureDType",
+      "namespace": 2
+    },
+    {
+      "local": "HRDType",
+      "namespace": 2
+    },
+    {
+      "local": "ImgDType",
+      "namespace": 2
+    },
+    {
+      "local": "LIDType",
+      "namespace": 2
+    },
+    {
+      "local": "param",
+      "namespace": 2
+    },
+    {
+      "local": "ObjectDType",
+      "namespace": 2
+    },
+    {
+      "local": "li",
+      "namespace": 2
+    },
+    {
+      "local": "OULDType",
+      "namespace": 2
+    },
+    {
+      "local": "ParamDType",
+      "namespace": 2
+    },
+    {
+      "local": "PictureDType",
+      "namespace": 2
+    },
+    {
+      "local": "QDType",
+      "namespace": 2
+    },
+    {
+      "local": "AdaptiveHrefDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-adaptive-engine-ref",
+      "namespace": 2
+    },
+    {
+      "local": "qti-adaptive-settings-ref",
+      "namespace": 2
+    },
+    {
+      "local": "qti-metadata-ref",
+      "namespace": 2
+    },
+    {
+      "local": "qti-usagedata-ref",
+      "namespace": 2
+    },
+    {
+      "local": "AdaptiveSelectionDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-and",
+      "namespace": 2
+    },
+    {
+      "local": "qti-any-n",
+      "namespace": 2
+    },
+    {
+      "local": "qti-base-value",
+      "namespace": 2
+    },
+    {
+      "local": "qti-container-size",
+      "namespace": 2
+    },
+    {
+      "local": "qti-contains",
+      "namespace": 2
+    },
+    {
+      "local": "qti-correct",
+      "namespace": 2
+    },
+    {
+      "local": "qti-custom-operator",
+      "namespace": 2
+    },
+    {
+      "local": "qti-default",
+      "namespace": 2
+    },
+    {
+      "local": "qti-delete",
+      "namespace": 2
+    },
+    {
+      "local": "qti-divide",
+      "namespace": 2
+    },
+    {
+      "local": "qti-duration-gte",
+      "namespace": 2
+    },
+    {
+      "local": "qti-duration-lt",
+      "namespace": 2
+    },
+    {
+      "local": "qti-equal",
+      "namespace": 2
+    },
+    {
+      "local": "qti-equal-rounded",
+      "namespace": 2
+    },
+    {
+      "local": "qti-field-value",
+      "namespace": 2
+    },
+    {
+      "local": "qti-gcd",
+      "namespace": 2
+    },
+    {
+      "local": "qti-gt",
+      "namespace": 2
+    },
+    {
+      "local": "qti-gte",
+      "namespace": 2
+    },
+    {
+      "local": "qti-index",
+      "namespace": 2
+    },
+    {
+      "local": "qti-inside",
+      "namespace": 2
+    },
+    {
+      "local": "qti-integer-divide",
+      "namespace": 2
+    },
+    {
+      "local": "qti-integer-modulus",
+      "namespace": 2
+    },
+    {
+      "local": "qti-integer-to-float",
+      "namespace": 2
+    },
+    {
+      "local": "qti-is-null",
+      "namespace": 2
+    },
+    {
+      "local": "qti-lcm",
+      "namespace": 2
+    },
+    {
+      "local": "qti-lt",
+      "namespace": 2
+    },
+    {
+      "local": "qti-lte",
+      "namespace": 2
+    },
+    {
+      "local": "qti-map-response",
+      "namespace": 2
+    },
+    {
+      "local": "qti-map-response-point",
+      "namespace": 2
+    },
+    {
+      "local": "qti-match",
+      "namespace": 2
+    },
+    {
+      "local": "qti-math-constant",
+      "namespace": 2
+    },
+    {
+      "local": "qti-math-operator",
+      "namespace": 2
+    },
+    {
+      "local": "qti-max",
+      "namespace": 2
+    },
+    {
+      "local": "qti-member",
+      "namespace": 2
+    },
+    {
+      "local": "qti-min",
+      "namespace": 2
+    },
+    {
+      "local": "qti-multiple",
+      "namespace": 2
+    },
+    {
+      "local": "qti-not",
+      "namespace": 2
+    },
+    {
+      "local": "qti-null",
+      "namespace": 2
+    },
+    {
+      "local": "qti-number-correct",
+      "namespace": 2
+    },
+    {
+      "local": "qti-number-incorrect",
+      "namespace": 2
+    },
+    {
+      "local": "qti-number-presented",
+      "namespace": 2
+    },
+    {
+      "local": "qti-number-responded",
+      "namespace": 2
+    },
+    {
+      "local": "qti-number-selected",
+      "namespace": 2
+    },
+    {
+      "local": "qti-or",
+      "namespace": 2
+    },
+    {
+      "local": "qti-ordered",
+      "namespace": 2
+    },
+    {
+      "local": "qti-outcome-maximum",
+      "namespace": 2
+    },
+    {
+      "local": "qti-outcome-minimum",
+      "namespace": 2
+    },
+    {
+      "local": "qti-pattern-match",
+      "namespace": 2
+    },
+    {
+      "local": "qti-power",
+      "namespace": 2
+    },
+    {
+      "local": "qti-product",
+      "namespace": 2
+    },
+    {
+      "local": "qti-random",
+      "namespace": 2
+    },
+    {
+      "local": "qti-random-float",
+      "namespace": 2
+    },
+    {
+      "local": "qti-random-integer",
+      "namespace": 2
+    },
+    {
+      "local": "qti-repeat",
+      "namespace": 2
+    },
+    {
+      "local": "qti-round",
+      "namespace": 2
+    },
+    {
+      "local": "qti-round-to",
+      "namespace": 2
+    },
+    {
+      "local": "qti-stats-operator",
+      "namespace": 2
+    },
+    {
+      "local": "qti-string-match",
+      "namespace": 2
+    },
+    {
+      "local": "qti-substring",
+      "namespace": 2
+    },
+    {
+      "local": "qti-subtract",
+      "namespace": 2
+    },
+    {
+      "local": "qti-sum",
+      "namespace": 2
+    },
+    {
+      "local": "qti-test-variables",
+      "namespace": 2
+    },
+    {
+      "local": "qti-truncate",
+      "namespace": 2
+    },
+    {
+      "local": "qti-variable",
+      "namespace": 2
+    },
+    {
+      "local": "Logic1toManyDType",
+      "namespace": 2
+    },
+    {
+      "local": "AnyNDType",
+      "namespace": 2
+    },
+    {
+      "local": "AreaMapEntryDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-area-map-entry",
+      "namespace": 2
+    },
+    {
+      "local": "AreaMappingDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-assessment-stimulus-ref",
+      "namespace": 2
+    },
+    {
+      "local": "qti-catalog-info",
+      "namespace": 2
+    },
+    {
+      "local": "qti-companion-materials-info",
+      "namespace": 2
+    },
+    {
+      "local": "qti-context-declaration",
+      "namespace": 2
+    },
+    {
+      "local": "qti-item-body",
+      "namespace": 2
+    },
+    {
+      "local": "qti-modal-feedback",
+      "namespace": 2
+    },
+    {
+      "local": "qti-outcome-declaration",
+      "namespace": 2
+    },
+    {
+      "local": "qti-response-declaration",
+      "namespace": 2
+    },
+    {
+      "local": "qti-response-processing",
+      "namespace": 2
+    },
+    {
+      "local": "qti-stylesheet",
+      "namespace": 2
+    },
+    {
+      "local": "qti-template-declaration",
+      "namespace": 2
+    },
+    {
+      "local": "qti-template-processing",
+      "namespace": 2
+    },
+    {
+      "local": "AssessmentItemDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-branch-rule",
+      "namespace": 2
+    },
+    {
+      "local": "qti-item-session-control",
+      "namespace": 2
+    },
+    {
+      "local": "qti-pre-condition",
+      "namespace": 2
+    },
+    {
+      "local": "qti-template-default",
+      "namespace": 2
+    },
+    {
+      "local": "qti-time-limits",
+      "namespace": 2
+    },
+    {
+      "local": "qti-variable-mapping",
+      "namespace": 2
+    },
+    {
+      "local": "qti-weight",
+      "namespace": 2
+    },
+    {
+      "local": "AssessmentItemRefDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-adaptive-selection",
+      "namespace": 2
+    },
+    {
+      "local": "qti-assessment-item-ref",
+      "namespace": 2
+    },
+    {
+      "local": "qti-assessment-section",
+      "namespace": 2
+    },
+    {
+      "local": "qti-assessment-section-ref",
+      "namespace": 2
+    },
+    {
+      "local": "qti-ordering",
+      "namespace": 2
+    },
+    {
+      "local": "qti-rubric-block",
+      "namespace": 2
+    },
+    {
+      "local": "qti-selection",
+      "namespace": 2
+    },
+    {
+      "local": "AssessmentSectionDType",
+      "namespace": 2
+    },
+    {
+      "local": "AssessmentSectionRefDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-stimulus-body",
+      "namespace": 2
+    },
+    {
+      "local": "AssessmentStimulusDType",
+      "namespace": 2
+    },
+    {
+      "local": "AssessmentStimulusRefDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-outcome-processing",
+      "namespace": 2
+    },
+    {
+      "local": "qti-test-feedback",
+      "namespace": 2
+    },
+    {
+      "local": "qti-test-part",
+      "namespace": 2
+    },
+    {
+      "local": "AssessmentTestDType",
+      "namespace": 2
+    },
+    {
+      "local": "AssociableHotspotDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-prompt",
+      "namespace": 2
+    },
+    {
+      "local": "qti-simple-associable-choice",
+      "namespace": 2
+    },
+    {
+      "local": "AssociateInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "BaseValueDType",
+      "namespace": 2
+    },
+    {
+      "local": "BranchRuleDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-calculator-info",
+      "namespace": 2
+    },
+    {
+      "local": "qti-calculator-type",
+      "namespace": 2
+    },
+    {
+      "local": "qti-description",
+      "namespace": 2
+    },
+    {
+      "local": "CalculatorDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-file-href",
+      "namespace": 2
+    },
+    {
+      "local": "qti-resource-icon",
+      "namespace": 2
+    },
+    {
+      "local": "ItemFileInfoDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-card-entry",
+      "namespace": 2
+    },
+    {
+      "local": "qti-html-content",
+      "namespace": 2
+    },
+    {
+      "local": "CardDType",
+      "namespace": 2
+    },
+    {
+      "local": "CardEntryDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-card",
+      "namespace": 2
+    },
+    {
+      "local": "CatalogDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-catalog",
+      "namespace": 2
+    },
+    {
+      "local": "CatalogInfoDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-simple-choice",
+      "namespace": 2
+    },
+    {
+      "local": "ChoiceInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-calculator",
+      "namespace": 2
+    },
+    {
+      "local": "qti-digital-material",
+      "namespace": 2
+    },
+    {
+      "local": "qti-physical-material",
+      "namespace": 2
+    },
+    {
+      "local": "qti-protractor",
+      "namespace": 2
+    },
+    {
+      "local": "qti-rule",
+      "namespace": 2
+    },
+    {
+      "local": "CompanionMaterialsInfoDType",
+      "namespace": 2
+    },
+    {
+      "local": "LogicSingleDType",
+      "namespace": 2
+    },
+    {
+      "local": "LogicPairDType",
+      "namespace": 2
+    },
+    {
+      "local": "FeedbackContentBodyDType",
+      "namespace": 2
+    },
+    {
+      "local": "FeedbackFlowContentBodyDType",
+      "namespace": 2
+    },
+    {
+      "local": "RubricBlockContentBodyDType",
+      "namespace": 2
+    },
+    {
+      "local": "RubricBlockTemplateBlockContentBodyDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateBlockContentBodyDType",
+      "namespace": 2
+    },
+    {
+      "local": "TestFeedbackFlowContentBodyDType",
+      "namespace": 2
+    },
+    {
+      "local": "TestRubricBlockContentBodyDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-default-value",
+      "namespace": 2
+    },
+    {
+      "local": "ContextDeclarationDType",
+      "namespace": 2
+    },
+    {
+      "local": "ContextUniqueIDRefDType",
+      "namespace": 2
+    },
+    {
+      "local": "CorrectDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-value",
+      "namespace": 2
+    },
+    {
+      "local": "CorrectResponseDType",
+      "namespace": 2
+    },
+    {
+      "local": "CustomInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "CustomOperatorDType",
+      "namespace": 2
+    },
+    {
+      "local": "DefaultDType",
+      "namespace": 2
+    },
+    {
+      "local": "DefaultValueDType",
+      "namespace": 2
+    },
+    {
+      "local": "normalizedString",
+      "namespace": 6
+    },
+    {
+      "local": "DrawingInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "EndAttemptInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "EqualDType",
+      "namespace": 2
+    },
+    {
+      "local": "EqualRoundedDType",
+      "namespace": 2
+    },
+    {
+      "local": "EmptyPrimitiveTypeDType",
+      "namespace": 2
+    },
+    {
+      "local": "ExtendedTextInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-content-body",
+      "namespace": 2
+    },
+    {
+      "local": "FeedbackBlockDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateBlockFeedbackBlockDType",
+      "namespace": 2
+    },
+    {
+      "local": "FeedbackInlineDType",
+      "namespace": 2
+    },
+    {
+      "local": "FieldValueDType",
+      "namespace": 2
+    },
+    {
+      "local": "FileHrefCardDType",
+      "namespace": 2
+    },
+    {
+      "local": "FileHrefDType",
+      "namespace": 2
+    },
+    {
+      "local": "GapDType",
+      "namespace": 2
+    },
+    {
+      "local": "GapImgDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-gap-img",
+      "namespace": 2
+    },
+    {
+      "local": "qti-gap-text",
+      "namespace": 2
+    },
+    {
+      "local": "GapMatchInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "GapTextDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-associable-hotspot",
+      "namespace": 2
+    },
+    {
+      "local": "GraphicAssociateInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "GraphicGapMatchInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-hotspot-choice",
+      "namespace": 2
+    },
+    {
+      "local": "GraphicOrderInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "HotspotChoiceDType",
+      "namespace": 2
+    },
+    {
+      "local": "HotspotInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "HotTextDType",
+      "namespace": 2
+    },
+    {
+      "local": "HotTextInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "HTMLContentDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-major-increment",
+      "namespace": 2
+    },
+    {
+      "local": "qti-minor-increment",
+      "namespace": 2
+    },
+    {
+      "local": "IncrementSIDType",
+      "namespace": 2
+    },
+    {
+      "local": "IncrementUSDType",
+      "namespace": 2
+    },
+    {
+      "local": "IndexDType",
+      "namespace": 2
+    },
+    {
+      "local": "InlineChoiceDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-inline-choice",
+      "namespace": 2
+    },
+    {
+      "local": "qti-label",
+      "namespace": 2
+    },
+    {
+      "local": "InlineChoiceInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "InsideDType",
+      "namespace": 2
+    },
+    {
+      "local": "template",
+      "namespace": 2
+    },
+    {
+      "local": "InteractionMarkupDType",
+      "namespace": 2
+    },
+    {
+      "local": "InteractionModuleDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-interaction-module",
+      "namespace": 2
+    },
+    {
+      "local": "InteractionModulesDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-interpolation-table-entry",
+      "namespace": 2
+    },
+    {
+      "local": "InterpolationTableDType",
+      "namespace": 2
+    },
+    {
+      "local": "InterpolationTableEntryDType",
+      "namespace": 2
+    },
+    {
+      "local": "ItemBodyDType",
+      "namespace": 2
+    },
+    {
+      "local": "ItemSessionControlDType",
+      "namespace": 2
+    },
+    {
+      "local": "LabelDType",
+      "namespace": 2
+    },
+    {
+      "local": "LookupOutcomeValueDType",
+      "namespace": 2
+    },
+    {
+      "local": "RadialSIValueDType",
+      "namespace": 2
+    },
+    {
+      "local": "RadialUSValueDType",
+      "namespace": 2
+    },
+    {
+      "local": "SILinearValueDType",
+      "namespace": 2
+    },
+    {
+      "local": "USLinearValueDType",
+      "namespace": 2
+    },
+    {
+      "local": "MapEntryDType",
+      "namespace": 2
+    },
+    {
+      "local": "MapResponseDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-map-entry",
+      "namespace": 2
+    },
+    {
+      "local": "MappingDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-simple-match-set",
+      "namespace": 2
+    },
+    {
+      "local": "MatchInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-match-table-entry",
+      "namespace": 2
+    },
+    {
+      "local": "MatchTableDType",
+      "namespace": 2
+    },
+    {
+      "local": "MatchTableEntryDType",
+      "namespace": 2
+    },
+    {
+      "local": "MathConstantDType",
+      "namespace": 2
+    },
+    {
+      "local": "MathOperatorDType",
+      "namespace": 2
+    },
+    {
+      "local": "MediaInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "integer",
+      "namespace": 6
+    },
+    {
+      "local": "ModalFeedbackDType",
+      "namespace": 2
+    },
+    {
+      "local": "Logic0toManyDType",
+      "namespace": 2
+    },
+    {
+      "local": "NumberDType",
+      "namespace": 2
+    },
+    {
+      "local": "OrderInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "OrderingDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-outcome-else",
+      "namespace": 2
+    },
+    {
+      "local": "qti-outcome-else-if",
+      "namespace": 2
+    },
+    {
+      "local": "qti-outcome-if",
+      "namespace": 2
+    },
+    {
+      "local": "OutcomeConditionDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-interpolation-table",
+      "namespace": 2
+    },
+    {
+      "local": "qti-match-table",
+      "namespace": 2
+    },
+    {
+      "local": "OutcomeDeclarationDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-exit-test",
+      "namespace": 2
+    },
+    {
+      "local": "qti-lookup-outcome-value",
+      "namespace": 2
+    },
+    {
+      "local": "qti-outcome-condition",
+      "namespace": 2
+    },
+    {
+      "local": "qti-outcome-processing-fragment",
+      "namespace": 2
+    },
+    {
+      "local": "qti-set-outcome-value",
+      "namespace": 2
+    },
+    {
+      "local": "OutcomeElseDType",
+      "namespace": 2
+    },
+    {
+      "local": "OutcomeIfDType",
+      "namespace": 2
+    },
+    {
+      "local": "OutcomeMinMaxDType",
+      "namespace": 2
+    },
+    {
+      "local": "OutcomeProcessingDType",
+      "namespace": 2
+    },
+    {
+      "local": "OutcomeProcessingFragmentDType",
+      "namespace": 2
+    },
+    {
+      "local": "PatternMatchDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-context-variable",
+      "namespace": 2
+    },
+    {
+      "local": "qti-interaction-markup",
+      "namespace": 2
+    },
+    {
+      "local": "qti-interaction-modules",
+      "namespace": 2
+    },
+    {
+      "local": "qti-template-variable",
+      "namespace": 2
+    },
+    {
+      "local": "PortableCustomInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "PositionObjectInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-position-object-interaction",
+      "namespace": 2
+    },
+    {
+      "local": "PositionObjectStageDType",
+      "namespace": 2
+    },
+    {
+      "local": "PrintedVariableDType",
+      "namespace": 2
+    },
+    {
+      "local": "PromptDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-increment-si",
+      "namespace": 2
+    },
+    {
+      "local": "qti-increment-us",
+      "namespace": 2
+    },
+    {
+      "local": "ProtractorDType",
+      "namespace": 2
+    },
+    {
+      "local": "RandomFloatDType",
+      "namespace": 2
+    },
+    {
+      "local": "RandomIntegerDType",
+      "namespace": 2
+    },
+    {
+      "local": "RepeatDType",
+      "namespace": 2
+    },
+    {
+      "local": "URLDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-response-else",
+      "namespace": 2
+    },
+    {
+      "local": "qti-response-else-if",
+      "namespace": 2
+    },
+    {
+      "local": "qti-response-if",
+      "namespace": 2
+    },
+    {
+      "local": "ResponseConditionDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-area-mapping",
+      "namespace": 2
+    },
+    {
+      "local": "qti-correct-response",
+      "namespace": 2
+    },
+    {
+      "local": "qti-mapping",
+      "namespace": 2
+    },
+    {
+      "local": "ResponseDeclarationDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-exit-response",
+      "namespace": 2
+    },
+    {
+      "local": "qti-response-condition",
+      "namespace": 2
+    },
+    {
+      "local": "qti-response-processing-fragment",
+      "namespace": 2
+    },
+    {
+      "local": "ResponseElseDType",
+      "namespace": 2
+    },
+    {
+      "local": "ResponseIfDType",
+      "namespace": 2
+    },
+    {
+      "local": "ResponseProcessingDType",
+      "namespace": 2
+    },
+    {
+      "local": "ResponseProcessingFragmentDType",
+      "namespace": 2
+    },
+    {
+      "local": "RoundToDType",
+      "namespace": 2
+    },
+    {
+      "local": "RubricBlockDType",
+      "namespace": 2
+    },
+    {
+      "local": "TestRubricBlockDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-rule-system-si",
+      "namespace": 2
+    },
+    {
+      "local": "qti-rule-system-us",
+      "namespace": 2
+    },
+    {
+      "local": "RuleDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-minimum-length",
+      "namespace": 2
+    },
+    {
+      "local": "SIRuleSystemDType",
+      "namespace": 2
+    },
+    {
+      "local": "USRuleSystemDType",
+      "namespace": 2
+    },
+    {
+      "local": "SelectPointInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "SelectionDType",
+      "namespace": 2
+    },
+    {
+      "local": "SetValueDType",
+      "namespace": 2
+    },
+    {
+      "local": "SimpleAssociableChoiceDType",
+      "namespace": 2
+    },
+    {
+      "local": "SimpleChoiceDType",
+      "namespace": 2
+    },
+    {
+      "local": "SimpleMatchSetDType",
+      "namespace": 2
+    },
+    {
+      "local": "SliderInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "StatsOperatorDType",
+      "namespace": 2
+    },
+    {
+      "local": "StimulusBodyDType",
+      "namespace": 2
+    },
+    {
+      "local": "StringMatchDType",
+      "namespace": 2
+    },
+    {
+      "local": "StyleSheetDType",
+      "namespace": 2
+    },
+    {
+      "local": "SubstringDType",
+      "namespace": 2
+    },
+    {
+      "local": "NumericLogic1toManyDType",
+      "namespace": 2
+    },
+    {
+      "local": "RubricBlockTemplateBlockDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateBlockDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-template-else",
+      "namespace": 2
+    },
+    {
+      "local": "qti-template-else-if",
+      "namespace": 2
+    },
+    {
+      "local": "qti-template-if",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateConditionDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateConstraintDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateDeclarationDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateDefaultDType",
+      "namespace": 2
+    },
+    {
+      "local": "qti-exit-template",
+      "namespace": 2
+    },
+    {
+      "local": "qti-set-correct-response",
+      "namespace": 2
+    },
+    {
+      "local": "qti-set-default-value",
+      "namespace": 2
+    },
+    {
+      "local": "qti-set-template-value",
+      "namespace": 2
+    },
+    {
+      "local": "qti-template-condition",
+      "namespace": 2
+    },
+    {
+      "local": "qti-template-constraint",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateElseDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateIfDType",
+      "namespace": 2
+    },
+    {
+      "local": "RubricBlockTemplateInlineDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateInlineDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateProcessingDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateUniqueIDRefDType",
+      "namespace": 2
+    },
+    {
+      "local": "TestFeedbackDType",
+      "namespace": 2
+    },
+    {
+      "local": "TestPartDType",
+      "namespace": 2
+    },
+    {
+      "local": "TestVariablesDType",
+      "namespace": 2
+    },
+    {
+      "local": "TextEntryInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "TimeLimitsDType",
+      "namespace": 2
+    },
+    {
+      "local": "UploadInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "ValueDType",
+      "namespace": 2
+    },
+    {
+      "local": "VariableDType",
+      "namespace": 2
+    },
+    {
+      "local": "VariableMappingDType",
+      "namespace": 2
+    },
+    {
+      "local": "WeightDType",
+      "namespace": 2
+    },
+    {
+      "local": "BaseHTML5PhrasingDType",
+      "namespace": 2
+    },
+    {
+      "local": "rt",
+      "namespace": 2
+    },
+    {
+      "local": "RTCDType",
+      "namespace": 2
+    },
+    {
+      "local": "rb",
+      "namespace": 2
+    },
+    {
+      "local": "rp",
+      "namespace": 2
+    },
+    {
+      "local": "rtc",
+      "namespace": 2
+    },
+    {
+      "local": "RubyDType",
+      "namespace": 2
+    },
+    {
+      "local": "SourceDType",
+      "namespace": 2
+    },
+    {
+      "local": "caption",
+      "namespace": 2
+    },
+    {
+      "local": "colgroup",
+      "namespace": 2
+    },
+    {
+      "local": "tbody",
+      "namespace": 2
+    },
+    {
+      "local": "tfoot",
+      "namespace": 2
+    },
+    {
+      "local": "thead",
+      "namespace": 2
+    },
+    {
+      "local": "tr",
+      "namespace": 2
+    },
+    {
+      "local": "TableDType",
+      "namespace": 2
+    },
+    {
+      "local": "TablePartDType",
+      "namespace": 2
+    },
+    {
+      "local": "TDHDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateDType",
+      "namespace": 2
+    },
+    {
+      "local": "td",
+      "namespace": 2
+    },
+    {
+      "local": "th",
+      "namespace": 2
+    },
+    {
+      "local": "TRDType",
+      "namespace": 2
+    },
+    {
+      "local": "TrackDType",
+      "namespace": 2
+    },
+    {
+      "local": "VideoDType",
+      "namespace": 2
+    },
+    {
+      "local": "BaseSequenceXBaseDType",
+      "namespace": 2
+    },
+    {
+      "local": "anyType",
+      "namespace": 6
+    },
+    {
+      "local": "string",
+      "namespace": 6
+    },
+    {
+      "local": "BaseSequenceXBaseEmptyDType",
+      "namespace": 2
+    },
+    {
+      "local": "BasePromptInteractionDType",
+      "namespace": 2
+    },
+    {
+      "local": "BaseSequenceDType",
+      "namespace": 2
+    },
+    {
+      "local": "ARIABaseDType",
+      "namespace": 2
+    },
+    {
+      "local": "ARIABaseEmptyDType",
+      "namespace": 2
+    },
+    {
+      "local": "BaseSequenceFullDType",
+      "namespace": 2
+    },
+    {
+      "local": "anyURI",
+      "namespace": 6
+    },
+    {
+      "local": "NCName",
+      "namespace": 6
+    },
+    {
+      "local": "int",
+      "namespace": 6
+    },
+    {
+      "local": "MimeTypeDType",
+      "namespace": 2
+    },
+    {
+      "local": "double",
+      "namespace": 6
+    },
+    {
+      "local": "BaseSequenceRIdentDType",
+      "namespace": 2
+    },
+    {
+      "local": "decimal",
+      "namespace": 6
+    },
+    {
+      "local": "BaseSequenceEmptyDType",
+      "namespace": 2
+    },
+    {
+      "local": "TemplateBlockContentDType",
+      "namespace": 2
+    },
+    {
+      "local": "ID",
+      "namespace": 6
+    },
+    {
+      "local": "IDREF",
+      "namespace": 6
+    }
+  ],
+  "namespaces": [
+    "",
+    "http://www.w3.org/XML/1998/namespace",
+    "http://www.imsglobal.org/xsd/imsqtiasi_v3p0",
+    "http://www.w3.org/1998/Math/MathML",
+    "http://www.w3.org/2001/10/synthesis",
+    "http://www.w3.org/2001/XInclude",
+    "http://www.w3.org/2001/XMLSchema"
+  ],
+  "types": {
+    "ADType": {
+      "attributes": 0,
+      "base": 491,
+      "children": 0,
+      "derivation": "extension"
+    },
+    "ARIABaseDType": {
+      "attributes": 114,
+      "base": 492,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "ARIABaseEmptyDType": {
+      "attributes": 115,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "ARIALevelIntegerDType": {
+      "attributes": 14,
+      "base": 359,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "ARIARelevantListDType": {
+      "attributes": 14,
+      "base": 493,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "AdaptiveHrefDType": {
+      "attributes": 13,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "AdaptiveSelectionDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 40,
+      "derivation": "restriction"
+    },
+    "AnyNDType": {
+      "attributes": 15,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "AreaMapEntryDType": {
+      "attributes": 16,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "AreaMappingDType": {
+      "attributes": 17,
+      "base": 492,
+      "children": 46,
+      "derivation": "restriction"
+    },
+    "AssessmentItemDType": {
+      "attributes": 18,
+      "base": 492,
+      "children": 48,
+      "derivation": "restriction"
+    },
+    "AssessmentItemRefDType": {
+      "attributes": 19,
+      "base": 492,
+      "children": 50,
+      "derivation": "restriction"
+    },
+    "AssessmentSectionDType": {
+      "attributes": 20,
+      "base": 492,
+      "children": 52,
+      "derivation": "restriction"
+    },
+    "AssessmentSectionRefDType": {
+      "attributes": 21,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "AssessmentStimulusDType": {
+      "attributes": 22,
+      "base": 492,
+      "children": 55,
+      "derivation": "restriction"
+    },
+    "AssessmentStimulusRefDType": {
+      "attributes": 23,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "AssessmentTestDType": {
+      "attributes": 24,
+      "base": 492,
+      "children": 58,
+      "derivation": "restriction"
+    },
+    "AssociableHotspotDType": {
+      "attributes": 25,
+      "base": 494,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "AssociateInteractionDType": {
+      "attributes": 26,
+      "base": 495,
+      "children": 61,
+      "derivation": "extension"
+    },
+    "AudioDType": {
+      "attributes": 3,
+      "base": 496,
+      "children": 5,
+      "derivation": "extension"
+    },
+    "BDIDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 7,
+      "derivation": "extension"
+    },
+    "BDODType": {
+      "attributes": 4,
+      "base": 496,
+      "children": 9,
+      "derivation": "extension"
+    },
+    "BRDType": {
+      "attributes": 6,
+      "base": 494,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "BaseHTML5FlowDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 3,
+      "derivation": "extension"
+    },
+    "BaseHTML5PhrasingDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 257,
+      "derivation": "extension"
+    },
+    "BasePromptInteractionDType": {
+      "attributes": 37,
+      "base": 497,
+      "children": 102,
+      "derivation": "extension"
+    },
+    "BaseSequenceDType": {
+      "attributes": 2,
+      "base": 497,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "BaseSequenceEmptyDType": {
+      "attributes": 116,
+      "base": 498,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "BaseSequenceFullDType": {
+      "attributes": 37,
+      "base": 497,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "BaseSequenceRIdentDType": {
+      "attributes": 117,
+      "base": 497,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "BaseSequenceXBaseDType": {
+      "attributes": 1,
+      "base": 497,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "BaseSequenceXBaseEmptyDType": {
+      "attributes": 6,
+      "base": 498,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "BaseValueDType": {
+      "attributes": 27,
+      "base": 493,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "BlockQuoteDType": {
+      "attributes": 5,
+      "base": 491,
+      "children": 7,
+      "derivation": "extension"
+    },
+    "BranchRuleDType": {
+      "attributes": 28,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "CalculatorDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 65,
+      "derivation": "restriction"
+    },
+    "CaptionDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 3,
+      "derivation": "extension"
+    },
+    "CardDType": {
+      "attributes": 30,
+      "base": 492,
+      "children": 69,
+      "derivation": "restriction"
+    },
+    "CardEntryDType": {
+      "attributes": 31,
+      "base": 492,
+      "children": 71,
+      "derivation": "restriction"
+    },
+    "CatalogDType": {
+      "attributes": 32,
+      "base": 492,
+      "children": 73,
+      "derivation": "restriction"
+    },
+    "CatalogInfoDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 75,
+      "derivation": "restriction"
+    },
+    "ChoiceInteractionDType": {
+      "attributes": 33,
+      "base": 495,
+      "children": 77,
+      "derivation": "extension"
+    },
+    "ColDType": {
+      "attributes": 7,
+      "base": 494,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "ColGroupDType": {
+      "attributes": 8,
+      "base": 496,
+      "children": 16,
+      "derivation": "extension"
+    },
+    "CompanionMaterialsInfoDType": {
+      "anyElement": {
+        "namespace": "##other",
+        "process": "strict"
+      },
+      "attributes": 14,
+      "base": 492,
+      "children": 79,
+      "derivation": "restriction"
+    },
+    "ContextDeclarationDType": {
+      "attributes": 34,
+      "base": 492,
+      "children": 85,
+      "derivation": "restriction"
+    },
+    "ContextUniqueIDRefDType": {
+      "attributes": 35,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "CoordsDType": {
+      "attributes": 14,
+      "base": 291,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "CorrectDType": {
+      "attributes": 35,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "CorrectResponseDType": {
+      "attributes": 36,
+      "base": 492,
+      "children": 89,
+      "derivation": "restriction"
+    },
+    "CustomInteractionDType": {
+      "anyElement": {
+        "namespace": "##any",
+        "process": "lax"
+      },
+      "attributes": 37,
+      "base": 499,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "CustomOperatorDType": {
+      "anyElement": {
+        "namespace": "##other",
+        "process": "lax"
+      },
+      "attributes": 38,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "DDDType": {
+      "attributes": 1,
+      "base": 491,
+      "children": 3,
+      "derivation": "extension"
+    },
+    "DLDType": {
+      "attributes": 1,
+      "base": 491,
+      "children": 23,
+      "derivation": "extension"
+    },
+    "DTDType": {
+      "attributes": 1,
+      "base": 491,
+      "children": 0,
+      "derivation": "extension"
+    },
+    "DefaultDType": {
+      "attributes": 35,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "DefaultValueDType": {
+      "attributes": 36,
+      "base": 492,
+      "children": 89,
+      "derivation": "restriction"
+    },
+    "DetailsDType": {
+      "attributes": 9,
+      "base": 496,
+      "children": 19,
+      "derivation": "extension"
+    },
+    "DivDType": {
+      "attributes": 1,
+      "base": 491,
+      "children": 21,
+      "derivation": "extension"
+    },
+    "DrawingInteractionDType": {
+      "attributes": 37,
+      "base": 495,
+      "children": 96,
+      "derivation": "extension"
+    },
+    "EmptyPrimitiveTypeDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "EncVariableStringDType": {
+      "attributes": 14,
+      "base": 493,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "EndAttemptInteractionDType": {
+      "attributes": 39,
+      "base": 494,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "EqualDType": {
+      "attributes": 40,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "EqualRoundedDType": {
+      "attributes": 41,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "ExtendedTextInteractionDType": {
+      "attributes": 42,
+      "base": 495,
+      "children": 102,
+      "derivation": "extension"
+    },
+    "FeedbackBlockDType": {
+      "attributes": 43,
+      "base": 491,
+      "children": 104,
+      "derivation": "extension"
+    },
+    "FeedbackContentBodyDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 274,
+      "derivation": "restriction"
+    },
+    "FeedbackFlowContentBodyDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 275,
+      "derivation": "restriction"
+    },
+    "FeedbackInlineDType": {
+      "attributes": 43,
+      "base": 491,
+      "children": 106,
+      "derivation": "extension"
+    },
+    "FieldValueDType": {
+      "attributes": 44,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "FigureDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 26,
+      "derivation": "extension"
+    },
+    "FileHrefCardDType": {
+      "attributes": 118,
+      "base": 500,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "FileHrefDType": {
+      "attributes": 14,
+      "base": 500,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "GapDType": {
+      "attributes": 46,
+      "base": 494,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "GapImgDType": {
+      "attributes": 47,
+      "base": 496,
+      "children": 111,
+      "derivation": "extension"
+    },
+    "GapMatchInteractionDType": {
+      "attributes": 48,
+      "base": 495,
+      "children": 113,
+      "derivation": "extension"
+    },
+    "GapTextDType": {
+      "attributes": 49,
+      "base": 496,
+      "children": 115,
+      "derivation": "extension"
+    },
+    "GraphicAssociateInteractionDType": {
+      "attributes": 50,
+      "base": 495,
+      "children": 117,
+      "derivation": "extension"
+    },
+    "GraphicGapMatchInteractionDType": {
+      "attributes": 51,
+      "base": 499,
+      "children": 119,
+      "derivation": "extension"
+    },
+    "GraphicOrderInteractionDType": {
+      "attributes": 52,
+      "base": 499,
+      "children": 121,
+      "derivation": "extension"
+    },
+    "HRDType": {
+      "attributes": 6,
+      "base": 494,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "HTMLContentDType": {
+      "attributes": 56,
+      "base": 492,
+      "children": 128,
+      "derivation": "restriction"
+    },
+    "HTMLTextDType": {
+      "attributes": 1,
+      "base": 491,
+      "children": 0,
+      "derivation": "extension"
+    },
+    "HotTextDType": {
+      "attributes": 55,
+      "base": 491,
+      "children": 115,
+      "derivation": "extension"
+    },
+    "HotTextInteractionDType": {
+      "attributes": 54,
+      "base": 495,
+      "children": 126,
+      "derivation": "extension"
+    },
+    "HotspotChoiceDType": {
+      "attributes": 53,
+      "base": 494,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "HotspotInteractionDType": {
+      "attributes": 54,
+      "base": 495,
+      "children": 121,
+      "derivation": "extension"
+    },
+    "IdentifierDType": {
+      "attributes": 14,
+      "base": 501,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "IdentifierListDType": {
+      "attributes": 14,
+      "base": 501,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "ImgDType": {
+      "attributes": 10,
+      "base": 494,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "IncrementSIDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 130,
+      "derivation": "restriction"
+    },
+    "IncrementUSDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 130,
+      "derivation": "restriction"
+    },
+    "IndexDType": {
+      "attributes": 57,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "InlineChoiceDType": {
+      "attributes": 58,
+      "base": 496,
+      "children": 115,
+      "derivation": "extension"
+    },
+    "InlineChoiceInteractionDType": {
+      "attributes": 59,
+      "base": 499,
+      "children": 135,
+      "derivation": "extension"
+    },
+    "InsideDType": {
+      "attributes": 60,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "IntegerListDType": {
+      "attributes": 14,
+      "base": 502,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "InteractionMarkupDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 138,
+      "derivation": "restriction"
+    },
+    "InteractionModuleDType": {
+      "attributes": 61,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "InteractionModulesDType": {
+      "attributes": 62,
+      "base": 492,
+      "children": 141,
+      "derivation": "restriction"
+    },
+    "InterpolationTableDType": {
+      "attributes": 63,
+      "base": 492,
+      "children": 143,
+      "derivation": "restriction"
+    },
+    "InterpolationTableEntryDType": {
+      "attributes": 64,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "ItemBodyDType": {
+      "attributes": 65,
+      "base": 492,
+      "children": 146,
+      "derivation": "restriction"
+    },
+    "ItemFileInfoDType": {
+      "attributes": 29,
+      "base": 492,
+      "children": 67,
+      "derivation": "restriction"
+    },
+    "ItemSessionControlDType": {
+      "attributes": 66,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "LIDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 3,
+      "derivation": "extension"
+    },
+    "LabelDType": {
+      "attributes": 1,
+      "base": 491,
+      "children": 115,
+      "derivation": "extension"
+    },
+    "LengthDType": {
+      "attributes": 14,
+      "base": 493,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "Logic0toManyDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "Logic1toManyDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "LogicPairDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "LogicSingleDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "LookupOutcomeValueDType": {
+      "attributes": 35,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "MapEntryDType": {
+      "attributes": 68,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "MapResponseDType": {
+      "attributes": 35,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "MappingDType": {
+      "attributes": 17,
+      "base": 492,
+      "children": 154,
+      "derivation": "restriction"
+    },
+    "MatchInteractionDType": {
+      "attributes": 69,
+      "base": 495,
+      "children": 156,
+      "derivation": "extension"
+    },
+    "MatchTableDType": {
+      "attributes": 63,
+      "base": 492,
+      "children": 158,
+      "derivation": "restriction"
+    },
+    "MatchTableEntryDType": {
+      "attributes": 70,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "MathConstantDType": {
+      "attributes": 71,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "MathOperatorDType": {
+      "attributes": 71,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "MediaInteractionDType": {
+      "attributes": 72,
+      "base": 495,
+      "children": 163,
+      "derivation": "extension"
+    },
+    "MimeTypeDType": {
+      "attributes": 14,
+      "base": 291,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "MimeTypeListDType": {
+      "attributes": 14,
+      "base": 503,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "ModalFeedbackDType": {
+      "attributes": 73,
+      "base": 492,
+      "children": 104,
+      "derivation": "restriction"
+    },
+    "NonNegativeDoubleDType": {
+      "attributes": 14,
+      "base": 504,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "NumberDType": {
+      "attributes": 74,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "NumericLogic1toManyDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 230,
+      "derivation": "restriction"
+    },
+    "OULDType": {
+      "attributes": 1,
+      "base": 491,
+      "children": 33,
+      "derivation": "extension"
+    },
+    "ObjectDType": {
+      "attributes": 11,
+      "base": 491,
+      "children": 31,
+      "derivation": "extension"
+    },
+    "OrderInteractionDType": {
+      "attributes": 75,
+      "base": 495,
+      "children": 77,
+      "derivation": "extension"
+    },
+    "OrderingDType": {
+      "anyElement": {
+        "namespace": "##other",
+        "process": "lax"
+      },
+      "attributes": 76,
+      "base": 492,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "OutcomeConditionDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 171,
+      "derivation": "restriction"
+    },
+    "OutcomeDeclarationDType": {
+      "attributes": 77,
+      "base": 492,
+      "children": 173,
+      "derivation": "restriction"
+    },
+    "OutcomeElseDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 175,
+      "derivation": "restriction"
+    },
+    "OutcomeIfDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 177,
+      "derivation": "restriction"
+    },
+    "OutcomeMinMaxDType": {
+      "attributes": 78,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "OutcomeProcessingDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 175,
+      "derivation": "restriction"
+    },
+    "OutcomeProcessingFragmentDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 175,
+      "derivation": "restriction"
+    },
+    "ParamDType": {
+      "attributes": 12,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "PatternMatchDType": {
+      "attributes": 79,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "PictureDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 36,
+      "derivation": "extension"
+    },
+    "PortableCustomInteractionDType": {
+      "attributes": 80,
+      "base": 495,
+      "children": 183,
+      "derivation": "extension"
+    },
+    "PositionObjectInteractionDType": {
+      "attributes": 81,
+      "base": 505,
+      "children": 111,
+      "derivation": "extension"
+    },
+    "PositionObjectStageDType": {
+      "attributes": 82,
+      "base": 492,
+      "children": 186,
+      "derivation": "restriction"
+    },
+    "PrintedVariableDType": {
+      "attributes": 83,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "PromptDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 189,
+      "derivation": "extension"
+    },
+    "ProtractorDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 191,
+      "derivation": "restriction"
+    },
+    "QDType": {
+      "attributes": 5,
+      "base": 491,
+      "children": 0,
+      "derivation": "extension"
+    },
+    "RTCDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 259,
+      "derivation": "extension"
+    },
+    "RadialSIValueDType": {
+      "attributes": 67,
+      "base": 506,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "RadialUSValueDType": {
+      "attributes": 67,
+      "base": 506,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "RandomFloatDType": {
+      "attributes": 84,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "RandomIntegerDType": {
+      "attributes": 85,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "RepeatDType": {
+      "attributes": 86,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "ResponseConditionDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 197,
+      "derivation": "restriction"
+    },
+    "ResponseDeclarationDType": {
+      "attributes": 34,
+      "base": 492,
+      "children": 199,
+      "derivation": "restriction"
+    },
+    "ResponseElseDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 201,
+      "derivation": "restriction"
+    },
+    "ResponseIfDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 203,
+      "derivation": "restriction"
+    },
+    "ResponseProcessingDType": {
+      "attributes": 87,
+      "base": 492,
+      "children": 201,
+      "derivation": "restriction"
+    },
+    "ResponseProcessingFragmentDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 201,
+      "derivation": "restriction"
+    },
+    "RoundToDType": {
+      "attributes": 88,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "RubricBlockContentBodyDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 276,
+      "derivation": "restriction"
+    },
+    "RubricBlockDType": {
+      "attributes": 119,
+      "base": 491,
+      "children": 104,
+      "derivation": "extension"
+    },
+    "RubricBlockTemplateBlockContentBodyDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 277,
+      "derivation": "restriction"
+    },
+    "RubricBlockTemplateBlockDType": {
+      "attributes": 96,
+      "base": 491,
+      "children": 104,
+      "derivation": "extension"
+    },
+    "RubricBlockTemplateInlineDType": {
+      "attributes": 96,
+      "base": 491,
+      "children": 278,
+      "derivation": "extension"
+    },
+    "RubyDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 261,
+      "derivation": "extension"
+    },
+    "RuleDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 210,
+      "derivation": "restriction"
+    },
+    "SILinearValueDType": {
+      "attributes": 67,
+      "base": 506,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "SIRuleSystemDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 212,
+      "derivation": "restriction"
+    },
+    "SelectPointInteractionDType": {
+      "attributes": 52,
+      "base": 495,
+      "children": 96,
+      "derivation": "extension"
+    },
+    "SelectionDType": {
+      "anyElement": {
+        "namespace": "##other",
+        "process": "lax"
+      },
+      "attributes": 90,
+      "base": 492,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "SetValueDType": {
+      "attributes": 35,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "SimpleAssociableChoiceDType": {
+      "attributes": 91,
+      "base": 496,
+      "children": 218,
+      "derivation": "extension"
+    },
+    "SimpleChoiceDType": {
+      "attributes": 58,
+      "base": 496,
+      "children": 218,
+      "derivation": "extension"
+    },
+    "SimpleMatchSetDType": {
+      "attributes": 82,
+      "base": 492,
+      "children": 221,
+      "derivation": "restriction"
+    },
+    "SliderInteractionDType": {
+      "attributes": 92,
+      "base": 495,
+      "children": 102,
+      "derivation": "extension"
+    },
+    "SourceDType": {
+      "attributes": 109,
+      "base": 507,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "StatsOperatorDType": {
+      "attributes": 71,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "StimulusBodyDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 225,
+      "derivation": "extension"
+    },
+    "StringListDType": {
+      "attributes": 14,
+      "base": 493,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "StringMatchDType": {
+      "attributes": 93,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "StyleSheetDType": {
+      "attributes": 94,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "SubstringDType": {
+      "attributes": 95,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "SupportExtStringDType": {
+      "attributes": 14,
+      "base": 291,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "TDHDType": {
+      "attributes": 111,
+      "base": 496,
+      "children": 3,
+      "derivation": "extension"
+    },
+    "TRDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 270,
+      "derivation": "extension"
+    },
+    "TableDType": {
+      "attributes": 110,
+      "base": 491,
+      "children": 264,
+      "derivation": "extension"
+    },
+    "TablePartDType": {
+      "attributes": 2,
+      "base": 496,
+      "children": 266,
+      "derivation": "extension"
+    },
+    "TemplateBlockContentBodyDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 218,
+      "derivation": "restriction"
+    },
+    "TemplateBlockContentDType": {
+      "attributes": 1,
+      "base": 491,
+      "children": 104,
+      "derivation": "extension"
+    },
+    "TemplateBlockDType": {
+      "attributes": 96,
+      "base": 508,
+      "children": 104,
+      "derivation": "extension"
+    },
+    "TemplateBlockFeedbackBlockDType": {
+      "attributes": 43,
+      "base": 508,
+      "children": 104,
+      "derivation": "extension"
+    },
+    "TemplateConditionDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 233,
+      "derivation": "restriction"
+    },
+    "TemplateConstraintDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "TemplateDType": {
+      "anyElement": {
+        "namespace": "##any",
+        "process": "lax"
+      },
+      "attributes": 14,
+      "base": 492,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "TemplateDeclarationDType": {
+      "attributes": 97,
+      "base": 492,
+      "children": 85,
+      "derivation": "restriction"
+    },
+    "TemplateDefaultDType": {
+      "attributes": 98,
+      "base": 492,
+      "children": 42,
+      "derivation": "restriction"
+    },
+    "TemplateElseDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 238,
+      "derivation": "restriction"
+    },
+    "TemplateIfDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 240,
+      "derivation": "restriction"
+    },
+    "TemplateInlineDType": {
+      "attributes": 96,
+      "base": 491,
+      "children": 242,
+      "derivation": "extension"
+    },
+    "TemplateProcessingDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 238,
+      "derivation": "restriction"
+    },
+    "TemplateUniqueIDRefDType": {
+      "attributes": 98,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "TestFeedbackDType": {
+      "attributes": 99,
+      "base": 492,
+      "children": 104,
+      "derivation": "restriction"
+    },
+    "TestFeedbackFlowContentBodyDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 189,
+      "derivation": "restriction"
+    },
+    "TestPartDType": {
+      "attributes": 100,
+      "base": 492,
+      "children": 247,
+      "derivation": "restriction"
+    },
+    "TestRubricBlockContentBodyDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 189,
+      "derivation": "restriction"
+    },
+    "TestRubricBlockDType": {
+      "attributes": 89,
+      "base": 491,
+      "children": 208,
+      "derivation": "extension"
+    },
+    "TestVariablesDType": {
+      "attributes": 101,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "TextEntryInteractionDType": {
+      "attributes": 102,
+      "base": 494,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "TimeLimitsDType": {
+      "attributes": 103,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "ToleranceListDType": {
+      "attributes": 14,
+      "children": 12,
+      "derivation": "union"
+    },
+    "TrackDType": {
+      "attributes": 112,
+      "base": 507,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "URLDType": {
+      "attributes": 14,
+      "base": 291,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "USLinearValueDType": {
+      "attributes": 67,
+      "base": 506,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "USRuleSystemDType": {
+      "attributes": 14,
+      "base": 492,
+      "children": 212,
+      "derivation": "restriction"
+    },
+    "UniqueIdentifierDType": {
+      "attributes": 14,
+      "base": 509,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "UniqueIdentifierRefDType": {
+      "attributes": 14,
+      "base": 510,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "UploadInteractionDType": {
+      "attributes": 104,
+      "base": 495,
+      "children": 102,
+      "derivation": "extension"
+    },
+    "UseExtensionStringDType": {
+      "attributes": 14,
+      "base": 291,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "ValueDType": {
+      "attributes": 105,
+      "base": 291,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "VariableDType": {
+      "attributes": 106,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "VariableMappingDType": {
+      "attributes": 107,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    },
+    "VariableStringDType": {
+      "attributes": 14,
+      "base": 493,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "VideoDType": {
+      "attributes": 113,
+      "base": 496,
+      "children": 5,
+      "derivation": "extension"
+    },
+    "ViewEnumDType": {
+      "attributes": 14,
+      "base": 493,
+      "children": 12,
+      "derivation": "restriction"
+    },
+    "WeightDType": {
+      "attributes": 108,
+      "base": 296,
+      "children": 12,
+      "derivation": "extension"
+    }
+  }
+}

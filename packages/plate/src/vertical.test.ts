@@ -9,7 +9,6 @@ import {
   checkResponses,
   configure,
   decode,
-  open,
   partition,
   postings,
   redact,
@@ -37,6 +36,7 @@ import { checkTree, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml, roundTrips } from "#plate/test/round-trip.ts";
+import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**

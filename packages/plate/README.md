@@ -25,17 +25,20 @@ plate is a private workspace package of [qti-pie](../../README.md). In a sibling
 "dependencies": { "@qti-pie/plate": "workspace:*", "effect": "4.1.2" }
 ```
 
-Then run `pnpm install` from the repository root. The package has three entry points:
+Then run `pnpm install` from the repository root. The package has four entry points:
 
 | Entry point | Gives | Stability |
 | --- | --- | --- |
 | `@qti-pie/plate` | Every function, type and error in [`src/index.ts`](src/index.ts) | Unstable until M3 |
+| `@qti-pie/plate/open` | `open`, in [`src/validate/open.ts`](src/validate/open.ts) | Unstable until M3 |
 | `@qti-pie/plate/package` | `openPackage` and its verdict's types, in [`src/package/index.ts`](src/package/index.ts) | Unstable until M3 |
 | `@qti-pie/plate/styles.css` | The default theme, [`src/styles.css`](src/styles.css) | Unstable until M3 |
 
-`openPackage` has an entry of its own because it checks a manifest against the content packaging
-profiles' tables, which load with it. A host that serves items imports `@qti-pie/plate` alone and
-never loads them.
+`open` and `openPackage` have entries of their own because they check content against tables that
+load with them: the QTI XSD's, 5 MB of JSON, and for a package the content packaging profiles'
+too. A host whose content store checks each document with `open` when it admits it imports
+`@qti-pie/plate` alone where it serves, and opens each document there with `openAdmitted`, which
+loads only the securing tables, a projection of the XSD's under 3% of their size.
 
 Until M3, plate's next milestone, any name or signature can change in any commit. The
 [changelog](CHANGELOG.md) records each change a host can see.
@@ -47,7 +50,8 @@ On the server, open an item and render it:
 ```ts
 import { readFile } from "node:fs/promises";
 import { Effect, Option, Result } from "effect";
-import { acceptedItem, configure, open, redact, render } from "@qti-pie/plate";
+import { acceptedItem, configure, redact, render } from "@qti-pie/plate";
+import { open } from "@qti-pie/plate/open";
 
 const verdict = await Effect.runPromise(open("item.xml", await readFile("item.xml")));
 const accepted = acceptedItem(verdict);
@@ -61,6 +65,12 @@ if (Option.isSome(accepted)) {
 Put that HTML inside your own form. When the form posts back, `partition` picks out the item's
 entries, and `decode` reads each response that `postings` lists, in the base its interaction
 declares. `score` scores the responses. The [playground](#playground) does the whole round trip.
+
+Where a content store checks each document with `open` when it admits it, serve it after with
+`openAdmitted` in place of `open`, imported from `@qti-pie/plate`. It judges the bytes with none of
+`open`'s checks, and secures the item by the securing tables, so the serving process never loads
+the XSD's 5 MB. On a document `open` accepts it gives the same verdict, so the item renders and
+scores the same. Give it only bytes the store admitted, never a document from anywhere else.
 
 An item whose template processing runs shows its template parts only from the record `begin`
 starts. With no record, `redact` shows a notice in their place, and `score` refuses the post with
@@ -103,7 +113,8 @@ request. [Navigation](#navigation) moves the session on.
 
 | Function | Does |
 | --- | --- |
-| `open` | Reads and checks a document's bytes, and returns a verdict |
+| `open` | Reads and checks a document's bytes, and returns a verdict. It comes from `@qti-pie/plate/open` |
+| `openAdmitted` | Reads the bytes of a document the host's content store has admitted, and returns the verdict `open` gives on it, without `open`'s checks or the XSD tables |
 | `acceptedItem` | Reads the accepted item out of a verdict |
 | `configure` | Decodes the host's settings into a `Configuration` |
 | `begin` | Starts an item's stored record, running its template processing |
@@ -126,7 +137,7 @@ request. [Navigation](#navigation) moves the session on.
 | `encodeSession`, `decodeSession` | Write a session as the record the host stores, and check one handed back |
 | `results` | Writes a Results Reporting document for an item or a test session |
 
-`open`, `openPackage` and `configure` return Effects. Every other function is plain and returns
+`open`, `openAdmitted`, `openPackage` and `configure` return Effects. Every other function is plain and returns
 its value, or a `Result` when it can fail. `redact`, `checkResponses` and `solution` take the
 item's record as an optional last argument, and `redact` takes the output budget after it.
 `render`'s `parts` option swaps a part for the host's
@@ -919,7 +930,7 @@ The server keeps what `open` accepted, correct responses included. The browser g
 that `render` makes from `redact`'s copy, and the server scores the post. plate does not enforce
 this split. A host that sends the accepted item to the browser sends what `redact` removes.
 
-- `open` and `openPackage` run on Node, not in a browser.
+- `open`, `openAdmitted` and `openPackage` run on Node, not in a browser.
 - An accepted item is not JSON, so a stateless server opens the bytes again for each request. To
   send the redacted item itself, write it with `encodeRedacted` and read it with `decodeRedacted`.
 - A page that holds a `TestSession` holds every item's outcomes and the test's own, scores included,
@@ -973,7 +984,7 @@ default.
 serves one item inside its own `<form method="post" autocomplete="off">` and submit button, on a
 page that links plate's sheet and sends `Cache-Control: no-store`. It scores a post with
 `partition`, `postings`, `decode`, `checkResponses` and `score`, and uses only what
-`@qti-pie/plate` exports. It keeps no record, so it cannot score an item whose template processing
+`@qti-pie/plate` and `@qti-pie/plate/open` export. It keeps no record, so it cannot score an item whose template processing
 runs: `score` refuses that item with `RecordRequired`.
 
 In Astro, render on an on-demand page, import plate's stylesheet so that Astro links it, and put
@@ -984,7 +995,8 @@ the HTML in with `set:html`:
 import "@qti-pie/plate/styles.css";
 import { readFile } from "node:fs/promises";
 import { Effect, Option, Result } from "effect";
-import { acceptedItem, configure, open, redact, render } from "@qti-pie/plate";
+import { acceptedItem, configure, redact, render } from "@qti-pie/plate";
+import { open } from "@qti-pie/plate/open";
 
 export const prerender = false;
 

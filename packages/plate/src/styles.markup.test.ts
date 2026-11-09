@@ -12,7 +12,6 @@ import {
   configure,
   decode,
   entryName,
-  open,
   redact,
   render,
   renderStatus,
@@ -33,6 +32,7 @@ import type { NavigationOptions, NavigationState } from "#plate/navigation.ts";
 import { compounds, scanSheet } from "#plate/test/css.ts";
 import type { AttributeTest, Compound, Sheet } from "#plate/test/css.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { open } from "#plate/validate/open.ts";
 import { styledClasses } from "#plate/vocabulary.ts";
 import type { ClassOwner } from "#plate/vocabulary.ts";
 

@@ -1,10 +1,12 @@
 /**
- * `open`, the host's one entry from a document's bytes to its verdict: parse, then validate.
+ * `open`, the host's entry from a document's bytes to its verdict: parse, then validate. It is
+ * published as `@qti-pie/plate/open`, apart from the serving entry, because it loads the full XSD
+ * tables, a committed JSON module of 5 MB, which a host serving admitted content never needs.
  *
  * It reads the bytes with the shared reader's adapter and checks the source against the committed
- * XSD tables. Its verdict is the only way a host reaches an `Accepted`, which `redact` and `score`
- * take. It stays server-side: the tables load from a committed JSON module of 5 MB, and the reader
- * is crust's.
+ * XSD tables. Its verdict is one of the two ways a host reaches an `Accepted`, which `redact` and
+ * `score` take; `openAdmitted`'s, for a document a check like this one already admitted, is the
+ * other. It stays server-side: the tables are 5 MB, and the reader is crust's.
  *
  * @module
  */

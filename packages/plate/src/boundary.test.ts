@@ -14,6 +14,7 @@ import {
   unreadable,
   valueClosure,
 } from "#plate/test/imports.ts";
+import * as openEntry from "#plate/validate/open.ts";
 import {
   acceptForTest,
   acceptMarkedTest,
@@ -51,13 +52,13 @@ interface Crossing {
 
 /**
  * The specifiers the core may not load (rules `b454bdf7` and `6f47762b`, and the composition ruling
- * `a9d04969` points 1 and 5, so the `"."` and `"./package"` entries stay callable anywhere): the
- * dev playground, the example hosts, the conformance ledger, test support, the Node-only corpus
- * reader, every Node built-in, the HTML parser the tests use, the browser drivers, the test runner
- * by package (`vitest`, every `@vitest/` package, `@effect/vitest` and `vite-plus`, so a re-export
- * under another name, such as vite-plus's in-page context re-exporting `vitest/browser`, cannot
- * route around the list), the QTI database package and grizzle. One that ends in `/` or `:`
- * forbids every specifier it begins; any other forbids itself and its subpaths.
+ * `a9d04969` points 1 and 5, so the `"."`, `"./open"` and `"./package"` entries stay callable
+ * anywhere): the dev playground, the example hosts, the conformance ledger, test support, the
+ * Node-only corpus reader, every Node built-in, the HTML parser the tests use, the browser
+ * drivers, the test runner by package (`vitest`, every `@vitest/` package, `@effect/vitest` and
+ * `vite-plus`, so a re-export under another name, such as vite-plus's in-page context re-exporting
+ * `vitest/browser`, cannot route around the list), the QTI database package and grizzle. One that
+ * ends in `/` or `:` forbids every specifier it begins; any other forbids itself and its subpaths.
  */
 const forbiddenSpecifiers: readonly string[] = [
   "#plate/dev/",
@@ -288,11 +289,11 @@ const modules = sourceModules();
 const closure = valueClosure(modules, ["src/index.ts"]);
 
 /**
- * List the exports of both public entries, `src/index.ts` and `src/package/index.ts`, that are one
- * of some named values, by its own name or under any other.
+ * List the exports of the public script entries, `src/index.ts`, `src/validate/open.ts` and
+ * `src/package/index.ts`, that are one of some named values, by its own name or under any other.
  *
  * @param named The values, by the name each is declared with.
- * @returns `<entry>.<name>` for each name an entry exports one of them under, empty when neither
+ * @returns `<entry>.<name>` for each name an entry exports one of them under, empty when none
  *   exports one.
  */
 const exportedAmong = (named: ReadonlyMap<string, unknown>): readonly string[] => {
@@ -300,6 +301,7 @@ const exportedAmong = (named: ReadonlyMap<string, unknown>): readonly string[] =
 
   const surfaces: readonly (readonly [string, object])[] = [
     ["index", plate],
+    ["open", openEntry],
     ["package", packageEntry],
   ];
 
@@ -313,12 +315,14 @@ const exportedAmong = (named: ReadonlyMap<string, unknown>): readonly string[] =
 /**
  * The committed JSON modules the serving entry may load, each with what reads it while a host
  * serves items. Any other JSON its closure reaches is a table serving never reads, loaded and
- * parsed on every cold start for nothing.
+ * parsed on every cold start for nothing: the full XSD tables and the package tables among them,
+ * which only the checking entries read.
  */
 const servedTables = {
   "src/model/blocks.generated.json":
     "the block names of XML Schema Part 2, which model/regex.ts reads to check a pattern facet",
-  "src/validate/tables.generated.json": "the XSD tables, which open checks a document by",
+  "src/validate/securing-tables.generated.json":
+    "the securing tables, which openAdmitted secures an admitted item by",
 } satisfies Readonly<Record<string, string>>;
 
 /**
@@ -361,11 +365,11 @@ describe("the core, from src/index.ts", () => {
     assert.deepStrictEqual(crossings(modules, ["src/index.ts"]), []);
   });
 
-  it("reaches more than ten modules, render, score and open among them", () => {
+  it("reaches more than ten modules, render, score and openAdmitted among them", () => {
     assert.isAbove(closure.length, 10);
     assert.includeMembers(
       [...closure],
-      ["src/render.ts", "src/score.ts", "src/validate/open.ts", "src/document/read.ts"],
+      ["src/render.ts", "src/score.ts", "src/validate/admitted.ts", "src/document/read.ts"],
     );
   });
 
@@ -382,7 +386,8 @@ describe("the core, from src/index.ts", () => {
       ["PartlessTestDefect", PartlessTestDefect],
     ]);
 
-    assert.includeMembers(Object.keys(plate), ["open", "redact"]);
+    assert.includeMembers(Object.keys(plate), ["openAdmitted", "redact"]);
+    assert.includeMembers(Object.keys(openEntry), ["open"]);
     assert.includeMembers(Object.keys(packageEntry), ["openPackage"]);
     assert.deepStrictEqual(exportedAmong(seams), []);
   });
@@ -392,14 +397,30 @@ describe("the core, from src/index.ts", () => {
     assert.deepStrictEqual(exportedAmong(new Map([["acceptMarkedTest", acceptMarkedTest]])), []);
   });
 
-  it("publishes src/index.ts and src/package/index.ts as the exports map's only script modules", () => {
+  it("publishes src/index.ts, src/validate/open.ts and src/package/index.ts as the exports map's only script modules", () => {
     assert.deepStrictEqual(
       Object.entries(readManifest().exports).filter(([, target]) => /\.[cm]?[jt]s$/u.test(target)),
       [
         [".", "./src/index.ts"],
+        ["./open", "./src/validate/open.ts"],
         ["./package", "./src/package/index.ts"],
       ],
     );
+  });
+
+  it.effect(
+    "resolves @qti-pie/plate/open through the exports map to the open entry, which exports open alone",
+    () =>
+      Effect.gen(function* openSelfImport() {
+        const surface = yield* Effect.promise(() => import("@qti-pie/plate/open"));
+
+        assert.deepStrictEqual(Object.keys(surface), ["open"]);
+        assert.strictEqual(surface.open, openEntry.open);
+      }),
+  );
+
+  it("loads from src/validate/open.ts, the open entry, none of what the core may not load", () => {
+    assert.deepStrictEqual(crossings(modules, ["src/validate/open.ts"]), []);
   });
 
   it.effect(
@@ -417,28 +438,46 @@ describe("the core, from src/index.ts", () => {
     assert.deepStrictEqual(crossings(modules, ["src/package/index.ts"]), []);
   });
 
-  it('loads from the serving entry, the exports map\'s ".", no committed JSON but the XSD tables and the block table', () => {
+  it('loads from the serving entry, the exports map\'s ".", no committed JSON but the securing tables and the block table', () => {
     const entry = readManifest().exports["."]?.replace(/^\.\//u, "") ?? "";
 
     assert.strictEqual(entry, "src/index.ts");
     assert.deepStrictEqual(unservedTables(modules, [entry]), []);
-    // The package tables are the package entry's alone.
+    // The full XSD tables are the checking entries' alone, and the package tables the package
+    // entry's.
+    assert.includeMembers(
+      [...valueClosure(modules, ["src/validate/open.ts"])],
+      ["src/validate/tables.generated.json"],
+    );
     assert.includeMembers(
       [...valueClosure(modules, ["src/package/index.ts"])],
-      ["src/package/tables.generated.json"],
+      ["src/package/tables.generated.json", "src/validate/tables.generated.json"],
     );
   });
 
-  it("refuses the package tables on the serving entry once it re-exports openPackage (the plant)", () => {
+  it("refuses the full XSD tables on the serving entry once it re-exports open (the plant)", () => {
+    const planted = new Map(modules);
+    planted.set(
+      "src/index.ts",
+      `${modules.get("src/index.ts") ?? ""}\nexport { open } from "#plate/validate/open.ts";\n`,
+    );
+
+    assert.deepStrictEqual(unservedTables(planted, ["src/index.ts"]), [
+      "src/validate/tables.generated.json",
+    ]);
+  });
+
+  it("refuses the package tables and the full XSD tables on the serving entry once it re-exports openPackage (the plant)", () => {
     const planted = new Map(modules);
     planted.set(
       "src/index.ts",
       `${modules.get("src/index.ts") ?? ""}\nexport { openPackage } from "#plate/package/open.ts";\n`,
     );
 
-    assert.deepStrictEqual(unservedTables(planted, ["src/index.ts"]), [
-      "src/package/tables.generated.json",
-    ]);
+    assert.sameMembers(
+      [...unservedTables(planted, ["src/index.ts"])],
+      ["src/package/tables.generated.json", "src/validate/tables.generated.json"],
+    );
   });
 
   it("holds playwright-core and playwright at exactly 1.64.1 and @vitest/browser-playwright at exactly 5.1.0 among the devDependencies, never the dependencies", () => {

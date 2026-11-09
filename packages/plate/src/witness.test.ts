@@ -9,7 +9,6 @@ import {
   entryName,
   isPosted,
   Malformed,
-  open,
   partition,
   redact,
   render,
@@ -31,6 +30,7 @@ import { attribute, checkTree, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 import { xhtmlItem, xhtmlProbe } from "#scripts/walk-corpus.ts";
 

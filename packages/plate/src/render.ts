@@ -250,9 +250,10 @@ const checkedInstance = (
  * is computed, so a printed variable that names a template variable shows the notice
  * `qti-printed-variable`, which the redacted item's notices name and the record's do not.
  *
- * It takes only `check`'s `Accepted` (rule `723e580c`), so a hand-built item, which may hold a
- * `javascript:` href or an `onclick` that `check` would strip, never reaches {@link render}. It
- * always gives a redacted item: what it cannot print shows as a notice.
+ * It takes only an `Accepted` that `check` made, or `checkAdmitted` made from content admission
+ * already checked (rule `723e580c`). Both secure the item alike, so a hand-built item, which may
+ * hold a `javascript:` href or an `onclick` that securing would strip, never reaches
+ * {@link render}. It always gives a redacted item: what it cannot print shows as a notice.
  *
  * @example
  *   const { record, values } =

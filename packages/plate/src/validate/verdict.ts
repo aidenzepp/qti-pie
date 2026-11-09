@@ -57,7 +57,7 @@ import {
   tableOf,
 } from "#plate/validate/structure.ts";
 import { checkTestRules } from "#plate/validate/test-rules.ts";
-import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
+import type { SecuringContent, SecuringTables, Tables } from "#plate/validate/xsd.ts";
 import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
 import type { TestMark } from "#plate/vocabulary.ts";
 
@@ -74,7 +74,8 @@ export interface UncheckedReason {
 }
 
 /**
- * The fields of an accepted document, which only {@link check} and {@link acceptForTest} brand.
+ * The fields of an accepted document, which only {@link check}, {@link checkAdmitted} for a
+ * document content admission already checked, and {@link acceptForTest} brand.
  */
 interface AcceptedFields {
   /**
@@ -108,8 +109,8 @@ export type Accepted = Brand.Branded<AcceptedFields, "Accepted">;
 const accept = Brand.nominal<Accepted>();
 
 /**
- * The fields of an accepted test, which only {@link check}, {@link acceptMarkedTest} and
- * {@link acceptTestForTest} brand.
+ * The fields of an accepted test, which only {@link check}, {@link checkAdmitted},
+ * {@link acceptMarkedTest} and {@link acceptTestForTest} brand.
  */
 interface AcceptedTestFields {
   /**
@@ -362,7 +363,7 @@ const isKeptEverywhere = (attribute: SourceAttribute): boolean =>
  * @param local The attribute's local name.
  * @returns Whether the table declares it.
  */
-const declares = (table: ContentTable, namespace: string, local: string): boolean =>
+const declares = (table: SecuringContent, namespace: string, local: string): boolean =>
   table.attributes.some(
     (declaration) =>
       declaration.use !== "prohibited" &&
@@ -383,7 +384,7 @@ const declares = (table: ContentTable, namespace: string, local: string): boolea
  * @param attribute The attribute.
  * @returns Whether it stays; any other attribute was admitted only by a wildcard.
  */
-const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute): boolean =>
+const isKept = (table: Option.Option<SecuringContent>, attribute: SourceAttribute): boolean =>
   isKeptEverywhere(attribute) ||
   Option.exists(
     table,
@@ -403,7 +404,7 @@ const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute):
  * table.
  *
  * @param visit The element's visit.
- * @param tables The tables.
+ * @param tables The securing tables: the full tables, or their securing projection.
  * @param governing The table that governs each element the structural walk checked.
  * @param marks Where E3's marks are collected.
  * @param drops Where each dropped URL's feature is collected, by element path.
@@ -411,8 +412,8 @@ const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute):
  */
 const secureAttributes = (
   visit: Visit,
-  tables: Tables,
-  governing: ReadonlyMap<SourceElement, ContentTable>,
+  tables: SecuringTables,
+  governing: ReadonlyMap<SourceElement, SecuringContent>,
   marks: UnsupportedFeature[],
   drops: Map<string, string[]>,
 ): readonly SourceAttribute[] => {
@@ -423,7 +424,7 @@ const secureAttributes = (
 
   const table = Option.orElse(
     Option.fromUndefinedOr(governing.get(element)),
-    (): Option.Option<ContentTable> => tableOf(tables, element.local),
+    (): Option.Option<SecuringContent> => tableOf(tables, element.local),
   );
   const kept: SourceAttribute[] = [];
   for (const attribute of element.attributes) {
@@ -460,11 +461,15 @@ const secureAttributes = (
  * call stack however deep the document. Element paths do not change: they depend only on element
  * names and their order.
  *
- * @param source A document the validators accepted and phase 1 can judge.
- * @param tables The tables it was checked against.
+ * It reads only the fields of {@link SecuringTables}, so the full tables and the securing tables'
+ * projection of them secure a document alike.
+ *
+ * @param source A document the validators accepted, or content admission already checked, that
+ *   phase 1 can judge.
+ * @param tables The securing tables: the full tables it was checked against, or their projection.
  * @returns The secured source, E3's marks and the dropped URLs.
  */
-const secure = (source: SourceDocument, tables: Tables): Secured => {
+const secure = (source: SourceDocument, tables: SecuringTables): Secured => {
   const marks: UnsupportedFeature[] = [];
   const drops = new Map<string, string[]>();
   const governing = governingTables(source, tables);
@@ -901,14 +906,14 @@ const summarise = (source: SourceDocument, mark: TestMark): Result.Result<RootSu
   });
 
 /**
- * Give the verdict on an item that every validator accepted and plate can judge: secure it, build
- * it, and accept it.
+ * Give the verdict on an item that every validator accepted, or that admission already checked,
+ * and plate can judge: secure it, build it, and accept it.
  *
  * @param source The item.
- * @param tables The tables it was checked against.
+ * @param tables The securing tables: the full tables it was checked against, or their projection.
  * @returns `refused` when the builder refuses it, else `accepted` or `accepted-with-unsupported`.
  */
-const checkItem = (source: SourceDocument, tables: Tables): Verdict => {
+const checkItem = (source: SourceDocument, tables: SecuringTables): Verdict => {
   const document = source.location;
   const secured = secure(source, tables);
   const built = Effect.runSync(Effect.result(buildItem(secured.source)));
@@ -981,6 +986,40 @@ const checkUndelivered = (source: SourceDocument, kind: "section" | "stimulus"):
 };
 
 /**
+ * Give the verdict on a QTI document no validator refuses, from step 3 of {@link check} on: it is
+ * `unchecked` for any of {@link uncheckedReasons} or a root plate does not judge, and is otherwise
+ * secured, built and accepted by its kind.
+ *
+ * @param source The document.
+ * @param kind Its root's kind.
+ * @param tables The securing tables: the full tables it was checked against, or their projection.
+ * @returns The verdict.
+ */
+const judge = (source: SourceDocument, kind: VerdictKind, tables: SecuringTables): Verdict => {
+  const document = source.location;
+  const reasons = uncheckedReasons(source, kind);
+  if (reasons.length > 0 || !isAcceptedKind(kind)) {
+    return { document, kind, reasons, verdict: "unchecked" };
+  }
+
+  switch (kind) {
+    case "item": {
+      return checkItem(source, tables);
+    }
+    case "test": {
+      return checkTest(source);
+    }
+    case "section":
+    case "stimulus": {
+      return checkUndelivered(source, kind);
+    }
+    default: {
+      return kind satisfies never;
+    }
+  }
+};
+
+/**
  * Give the verdict on a document, in order:
  *
  * 1. A root outside QTI's namespace is `refused`, of kind `none`, with `not-qti-root` alone.
@@ -1025,26 +1064,40 @@ export const check = (source: SourceDocument, tables: Tables): Verdict => {
     return { document, kind, refusals, verdict: "refused" };
   }
 
-  const reasons = uncheckedReasons(source, kind);
-  if (reasons.length > 0 || !isAcceptedKind(kind)) {
-    return { document, kind, reasons, verdict: "unchecked" };
+  return judge(source, kind, tables);
+};
+
+/**
+ * Give the verdict on a document that content admission already checked, as {@link check} gives it
+ * on a document its validators accept, without running them.
+ *
+ * A host's content store admits a document once, through a check of its own, and serves it after.
+ * This judges such a document with none of the structural walk's refusals, the item prose rules'
+ * or the test prose rules', and with the securing tables in place of the full tables, so it never
+ * reads the XSD's attribute types or loads the full tables. Everything after the validators is
+ * {@link check}'s own: a root outside QTI's namespace is refused, MathML, SSML, an XInclude
+ * `include` and an unexpanded entity reference leave the document `unchecked`, E3 and the URL
+ * checks secure an item through the same tables' values, and the builders build it. On a document
+ * {@link check} accepts, it gives the same verdict.
+ *
+ * It judges a document admission did not check as if it had: never give it one from anywhere else.
+ *
+ * @param source The document, as the reader adapter built it.
+ * @param tables The securing tables (`src/validate/securing-tables.ts`).
+ * @returns The verdict. A refusal is a verdict, never a failure. A defect of the item or test
+ *   builder is thrown.
+ */
+export const checkAdmitted = (source: SourceDocument, tables: SecuringTables): Verdict => {
+  if (source.root.namespace !== qtiNamespace) {
+    return {
+      document: source.location,
+      kind: "none",
+      refusals: [notQtiRoot(source)],
+      verdict: "refused",
+    };
   }
 
-  switch (kind) {
-    case "item": {
-      return checkItem(source, tables);
-    }
-    case "test": {
-      return checkTest(source);
-    }
-    case "section":
-    case "stimulus": {
-      return checkUndelivered(source, kind);
-    }
-    default: {
-      return kind satisfies never;
-    }
-  }
+  return judge(source, kindOf(source.root), tables);
 };
 
 /**

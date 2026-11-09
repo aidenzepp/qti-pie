@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { decodeRecord } from "#plate/codec/record.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
-import { decode, entryName, isPosted, open, score } from "#plate/index.ts";
+import { decode, entryName, isPosted, score } from "#plate/index.ts";
 import type { Accepted, Value } from "#plate/index.ts";
 import type {
   AreaMapping,
@@ -14,6 +14,7 @@ import type {
 } from "#plate/model/item.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { format } from "#plate/model/values.ts";
+import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**

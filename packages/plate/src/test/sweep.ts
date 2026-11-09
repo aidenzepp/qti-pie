@@ -13,7 +13,7 @@ import { Effect, Exit, Option, Result } from "effect";
 import { decodeRecord } from "#plate/codec/record.ts";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
-import { begin, open, redact, render } from "#plate/index.ts";
+import { begin, redact, render } from "#plate/index.ts";
 import type {
   Accepted,
   Configuration,
@@ -28,6 +28,7 @@ import type {
   Verdict,
 } from "#plate/index.ts";
 import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
+import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**

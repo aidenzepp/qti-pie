@@ -34,7 +34,6 @@ import {
   checkResponses,
   configure,
   encodeRedacted,
-  open,
   postings,
   redact,
   render,
@@ -56,6 +55,7 @@ import { openPackage } from "#plate/package/index.ts";
 import { textOf } from "#plate/test/accessibility.ts";
 import { float } from "#plate/test/fixtures.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { open } from "#plate/validate/open.ts";
 
 /**
  * The instance token every render here passes.
