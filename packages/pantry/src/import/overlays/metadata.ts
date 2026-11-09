@@ -903,6 +903,14 @@ const usageValueBaseTypeRowsOf = (
 const recordTypes: ReadonlySet<string> = new Set(recordDocumentTypes);
 
 /**
+ * The manifest's type, the one document whose `cp:resource`s are the package's resources: a
+ * {@link LomResource} is the node of a `Resource`, which the manifest alone writes
+ * (`#pantry/import/overlays/package.ts`'s `noPackageRows`), so a `cp:resource` of a record file
+ * whose root is a `cp:manifest` names no resource of the package.
+ */
+const manifestType = "none" satisfies (typeof ResourceType.handles)[number];
+
+/**
  * The metadata rows of a document that holds no package record: every relation of the records
  * empty.
  */
@@ -937,16 +945,15 @@ const noRecordRows = {
  * `recordDocumentTypes`): the manifest is its one `imsmanifest.xml` (IMS Content Packaging 1.2),
  * and a `cp:metadata` of another document describes no part of the package (170356bd's ruling), so
  * a document of another type writes no record. In a document of a record type, every `lom:lom`,
- * `lom:general`, `lom:entry`, `lom:title` and `lom:string` has its row, every
- * `cp:resource` its {@link LomResource}, every general category under a resource's `cp:metadata`
- * its {@link ResourceLomGeneral}, every title's string its {@link LomTitleString}, and every
- * learning resource type its {@link LomResourceType} where it holds a value and its
- * {@link LomResourceTypeSource} where it writes a source. In every document, an item's or
- * test's root has its {@link AssessmentObject}, a usage statistic its {@link StatisticDate} where
- * it writes a `lastUpdated`, and a usage value its {@link UsageBaseType} where it writes a
- * `baseType`, its {@link UsageValue} where it also writes a `fieldIdentifier`, and its
- * {@link UsageValueBaseType} where that `baseType` spells a code; an optional
- * attribute's row exists where it is written.
+ * `lom:general`, `lom:entry`, `lom:title` and `lom:string` has its row, every `cp:resource` of the
+ * manifest its {@link LomResource}, every general category under a resource's `cp:metadata` its
+ * {@link ResourceLomGeneral}, every title's string its {@link LomTitleString}, and every learning
+ * resource type its {@link LomResourceType} where it holds a value and its
+ * {@link LomResourceTypeSource} where it writes a source. In every document, an item's or test's
+ * root has its {@link AssessmentObject}, a usage statistic its {@link StatisticDate} where it writes
+ * a `lastUpdated`, and a usage value its {@link UsageBaseType} where it writes a `baseType`, its
+ * {@link UsageValue} where it also writes a `fieldIdentifier`, and its {@link UsageValueBaseType}
+ * where that `baseType` spells a code; an optional attribute's row exists where it is written.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under, and its type.
@@ -967,7 +974,6 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
   }
 
   const namedOf = resourceNamer(tree, resourcePathsOf(flatten(doc, ids.idOf)), ids.targetAt);
-  const resources = resourceRowsOf(tree, namedOf);
   const records = recordRowsOf(tree, namedOf);
   const generals = generalRowsOf(tree, records);
   const titles = titleRowsOf(tree, records);
@@ -978,7 +984,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
     LomEntry: entryRowsOf(tree, records),
     LomGeneral: generals,
     LomRecord: records,
-    LomResource: resources,
+    LomResource:
+      ids.documentType === manifestType ? resourceRowsOf(tree, namedOf) : noRecordRows.LomResource,
     LomResourceType: termRowsOf(tree, "lom:value"),
     LomResourceTypeSource: termRowsOf(tree, "lom:source"),
     LomString: strings.strings,
