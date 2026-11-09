@@ -73,8 +73,9 @@ import { lawTable } from "#pantry/vocab/laws.ts";
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
  * describe: a hang guard, never a budget. Measured 2026-11-07: 35.7 s at a load average of 87 to
  * 98, its slowest test then. The restatement test, which compiles Qti's law model to pair each
- * statement with its laws and so ran past the free project's 60 s, states it too: it ran 80.4 s and
- * 86.8 s on 2026-11-08 beside other suites, its load not recorded.
+ * statement with its laws and so ran past the free project's 60 s, states it too: it ran 86.8 s on
+ * 695e408e on 2026-11-08 beside other suites, at a load average sampled at 57 to 65 around the run
+ * but not through it. It owes a re-measure through a run at a load average of 60 or more.
  */
 const testTimeoutMs = 1_200_000;
 
