@@ -2529,6 +2529,120 @@ const unresolvedUnder = (base: string, hrefs: readonly string[]) =>
     (verdict) => refusedUnder(verdict, "item-ref-unresolved"),
   );
 
+/**
+ * The section documents of the smaller growth check of refusals many placements give, each
+ * writing the section identifier `X`. From the brief's 250 a count of every refusal given so far at
+ * each placement took only some 34 times as long on 8 times as many, as the rest of opening the
+ * package outweighed the counts; from 500 it takes some 50 times as long.
+ */
+const fewerRepeatingDocuments = 500;
+
+/**
+ * The files of a package whose test `T` holds one part `P` of section refs `R<n>`, each placing a
+ * section document of its own, `sections/s<n>.xml`, whose one section writes the identifier `X` and
+ * holds nothing: every one after the first gives `X` again, so each is refused
+ * `duplicate-identifier`.
+ *
+ * @param documents How many section documents the test places.
+ * @returns The package's files.
+ */
+const repeatingPackage = (documents: number): ReadonlyMap<string, Uint8Array> => {
+  const indices = Array.from({ length: documents }, (_, index) => index);
+
+  return packageOf({
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      ...indices.map((index) =>
+        resourceXml(`S${index}`, "imsqti_section_xmlv3p0", `sections/s${index}.xml`),
+      ),
+    ),
+    ...Object.fromEntries(
+      indices.map((index) => [`sections/s${index}.xml`, sectionDocumentXml("X", "")]),
+    ),
+    "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T">${partXml("P", indices.map((index) => sectionRefXml(`R${index}`, `sections/s${index}.xml`)).join(""))}</qti-assessment-test>`,
+  });
+};
+
+/**
+ * The section documents of the hostile-size case of inclusion cycles, the size the gate's review
+ * measured at 8.8 s of CPU and 260 MB.
+ */
+const hostileCyclingDocuments = 100;
+
+/**
+ * The section refs back to the first section document that each section document of the hostile
+ * cycle case holds.
+ */
+const cyclingRefsBack = 20;
+
+/**
+ * The directory, some 1,000 characters deep, that holds the section documents of the hostile cycle
+ * case, so each path a chain names is that long.
+ */
+const cyclingDirectory = "d/".repeat(500);
+
+/**
+ * The path of a section document of {@link cyclingPackage}.
+ *
+ * @param index The document's 0-based position in the chain.
+ * @returns Its path.
+ */
+const cyclingAt = (index: number): string => `${cyclingDirectory}s${index}.xml`;
+
+/**
+ * The files of a package whose test `T`, at `test.xml`, places a chain of section documents in
+ * {@link cyclingDirectory}: its one part's section ref names the first, and each section document
+ * `X<n>` ({@link cyclingAt}) holds one item ref `I<n>` to `items/a.xml` ({@link reachedItemXml}),
+ * then {@link cyclingRefsBack} section refs `B<n>_<k>` back to `s0.xml`, the first, each refused
+ * `inclusion-cycle`, and, but the last, a section ref `R<n + 1>` to the next.
+ *
+ * @param documents How many section documents the chain holds.
+ * @returns The package's files.
+ */
+const cyclingPackage = (documents: number): ReadonlyMap<string, Uint8Array> => {
+  const indices = Array.from({ length: documents }, (_, index) => index);
+  const backRefs = (index: number): string =>
+    Array.from({ length: cyclingRefsBack }, (_, back) =>
+      sectionRefXml(`B${index}_${back}`, "s0.xml"),
+    ).join("");
+
+  return packageOf({
+    "items/a.xml": reachedItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+      ...indices.map((index) =>
+        resourceXml(`S${index}`, "imsqti_section_xmlv3p0", cyclingAt(index)),
+      ),
+    ),
+    ...Object.fromEntries(
+      indices.map((index) => [
+        cyclingAt(index),
+        sectionDocumentXml(
+          `X${index}`,
+          `${itemRefXml(`I${index}`, `${"../".repeat(500)}items/a.xml`)}${backRefs(index)}${index + 1 < documents ? sectionRefXml(`R${index + 1}`, `s${index + 1}.xml`) : ""}`,
+        ),
+      ]),
+    ),
+    "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T">${partXml("P", sectionRefXml("R0", cyclingAt(0)))}</qti-assessment-test>`,
+  });
+};
+
+/**
+ * The whole chain of an `inclusion-cycle` refusal of a section ref of {@link cyclingPackage} back
+ * to the first section document: the test, every section document from the first down to the one
+ * that holds the ref, then the first again.
+ *
+ * @param index The 0-based position of the document that holds the ref.
+ * @returns The chain, before any bound.
+ */
+const cyclingChain = (index: number): string =>
+  [
+    "test.xml",
+    ...Array.from({ length: index + 1 }, (_, above) => cyclingAt(above)),
+    cyclingAt(0),
+  ].join(" ");
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -5940,6 +6054,64 @@ describe("package/open.ts", () => {
           }
         }),
       growthTimeoutMs,
+    );
+  });
+
+  describe("openPackage, refusals many placements give", () => {
+    it.effect(
+      "align-54 r11 held refusals indexed finding 12: 8 times the section documents, each writing the section identifier X, open in under 32 times the time, every one after the first refused duplicate-identifier once, as the refusals given so far are counted once across the placements, not again at each",
+      () =>
+        Effect.gen(function* heldGrowth() {
+          const fewer = repeatingPackage(fewerRepeatingDocuments);
+          const more = repeatingPackage(fewerRepeatingDocuments * growthFactor);
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, fewer)),
+            Array.from({ length: fewerRepeatingDocuments - 1 }, (_, index) =>
+              duplicateIn(`sections/s${index + 1}.xml`, "qti-assessment-section", "X"),
+            ),
+          );
+
+          const growth = yield* growthRatio(opening(fewer), opening(more));
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `8 times the section documents took ${growth.toFixed(1)} times as long`,
+          );
+        }),
+      growthTimeoutMs,
+    );
+
+    it.effect(
+      'align-54 r11 held refusals indexed finding 12: 100 section documents some 1,000 characters deep, each with 20 section refs back to the first, open within the default timeout, each ref refused inclusion-cycle once, its chain the documents from the test bounded to at most 1,024 characters, its first 512 and its last 511 around one … (U+2026) (reading 85 ("an inclusion never reaches itself"))',
+      () =>
+        Effect.gen(function* boundedCycles() {
+          const verdict = yield* openPackage(location, cyclingPackage(hostileCyclingDocuments));
+          const expected = new Map(
+            Array.from({ length: hostileCyclingDocuments }, (_, index) => [
+              fileLocation(location, cyclingAt(index)),
+              boundedAs(cyclingChain(index)),
+            ]),
+          );
+          const refused = refusalsOf(verdict);
+          const perDocument = new Map<string, number>();
+
+          assert.lengthOf(refused, hostileCyclingDocuments * cyclingRefsBack);
+          for (const { detail, document, rule } of refused) {
+            const chain = detail["chain"] ?? "";
+            perDocument.set(document, (perDocument.get(document) ?? 0) + 1);
+
+            assert.strictEqual(rule, "inclusion-cycle");
+            assert.strictEqual(chain, expected.get(document), document);
+            assert.isAtMost(chain.length, 1024);
+            assert.include(chain, "…");
+          }
+
+          assert.deepStrictEqual(
+            [...perDocument.values()],
+            Array.from({ length: hostileCyclingDocuments }, () => cyclingRefsBack),
+          );
+          assert.isString(JSON.stringify(verdict));
+        }),
     );
   });
 
