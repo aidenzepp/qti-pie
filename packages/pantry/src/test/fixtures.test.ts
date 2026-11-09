@@ -514,7 +514,7 @@ const catalogPresent: readonly (readonly [(typeof catalogNames)[number], string,
   [
     "catalog-padded",
     "choice.xml",
-    '<qti-file-href mime-type="image/&#9;png"> images/sign.png </qti-file-href>',
+    '<qti-file-href mime-type="image/png"> images/sign.png </qti-file-href>',
   ],
   ["catalog-lang", "choice.xml", '<qti-card support="linguistic-guidance" xml:lang="es">'],
   ["catalog-lang", "choice.xml", '<span xml:lang="fr">exact</span>'],

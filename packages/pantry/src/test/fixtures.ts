@@ -464,7 +464,7 @@ export const weightedNames = ["weighted-sum-float", "weighted-variables-integer"
  * hand-edited packages, one for each shape the corpus lacks: `catalog-hosts` (a catalog in a
  * feedback block, a modal feedback, a template block, a feedback block in a template block and a
  * template block in a rubric block), `card-files` (cards that hold files), `catalog-padded` (outer
- * whitespace and a tab in the values that collapse or normalize), `catalog-lang` (decision 85:
+ * whitespace in the values that collapse), `catalog-lang` (decision 85:
  * languages in catalog content that the item's metadata does not list), `card-qti-content`
  * (decision 216: a printed variable and an interaction in a card), `card-gap-inside` (decision
  * 309's case B: a gap in a card inside a gap match), `card-empty` (a card with no content) and
@@ -752,9 +752,8 @@ export const pciNegativeNames = [
  * - `pci-context-undeclared` is read at 3.0.0, where the reader's declared-variable rule may name it
  *   `idref-target`; `pci-context-undeclared-3-0-1` only `context-variable-ref`.
  * - `pci-markup-text` is the automaton's character-data rule, predicted `admission`.
- * - `template-outside` is predicted `admission` or `ordering`; the oracle at the base of this slice
- *   names it `unmodeled-vocabulary` (reading 57 admits `template` only in the markup), a finding
- *   the table keeps as predicted.
+ * - `template-outside` is `unmodeled-vocabulary`, reading 57's rule: an HTML `template` is admitted
+ *   only inside a PCI's markup.
  * - `custom-attribute` is reading 90's refusal of an undeclared attribute on the custom interaction
  *   (open question O5 can turn it into a positive).
  * - `pci-items-fallback` is reading 11; `pci-configuration-missing` is `file-exists`, or the
@@ -778,7 +777,7 @@ export const pciVerdicts: readonly (readonly [FixtureName, readonly string[]])[]
   ["pci-markup-text", ["admission"]],
   ["pci-stylesheet-3-0-0", ["admission", "ordering"]],
   ["pci-catalog-info-3-0-0", ["admission", "ordering"]],
-  ["template-outside", ["admission", "ordering"]],
+  ["template-outside", ["unmodeled-vocabulary"]],
   ["pci-nested", ["ancestry-ban"]],
   ["pci-type-malformed", ["attribute-lexical"]],
   ["pci-path-malformed", ["attribute-lexical"]],
@@ -4992,11 +4991,14 @@ const catalogSpecs: Record<(typeof catalogNames)[number], FixtureSpec> = {
       '<qti-catalog-info><qti-catalog id="catalog1"><qti-card support="keyword-translation"><qti-card-entry xml:lang="es"><qti-html-content>preciso</qti-html-content></qti-card-entry><qti-card-entry xml:lang="de"><qti-html-content>genau</qti-html-content></qti-card-entry></qti-card><qti-card support="linguistic-guidance" xml:lang="es"><qti-html-content xml:lang="es">Preciso significa <span xml:lang="fr">exact</span>.</qti-html-content></qti-card></qti-catalog></qti-catalog-info>',
     ),
   ]),
+  // The MIME type is not padded (decision 447): `MimeTypeDType` is an `xs:normalizedString`,
+  // whose whitespace is replaced and never collapsed, so a space or a tab in it stays and reading
+  // 135 refuses it. The other padded values (`id`, `default`, the href) are of types that collapse.
   "catalog-padded": overSimple(
     "catalog-padded",
     simpleWithCatalog(
       "catalog1",
-      '<qti-catalog-info><qti-catalog id=" catalog1 "><qti-card support="sign-language"><qti-card-entry default=" true "><qti-file-href mime-type="image/&#9;png"> images/sign.png </qti-file-href></qti-card-entry></qti-card></qti-catalog></qti-catalog-info>',
+      '<qti-catalog-info><qti-catalog id=" catalog1 "><qti-card support="sign-language"><qti-card-entry default=" true "><qti-file-href mime-type="image/png"> images/sign.png </qti-file-href></qti-card-entry></qti-card></qti-catalog></qti-catalog-info>',
     ),
   ),
   "cut-catalog-multiple": cutItem(
@@ -6080,9 +6082,24 @@ const configurationsSecondData = [
 ] as const;
 
 /**
+ * The edits that make the two correct responses of a `fractions_deps` item valid: the corpus writes
+ * the `identifier` values `1` and `6`, which the identifier type refuses (it starts with no digit),
+ * so a positive writes `N1` and `N6`, keeping the base type.
+ *
+ * @param file - The item, `fractions_deps.xml` or `fractions_deps_2.xml`.
+ * @returns The two edits.
+ */
+const validCorrectResponses = (file: string): readonly TextEdit[] => [
+  replaceIn(file, "<qti-value>1</qti-value>", "<qti-value>N1</qti-value>"),
+  replaceIn(file, "<qti-value>6</qti-value>", "<qti-value>N6</qti-value>"),
+];
+
+/**
  * The edits of `pci-configurations`: `fractions_deps_2.xml` with its corpus PCIs' custom `data-*`
  * dropped, the first PCI given both module forms and the corpus's misspelt `XX` paths repaired,
- * and the configuration attributes of its `qti-interaction-modules` written as `configurations`.
+ * the configuration attributes of its `qti-interaction-modules` written as `configurations`, and
+ * its two `identifier` correct responses, which the corpus writes `1` and `6` and the identifier
+ * type refuses, written `N1` and `N6` ({@link validCorrectResponses}).
  *
  * @param configurations - The attributes of the `qti-interaction-modules` start tag, as written.
  * @returns The edits, in the order the positive applies them.
@@ -6116,6 +6133,7 @@ const pciConfigurationsEdits = (configurations: string): readonly Edit[] => [
     '<qti-interaction-module id="raphael"/>',
     '<qti-interaction-module id="raphael" fallback-path="modules/lib/raphael.js"/>',
   ),
+  ...validCorrectResponses("fractions_deps_2.xml"),
 ];
 
 /**
@@ -6128,7 +6146,8 @@ const pciConfigurationFiles =
 /**
  * The edits of `pci-modules`: `fractions_deps.xml` with its corpus PCIs' custom `data-*` dropped,
  * in a package of the three module files it keeps, the handlebars file listed and `raphael.js`
- * absent.
+ * absent, and its two `identifier` correct responses, which the corpus writes `1` and `6` and the
+ * identifier type refuses, written `N1` and `N6` ({@link validCorrectResponses}).
  */
 const pciModulesEdits: readonly Edit[] = [
   ...pciItemsKept("pci-modules", "fractions_deps.xml", [
@@ -6138,6 +6157,7 @@ const pciModulesEdits: readonly Edit[] = [
   ]),
   withoutData("fractions_deps.xml", depsFirstKept, depsFirstData),
   withoutData("fractions_deps.xml", depsSecondKept, depsSecondData),
+  ...validCorrectResponses("fractions_deps.xml"),
 ];
 
 /**
