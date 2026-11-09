@@ -1,7 +1,7 @@
 /**
  * Phase 5's test-layer negatives through the importer, on the lease: PostgreSQL the judge. Each
  * negative of `negativeNames` is held to the law oracle's prediction for it, pinned in
- * `test/negatives.oracle.test.ts` (`expectations`): where the oracle finds breaches, the import
+ * `#pantry/test/negatives.ts` (`expectations`): where the oracle finds breaches, the import
  * fails with `ImportRefused` under one of their rules; where it accepts the negative, so does the
  * import.
  *
@@ -21,7 +21,7 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { materialize, negativeNames } from "#pantry/test/fixtures.ts";
-import { expectations } from "#pantry/test/negatives.oracle.test.ts";
+import { expectations } from "#pantry/test/negatives.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**

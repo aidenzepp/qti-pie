@@ -41,10 +41,12 @@
  *   kind, and its {@link ChoiceInteraction}, its nearest interaction (N8) (§5.132.1 and the other
  *   choice classes': "This identifier must not be used by any other choice or item variable"; spec
  *   reading 104: the item is the scope, as §7.16 reads an identifier, "a logical reference to
- *   another object in the item, such as an itemVariable or choice").
+ *   another object in the item, such as an itemVariable or choice"). Across the classes,
+ *   {@link ChoiceVariableName} holds it distinct among every choice and hottext of its document.
  * - {@link Hottext}: every hottext, its nearest interaction's kind, so {@link HottextOwner} is the
  *   hottexts of a hottext interaction; elsewhere a hottext is valid and owned by none (reading 38).
- *   Its identifier is distinct among its document's hottexts (§5.65.1, reading 104).
+ *   Its identifier is distinct among its document's hottexts (§5.65.1, reading 104), and among its
+ *   document's choices by {@link ChoiceVariableName}.
  * - {@link ChoiceVariableName}: each identifier a document's choices, hottexts or declarations use,
  *   counting each, so the nine choice classes share one space of identifiers, a name borne by one
  *   choice or hottext of a document or its assembly and by no other ("Choice identifier key"), and

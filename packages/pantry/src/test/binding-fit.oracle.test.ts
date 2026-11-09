@@ -45,12 +45,11 @@ import { exhaust } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import type { Addition, Law } from "@bjornpagen/grizzle";
+import type { Addition } from "@bjornpagen/grizzle";
 import { Duration, Effect, Option } from "effect";
 import { Qti } from "#pantry/qti/schema.ts";
 import { BindingFit, grammar, RecordBindingFit } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawNameOf } from "#pantry/import/refusal.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { anyTypeKinds } from "#pantry/qti/interactions.ts";
 import type {
@@ -73,6 +72,7 @@ import type { BindingSite, BindingState } from "#pantry/test/binding-cases.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge as judgeHost } from "#pantry/test/host-judge.ts";
+import { lawNamesOf } from "#pantry/test/host-law-names.ts";
 import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
@@ -423,15 +423,6 @@ const gapPackageOf = (drawn: GapCase): PackageEntries => {
   ]);
 };
 
-/**
- * Name the laws a host judgment lists, each by its law's name.
- *
- * @param held - The broken or skipped laws.
- * @returns Their names.
- */
-const named = (held: readonly { readonly law: Law }[]): ReadonlySet<string> =>
-  new Set(held.flatMap(({ law }) => Option.toArray(lawNameOf(law))));
-
 describe("a gap match interaction's gaps", () => {
   layer(NodeServices.layer, { excludeTestServices: true })("over a one-item package", (it) => {
     it.effect(
@@ -454,8 +445,8 @@ describe("a gap match interaction's gaps", () => {
                 const oracle = new Set<string>(breaches.map(({ law }) => law));
                 const program = yield* readProgram(dir);
                 const host = judgeHost(hostRowsOf(program.inputs), judgedLaws(Qti));
-                const broken = named(host.broken);
-                const unjudged = named(host.skipped);
+                const broken = lawNamesOf(host.broken);
+                const unjudged = lawNamesOf(host.skipped);
                 const shown = [
                   ...[...broken]
                     .filter((law) => !oracle.has(law))

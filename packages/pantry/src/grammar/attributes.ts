@@ -701,14 +701,13 @@ const nonEmptyUrl = (domain: Domain): Domain => withPattern(domain, ".*[^ ].*");
  * conversion type codes: E, e, f, G, g, r, R, i, o, X, or x" (§2.3.4). Spec reading 171 adds `d`
  * to that list: the sentence stands in a section the information model marks not normative, the
  * implementation guide's own example writes `format="%d"`, and C reads `d` as it reads `i` (C11
- * §7.21.6.1; PR #46, comment 6722164084). So a format is a printf format string
- * over those codes and `d`: characters but `%`, the escape `%%`, and conversion specifiers,
- * any number of them. Spec reading 161 sets aside reading 132's rule of at most one specifier: QTI
- * bans no second conversion, C's undefined behaviour for a missing argument (C11 §7.21.6.1) is no
- * QTI prohibition, and pantry never renders, so `%i of %i` is stored as written and how it prints
- * is the renderer's call. `%%` converts no argument, and a format with no specifier prints its
- * text alone. A `%` that begins no specifier, and a code that is not listed, are refused, wherever
- * they stand.
+ * §7.21.6.1; PR #46, comment 6722164084). So a format is a printf format string over those codes
+ * and `d`: characters but `%`, the escape `%%`, and conversion specifiers, any number of them. Spec
+ * reading 161 sets aside reading 132's rule of at most one specifier: QTI bans no second
+ * conversion, C's undefined behaviour for a missing argument (C11 §7.21.6.1) is no QTI prohibition,
+ * and pantry never renders, so `%i of %i` is stored as written and how it prints is the renderer's
+ * call. `%%` converts no argument, and a format with no specifier prints its text alone. A `%` that
+ * begins no specifier, and a code that is not listed, are refused, wherever they stand.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Variable | QTI 3.0 information model, 2.3.4 Variable Content}
  * @see {@link https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf | C11 (N1570), 7.21.6.1 The fprintf function}

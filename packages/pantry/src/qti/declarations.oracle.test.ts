@@ -13,7 +13,7 @@ import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Array as Arr, Duration, Effect, Option } from "effect";
+import { Array as Arr, Duration, Effect } from "effect";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import {
   BaseType,
@@ -22,7 +22,6 @@ import {
   grammar,
   ValueDomainOf,
 } from "#pantry/grammar/install.ts";
-import { lawNameOf } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
@@ -62,6 +61,7 @@ import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge as judgeHost } from "#pantry/test/host-judge.ts";
+import { lawNamesOf } from "#pantry/test/host-law-names.ts";
 import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import { judge as judgeOracle, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
@@ -425,9 +425,7 @@ describe("qti/declarations.ts, Declaration not reserved by parent", () => {
                 judgment._tag === "Judged" ? judgment.breaches.map(({ law }) => law) : [],
               );
               const host = judgeHost(hostRowsOf((yield* readProgram(dir)).inputs), hostLaws);
-              const broken = new Set(
-                host.broken.flatMap(({ law }) => Option.toArray(lawNameOf(law))),
-              );
+              const broken = lawNamesOf(host.broken);
 
               assert.strictEqual(
                 oracle.has("Declaration not reserved"),
