@@ -1,56 +1,28 @@
 [
   {
     "file": "qtiv3-examples/packaging/basicFeedbackTest/basicFeedbackTest.zip",
-    "finding": "plate leaves 1 of its 4 items unchecked for its MathML and accepts the test and the other 3 items, with unsupported features (test, modal, block and inline feedback, an adaptive item, a rubric block and outcome processing among them); a package with an unchecked document agrees with no verdict. pantry refuses it unmodeled-vocabulary: an element or attribute in it has no kinds file in pantry's model yet, which marks what pantry does not model, not a QTI rule the package breaks; its verdict file does not name which.",
+    "finding": "plate leaves 1 of its 4 items unchecked for its MathML and accepts the test and the other 3 items, with unsupported features (test, modal, block and inline feedback, an adaptive item, a rubric block and outcome processing among them); a package with an unchecked document agrees with no verdict. pantry accepts it. The difference is plate's unmodeled vocabulary: plate does not validate MathML yet, so it judges nothing in that item, which marks what plate does not model, not a QTI rule the package breaks.",
     "pantry": {
-      "rule": "unmodeled-vocabulary",
-      "verdict": "refused"
+      "rule": "",
+      "verdict": "accepted"
     },
     "plate": {
       "rules": [],
       "verdict": "unchecked"
     },
     "ruling": {
-      "expectedWhile": "pantry does not yet model this vocabulary (its phases 6 to 11)",
+      "expectedWhile": "plate does not validate MathML (M3)",
       "group": 1,
-      "source": "rule 564d5592 (operator, 2026-11-06)",
+      "source": "rule 4325d4c1 (operator, criterion 5), its group 1 widened to either package's unmodeled vocabulary by 057ff1af (overseer, 2026-11-08)",
       "state": {
-        "commit": "69dfc1a",
+        "commit": "083890d8",
         "pantry": {
-          "rule": "unmodeled-vocabulary",
-          "verdict": "refused"
+          "rule": "",
+          "verdict": "accepted"
         },
         "plate": {
           "rules": [],
           "verdict": "unchecked"
-        }
-      }
-    }
-  },
-  {
-    "file": "qtiv3-examples/packaging/pci-simple/pci_simple_example.zip",
-    "finding": "plate accepts its one item, marking its portable custom interaction and its data-toggle and data-tap-message attributes unsupported. pantry refuses it unmodeled-vocabulary: an element or attribute in it has no kinds file in pantry's model yet, which marks what pantry does not model, not a QTI rule the package breaks; its verdict file does not name which.",
-    "pantry": {
-      "rule": "unmodeled-vocabulary",
-      "verdict": "refused"
-    },
-    "plate": {
-      "rules": [],
-      "verdict": "accepted-with-unsupported"
-    },
-    "ruling": {
-      "expectedWhile": "pantry does not yet model this vocabulary (its phases 6 to 11)",
-      "group": 1,
-      "source": "rule 564d5592 (operator, 2026-11-06)",
-      "state": {
-        "commit": "69dfc1a",
-        "pantry": {
-          "rule": "unmodeled-vocabulary",
-          "verdict": "refused"
-        },
-        "plate": {
-          "rules": [],
-          "verdict": "accepted-with-unsupported"
         }
       }
     }
