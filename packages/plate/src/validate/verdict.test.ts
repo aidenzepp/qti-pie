@@ -624,18 +624,55 @@ describe("check", () => {
 });
 
 describe("check, E3: attributes only a wildcard admits", () => {
-  it("removes an onclick on a body p and marks it", () => {
+  it("align-54 extension lists E10: refuses an onclick on a body p as unknown-attribute, since the extension lists cover p (reading 90)", () => {
+    const verdict = verdictOf(
+      item([body([el("p", [attr("class", "lead"), attr("onclick", "alert(1)")], [text("Hi")])])]),
+    );
+
+    assert.deepStrictEqual(refusalsOf(verdict), [
+      { location: { kind: "path", path: `${bodyPath}/p/@onclick` }, rule: "unknown-attribute" },
+    ]);
+    assert.deepStrictEqual(
+      verdict.verdict === "refused" ? verdict.refusals.map((refusal) => refusal.detail) : [],
+      [{ attribute: "onclick", element: "p", reading: "90" }],
+    );
+  });
+
+  it("align-54 extension lists E10: removes and marks an attribute in another namespace on qti-custom-operator, whose wildcard the extension lists do not cover", () => {
+    const foreign = "urn:example:other";
+    const operatorPath = `${root}/qti-response-processing/qti-set-outcome-value/qti-custom-operator`;
     const accepted = acceptedOf(
       verdictOf(
-        item([body([el("p", [attr("class", "lead"), attr("onclick", "alert(1)")], [text("Hi")])])]),
+        item([
+          score(),
+          body([el("p", [], [text("Hi")])]),
+          el(
+            "qti-response-processing",
+            [],
+            [
+              el(
+                "qti-set-outcome-value",
+                [attr("identifier", "SCORE")],
+                [
+                  el(
+                    "qti-custom-operator",
+                    [attr("class", "org.example.Half"), attr("x", "1", foreign)],
+                    [el("qti-base-value", [attr("base-type", "float")], [text("1")])],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ]),
       ),
       "accepted-with-unsupported",
     );
 
-    assert.deepStrictEqual(accepted.unsupported, [
-      { feature: "attribute:onclick", path: `${bodyPath}/p`, shown: "mark" },
-    ]);
-    assert.deepStrictEqual(namesOf(bodyElement(accepted, `${bodyPath}/p`)), ["class"]);
+    // The case is about attribute marks only; the custom operator earns its own mark.
+    assert.deepStrictEqual(
+      accepted.unsupported.filter((mark) => mark.feature.startsWith("attribute:")),
+      [{ feature: `attribute:{${foreign}}x`, path: operatorPath, shown: "mark" }],
+    );
   });
 
   it("neither marks nor removes xsi:schemaLocation, xsi:noNamespaceSchemaLocation, xml:lang or a namespace declaration on the root", () => {
@@ -658,57 +695,49 @@ describe("check, E3: attributes only a wildcard admits", () => {
     assert.deepStrictEqual(accepted.item.lang, Option.some("en"));
   });
 
-  it("keeps aria-keyshortcuts where the table declares aria-keyshorts, and removes aria-keyshorts where it does not", () => {
-    const accepted = acceptedOf(
-      verdictOf(
-        item([
-          body([
-            el(
-              "p",
-              [attr("aria-keyshorts", "Alt+P")],
-              [
-                el("img", [
-                  attr("alt", "A cat"),
-                  attr("aria-keyshortcuts", "Alt+I"),
-                  attr("src", "cat.png"),
-                ]),
-              ],
-            ),
-          ]),
-        ]),
-      ),
-      "accepted-with-unsupported",
-    );
-
-    assert.deepStrictEqual(accepted.unsupported, [
-      { feature: "attribute:aria-keyshorts", path: `${bodyPath}/p`, shown: "mark" },
+  it("align-54 extension lists E10: keeps aria-keyshortcuts where the table declares aria-keyshorts (reading 10), and refuses aria-keyshorts where it does not as unknown-attribute (reading 90)", () => {
+    const image = el("img", [
+      attr("alt", "A cat"),
+      attr("aria-keyshortcuts", "Alt+I"),
+      attr("src", "cat.png"),
     ]);
-    assert.deepStrictEqual(namesOf(bodyElement(accepted, `${bodyPath}/p`)), []);
+    const accepted = acceptedOf(verdictOf(item([body([el("p", [], [image])])])), "accepted");
+    const refused = verdictOf(item([body([el("p", [attr("aria-keyshorts", "Alt+P")], [image])])]));
+
+    assert.deepStrictEqual(accepted.unsupported, []);
     assert.deepStrictEqual(namesOf(bodyElement(accepted, `${bodyPath}/p/img`)), [
       "alt",
       "aria-keyshortcuts",
       "src",
     ]);
+    assert.deepStrictEqual(refusalsOf(refused), [
+      {
+        location: { kind: "path", path: `${bodyPath}/p/@aria-keyshorts` },
+        rule: "unknown-attribute",
+      },
+    ]);
+    assert.deepStrictEqual(
+      refused.verdict === "refused" ? refused.refusals.map((refusal) => refusal.detail) : [],
+      [{ attribute: "aria-keyshorts", element: "p", reading: "90" }],
+    );
   });
 
-  it("compares names exactly: an HREF is wildcard-only, and an element A is refused", () => {
-    const accepted = acceptedOf(
-      verdictOf(
-        item([
-          body([
-            el("p", [], [el("a", [attr("HREF", scriptUrl), attr("href", "#note")], [text("Go")])]),
-          ]),
+  it("align-54 extension lists E10: compares names exactly: an HREF is no attribute a declares, refused as unknown-attribute (reading 90), and an element A is refused", () => {
+    const undeclared = verdictOf(
+      item([
+        body([
+          el("p", [], [el("a", [attr("HREF", scriptUrl), attr("href", "#note")], [text("Go")])]),
         ]),
-      ),
-      "accepted-with-unsupported",
+      ]),
     );
 
-    assert.deepStrictEqual(accepted.unsupported, [
-      { feature: "attribute:HREF", path: `${bodyPath}/p/a`, shown: "mark" },
+    assert.deepStrictEqual(refusalsOf(undeclared), [
+      { location: { kind: "path", path: `${bodyPath}/p/a/@HREF` }, rule: "unknown-attribute" },
     ]);
-    assert.deepStrictEqual(bodyElement(accepted, `${bodyPath}/p/a`).attributes, [
-      { name: "href", value: "#note" },
-    ]);
+    assert.deepStrictEqual(
+      undeclared.verdict === "refused" ? undeclared.refusals.map((refusal) => refusal.detail) : [],
+      [{ attribute: "HREF", element: "a", reading: "90" }],
+    );
 
     const refused = verdictOf(
       item([body([el("p", [], [el("A", [attr("href", scriptUrl)], [text("Go")])])])]),
