@@ -90,6 +90,25 @@ export const known = {
       fix: "a stated limit (spec reading 1): a record file whose root is a cp:manifest has no LomResource, which is written for the package manifest's resources alone, while its resource-owned record is still read, so E1 derived breaks beside RootOfType, which refuses the file on both sides; lifted by reading no record a record file's cp:resource owns",
       owner: "decision 449",
     },
+  "import-only-law: LOM learning resource type, contained LomResourceType(node) in LomResourceTypeSource(node)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourcemetadata/xml" href="r.xml"/></resources></manifest>`,
+        ],
+        [
+          "r.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><resources><resource><metadata><imsmd:lom><imsmd:educational><imsmd:learningResourceType><imsmd:value>exam</imsmd:value></imsmd:learningResourceType></imsmd:educational></imsmd:lom></metadata></resource></resources></manifest>`,
+        ],
+      ],
+      fix: "a stated limit (spec reading 1): a record file whose root is a cp:manifest still has its resource-owned record read, so its learning resource type is judged under LOM learning resource type where the law oracle reads no record of that file; RootOfType refuses the file on both sides; lifted by reading no record a record file's cp:resource owns",
+      owner: "decision 449",
+    },
   "import-only-law: Test overlay, contained Section(node, visible) in TestFlag(node, value)": {
     files: [
       [
@@ -1701,6 +1720,24 @@ export const fixed = {
     ],
     fix: "fix (3): a package's records are read from its manifest and its record files alone (recordDocumentTypes), and the Manifest overlay selections read the manifest's cp:* attributes alone, each by its node's and attribute's documentType (170356bd's reading)",
     owner: "GEN-A",
+  },
+  "oracle-only-law: LOM learning resource type": {
+    files: [
+      [
+        "choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><resources><resource><metadata><imsmd:lom><imsmd:educational><imsmd:learningResourceType><imsmd:value>exam</imsmd:value></imsmd:learningResourceType></imsmd:educational></imsmd:lom></metadata></resource></resources></manifest>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml"/></resources></manifest>`,
+      ],
+    ],
+    fix: "the law oracle reads a learning resource type only in the records' documents, the manifest's and an external record file's, as the import's recordDocumentTypes does (170356bd's reading)",
+    owner: "genetic-repair-3 gr3-2",
   },
   "oracle-only-law: LomObjectIdentifier": {
     files: [
