@@ -37,6 +37,14 @@ operator ruling. A new reading lands here by pull request, and a package that ne
      documents use, and an `xsi:type` as a type of any schema its version pins, not only its own document's set, so
      such an element is judged, and may be refused, where XML Schema would not assess it, since the grammar is keyed
      by version and not by schema set (readings 81 and 60).
+   - **Astral identifiers**: an identifier holding a character from U+10000 up, such as U+1D538, is outside
+     `xs:NCName` and refused by "value domain" on both sides. XML 1.0 Fifth Edition admits characters from U+10000 up
+     in names, so this refusal rests on our reading 94 (XML Schema 1.0's NCName) and is a stated limit of ours, not a
+     ban in the standard. The import still writes the derived row or the key such an identifier would have, so it also
+     breaks "E1 derived" on a section identifier, "Section identifier target" or "Choice identifier key", which the law
+     oracle does not raise, and the rule named first may differ. Outlandish and absent from the official packages;
+     lifted by reading names from XML 1.0 Fifth Edition (reading 94), or by writing no row for a value outside its
+     domain (decision 463, stated here).
 
    Limits that accept content without a check:
    - MathML prose rules no structural law reads, such as the definition a `definitionURL` names, and the importer's
@@ -66,10 +74,12 @@ operator ruling. A new reading lands here by pull request, and a package that ne
      manifest's resources alone, while the record that resource owns is still read, and is held to a `LomResource`.
      A learning resource type the LOM vocabulary forbids in that record also breaks "LOM learning resource type",
      which the law oracle does not raise either: it reads a type only in a record's document, and a record file whose
-     root is a `cp:manifest` is none (reading 122). "RootOfType" refuses the file on both sides, since such a file's
-     root is a `lom:lom`, so the rule stays "RootOfType". Outlandish and absent from the official packages; lifted by
-     reading no record a record file's `cp:resource` owns (decision 449, stated here; decision 460, on the learning
-     resource type).
+     root is a `cp:manifest` is none (reading 122). The record read so also breaks "E1 derived" on its general object
+     and "LomObjectIdentifier" on its identifier, which the law oracle does not raise either. "RootOfType" refuses the
+     file on both sides, since such a file's root is a `lom:lom`, though the import can name the refusal
+     `lom-identifier` where the law oracle names `root-type-reverse`. Outlandish and absent from the official packages;
+     lifted by reading no record a record file's `cp:resource` owns (decision 449, stated here; decision 460, on the
+     learning resource type; decision 463, on the general object, the identifier and the rule named).
    - An inclusion cycle closed only by an include that may not stand for its target's root breaks "Inclusion cycle"
      in the law oracle and not in the import: XInclude still recurses through such an include (reading 85), but the
      import places a child instance only at a site that places its target. Both refuse the package under "Include
@@ -82,10 +92,69 @@ operator ruling. A new reading lands here by pull request, and a package that ne
      which refuses the package on both sides, so the refusal can be named "DocumentId key", which ranks first, where
      the law oracle names another rule. Outlandish and absent from the official packages; lifted by binding only an
      ID whose every ancestor the grammar admits (decision 452, stated here).
+   - An empty value, such as an item ref's or a metadata object's `identifier=""` or a branch rule's `target=""`,
+     still writes its derived row in the import, which then breaks "E1 derived" (an object identifier, a test token)
+     or "Branch target", which the law oracle does not raise: it leaves the value to "value domain". An LTI resource
+     type written in a 3.0.0 package, outside 3.0.0's domain, is the same shape the other way: the import reads it as
+     an LTI link and the law oracle as no type, so the oracle alone raises "Prefixed reference" on a reference through
+     it. "Value domain" refuses each on both sides, though the rule named first may differ. Outlandish and absent from
+     the official packages; lifted by writing no derived row for a value outside its domain, and by both sides reading
+     an out-of-domain resource type alike (decision 463, stated here).
+   - Two identifiers outside their domain that share a value, such as two resources' or two hottexts'
+     `identifier="0"`, are keyed by the import, which then breaks "DocumentId key" or "Choice identifier key", while
+     the law oracle reads each as no identifier. "Value domain" refuses the package on both sides, though the rule
+     named first may differ. Outlandish and absent from the official packages; lifted by keying only identifiers inside
+     their domain, as decision 457 (2) does for one key (decision 463, stated here).
+   - A required attribute or child left unwritten, such as a selection's `select`, a variable mapping's source or
+     target, a template default's expression, or a slider's lower or upper bound, writes no row in the import, while a
+     containment wants one per node, so the import breaks "Test overlay", "Template default target" or "E1 derived",
+     which the law oracle does not raise. "AL3 required" refuses the package on both sides, though the rule named first
+     may differ. It is kin to lane NIL's "(6) the absence defaults": an absent required attribute writes no row.
+     Outlandish and absent from the official packages; lifted by a law that wants the row only where the attribute or
+     child is written (decision 463, stated here).
+   - A second child the content model forbids, such as two expressions under a template default or two mappings under
+     one declaration, also breaks a per-parent key ("E1 derived") or a typing law ("Template default type") in the
+     import, which the law oracle does not raise. The reverse holds for a record's repeated field whose values write no
+     base type: the law oracle raises "Record field key", while the import writes no field row. "Arity", "N7 Last" or
+     "Value cardinality" refuses the package on both sides, though the rule named first may differ. Outlandish and
+     absent from the official packages; lifted by keying or typing only the child the content model admits (decision
+     463, stated here).
+   - A document whose root its type refuses, such as a section resource rooted at response processing or at a response
+     condition, or an item document typed as a section, is still read by the import as its type's. Its references
+     break "Variable declared", "Variable kind" or "Prefixed reference", and an item so placed twice breaks "Choice
+     identifier key" on its placed choices, none of which the law oracle raises: it reads no references there.
+     "RootOfType" refuses the package on both sides, though the rule named first may differ. It is decision 449's kin,
+     for section and item documents. Outlandish and absent from the official packages; lifted by reading no references
+     in a document whose root its type refuses (decision 463, stated here).
+   - Under an inclusion cycle or a banned ancestor, one side reads less than the other. The law oracle drops content
+     the import still reads: a test that places itself as a section loses its sections, so the oracle alone raises
+     "Section identifier target", and a fragment that includes itself has its identifiers held to "value domain" by
+     the import alone. A forbidden 3.0.1 `cpx:variant`'s `identifierref` is still checked under "Idref target" by the
+     import, though the oracle drops the forbidden subtree (decision 452's limit above). The reverse holds for a
+     context variable in a section document, which stands only in a PCI in a rubric, where "N6 ancestry" bans the PCI:
+     the import writes no reference for it, and the oracle alone raises "Context variable reference". "Inclusion
+     cycle", "N5 admitted" or "N6 ancestry" refuses the package on both sides, though the rule named first may differ.
+     It is kin to decisions 451 and 452. Outlandish and absent from the official packages; lifted by the import
+     dropping that content as the law oracle does, and by the import writing a section document's context references
+     as the oracle reads them (decision 463, stated here).
+   - One fragment placed in two items, once inside feedback and once outside, breaks "Adaptive feedback" in the
+     import, which the law oracle does not raise: the import judges an interaction's feedback context per written node,
+     not per placement, as in reading 117's fragment-context limit. "Binding declared" refuses the package on both
+     sides, though the rule named first may differ. Outlandish and absent from the official packages; lifted by judging
+     a fragment's feedback context per placement (decision 463, stated here).
+   - `xml:base` on a `cp:resource` makes the import and the law oracle attach the resource's LOM record differently,
+     so one side raises "LomObjectTitle" where the other does not. Any `xml:base` on a `cp:resource` breaks "Href
+     listed" on both sides, which refuses the package, though the rule named first may differ. Outlandish and absent
+     from the official packages; lifted by resolving a resource's `xml:base` alike on both sides (decision 463, stated
+     here).
+   - Two documents that fail the codec differently, such as a binary file typed as a fragment beside a document whose
+     root has no namespace, are refused on both sides, and each side names the first in manifest order, so the rule
+     named moves with resource order. Outlandish and absent from the official packages; lifted by a codec precedence
+     that names one rule whatever the order (decision 463, stated here).
 
    (2026-10-30, restated without exceptions 2026-11-03. Amended under the operator's ruling of 2026-11-07, register
    D1, to defer to this list; the element-depth limit added by decision 445; the three limits that change no verdict
-   after reading 162's added by decisions 449, 451 and 452.)
+   after reading 162's added by decisions 449, 451 and 452; the limits added by decision 463.)
 
 2. **MathML validity is the MathML 3 Recommendation**: its RelaxNG schema and its prose rules, not only the MathML XSD
    that QTI's schema imports. MathML that breaks a rule of the Recommendation, such as an operator applied to the wrong
