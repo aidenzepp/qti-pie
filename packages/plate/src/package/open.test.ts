@@ -1456,6 +1456,182 @@ const holdingFiles = (more: string): ReadonlyMap<string, Uint8Array> =>
     ),
   });
 
+/**
+ * The namespace of QTI 2.2's usage data, a namespace of QTI 2 (reading 89).
+ */
+const qti2UsageData = "http://www.imsglobal.org/xsd/imsqti_usagedata_v2p2";
+
+/**
+ * Write a usage-data document of one statistic, its root `usageData` in a namespace.
+ *
+ * @param namespace The root's namespace.
+ * @returns The document's text.
+ */
+const usageDataXml = (namespace: string): string =>
+  `<usageData xmlns="${namespace}"><ordinaryStatistic name="P-Value" context="T" caseCount="1"><targetObject identifier="a"/><value>1</value></ordinaryStatistic></usageData>`;
+
+/**
+ * A response processing document with no rule, whose root both the response-processing and the
+ * response-processing template types name.
+ */
+const processingXml = `<qti-response-processing xmlns="${qti}"/>`;
+
+/**
+ * A LOM record with one title, whose root the metadata type names.
+ */
+const lomXml = `<lom xmlns="${lomNamespace}"><general>${lomTitle("a")}</general></lom>`;
+
+/**
+ * The `resource-type-mismatch` refusal of a resource that names a path two document types name,
+ * under a type the path's document is not read as (reading 162).
+ *
+ * @param position The resource's 1-based position in the manifest.
+ * @param type Its declared type.
+ * @param file The path it names.
+ * @returns The refusal's facts.
+ */
+const pathTyped = (position: number, type: string, file: string): Seen => ({
+  detail: { check: "path-type", path: file, reading: "162", type },
+  document: fileLocation(location, manifestFile),
+  location: { kind: "path", path: resourceAt(position) },
+  rule: "resource-type-mismatch",
+});
+
+/**
+ * The item ref identifiers a {@link viewingPackage} gives its section documents, each the one
+ * before it with `.a` added: `a`, `a.a`, `a.a.a` and so on.
+ *
+ * @param count How many there are.
+ * @returns The identifiers, shortest first.
+ */
+const dottedPrefixes = (count: number): readonly string[] =>
+  Array.from({ length: count }, (_, index) =>
+    Array.from({ length: index + 1 }, () => "a").join("."),
+  );
+
+/**
+ * The files of a package whose test `T`, {@link referringTestXml} with no processing, places
+ * `count` section documents `D<n>`, at `sections/d<n>.xml`, each holding one item ref to
+ * `items/a.xml` named by {@link dottedPrefixes} and a section ref to `sections/u.xml`. That
+ * section, `U`, holds the item ref `IU` with a pre-condition over the longest item ref's `SCORE`,
+ * a name each of whose dots splits it at an item ref of another `D<n>`. The test reaches `U`'s one
+ * placement through every `D<n>`, so from it each `D<n>` is read both from inside and from outside
+ * (reading 86).
+ *
+ * @param count How many section documents place `U`.
+ * @returns The package's files.
+ */
+const viewingPackage = (count: number): ReadonlyMap<string, Uint8Array> => {
+  const prefixes = dottedPrefixes(count);
+
+  return packageOf({
+    "items/a.xml": reachedItemXml,
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+      resourceXml("U", "imsqti_section_xmlv3p0", "sections/u.xml"),
+      ...prefixes.map((_, index) =>
+        resourceXml(`D${index}`, "imsqti_section_xmlv3p0", `sections/d${index}.xml`),
+      ),
+    ),
+    ...Object.fromEntries(
+      prefixes.map((prefix, index) => [
+        `sections/d${index}.xml`,
+        sectionDocumentXml(
+          `D${index}`,
+          `${itemRefXml(prefix, "../items/a.xml")}${sectionRefXml(`RU${index}`, "u.xml")}`,
+        ),
+      ]),
+    ),
+    "sections/u.xml": sectionDocumentXml(
+      "U",
+      itemRefXml("IU", "../items/a.xml", preConditionXml(greaterXml(`${prefixes.at(-1)}.SCORE`))),
+    ),
+    "test.xml": referringTestXml(
+      "",
+      prefixes.map((_, index) => sectionRefXml(`R${index}`, `sections/d${index}.xml`)).join(""),
+    ),
+  });
+};
+
+/**
+ * Open a package holding the item `A` and the resource `UD`, of a type, whose `href` names
+ * `usage.xml`, which holds what is given.
+ *
+ * @param usage The document's text.
+ * @param type The resource's type, usage data unless given.
+ * @returns The package's verdict.
+ */
+const openUsageData = (usage: string, type = "qtiusagedata/xml") =>
+  openPackage(
+    location,
+    packageOf({
+      "items/a.xml": itemXml("a", "SCORE"),
+      [manifestFile]: manifestXml(
+        resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
+        resourceXml("UD", type, "usage.xml"),
+      ),
+      "usage.xml": usage,
+    }),
+  );
+
+/**
+ * The `not-qti-root` refusal of `usage.xml`, whose root is in a namespace of QTI 2 (reading 89).
+ *
+ * @param element The root's local name.
+ * @param namespace Its namespace.
+ * @returns The refusal's facts.
+ */
+const notQti2Root = (element: string, namespace: string): Seen => ({
+  detail: { element, namespace, reading: "89" },
+  document: fileLocation(location, "usage.xml"),
+  location: { kind: "path", path: `{${namespace}}${element}` },
+  rule: "not-qti-root",
+});
+
+/**
+ * Open a package whose resources are the item `A`, then `FIRST` and `SECOND`, each of a type, both
+ * naming `doc.xml`.
+ *
+ * @param first The type of `FIRST`.
+ * @param second The type of `SECOND`.
+ * @param files The package's other files, `doc.xml` and `items/a.xml` among them.
+ * @returns The package's verdict.
+ */
+const openTwiceNamed = (first: string, second: string, files: Readonly<Record<string, string>>) =>
+  openPackage(
+    location,
+    packageOf({
+      ...files,
+      [manifestFile]: manifestXml(
+        resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
+        resourceXml("FIRST", first, "doc.xml"),
+        resourceXml("SECOND", second, "doc.xml"),
+      ),
+    }),
+  );
+
+/**
+ * Open a package holding the item `A` and the resource `M`, of a type, whose `href` names the
+ * manifest.
+ *
+ * @param type The type of `M`.
+ * @returns The package's verdict.
+ */
+const openNamingManifest = (type: string) =>
+  openPackage(
+    location,
+    packageOf({
+      "items/a.xml": itemXml("a", "SCORE"),
+      [manifestFile]: manifestXml(
+        resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
+        resourceXml("M", type, manifestFile),
+      ),
+    }),
+  );
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -3730,6 +3906,131 @@ describe("package/open.ts", () => {
           assert.strictEqual(alone.verdict, "accepted-with-unsupported");
         }),
     );
+
+    it.effect(
+      "align-54 document roots E9: a usage-data or fragment resource whose document's root is in a namespace of QTI 2 is refused as not-qti-root at that document, read for its root alone; a usage-data root in QTI 3's namespace, and a usage-data document the reader cannot read, are passed over (reading 89 (\"a document whose root element is in a namespace of QTI 2 is not a QTI 3 document\"))",
+      () =>
+        Effect.gen(function* qti2Roots() {
+          assert.deepStrictEqual(refusalsOf(yield* openUsageData(usageDataXml(qti2UsageData))), [
+            notQti2Root("usageData", qti2UsageData),
+          ]);
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openUsageData(
+                '<assessmentItem xmlns="http://www.imsglobal.org/xsd/imsqti_v2p2" identifier="a" title="a" adaptive="false" timeDependent="false"/>',
+                "imsqti_fragment_xmlv3p0",
+              ),
+            ),
+            [notQti2Root("assessmentItem", "http://www.imsglobal.org/xsd/imsqti_v2p2")],
+          );
+          acceptedOf(
+            yield* openUsageData(
+              usageDataXml("http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0"),
+            ),
+          );
+          acceptedOf(yield* openUsageData(`<usageData xmlns="${qti2UsageData}">`));
+        }),
+    );
+
+    it.effect(
+      "align-54 document roots E38: a path two document types name is read as the first type in the manifest's order that its root bears out, and each resource of another type is refused as resource-type-mismatch with check path-type; where its root bears out neither, the first type's resource is refused for the root as well (reading 162 (\"a path two document types name is the document its root bears out\"))",
+      () =>
+        Effect.gen(function* oneTypePerPath() {
+          const item = { "doc.xml": itemXml("d", "SCORE"), "items/a.xml": itemXml("a", "SCORE") };
+          const processing = { "doc.xml": processingXml, "items/a.xml": itemXml("a", "SCORE") };
+
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openTwiceNamed(
+                "imsqti_rptemplate_xmlv3p0",
+                "imsqti_resprocessing_xmlv3p0",
+                processing,
+              ),
+            ),
+            [pathTyped(3, "imsqti_resprocessing_xmlv3p0", "doc.xml")],
+          );
+
+          const stimulusFirst = yield* openTwiceNamed(
+            "imsqti_stimulus_xmlv3p0",
+            "imsqti_item_xmlv3p0",
+            item,
+          );
+          assert.deepStrictEqual(refusalsOf(stimulusFirst), [
+            pathTyped(2, "imsqti_stimulus_xmlv3p0", "doc.xml"),
+          ]);
+          assert.deepStrictEqual(
+            documentKind(resourceOf(stimulusFirst, "SECOND")),
+            Option.some("item"),
+          );
+          assert.isTrue(Option.isNone(resourceOf(stimulusFirst, "FIRST").verdict));
+          for (const other of [
+            "resourcemetadata/xml",
+            "qtiusagedata/xml",
+            "imsqti_fragment_xmlv3p0",
+          ]) {
+            assert.deepStrictEqual(
+              refusalsOf(yield* openTwiceNamed("imsqti_item_xmlv3p0", other, item)),
+              [pathTyped(3, other, "doc.xml")],
+            );
+          }
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openTwiceNamed("imsqti_item_xmlv3p0", "resourcemetadata/xml", {
+                "doc.xml": lomXml,
+                "items/a.xml": itemXml("a", "SCORE"),
+              }),
+            ),
+            [pathTyped(2, "imsqti_item_xmlv3p0", "doc.xml")],
+          );
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openTwiceNamed("imsqti_outcomes_xmlv3p0", "imsqti_rptemplate_xmlv3p0", item),
+            ),
+            [
+              {
+                detail: {
+                  expected: "imsqti_item_xmlv3p0",
+                  path: "doc.xml",
+                  root: "qti-assessment-item",
+                  type: "imsqti_outcomes_xmlv3p0",
+                },
+                document: fileLocation(location, manifestFile),
+                location: { kind: "path", path: resourceAt(2) },
+                rule: "resource-type-mismatch",
+              },
+              pathTyped(3, "imsqti_rptemplate_xmlv3p0", "doc.xml"),
+            ],
+          );
+          acceptedOf(yield* openTwiceNamed("imsqti_item_xmlv3p0", "imsqti_item_xmlv3p0", item));
+        }),
+    );
+
+    it.effect(
+      "align-54 document roots E38: a document resource whose href names imsmanifest.xml is refused as resource-type-mismatch with check manifest-document, and the manifest is never read again as its document; a web content resource or a file that names it is admitted (reading 146 (\"the manifest is the package's one document at imsmanifest.xml, and no resource's\"))",
+      () =>
+        Effect.gen(function* manifestNamed() {
+          for (const type of [
+            "imsqti_fragment_xmlv3p0",
+            "resourcemetadata/xml",
+            "qtiusagedata/xml",
+            "imsqti_item_xmlv3p0",
+            "imsqti_outcomes_xmlv3p0",
+          ]) {
+            const verdict = yield* openNamingManifest(type);
+
+            assert.deepStrictEqual(refusalsOf(verdict), [
+              {
+                detail: { check: "manifest-document", path: manifestFile, reading: "146", type },
+                document: fileLocation(location, manifestFile),
+                location: { kind: "path", path: resourceAt(2) },
+                rule: "resource-type-mismatch",
+              },
+            ]);
+            assert.isTrue(Option.isNone(resourceOf(verdict, "M").verdict));
+          }
+          acceptedOf(yield* openNamingManifest("webcontent"));
+        }),
+    );
   });
 
   describe("openPackage, a test that reads an item's context variable", () => {
@@ -4129,6 +4430,14 @@ describe("package/open.ts", () => {
               },
             ],
           );
+        }),
+    );
+
+    it.effect(
+      'align-54 document roots B6: a dotted name each of whose 30 dots splits it at an item ref of another section document, each of which the placement that holds the name reads both from inside and from outside, is judged once for each kind of answer its readings give, not once for each of the 2^30 ways to read those documents, and is accepted within the default timeout (reading 86 ("a section document a test places twice is written once"))',
+      () =>
+        Effect.gen(function* manyViews() {
+          acceptedOf(yield* openPackage(location, viewingPackage(30)));
         }),
     );
   });

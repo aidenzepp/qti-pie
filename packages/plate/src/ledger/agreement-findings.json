@@ -110,33 +110,5 @@
         }
       }
     }
-  },
-  {
-    "file": "qtiv3-examples/packaging/usageData/usageData.zip",
-    "finding": "plate accepts it with no document judged: its 3 resources are usage data (qtiusagedata/xml), a type the QTI 3.0.0 CP profile lists and plate neither judges nor delivers in M2, and plate knows no rule that asks a package to hold an item or a test (rule 5b8ee08b). pantry refuses it not-qti3: it reads each usage-data document, whose root is usageData in QTI 2.2's usage-data namespace (imsqti_usagedata_v2p2), not QTI 3's (imsqti_usagedata_v3p0). Recorded as a disagreement, not as a plate rule: plate judges the documents it delivers or reads to deliver, and whether a QTI 3 package may carry QTI 2.2 usage data is an open reading.",
-    "pantry": {
-      "rule": "not-qti3",
-      "verdict": "refused"
-    },
-    "plate": {
-      "rules": [],
-      "verdict": "accepted"
-    },
-    "ruling": {
-      "expectedWhile": "plate neither judges nor delivers usage data in M2; the QTI 2.2 namespace question is an open reading",
-      "group": 3,
-      "source": "rule 564d5592 (operator, 2026-11-06)",
-      "state": {
-        "commit": "69dfc1a",
-        "pantry": {
-          "rule": "not-qti3",
-          "verdict": "refused"
-        },
-        "plate": {
-          "rules": [],
-          "verdict": "accepted"
-        }
-      }
-    }
   }
 ]
