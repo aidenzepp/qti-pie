@@ -37,7 +37,7 @@
  * Q3's `automatonOf` builds every automaton from the content-model IR; this module installs them.
  */
 import { Array as Arr, Option, pipe, Result, Schema } from "effect";
-import type { Admission, AdmittedChild } from "#pantry/grammar/admission.ts";
+import type { Admission, AdmissionKey, AdmittedChild } from "#pantry/grammar/admission.ts";
 import {
   closed,
   dependentField,
@@ -1000,8 +1000,8 @@ export const maxOccursOf = (occurs: Occurs): number =>
   Option.match(occurs.max, { onNone: () => Number.POSITIVE_INFINITY, onSome: (most) => most });
 
 /**
- * Install the automata of content models, and project their admitted triples with each child's
- * position (plan R12, U4).
+ * Install the automata of content models, and state their admitted triples with each child's
+ * position as each family's admission map (plan R12, U4).
  *
  * An element particle admits its kinds. A wildcard admits, by its processing, the globally
  * declared kinds in its namespaces that no element particle of the model names and that the
@@ -1017,8 +1017,8 @@ export const maxOccursOf = (occurs: Occurs): number =>
  * @param input.namespaceOf - The namespace of each kind's elements.
  * @param input.stated - The triples the vocabularies state beside their models, each admitted at
  *   position 0 in its family's admission map.
- * @returns The content grammar and the admitted triples with their positions, or the first model or
- *   reading that has none.
+ * @returns The content grammar and `Admission` read through its admission maps, or the first model
+ *   or reading that has none.
  */
 export const contentOf = (input: {
   readonly facets: readonly ContentFacet[];
@@ -1027,11 +1027,11 @@ export const contentOf = (input: {
   readonly kinds: Roster<string>;
   readonly models: readonly ContentModel[];
   readonly namespaceOf: (kind: string) => NamespaceOfKind;
-  readonly stated: readonly AdmittedChild[];
+  readonly stated: readonly (AdmittedChild & { readonly source: Source })[];
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<
   {
-    readonly admitted: readonly AdmittedRow[];
+    readonly admission: Admission;
     readonly content: ContentGrammar;
   },
   ContentError
@@ -1341,10 +1341,9 @@ export const contentOf = (input: {
       dependentField(name, positions, (prefix) =>
         countOf(modelSizes, prefixHandle(prefix, "model"), "ModelPositions"),
       );
-    // Each installed family with the children its model admits, read once: `Admission`'s rows,
+    // Each installed family with the children its model admits, read once: its admission map's,
     // and `StrictlyHeld`'s among them.
     const admittedBy = installed.map((entry) => ({ entry, rows: admittedOf(entry) }));
-    const admitted = admittedBy.flatMap(({ rows }) => rows);
     // Each family's admitted children at their positions, the models' and then the triples the
     // vocabularies state beside them, at 0; then each family's children, by kind, as its
     // admission map, each distinct map numbered once in the order of the first family, in
@@ -1416,7 +1415,7 @@ export const contentOf = (input: {
     const sourceOf = (key: {
       readonly parent: string;
       readonly position: string;
-      readonly version: SchemaVersion;
+      readonly version: string;
     }): Option.Option<Source> =>
       Option.flatMap(installedAt(key), (entry) => {
         const number = Number(key.position);
@@ -1444,26 +1443,52 @@ export const contentOf = (input: {
       }),
     );
 
+    const admissionIn = indexed(
+      closed({
+        key: [idField("map", admissionMap.roster), idField("child", input.kinds)],
+        name: "AdmissionIn",
+        payload: [idField("position", positions)],
+        rows: mapMembers,
+      }),
+    );
+    const contentModelOf = indexed(
+      closed({
+        key: [version, parent],
+        name: "ContentModelOf",
+        payload: [model, admissionMap],
+        rows: familyModels,
+      }),
+    );
+    // The sources the vocabularies state their triples with, by `version parent child`: production
+    // states none.
+    const statedSources = new Map(
+      input.stated.map(({ child, parent: held, source, version: in_ }) => [
+        `${in_} ${held} ${child}`,
+        source,
+      ]),
+    );
+    const lookup = (key: AdmissionKey) =>
+      Option.flatMap(contentModelOf.lookup(key), ({ admission }) =>
+        admissionIn.lookup({ child: key.child, map: admission }),
+      );
+
     return {
-      admitted,
+      admission: {
+        lookup,
+        sourceOf: (key) =>
+          Option.flatMap(lookup(key), ({ position: at }) =>
+            Option.orElse(
+              Option.fromUndefinedOr(
+                statedSources.get(`${key.version} ${key.parent} ${key.child}`),
+              ),
+              () => sourceOf({ parent: key.parent, position: at, version: key.version }),
+            ),
+          ),
+      },
       content: {
-        admissionIn: indexed(
-          closed({
-            key: [idField("map", admissionMap.roster), idField("child", input.kinds)],
-            name: "AdmissionIn",
-            payload: [idField("position", positions)],
-            rows: mapMembers,
-          }),
-        ),
+        admissionIn,
         admissionMaps: admissionMap.roster,
-        contentModelOf: indexed(
-          closed({
-            key: [version, parent],
-            name: "ContentModelOf",
-            payload: [model, admissionMap],
-            rows: familyModels,
-          }),
-        ),
+        contentModelOf,
         counted: sourced({
           key: [version, parent, position],
           name: "Counted",

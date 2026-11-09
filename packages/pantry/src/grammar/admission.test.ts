@@ -38,6 +38,7 @@ import {
   mathmlRoot,
   semanticsContexp,
 } from "#pantry/test/gen/relaxng.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * The wildcards a parent's content reads, a spec reading's in place of the XSD's: spec reading 61
@@ -140,7 +141,8 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
     "admits under each kind exactly the elements its content model names, wildcards apart, in every pinned schema",
     () =>
       Effect.gen(function* admissionIsTheXsds() {
-        const { admission, kinds } = yield* grammar;
+        const { content, kinds } = yield* grammar;
+        const admission = admittedOf(content.contentModelOf, content.admissionIn);
         const isElement = (kind: string) => Option.isSome(kinds.isElement.lookup({ kind }));
         const namespaceOf = (kind: string) =>
           Option.map(kinds.elementName.lookup({ kind }), ({ namespace }) => namespace);
@@ -164,7 +166,7 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
                 ),
             );
             const wildcards = readWildcards(parent, particles.flatMap(wildcardsOf));
-            const admitted = admission.rows
+            const admitted = admission
               .filter((row) => row.version === version && row.parent === parent)
               .map(({ child }) => child);
             const elements = admitted.filter(isElement);
@@ -603,7 +605,7 @@ describe("Admission projected from content models", () => {
               const result = toyGrammar([{ ...toy, models: [model] }], toyDomains);
               const held = result.pipe(
                 Result.map((composedToy) =>
-                  composedToy.admission.rows
+                  admittedOf(composedToy.content.contentModelOf, composedToy.content.admissionIn)
                     .filter(({ parent, version }) => parent === "e0" && version === "3.0.1")
                     .map(({ child }) => child)
                     .filter((child) => !["comment", "pi", "ws"].includes(child))
@@ -699,14 +701,15 @@ describe("Admission through compose", () => {
                 toyDomains,
               );
 
-              // A triple stated twice is no generator's refusal: `faultOf` finds it in
-              // `Admission`'s rows, and grizzle refuses it when it declares `ChildGrammar`.
+              // A triple stated twice is no generator's refusal: `faultOf` finds it in its
+              // family's admission map's `AdmissionIn` rows, and grizzle refuses it when it
+              // declares `AdmissionIn`.
               if (second.length > 0) {
                 assert.strictEqual(
                   Result.match(result, {
                     onFailure: ({ _tag }) => _tag,
-                    onSuccess: ({ admission }) =>
-                      Option.match(faultOf(admission), {
+                    onSuccess: ({ content }) =>
+                      Option.match(faultOf(content.admissionIn), {
                         onNone: () => "composed",
                         onSome: ({ _tag }) => _tag,
                       }),
@@ -715,7 +718,15 @@ describe("Admission through compose", () => {
                 );
               } else {
                 assert.deepStrictEqual(
-                  result.pipe(Result.map((composedToy) => composedToy.admission.rows.length)),
+                  result.pipe(
+                    Result.map(
+                      (composedToy) =>
+                        admittedOf(
+                          composedToy.content.contentModelOf,
+                          composedToy.content.admissionIn,
+                        ).length,
+                    ),
+                  ),
                   Result.succeed(triples.length),
                 );
               }

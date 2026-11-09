@@ -65,6 +65,7 @@ import type {
 import { globalKinds } from "#pantry/vocab/inventory/vocabularies.ts";
 import { namespaceClassesUnder, vocabularyNamespaces } from "#pantry/vocab/namespaces.ts";
 import { foreignRoots } from "#pantry/vocab/open.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * A rule's status, as the alignment audit's §2 defines it.
@@ -1421,7 +1422,7 @@ interface Index {
  */
 const indexOf = (grammar: ComposedGrammar): Index => {
   const children = new Map<string, Set<string>>();
-  for (const row of grammar.admission.rows) {
+  for (const row of admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn)) {
     const key = `${row.version} ${row.parent}`;
     children.set(key, (children.get(key) ?? new Set()).add(row.child));
   }

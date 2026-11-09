@@ -31,8 +31,8 @@
  *   `data-*` on the foreign kinds (fin.md, D2). On a kind the Schematron's extension rules cover,
  *   only `data-*` is, and no `xml:` name the kind does not declare (spec reading 90, `coveredBy`).
  *
- * Every admitted triple is stated once: a triple two sources state is a `KeyCollision` of
- * `Admission`'s rows (`faultOf`, which the tests read).
+ * Every admitted triple is stated once: a triple two sources state is a `KeyCollision` of its
+ * family's admission map's `AdmissionIn` rows (`faultOf`, which the tests read).
  */
 import { Function as Fn, Option, Result } from "effect";
 import type { Admission, AdmittedChild } from "#pantry/grammar/admission.ts";
@@ -53,7 +53,7 @@ import type {
 } from "#pantry/grammar/attributes.ts";
 import { barredByOf } from "#pantry/grammar/children.ts";
 import type { BarredBy, ChildError, LastWhere } from "#pantry/grammar/children.ts";
-import { idField, indexedSourced, roster, rowsAt, sourced } from "#pantry/grammar/closed.ts";
+import { roster, rowsAt } from "#pantry/grammar/closed.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
 import { compositions } from "#pantry/grammar/compositions.ts";
 import {
@@ -603,7 +603,8 @@ const governedOf = (
 export interface Grammar<K extends string, N extends string> {
   /**
    * `Admission`: the admitted (version, parent, child) triples, each with its content position
-   * (`ChildGrammar`), sourced to its particle, or its model at position 0.
+   * (`ChildGrammar`), sourced to its particle, or its model at position 0, read through the content
+   * grammar's admission maps.
    */
   readonly admission: Admission;
   readonly ancestry: AncestrySets;
@@ -740,36 +741,11 @@ export const compose = <const V extends readonly Vocabulary[]>(
       versions: base.versions,
     });
     // A parent admits a kind where its family's admission map holds the kind in some version.
-    const { admissionIn, contentModelOf } = installed.content;
+    const { admission } = installed;
     const kinds = resolution(base, (parent, kind) =>
       base.versions.handles.some((version) =>
-        Option.exists(contentModelOf.lookup({ parent, version }), ({ admission: map }) =>
-          Option.isSome(admissionIn.lookup({ child: kind, map })),
-        ),
+        Option.isSome(admission.lookup({ child: kind, parent, version })),
       ),
-    );
-    // A child the models admit carries its position's particle, or its model's at 0; a triple a
-    // vocabulary states beside them carries its own source.
-    const admission = indexedSourced(
-      sourced({
-        key: [
-          idField("version", kinds.versions),
-          idField("parent", kinds.nodeKind),
-          idField("child", kinds.nodeKind),
-        ],
-        name: "Admission",
-        payload: [idField("position", installed.content.positions)],
-        rows: [
-          ...installed.admitted.map(({ child, parent, position, source, version }) => ({
-            row: { child, parent, position: String(position), version },
-            source,
-          })),
-          ...stating.map(({ child, parent, source, version }) => ({
-            row: { child, parent, position: "0", version },
-            source,
-          })),
-        ],
-      }),
     );
     const declarations = list.flatMap((entry) => entry.declarations);
     const declared = new Set(
@@ -860,7 +836,8 @@ export const compose = <const V extends readonly Vocabulary[]>(
         versions: kinds.versions,
       }),
       kindByNameUnder: namesUnder({
-        admitted: admission.rows,
+        admissionIn: installed.content.admissionIn,
+        families: installed.content.contentModelOf,
         kinds: kinds.nodeKind,
         nameOf: (kind) => kinds.elementName.lookup({ kind }),
         versions: kinds.versions,

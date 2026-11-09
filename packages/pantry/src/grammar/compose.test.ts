@@ -23,6 +23,7 @@ import {
 import type { Domain } from "#pantry/vocab/inventory/types.ts";
 import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
 import { asiNamespace } from "#pantry/vocab/namespaces.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -380,9 +381,9 @@ describe("the composition", () => {
     assert.deepStrictEqual(
       result.pipe(
         Result.map(
-          ({ admission, kinds }) =>
+          ({ content, kinds }) =>
             new Set(
-              admission.rows
+              admittedOf(content.contentModelOf, content.admissionIn)
                 .filter(
                   ({ child, parent }) =>
                     parent === "e0" && Option.isSome(kinds.isElement.lookup({ kind: child })),
@@ -455,7 +456,7 @@ const pathTo = (
 ): Option.Option<readonly string[]> => {
   const elements = new Set<string>(production.kinds.elementName.rows.map((row) => row.kind));
   const children = new Map<string, string[]>();
-  for (const row of production.admission.rows) {
+  for (const row of admittedOf(production.content.contentModelOf, production.content.admissionIn)) {
     if (row.version === version && elements.has(row.child)) {
       children.set(row.parent, [...(children.get(row.parent) ?? []), row.child]);
     }

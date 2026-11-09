@@ -55,7 +55,7 @@ import type {
   XdmFeature,
 } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawNames, lawsOf } from "#pantry/test/oracle.ts";
-import { ancestryIndexesOf } from "#pantry/test/indexes.ts";
+import { admittedOf, ancestryIndexesOf } from "#pantry/test/indexes.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 
 /**
@@ -889,7 +889,9 @@ const isClosedKind = (kind: string): kind is ElementKind<Composed> =>
 const placedAlone: ReadonlyMap<string, readonly ElementKind<Composed>[]> = new Map(
   [
     ...Map.groupBy(
-      grammar.admission.rows.filter(({ position }) => position !== "0"),
+      admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn).filter(
+        ({ position }) => position !== "0",
+      ),
       ({ parent, version }) => `${version} ${parent}`,
     ),
   ].map(([key, held]) => [key, held.flatMap(({ child }) => (isClosedKind(child) ? [child] : []))]),

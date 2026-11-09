@@ -53,7 +53,7 @@ import {
   XsdOracleLayer,
   xsdContents,
 } from "#pantry/test/gen/grammar.ts";
-import { accepts, indexesOf, symbolRowsOf } from "#pantry/test/indexes.ts";
+import { accepts, admittedOf, indexesOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 import type {
   Content,
   DrawnChild,
@@ -427,7 +427,10 @@ const probesOf = (input: {
       return [];
     }
 
-    const admitted = composedGrammar.admission.rows
+    const admitted = admittedOf(
+      composedGrammar.content.contentModelOf,
+      composedGrammar.content.admissionIn,
+    )
       .filter(
         (row) =>
           row.version === version &&
@@ -684,13 +687,13 @@ const languagesOf = (
   parent: string,
   particle: Particle,
 ): Languages => {
-  const { admission, kinds } = composedGrammar;
+  const { content, kinds } = composedGrammar;
   const resolve = (members: readonly { readonly name: XsdName }[]) =>
     members.flatMap((member) =>
       Option.toArray(resolverOf(kinds)(member.name.namespace, member.name.local, parent)),
     );
   const named = new Set(elementsOf(particle).flatMap(({ members }) => resolve(members)));
-  const byWildcard = admission.rows
+  const byWildcard = admittedOf(content.contentModelOf, content.admissionIn)
     .filter(
       (row) =>
         row.version === version &&
@@ -922,7 +925,8 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
       // reported.
       Effect.gen(function* everyModel() {
         const composedGrammar = yield* grammar;
-        const { admission, kinds } = composedGrammar;
+        const { content, kinds } = composedGrammar;
+        const admission = admittedOf(content.contentModelOf, content.admissionIn);
         const draw = yield* seededDraw;
         const isElement = (kind: string) => Option.isSome(kinds.isElement.lookup({ kind }));
         const disagreements: string[] = [];
@@ -959,7 +963,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
                   ...new Set(elementsOf(particle).flatMap((held) => resolve(held.members))),
                 ],
               });
-              const admitted = admission.rows
+              const admitted = admission
                 .filter(
                   (row) => row.version === version && row.parent === parent && isElement(row.child),
                 )
@@ -1557,7 +1561,7 @@ describe.skipIf(!cached)("the content grammar's sources", () => {
               }
             }
           });
-        for (const row of admission.rows) {
+        for (const row of admittedOf(content.contentModelOf, content.admissionIn)) {
           yield* check("Admission", row.version, admission.sourceOf(row));
         }
 
@@ -1920,7 +1924,7 @@ describe("the installed automata", () => {
       // nothing with the construction. A position no family can reach, or none can leave
       // lawfully, would make an admitted kind a dead letter, which a content model never states.
       Effect.gen(function* trim() {
-        const { admission, content } = yield* grammar;
+        const { content } = yield* grammar;
         // Each model's automaton, which every family of it reads (`ContentModelOf`).
         const families = new Map<
           string,
@@ -1960,7 +1964,7 @@ describe("the installed automata", () => {
             { model, position: to },
           ]),
           ...content.last.rows,
-          ...admission.rows
+          ...admittedOf(content.contentModelOf, content.admissionIn)
             .filter(({ position }) => position !== "0")
             .map(({ parent, position, version }) => ({
               model: modelOf.get(`${version} ${parent}`) ?? "",
@@ -2373,7 +2377,7 @@ const automatonRowsOf = (
           .map(({ position }) => `last ${position}`),
       ],
     ),
-    ...composedGrammar.admission.rows
+    ...admittedOf(composedGrammar.content.contentModelOf, composedGrammar.content.admissionIn)
       .filter((row) => row.version === version && row.parent === parent)
       .map(({ child, position }) => `admits ${child} at ${position}`),
   ].toSorted();
@@ -2446,7 +2450,10 @@ const widenedProbesOf = (input: {
 
   return Option.toArray(reading.particle).flatMap((particle) => {
     const named = new Set(elementsOf(particle).flatMap(kindOf));
-    const held = composedGrammar.admission.rows
+    const held = admittedOf(
+      composedGrammar.content.contentModelOf,
+      composedGrammar.content.admissionIn,
+    )
       .filter(
         (row) =>
           row.version === version &&

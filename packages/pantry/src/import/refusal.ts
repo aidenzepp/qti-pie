@@ -892,7 +892,7 @@ const contentOrderLaws: Readonly<
  * The content grammar as an explanation reads it, every lookup a map's: each family's content
  * model by `version parent` (`ContentModelOf`), `Follow`'s successors by `model position`, `Last`'s
  * ends by model, and the kinds at each position of each family by `version parent position`, those
- * its `Admission` gives the position and then those its shared model's symbol sets do.
+ * its admission map gives the position, by kind, and then those its shared model's symbol sets do.
  */
 interface ContentIndex {
   readonly ends: ReadonlyMap<string, readonly string[]>;
@@ -950,15 +950,18 @@ const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
     return known;
   }
 
-  const { admission, content } = constants;
+  const { content } = constants;
+  const childrenOf = Map.groupBy(content.admissionIn.rows, ({ map }) => map);
   const symbolsOf = Map.groupBy(content.symbolSetOf.rows, ({ model }) => model);
   const membersOf = Map.groupBy(content.symbolMember.rows, ({ set }) => set);
   const index: ContentIndex = {
     ends: grouped(content.last.rows.map(({ model, position }) => [model, position] as const)),
     kinds: grouped([
-      ...admission.rows.map(
-        ({ child, parent, position, version }) =>
-          [positionKey(version, parent, position), child] as const,
+      // Each family's admission map's children, each at its position.
+      ...content.contentModelOf.rows.flatMap(({ admission, parent, version }) =>
+        rowsAt(childrenOf, admission).map(
+          ({ child, position }) => [positionKey(version, parent, position), child] as const,
+        ),
       ),
       // Each shared family's model's kinds, each at every position of its symbol set.
       ...content.sharedModelOf.rows.flatMap(({ model, parent, version }) =>

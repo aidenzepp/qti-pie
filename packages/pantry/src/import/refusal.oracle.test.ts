@@ -62,7 +62,7 @@ import {
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
-import { symbolRowsOf } from "#pantry/test/indexes.ts";
+import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 import { beginsWith, mergedAxes } from "#pantry/test/merged-axes.ts";
 import type { Axis } from "#pantry/test/merged-axes.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
@@ -1407,7 +1407,10 @@ const positionKinds: ReadonlyMap<string, ReadonlySet<string>> = (() => {
   const add = (at: string, kind: string): void => {
     kinds.set(at, (kinds.get(at) ?? new Set()).add(kind));
   };
-  for (const { child, parent, position, version } of grammar.admission.rows) {
+  for (const { child, parent, position, version } of admittedOf(
+    grammar.content.contentModelOf,
+    grammar.content.admissionIn,
+  )) {
     add(`${version} ${parent} ${position}`, child);
   }
 

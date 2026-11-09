@@ -202,7 +202,7 @@ const comparisons: readonly Comparison[] = [
   { expected: () => grammar.content.strictlyHeld.rows, name: "StrictlyHeld" },
   // The content grammar is keyed by automaton where it is generated, so each relation is its
   // generator's rows one to one, and nothing regroups families into models here.
-  // Each family's admission map's rows are held to `Admission`'s by the admission test below.
+  // Each family's admission map's rows are held to rule 0 by the admission test below.
   { expected: () => grammar.content.contentModelOf.rows, name: "ContentModelOf" },
   { expected: () => grammar.content.admissionIn.rows, name: "AdmissionIn" },
   { expected: () => grammar.content.symbolSetOf.rows, name: "SymbolSetOf" },
@@ -605,27 +605,43 @@ describe("the installed relations", () => {
     searchTimeout,
   );
 
-  it("state Admission, ChildGrammar once, as each family's admission map and each map's children, in the grammar and as installed: every (version, parent, child) at its position, and no other", () => {
-    // Oracle: the generator's `Admission` rows, against the content grammar's and the installed
-    // `ContentModelOf.admission` and `AdmissionIn`, each spelled out (`admittedOf`). N5 reads
-    // `AdmissionIn` at the family's map where it read ChildGrammar at the family, and `resolve`
-    // asks it of a name's kinds, so they agree exactly when these sets do.
-    const key = ["version", "parent", "child"];
-    const admission = keyedSet("Admission", key, grammar.admission.rows);
+  it("state Admission, ChildGrammar once, as each family's admission map, each distinct map once and held by a family, and read each (version, parent, child) at its position through its family's map", () => {
+    // Oracle: rule 0, identical facts are one fact, over the content grammar's maps, which
+    // install.ts states one to one (the rows law above): a map minted twice, a map no family holds,
+    // or a child held twice in a map is a fact stated twice or one stated of nothing. And
+    // `Admission.lookup`, the host's reading of the maps that N5's `AdmissionIn` at the family's
+    // map restates, against the maps spelled out (`admittedOf`): every (version, parent, child)
+    // they state, at its position.
+    const { admissionIn, admissionMaps, contentModelOf } = grammar.content;
+    const members = Map.groupBy(admissionIn.rows, ({ map }) => map);
+    const spelled = admissionMaps.handles.map((map) =>
+      (members.get(map) ?? []).map(({ child, position }) => `${child}:${position}`).join(" "),
+    );
+    const held = new Set(contentModelOf.rows.map(({ admission }) => admission));
+    const admitted = admittedOf(contentModelOf, admissionIn);
 
+    keyedSet("AdmissionIn", ["map", "child"], admissionIn.rows);
+    assert.strictEqual(
+      new Set(spelled).size,
+      spelled.length,
+      "two admission maps hold one set of children",
+    );
     assert.deepStrictEqual(
-      keyedSet(
-        "the grammar's admission maps",
-        key,
-        admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn),
+      admissionMaps.handles.filter((map) => !held.has(map)),
+      [],
+      "admission maps no family holds",
+    );
+    assert.deepStrictEqual(
+      admitted.filter(
+        (row) =>
+          !Option.contains(
+            Option.map(grammar.admission.lookup(row), ({ position }) => position),
+            row.position,
+          ),
       ),
-      admission,
+      [],
     );
-    assert.deepStrictEqual(
-      keyedSet("the admission maps", key, admittedOf(install.ContentModelOf, install.AdmissionIn)),
-      admission,
-    );
-    assert.isBelow(install.AdmissionIn.rows.length, grammar.admission.rows.length);
+    assert.isBelow(admissionIn.rows.length, admitted.length);
   });
 
   it("state each shared model's kinds' positions as symbol sets, each distinct set of positions once, held by the pairs it names and by no other", () => {
@@ -739,11 +755,11 @@ describe("the installed relations", () => {
 
     // A family whose kinds each name one position has no SharedModelOf row (README, "Closed
     // relations": a law reads its absence through `SharedModelOf.has`), so the relation holds the
-    // shared families alone. Oracle: Admission's own rows, where an element kind at position 0 is
-    // one several positions name.
+    // shared families alone. Oracle: the admission maps spelled out, where an element kind at
+    // position 0 is one several positions name.
     const nonElements: ReadonlySet<string> = new Set(install.nonElementKinds);
     const sharedFamilies = new Set(
-      grammar.admission.rows
+      admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn)
         .filter(({ child, position }) => position === "0" && !nonElements.has(child))
         .map(({ parent, version }) => tupleText([version, parent])),
     );

@@ -49,7 +49,7 @@ import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { breachesOf, judged as judgedPackage, shown, withItem } from "#pantry/test/probe.ts";
-import { accepts, admits } from "#pantry/test/indexes.ts";
+import { accepts, admits, admittedOf } from "#pantry/test/indexes.ts";
 import { xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
@@ -531,14 +531,15 @@ describe("spec reading 2: MathML's content models (the MathML 3 RelaxNG)", () =>
       // Oracle: the RelaxNG's `start = math` (`mathml3-common.rnc` line 15) and §2.2, "All other MathML
       // content must be contained in a math element". Bound: every Admission row.
       Effect.gen(function* everyRow() {
-        const { admission } = yield* grammar;
-        const wrong = admission.rows
+        const { content } = yield* grammar;
+        const admission = admittedOf(content.contentModelOf, content.admissionIn);
+        const wrong = admission
           .filter(
             ({ child, parent }) =>
               child.startsWith("m:") && !parent.startsWith("m:") && child !== mathmlRoot,
           )
           .map(({ child, parent, version }) => `${version} ${parent} admits ${child}`);
-        const roots = admission.rows.filter(
+        const roots = admission.filter(
           ({ child, parent }) => child === mathmlRoot && !parent.startsWith("m:"),
         );
 

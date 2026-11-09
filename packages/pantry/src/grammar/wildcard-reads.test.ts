@@ -29,6 +29,7 @@ import { isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import { schemaSetOf } from "#pantry/test/xsd-catalog.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import { globalKinds } from "#pantry/vocab/inventory/vocabularies.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -74,7 +75,10 @@ describe.skipIf(!cached)("a wildcard's global elements", () => {
           const wrong: string[] = [];
           let pairs = 0;
           for (const version of schemaVersions) {
-            const rows = grammar.admission.rows.filter((row) => row.version === version);
+            const rows = admittedOf(
+              grammar.content.contentModelOf,
+              grammar.content.admissionIn,
+            ).filter((row) => row.version === version);
             const roots = [
               ...new Set(
                 rows

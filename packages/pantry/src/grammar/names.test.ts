@@ -24,6 +24,7 @@ import {
   xsNamespace,
 } from "#pantry/vocab/namespaces.ts";
 import { foreignRoots, schemaSets } from "#pantry/vocab/open.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * The composed grammar of production. It is composed once, when the module loads.
@@ -126,12 +127,16 @@ describe("patternLiteral", () => {
 
 /**
  * Each (version, parent) family whose content admits a foreign element, with the expanded names of
- * the element kinds it admits there: the oracle's own reading of `Admission` and `ElementName`.
+ * the element kinds it admits there: the oracle's own reading of the admission maps, spelled out,
+ * and `ElementName`.
  */
 const foreignHosts: ReadonlyMap<string, ReadonlySet<string>> = (() => {
   const hosts = new Map<string, Set<string>>();
   const foreign = new Set<string>();
-  for (const { child, parent, version } of grammar.admission.rows) {
+  for (const { child, parent, version } of admittedOf(
+    grammar.content.contentModelOf,
+    grammar.content.admissionIn,
+  )) {
     const at = `${version} ${parent}`;
     const names = hosts.get(at) ?? new Set<string>();
     for (const name of Option.toArray(grammar.kinds.elementName.lookup({ kind: child }))) {

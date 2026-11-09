@@ -51,7 +51,7 @@ import { expandedNameOf, typeHandle } from "#pantry/grammar/xsi.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { closedName, flatten, handlePrefixes, handlePrefixOf } from "#pantry/model/xdm.ts";
-import { symbolRowsOf } from "#pantry/test/indexes.ts";
+import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import type {
   ClosedName,
@@ -550,7 +550,10 @@ const finishOf = (
  */
 const childrenOf = (grammar: ComposedGrammar): ReadonlyMap<string, readonly Candidate[]> => {
   const children = new Map<string, Candidate[]>();
-  for (const { child, parent, position, version } of grammar.admission.rows) {
+  for (const { child, parent, position, version } of admittedOf(
+    grammar.content.contentModelOf,
+    grammar.content.admissionIn,
+  )) {
     // A foreign element only a strict wildcard holds stands only with an xsi:type its document's
     // schema set resolves (spec reading 81, `StrictlyHeld`). A foreign element's xsi:type is drawn
     // with no regard to the wildcard that holds it, a name no schema defines among them, so none

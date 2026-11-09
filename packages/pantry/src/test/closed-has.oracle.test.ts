@@ -48,7 +48,7 @@ import {
 import { Qti } from "#pantry/qti/own.ts";
 import type { Datum } from "#pantry/test/predicates.ts";
 import { checkValueOf } from "#pantry/test/key-copies.ts";
-import { indexesOf } from "#pantry/test/indexes.ts";
+import { admittedOf, indexesOf } from "#pantry/test/indexes.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 
 /**
@@ -115,7 +115,7 @@ const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
  * places an element kind at position 0, its cell for a kind several positions name.
  */
 const sharedFamilies: ReadonlySet<string> = new Set(
-  grammar.admission.rows
+  admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn)
     .filter(({ child, position }) => position === "0" && !nonElements.has(child))
     .map(({ parent, version }) => `${version} ${parent}`),
 );

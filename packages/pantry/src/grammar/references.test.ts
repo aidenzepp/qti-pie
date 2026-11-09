@@ -63,6 +63,7 @@ import {
   typedAttributesOf,
 } from "#pantry/test/gen/references.ts";
 import type { Fault } from "#pantry/test/gen/references.ts";
+import { admittedOf } from "#pantry/test/indexes.ts";
 
 /**
  * Index the reference relations this file reads by key, none of which a serving path does.
@@ -431,9 +432,12 @@ describe("the reference relations of production", () => {
       Effect.gen(function* countsAreChildren() {
         const relations = yield* production;
         const looked = lookedUp(relations);
-        const { admission } = yield* grammar;
+        const { content } = yield* grammar;
         const parents = new Map<string, Set<string>>();
-        for (const { child, parent, version } of admission.rows) {
+        for (const { child, parent, version } of admittedOf(
+          content.contentModelOf,
+          content.admissionIn,
+        )) {
           const key = keyed(version, parent);
           parents.set(key, (parents.get(key) ?? new Set()).add(child));
         }

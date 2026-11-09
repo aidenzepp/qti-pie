@@ -122,10 +122,13 @@ export type NamesUnder = Closed<
  * the pattern of the expanded names of the element kinds it admits there.
  *
  * Only a parent that admits a foreign kind may hold a foreign element (N5), so the relation is
- * total over the parents a foreign element's row may name and holds no other.
+ * total over the parents a foreign element's row may name and holds no other. A family's names are
+ * its admission map's, so each map's pattern is spelled once, however many families hold it.
  *
- * @param input - The admitted triples and the kinds' names.
- * @param input.admitted - Each (version, parent, child) the content grammar admits.
+ * @param input - The admission maps and the kinds' names.
+ * @param input.admissionIn - `AdmissionIn`: each admission map's children.
+ * @param input.families - `ContentModelOf`: each (version, parent) family's admission map, in
+ *   (version, parent) code order, the rows' order.
  * @param input.kinds - The `NodeKind` roster.
  * @param input.nameOf - A kind's expanded name, none for a kind that is no element of a
  *   vocabulary.
@@ -133,35 +136,39 @@ export type NamesUnder = Closed<
  * @returns The relation.
  */
 export const namesUnder = (input: {
-  readonly admitted: readonly {
-    readonly child: string;
-    readonly parent: string;
-    readonly version: SchemaVersion;
-  }[];
+  readonly admissionIn: {
+    readonly rows: readonly { readonly child: string; readonly map: string }[];
+  };
+  readonly families: {
+    readonly rows: readonly {
+      readonly admission: string;
+      readonly parent: string;
+      readonly version: SchemaVersion;
+    }[];
+  };
   readonly kinds: Roster<string>;
   readonly nameOf: (
     kind: string,
   ) => Option.Option<{ readonly local: string; readonly namespace: string }>;
   readonly versions: Roster<SchemaVersion>;
 }): NamesUnder => {
-  const families = Object.values(
-    Arr.groupBy(input.admitted, ({ parent, version }) => `${version} ${parent}`),
-  );
-  const rows = families.flatMap(([first, ...rest]) => {
-    const admitted = [first, ...rest];
+  const patterns = new Map<string, string>();
+  for (const [map, held] of Map.groupBy(input.admissionIn.rows, ({ map: of }) => of)) {
+    if (held.some(({ child }) => isForeignKind(child))) {
+      patterns.set(
+        map,
+        expandedNamesPattern(held.flatMap(({ child }) => Option.toArray(input.nameOf(child)))),
+      );
+    }
+  }
 
-    return admitted.some(({ child }) => isForeignKind(child))
-      ? [
-          {
-            names: expandedNamesPattern(
-              admitted.flatMap(({ child }) => Option.toArray(input.nameOf(child))),
-            ),
-            parent: first.parent,
-            version: first.version,
-          },
-        ]
-      : [];
-  });
+  const rows = input.families.rows.flatMap(({ admission, parent, version }) =>
+    Option.toArray(Option.fromUndefinedOr(patterns.get(admission))).map((names) => ({
+      names,
+      parent,
+      version,
+    })),
+  );
 
   return closed({
     key: [idField("version", input.versions), idField("parent", input.kinds)],

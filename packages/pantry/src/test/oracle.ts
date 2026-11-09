@@ -120,7 +120,12 @@ import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { Domain, WhiteSpace } from "#pantry/vocab/inventory/types.ts";
 import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantry/qti/limits.ts";
-import { contentEnds, indexesOf, symbolRowsOf } from "#pantry/test/indexes.ts";
+import {
+  admittedOf as admittedChildrenOf,
+  contentEnds,
+  indexesOf,
+  symbolRowsOf,
+} from "#pantry/test/indexes.ts";
 import { datumText } from "#pantry/test/predicates.ts";
 import { keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
@@ -6903,7 +6908,7 @@ const kindsAt = (
   position: string,
 ): readonly string[] => [
   ...new Set([
-    ...grammar.admission.rows
+    ...admittedChildrenOf(grammar.content.contentModelOf, grammar.content.admissionIn)
       .filter(
         (row) => row.version === version && row.parent === parent && row.position === position,
       )
@@ -7511,7 +7516,7 @@ const ownLaws = {
   "N5 admitted": {
     explain: (keys, grammar) =>
       `${field(keys, "parentKind")} admits no ${field(keys, "kind")} in ${field(keys, "version")}; it admits ${inBraces(
-        grammar.admission.rows
+        admittedChildrenOf(grammar.content.contentModelOf, grammar.content.admissionIn)
           .filter(
             ({ parent, version }) =>
               parent === field(keys, "parentKind") && version === field(keys, "version"),
