@@ -1631,6 +1631,17 @@ const builtInResponses = builtIns.filter(
 );
 
 /**
+ * The scope under each root whose built-in variables a reading reads, as {@link builtInOfScope}
+ * states it: a test's, unsplit; an item's, through an item ref; a section's, for a part's, a
+ * section's or a section ref's `duration`, split at it.
+ */
+const builtInScopes = [
+  [testKind, (r: ReadingRow) => r.eq(r.form, "unsplit")],
+  [itemKind, itemScoped],
+  [sectionKind, (r: ReadingRow) => r.and(r.eq(r.form, "split"), r.in(r.namedKind, durationScopes))],
+] as const;
+
+/**
  * State that a test's resolving prefixed reading of a `qti-map-response`'s or a
  * `qti-map-response-point`'s `identifier` reads no built-in response of its scope's root, whose
  * mapping or area mapping is never declared (decision 431, spec reading 166; information model
@@ -1702,17 +1713,6 @@ const mapsNoBuiltIn = (v: VariableRefRow | PlacedVariableRefRow) =>
       ),
     ),
   );
-
-/**
- * The scope under each root whose built-in variables a reading reads, as {@link builtInOfScope}
- * states it: a test's, unsplit; an item's, through an item ref; a section's, for a part's, a
- * section's or a section ref's `duration`, split at it.
- */
-const builtInScopes = [
-  [testKind, (r: ReadingRow) => r.eq(r.form, "unsplit")],
-  [itemKind, itemScoped],
-  [sectionKind, (r: ReadingRow) => r.and(r.eq(r.form, "split"), r.in(r.namedKind, durationScopes))],
-] as const;
 
 /**
  * State that a resolving reading by `identifier` of a built-in variable names one its element may:
