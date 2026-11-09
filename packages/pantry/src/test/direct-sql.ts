@@ -1122,9 +1122,17 @@ const selects = (
 
 /**
  * Each fact with the values its containments copy filled where it states none: across each of
- * {@link copies}, a left fact and the one right fact its key fields name hold each further pair
- * equal, so a value one of them states fills the other's. It repeats until no value moves, so a
- * value runs down a tree from its root, a root's from its `Document` row's.
+ * {@link copies}, a left fact its side's selection holds and the one right fact its key fields
+ * name hold each further pair equal, so a value one of them states fills the other's. It repeats
+ * until no value moves, so a value runs down a tree from its root, a root's from its `Document`
+ * row's.
+ *
+ * The right fact is the one the key names, whatever the right side's selection reads: the key is
+ * its relation's primary key, so it names one row, and the containment holds that row in the
+ * selection. A target that fixes fields beyond its terms, the document node `Document` copies into
+ * (`#pantry/qti/chardata.ts`, its `governor`, `kind`, `parentKind`, `start` and `document`), says
+ * those of the row it names and never picks among rows, so a fact that leaves them unstated takes
+ * its copies as one that states them does.
  *
  * @param stated - The facts.
  * @returns The facts, each with its copied values.
@@ -1135,12 +1143,12 @@ const copiedOf = (stated: readonly Stated[]): readonly Stated[] => {
   const across = copies.filter(
     ({ from, to }) => names.has(from.relation) && names.has(to.relation),
   );
-  const factsOf = (side: (typeof copies)[number]["to"]) =>
-    facts.filter((fact, at) => stated[at]?.relation.name === side.relation && selects(side, fact));
+  const factsOf = (relation: string) =>
+    facts.filter((_, at) => stated[at]?.relation.name === relation);
   const copyOnce = () =>
     across.flatMap(({ from, key, to, values }) => {
       const targets = new Map(
-        factsOf(to).map((fact) => [
+        factsOf(to.relation).map((fact) => [
           keyAt(
             fact,
             key.map(([, field]) => field),
@@ -1149,31 +1157,33 @@ const copiedOf = (stated: readonly Stated[]): readonly Stated[] => {
         ]),
       );
 
-      return factsOf(from).flatMap((fact) => {
-        const fields = key.map(([field]) => field);
-        const target = fields.every((field) => fact[field] !== undefined)
-          ? targets.get(keyAt(fact, fields))
-          : undefined;
+      return factsOf(from.relation)
+        .filter((fact) => selects(from, fact))
+        .flatMap((fact) => {
+          const fields = key.map(([field]) => field);
+          const target = fields.every((field) => fact[field] !== undefined)
+            ? targets.get(keyAt(fact, fields))
+            : undefined;
 
-        return target === undefined
-          ? []
-          : values.flatMap(([field, other]) => {
-              const [here, there] = [fact[field], target[other]];
-              if (here === undefined && there !== undefined) {
-                fact[field] = there;
+          return target === undefined
+            ? []
+            : values.flatMap(([field, other]) => {
+                const [here, there] = [fact[field], target[other]];
+                if (here === undefined && there !== undefined) {
+                  fact[field] = there;
 
-                return [field];
-              }
+                  return [field];
+                }
 
-              if (there === undefined && here !== undefined) {
-                target[other] = here;
+                if (there === undefined && here !== undefined) {
+                  target[other] = here;
 
-                return [other];
-              }
+                  return [other];
+                }
 
-              return [];
-            });
-      });
+                return [];
+              });
+        });
     });
   while (copyOnce().length > 0) {
     // Each pass fills at least one value a pass before left empty, so the loop ends.
