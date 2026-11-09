@@ -14,9 +14,9 @@
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`), and
  * both against §2.7.1 and readings 93 and 146 as stated above: the two agree on every case, and
  * each raises "Document entry" exactly where the `href` names no document a resource names.
- * `lom-identifier` and `lom-title` are rules over queries, which only the database judges (the
- * host judge leaves them unjudged), so the oracle's side alone is held to them here, and
- * `#pantry/qti/metadata.db.test.ts` holds the database to them through the importer.
+ * "Document entry" (over `TypedHref`), `lom-identifier` and `lom-title` are rules over queries,
+ * which only the database judges (the host judge leaves them unjudged), so the oracle's side alone
+ * is held to them here, and the database tests hold the database to them through the importer.
  *
  * Bound: a package of one resource, of the item type or the test type, whose `href` names each of
  * the listed document of its type, a path no entry holds, a path outside the package, the
@@ -217,10 +217,14 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     of.href === "no entry" || of.href === "outside" || of.href === "the manifest";
                   const read = of.href === "the listed document" && of.record === "identified";
                   for (const side of [judged.summary.oracle, judged.summary.import]) {
-                    assert.strictEqual(/\bDocument entry\b/u.test(side), unnamed, said);
                     assert.notMatch(side, /\bE1 derived\b/u, said);
                   }
 
+                  assert.strictEqual(
+                    /\bDocument entry\b/u.test(judged.summary.oracle),
+                    unnamed,
+                    said,
+                  );
                   assert.strictEqual(
                     /\bLomObjectIdentifier\b/u.test(judged.summary.oracle),
                     read,
