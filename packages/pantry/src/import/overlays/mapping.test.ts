@@ -434,13 +434,15 @@ type SplitRow = readonly [string, readonly string[]];
 
 /**
  * A situation the two-item box must reach: a key its base type splits, a key it does not (a pair
- * of letters in a point mapping), a mapping with no entry, and a case that catches the deleted
- * gate, under which a pair or directed pair key had its row only where `pairKeyPattern` held it.
+ * of letters in a point mapping), a mapping with no entry, and a case that catches the ungated
+ * split of 78b6676e, under which a pair or directed pair key had its row wherever the split held
+ * it, an item that is no `Item` included.
  */
-type TwoItemSituation = "split" | "unsplit" | "no entry" | "caught: the pair gate";
+type TwoItemSituation = "split" | "unsplit" | "no entry" | "caught: the ungated split";
 
 /**
- * `pairKeyPattern` as JavaScript's engine reads it, the deleted gate's test.
+ * `pairKeyPattern` as JavaScript's engine reads it, the keys the pair and directed pair mirrors
+ * select.
  */
 const pairKey = new RegExp(pairKeyPattern, "u");
 
@@ -472,7 +474,8 @@ describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTim
       // the type of a pair's items, read by JavaScript's engine. The integer and point parses
       // decide whether the builder writes a typed row, so each holds a key exactly where its
       // pattern does; the pair split is wider, and the two part exactly on a key that holds
-      // U+0001, whose row `Item`'s pattern law refuses, as `Typed_attribute_value` refuses the key.
+      // U+0001, whose split holds an item that is no `Item`, so the builder writes it no typed row
+      // and `Typed_attribute_value` refuses the key.
       // Bound: every key of 1 to 4 characters over `keyCharacters`, 4,680; residual: longer keys,
       // which repeat these shapes.
       searched(
@@ -527,13 +530,15 @@ describe("import/overlays/mapping.ts, a typed key's parse", { timeout: searchTim
 
 describe("import/overlays/mapping.ts, two-item keys", { timeout: searchTimeout }, () => {
   it.effect(
-    "writes each point, pair and directed pair key's typed row wherever the split holds it, its split the second reading's items, and catches the deleted pair gate",
+    "writes each point key's typed row wherever the split holds it, and each pair and directed pair key's where both items of the split are Items, exactly the keys pairKeyPattern selects, its split the second reading's items, and catches the ungated split",
     (ctx) =>
       // Oracle: a second implementation, a split at the one XML whitespace character, a point's
-      // items each an xs:integer, against the builder's split, which E1_derived holds to the key
-      // and PostgreSQL generates each value from (§8.13). A pair key whose item no `Item` holds
-      // has its row too, which `Item`'s pattern law refuses; the plant restates the deleted gate,
-      // a row only where `pairKeyPattern` holds the key, and the search must catch it.
+      // items each an xs:integer and a pair's each an `Item`, read from `Item`'s own pattern,
+      // against the builder's split, which E1_derived holds to the key and PostgreSQL generates
+      // each value from (§8.13); and the pair mirrors' selection, `pairKeyPattern`, which "Mapping
+      // overlay" holds the pair rows to both ways. A pair key whose item no `Item` holds has no
+      // typed row, and `Typed_attribute_value` alone refuses it; the plant restates the ungated
+      // split, a row wherever the split holds the key, and the search must catch it.
       // Bound: every mapping of point, pair or directedPair with at most 3 entries over 7 keys,
       // 1,200.
       searched(
@@ -546,7 +551,7 @@ describe("import/overlays/mapping.ts, two-item keys", { timeout: searchTimeout }
               "split",
               "unsplit",
               "no entry",
-              "caught: the pair gate",
+              "caught: the ungated split",
             ]),
             generator: twoItemCases,
             limit: 1500,
@@ -591,17 +596,30 @@ describe("import/overlays/mapping.ts, two-item keys", { timeout: searchTimeout }
                   })),
                 ),
               );
-              const expected = splits.map(({ row }) => row);
+              const expected = splits
+                .filter(
+                  ({ row: [, items] }) =>
+                    input.baseType === "point" ||
+                    items.filter((_, at) => at !== 1).every((part) => item.test(part)),
+                )
+                .map(({ row }) => row);
 
               for (const [baseType, held] of Object.entries(typed)) {
                 assert.deepStrictEqual(held, baseType === input.baseType ? expected : [], baseType);
               }
 
-              const gated = splits.filter(
-                ({ key }) => input.baseType === "point" || pairKey.test(key),
-              );
-              if (gated.length !== expected.length) {
-                c.note("caught: the pair gate");
+              if (input.baseType === "pair" || input.baseType === "directedPair") {
+                assert.deepStrictEqual(
+                  typed[input.baseType].map(([node]) => node),
+                  [...walkedKeys(input)].flatMap(([node, { key }]) =>
+                    pairKey.test(key) ? [node] : [],
+                  ),
+                  "the pair mirrors' selection",
+                );
+              }
+
+              if (splits.length !== expected.length) {
+                c.note("caught: the ungated split");
               }
             }),
         ),

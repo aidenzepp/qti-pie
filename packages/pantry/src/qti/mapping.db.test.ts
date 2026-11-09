@@ -526,9 +526,10 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, the text domain of `FloatKey` and of `Item` as the statement casts
           // each value, before any row CHECK, and grizzle's pattern law of the field, named by its
-          // type's row of `textLaws`. The import writes these rows whatever the key's form
-          // (`#pantry/import/overlays/mapping.ts`), so the domain judges the form, as
-          // `Typed_attribute_value` judges the same key on `MapKeyType` above (readings 7 and 154).
+          // type's row of `textLaws`. The import writes no such row
+          // (`#pantry/import/overlays/mapping.ts` `typedKeyAdders`), so only a direct writer meets
+          // the domain, which judges the form as `Typed_attribute_value` judges the same key on
+          // `MapKeyType` above (readings 7 and 154).
           // Bound: float keys with a comma, a space before, a word and XML Schema 1.1's +INF, and
           // 1.5, which the domain holds; a pair and a directed pair whose first item holds U+0001,
           // which an XML 1.1 document writes as `&#x1;`, and whose second item holds none.

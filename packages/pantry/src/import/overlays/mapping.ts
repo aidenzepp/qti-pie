@@ -5,12 +5,12 @@
  *
  * The rows restate what the tree says and nothing else: each overlay's node tuple, its parent, its
  * declaration's `declarationRef` tuple as `#pantry/qti/declarations.ts` derives it, each map
- * entry's `map-key` as written, each key's split where its base type has a typed value and the
- * split holds the key, whose value PostgreSQL generates from the split, and each lookup table's
- * typed attribute values; and, where the declaration has a base type, a mapping's, a map key's and
- * a lookup value's row beside it (a record has none: lane NIL's audit, B12). The database proves
- * every one of them (`mappingLaws`), and judges every key's form, so a row this builder gets wrong
- * is refused, never accepted.
+ * entry's `map-key` as written, each key's typed row where its base type has a typed value and
+ * the key is of that value's form, its fields the split PostgreSQL generates the value from, and
+ * each lookup table's typed attribute values; and, where the declaration has a base type, a
+ * mapping's, a map key's and a lookup value's row beside it (a record has none: lane NIL's audit,
+ * B12). The database proves every one of them (`mappingLaws`), so a row this builder gets wrong is
+ * refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
@@ -21,6 +21,7 @@ import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import { FloatKey, Item } from "#pantry/qti/mapping.ts";
 import type {
   AreaMapping,
   AreaMappingCardinality,
@@ -114,6 +115,17 @@ const copyOf = ({ baseType, cardinality, declarationKind }: Declared): Declarati
   cardinalities: typedCountOf(cardinality),
   declarationKind,
 });
+
+/**
+ * The float keys that hold a typed value, as `FloatKey`, the type of `MapKeyFloat.key`, holds them:
+ * `xs:double`'s lexical space (reading 154), the keys the `floatKeys` mirror selects.
+ */
+const floatKey = new RegExp(FloatKey.patterns[0].source, FloatKey.patterns[0].flags);
+
+/**
+ * A pair's or a directed pair's item as `Item`, the type of each item field, holds it.
+ */
+const pairItem = new RegExp(Item.patterns[0].source, Item.patterns[0].flags);
 
 /**
  * A point key's or a pair key's split: its two items and the whitespace between them.
@@ -256,8 +268,9 @@ export const pointPartsOf = (
  *
  * The split is wider than `pairKeyPattern` (`#pantry/qti/mapping.ts`): an item of the split is any
  * run of no XML whitespace, and an `Item` a run of XML `Char`s past U+0020. The two part on the C0
- * control characters an XML 1.1 document writes as character references (`&#x1;`), whose items
- * `Item`'s pattern law refuses, as `Typed_attribute_value` refuses the key (`mapping.test.ts`).
+ * control characters an XML 1.1 document writes as character references (`&#x1;`), whose key no
+ * typed row holds ({@link typedKeyAdders}), and `Typed_attribute_value` refuses it
+ * (`mapping.test.ts`).
  *
  * @param key - The key.
  * @returns The parts, or none for a key that is not two items around one XML whitespace
@@ -307,22 +320,36 @@ interface TypedEntry {
 
 /**
  * Each base type's typed key, where it has one: the split of its key into the row's parts, and the
- * relation its row joins. A float key's row holds no split, so every float key has one. The
- * builder tests no key's form: the typed relation's own field types and its mirror with the typed
- * keys judge it, so a float key outside `xs:double`'s lexical space is refused under `FloatKey`'s
- * pattern law, and a pair item outside `Item` under that type's, both "Typed attribute value".
+ * relation its row joins, written only where each part is a value of its field's type. A float
+ * key's row holds the key alone, written where `FloatKey` holds it; a pair's or a directed pair's,
+ * where both items of its split are `Item`s; an integer's and a point's parts are typed by their
+ * split. These are the keys each typed relation's mirror selects ("Mapping overlay": `floatKeys`
+ * over `xs:double`'s lexical space, `pairKeys` and `directedPairKeys` over `pairKeyPattern`), so a
+ * key of no such form has no typed row, and `Typed_attribute_value` alone refuses it on its
+ * `MapKeyType` row: a form outside a type's lexical space denotes no value of it (XML Schema Part 2
+ * §2.3), as reading 152 reads it for a name. The
+ * mirror judges the decision; the decision stays here because each typed relation is keyed over
+ * the value PostgreSQL generates, and grizzle keys only a stored relation, so none can be a query
+ * over `MapKeyType` (the constraint-engine plan's B9). A row for every float key, or for every
+ * pair split, breaks the mirror beside `Typed attribute value`.
  */
 const typedKeyAdders: Partial<
   Readonly<Record<BaseTypeHandle, (typed: TypedKeys, entry: TypedEntry) => void>>
 > = {
   directedPair: (typed, entry) => {
     const directed = directedPairPartsOf(entry.key);
-    if (directed !== undefined) {
+    if (
+      directed !== undefined &&
+      pairItem.test(directed.source) &&
+      pairItem.test(directed.target)
+    ) {
       typed.MapKeyDirectedPair.set(entry.node, { ...directed, ...entry });
     }
   },
   float: (typed, entry) => {
-    typed.MapKeyFloat.set(entry.node, entry);
+    if (floatKey.test(entry.key)) {
+      typed.MapKeyFloat.set(entry.node, entry);
+    }
   },
   integer: (typed, entry) => {
     const integer = integerPartsOf(entry.key);
@@ -332,7 +359,7 @@ const typedKeyAdders: Partial<
   },
   pair: (typed, entry) => {
     const pair = pairPartsOf(entry.key);
-    if (pair !== undefined) {
+    if (pair !== undefined && pairItem.test(pair.first) && pairItem.test(pair.second)) {
       typed.MapKeyPair.set(entry.node, { ...pair, ...entry });
     }
   },
@@ -345,10 +372,10 @@ const typedKeyAdders: Partial<
 };
 
 /**
- * Add a map key's typed row, where its base type gives it one and its split holds the key: every
- * float key, an integer's sign, zeros and digits, a point's two integers, and a pair's or a
- * directed pair's two items. Every other key has no typed row, and `Typed_attribute_value` refuses
- * it on its `MapKeyType` row.
+ * Add a map key's typed row, where its base type gives it one and the key is of its form: a float
+ * key in `xs:double`'s lexical space, an integer's sign, zeros and digits, a point's two integers,
+ * and a pair's or a directed pair's two `Item`s. Every other key has no typed row, and
+ * `Typed_attribute_value` refuses it on its `MapKeyType` row.
  *
  * @param typed - The typed rows so far.
  * @param baseType - The key's mapping's base type.
@@ -372,9 +399,9 @@ const addTypedKey = (typed: TypedKeys, baseType: BaseTypeHandle, entry: TypedEnt
  * A map entry with no `map-key` has no `MapKey` row, and AL3 refuses the element. A key past the
  * key-text bound keeps its `MapKey` row and its typed row, and `MapKey`'s `keyText` refuses it
  * under "Key text bound" (its parts' types bound no length, and `FloatKey` holds `keyText`'s
- * bound). Every float key has its typed row and every other typed key has one where its split
- * holds it, whatever its form, so the typed relation's field types and its mirror judge the key; a
- * key no split holds has no typed row, and `Typed_attribute_value` refuses it. A table entry, and a
+ * bound). A typed key has its typed row exactly where it is of its base type's form
+ * ({@link typedKeyAdders}); any other key has none, and `Typed_attribute_value` refuses it. A
+ * table entry, and a
  * table with a `default-value`, has its `LookupValue` row, with its table's declaration. Each of a
  * mapping, a map key and a lookup value has its row beside its declaration's base type, where the
  * declaration has one, and only there; a record's has none, so its keys and values are read in no
