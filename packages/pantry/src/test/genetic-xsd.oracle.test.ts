@@ -218,25 +218,9 @@ interface Known {
 }
 
 /**
- * The known disagreements.
+ * The known disagreements, none at present.
  */
-const knownDisagreements: readonly Known[] = [
-  {
-    class: "content",
-    detail:
-      /^Foreign simple content at \/lom:lom\[\d+\]\/foreign-element\[\d+\]\/\S+: a foreign element governed by the simple type xs:\w+ holds an element child/u,
-    direction: "oracle-only",
-    owner: "GEN-B, fixing forward with a libxml2 record",
-    why: "JAN's run (TEST_SEED=2990697775): under a LOM root's lax wildcard, an element whose xsi:type resolves to no type of the document's schema set is laxly assessed and its children in turn (reading 60), so a descendant whose xsi:type names xs:Name and that holds an element child is invalid; libxml2 2.9.13 skips the subtree of an element whose type is absent (xmlschemas.c xmlSchemaValidateElem: XML_SCHEMAV_CVC_TYPE_1, then skipDepth), so xmllint never sees it",
-  },
-  {
-    class: "text-value",
-    detail: /^TextDomain at \/lom:lom\[\d+\]\/foreign-element\[\d+\]\/\S+: .* is outside xs:\w+/su,
-    direction: "oracle-only",
-    owner: "GEN-B, fixing forward with a libxml2 record",
-    why: "CRUST's run (TEST_SEED=2420825299): the same skip, below a foreign element whose xsi:type names no type at all; its no-namespace child's xsi:type names xs:unsignedShort, which its text is not",
-  },
-];
+const knownDisagreements: readonly Known[] = [];
 
 /**
  * Find the known disagreement a difference is.
@@ -413,8 +397,8 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * not see it stood within a nested root. The two LOM roots are JAN's run's (TEST_SEED=2990697775)
  * and CRUST's (TEST_SEED=2420825299): below an element laxly assessed with an xsi:type that names
  * no type of the set, a descendant typed by a built-in simple type it breaks, which the law oracle
- * refuses (reading 60: the children are assessed laxly in turn) and libxml2 never assesses; each
- * shows a known disagreement until its libxml2 record lands.
+ * refuses (reading 60: the children are assessed laxly in turn) and libxml2 never assesses, after
+ * cvc-type clause 1 (`skippedContentRecord`).
  *
  * The six after the template block's are the shapes Aiden's runs of the free suite met (PR #46,
  * comment 6701102861), each a document's only kind of fault. A blank media URL is refused under
@@ -466,6 +450,16 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * (reading 92, §2.2.2.2: a response variable is bound to one interaction only), which reading 172
  * widened to every interaction kind, and xmllint accepts both, as the XSD resolves no binding;
  * their `beyond` record sits beside reading 75's.
+ *
+ * The last four are the genetic repair's R-X4 and R-X5, each beside its control, below an element
+ * of an XInclude's content whose `xsi:type` names `xs:ENTITIES`. Once that element holds an element
+ * child, libxml2 refuses it under cvc-type clause 3.1.2 and assesses nothing more of it: neither
+ * the text `<` after the child, which the law oracle refuses as no `xs:ENTITIES`, nor an `h2`
+ * within the child whose `aria-level` is no integer (`skippedContentRecord`). Without the child
+ * both refuse the text, and without the `xsi:type` both refuse the `aria-level`. The record
+ * matches only at places a document's rows show libxml2 skipped, and the replay reports no
+ * difference a record matches, so these controls show the two agree there, not that the record
+ * stays narrow.
  */
 const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
   {
@@ -559,6 +553,22 @@ const keptDocuments: readonly { readonly name: string; readonly text: string }[]
   {
     name: "a text entry interaction and a custom interaction bound to one response variable",
     text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="a1" cardinality="single" base-type="string"/><qti-item-body><p><qti-text-entry-interaction response-identifier="a1"/></p><qti-custom-interaction response-identifier="a1"/></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "an xs:ENTITIES element holding an element and then other text, in an XInclude's content",
+    text: '<qti-response-processing xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-processing-fragment><xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="f.xml"><widget xmlns="" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:ENTITIES"><b/>&lt;</widget></xi:include></qti-response-processing-fragment></qti-response-processing>',
+  },
+  {
+    name: "an xs:ENTITIES element of other text, in an XInclude's content",
+    text: '<qti-response-processing xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-processing-fragment><xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="f.xml"><widget xmlns="" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:ENTITIES">&lt;</widget></xi:include></qti-response-processing-fragment></qti-response-processing>',
+  },
+  {
+    name: "an h2 whose aria-level is no integer, in a stimulus body an xs:ENTITIES element of an XInclude's content holds",
+    text: '<qti-response-processing xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-processing-fragment><xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="f.xml"><widget xmlns="" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:ENTITIES"><qti-stimulus-body xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><h2 aria-level="x"/></qti-stimulus-body></widget></xi:include></qti-response-processing-fragment></qti-response-processing>',
+  },
+  {
+    name: "an h2 whose aria-level is no integer, in a stimulus body an untyped element of an XInclude's content holds",
+    text: '<qti-response-processing xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-processing-fragment><xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="f.xml"><widget xmlns="" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema"><qti-stimulus-body xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><h2 aria-level="x"/></qti-stimulus-body></widget></xi:include></qti-response-processing-fragment></qti-response-processing>',
   },
 ];
 
