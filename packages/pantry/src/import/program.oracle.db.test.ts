@@ -713,12 +713,9 @@ describe.skipIf(!hasLease)(
               ]),
               (dir) => applyEdited(dir),
             ),
-          laws: [
-            containedIn("ResourceHref", "Entry"),
-            containedIn("ResourceHref", "Document"),
-            containedIn("FileHref", "Entry"),
-            containedIn("File", "Entry"),
-          ],
+          // "Document entry" over the query `TypedHref` (`qti/queries.ts`): the document a typed href
+          // names is one the package lists; and the listed file's own entry.
+          laws: [containedIn("TypedHref", "ResourceDocument"), containedIn("File", "Entry")],
           name: "a document href no entry holds (entry-kind, Q5.06)",
         },
         {
