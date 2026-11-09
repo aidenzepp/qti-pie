@@ -9,6 +9,9 @@
  * owner's fix deletes the entries it closes, or moves them to {@link fixed}, whose packages must
  * never show their class again. An entry records a class, never a package: a fix that leaves the
  * class showing elsewhere keeps the entry, with a package that still shows it.
+ *
+ * A class spec reading 1 lists as a stated limit waits on no fix: its entry's owner is the decision
+ * that states it, its fix what would lift it, and it stays while the limit stands.
  */
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 
@@ -55,6 +58,38 @@ export const knownEntries = (known: Known): PackageEntries =>
  * The known disagreements, keyed by signature.
  */
 export const known = {
+  'import-only-law: DocumentId key, {"kind":"key","side":{"relation":"IdBinding","terms":[{"kind":"field","field":"document"},{"kind":"field","field":"id"}],"selection":{"conjuncts":[{"kind":"compare","op":"eq","left":{"kind":"field","field":"admitted"},"right":{"kind":"literal","value":true,"type":undefined}}]}}}':
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:cpx="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_extensionv1p2" xmlns:drd="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0"><metadata><schemaversion>3.0.1</schemaversion></metadata><resources><resource identifier="v1" type="webcontent"/><resource identifier="r2" type="webcontent"><cpx:variant identifier="v0"><cpx:metadata><drd:accessForAllResource><cpx:variant identifier="v1"/></drd:accessForAllResource></cpx:metadata></cpx:variant></resource></resources></manifest>`,
+        ],
+      ],
+      fix: "a stated limit (spec reading 1): an element the grammar admits under its own parent binds its ID though an ancestor is a forbidden element whose subtree the law oracle drops, so its duplicate ID breaks DocumentId key beside the ancestor's N5 admitted, which no verdict follows; lifted by binding only an ID whose every ancestor the grammar admits",
+      owner: "decision 452",
+    },
+  "import-only-law: E1 derived, contained LomRecord(ownerParent, named) in LomResource(node, named)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourcemetadata/xml" href="test.xml"/></resources></manifest>`,
+        ],
+        [
+          "test.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><resources><resource><metadata><lom xmlns="http://ltsc.ieee.org/xsd/LOM"/></metadata></resource></resources></manifest>`,
+        ],
+      ],
+      fix: "a stated limit (spec reading 1): a record file whose root is a cp:manifest has no LomResource, which is written for the package manifest's resources alone, while its resource-owned record is still read, so E1 derived breaks beside RootOfType, which refuses the file on both sides; lifted by reading no record a record file's cp:resource owns",
+      owner: "decision 449",
+    },
   "import-only-law: Test overlay, contained Section(node, visible) in TestFlag(node, value)": {
     files: [
       [
