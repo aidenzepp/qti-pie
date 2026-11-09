@@ -555,8 +555,8 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     104,
     {
       owner:
-        "PM's `ChoiceVariableName` (`src/qti/interactions.ts`): `Choice_not_variable` over the counted families of `Choice`, `Hottext` and `Declaration` on (document, identifier), and the keys `Choice(document, kind, identifier)` and `Hottext(document, identifier)`; the oracle's Choice not variable and Choice identifier key; align-n-1: the per-class keys and the cross-class check on ChoiceVariableName",
-      status: "P",
+        "PM's `ChoiceVariableName` (`src/qti/interactions.ts`): `Choice_not_variable` over the counted families of `Choice`, `Hottext` and `Declaration` on (document, identifier); Choice identifier key's per-class keys `Choice(document, kind, identifier)` and `Hottext(document, identifier)`, their placed copies on the assembly, and the cross-class check `Choice_identifier_key` over `ChoiceVariableName`'s counts (`choiceIdentifierUnique`), so the nine choice classes share one space of identifiers, a gap and a gap text among them; the oracle's Choice not variable and Choice identifier key (`choiceNames` and `sharedNames`, `src/test/oracle.ts`); held by `src/qti/interactions.oracle.test.ts` (two classes named alike, and a gap and a gap text of one gap match)",
+      status: "G",
     },
   ],
   [
@@ -643,7 +643,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     115,
     {
       owner:
-        "IN's `SiteTarget`, each site's target, a row only where its href names a document the manifest lists: `SiteTarget` into `Site` and into `Document`, every include an include parent reads its `Site`, and each such include that is not `external` its `SiteTarget` (`includeSites`, `src/qti/tests.ts`, Include target); a `Site` marked `external` is proven by its href's `Reference` row (`externalSites` into `externalHrefs`), stored as written and never fetched; and `Include_fragment_identifier` on `Reference` (`src/qti/package.ts`); the oracle's Include target, admitting an external href (`inclusionBreaches`, `src/test/oracle.ts`), and Include fragment identifier; and the schema's one cause per fault: a site's href is its `SitePath` (`src/qti/tests.ts`), written only where it resolves to a path of the package, its `entry` held by `File_exists` (\"File exists\"), every include that is not `external` has its `SitePath` (Include target), every section ref its `SitePath` (\"Document entry\"), and the oracle's Document entry, the box `src/test/gen/sites.test.ts` exhausts",
+        "IN's `SiteTarget`, each site's target, a row only where its href names a document the manifest lists: `SiteTarget` into `Site` and into `Document`, every include an include parent reads its `Site`, and each such include that is not `external` its `SiteTarget` (`includeSites`, `src/qti/tests.ts`, Include target); a `Site` marked `external` is proven by its href's `Reference` row (`externalSites` into `externalHrefs`), stored as written and never fetched; and `Include_fragment_identifier` on `Reference` (`src/qti/package.ts`); the oracle's Include target, admitting an external href (`inclusionBreaches`, `src/test/oracle.ts`), and Include fragment identifier; and the schema's one cause per fault: a site's href is its `SitePath` (`src/qti/tests.ts`), written only where it resolves to a path of the package, its `entry` held by `File_exists` (\"File exists\"), every include that is not `external` has its `SitePath` (Include target), every section ref whose href stays in the package its `SitePath` (\"Document entry\"), and an external section ref is the stated limit \"Remote section ref\"'s alone (reading 170), and the oracle's Document entry, the box `src/test/gen/sites.test.ts` exhausts",
       status: "G",
     },
   ],
@@ -778,7 +778,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     132,
     {
       owner:
-        "AL1 (`printfFormat` on `qti-printed-variable`'s `format`): each conversion specifier over the listed codes; its one-specifier rule is set aside by reading 161",
+        "AL1 (`printfFormat` on `qti-printed-variable`'s `format`): each conversion specifier over the listed codes, `d` a listed code by reading 171; its one-specifier rule is set aside by reading 161",
       status: "G",
     },
   ],
@@ -1010,7 +1010,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     161,
     {
       owner:
-        "AL1 (`printfFormat` on `qti-printed-variable`'s `format`, `src/grammar/attributes.ts`): text, `%%` and conversion specifiers over the listed codes, any number of them, kept as the attribute's lexical form; the law oracle reads the same composed domain; held by `src/grammar/attributes.test.ts` (read 161, searched, against `printfSpecifiers`) and `src/test/rv-g.oracle.test.ts`",
+        "AL1 (`printfFormat` on `qti-printed-variable`'s `format`, `src/grammar/attributes.ts`): text, `%%` and conversion specifiers over the listed codes (`d` a listed code by reading 171), any number of them, kept as the attribute's lexical form; the law oracle reads the same composed domain; held by `src/grammar/attributes.test.ts` (read 161, searched, against `printfSpecifiers`) and `src/test/rv-g.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -1066,31 +1066,32 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     168,
     {
       owner:
-        'align-n-2: "Declaration not reserved" by parent kind, a test\'s own `numAttempts` and `completionStatus` admitted and its `duration` refused',
-      status: "P",
+        "\"Declaration not reserved\" (`src/qti/declarations.ts`): `Declaration_not_reserved` over `DeclarationIdentifier` by its `parentKind`, an item's declaration naming none of `itemSessionVariables` and a test's none of `testSessionVariables`, `duration` alone, so a test's own `numAttempts` and `completionStatus` are admitted; the oracle's Declaration not reserved (`src/test/oracle-laws/documents.ts`) and its completeness mutation (`src/test/oracle-complete/documents.ts`); held by `src/qti/declarations.oracle.test.ts` and, on PostgreSQL, `src/qti/declarations.db.test.ts`",
+      status: "G",
     },
   ],
   [
     169,
     {
       owner:
-        'align-n-3: "Binding cardinality" over a gap match\'s own gaps, `multiple` required of two or more',
-      status: "P",
+        "\"Binding cardinality\" (`src/qti/interactions.ts`): `Binding_cardinality` over `BindingCardinality` and `PlacedBindingCardinality` (`singleGap`), a gap match bound to a `single` response only where `Interaction.gaps`, the count of its `GapInteraction` rows (its own gaps and an included fragment's), is at most one; the oracle's Binding cardinality over the gaps the interaction is nearest to (`src/test/oracle.ts`); held by `src/test/binding-fit.oracle.test.ts` and, on PostgreSQL, `src/qti/interactions.db.test.ts`",
+      status: "G",
     },
   ],
   [
     170,
     {
       owner:
-        'align-n-5: "Remote section ref" (`remote-section`), a stated limit among `limitRules`',
-      status: "P",
+        '"Remote section ref" (`src/qti/tests.ts`): `Remote_section_ref` over `Site`, no section ref marked `external`, under rule `remote-section`, a stated limit among `limitRules` (`src/import/refusal.ts`) and the catalog\'s limit block (`src/vocab/laws.ts`); "Document entry" reads only the section refs whose href stays in the package (`sectionRefSites`); the oracle\'s Remote section ref (`src/test/oracle.ts`); held by `src/qti/tests.oracle.test.ts` and the box `src/test/gen/sites.test.ts` exhausts',
+      status: "G",
     },
   ],
   [
     171,
     {
-      owner: "align-n-8: `printfFormat` (`src/grammar/attributes.ts`) with `d` among its codes",
-      status: "P",
+      owner:
+        "AL1 (`printfFormat` on `qti-printed-variable`'s `format`, `src/grammar/attributes.ts`): `d` among the listed conversion codes, so `%d`, `%5d`, `%d %d` and `%i of %d` are admitted and stored as written, and `%q`, `2f%` and `%` stay refused under `attribute-lexical`; the law oracle reads the same composed domain; held by `src/grammar/attributes.test.ts`, `src/test/rv-g.oracle.test.ts` and the differential record of reading 132 (`src/test/lexical-harness.ts`)",
+      status: "G",
     },
   ],
   [
