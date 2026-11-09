@@ -1901,6 +1901,15 @@ const builtInIdentifiers: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The kind of variable a test declares under a built-in's name, by the `declared` fact of an
+ * `undeclared-variable` refusal ({@link undeclarableResponse}), as its sentence names it.
+ */
+const declaredKinds: ReadonlyMap<string, string> = new Map([
+  ["context", "a context variable"],
+  ["outcome", "an outcome"],
+]);
+
+/**
  * The fix of a response a test names with no item ref: a test declares no response, so it reads an
  * item's through that item's ref.
  */
@@ -1921,14 +1930,20 @@ const itemRefResponse = `name a response an item declares, through its item ref,
  *   reading reads through, since what it reads is not a response its item declares, but an outcome,
  *   a template variable or a built-in. The fix is a response the item declares, written
  *   `ITEMREF.RESPONSE`.
- * - A built-in ({@link builtInIdentifiers}): no item's declaration may take its name, and a test
- *   declares no response (a test's `numAttempts` or `completionStatus`, reading 168, is an outcome
- *   or a context variable), so it has no mapping and no declared correct response. The rules refuse
- *   here only the built-in outcome `completionStatus`; `numAttempts` and `duration` are "built-in
- *   response variables" (`info.txt:8466`), which a `qti-correct` reads (reading 111), and the
- *   sentence calls each the built-in and never says it is no response. In an item the fix is a
- *   declared response; with `declarer: "test"` it is an item's response read through its item ref
+ * - A built-in's name a test declares, whose refusal carries `declared` (`outcome` or `context`): the
+ *   declaration takes the built-in's place in the test (reading 168, "A test may declare a variable
+ *   named `numAttempts` or `completionStatus`; in a test only `duration` is reserved"), so the name
+ *   is that outcome or context variable, which is no response, and the sentence says the test
+ *   declares it. The fix is an item's response read through its item ref
  *   ({@link itemRefResponse}).
+ * - A built-in ({@link builtInIdentifiers}) no declaration gives: no item's declaration may take its
+ *   name, and a test declares no response (a test's `numAttempts` or `completionStatus`, reading
+ *   168, is an outcome or a context variable, worded above), so it has no mapping and no declared
+ *   correct response. The rules refuse here only the built-in outcome `completionStatus`;
+ *   `numAttempts` and `duration` are "built-in response variables" (`info.txt:8466`), which a
+ *   `qti-correct` reads (reading 111), and the sentence calls each the built-in and never says it
+ *   is no response. In an item the fix is a declared response; with `declarer: "test"` it is an
+ *   item's response read through its item ref ({@link itemRefResponse}).
  * - Any other name with `declarer: "test"`: a test declares outcomes and context variables, and only
  *   its items declare responses, so the sentence says the test declares none and the fix is an
  *   item's response read through its item ref, never a declaration. A dotted name the test declares
@@ -1957,6 +1972,19 @@ const undeclarableResponse = (refusal: Refusal, subject: string): Option.Option<
         refusal,
         `${subject} names ${identifier}, which reads, through an item ref, test part or section, a variable that is not a response its item declares.`,
         `name a response the item declares, written ${code("ITEMREF.RESPONSE")}`,
+      ),
+    );
+  }
+
+  const declared = Option.flatMap(optionalFact(refusal, "declared"), (kind) =>
+    Option.fromUndefinedOr(declaredKinds.get(kind)),
+  );
+  if (Option.isSome(declared)) {
+    return Option.some(
+      sentence(
+        refusal,
+        `${subject} names ${identifier}, ${declared.value} the test declares in place of the built-in, and no response, so it has no mapping or correct response.`,
+        itemRefResponse,
       ),
     );
   }

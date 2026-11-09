@@ -4600,3 +4600,137 @@ describe("describeRefusal", () => {
     }
   });
 });
+
+/**
+ * Construct a test that declares `TOTAL` and the given declarations before its one part, and whose
+ * outcome processing sets `TOTAL` to an expression naming a variable through its `identifier`.
+ *
+ * @param declarations The test's declarations besides `TOTAL`.
+ * @param local The expression's local name, such as `qti-correct`.
+ * @param identifier The name the expression gives.
+ * @returns The test, at {@link testLocation}.
+ */
+const readingByName = (
+  declarations: readonly SourceElement[],
+  local: string,
+  identifier: string,
+): SourceDocument =>
+  doc(
+    testLocation,
+    el(
+      "qti-assessment-test",
+      [attr("identifier", "T"), attr("title", "Test")],
+      [
+        ...declarations,
+        outcome("TOTAL", "integer"),
+        el(
+          "qti-test-part",
+          [
+            attr("identifier", "P"),
+            attr("navigation-mode", "linear"),
+            attr("submission-mode", "individual"),
+          ],
+          [assessmentSection("S", [itemRef("I1")])],
+        ),
+        el(
+          "qti-outcome-processing",
+          [],
+          [
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "TOTAL")],
+              [el(local, [attr("identifier", identifier)])],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+/**
+ * The `undeclared-variable` refusals of a verdict, each with its detail and its sentence.
+ *
+ * @param verdict The verdict.
+ * @returns Each such refusal's detail and sentence, in order; none when the verdict is not refused.
+ */
+const undeclaredOf = (verdict: Verdict) =>
+  verdict.verdict === "refused"
+    ? verdict.refusals
+        .filter((refusal) => refusal.rule === "undeclared-variable")
+        .map((refusal) => ({ detail: refusal.detail, sentence: describeRefusal(refusal) }))
+    : [];
+
+describe("check, a built-in's name a test declares, read as a response (reading 168)", () => {
+  it("align-54 R3 declared built-in: refuses a qti-correct or qti-map-response of the outcome numAttempts or completionStatus a test declares, or of its context variable numAttempts, with declared naming the kind, and says the test declares it, not that it has no declaration", () => {
+    for (const [identifier, declaration, declared, kind] of [
+      ["numAttempts", outcome("numAttempts", "integer"), "outcome", "an outcome"],
+      ["completionStatus", outcome("completionStatus", "identifier"), "outcome", "an outcome"],
+      [
+        "numAttempts",
+        el("qti-context-declaration", [
+          attr("base-type", "integer"),
+          attr("cardinality", "single"),
+          attr("identifier", "numAttempts"),
+        ]),
+        "context",
+        "a context variable",
+      ],
+    ] as const) {
+      for (const local of ["qti-correct", "qti-map-response"]) {
+        const label = `${local} ${declared} ${identifier}`;
+        const refusals = undeclaredOf(verdictOf(readingByName([declaration], local, identifier)));
+
+        assert.deepStrictEqual(
+          refusals.map((refusal) => refusal.detail),
+          [{ declared, declarer: "test", element: local, expected: "response", identifier }],
+          label,
+        );
+        assert.strictEqual(
+          refusals.map((refusal) => refusal.sentence).join("\n"),
+          `**\`${testLocation}\`, at \`qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/${local}\`: refused.** \`${local}\` names \`${identifier}\`, ${kind} the test declares in place of the built-in, and no response, so it has no mapping or correct response. Rule \`undeclared-variable\`. To make it valid: name a response an item declares, through its item ref, written \`ITEMREF.RESPONSE\`.`,
+          label,
+        );
+      }
+    }
+  });
+
+  it("align-54 R3 declared built-in: keeps today's sentence, byte for byte, for an item's qti-correct of the undeclared built-in completionStatus, and for a test's that declares no completionStatus, neither carrying declared", () => {
+    const itemVerdict = verdictOf(
+      item([
+        score(),
+        el("qti-item-body", [], [el("p", [], [text("x")])]),
+        el(
+          "qti-response-processing",
+          [],
+          [
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "SCORE")],
+              [el("qti-correct", [attr("identifier", "completionStatus")])],
+            ),
+          ],
+        ),
+      ]),
+    );
+    const testVerdict = verdictOf(readingByName([], "qti-correct", "completionStatus"));
+
+    assert.deepStrictEqual(undeclaredOf(itemVerdict), [
+      {
+        detail: { element: "qti-correct", expected: "response", identifier: "completionStatus" },
+        sentence:
+          "**`item.xml`, at `qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-correct`: refused.** `qti-correct` names the built-in `completionStatus`, which has no declaration, so no mapping or correct response. Rule `undeclared-variable`. To make it valid: name a declared response.",
+      },
+    ]);
+    assert.deepStrictEqual(undeclaredOf(testVerdict), [
+      {
+        detail: {
+          declarer: "test",
+          element: "qti-correct",
+          expected: "response",
+          identifier: "completionStatus",
+        },
+        sentence: `**\`${testLocation}\`, at \`qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-correct\`: refused.** \`qti-correct\` names the built-in \`completionStatus\`, which has no declaration, so no mapping or correct response. Rule \`undeclared-variable\`. To make it valid: name a response an item declares, through its item ref, written \`ITEMREF.RESPONSE\`.`,
+      },
+    ]);
+  });
+});

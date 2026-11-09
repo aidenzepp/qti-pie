@@ -2716,6 +2716,47 @@ const variableType = (
 };
 
 /**
+ * The kind each declaration that a `qti-variable` may read declares, by its local name.
+ */
+const declarationKinds: ReadonlyMap<string, NamedKind> = new Map<string, NamedKind>([
+  ["qti-context-declaration", "context"],
+  ["qti-outcome-declaration", "outcome"],
+  ["qti-response-declaration", "response"],
+  ["qti-template-declaration", "template"],
+]);
+
+/**
+ * The `declared` fact of an `undeclared-variable` refusal in a test whose name is a built-in's
+ * ({@link builtInKinds}) that the test declares as an outcome or a context variable.
+ *
+ * A test may declare `numAttempts` or `completionStatus` (reading 168, "A test may declare a
+ * variable named `numAttempts` or `completionStatus`; in a test only `duration` is reserved"), and
+ * the declaration takes the built-in's place in its processing ({@link testProcessingScope}). An
+ * expression that reads another kind, such as a `qti-correct` of a declared outcome `numAttempts`,
+ * which reads a response, is then refused although the name is declared, and the fact lets the
+ * wording say that the test declares it, rather than that the built-in has no declaration. Any
+ * other name, and every name in an item, carries no such fact.
+ *
+ * @param identifier The name the expression gives.
+ * @param context The document's declarations.
+ * @returns The fact `declared`, `outcome` or `context`, for such a name in a test; no fact
+ *   otherwise.
+ */
+const declaredBuiltIn = (
+  identifier: string,
+  context: Context,
+): Readonly<Record<string, string>> => {
+  const declaration = context.variables.get(identifier);
+  const declared = declaration === undefined ? undefined : declarationKinds.get(declaration.local);
+
+  return context.declarer === "test" &&
+    builtInKinds.has(identifier) &&
+    (declared === "outcome" || declared === "context")
+    ? { declared }
+    : {};
+};
+
+/**
  * Apply `undeclared-variable` to an element that lies in a processing ({@link processings}) and
  * names a variable ({@link namingOf}).
  *
@@ -2747,7 +2788,8 @@ const variableType = (
  * by its unsplit reading alone. A name nothing answers in a test's processing, or in a section
  * document a test reaches, is refused with `declarer: "test"` ({@link declaredBy}), so its wording
  * names the test, which declares outcomes and context variables and no response, rather than an
- * item.
+ * item. A built-in's name the test declares as an outcome or a context variable also carries the
+ * kind that declares it ({@link declaredBuiltIn}).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -2780,7 +2822,15 @@ const undeclaredVariable = (
           source,
           "undeclared-variable",
           visit.path,
-          declaredBy({ element: visit.element.local, expected, identifier }, context.declarer),
+          declaredBy(
+            {
+              element: visit.element.local,
+              expected,
+              identifier,
+              ...declaredBuiltIn(identifier, context),
+            },
+            context.declarer,
+          ),
         ),
       ]
     : [];
@@ -3906,16 +3956,6 @@ const printedKinds: Readonly<Record<VariableScope["declarer"], string>> = {
 export type NamedKind = "context" | "outcome" | "response" | "template";
 
 /**
- * The kind each declaration that a `qti-variable` may read declares, by its local name.
- */
-const declarationKinds: ReadonlyMap<string, NamedKind> = new Map<string, NamedKind>([
-  ["qti-context-declaration", "context"],
-  ["qti-outcome-declaration", "outcome"],
-  ["qti-response-declaration", "response"],
-  ["qti-template-declaration", "template"],
-]);
-
-/**
  * The variable a printed variable's attribute or a `template-identifier` names: its kind, and its
  * type unless its declaration's type is not judged ({@link declarationType}).
  */
@@ -4996,9 +5036,9 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
  * `numAttempts` and `completionStatus` where the test declares neither, as ruled (B4), an agreement
  * difference (G-R3 184, pending). A test may declare either (reading 168, "A test may declare a
  * variable named `numAttempts` or `completionStatus`; in a test only `duration` is reserved"), and
- * its processing then reads the declared variable, which this map does not hold. A test's
- * printed variables name fewer: only `duration` and `QTI_CONTEXT` (`testBuiltIns` in
- * `#plate/validate/test-rules.ts`).
+ * its processing then reads the declared variable: {@link testProcessingScope} drops from this map
+ * each built-in the test declares, under any kind. A test's printed variables name fewer: only
+ * `duration` and `QTI_CONTEXT` (`testBuiltIns` in `#plate/validate/test-rules.ts`).
  */
 const testProcessingBuiltIns: ReadonlyMap<string, NamedVariable> = new Map(
   [...builtInKinds].map(([identifier, kind]) => [
@@ -5026,6 +5066,13 @@ type ProcessingScope = Pick<
  * processing reads ({@link testProcessingBuiltIns}), the typer of a prefixed read, a name with a
  * `.` that no declaration answers whole, and the typer of what a `qti-test-variables` collects.
  *
+ * A built-in the test declares, under any kind, is not among them: its declaration takes the
+ * built-in's place (reading 168, "A test may declare a variable named `numAttempts` or
+ * `completionStatus`; in a test only `duration` is reserved"), so a `qti-correct` or a map
+ * response of a declared outcome `numAttempts`, which reads a response, names none and is refused
+ * `undeclared-variable`, its refusal carrying the kind that declares the name
+ * ({@link declaredBuiltIn}).
+ *
  * A dotted name the test declares whole is that declaration and never a prefixed read (reading 37),
  * whatever kind of variable the reference expects: where it expects another kind
  * ({@link variableType}), a `qti-map-response` or a `qti-correct` of a test outcome `A.B`, or a
@@ -5048,7 +5095,9 @@ const testProcessingScope = (
   );
 
   return {
-    builtIns: testProcessingBuiltIns,
+    builtIns: new Map(
+      [...testProcessingBuiltIns].filter(([identifier]) => !variables.has(identifier)),
+    ),
     declarer: "test",
     outcomes: declarationsOf(test, "qti-outcome-declaration"),
     typeCollected,
