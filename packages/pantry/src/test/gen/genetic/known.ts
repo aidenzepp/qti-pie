@@ -598,6 +598,18 @@ export const fixed = {
     fix: "spec readings 157 and 158: every declaration has its Declaration row and every row below it whatever its identifier, cardinality and base type spell, each of which is a row of its own (DeclarationIdentifier, DeclarationCardinality, DeclarationBaseType), written only where it names or spells something, so AL3 or the value domain refuses one that does not alone (FIX-DECLNAME closed a nameless declaration's case, FIX-DECLCARD one whose cardinality or base type spells nothing)",
     owner: "FIX-DECLCARD",
   },
+  "import-only-law: Dependency target, contained Dependency(node) in DependencyTarget(node)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource><dependency identifierref="1x"/></resource></resources></manifest>`,
+      ],
+    ],
+    fix: "spec reading 152 and decision 457 (2): a dependency's identifierref that is no NCName once collapsed names no resource, so it writes no Dependency row and its value domain refuses it alone, where the import wrote one that no DependencyTarget could follow",
+    owner: "genetic-repair-2 gr2-2",
+  },
   "import-only-law: Document entry, contained SitePath(package, path) in TestDocument(package, path)":
     {
       files: [

@@ -20,6 +20,7 @@
  */
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Option, Result } from "effect";
+import { collapse, isNcName } from "#pantry/grammar/domains.ts";
 import { documentTypes, grammar, ResourceType } from "#pantry/grammar/install.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
@@ -761,14 +762,17 @@ const unwrittenType = "";
 /**
  * Build the overlay rows of a package's manifest.
  *
- * An element's identifier is a row only where it is written: a `cp:manifest`'s is its
- * `ManifestId`, a `cp:resource`'s its `ResourceId`, each beside its row of the package's
- * identifier space (`ManifestIdSpace`). A row whose existence an attribute's copy proves is left
- * out where the attribute is absent (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`),
- * and a resource's `href` is a row only where it is written; AL3 refuses an absent required
- * attribute. A resource's absent `type` is held as {@link unwrittenType}. A resource's `href`
- * whose `type` is written and spells no handle has its `UnreadTypeHref`, beside the
- * `UnreadTypePath` of its compared path, where a typed one has its `TypedHref`.
+ * An element's identifier is a row only where it is written: a `cp:manifest`'s is its `ManifestId`,
+ * a `cp:resource`'s its `ResourceId`, each beside its row of the package's identifier space
+ * (`ManifestIdSpace`). A row whose existence an attribute's copy proves is left out where the
+ * attribute is absent (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`), and a resource's
+ * `href` is a row only where it is written; AL3 refuses an absent required attribute. A
+ * dependency's `Dependency` is left out, too, where its `identifierref` is no NCName once collapsed
+ * ({@link isNcName}): `xs:IDREF` restricts `xs:NCName`, so it names no resource, and its value
+ * domain refuses it alone (spec reading 152, decision 457 (2)). A resource's absent `type` is held
+ * as {@link unwrittenType}. A resource's `href` whose `type` is written and spells no handle has its
+ * `UnreadTypeHref`, beside the `UnreadTypePath` of its compared path, where a typed one has its
+ * `TypedHref`.
  *
  * A dependency names the resource whose identifier its `identifierref` is, its own where its own
  * resource's is (`DependencyTarget`), and none where no resource's is.
@@ -911,7 +915,9 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
     }
 
     for (const ref of node.kind === "cp:dependency"
-      ? Option.toArray(valueOf(node, "identifierref"))
+      ? Option.toArray(
+          Option.filter(valueOf(node, "identifierref"), (value) => isNcName(collapse(value))),
+        )
       : []) {
       dependencies.set(node.id, {
         ...tupleOf(node),

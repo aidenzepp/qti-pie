@@ -72,6 +72,7 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
+import { namingPattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeName,
   documentTypes,
@@ -414,7 +415,10 @@ export const ResourceFile = relation(
 /**
  * A dependency's overlay, keyed by the `cp:dependency` node: its {@link nodeRef} tuple, its
  * `resource` the node's parent, its resource's package, and its `identifierref`'s lexical form,
- * which names a resource of its package through its {@link DependencyTarget}.
+ * which names a resource of its package through its {@link DependencyTarget}. A dependency has its
+ * row only where its `identifierref` names something once collapsed ({@link namingPattern}); any
+ * other, absent or no NCName, names no resource, and AL3 or its value domain refuses it alone
+ * (spec reading 152, decision 457 (2)).
  */
 export const Dependency = relation(
   "Dependency",
@@ -627,9 +631,24 @@ const resourceHrefs = attributesOf("cp:resource", "href");
 const fileHrefs = attributesOf("cp:file", "href");
 
 /**
- * The `identifierref` of each `cp:dependency`.
+ * The `identifierref` of each `cp:dependency`, whatever it spells.
  */
 const dependencyRefs = attributesOf("cp:dependency", "identifierref");
+
+/**
+ * The `identifierref` of each `cp:dependency` that names something once collapsed
+ * ({@link namingPattern}): each such dependency's, and only theirs, is copied into its
+ * {@link Dependency}. `xs:IDREF` restricts `xs:NCName`, so any other identifierref names no
+ * resource, and its value domain refuses it alone (spec reading 152, decision 457 (2)).
+ */
+const namingDependencyRefs = select(Attribute, (a) =>
+  a.and(
+    a.eq(a.name, "identifierref"),
+    a.eq(a.kind, "cp:dependency"),
+    a.eq(a.documentType, "none"),
+    Compute.matches(a.lexical, namingPattern),
+  ),
+);
 
 /**
  * Select the nodes of one kind, a constant selection: a containment into it carries the constant,
@@ -840,6 +859,7 @@ export const packageLawsByName = {
     key(on(resourceHrefs, "node")),
     key(on(fileHrefs, "node")),
     key(on(dependencyRefs, "node")),
+    key(on(namingDependencyRefs, "node")),
   ],
   "E1 derived": [
     check("E1_derived", ResourceTyped, (r) =>
@@ -1008,7 +1028,7 @@ export const packageLawsByName = {
     ),
     contained(on(Dependency, "node"), on(nodesOf("cp:dependency"), "id")),
     contained(on(Dependency, "resource", "package"), on(Resource, "node", "package")),
-    contained(on(dependencyRefs, "node", "lexical"), on(Dependency, "node", "ref")),
+    contained(on(namingDependencyRefs, "node", "lexical"), on(Dependency, "node", "ref")),
     contained(
       on(DependencyTarget, "node", "package", "ref", "resource"),
       on(Dependency, "node", "package", "ref", "resource"),

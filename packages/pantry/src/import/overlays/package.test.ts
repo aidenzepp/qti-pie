@@ -689,6 +689,35 @@ const unreadOf = (
   };
 };
 
+/**
+ * Build a manifest of one resource, `r1`, holding the dependencies given, and read the refs of the
+ * `Dependency` rows the builder writes.
+ *
+ * @param dependencies - Each dependency's `identifierref` as written.
+ * @returns The ref of each `Dependency` row, in document order.
+ */
+const dependencyRefsOf = (dependencies: readonly string[]) =>
+  [
+    ...rowsOf(
+      treeOf({
+        manifestBase: undefined,
+        manifestIdentifier: "m",
+        resources: [
+          {
+            base: undefined,
+            dependencies,
+            files: [],
+            href: undefined,
+            identifier: "r1",
+            type: "webcontent",
+          },
+        ],
+        resourcesBase: undefined,
+      }),
+      ids,
+    ).Dependency.values(),
+  ].map(({ ref }) => ref);
+
 describe("import/overlays/package.ts", () => {
   it.effect("writes each overlay's rows as the walk of the manifest's tree names them", (ctx) =>
     // Oracle: a second implementation, a direct walk of the XDM document that numbers its nodes in
@@ -786,6 +815,21 @@ describe("import/overlays/package.ts", () => {
       ]).paths,
       ["item.xml"],
       "two unread resources of one path, one UnreadTypePath",
+    );
+  });
+
+  it("writes a Dependency only for a dependency whose identifierref names something once collapsed", () => {
+    // Oracle: spec reading 152 and decision 457 (2), with the genetic repair round 2's class 1
+    // (gr2-2): `xs:IDREF` restricts `xs:NCName`, so `1x` and `x𝔸` name no resource and have no
+    // Dependency row, and their value domain refuses them alone; `r1` and its padded form name the
+    // resource `r1` and keep their row, the ref as written.
+    assert.deepStrictEqual(dependencyRefsOf(["1x"]), [], "a digit first");
+    assert.deepStrictEqual(dependencyRefsOf(["x𝔸"]), [], "a character no NCName holds");
+    assert.deepStrictEqual(dependencyRefsOf(["r1"]), ["r1"], "an NCName");
+    assert.deepStrictEqual(
+      dependencyRefsOf([" r1"]),
+      [" r1"],
+      "an NCName once collapsed, kept as written",
     );
   });
 });
