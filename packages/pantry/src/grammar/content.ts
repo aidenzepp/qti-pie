@@ -78,8 +78,8 @@ import {
   namespaceClassesUnder,
 } from "#pantry/vocab/namespaces.ts";
 import type { NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
-import { automatonOf } from "#pantry/vocab/sequencing.ts";
-import type { Automaton, Position } from "#pantry/vocab/sequencing.ts";
+import { positionsOf, outlineOf, structureOf } from "#pantry/vocab/sequencing.ts";
+import type { Automaton, Position, Structure } from "#pantry/vocab/sequencing.ts";
 
 /**
  * A spec reading that edits a content model where it says more than the XSD: a kind admitted beside
@@ -863,7 +863,7 @@ type Follows = readonly (readonly number[])[];
  * @param automaton - The automaton.
  * @returns Each state's follow set, the start's first.
  */
-const followsOf = (automaton: Automaton): Follows =>
+const followsOf = (automaton: Structure): Follows =>
   automaton.next.map((next) => [...next].toSorted((left, right) => left - right));
 
 /**
@@ -1024,6 +1024,9 @@ export const contentOf = (input: {
       );
     };
     const installed: Installed[] = [];
+    // Each distinct outline's follow sets, endings and sorted follows, built once: the models of
+    // many kinds share an outline, and differ only in what their positions name.
+    const outlined = new Map<string, Structure & { readonly follows: Follows }>();
     for (const model of [...input.models, ...input.facets.flatMap((facet) => facet.models)]) {
       const { content } = model;
       const own = input.namespaceOf(model.kind);
@@ -1032,16 +1035,24 @@ export const contentOf = (input: {
         content._tag === "element-only" || content._tag === "mixed"
           ? Option.some(editedBy(content.particle, edits, model.kind))
           : Option.none();
-      const automaton = endedBy(
-        Option.match(particle, {
-          onNone: () => noAutomaton,
-          onSome: automatonOf,
-        }),
-        edits,
-        model.kind,
-      );
+      const built = Option.match(particle, {
+        // A model with no element content follows as the empty language does: its start, which
+        // nothing follows.
+        onNone: () => ({ automaton: noAutomaton, follows: emptyFollows }),
+        onSome: (tree) => {
+          const outline = outlineOf(tree);
+          const { ends, follows: sorted, next } = outlined.getOrInsertComputed(outline.key, () => {
+            const structure = structureOf(tree);
+
+            return { ...structure, follows: followsOf(structure) };
+          });
+
+          return { automaton: { ends, next, positions: positionsOf(outline) }, follows: sorted };
+        },
+      });
+      const automaton = endedBy(built.automaton, edits, model.kind);
       const caps = yield* cappedBy(automaton, edits, model.kind);
-      const follows = followsOf(automaton);
+      const { follows } = built;
       const signature = signatureOf(follows, automaton.ends);
       const named = new Set(
         automaton.positions.flatMap(({ symbol }) => (symbol._tag === "kinds" ? symbol.kinds : [])),

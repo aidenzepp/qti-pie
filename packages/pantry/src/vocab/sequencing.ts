@@ -105,10 +105,11 @@ interface State {
 }
 
 /**
- * The state after a child at a position: the position, and the positions a child may take next.
+ * The state after a child at a position: the position's number, and the positions a child may take
+ * next.
  */
 interface PositionState extends State {
-  readonly position: Position;
+  readonly number: number;
 }
 
 /**
@@ -281,12 +282,75 @@ const bodyOf = (
 };
 
 /**
- * Build a content model's positions and Glushkov automaton.
+ * An element or wildcard particle: what one position of an automaton reads.
+ */
+type PositionParticle = Exclude<Particle, { readonly _tag: "group" }>;
+
+/**
+ * A particle's outline: the text of what its automaton's follow sets and endings depend on, and the
+ * element and wildcard particles its positions read.
+ *
+ * The follow sets and endings read a particle's tree alone: each group's compositor, and for every
+ * node whether it never occurs, may repeat or may be absent. They read nothing a position names, so
+ * two particles of one outline have one {@link Structure}, and differ only in their positions
+ * ({@link positionsOf}). Many kinds' content models share an outline, so a composition builds each
+ * outline's structure once.
+ */
+export interface Outline {
+  /**
+   * The tree as text: `0` for a node that never occurs, `p` for a position, a group's compositor's
+   * initial and its members in parentheses, each node followed by `r` where it may repeat and `?`
+   * where it may be absent.
+   */
+  readonly key: string;
+  /**
+   * The particles of the positions, in the order {@link structureOf} numbers them from 1: every
+   * element and wildcard particle in document order, but none in a node that never occurs.
+   */
+  readonly particles: readonly PositionParticle[];
+}
+
+/**
+ * Read a particle's outline ({@link Outline}).
  *
  * @param particle - The model's particle.
- * @returns The automaton.
+ * @returns Its outline.
  */
-export const automatonOf = (particle: Particle): Automaton => {
+export const outlineOf = (particle: Particle): Outline => {
+  const particles: PositionParticle[] = [];
+  const keyOf = (node: Particle): string => {
+    if (never(node.occurs)) {
+      return "0";
+    }
+
+    const flags = `${repeats(node.occurs) ? "r" : ""}${node.occurs.min === 0 ? "?" : ""}`;
+    if (node._tag !== "group") {
+      particles.push(node);
+
+      return `p${flags}`;
+    }
+
+    return `${node.compositor.charAt(0)}(${node.particles.map(keyOf).join(",")})${flags}`;
+  };
+
+  return { key: keyOf(particle), particles };
+};
+
+/**
+ * A content model's Glushkov automaton without its positions: its endings and each state's follow
+ * set, which two particles of one {@link Outline} share.
+ */
+export type Structure = Pick<Automaton, "ends" | "next">;
+
+/**
+ * Build a content model's Glushkov automaton without its positions: state 0 is the start, and state
+ * `n` the one after a child at position `n`, the positions numbered from 1 in document order, as
+ * {@link Outline.particles} lists them.
+ *
+ * @param particle - The model's particle.
+ * @returns The automaton's endings and follow sets.
+ */
+export const structureOf = (particle: Particle): Structure => {
   // The start, before any child; then one state per position, the state after a child there.
   const start: State = { follows: new Set() };
   const states: PositionState[] = [];
@@ -303,18 +367,7 @@ export const automatonOf = (particle: Particle): Automaton => {
     }
 
     if (node._tag !== "group") {
-      const state: PositionState = {
-        follows: new Set(),
-        position: {
-          number: states.length + 1,
-          occurs: node.occurs,
-          sources: node.sources,
-          symbol:
-            node._tag === "element"
-              ? { _tag: "kinds", kinds: node.kinds }
-              : { _tag: "wildcard", namespace: node.namespace, processing: node.processing },
-        },
-      };
+      const state: PositionState = { follows: new Set(), number: states.length + 1 };
 
       states.push(state);
 
@@ -342,16 +395,44 @@ export const automatonOf = (particle: Particle): Automaton => {
   const whole = visit(particle);
   link(new Set([start]), whole.first);
 
-  // State 0 is the start; state `n` is the one after a child at position `n`.
   const ordered: readonly State[] = [start, ...states];
-  const numberOf = ({ position }: PositionState): number => position.number;
+  const numberOf = ({ number }: PositionState): number => number;
 
   return {
     ends: new Set([...(whole.nullable ? [0] : []), ...[...whole.last].map(numberOf)]),
     next: ordered.map(({ follows }) => new Set([...follows].map(numberOf))),
-    positions: states.map(({ position }) => position),
   };
 };
+
+/**
+ * Read an outline's positions: each of its particles, numbered from 1 in its order, with its
+ * occurrence, its sources and what it names.
+ *
+ * @param outline - The particle's outline.
+ * @returns The positions.
+ */
+export const positionsOf = (outline: Outline): readonly Position[] =>
+  outline.particles.map((node, at) => ({
+    number: at + 1,
+    occurs: node.occurs,
+    sources: node.sources,
+    symbol:
+      node._tag === "element"
+        ? { _tag: "kinds", kinds: node.kinds }
+        : { _tag: "wildcard", namespace: node.namespace, processing: node.processing },
+  }));
+
+/**
+ * Build a content model's positions and Glushkov automaton ({@link structureOf},
+ * {@link positionsOf}).
+ *
+ * @param particle - The model's particle.
+ * @returns The automaton.
+ */
+export const automatonOf = (particle: Particle): Automaton => ({
+  ...structureOf(particle),
+  positions: positionsOf(outlineOf(particle)),
+});
 
 /**
  * Find an automaton's breaches of Unique Particle Attribution (XML Schema 1.0 Part 1, 3.8.6): each
