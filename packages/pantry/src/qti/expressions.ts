@@ -2594,10 +2594,13 @@ export const referenceLawsByName = {
     check("Prefixed_reference", Reading, (r) => r.or(r.not(resolves(r)), r.eq(r.placements, 1n))),
   ],
   "Reference type": [
+    // A reading through an LTI item ref has no declaration to type it by, and is accepted
+    // unchecked ({@link linkHeld}, spec reading 110), as it resolves and as `mappedReadings` drops it.
     check("Reference_type", Reading, (r) =>
       r.or(
         r.eq(r.attribute, "identifier"),
         r.not(resolves(r)),
+        linkHeld(r),
         r.and(
           r.in(r.source, ["declared", "mapped"]),
           r.in(r.declarationKind, ["qti-outcome-declaration", "qti-template-declaration"]),
