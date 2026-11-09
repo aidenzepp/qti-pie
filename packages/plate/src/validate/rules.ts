@@ -413,65 +413,148 @@ const refusal = (
   });
 
 /**
- * The choice elements whose `identifier` is unique within their interaction: each choice's local
- * name, with the local name of the interaction that scopes it.
- *
- * A `qti-simple-choice` is scoped only inside a Choice. In any other interaction that holds one,
- * such as an Order, these rules do not judge its identifier.
+ * The choice classes whose identifiers share one pool across an item: the eight classes the
+ * information model's prose calls choices. Each says of its identifier that it "must not be used by
+ * any other choice or item variable" (SimpleChoice 5.132.1, `info.txt:42411`; InlineChoice 5.73.1,
+ * `info.txt:31918`) or names its own noun ("any other image", "any other text", "any other
+ * hotspot", "any other hottext choice"). Reading 104 reads each class as its own scope; the
+ * overseer extended it (`9c42437e`, Appendix A line 25, E19) to pool the eight, so no two choices
+ * of these classes in one item share an identifier, whichever interactions hold them. A `qti-gap`
+ * stays outside the pool ({@link choicePool}).
  */
-const choiceScopes: ReadonlyMap<string, string> = new Map([
-  ["qti-inline-choice", "qti-inline-choice-interaction"],
-  ["qti-simple-choice", "qti-choice-interaction"],
+const pooledChoices: ReadonlySet<string> = new Set([
+  "qti-associable-hotspot",
+  "qti-gap-img",
+  "qti-gap-text",
+  "qti-hotspot-choice",
+  "qti-hottext",
+  "qti-inline-choice",
+  "qti-simple-associable-choice",
+  "qti-simple-choice",
 ]);
 
 /**
- * Find the scope in which an element's `identifier` must be unique, if it has one.
- *
- * The item's declarations share one scope, the root: "All item variables declared in an item share
- * the same namespace" (info.txt:12006). A Choice's simple choices share another, the interaction:
- * the identifier of a simple choice "must not be used by any other choice" (info.txt:42411). An
- * Inline Choice's inline choices share theirs the same way: "This identifier must not be used by
- * any other choice or item variable." (info.txt:31918, InlineChoice 5.73.1). Both sentences also
- * forbid a choice identifier equal to an item variable's, which these rules do not refuse.
- *
- * @param source The document.
- * @param visit The element's visit.
- * @returns The element whose children share the scope, or none when no rule here scopes it.
+ * The identifiers an item's choices have given so far, each with the class of the first element
+ * that gave it: one pool for the {@link pooledChoices}, and one for the gaps.
  */
-const uniquenessScope = (source: SourceDocument, visit: Visit): Option.Option<SourceElement> =>
-  visit.parent.pipe(
-    Option.filter(
-      (parent) =>
-        (parent === source.root && isDeclaration(visit.element)) ||
-        (isQti(visit.element, (local) => choiceScopes.has(local)) &&
-          isQti(parent, (local) => local === choiceScopes.get(visit.element.local))),
-    ),
-  );
+interface ChoicePools {
+  readonly choices: Map<string, string>;
+  readonly gaps: Map<string, string>;
+}
 
 /**
- * Apply `duplicate-identifier` to one element: its `identifier` is not one an earlier element of
- * its scope already declared.
+ * Find the pool an element's `identifier` is unique within, if it is a choice or a gap.
+ *
+ * A gap is unique among the item's gaps, "any other gap" (Gap 5.55.1, reading 104), and outside the
+ * choices' pool, so a gap and a gap text of one Gap Match may share an identifier.
+ *
+ * @param element The element.
+ * @param pools The item's pools.
+ * @returns The pool, or none for an element that is neither.
+ */
+const choicePool = (
+  element: SourceElement,
+  pools: ChoicePools,
+): Option.Option<Map<string, string>> => {
+  if (isQti(element, (local) => pooledChoices.has(local))) {
+    return Option.some(pools.choices);
+  }
+
+  return isQti(element, (local) => local === "qti-gap") ? Option.some(pools.gaps) : Option.none();
+};
+
+/**
+ * Apply `duplicate-identifier` to one choice or gap (reading 104, as extended, E19): its
+ * `identifier` names no item variable, and no earlier element of its pool ({@link choicePool}) gave
+ * it.
+ *
+ * The item variables are its declarations of all four kinds and its built-ins, `completionStatus`,
+ * `numAttempts`, `duration` and `QTI_CONTEXT`, which "are declared implicitly". A choice that names
+ * one is refused under `check: "choice-variable"` alone, whether or not it also repeats an earlier
+ * choice's identifier, and still counts toward its pool.
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param seen The identifiers each scope has declared so far, which this adds the element's to.
- * @returns The refusal at the repeated `identifier` attribute's path, or none for the first
- *   occurrence and for an element no scope holds.
+ * @param variables The identifiers of the item's variables, declared and built in.
+ * @param pools The identifiers each pool has given so far, which this adds the element's to.
+ * @returns The refusal at the `identifier` attribute's path, with the element's `class` and, for a
+ *   repeat of a choice of another class, its `otherClass`; none for an element that is no choice or
+ *   gap, and for a first occurrence that names no variable.
  */
-const duplicateIdentifier = (
+const choiceIdentifier = (
   source: SourceDocument,
   visit: Visit,
-  seen: Map<SourceElement, Set<string>>,
+  variables: ReadonlySet<string>,
+  pools: ChoicePools,
 ): readonly Refusal[] => {
-  const scope = uniquenessScope(source, visit);
+  const pool = choicePool(visit.element, pools);
   const attribute = attributeOf(visit.element, "identifier");
-  if (Option.isNone(scope) || Option.isNone(attribute)) {
+  if (Option.isNone(pool) || Option.isNone(attribute)) {
     return [];
   }
 
   const identifier = identifierOf(attribute.value);
-  const declared = seen.get(scope.value) ?? new Set<string>();
-  seen.set(scope.value, declared);
+  const path = attributePath(visit.path, attribute.value);
+  const choiceClass = visit.element.local;
+  const earlier = Option.fromUndefinedOr(pool.value.get(identifier));
+  if (Option.isNone(earlier)) {
+    pool.value.set(identifier, choiceClass);
+  }
+
+  if (variables.has(identifier)) {
+    return [
+      refusal(source, "duplicate-identifier", path, {
+        check: "choice-variable",
+        class: choiceClass,
+        identifier,
+        reading: "104",
+      }),
+    ];
+  }
+
+  return Option.match(earlier, {
+    onNone: () => [],
+    onSome: (otherClass) => [
+      refusal(
+        source,
+        "duplicate-identifier",
+        path,
+        otherClass === choiceClass
+          ? { class: choiceClass, identifier, reading: "104" }
+          : { class: choiceClass, identifier, otherClass, reading: "104" },
+      ),
+    ],
+  });
+};
+
+/**
+ * Apply `duplicate-identifier` to one of the item's declarations: its `identifier` is not one an
+ * earlier declaration gave.
+ *
+ * The item's declarations share one scope, the root: "All item variables declared in an item share
+ * the same namespace" (info.txt:12006). A choice's identifier is judged against them, and against
+ * the other choices, by {@link choiceIdentifier}.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param declared The identifiers the item's declarations have given so far, which this adds the
+ *   element's to.
+ * @returns The refusal at the repeated `identifier` attribute's path, or none for the first
+ *   occurrence and for an element that is no declaration of the root.
+ */
+const duplicateDeclaration = (
+  source: SourceDocument,
+  visit: Visit,
+  declared: Set<string>,
+): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "identifier");
+  const declaration =
+    Option.exists(visit.parent, (parent) => parent === source.root) && isDeclaration(visit.element);
+  if (!declaration || Option.isNone(attribute)) {
+    return [];
+  }
+
+  const identifier = identifierOf(attribute.value);
   if (!declared.has(identifier)) {
     declared.add(identifier);
 
@@ -3902,7 +3985,10 @@ const setCorrectResponses = (
  * or an Extended Text's `string-identifier` ({@link responseRules}): the declaration each names,
  * its fit, reading 92's counts and single binding, and a gap match's gaps. `count-range` judges a
  * least count against its most (reading 76) and an order interaction's counts against its choices
- * (reading 18, {@link countRules}). `template-requirements`
+ * (reading 18, {@link countRules}). `duplicate-identifier` judges the item's declarations among
+ * themselves ({@link duplicateDeclaration}), and each choice of the eight pooled classes and each
+ * gap against its pool and the item's variables (reading 104, as extended, E19,
+ * {@link choiceIdentifier}). `template-requirements`
  * judges the declarations a standard template, an inline `qti-map-response` or
  * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `undeclared-variable` judges the
  * variable a rule or an expression names, through its kind's declaration facet in the registry, and
@@ -3970,7 +4056,9 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
     types: new Map(),
     variables: new Map(variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
   };
-  const seen = new Map<SourceElement, Set<string>>();
+  const declared = new Set<string>();
+  const pools: ChoicePools = { choices: new Map(), gaps: new Map() };
+  const variables = new Set([...context.variables.keys(), ...itemBuiltIns.keys()]);
   const bound = new Set<string>();
   const contexts = declarationsOf(source, "qti-context-declaration");
   const refusals: Refusal[] = [];
@@ -3980,7 +4068,8 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
     }
 
     refusals.push(
-      ...duplicateIdentifier(source, visit, seen),
+      ...duplicateDeclaration(source, visit, declared),
+      ...choiceIdentifier(source, visit, variables, pools),
       ...responseRules(source, visit, context.responses, bound),
       ...countRules(source, visit),
       ...contextVariableReference(source, visit, contexts),
