@@ -169,25 +169,23 @@ export const known: readonly Known[] = [
       },
     },
   },
-  // MERGE-OPEN: nine of upstream's genetic repair round 4 known classes (origin/main 284e13ab's
-  // known.ts, decisions 449 and 463 and issue #65) can't be stated on Qti, since each is a class of
-  // a law our model states only as a rule over a query, which the host never judges (host-laws.ts:
-  // a statement over a derived relation is unknown, never broken and never held), or of a relation
-  // the model no longer has:
-  // - "E1 derived, contained GeneralObject(record, document) in LomObject(record, document)", under
-  //   a record file whose root is a cp:manifest and under xml:base on a cp:resource: Qti has no
-  //   GeneralObject or LomObject; a record's object is the ListedIdentifier and ListedTitle queries';
-  // - "LomObjectIdentifier, contained LomEntry(holderParent) in LomObjectIdentifier(record)", under
-  //   the same two limits, and "LomObjectTitle, contained LomTitle(record) in
-  //   LomObjectTitle(record)", under those two and under a resource href the oracle reads unresolved
-  //   (#65): both laws are rules over queries (queries.ts metadataQueryLawsByName), and Qti has no
-  //   LomObjectIdentifier or LomObjectTitle relation;
-  // - "oracle-only-law: LomObjectTitle": the host never holds a law over a query, so the oracle's
-  //   breach is unjudged, never a disagreement;
+  // Nine of upstream's genetic repair round 4 known classes (284e13ab's known.ts; decisions 449, 463
+  // and 467, issues #65 and #68) are no entries here: each is of a law Qti states only as a rule
+  // over a query, which the host never judges (host-laws.ts: a statement over a derived relation is
+  // unknown, never broken and never held), or of a relation Qti does not have, so the search never
+  // shows one. Their packages, upstream's file for file, are #pantry/test/record-naming.ts's, and
+  // the database judges each in #pantry/import/record-naming.db.test.ts:
+  // - "import-only-law: E1 derived, contained GeneralObject(record, document) in LomObject(record,
+  //   document)", under a record file whose root is a cp:manifest and under xml:base on a
+  //   cp:resource;
+  // - "import-only-law: LomObjectIdentifier, contained LomEntry(holderParent) in
+  //   LomObjectIdentifier(record)", under the same two;
+  // - "import-only-law: LomObjectTitle, contained LomTitle(record) in LomObjectTitle(record)", under
+  //   a record file whose root is a cp:manifest, under a resource href the oracle reads unresolved
+  //   (#65) and under xml:base on a cp:resource;
+  // - "oracle-only-law: LomObjectTitle";
   // - "lone-refusal: RootOfType named lom-identifier, witness unreported", under a record file whose
-  //   root is a cp:manifest: lom-identifier is LomObjectIdentifier's rule, which no law the host
-  //   finds broken names.
-  // Their packages stay in that commit's known.ts; the database judges each law (metadata.db.test.ts).
+  //   root is a cp:manifest.
   {
     files: [
       [
