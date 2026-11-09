@@ -2500,3 +2500,52 @@ query, `TypedHref`, joined that level.
   cutover's first query, `TypedHref` (lane E's R1), and every query lanes F and G add.
 - **Status.** Sent to grizzle-c5 for a fix hash, beside lane F's finding. pantry holds no workaround: R1 waits for the
   repin.
+
+## A rule over a query whose definition binds a literal: its probe puts the literal first (grizzle defect, open; lane F)
+
+Found at the vendored grizzle `4b0d45e` (`4b0d45ef2156b9b83d628fdb8c3bdd96dcf7f38a`, 2026-11-08) by lane F of the
+cutover, writing the metadata naming rules over queries. The three sites below are unchanged at grizzle `origin/main`
+`cb47b089` (`cb47b089e7f450a29e6f47690b37344fd12f54df`, 2026-11-08), by its source; the reproduction ran at `4b0d45e`.
+
+- **What happens.** `grizzle generate` refuses a schema with `MalformedDescription ... at <side>.where[k].eq.left: a term
+  here: a literal takes the type of the term it meets and never stands first` when a rule over a query reads a derived
+  relation whose definition binds a JavaScript literal in a match, such as `r.match(LomRecord, { owner:
+  "cp:metadata.resource" })`, or in an anti-join, such as `r.not(Flag, { item: id, on: 1 })`. The schema itself builds,
+  so the refusal comes from the rule's probes, not from the definition.
+- **Cause.** Each probe a rule's deferred trigger runs (`packages/engine/src/analysis/theory/query.ts`) holds a binding
+  of the touched row to the row's own value with `eq(binding, param)`, the binding first. A literal binding then stands
+  first, which grizzle's checker refuses:
+  - `:951`, `lostProbe`, `pinned.push(eq(e, old))`: the DELETE probe of a containment's target, for a field the
+    target's definition binds to a literal;
+  - `:771`, `pinnedTo`, `return eq(e, paramOf(record, fieldOf(field)))`: an anti-join's probe, for a field the negation
+    binds to a literal;
+  - `:813`, `newProbes`, `pinned.push(eq(bound, paramOf("NEW", f)))`: the INSERT probe, for a key field the definition
+    binds to a literal.
+- **Reproduction**, needing nothing of this repository: two relations and one rule, with a `grizzle.config.ts` listing
+  `Top` and no login (the connection is never opened by `generate`). It refuses as above, `exit 1`:
+
+  ```ts
+  const Item = relation("Item", { id: pg.integer, kind: pg.integer }, ["id"]);
+  const Claim = relation("Claim", { item: pg.integer }, ["item"]);
+  export const Base = schema("Repro", { Item, Claim }, []);
+  const KindOne = derived(
+    "KindOne",
+    query(Base).rule((r) => {
+      const { id } = v(Item, "i");
+      return r.match(Item, { id, kind: 1 }).find({ id });
+    }),
+  );
+  export const Top = schema.extend(Base, "ReproTop", { KindOne }, [
+    contained(on(Claim, "item"), on(KindOne, "id")),
+  ]);
+  ```
+
+  The anti-join form, `r.match(Item, { id }).where(r.not(Flag, { item: id, on: 1 }))` with `Flag(item, on)`, refuses the
+  same way.
+
+- **Control.** The same rule with the constant held by a condition, `const { id, kind } = v(Item, "i"); r.match(Item,
+  { id, kind }).where(r.eq(kind, 1))`, generates (`exit 0`), and so does the anti-join with no constant bound.
+- **Fix direction.** Put the parameter first at the three sites, `eq(param, binding)`, which means the same.
+- **Class.** A grizzle defect, sent to grizzle-c5 by the coordinator on 2026-11-08 with the reproduction. Until its fix
+  is vendored, a pantry query states such a constant as a condition, `.where(r.eq(field, value))`, the control's form,
+  and goes back to the literal match once it is.
