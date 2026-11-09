@@ -629,7 +629,10 @@ const selectionElements: ReadonlySet<string> = new Set(["qti-selection"]);
  * and a single identifier, and `duration` and `numAttempts`, responses, a single duration and a
  * single integer. The qti package now gives a test only `duration` and `QTI_CONTEXT` (`builtIns`
  * in `packages/pantry/src/grammar/references.ts`); plate keeps a test's own `numAttempts` and
- * `completionStatus`, accepted and marked, an agreement difference (G-R3 184, pending).
+ * `completionStatus` where the test declares neither, accepted and marked, as ruled (B4), an
+ * agreement difference (G-R3 184, pending). A test may declare either (reading 168, "A test may
+ * declare a variable named `numAttempts` or `completionStatus`; in a test only `duration` is
+ * reserved"), and its processing then reads the declared variable, not this built-in.
  */
 const testBuiltIns: ReadonlyMap<string, BuiltIn> = new Map<string, BuiltIn>([
   ["QTI_CONTEXT", { kind: "context", type: { baseType: "unknown", cardinality: "record" } }],
@@ -2326,16 +2329,19 @@ const referencesOf = (
  *   (`:9306`, `:9314`) and "transforms it using the associated mapping, which must have been
  *   declared" (`:9306`). The `prefix` is what tells the wording a read through an item ref, part or
  *   section from a dotted name a document declares whole, which the rules refuse with no `prefix`.
- *   Pantry does not judge what a prefixed name reads there, so this is an agreement difference
- *   (G-R3, pending).
+ *   Main and pantry refuse it too (reading 166, "A test's prefixed `qti-map-response` names a
+ *   response variable whose declaration holds a `qti-mapping`, and a test's prefixed `qti-correct`
+ *   names a response variable"; pantry's `Variable kind` and `Mapped response` laws,
+ *   `packages/pantry/src/qti/expressions.ts`).
  * - In a `qti-map-response` or `qti-map-response-point`, a response its item declares without the
  *   mapping or the area mapping the expression needs is `template-requirements`, as an item's
  *   inline expression is, the `identifier` as written, with the `prefix` the reading reads through:
  *   the information model's "transforms it using the associated mapping, which must have been
  *   declared" (`info.txt:9306`). The `prefix` is what tells the wording that the response is one
  *   the item that item ref names declares, to be given its mapping there, and not a dotted name to
- *   declare. Pantry checks no P27 for a prefixed name, so this is an agreement difference (G-R3,
- *   pending).
+ *   declare. Main and pantry refuse it too (reading 166, "A test's prefixed `qti-map-response`
+ *   names a response variable whose declaration holds a `qti-mapping`"; pantry's `Mapped response`
+ *   law, `packages/pantry/src/qti/expressions.ts`).
  *
  * @param document The test's location.
  * @param visit The element's visit.
@@ -4059,8 +4065,8 @@ const reachedAvoiding = (
  * - Where the test reaches a placement of the rule's document through no placement of a document that
  *   writes the target, the target is `unknown`, or `ambiguous` when the documents that write it are
  *   placed more than once, so two placements supply it (reading 87, "one that two placements of a
- *   section document supply twice ... is refused as ambiguous", which the operator's comment on PR
- *   #46 asks to apply only to a rule outside that document).
+ *   section document supply twice ... is refused as ambiguous", which it states "applies only to a
+ *   rule outside the section document").
  * - Where a placement of a document that writes it lies above, the target is judged as that placement
  *   holds it, from the section ref through which the rule's placement descends
  *   ({@link viewFault}).

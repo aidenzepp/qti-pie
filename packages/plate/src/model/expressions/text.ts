@@ -175,9 +175,9 @@ const substringReader: ReaderSpec<"substring"> = {
  * declared names, as written and untrimmed (reading 7): only `{name}` whose name names a variable
  * the item holds is a reference. A braced name that names no variable is literal text, braces kept,
  * and never refused as P8 (ruling R1, as the information model reads a string attribute that
- * "appears to be a reference" to no variable). The qti package refuses such a name as P8 (the
- * `Variable declared` law in `packages/pantry/src/qti/expressions.ts`, over `referenceMembers` in
- * `packages/pantry/src/grammar/references.ts`): a ruled agreement difference.
+ * "appears to be a reference" to no variable). Main and the qti package now read it so too, as
+ * R15-k ("A braced `pattern` that names no declared variable is a string value"): pantry stores it
+ * as written, so this is no longer an agreement difference.
  *
  * A literal is compiled here only to decide its mark: one `compile` in `#plate/model/regex.ts`
  * refuses (outside XML Schema's regular expressions, readings 55 and 58, or past the automaton's

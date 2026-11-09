@@ -69,7 +69,9 @@ const attributeOf = (element: SourceElement, local: string): Option.Option<Sourc
 /**
  * Refuse each `qti-custom-interaction` of a QTI 3.0.0 document (the operator's P2): 3.0.0
  * deprecates it and requires a `qti-portable-custom-interaction` in its place. Plate keeps the
- * operator's ruling over the shared reading that accepts it (overseer `b7d702d6`).
+ * operator's ruling (overseer `b7d702d6`), which main now shares as R10-b ("A 3.0.0 document holds
+ * no `qti-custom-interaction`; a 3.0.1 document may"): main and pantry refuse it too (pantry's
+ * `Custom interaction version` law, `packages/pantry/src/qti/interactions.ts`).
  *
  * @param source The document.
  * @returns One `unknown-element` refusal at each custom interaction, in document order.

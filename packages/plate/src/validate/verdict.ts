@@ -769,8 +769,9 @@ const complete = (built: Item, secured: Secured): Item => {
  * never fetches the fragment, so it can judge neither the fragment nor the document that places
  * it. No include is refused for its form (P4, the operator's ruling plate keeps): one with an
  * `xpointer` or with `parse="text"`, which reading 85 ("an included fragment is read in place, as
- * XML, with no `xpointer`") refuses, or with an external `href`, which reading 115 ("an include
- * names a document of its package") refuses, is only a reason here.
+ * XML, with no `xpointer`") refuses, or with an external `href`, is only a reason here. Main now
+ * shares P4 in part: reading 115 ("An include names a document of its package or a resource
+ * outside it") admits an external include, and reading 85 still refuses the other two.
  *
  * @param source A document whose root is in QTI's namespace.
  * @param kind The root's kind.
@@ -1886,9 +1887,12 @@ const attributeType = (refusal: Refusal): string => {
 };
 
 /**
- * The built-in variables' identifiers, which "are reserved" (`info.txt:12006`), so no declaration
- * may take one: the names of `reservedIdentifiers` in `#plate/validate/structure.ts`, which refuses
- * such a declaration `attribute-type` (pantry's `DeclarationNotReserved`).
+ * The built-in variables' identifiers, which "are reserved" (`info.txt:12006`), so no item's
+ * declaration may take one: the names of `reservedIdentifiers` in `#plate/validate/structure.ts`,
+ * which refuses such a declaration `attribute-type` (pantry's `DeclarationNotReserved`). A test may
+ * declare `numAttempts` or `completionStatus`, and only `duration` is reserved there (reading 168,
+ * "A test may declare a variable named `numAttempts` or `completionStatus`; in a test only
+ * `duration` is reserved"; `testReservedIdentifiers` in the same file).
  */
 const builtInIdentifiers: ReadonlySet<string> = new Set([
   "completionStatus",
@@ -1917,12 +1921,13 @@ const itemRefResponse = `name a response an item declares, through its item ref,
  *   reading reads through, since what it reads is not a response its item declares, but an outcome,
  *   a template variable or a built-in. The fix is a response the item declares, written
  *   `ITEMREF.RESPONSE`.
- * - A built-in ({@link builtInIdentifiers}): no declaration may take its name, so it has no mapping
- *   and no declared correct response. The rules refuse here only the built-in outcome
- *   `completionStatus`; `numAttempts` and `duration` are "built-in response variables"
- *   (`info.txt:8466`), which a `qti-correct` reads (reading 111), and the sentence calls each the
- *   built-in and never says it is no response. In an item the fix is a declared response; with
- *   `declarer: "test"` it is an item's response read through its item ref
+ * - A built-in ({@link builtInIdentifiers}): no item's declaration may take its name, and a test
+ *   declares no response (a test's `numAttempts` or `completionStatus`, reading 168, is an outcome
+ *   or a context variable), so it has no mapping and no declared correct response. The rules refuse
+ *   here only the built-in outcome `completionStatus`; `numAttempts` and `duration` are "built-in
+ *   response variables" (`info.txt:8466`), which a `qti-correct` reads (reading 111), and the
+ *   sentence calls each the built-in and never says it is no response. In an item the fix is a
+ *   declared response; with `declarer: "test"` it is an item's response read through its item ref
  *   ({@link itemRefResponse}).
  * - Any other name with `declarer: "test"`: a test declares outcomes and context variables, and only
  *   its items declare responses, so the sentence says the test declares none and the fix is an

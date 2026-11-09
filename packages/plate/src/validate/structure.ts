@@ -767,10 +767,11 @@ const variableDeclarations: ReadonlySet<string> = new Set(
  * so they are typed in an item and any base type in a test; it says "PASSED needs to be a boolean"
  * of "Items or tests", so it is typed in both. Each row's line is §2.2.2.3's restatement of the
  * same sentence (info.txt:8478, :8480, :8482). A typed outcome is a value of its base type, so it
- * is no record (reading 153), wherever its type holds. The qti package's `Reserved type` law
- * (`packages/pantry/src/qti/declarations.ts`) refuses a test's SCORE and MAXSCORE of another base
- * type, or declared `record`, too, so plate accepts such a test where pantry refuses it, as the
- * operator ruled (P8).
+ * is no record (reading 153), wherever its type holds. Plate accepts a test's SCORE and MAXSCORE of
+ * any base type as the operator ruled (P8), which main now shares as reading 163 ("SCORE's and
+ * MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests"): main
+ * accepts such a test, and the qti package's `Reserved type` law
+ * (`packages/pantry/src/qti/declarations.ts`) accepts one declared `record` too.
  */
 const typedOutcomes = [
   ["SCORE", "float", "info.txt:8478", false],
@@ -916,8 +917,10 @@ const toleranceTokens = (lexical: string): boolean => {
  * specifier, a `%`, flags from `#`, `0`, space, `+` and `-`, a width, a precision of a point
  * "followed by zero or more digits" (info.txt:8686), so `%.f` is one, and a conversion code.
  *
- * The codes are the information model's, `E e f G g r R i o X x` (reading 132), and `d`: the
- * operator's ruling on P1 admits `%d`, which prints as `%i`, where readings 132 and 161 refuse it.
+ * The codes are the information model's, `E e f G g r R i o X x` (reading 132), and `d`, which
+ * prints as `%i`: the operator's ruling on P1, which main now shares as reading 171 ("A printed
+ * variable's `format` may use `d` as a conversion code"), adding `d` to the codes of readings 132
+ * and 161.
  *
  * The width cannot start with `0`, so no character can end the flags and start the width. A
  * pattern whose flags and width both match `0` makes a refused `%`, a run of zeros and a letter
@@ -1146,7 +1149,8 @@ const readingRows: readonly ReadingRow[] = [
     source: "reading 21",
   },
   // No row counts a card's or a card entry's children: one with no content is accepted, as the
-  // operator ruled (P5, overseer `b7d702d6`), where the shared readings refuse it.
+  // operator ruled (P5, overseer `b7d702d6`), which main now shares as reading 31 ("A card holds an
+  // HTML content node, file hrefs, both, or nothing").
   // Reading 22 ("a `qti-template-constraint` is a direct child of `qti-template-processing`"),
   // where the XSD also admits it in the template conditions' branches.
   {
@@ -1336,9 +1340,10 @@ const readingRows: readonly ReadingRow[] = [
   // The information model fixes the base types of three outcomes: an item's SCORE and MAXSCORE are
   // floats, and an item's or a test's PASSED a boolean (§4.5, info.txt:11979); a test's SCORE and
   // MAXSCORE may be of any base type, a record included (P8). A record has no base type (reading
-  // 153), so a typed outcome declared `record` is refused at its `cardinality`. Pantry's `Reserved
-  // type` law refuses an outcome declaration of another base type, or a record, in an item or a
-  // test, so it refuses a test's SCORE and MAXSCORE too, which plate accepts as the operator ruled.
+  // 153), so a typed outcome declared `record` is refused at its `cardinality`. Main now shares P8
+  // as reading 163 ("SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds
+  // items and tests"): pantry's `Reserved type` law accepts a test's SCORE and MAXSCORE of any base
+  // type, a record included, as plate does.
   // A response or template declaration of those names is not an outcome.
   ...typedOutcomes.flatMap(
     ([identifier, baseType, source, inTests]): readonly NarrowedAttribute[] => [
@@ -1389,8 +1394,9 @@ const readingRows: readonly ReadingRow[] = [
   },
   // The information model's printed variable `format` is "The format conversion specifier"
   // (info.txt:70323), whose syntax is a C `printf` conversion (info.txt:8686). Readings 132 and 161
-  // read it as a printf format string of any number of conversions over the listed codes, and the
-  // operator's ruling on P1 adds `d`, so `%d`, `%i of %i`, `Score: %.1f` and `100%%` are formats,
+  // read it as a printf format string of any number of conversions over the listed codes, and
+  // reading 171 ("A printed variable's `format` may use `d` as a conversion code"), the operator's
+  // ruling on P1, adds `d`, so `%d`, `%i of %i`, `Score: %.1f` and `100%%` are formats,
   // and `%q`, `%u` and a trailing `%` are not (see printfFormat). The `xs:normalizedString` is
   // read with its tabs and line breaks replaced, so text around a conversion is any text.
   {

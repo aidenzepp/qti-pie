@@ -799,12 +799,14 @@ const countRules = (source: SourceDocument, visit: Visit): readonly Refusal[] =>
  * that is not `multiple` is `binding` with `check: "count-cardinality"`. A count whose value is not
  * a non-negative integer is the structural validator's refusal and is not compared.
  *
- * The operator's ruling P7, a disputed reading plate keeps over main's reading 92, which follows
- * `max-associations` alone: the gap match "must be bound to a response variable with base-type
+ * The operator's ruling P7, which main now shares as reading 169 ("A gap match interaction with two
+ * or more gaps binds a response of multiple cardinality"), beside reading 92's sentence on
+ * `max-associations`: the gap match "must be bound to a response variable with base-type
  * 'directedPair' and either single or multiple cardinality, depending on the number of gaps"
  * (info.txt:8792), so one of two or more `qti-gap`s bound to a `single` response is `binding` with
- * `check: "gap-match-single"`. It is judged only where the count gives no refusal, so a gap match
- * bound single gets one refusal, whose remedy, a `multiple` response, is the same.
+ * `check: "gap-match-single"`; main and pantry refuse it too (pantry's `Binding cardinality` law,
+ * `packages/pantry/src/qti/interactions.ts`). It is judged only where the count gives no refusal,
+ * so a gap match bound single gets one refusal, whose remedy, a `multiple` response, is the same.
  *
  * @param source The document.
  * @param visit The interaction's visit.
@@ -2167,7 +2169,9 @@ const mapEntryToDeclaration = [named("qti-mapping"), named("qti-response-declara
  * repeats only so, such as `a` twice under `base-type=" string "`, is refused with an empty
  * `baseType`, citing reading 160, while `1` and `01` under `" integer "` are two keys. A string
  * compares by its code points, whatever an entry's `case-sensitive` says, so `York` and `york` are
- * two keys. A key outside its base type's lexical space has no value to compare, and is
+ * two keys (reading 165, "Two string map keys that differ only by case are two keys, and a
+ * response that matches several entries takes the first one listed", which narrows reading 98's
+ * string clause). A key outside its base type's lexical space has no value to compare, and is
  * {@link attributeValueType}'s refusal.
  *
  * @param source The document.
@@ -4989,7 +4993,10 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
  * `QTI_CONTEXT` typed as an item's. The qti package now gives a test only `duration`, a duration,
  * and `QTI_CONTEXT` (`builtIns` in `packages/pantry/src/grammar/references.ts`, typed by
  * `builtInTypes` in `packages/pantry/src/grammar/expression.ts`); plate keeps a test's own
- * `numAttempts` and `completionStatus`, an agreement difference (G-R3 184, pending). A test's
+ * `numAttempts` and `completionStatus` where the test declares neither, as ruled (B4), an agreement
+ * difference (G-R3 184, pending). A test may declare either (reading 168, "A test may declare a
+ * variable named `numAttempts` or `completionStatus`; in a test only `duration` is reserved"), and
+ * its processing then reads the declared variable, which this map does not hold. A test's
  * printed variables name fewer: only `duration` and `QTI_CONTEXT` (`testBuiltIns` in
  * `#plate/validate/test-rules.ts`).
  */

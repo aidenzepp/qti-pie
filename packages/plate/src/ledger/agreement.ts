@@ -51,7 +51,7 @@ export const verdictsSource = "packages/pantry/verdicts/qti-examples-0a92fbb.tsv
  * The commit of `main` whose {@link verdictsSource} `qti-verdicts.tsv` copies byte for byte: the
  * `main` the agreement was last run on.
  */
-export const verdictsCommit = "083890d8";
+export const verdictsCommit = "c6e55307";
 
 /**
  * The copy's path, beside this module.
