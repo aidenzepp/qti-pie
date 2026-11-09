@@ -205,7 +205,7 @@ const outsideDomain = (of: LangCase): boolean =>
 /**
  * The schema's stated forms, `statedLanguagePattern` read on the host.
  */
-const stated = new RegExp(statedLanguagePattern, patternFlags);
+const stated = new RegExp(statedLanguagePattern.source, patternFlags);
 
 /**
  * Read a row's text field.

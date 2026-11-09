@@ -11,7 +11,7 @@
  * package (the W5 amendment's C19), which `db.apply` compiles for its call from the same
  * Description.
  */
-import { insertableNamesOf, login, workload } from "@bjornpagen/grizzle";
+import { insertableNamesOf, login, paged, workload } from "@bjornpagen/grizzle";
 import { pipe, Record as Rec, Struct } from "effect";
 import { exportQueriesOf } from "#pantry/export/scan.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
@@ -60,10 +60,11 @@ const noInputsOf = (qti: QtiSchema): PackageInputs =>
  */
 export const authorAppOf = (qti: QtiSchema) => {
   const author = authorRoleOf(qti);
+  const { documentScan, documentsOf, entriesOf } = exportQueriesOf(qti);
 
   return login(qti, "author_app", [author], {
     workload: [
-      workload(author, exportQueriesOf(qti)),
+      workload(author, { documentScan: paged(documentScan), documentsOf, entriesOf }),
       workload(author, { importWrite: changeSetOf(author, noInputsOf(qti)) }),
     ],
   });

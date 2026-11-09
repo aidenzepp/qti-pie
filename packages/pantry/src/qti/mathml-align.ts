@@ -102,8 +102,8 @@ export const AlignDirection = closed("AlignDirection", ["ltr", "rtl"]);
  * handle spells.
  */
 export const directionSpellings = [
-  ["ltr", "^[ \\t\\n\\r]*ltr[ \\t\\n\\r]*$"],
-  ["rtl", "^[ \\t\\n\\r]*rtl[ \\t\\n\\r]*$"],
+  ["ltr", Compute.pattern("^[ \\t\\n\\r]*ltr[ \\t\\n\\r]*$")],
+  ["rtl", Compute.pattern("^[ \\t\\n\\r]*rtl[ \\t\\n\\r]*$")],
 ] as const;
 
 /**

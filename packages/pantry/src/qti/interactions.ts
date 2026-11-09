@@ -166,7 +166,7 @@ type Name = (typeof AttributeName.handles)[number];
  * variable's `base` and `index`. Any other value names nothing, an integer of `base` or `index`
  * among them, and its value domain refuses it alone (spec reading 152).
  */
-const namePattern = `^${ncNamePattern}$`;
+const namePattern = Compute.pattern<string>(`^${ncNamePattern}$`);
 
 /**
  * The root kinds of the documents whose content references resolve in their own declarations: an
@@ -2035,7 +2035,7 @@ const bigintForm = lexicalForm(pg.bigint);
  * its own map (`countValueOf` in `#pantry/import/overlays/interactions.ts`), and the law oracle by
  * its own (`integerOf` in `#pantry/test/oracle-view.ts`).
  */
-const countSign = "^(?:[^-]|-0+$)";
+const countSign = Compute.pattern("^(?:[^-]|-0+$)");
 
 /**
  * Select the read count attributes of some names, on the kinds whose counts `ChoiceBound` pairs,

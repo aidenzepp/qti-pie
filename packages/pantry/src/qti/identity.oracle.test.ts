@@ -91,7 +91,7 @@ const space = /^[\t\n\r ]*$/u;
  * An ID's value as `E1_derived` reads it, `idValuePattern` under the `u` flag grizzle compiles
  * every pattern with.
  */
-const value = new RegExp(idValuePattern, "u");
+const value = new RegExp(idValuePattern.source, "u");
 
 /**
  * Every way `DocumentId`'s `E1_derived` admits a lexical form as `before ‖ id ‖ after`: the

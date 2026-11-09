@@ -96,6 +96,12 @@ import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
 import { Entry, hrefPaths, Reference } from "#pantry/qti/package.ts";
 
 /**
+ * `xs:boolean`'s true forms (`booleanTruePattern` of `#pantry/grammar/domains.ts`), as the pattern
+ * `Compute.matches` reads, made once.
+ */
+const booleanTrueForm = Compute.pattern(booleanTruePattern);
+
+/**
  * The test's root kind, the root of an assembly whose names and branch rules resolve.
  */
 export const testKind = "qti-assessment-test" satisfies Kind;
@@ -268,8 +274,9 @@ export const SelectForm = lexical(pg.bigint);
  * A collapsed value: no whitespace at either end, and something between. An NCName holds no
  * whitespace at all, so an identifier's collapsed form is this.
  */
-export const collapsedPattern =
-  "^(?:[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]|[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}][\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}])$";
+export const collapsedPattern = Compute.pattern(
+  "^(?:[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]|[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}][\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}])$",
+);
 
 /**
  * A document of a test or a section, keyed by its document node: its entry, its root kind, and
@@ -1825,8 +1832,8 @@ export const testLawsByName = {
     ),
     check("E1_derived", TestFlag, (f) =>
       f.or(
-        f.and(f.eq(f.value, true), Compute.matches(f.lexical, booleanTruePattern)),
-        f.and(f.eq(f.value, false), f.not(Compute.matches(f.lexical, booleanTruePattern))),
+        f.and(f.eq(f.value, true), Compute.matches(f.lexical, booleanTrueForm)),
+        f.and(f.eq(f.value, false), f.not(Compute.matches(f.lexical, booleanTrueForm))),
       ),
     ),
     check("E1_derived", Named, (n) =>

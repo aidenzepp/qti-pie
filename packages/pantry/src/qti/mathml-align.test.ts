@@ -166,10 +166,10 @@ describe("qti/mathml-align.ts, spellings", () => {
       ["ltr", "rtl"],
     );
     for (const [direction, spelling] of directionSpellings) {
-      assert.strictEqual(spelling, `^[ \\t\\n\\r]*${direction}[ \\t\\n\\r]*$`);
+      assert.strictEqual(spelling.source, `^[ \\t\\n\\r]*${direction}[ \\t\\n\\r]*$`);
     }
 
-    const pattern = new RegExp(directionSpellings[0][1], "u");
+    const pattern = new RegExp(directionSpellings[0][1].source, "u");
 
     assert.isTrue(pattern.test(" ltr\n"));
     assert.isFalse(pattern.test("ltrx"));

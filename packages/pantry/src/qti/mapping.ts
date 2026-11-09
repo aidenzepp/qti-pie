@@ -95,7 +95,7 @@ import { Node, nodeRef } from "#pantry/qti/node.ts";
  * `mapping.oracle.test.ts` holds it to the deleted schema's `xsInteger` with JavaScript's engine as
  * the oracle.
  */
-export const integerKeyPattern = "^[+-]?[0-9]+$";
+export const integerKeyPattern = Compute.pattern("^[+-]?[0-9]+$");
 
 /**
  * A two-item key as an attribute writes it: two runs of characters holding no XML whitespace, and
@@ -104,14 +104,16 @@ export const integerKeyPattern = "^[+-]?[0-9]+$";
  * a point's are two integers, a pair's and a directed pair's two runs of {@link itemPattern}, and
  * `Typed_attribute_value` judges the key's lexical form.
  */
-export const twoItemPattern = "^[^\\t\\n\\r ]+[\\t\\n\\r ][^\\t\\n\\r ]+$";
+export const twoItemPattern = Compute.pattern("^[^\\t\\n\\r ]+[\\t\\n\\r ][^\\t\\n\\r ]+$");
 
 /**
  * One item of a pair or a directed pair: a run of XML `Char`s holding no whitespace, its
  * identifier's lexical form `Typed_attribute_value` judges: the items the queries `MapKeyPair`
  * and `MapKeyDirectedPair` (`#pantry/qti/queries.ts`) give a typed value.
  */
-export const itemPattern = "^[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+$";
+export const itemPattern = Compute.pattern(
+  "^[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+$",
+);
 
 /**
  * A text with no whitespace before or after it: an XML `Char` other than whitespace at each end,
@@ -119,8 +121,9 @@ export const itemPattern = "^[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u
  * written so (reading 7), since `BaseTypePattern` reads a value as XML Schema's collapse leaves it,
  * outer whitespace absorbed.
  */
-export const exactValuePattern =
-  "^(?:[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}](?:[\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}])?)?$";
+export const exactValuePattern = Compute.pattern(
+  "^(?:[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}](?:[\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}])?)?$",
+);
 
 /**
  * A mapping's overlay, keyed by its `qti-mapping` node: its {@link nodeRef} tuple, its

@@ -136,7 +136,7 @@ describe("qti/mathml-cn.ts, spellings", () => {
       [...CnType.handles],
     );
     for (const [type, spelling] of typeSpellings) {
-      assert.strictEqual(spelling, `^[ \\t\\n\\r]*${type}[ \\t\\n\\r]*$`);
+      assert.strictEqual(spelling.source, `^[ \\t\\n\\r]*${type}[ \\t\\n\\r]*$`);
     }
   });
 
@@ -146,11 +146,11 @@ describe("qti/mathml-cn.ts, spellings", () => {
       [...CnBase.handles],
     );
     for (const [base, spelling] of baseSpellings) {
-      assert.strictEqual(spelling, `^[ \\t\\n\\r]*0*${base}[ \\t\\n\\r]*$`);
+      assert.strictEqual(spelling.source, `^[ \\t\\n\\r]*0*${base}[ \\t\\n\\r]*$`);
     }
 
     const sixteen = baseSpellings.find(([base]) => base === "16");
-    const pattern = new RegExp(sixteen?.[1] ?? "(?!)", "u");
+    const pattern = new RegExp(sixteen?.[1].source ?? "(?!)", "u");
 
     assert.isTrue(pattern.test(" 016\n"));
     assert.isFalse(pattern.test("160"));

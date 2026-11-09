@@ -113,14 +113,14 @@ import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
  * lexical space, which `E1_derived` holds each written name to, so its pieces are its lexical
  * form's outer whitespace and nothing more.
  */
-const namePattern = `^${ncNamePattern}$`;
+const namePattern = Compute.pattern<string>(`^${ncNamePattern}$`);
 
 /**
  * A lexical form that names something once collapsed: an NCName with XML whitespace around it,
  * which collapsing strips. Any other form names nothing, and its value domain refuses it alone
  * (spec reading 152).
  */
-const namingPattern = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
+const namingPattern = Compute.pattern<string>(`^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`);
 
 /**
  * The kinds that declare a variable: the `NodeKind` handles that are `DeclarationKind` handles too

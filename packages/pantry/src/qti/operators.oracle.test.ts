@@ -131,9 +131,9 @@ const matcher = (pattern: string): ((text: string) => boolean) => {
  * `doublePattern`, `positivePattern` and `integerForm` as the database reads them.
  */
 const database = {
-  integer: matcher(integerForm),
-  numeric: matcher(doublePattern),
-  positive: matcher(positivePattern),
+  integer: matcher(integerForm.source),
+  numeric: matcher(doublePattern.source),
+  positive: matcher(positivePattern.source),
 };
 
 /**

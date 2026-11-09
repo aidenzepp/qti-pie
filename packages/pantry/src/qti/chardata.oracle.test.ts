@@ -83,9 +83,9 @@ const patternOf = (field: RegexText<string>) =>
  * `u`.
  */
 const charsPatterns = {
-  entityRef: new RegExp(entityRefChars, "u"),
-  text: new RegExp(textChars, "u"),
-  ws: new RegExp(whitespaceChars, "u"),
+  entityRef: new RegExp(entityRefChars.source, "u"),
+  text: new RegExp(textChars.source, "u"),
+  ws: new RegExp(whitespaceChars.source, "u"),
 } as const;
 
 /**

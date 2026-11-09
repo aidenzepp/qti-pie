@@ -61,18 +61,18 @@ const oldDouble = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?
  * Grizzle's `doubleText`, the language `Compute.parseDouble` reads total, which every typed float
  * key must lie inside.
  */
-const parsed = new RegExp(doubleText, "u");
+const parsed = new RegExp(doubleText.source, "u");
 
 /**
  * `integerKeyPattern` as JavaScript's engine reads it.
  */
-const integerKey = new RegExp(integerKeyPattern, "u");
+const integerKey = new RegExp(integerKeyPattern.source, "u");
 
 /**
  * `doublePattern`, the float keys the query `MapKeyFloat` (`#pantry/qti/queries.ts`) gives a typed
  * value, as JavaScript's engine reads it.
  */
-const floatKey = new RegExp(doublePattern, "u");
+const floatKey = new RegExp(doublePattern.source, "u");
 
 /**
  * The relations this module declares.
@@ -273,18 +273,18 @@ const baseTypeForm = (baseType: string): RegExp =>
 /**
  * `exactValuePattern` as JavaScript's engine reads it.
  */
-const exactValue = new RegExp(exactValuePattern, "u");
+const exactValue = new RegExp(exactValuePattern.source, "u");
 
 /**
  * `twoItemPattern` as JavaScript's engine reads it: the keys whose split `MapKeyItems` holds.
  */
-const twoItemKey = new RegExp(twoItemPattern, "u");
+const twoItemKey = new RegExp(twoItemPattern.source, "u");
 
 /**
  * `itemPattern` as JavaScript's engine reads it: the runs the queries `MapKeyPair` and
  * `MapKeyDirectedPair` give a typed value.
  */
-const itemRun = new RegExp(itemPattern, "u");
+const itemRun = new RegExp(itemPattern.source, "u");
 
 /**
  * Split a two-item key into its two runs, as `MapKeyItems` holds them.

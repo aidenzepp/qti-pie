@@ -132,6 +132,12 @@ import { Chars, holdsCheckedText, Node, universalDomains } from "#pantry/qti/nod
 import { dataName } from "#pantry/vocab/open.ts";
 
 /**
+ * Reading 13's `data-*` names (`dataName` of `#pantry/vocab/open.ts`), as the pattern
+ * `Compute.matches` reads, made once from the host's expression's source.
+ */
+const dataNamePattern = Compute.pattern(dataName.source);
+
+/**
  * XML 1.0's `Char` less its whitespace `S`, as the body of a character class.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
@@ -167,7 +173,7 @@ export const Space = str.regex("^[\\t\\n\\r ]*$");
  * holds each `Idref.token` to. That it is an NCName follows from AL1's lexical half, since the
  * pieces concatenate to the lexical form.
  */
-const nonSpacePattern = `^[${xmlNonSpace}]+$`;
+const nonSpacePattern = Compute.pattern(`^[${xmlNonSpace}]+$`);
 
 /**
  * An open attribute's local name: an NCName of at most `localNameBytes` UTF-8 bytes
@@ -535,7 +541,7 @@ export const attributeLawsByName = {
   "AL4 data name": [
     check("AL4_data_name", OpenAttributeName, (o) =>
       o.and(
-        o.or(o.ne(o.class, "data-*"), Compute.matches(o.local, dataName.source)),
+        o.or(o.ne(o.class, "data-*"), Compute.matches(o.local, dataNamePattern)),
         o.or(
           o.ne(o.class, "no-namespace"),
           o.in(o.kind, openElementClasses),

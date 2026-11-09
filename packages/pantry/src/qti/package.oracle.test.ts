@@ -211,23 +211,23 @@ const isOneCandidate = (candidate: string): boolean => {
 const patternSets = {
   descriptor: {
     candidate: /^[\t\n\r ]*[^,]*[\t\n\r ]*$/u,
-    external: new RegExp(externalHrefPattern, "u"),
-    resolved: new RegExp(resolvedPathPattern, "u"),
+    external: new RegExp(externalHrefPattern.source, "u"),
+    resolved: new RegExp(resolvedPathPattern.source, "u"),
   },
   noDotDotArm: {
-    candidate: new RegExp(srcsetCandidatePattern, "u"),
-    external: new RegExp(externalHrefPattern, "u"),
+    candidate: new RegExp(srcsetCandidatePattern.source, "u"),
+    external: new RegExp(externalHrefPattern.source, "u"),
     resolved: /^(?:(?:[^/.][^/]*|\.[^./][^/]*)(?:\/(?:[^/.][^/]*|\.[^./][^/]*)?)*)?$/u,
   },
   noSlash: {
-    candidate: new RegExp(srcsetCandidatePattern, "u"),
+    candidate: new RegExp(srcsetCandidatePattern.source, "u"),
     external: /^[A-Za-z][A-Za-z0-9+.-]*:/u,
-    resolved: new RegExp(resolvedPathPattern, "u"),
+    resolved: new RegExp(resolvedPathPattern.source, "u"),
   },
   stated: {
-    candidate: new RegExp(srcsetCandidatePattern, "u"),
-    external: new RegExp(externalHrefPattern, "u"),
-    resolved: new RegExp(resolvedPathPattern, "u"),
+    candidate: new RegExp(srcsetCandidatePattern.source, "u"),
+    external: new RegExp(externalHrefPattern.source, "u"),
+    resolved: new RegExp(resolvedPathPattern.source, "u"),
   },
 } as const;
 

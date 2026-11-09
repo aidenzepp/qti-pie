@@ -405,14 +405,14 @@ packages:
     engines: {node: '>=6.9.0'}
 
   '@bjornpagen/grizzle-engine@file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.1.tgz':
-    resolution: {integrity: sha512-G8v5Y2P59f+LCMQkxGYvE/McJR0Zma9vRj3Et7n61Ow2lQ2FHlO//dWwly4U0l73ZJN9T8COKGW85VluTcyeTQ==, tarball: file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.1.tgz}
+    resolution: {integrity: sha512-XAMz92p+MR2hwmGZq+0RsL+y8GoVRJ/y4M6prac/XXziwCkCldpMaoPIA3pK+GKOK9gIvQaP+NFC/S7cBXV4MA==, tarball: file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.1.tgz}
     version: 1.0.0-beta.1
     engines: {node: '>=26'}
     peerDependencies:
       effect: ^4.1.2
 
   '@bjornpagen/grizzle@file:vendor/bjornpagen-grizzle-1.0.0-beta.1.tgz':
-    resolution: {integrity: sha512-sZQK7cWvmsgGD/ykTYM2P0go0rwEoM55eFJQKy0bHlVbH0GWo9zqDi9Kg+4en21CJ7m0CC3FeEVnoEf/17kbTw==, tarball: file:vendor/bjornpagen-grizzle-1.0.0-beta.1.tgz}
+    resolution: {integrity: sha512-grw2I3xsg7TCaAKTRUKMOMt2iYVd8iAPraAYrPwxF0DneaEiLqJMjaREvvAymsaGqJOiA5ZoL1DVd4YzAdlEuA==, tarball: file:vendor/bjornpagen-grizzle-1.0.0-beta.1.tgz}
     version: 1.0.0-beta.1
     engines: {node: '>=26'}
     hasBin: true

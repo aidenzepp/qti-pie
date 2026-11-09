@@ -967,7 +967,7 @@ const lists = (langs: readonly string[], form: string): boolean =>
  * A form that states a language, as the database's R26 selects it (`statedLanguagePattern`): a
  * language tag once its outer whitespace is set apart.
  */
-const statedForm = new RegExp(statedLanguagePattern, patternFlags);
+const statedForm = new RegExp(statedLanguagePattern.source, patternFlags);
 
 /**
  * `DocumentLang`'s generated `value` as the schema states it, read off the relation's description

@@ -69,6 +69,12 @@ import { Chars, Node, nodeRef, typeGovernorOf } from "#pantry/qti/node.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
+ * The namespaces the vocabularies name (`vocabularyNamespacePattern` of
+ * `#pantry/grammar/install.ts`), as the pattern `Compute.matches` reads, made once.
+ */
+const vocabularyNamespaces = Compute.pattern(vocabularyNamespacePattern);
+
+/**
  * XML 1.0's `Char` as the body of a class: tab, line feed, carriage return and every scalar from
  * U+0020 but the surrogates, U+FFFE and U+FFFF.
  *
@@ -123,12 +129,12 @@ const ncName = `[${ncStart}][${ncChar}]*`;
  *
  * @see {@link https://www.w3.org/TR/xml/#syntax | XML 1.0, §2.4 Character Data and Markup}
  */
-export const textChars = `^[${xmlChar}]*[${xmlNonSpace}][${xmlChar}]*$`;
+export const textChars = Compute.pattern(`^[${xmlChar}]*[${xmlNonSpace}][${xmlChar}]*$`);
 
 /**
  * The text of a node of kind `ws`: a non-empty run of XML whitespace (`XdmWhitespace`).
  */
-export const whitespaceChars = "^[ \\t\\n\\r]+$";
+export const whitespaceChars = Compute.pattern("^[ \\t\\n\\r]+$");
 
 /**
  * The characters of a node of kind `entityRef`: the reference as written, `&name;`, its name an
@@ -136,7 +142,7 @@ export const whitespaceChars = "^[ \\t\\n\\r]+$";
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-EntityRef | XML 1.0, EntityRef}
  */
-export const entityRefChars = `^&${ncName};$`;
+export const entityRefChars = Compute.pattern(`^&${ncName};$`);
 
 /**
  * The nodes of kind `text`, whose characters are {@link textChars}. A selection of `Node`, since a
@@ -744,7 +750,7 @@ export const chardataLawsByName = {
     check("XsiType_available", OpenElementType, (t) =>
       t.or(
         Compute.matches(t.parentNamespace, TypeAvailable.at("namespaces", t.type)),
-        t.not(Compute.matches(t.parentNamespace, vocabularyNamespacePattern)),
+        t.not(Compute.matches(t.parentNamespace, vocabularyNamespaces)),
       ),
     ),
   ],

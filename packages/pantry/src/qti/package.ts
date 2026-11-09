@@ -85,6 +85,11 @@ import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 
 /**
+ * A `#` anywhere in a text: an `xi:include`'s parameters that hold a fragment identifier.
+ */
+const fragmentMark = Compute.pattern("#");
+
+/**
  * The path of a package's manifest, the one entry no `cp:file` need list and the one document that
  * is no resource's (spec reading 146).
  */
@@ -222,7 +227,7 @@ export const hrefParamsPattern = "^(?:[?#].*)?$";
 /**
  * The pattern of an href's `path` piece: no `?` and no `#`, the characters that start `params`.
  */
-export const hrefPathPattern = "^[^?#]*$";
+export const hrefPathPattern = Compute.pattern("^[^?#]*$");
 
 /**
  * An href's `params` piece, its query or fragment (reading 102): text no key holds and no law
@@ -239,7 +244,7 @@ export const HrefParams = str.regex(hrefParamsPattern, "su");
  *
  * @see {@link https://www.rfc-editor.org/rfc/rfc3986#section-4.2 | RFC 3986, §4.2}
  */
-export const externalHrefPattern = "^(?:[A-Za-z][A-Za-z0-9+.\\-]*:|/)";
+export const externalHrefPattern = Compute.pattern("^(?:[A-Za-z][A-Za-z0-9+.\\-]*:|/)");
 
 /**
  * A `srcset` this representation reads: one image candidate, its URL alone between any outer
@@ -252,7 +257,9 @@ export const externalHrefPattern = "^(?:[A-Za-z][A-Za-z0-9+.\\-]*:|/)";
  *
  * @see {@link https://html.spec.whatwg.org/multipage/images.html#srcset-attributes | HTML, srcset}
  */
-export const srcsetCandidatePattern = "^[\\t\\n\\r ]*[^,\\t\\n\\r ]*[\\t\\n\\r ]*$";
+export const srcsetCandidatePattern = Compute.pattern(
+  "^[\\t\\n\\r ]*[^,\\t\\n\\r ]*[\\t\\n\\r ]*$",
+);
 
 /**
  * How an href resolves (readings 102 and 103), the outcome the importer writes on every href's row:
@@ -276,8 +283,9 @@ export const HrefScope = closed("HrefScope", ["entry", "external", "document", "
  * character allowed, since a decoded name may hold `?`, `#`, `%`, `:` or a space. A path that ends
  * with `/` names a directory, and the empty path the package root, which no entry is.
  */
-export const resolvedPathPattern =
-  "^(?:(?:[^/.][^/]*|\\.[^./][^/]*|\\.\\.[^/]+)(?:/(?:[^/.][^/]*|\\.[^./][^/]*|\\.\\.[^/]+)?)*)?$";
+export const resolvedPathPattern = Compute.pattern(
+  "^(?:(?:[^/.][^/]*|\\.[^./][^/]*|\\.\\.[^/]+)(?:/(?:[^/.][^/]*|\\.[^./][^/]*|\\.\\.[^/]+)?)*)?$",
+);
 
 /**
  * A resource's `href`, keyed by the resource's node: an optional attribute is a row of its own. It
@@ -853,7 +861,7 @@ export const packageLawsByName = {
   ],
   "Include fragment identifier": [
     check("Include_fragment_identifier", Reference, (r) =>
-      r.or(r.ne(r.kind, "xi:include"), r.not(Compute.matches(r.params, "#"))),
+      r.or(r.ne(r.kind, "xi:include"), r.not(Compute.matches(r.params, fragmentMark))),
     ),
   ],
   "Manifest id space": [key(on(ManifestIdSpace, "package", "identifier"))],

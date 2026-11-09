@@ -81,7 +81,7 @@ const formerForm = lexicalForm(pg["double precision"]);
 /**
  * The same, as the host tests it.
  */
-const formerRegex = new RegExp(formerForm, "u");
+const formerRegex = new RegExp(formerForm.source, "u");
 
 /**
  * The deleted checks, restated as they were: each bound cast through the former form, `NaN` ordered

@@ -23,6 +23,13 @@ export const Author = AuthorApp.roles.author.role;
 export const [exportWork, importWork] = AuthorApp.workload;
 
 /**
- * The export's reads over `Qti`, the very queries {@link exportWork} holds.
+ * The export's reads of the documents and the entries over `Qti`, the very queries
+ * {@link exportWork} holds.
  */
-export const { documentScan, documentsOf, entriesOf } = exportWork.programs;
+export const { documentsOf, entriesOf } = exportWork.programs;
+
+/**
+ * The export's scan of one document's nodes over `Qti`, the very ordered query {@link exportWork}
+ * pages (`paged(documentScan)`, `#pantry/qti/logins.ts`).
+ */
+export const documentScan = exportWork.programs.documentScan.paged;

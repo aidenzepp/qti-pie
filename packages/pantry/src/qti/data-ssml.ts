@@ -43,6 +43,11 @@ import { keyText } from "#pantry/qti/limits.ts";
 import { dataSsmlMembers } from "#pantry/vocab/data-ssml.ts";
 
 /**
+ * A text with no tab, line feed or carriage return: an `xs:normalizedString`'s value.
+ */
+const normalizedValue = Compute.pattern("^[^\\t\\n\\r]*$");
+
+/**
  * An element whose closed `data-ssml` is one JSON object of objects of strings, keyed by the
  * element's node.
  */
@@ -140,7 +145,7 @@ export const dataSsmlLawsByName = {
           p.or(
             p.ne(p.memberName, member),
             p.ne(p.name, name),
-            Compute.matches(p.value, "^[^\\t\\n\\r]*$"),
+            Compute.matches(p.value, normalizedValue),
           ),
         ),
       ),

@@ -136,7 +136,7 @@ const directedKinds: ReadonlySet<string> = new Set(["m:mrow", "m:mstyle"]);
  * The lexical space a `selection` is read as an integer in, `xs:integer`'s within the signed 64-bit
  * range.
  */
-const integerSpelling = new RegExp(integerForm, "u");
+const integerSpelling = new RegExp(integerForm.source, "u");
 
 /**
  * The attributes the alignment builder reads: `dir` and `selection`.

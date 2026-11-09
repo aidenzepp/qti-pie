@@ -14,7 +14,7 @@
  * holds no set (C16), so each per-kind operand rule is a set relation keyed (kind, code) and read
  * by `.row(kind)`.
  */
-import { closed, closedId } from "@bjornpagen/grizzle";
+import { closed, closedId, Compute } from "@bjornpagen/grizzle";
 import { Array as Arr, Option } from "effect";
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import type { Kind, Name } from "#pantry/grammar/compose.ts";
@@ -309,9 +309,9 @@ export const ValueBaseForm = closed.relation(
  * and one that does not spells none (C17), so its expression's base type is `unknown`. Each base is
  * a word of letters, which a pattern reads as written.
  */
-export const spelledBasesPattern = `^(?:${valueBases
-  .filter((base) => base !== "any" && base !== "unknown")
-  .join("|")})$`;
+export const spelledBasesPattern = Compute.pattern<string>(
+  `^(?:${valueBases.filter((base) => base !== "any" && base !== "unknown").join("|")})$`,
+);
 
 /**
  * An NCName's first character: XML 1.0's `NameStartChar` without the colon, as a pattern's class

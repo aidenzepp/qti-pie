@@ -1015,7 +1015,7 @@ type ReferenceSituation =
 /**
  * `srcsetCandidatePattern` as the database reads it, ECMAScript under `u`.
  */
-const oneCandidate = new RegExp(srcsetCandidatePattern, "u");
+const oneCandidate = new RegExp(srcsetCandidatePattern.source, "u");
 
 /**
  * Name the situations one generated document reaches.
@@ -1151,7 +1151,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
                 { params: expected.params, path: expected.target },
                 JSON.stringify(core),
               );
-              assert.match(pieces.target, new RegExp(hrefPathPattern, "u"));
+              assert.match(pieces.target, new RegExp(hrefPathPattern.source, "u"));
               assert.match(pieces.params, new RegExp(hrefParamsPattern, "su"));
               assert.strictEqual(
                 `${pieces.lead}${pieces.target}${pieces.params}${pieces.trail}`,

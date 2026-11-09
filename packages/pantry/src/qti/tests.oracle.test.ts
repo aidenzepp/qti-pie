@@ -139,7 +139,11 @@ describe("qti/tests.ts, collapsedPattern", () => {
               };
               c.note(situation());
 
-              assert.strictEqual(new RegExp(collapsedPattern, "u").test(text), collapsed, text);
+              assert.strictEqual(
+                new RegExp(collapsedPattern.source, "u").test(text),
+                collapsed,
+                text,
+              );
             }),
         ),
       ),

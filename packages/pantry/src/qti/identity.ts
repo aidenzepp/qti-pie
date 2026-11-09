@@ -156,7 +156,7 @@ import { Instance, itemKind, testKind } from "#pantry/qti/tests.ts";
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
  */
-export const spacePattern = "^[\\t\\n\\r ]*$";
+export const spacePattern = Compute.pattern("^[\\t\\n\\r ]*$");
 
 /**
  * A nonempty run holding no XML whitespace: an ID's value once its lexical form's outer whitespace
@@ -164,7 +164,7 @@ export const spacePattern = "^[\\t\\n\\r ]*$";
  * ({@link namingPattern}); that an IDREF token is, AL1's lexical half over the attribute and
  * TextDomain's over the element's text.
  */
-export const idValuePattern = "^[^\\t\\n\\r ]+$";
+export const idValuePattern = Compute.pattern("^[^\\t\\n\\r ]+$");
 
 /**
  * A lexical form that names something once collapsed: an NCName (`ncNamePattern`) with XML
@@ -172,7 +172,9 @@ export const idValuePattern = "^[^\\t\\n\\r ]+$";
  * is an ID value, `xs:ID` being a restriction of `xs:NCName`; any other form names nothing and has
  * no {@link DocumentId}, so its value domain refuses it alone (spec reading 156).
  */
-export const namingPattern = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
+export const namingPattern = Compute.pattern<string>(
+  `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`,
+);
 
 /**
  * An `xml:lang` form that states a language once collapsed: a well-formed BCP 47 tag
@@ -181,12 +183,14 @@ export const namingPattern = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
  * and one of whitespace alone (XML 1.0 §2.12), and one that is no tag, which identifies no language
  * (RFC 5646 §2.1), so its value domain refuses it alone (spec reading 174).
  */
-export const statedLanguagePattern = `^[\\t\\n\\r ]*(?:${languageTag})[\\t\\n\\r ]*$`;
+export const statedLanguagePattern = Compute.pattern<string>(
+  `^[\\t\\n\\r ]*(?:${languageTag})[\\t\\n\\r ]*$`,
+);
 
 /**
  * A same-document fragment reference: `#` and one or more characters (MathML 3 §4.2.7).
  */
-const shareFragmentPattern = "^#.+$";
+const shareFragmentPattern = Compute.pattern("^#.+$");
 
 /**
  * The nil uuid: the start of the owner-axis copy of `document`, which every member's owner

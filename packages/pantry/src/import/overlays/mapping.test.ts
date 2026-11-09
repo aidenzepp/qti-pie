@@ -446,7 +446,7 @@ type TwoItemSituation = "split" | "unsplit" | "no entry";
 /**
  * `twoItemPattern` as JavaScript's engine reads it, the keys the split's mirror selects.
  */
-const twoItemKey = new RegExp(twoItemPattern, "u");
+const twoItemKey = new RegExp(twoItemPattern.source, "u");
 
 /**
  * The characters a split is drawn over: the signs, two digits, a letter, the space and the tab,

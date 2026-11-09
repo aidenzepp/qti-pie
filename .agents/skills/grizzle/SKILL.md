@@ -67,8 +67,10 @@ export default defineConfig({
   opens the installation's snapshot, and a refusal by a law above it is `{ kind: "above", level, law }`.
 - A login owns its workloads: `login(Blog, "web", [AnonBlog, MemberBlog], { workload: [anonReads, memberReads] })`.
   A workload, `workload(schemaOrRole, { name: program })`, is over the login's base, a level of it, or one of its
-  roles, and names queries, ordered queries, ChangeSets and relation keys. Two programs of one name across a login's
-  workloads are refused when the login is built.
+  roles, and names queries, ordered queries, ChangeSets and relation keys. An ordered query the application pages is
+  the member `paged(query)`: only its handle (`db.workload.<name>.page`) pages, and DbLayer.make compiles a page
+  template for no other member. Two programs of one name across a login's workloads are refused when the login is
+  built.
 - `connection` is the migration role's: `driver` (the pg module), `transport` (`kind: "sslRequest"`, `host`, `port`,
   `open`, which returns a new socket, `ca` and `servername`; TLS is always verify-full, the server certificate chaining
   to `ca` and naming `servername`), `database`, `role`, `password` (a Redacted, or an Effect yielding one, evaluated for
@@ -84,12 +86,15 @@ export default defineConfig({
 1. Edit the schema, its roles and logins in code. A program the application runs on every request belongs in a
    workload of its login: its access paths earn indexes, and DbLayer.make compiles it once, at startup. `grizzle
    generate` compiles it the same way for every role of its login first, so a program the layer would refuse fails
-   generate with the same CompileError.
+   generate with the same CompileError. DbLayer.make compiles the laws of the relations its workloads name and write
+   alone, so a program outside them that names or writes another relation compiles that relation's laws at its call.
 2. Run `grizzle generate grizzle.config.ts`, declaring what became of every name the schema no longer holds: a
    `--rename <old>=<new>` for each rename and a `--drop <old>` for each drop ([Renames and drops](#renames-and-drops)).
    It prints one line per written file, then each marker to resolve as `<file>:<line>: <kind>: <what to do>`, its
    kind `placeholder` or `confirm`, then each loss to decide as `<file>: data loss: <what it loses>: <what to do>`,
-   then `next: resolve the markers, then run grizzle check`. With no change it writes nothing and prints `no changes`. A name the previous snapshot
+   then `next: resolve the markers, then run grizzle check`. With no change it writes nothing and prints `no changes`,
+   unless the derived facts snapshot.json records are out of date or missing: then it writes `snapshot.json` and
+   `manifest.json` again, drafts no folder, and prints `next: commit snapshot.json, then run grizzle check`. A name the previous snapshot
    holds that the schema no longer does and no declaration names refuses the draft before anything is written:
    `<name> is dropped but not declared: declare it with --drop <name>, or --rename it`.
 3. Read every drafted SQL file, and resolve each marker:
@@ -321,6 +326,7 @@ schema or workload that does not compile) are `check`'s alone.
 | --- | --- |
 | the schemas or their logins differ from snapshot.json (an ungenerated change) | run grizzle generate |
 | a workload program's access differs from snapshot.json (an ungenerated change) | run grizzle generate |
+| the derived facts snapshot.json records differ from the ones the schemas compile to, or are missing (an ungenerated change) | run grizzle generate, which writes snapshot.json again and drafts no migration |
 | the schema or a login's workload does not compile | fix the schema or workload it names, then run grizzle generate |
 | the schema no longer holds a name snapshot.json holds, and no --drop or --rename declares what became of it | run grizzle generate <config> --drop <name>, or --rename <old>=<new> where it was renamed |
 | a roster declares a handle before one that holds a lower code in snapshot.json | append new handles; a roster's order is its codes' order |
@@ -502,10 +508,11 @@ The command line's own refusals, by stage:
   integer into an integer field with
   `Compute.cast` under `Compute.within`.
 - Test text with `Compute.matches(x, pattern)`, `Compute.startsWith` and `Compute.endsWith`, never a regex in your
-  code. A pattern is `str.regex`'s grammar under `"u"`, anchored by `^` and `$`: a string literal, or a closed
-  relation's text payload, `Compute.matches(lexical, ValueDomain.at("pattern", domain))`, every value of which the
-  compiler measures; a pattern held in an ordinary field or a parameter is refused. A literal pattern's match is a
-  guard: `Compute.when(Compute.matches(x, "^[0-9]+$"), (x) => …, otherwise)`. `Compute.concat` builds text in checks,
+  code. A pattern is `str.regex`'s grammar under `"u"`, anchored by `^` and `$`: a `Compute.pattern(source)`, made once
+  as a module constant and admitted there (`const digits = Compute.pattern("^[0-9]+$")`), never a bare string; or a
+  closed relation's text payload, `Compute.matches(lexical, ValueDomain.at("pattern", domain))`, every value of which
+  the compiler measures; a pattern held in an ordinary field or a parameter is refused. A `Compute.pattern`'s match is a
+  guard: `Compute.when(Compute.matches(x, digits), (x) => …, otherwise)`. `Compute.concat` builds text in checks,
   generated fields and folds; in a query, compare a text with a concatenation (`Compute.eq(t, Compute.concat(a, b))`)
   and it is decided without building it. Its first operand is a term: write a leading literal as
   `Compute.literal(Prose, "item-")`. Normalize text with `Compute.translate(x, from, to)`, strings of one length with
@@ -531,10 +538,10 @@ The command line's own refusals, by stage:
   limits alone and its domain tests each in turn, so a conjunction costs the sum of its patterns, never their product,
   and its host type is theirs intersected. Inside `Compute.when(Compute.matches(x, p), …)` the subject is text of its
   own patterns and `p` together, so nested matches prove a cast into a conjunction.
-- Write a `str.regex` or `Compute.matches` pattern in JavaScript's syntax under `u`, with no lookahead or lookbehind,
+- Write a `str.regex` or `Compute.pattern` source in JavaScript's syntax under `u`, with no lookahead or lookbehind,
   `\p{…}` or `\P{…}`, `\s` or `\S`, `\b` or `\B`, backreference, named group, inline modifier, lazy quantifier or
   repetition bound above 255, and with some text it matches. TypeScript accepts each of these, but the relation,
-  contract or `Compute.matches` built over the pattern refuses it as `UnsupportedOperation`, naming the construct and
+  contract or `Compute.pattern` built over the source refuses it as `UnsupportedOperation`, naming the construct and
   its offset. Spell an explicit class instead of `\s` or `\p{…}`.
 - A set of a roster's handles, `bits(X)`, has the algebra `Compute.union`, `Compute.intersection`,
   `Compute.difference`, `Compute.cardinality`, `Compute.subset`, `Compute.disjoint` and `Compute.singleton`, and no
@@ -561,7 +568,7 @@ The command line's own refusals, by stage:
   a typmod you do not mean.
 - Parse an `xs:decimal` text with `Compute.parseDecimal(x)`, the exact numeric of any digits, never a cast into the
   widest `pg.numeric(p, s)` with a lexical form, whose form ends at 256 integer and 255 fraction digits. Its text is
-  `decimalText` within `decimalTextMaxBytes` (16,384) bytes: type it `str.bytes(16384, str.regex(decimalText))`, or
+  `decimalText` within `decimalTextMaxBytes` (16,384) bytes: type it `str.bytes(16384, str.regex(decimalText.source))`, or
   guard it, `Compute.when(Compute.matches(x, decimalText), (x) => Compute.when(Compute.within(Compute.octetLength(x),
   0, 16384), () => Compute.parseDecimal(x), otherwise), otherwise)`. A double's text of any digits is
   `Compute.parseDouble(x)` over `doubleText`. Never make an `otherwise` stand for a value, an infinity or a sentinel:
