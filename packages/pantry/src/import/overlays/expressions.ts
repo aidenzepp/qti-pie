@@ -2422,7 +2422,12 @@ const mappingItemRefsOf = (
 
     return target === undefined
       ? []
-      : [[mapping.node, { itemRef: mapping.parent, node: mapping.node, type: target.type }] as const];
+      : [
+          [
+            mapping.node,
+            { itemRef: mapping.parent, node: mapping.node, type: target.type },
+          ] as const,
+        ];
   });
 
   return {

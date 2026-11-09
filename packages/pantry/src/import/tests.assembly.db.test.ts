@@ -77,7 +77,11 @@ describe.skipIf(!hasLease)(
                   `${name}: refused under ${refused.rules[0]}`,
                 );
                 if (verdict !== "accepted") {
-                  assert.include(verdict, refused.rules[0], `${name}: the refusal named another rule`);
+                  assert.include(
+                    verdict,
+                    refused.rules[0],
+                    `${name}: the refusal named another rule`,
+                  );
                 }
               } else {
                 assert.fail(`${name}: failed with ${outcome.failure._tag}`);

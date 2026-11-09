@@ -29,8 +29,7 @@
  *   values are put into a record first (`fieldIdentifier="F"`); outside one a value writes no row.
  *   Each usage value that writes a `baseType` in `usage3-typed` and `usage3-float-padded` is
  *   accepted by its row's laws; `usage3-integer-float`'s float under `integer` is refused by the
- *   `Usage_typed_value` CHECK (23514), and a code its lexical form does not spell by
- *   `E1_derived`.
+ *   `Usage_typed_value` CHECK (23514), and a code its lexical form does not spell by `E1_derived`.
  *
  * The other whole-package cases arrive with Q5.15: `simple` accepted, `identifier-mismatch` refused
  * `lom-identifier`, `title-mismatch` refused `lom-title`, and the usage-data fixtures accepted but

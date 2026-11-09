@@ -3993,12 +3993,12 @@ export const patternFlags = "u";
 export const ncNamePattern = `(?:${emit(ncName)})`;
 
 /**
- * The pattern of a lexical form that names something once collapsed: an NCName ({@link ncNamePattern}) with XML
- * whitespace around it, which collapsing strips. Only such a form names something: a declaration's,
- * a record field's or a test structure's identifier and a dependency's `identifierref` (spec
- * reading 152), and an ID-typed attribute's or text's ID value, `xs:ID` being a restriction of
- * `xs:NCName` (spec reading 156). Any other form names nothing, and its value domain refuses it
- * alone.
+ * The pattern of a lexical form that names something once collapsed: an NCName ({@link
+ * ncNamePattern}) with XML whitespace around it, which collapsing strips. Only such a form names
+ * something: a declaration's, a record field's or a test structure's identifier and a dependency's
+ * `identifierref` (spec reading 152), and an ID-typed attribute's or text's ID value, `xs:ID` being
+ * a restriction of `xs:NCName` (spec reading 156). Any other form names nothing, and its value
+ * domain refuses it alone.
  */
 export const namingText = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
 

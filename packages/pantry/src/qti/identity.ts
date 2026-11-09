@@ -208,8 +208,8 @@ const labelledRootVersion = "3.0.1";
  * - **the host's:** `before`, `id` and `after`, the lexical form split around its value, which
  *   `E1_derived` proves, and for an attribute, `owner`, the node itself: a row whose `owner` is its
  *   `node` is an attribute's, every other a text's; and `admitted`, whether the grammar admits the
- *   element that carries it where it stands (its parent's admission map, {@link admittedNodes}), which
- *   `E1_derived` proves both ways.
+ *   element that carries it where it stands (its parent's admission map, {@link admittedNodes}),
+ *   which `E1_derived` proves both ways.
  *
  * Every ID has its row, an unadmitted element's too, so the copy from the attribute or the text
  * stays complete; only an admitted element's ID is bound ({@link IdBinding}'s `admitted`).

@@ -946,12 +946,16 @@ export const unreadTypePathsOf = (
   rows: Pick<PackageRows, "ResourceHref" | "ResourceTyped">,
 ): ReadonlySet<string> => {
   const flat = flatten(doc, idOf);
-  const resources = new Set(flat.nodes.flatMap(({ id, kind }) => (kind === "cp:resource" ? [id] : [])));
+  const resources = new Set(
+    flat.nodes.flatMap(({ id, kind }) => (kind === "cp:resource" ? [id] : [])),
+  );
 
   return new Set(
     flat.attributes.flatMap(({ lexical, name, node }) =>
       name === "type" && resources.has(node) && lexical !== "" && !rows.ResourceTyped.has(node)
-        ? Option.toArray(Option.fromUndefinedOr(rows.ResourceHref.get(node))).map(({ path }) => path)
+        ? Option.toArray(Option.fromUndefinedOr(rows.ResourceHref.get(node))).map(
+            ({ path }) => path,
+          )
         : [],
     ),
   );
