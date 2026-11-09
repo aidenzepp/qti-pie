@@ -1016,6 +1016,16 @@ names, so a shadcn theme carries over, and its opening comment lists them. The h
 the tokens at `:root` and `.dark`. The page's surface and font are the host's. A host that skips
 the sheet copies its `[data-slot="item"]` rule, which keeps authored content inside the item.
 
+The item Root pads its content by 3px, the width of a focus ring, so no ring is clipped, and takes
+the same width back as a negative margin, so the item lines up with the host's column. A host
+whose own container clips its edge clips a ring at the Root's edge. The Root lays its blocks out in
+one column, 1rem apart; a `p` that keeps the browser's margin adds it to that gap.
+
+Every rule of the sheet sits inside `:where()`, so any unlayered host rule wins by order. A rule in
+a cascade layer loses to every unlayered rule whatever its specificity, so a host whose own rules
+sit in a layer, as Tailwind v4's utilities do, imports the sheet into a layer of its own below
+them, such as `@import "@qti-pie/plate/styles.css" layer(base);`.
+
 ## Playground
 
 From the repository root:

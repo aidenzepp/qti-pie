@@ -61,6 +61,12 @@ and each of its entry points is unstable until M3.
 - The default theme gives a Choice row in `review` and `solution` the muted surface a readonly
   text Control takes there, and the default cursor, so every interaction shows one locked look.
   The selected row keeps its border and its filled Indicator.
+- The default theme draws the Indicator's ring in `--muted-foreground` in place of `--input`, so
+  an unselected choice shows its boundary at 3:1; gives a horizontal or stacked Choice as many
+  tracks as it has choices, up to its own, so its row spans the Root; lays the item Root's blocks
+  out in one column 1rem apart, in place of a modal feedback's own top margin; and gives the Root a
+  -3px margin beside its 3px padding, so the item lines up with the host's column. The README's
+  Styling section says how to import the sheet beside a host's layered rules.
 
 ### How plate reads feedback (2026-11-09)
 

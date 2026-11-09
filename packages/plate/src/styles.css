@@ -175,6 +175,72 @@
 }
 
 /*
+ * A row of fewer choices than tracks: as many tracks as choices, so no empty track leaves its gap
+ * at the row's end and the row spans the Root as the blocks below it do. Each count below the
+ * class's track count has its rule, after the class's own, so a later stacking class still
+ * outranks it and a Root takes the fewer of its stacking's tracks and its choices.
+ */
+.qti-orientation-horizontal:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+  ),
+:where(
+  [data-slot="choice-interaction"][data-orientation="horizontal"]
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+) {
+  grid-template-columns: auto;
+}
+
+.qti-orientation-horizontal:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(2):last-child
+    )
+  ),
+:where(
+  [data-slot="choice-interaction"][data-orientation="horizontal"]
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(2):last-child
+    )
+) {
+  grid-template-columns: auto auto;
+}
+
+.qti-orientation-horizontal:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(3):last-child
+    )
+  ),
+:where(
+  [data-slot="choice-interaction"][data-orientation="horizontal"]
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(3):last-child
+    )
+) {
+  grid-template-columns: auto auto auto;
+}
+
+.qti-orientation-horizontal:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(4):last-child
+    )
+  ),
+:where(
+  [data-slot="choice-interaction"][data-orientation="horizontal"]
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(4):last-child
+    )
+) {
+  grid-template-columns: auto auto auto auto;
+}
+
+/*
  * Choice stacking (vocab.txt:4550-4738): qti-choices-stacking-N shows N columns. With horizontal
  * orientation or none, the choices run row by row ("Z"), as grid tracks.
  */
@@ -190,10 +256,37 @@
   grid-template-columns: auto auto;
 }
 
+.qti-choices-stacking-2:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+  ) {
+  grid-template-columns: auto;
+}
+
 .qti-choices-stacking-3:where([data-slot="choice-interaction"])
   :where([data-slot="choice-interaction-choices"]) {
   display: grid;
   grid-template-columns: auto auto auto;
+}
+
+.qti-choices-stacking-3:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+  ) {
+  grid-template-columns: auto;
+}
+
+.qti-choices-stacking-3:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(2):last-child
+    )
+  ) {
+  grid-template-columns: auto auto;
 }
 
 .qti-choices-stacking-4:where([data-slot="choice-interaction"])
@@ -202,10 +295,73 @@
   grid-template-columns: auto auto auto auto;
 }
 
+.qti-choices-stacking-4:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+  ) {
+  grid-template-columns: auto;
+}
+
+.qti-choices-stacking-4:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(2):last-child
+    )
+  ) {
+  grid-template-columns: auto auto;
+}
+
+.qti-choices-stacking-4:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(3):last-child
+    )
+  ) {
+  grid-template-columns: auto auto auto;
+}
+
 .qti-choices-stacking-5:where([data-slot="choice-interaction"])
   :where([data-slot="choice-interaction-choices"]) {
   display: grid;
   grid-template-columns: auto auto auto auto auto;
+}
+
+.qti-choices-stacking-5:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(1):last-child
+    )
+  ) {
+  grid-template-columns: auto;
+}
+
+.qti-choices-stacking-5:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(2):last-child
+    )
+  ) {
+  grid-template-columns: auto auto;
+}
+
+.qti-choices-stacking-5:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(3):last-child
+    )
+  ) {
+  grid-template-columns: auto auto auto;
+}
+
+.qti-choices-stacking-5:where([data-slot="choice-interaction"])
+  :where(
+    [data-slot="choice-interaction-choices"]:has(
+      [data-slot="choice-interaction-choice"]:nth-child(4):last-child
+    )
+  ) {
+  grid-template-columns: auto auto auto auto;
 }
 
 /*
@@ -540,19 +696,30 @@
  * class. Author content is laid out and painted inside the Root, fixed and absolute content
  * included, so an authored host utility class such as "fixed inset-0 z-50" cannot cover the host
  * page; content wider than the Root scrolls inside it; and the padding, the focus ring's 3px width
- * plus its 0 offset, keeps every focus ring inside it unclipped.
+ * plus its 0 offset, keeps every focus ring inside it unclipped. The margin of the padding's width,
+ * negative, puts the Root's content back on the host's column, so the item lines up with the page
+ * around it while the rings still paint inside the Root. A host whose own container clips its edge
+ * clips a ring at the Root's edge.
  */
 :where([data-slot="item"]) {
   contain: layout paint;
   overflow: auto;
+  margin: -3px;
   padding: 3px;
 }
 
 /* == theme: plate's default theme, on the part markers == */
 
-/* The item Root: a block. The page's surface, text colour and font are the host's. */
+/*
+ * The item Root: one column of its blocks, the body's and each modal feedback's, 1rem apart, so
+ * the item keeps one rhythm whatever margins the host's reset leaves its blocks. Flex margins do
+ * not collapse, so a host whose p keeps its margin adds it to the gap. The page's surface, text
+ * colour and font are the host's.
+ */
 :where([data-slot="item"]) {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 /* The Choice Root, a native fieldset: no border, margin or padding, and no minimum width. */
@@ -684,7 +851,12 @@
   display: block;
 }
 
-/* The Indicator, the visible mark: a box for a checkbox Control. */
+/*
+ * The Indicator, the visible mark: a box for a checkbox Control. Its ring is --muted-foreground,
+ * 4.73:1 on the row at the fallbacks and 3.79:1 on the .dark card, past the 3:1 an unselected
+ * control's boundary needs (WCAG 1.4.11); --input, 1.26:1, left an unselected row with no visible
+ * mark. A selected one takes --primary.
+ */
 :where([data-slot="choice-interaction-indicator"]) {
   display: inline-block;
   box-sizing: border-box;
@@ -692,7 +864,7 @@
   height: 1em;
   margin-inline-end: 0.5em;
   padding: 3px;
-  border: 1px solid var(--input, oklch(0.922 0 0));
+  border: 1px solid var(--muted-foreground, oklch(0.556 0 0));
   border-radius: calc(var(--radius, 0.625rem) * 0.6);
   vertical-align: middle;
 }
@@ -910,10 +1082,10 @@
 
 /*
  * A modal feedback, after the item body inside the Root: a card, as the Status region is, set off
- * from the body above it. A host that shows modal feedback as a dialog swaps the part.
+ * from the body above it by the Root's gap. A host that shows modal feedback as a dialog swaps the
+ * part.
  */
 :where([data-slot="item-modal-feedback"]) {
-  margin-block-start: 1rem;
   padding: 0.75rem 1rem;
   border: 1px solid var(--border, oklch(0.922 0 0));
   border-radius: var(--radius, 0.625rem);
