@@ -1,16 +1,17 @@
 /**
  * The rows the importer reads a `data-ssml` value into (`#pantry/vocab/data-ssml.ts`), and the law
  * the database holds them to ("Data SSML", spec reading 177, restated on the host by
- * `#pantry/test/data-ssml-law.ts`): what Data-SSML 1.0's JSON Schema admits, and the refusal of a
- * package that holds a value it does not.
+ * `#pantry/test/data-ssml-law.ts`): what Data-SSML 1.0's JSON Schema admits, and the rows a
+ * package's value is read into, which the law refuses where the schema does. The refusal itself is
+ * the database's alone; no host step judges a `data-ssml`.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 import { dataSsmlOf } from "#pantry/vocab/data-ssml.ts";
-import { previewPackage } from "#pantry/import/preview.ts";
+import type { SsmlMemberText } from "#pantry/vocab/data-ssml.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
+import type { PackageInputs } from "#pantry/import/write.ts";
 import { breaksDataSsml } from "#pantry/test/data-ssml-law.ts";
 import { materializeSpec } from "#pantry/test/fixtures.ts";
 import type { FixtureSpec } from "#pantry/test/fixtures.ts";
@@ -255,6 +256,29 @@ const withDataSsml = (name: string, value: string): FixtureSpec => ({
   name,
 });
 
+/**
+ * A program's `data-ssml` rows read back as the members they state, each member and property in
+ * the order of its place: none where no element holds a `DataSsml` row, as `dataSsmlOf` reads a
+ * value of no such shape. `simple`'s item holds one `data-ssml`, so the rows are one element's.
+ *
+ * @param inputs - The program's inputs.
+ * @returns The members.
+ */
+const membersHeld = (inputs: PackageInputs): Option.Option<readonly SsmlMemberText[]> =>
+  inputs.DataSsml.size === 0
+    ? Option.none()
+    : Option.some(
+        [...inputs.DataSsmlMember.values()]
+          .toSorted((a, b) => Number(a.at - b.at))
+          .map(({ at, member }) => ({
+            name: member,
+            properties: [...inputs.DataSsmlProperty.values()]
+              .filter((property) => property.member === at)
+              .toSorted((a, b) => Number(a.at - b.at))
+              .map(({ name, value }) => ({ name, value })),
+          })),
+      );
+
 layer(NodeServices.layer, { excludeTestServices: true })("the import of a data-ssml", (suite) => {
   suite.effect(
     "accepts a package whose data-ssml Data-SSML 1.0 admits, and keeps it as written",
@@ -276,14 +300,19 @@ layer(NodeServices.layer, { excludeTestServices: true })("the import of a data-s
         assert.isAbove(program.documents.length, 0);
         assert.include(lexicals, JSON.stringify(written).slice(1, -1));
         assert.include(lexicals, '"handle":"data-ssml"');
+        assert.deepStrictEqual(membersHeld(program.inputs), dataSsmlOf(written));
+        assert.isFalse(breaksDataSsml(written));
       }),
   );
 
   suite.effect(
-    "refuses a package whose data-ssml is an unknown name, a wrong type or outside its enumeration",
+    "reads a package's data-ssml that is an unknown name, a wrong type, outside its enumeration or not JSON into the rows the law refuses",
     () =>
-      // Oracle: Data-SSML 1.0's JSON Schema, §3.4, as a checker: each text is one it refuses, the
-      // package is refused as `attribute-lexical`, the rule of a value its domain refuses.
+      // Oracle: Data-SSML 1.0's JSON Schema, §3.4, as a checker: each text is one it refuses. The
+      // law is the database's (spec reading 177), which refuses such a package under
+      // `attribute-lexical`, so the import's read judges nothing: the package's rows are the
+      // members `dataSsmlOf` reads, as written (none for a value of no JSON object of objects of
+      // strings), and the law over them, restated by `#pantry/test/data-ssml-law.ts`, is broken.
       Effect.gen(function* refusedPackages() {
         const values = [
           '{"brk":{}}',
@@ -295,13 +324,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("the import of a data-s
           const dir = yield* materializeSpec(
             withDataSsml(`data-ssml-refused-${String(at)}`, value),
           );
-          const error = yield* Effect.flip(previewPackage(dir));
+          const program = yield* readProgram(dir);
 
-          assert.instanceOf(error, ImportRefused, value);
-          assert.strictEqual(
-            error instanceof ImportRefused ? error.rules[0] : undefined,
-            "attribute-lexical",
-          );
+          assert.deepStrictEqual(membersHeld(program.inputs), dataSsmlOf(value), value);
+          assert.isTrue(breaksDataSsml(value), value);
         }
       }),
   );
