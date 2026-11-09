@@ -22,6 +22,7 @@ import { booleanOf } from "#pantry/grammar/domains.ts";
 import {
   ancestorsOf,
   breachAt,
+  collapsed,
   elementsOf,
   field,
   typedOr,
@@ -104,9 +105,9 @@ const reservedBaseTypes: ReadonlyMap<string, string> = new Map([
 /**
  * `xs:double`'s lexical space as XML Schema 1.0 writes it (Part 2 §3.2.5.1, reading 71's edition,
  * in which `+INF` is no form): a decimal mantissa of any digits with an optional exponent of any
- * digits, `INF`, `-INF` or `NaN`. A mastery value or a normal bound outside it is not judged: a
- * form that is no `xs:double` has no value, and a form with outer whitespace is not read, the
- * stated limit the law catalog records for `Mastery range` (reading 9).
+ * digits, `INF`, `-INF` or `NaN`. A mastery value or a normal bound is read collapsed, as
+ * `xs:double`'s whiteSpace collapses it (Part 2 §4.3.6; reading 7), and one outside it once
+ * collapsed is not judged: a form that is no `xs:double` has no value.
  *
  * @see {@link https://www.w3.org/TR/xmlschema-2/#double | XML Schema Part 2, 3.2.5 double}
  */
@@ -114,12 +115,12 @@ const doubleForm = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)
 
 /**
  * Read a scale attribute as a double for an order that sets aside what it cannot read: where its
- * form is in {@link doubleForm}, the double it names, `INF` and `-INF` infinite and a decimal the
- * double nearest it, which JavaScript's `Number` rounds to as XML Schema 1.1's doubleLexicalMap
- * does (Part 2 §3.3.5.2, reading 144), of any digits and any exponent; the bound that holds the
- * order otherwise.
+ * form, collapsed, is in {@link doubleForm}, the double it names, `INF` and `-INF` infinite and a
+ * decimal the double nearest it, which JavaScript's `Number` rounds to as XML Schema 1.1's
+ * doubleLexicalMap does (Part 2 §3.3.5.2, reading 144), of any digits and any exponent; the bound
+ * that holds the order otherwise.
  *
- * @param lexical - The attribute's lexical form.
+ * @param lexical - The attribute's form, collapsed.
  * @param otherwise - The value an unread form stands as.
  * @returns The value.
  */
@@ -144,24 +145,32 @@ const scaleOf = (lexical: string, otherwise: number): number => {
 const normalMinimumByDefault: ReadonlyMap<string, string> = new Map([["3.0.1", "0.0"]]);
 
 /**
- * Order two scale values where both are present: `NaN` ordered against nothing, and a form
- * outside {@link doubleForm} read as the bound that holds the order.
+ * Order two scale values where both are present, each collapsed: `NaN` ordered against nothing,
+ * and a form outside {@link doubleForm} read as the bound that holds the order.
  *
- * @param left - The lower value, none where absent.
+ * @param left - The lower value as written, none where absent.
  * @param right - The upper one.
  * @returns Whether the order holds or is not judged.
  */
 const below = (left: Option.Option<string>, right: Option.Option<string>): boolean =>
-  Option.isNone(left) ||
-  Option.isNone(right) ||
-  left.value === "NaN" ||
-  right.value === "NaN" ||
-  scaleOf(left.value, Number.NEGATIVE_INFINITY) <= scaleOf(right.value, Number.POSITIVE_INFINITY);
+  Option.match(Option.all([left, right]), {
+    onNone: () => true,
+    onSome: ([low, high]) => {
+      const [lower, upper] = [collapsed(low), collapsed(high)];
+
+      return (
+        lower === "NaN" ||
+        upper === "NaN" ||
+        scaleOf(lower, Number.NEGATIVE_INFINITY) <= scaleOf(upper, Number.POSITIVE_INFINITY)
+      );
+    },
+  });
 
 /**
  * Judge `Mastery_range` over an outcome declaration's scale (reading 9, the Schematron's RULE
  * SPECIFIC CLASS OUTCOMEDEC 1): its mastery value lies in its normal range, each pair judged where
- * both are present, `NaN` ordered against nothing, a form outside {@link doubleForm} not judged.
+ * both are present, each value collapsed, `NaN` ordered against nothing, a form outside
+ * {@link doubleForm} not judged.
  * Its normal minimum is the one it writes, or else its version's default (reading 149,
  * {@link normalMinimumByDefault}).
  *

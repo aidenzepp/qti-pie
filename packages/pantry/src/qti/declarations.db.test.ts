@@ -258,24 +258,26 @@ const keyOver =
 const doubleForm = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|-?INF|NaN)$/u;
 
 /**
- * Read a scale attribute as the specification's model reads it: an `xs:double`, the double nearest
- * the decimal it writes (XML Schema 1.1's doubleLexicalMap, reading 144, which JavaScript's
- * `Number` rounds to), or none where it is outside {@link doubleForm}: no `xs:double`, or a form
- * with outer whitespace, which the law does not read (the stated limit of its law catalog entry).
+ * Read a scale attribute as the specification's model reads it: collapsed, as `xs:double`'s
+ * whiteSpace collapses it (XML Schema Part 2 §4.3.6; reading 7), then an `xs:double`, the double
+ * nearest the decimal it writes (XML Schema 1.1's doubleLexicalMap, reading 144, which
+ * JavaScript's `Number` rounds to), or none where it is outside {@link doubleForm}: no
+ * `xs:double`.
  *
  * @param lexical - The lexical form, as written.
  * @returns The value.
  */
 const scaleValue = (lexical: string): Option.Option<number> => {
-  if (!doubleForm.test(lexical)) {
+  const value = lexical.replaceAll(/[\t\n\r ]+/gu, " ").replaceAll(/^ | $/gu, "");
+  if (!doubleForm.test(value)) {
     return Option.none();
   }
 
-  if (lexical === "INF") {
+  if (value === "INF") {
     return Option.some(Number.POSITIVE_INFINITY);
   }
 
-  return Option.some(lexical === "-INF" ? Number.NEGATIVE_INFINITY : Number(lexical));
+  return Option.some(value === "-INF" ? Number.NEGATIVE_INFINITY : Number(value));
 };
 
 /**
@@ -294,7 +296,7 @@ const above = (low: string, high: string): boolean =>
 
 /**
  * The scale texts of the mastery box, each written: ordinary values, both infinities, `NaN`, a
- * value with outer whitespace, which the law does not read, and values past grizzle's former
+ * value with outer whitespace, which the law reads collapsed, and values past grizzle's former
  * bounded form of double precision (15 significant digits, an exponent of at most 293): 1e400,
  * which overflows to +INF, a 17-digit integer, 1e294, and -1e-400, which underflows to -0. An
  * unwritten attribute has no row, and no pair holds it.
@@ -772,8 +774,8 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // Oracle: the specification as a checker, the Schematron's OUTCOMEDEC 1 read by its intent
           // (reading 9): `not(@mastery-value < @normal-minimum)` and `not(@mastery-value >
           // @normal-maximum)` over written values as xs:double (reading 144's doubleLexicalMap), of
-          // any digits and any exponent, NaN ordered against nothing, a form outside xs:double's
-          // lexical space or with outer whitespace unjudged (the stated limit).
+          // any digits and any exponent, each form collapsed (reading 7), NaN ordered against
+          // nothing, a form outside xs:double's lexical space unjudged.
           // Bound: every pair (minimum, mastery) and (mastery, maximum) over 11 written texts, 242
           // cases, each a row of the pair it is.
           Effect.gen(function* masteryRange() {

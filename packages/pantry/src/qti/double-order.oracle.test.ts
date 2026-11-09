@@ -12,26 +12,29 @@
  *   `float8`'s order, in which NaN equals NaN and is above every other value. A term of any other
  *   kind fails the case, so no predicate is ever judged in part. The rows are the case's bounds as
  *   the import copies them: a slider's collapsed (`InteractionAttribute.value`), a scale
- *   attribute's as written; the copies themselves are their containments' (C18), which other tests
- *   hold.
+ *   attribute's as written (`Attribute.lexical`), which the check collapses; the copies themselves
+ *   are their containments' (C18), which other tests hold.
  * - **The law oracle** (`documentBreaches` of `#pantry/test/oracle.ts`) names `Slider bounds` or
  *   `Mastery range` over the item that writes the case's bounds.
- * - **The reference** written here from the specifications: a form is read where it is in XML Schema
- *   1.0's `xs:double` lexical space (Part 2 §3.2.5.1, reading 71's edition, `+INF` outside it), a
- *   slider's bound once collapsed and a scale attribute as written (the stated limit of the law
- *   catalog's `Mastery range`: a form with outer whitespace is not read), as the double XML Schema
- *   1.1's doubleLexicalMap maps it to (Part 2 §3.3.5.2, reading 144). ECMAScript's `Number` rounds
- *   a decimal of at most 20 significant digits exactly so, to nearest with ties to even, an
- *   infinity of its sign past the overflow threshold and a zero of its sign below half the least
- *   subnormal (ECMA-262 §7.1.4.1.1, RoundMVResult, and §6.1.6.1), so every numeral drawn has at
- *   most 20, its zero runs and its exponent of any length. A pair breaks its order where both forms
- *   have a value, neither is NaN, and the lower is above the upper.
+ * - **The reference** written here from the specifications: a form is read where, once collapsed as
+ *   `xs:double`'s whiteSpace collapses it (Part 2 §4.3.6; reading 7), it is in XML Schema 1.0's
+ *   `xs:double` lexical space (Part 2 §3.2.5.1, reading 71's edition, `+INF` outside it), as the
+ *   double XML Schema 1.1's doubleLexicalMap maps it to (Part 2 §3.3.5.2, reading 144).
+ *   ECMAScript's `Number` rounds a decimal of at most 20 significant digits exactly so, to nearest
+ *   with ties to even, an infinity of its sign past the overflow threshold and a zero of its sign
+ *   below half the least subnormal (ECMA-262 §7.1.4.1.1, RoundMVResult, and §6.1.6.1), so every
+ *   numeral drawn has at most 20, its zero runs and its exponent of any length. A pair breaks its
+ *   order where both forms have a value, neither is NaN, and the lower is above the upper.
  *
- * Three plants restate the deleted fallback, under which a form outside the bounded form stood as
- * the end of the order that holds it: the schema's former checks, built here as they were and
- * evaluated as the installed ones are; the oracle's former `Mastery range` reading, the bounded
- * form; and its former `Slider bounds` reading, which read any collapsed text as JavaScript's
- * `Number` does, `+INF` and `0x10` among them. The search must catch each.
+ * Five plants restate the deleted readings. Three restate the fallback under which a form outside
+ * the bounded form stood as the end of the order that holds it: the schema's former checks, built
+ * here as they were and evaluated as the installed ones are; the oracle's former `Mastery range`
+ * reading, the bounded form; and its former `Slider bounds` reading, which read any collapsed text
+ * as JavaScript's `Number` does, `+INF` and `0x10` among them. Two restate the scale read as
+ * written, under which a form with outer whitespace stood as the end of the order that holds it,
+ * a stated limit while grizzle's `Compute.matches` guard proved nothing of a `Compute.collapse`
+ * subject (lifted by grizzle `c899acca`): the schema's uncollapsed `Mastery_range`, and the
+ * oracle's uncollapsed reading. The search must catch each.
  */
 import { check, Compute, lexicalForm, pg } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
@@ -50,6 +53,7 @@ import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { MasteryCeiling, MasteryFloor } from "#pantry/qti/declarations.ts";
 import { Slider } from "#pantry/qti/interactions.ts";
+import { doublePattern } from "#pantry/qti/operators.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 import { breaks, checkOf, doubleNamed, installedChecks } from "#pantry/test/order-checks.ts";
@@ -125,6 +129,51 @@ const former: readonly ReadCheck[] = [
         Compute.when(
           Compute.matches(r.normalMaximum, formerForm),
           (high) => Compute.cast(high, pg["double precision"]),
+          Number.POSITIVE_INFINITY,
+        ),
+      ),
+    ),
+  ),
+].flatMap((statement) => Option.toArray(checkOf(statement)));
+
+/**
+ * The scale's checks before its forms were collapsed, restated as they were: each form read by
+ * `Compute.parseDouble` where it is in `doublePattern` as written, `NaN` ordered against nothing,
+ * and any other form, one with outer whitespace among them, read as the end of the order that
+ * holds it.
+ */
+const uncollapsed: readonly ReadCheck[] = [
+  check("Mastery_range", MasteryFloor, (r) =>
+    r.or(
+      r.eq(r.normalMinimum, "NaN"),
+      r.eq(r.masteryValue, "NaN"),
+      r.le(
+        Compute.when(
+          Compute.matches(r.normalMinimum, doublePattern),
+          (low) => Compute.parseDouble(low),
+          Number.NEGATIVE_INFINITY,
+        ),
+        Compute.when(
+          Compute.matches(r.masteryValue, doublePattern),
+          (mastery) => Compute.parseDouble(mastery),
+          Number.POSITIVE_INFINITY,
+        ),
+      ),
+    ),
+  ),
+  check("Mastery_range", MasteryCeiling, (r) =>
+    r.or(
+      r.eq(r.masteryValue, "NaN"),
+      r.eq(r.normalMaximum, "NaN"),
+      r.le(
+        Compute.when(
+          Compute.matches(r.masteryValue, doublePattern),
+          (mastery) => Compute.parseDouble(mastery),
+          Number.NEGATIVE_INFINITY,
+        ),
+        Compute.when(
+          Compute.matches(r.normalMaximum, doublePattern),
+          (high) => Compute.parseDouble(high),
           Number.POSITIVE_INFINITY,
         ),
       ),
@@ -408,6 +457,8 @@ const adversarial = [
   { forms: ["+INF", "1"], name: "XML Schema 1.1's +INF" },
   { forms: ["0x10", "1"], name: "a hexadecimal text" },
   { forms: ["NaN", "-INF"], name: "NaN above -INF" },
+  { forms: [" 2 ", "1"], name: "a padded form above" },
+  { forms: ["2", "\t1\n"], name: "a form above a padded one" },
 ] as const satisfies readonly {
   readonly forms: readonly [string, string];
   readonly name: string;
@@ -557,7 +608,7 @@ const itemOf = (attributes: ReadonlyMap<string, string>): string => {
 
 /**
  * The rows a case's item has for the two orders, by relation: its slider's bounds collapsed, and
- * each pair of its scale attributes as written, where it writes both.
+ * each pair of its scale attributes as written (`Attribute.lexical`), where it writes both.
  *
  * @param attributes - The case's attributes.
  * @returns The rows.
@@ -614,8 +665,8 @@ const formerSliderNumber = (form: string): number =>
   form === "INF" || form === "+INF" ? Number.POSITIVE_INFINITY : doubleNamed(form);
 
 /**
- * The oracle's former `Mastery range` reading of a scale attribute: its double where its form is in
- * the bounded form, and the end of the order that holds it otherwise.
+ * The oracle's former `Mastery range` reading of a scale attribute as written: its double where its
+ * form is in the bounded form, and the end of the order that holds it otherwise.
  *
  * @param form - The attribute, as written.
  * @param otherwise - What a form outside stands as.
@@ -623,6 +674,33 @@ const formerSliderNumber = (form: string): number =>
  */
 const formerScale = (form: string, otherwise: number): number =>
   formerRegex.test(form) ? doubleNamed(form) : otherwise;
+
+/**
+ * The oracle's uncollapsed `Mastery range` reading of a scale attribute: its double where its form
+ * as written is in `xs:double`'s lexical space, of any digits, and the end of the order that holds
+ * it otherwise, a form with outer whitespace among them.
+ *
+ * @param form - The attribute, as written.
+ * @param otherwise - What a form outside stands as.
+ * @returns Its value.
+ */
+const writtenScale = (form: string, otherwise: number): number =>
+  xsDouble.test(form) ? doubleNamed(form) : otherwise;
+
+/**
+ * Whether a scale reading orders two forms as written the wrong way round, `NaN` against nothing.
+ *
+ * @param read - The reading of one form, given what a form it cannot read stands as.
+ * @param forms - The two forms, as written, the lower first.
+ * @returns Whether it breaks the order.
+ */
+const scaleAbove = (
+  read: (form: string, otherwise: number) => number,
+  [low, high]: readonly [string, string],
+): boolean =>
+  low !== "NaN" &&
+  high !== "NaN" &&
+  read(low, Number.NEGATIVE_INFINITY) > read(high, Number.POSITIVE_INFINITY);
 
 /**
  * A situation the search must reach: each carrier and verdict, each edge a form sits past, and each
@@ -633,7 +711,9 @@ type Situation =
   | "broken"
   | "caught: the oracle's former Mastery range reading"
   | "caught: the oracle's former Slider bounds reading"
+  | "caught: the oracle's uncollapsed scale"
   | "caught: the schema's former bounded form"
+  | "caught: the schema's uncollapsed scale"
   | "exponent past 293"
   | "held"
   | "outside the lexical space"
@@ -689,13 +769,15 @@ const edgesOf = (form: string): readonly Situation[] => {
 };
 
 /**
- * A case's two forms as its law reads them: a slider's bounds collapsed, a scale's as written.
+ * A case's two forms as its law reads them: collapsed.
  *
  * @param drawnCase - The case.
  * @returns The lower form and the upper.
  */
-const formsRead = ({ carrier, forms: [low, high] }: OrderCase): readonly [string, string] =>
-  carrier === "slider" ? [collapsed(low), collapsed(high)] : [low, high];
+const formsRead = ({ forms: [low, high] }: OrderCase): readonly [string, string] => [
+  collapsed(low),
+  collapsed(high),
+];
 
 /**
  * Whether two different forms name one finite double.
@@ -720,7 +802,9 @@ const roundsTogether = ([low, high]: readonly [string, string]): boolean =>
  */
 const situationsOf = (drawnCase: OrderCase, expected: boolean): readonly Situation[] => {
   const read = formsRead(drawnCase);
-  const padded = drawnCase.forms.some((form) => form !== form.trim() && xsDouble.test(form.trim()));
+  const padded = drawnCase.forms.some(
+    (form) => form !== collapsed(form) && xsDouble.test(collapsed(form)),
+  );
 
   return [
     drawnCase.carrier,
@@ -746,23 +830,24 @@ const caughtOf = (
   expected: boolean,
 ): readonly Situation[] => {
   const [low, high] = formsRead(drawnCase);
-  const slider = drawnCase.carrier === "slider";
+  const scale = (verdict: () => boolean): Option.Option<boolean> =>
+    drawnCase.carrier === "slider" ? Option.none() : Option.some(verdict());
   const plants: readonly (readonly [Situation, Option.Option<boolean>])[] = [
     ["caught: the schema's former bounded form", Option.some(breaks(former, rows))],
     [
       "caught: the oracle's former Slider bounds reading",
-      slider ? Option.some(formerSliderNumber(high) < formerSliderNumber(low)) : Option.none(),
+      drawnCase.carrier === "slider"
+        ? Option.some(formerSliderNumber(high) < formerSliderNumber(low))
+        : Option.none(),
     ],
     [
       "caught: the oracle's former Mastery range reading",
-      slider
-        ? Option.none()
-        : Option.some(
-            low !== "NaN" &&
-              high !== "NaN" &&
-              formerScale(low, Number.NEGATIVE_INFINITY) >
-                formerScale(high, Number.POSITIVE_INFINITY),
-          ),
+      scale(() => scaleAbove(formerScale, drawnCase.forms)),
+    ],
+    ["caught: the schema's uncollapsed scale", scale(() => breaks(uncollapsed, rows))],
+    [
+      "caught: the oracle's uncollapsed scale",
+      scale(() => scaleAbove(writtenScale, drawnCase.forms)),
     ],
   ];
 
@@ -827,29 +912,36 @@ const situations: readonly [Situation | AdversarialName, ...(Situation | Adversa
   "caught: the schema's former bounded form",
   "caught: the oracle's former Slider bounds reading",
   "caught: the oracle's former Mastery range reading",
+  "caught: the schema's uncollapsed scale",
+  "caught: the oracle's uncollapsed scale",
   ...adversarial.map(({ name }) => name),
 ];
 
 describe("qti/interactions.ts and qti/declarations.ts, the double orders", () => {
   it("reads the installed Slider_bounds and Mastery_range checks, and their former statements, one over each relation", () => {
-    // Oracle: the schema's statements, which `Qti` holds once each, and the three restated here.
+    // Oracle: the schema's statements, which `Qti` holds once each, and the five restated here.
     for (const checks of [installed, former]) {
       assert.deepStrictEqual(
         checks.map(({ relation }) => relation).toSorted(),
         [MasteryCeiling.name, MasteryFloor.name, Slider.name].toSorted(),
       );
     }
+    assert.deepStrictEqual(
+      uncollapsed.map(({ relation }) => relation).toSorted(),
+      [MasteryCeiling.name, MasteryFloor.name].toSorted(),
+    );
   });
 
   it.effect(
-    "breaks a slider's or a scale's order exactly where the doubles XML Schema 1.1 maps its forms to are out of order, past grizzle's former bounded form, and catches each plant of the former reading",
+    "breaks a slider's or a scale's order exactly where the doubles XML Schema 1.1 maps its collapsed forms to are out of order, past grizzle's former bounded form and around outer whitespace, and catches each plant of the former readings",
     (ctx) =>
-      // Oracle: the specification as a checker, the reference above (XML Schema 1.0's lexical
-      // space, 1.1's doubleLexicalMap through ECMAScript's Number, exact to 20 significant digits).
-      // Bound: 1,500 cases on three carriers, a fifth of the pairs the 19 adversarial ones by name,
+      // Oracle: the specification as a checker, the reference above (XML Schema's collapse, 1.0's
+      // lexical space, 1.1's doubleLexicalMap through ECMAScript's Number, exact to 20 significant
+      // digits).
+      // Bound: 1,500 cases on three carriers, a fifth of the pairs the 21 adversarial ones by name,
       // the rest numerals of 1 to 20 significant digits at magnitudes from 10^-400 to 10^400 and
-      // 10^±1e20, zero runs of 0, 1 and 256, spelled twice, beside a 16- to 20-digit neighbour,
-      // or beside a special or a form outside the lexical space.
+      // 10^±1e20, zero runs of 0, 1 and 256, one form in ten padded, spelled twice, beside a 16- to
+      // 20-digit neighbour, or beside a special or a form outside the lexical space.
       searched(
         ctx,
         explore(

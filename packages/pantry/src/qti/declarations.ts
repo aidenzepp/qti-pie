@@ -80,7 +80,7 @@ import {
   select,
   uuid,
 } from "@bjornpagen/grizzle";
-import type { RowScalars } from "@bjornpagen/grizzle";
+import type { RowScalars, Term } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import {
   BaseType,
@@ -1011,37 +1011,54 @@ const typedValues = select(Value, (v) => v.and(v.eq(v.baseTypes, 1n), v.eq(v.car
 const fieldValues = select(ValueBaseType, (b) => b.eq(b.cardinalities, 1n));
 
 /**
+ * A text term a check reads: a row's text field, or a `Compute` term over one.
+ */
+type Text = Term<string, unknown, unknown, "text">;
+
+/**
+ * State that one `xs:double` form is no greater than another, as `Slider_bounds` and
+ * `Mastery_range` order a pair (reading 9). A form in `xs:double`'s lexical space
+ * (`doublePattern` of `#pantry/qti/operators.ts`, XML Schema 1.0's, reading 71's edition) is the
+ * double grizzle's `Compute.parseDouble` maps it to, XML Schema 1.1's doubleLexicalMap (Part 2
+ * §3.3.5.2, reading 144), of any digits and any exponent. The rule says what it holds of every
+ * other pair in its own arms (grizzle's agent guide: never make an otherwise stand for a value): a
+ * pair with a form outside the lexical space holds, since a form that is no `xs:double` has no
+ * value and its value domain alone refuses it; and a pair with `NaN` holds, since `NaN` is ordered
+ * against nothing. Each parse's otherwise is never read, since an arm holds wherever its guard
+ * fails. A grizzle check is a predicate and a `Compute.when`'s branch a term
+ * (`scalar/compute/builders.ts:946` of grizzle-engine at the vendored commit), so the arms stand
+ * beside the comparison rather than in a guard's otherwise.
+ *
+ * @param low - The form that is no greater, as the law reads it.
+ * @param high - The form that is no less.
+ * @returns The predicate.
+ */
+export const doublesInOrder = (low: Text, high: Text) =>
+  Compute.or(
+    Compute.not(Compute.matches(low, doublePattern)),
+    Compute.not(Compute.matches(high, doublePattern)),
+    Compute.eq(low, "NaN"),
+    Compute.eq(high, "NaN"),
+    Compute.le(
+      Compute.when(Compute.matches(low, doublePattern), (form) => Compute.parseDouble(form), 0),
+      Compute.when(Compute.matches(high, doublePattern), (form) => Compute.parseDouble(form), 0),
+    ),
+  );
+
+/**
  * State `Mastery_range` over a mastery value written and a normal minimum, written or its version's
- * default (readings 9 and 149): the minimum is no greater than the mastery value. Each lexical form
- * in `xs:double`'s lexical space (`doublePattern` of `#pantry/qti/operators.ts`, XML Schema 1.0's,
- * reading 71's edition) is read as the double grizzle's `Compute.parseDouble` maps it to, XML
- * Schema 1.1's doubleLexicalMap (Part 2 §3.3.5.2, reading 144), of any digits and any exponent.
- * `NaN` is ordered against nothing. A form outside the lexical space stands as the end of the order
- * that holds it, so the pair is not judged: a form that is no `xs:double` has no value, which its
- * value domain alone refuses; and a form with outer whitespace, which `xs:double`'s whiteSpace
- * collapses (XML Schema Part 2 §4.3.6), is not read, a stated limit while grizzle's
- * `Compute.matches` guard proves nothing of a `Compute.collapse` subject in its branch.
+ * default (readings 9 and 149): the minimum is no greater than the mastery value, each form read
+ * collapsed, as `xs:double`'s whiteSpace `collapse` reads it (XML Schema Part 2 §4.3.6; reading 7:
+ * an attribute the XSD types as `xs:double` is read as the XSD reads it), and ordered by
+ * {@link doublesInOrder}. The rows copy the attributes as written (`Attribute.lexical`), so the
+ * check collapses each, and a guard over the collapse narrows it in the parse's branch (grizzle
+ * `c899acca`).
  *
  * @param r - The row.
  * @returns The predicate.
  */
 const floorCheck = (r: MasteryFloorRow) =>
-  r.or(
-    r.eq(r.normalMinimum, "NaN"),
-    r.eq(r.masteryValue, "NaN"),
-    r.le(
-      Compute.when(
-        Compute.matches(r.normalMinimum, doublePattern),
-        (low) => Compute.parseDouble(low),
-        Number.NEGATIVE_INFINITY,
-      ),
-      Compute.when(
-        Compute.matches(r.masteryValue, doublePattern),
-        (mastery) => Compute.parseDouble(mastery),
-        Number.POSITIVE_INFINITY,
-      ),
-    ),
-  );
+  doublesInOrder(Compute.collapse(r.normalMinimum), Compute.collapse(r.masteryValue));
 
 /**
  * State `Mastery_range` over a mastery value and a normal maximum both written, each read as
@@ -1051,22 +1068,7 @@ const floorCheck = (r: MasteryFloorRow) =>
  * @returns The predicate.
  */
 const ceilingCheck = (r: MasteryCeilingRow) =>
-  r.or(
-    r.eq(r.masteryValue, "NaN"),
-    r.eq(r.normalMaximum, "NaN"),
-    r.le(
-      Compute.when(
-        Compute.matches(r.masteryValue, doublePattern),
-        (mastery) => Compute.parseDouble(mastery),
-        Number.NEGATIVE_INFINITY,
-      ),
-      Compute.when(
-        Compute.matches(r.normalMaximum, doublePattern),
-        (high) => Compute.parseDouble(high),
-        Number.POSITIVE_INFINITY,
-      ),
-    ),
-  );
+  doublesInOrder(Compute.collapse(r.masteryValue), Compute.collapse(r.normalMaximum));
 
 /**
  * Every statement over the O2 overlays, each `check` named by its oracle law:

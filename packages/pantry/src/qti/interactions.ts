@@ -135,9 +135,9 @@ import {
   DeclarationCardinality,
   DeclarationIdentifier,
   declarationIdentifierRef,
+  doublesInOrder,
 } from "#pantry/qti/declarations.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import { doublePattern } from "#pantry/qti/operators.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import { Instance, itemInstances, itemKind, testKind } from "#pantry/qti/tests.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
@@ -2278,26 +2278,19 @@ const identifierTyped = on(
  *   count.
  * - **counts:** each bound's counts written or defaulted, a row of its own where it has a value,
  *   typed by G-parse (`E1_derived`), and "Choice bounds" over the values a count has.
- * - **ranges:** "Slider bounds" (reading 9, the Schematron's 14Ba), each bound read as the
- *   `xs:double` it names where its collapsed value is in `xs:double`'s lexical space
- *   (`doublePattern` of `#pantry/qti/operators.ts`, XML Schema 1.0's, reading 71's edition): the
- *   double grizzle's `Compute.parseDouble` maps it to, XML Schema 1.1's doubleLexicalMap (Part 2
- *   §3.3.5.2, reading 144), of any digits and any exponent. `NaN` is ordered against nothing, and a
- *   bound that is no `xs:double` has no value, which its value domain alone refuses, so it stands
- *   as the end of the order that holds it and the pair is not judged. And "Aria value range" over
- *   the elements that carry both ARIA bounds, each value collapsed and read where it is in
- *   `xs:decimal`'s lexical space, grizzle's `decimalText`, the language pantry's own value domain
- *   admits (`decimalLexical` of `#pantry/grammar/domains.ts`): the decimal it names, exactly and of
- *   any digits, by grizzle's `Compute.parseDecimal` (XML Schema 1.1's decimalLexicalMap, Part 2
- *   §3.3.3.1), so a value past 256 integer or 255 fraction digits is ordered as any other. A pair
- *   with a value that is no `xs:decimal` holds the law by its own arm, since its value domain alone
- *   refuses it; each parse's otherwise is never read, since that arm holds wherever its guard
- *   fails. A grizzle check is a predicate and a `Compute.when`'s branch a term
- *   (`scalar/compute/builders.ts:946` of grizzle-engine at the vendored commit), so the arms stand
- *   beside the comparison rather than in a guard's otherwise. A value is a `keyText`, at most
- *   `keyTextBytes`, below the 16,384 bytes the parse reads (`decimalTextMaxBytes`), and a match
- *   guard keeps its subject's byte bound in its branch (`scalar/compute/lower.ts:930-934` and
- *   `:2951-2958` of grizzle-engine at the vendored commit), so the parse needs no byte guard.
+ * - **ranges:** "Slider bounds" (reading 9, the Schematron's 14Ba), the bounds collapsed and ordered
+ *   as `xs:double` values by `doublesInOrder` of `#pantry/qti/declarations.ts`. And "Aria value
+ *   range" over the elements that carry both ARIA bounds, each value collapsed and read where it is
+ *   in `xs:decimal`'s lexical space, grizzle's `decimalText`, the language pantry's own value
+ *   domain admits (`decimalLexical` of `#pantry/grammar/domains.ts`): the decimal it names, exactly
+ *   and of any digits, by grizzle's `Compute.parseDecimal` (XML Schema 1.1's decimalLexicalMap,
+ *   Part 2 §3.3.3.1), so a value past 256 integer or 255 fraction digits is ordered as any other. A
+ *   pair with a value that is no `xs:decimal` holds the law by its own arm, since its value domain
+ *   alone refuses it; each parse's otherwise is never read, since that arm holds wherever its guard
+ *   fails. A value is a `keyText`, at most `keyTextBytes`, below the 16,384 bytes the parse reads
+ *   (`decimalTextMaxBytes`), and a match guard keeps its subject's byte bound in its branch
+ *   (`scalar/compute/lower.ts:930-934` and `:2951-2958` of grizzle-engine at the vendored commit),
+ *   so the parse needs no byte guard.
  * - **section documents' and fragments' references:** each one's row, counted per document and class;
  *   one placement row per instance of an item's or a test's assembly whose document is neither, a
  *   section document's or a fragment's (spec reading 117), counting as many resolutions of each
@@ -3163,26 +3156,7 @@ export const interactionLawsByName = {
       on(RecordBindingFit, "kind"),
     ),
   ],
-  "Slider bounds": [
-    check("Slider_bounds", Slider, (s) =>
-      s.or(
-        s.eq(s.lower, "NaN"),
-        s.eq(s.upper, "NaN"),
-        s.le(
-          Compute.when(
-            Compute.matches(s.lower, doublePattern),
-            (lower) => Compute.parseDouble(lower),
-            Number.NEGATIVE_INFINITY,
-          ),
-          Compute.when(
-            Compute.matches(s.upper, doublePattern),
-            (upper) => Compute.parseDouble(upper),
-            Number.POSITIVE_INFINITY,
-          ),
-        ),
-      ),
-    ),
-  ],
+  "Slider bounds": [check("Slider_bounds", Slider, (s) => doublesInOrder(s.lower, s.upper))],
   "default hotspot last slot": [check("default_hotspot_last_slot", Hotspot, lastWhere)],
 } as const;
 
