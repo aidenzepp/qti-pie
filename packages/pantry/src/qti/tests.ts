@@ -17,12 +17,14 @@
  *
  * **The assembled test** (RG3, reading 5). {@link Instance} is a tree: its root is a document that
  * heads an assembly, every assembled document no include splices in place ({@link splicingParents},
- * reading 117), and each instance has exactly one child per site of its document, the instance of
- * the document that site names. A chain of section refs and includes that returns to a document
- * already on it would need infinitely many instances, so no finite tree holds it: the count law
- * `children = sites` refuses one a head reaches, and `TestDocument.instances` above 0 one no head
- * reaches, whose documents no assembly places (reading 85). Under a test's root,
- * each instance carries one {@link InstanceName} per name of its document, and their projection
+ * reading 117), and each instance has exactly one child per site of its document that places its
+ * target, the instance of the document that site names: a section ref, or an include that may stand
+ * for its target's root (`IncludeRoot`, reading 114), whatever its parent ({@link sitesFold}). A
+ * chain of section refs and includes that returns to a document already on it would need
+ * infinitely many instances, so no finite tree holds it: the count law `children = sites` refuses
+ * one a head reaches, and `TestDocument.instances` above 0 one no head reaches, whose documents no
+ * assembly places (reading 85). Under a test's root, each instance carries one
+ * {@link InstanceName} per name of its document, and their projection
  * {@link AssembledName} holds each written element once per test, so a section document placed
  * twice names nothing twice, and the key on `(assembly, identifier)` is reading 86's one namespace.
  * Each branch rule of each instance resolves once ({@link BranchResolution}), to its target
@@ -35,7 +37,8 @@
  *
  * Beside them: an item ref's variable mappings ({@link VariableMapping}, reading 97) and an item's
  * stimulus refs ({@link StimulusRef}), each keyed by its node with its law a key, and the item each
- * item ref names ({@link ItemRefTarget} and {@link ItemRefDocument}, B2 and B3).
+ * item ref names ({@link ItemRefHref}, {@link ItemRefTarget} and {@link ItemRefDocument}, B2 and
+ * B3).
  *
  * Every attribute value a law compares is copied from `Attribute` (C18) beside the key over its
  * selection that keeps its lexical form out of every index (the addendum's "Text in keys"), and
@@ -91,7 +94,7 @@ import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
-import { Entry, hrefPaths, NamedHref, Reference } from "#pantry/qti/package.ts";
+import { Entry, hrefPaths, NamedHref, Reference, UnreadTypePath } from "#pantry/qti/package.ts";
 
 /**
  * The test's root kind, the root of an assembly whose names and branch rules resolve.
@@ -275,9 +278,11 @@ export const collapsedPattern =
  * scope (`#pantry/qti/package.ts` `ReferencePath`).
  *
  * - **the host's:** `node`, `package`, `path` and `rootKind` (its `Document` row's);
- * - **drawn:** `sites`, `names` and `rules`, the counts of {@link siteFamily}, {@link nameFamily} and
- *   {@link ruleFamily}; and `instances`, its placements in every assembly, the count of
- *   {@link documentInstanceFamily}, which "Inclusion cycle" holds above 0.
+ * - **drawn:** `targets`, `names` and `rules`, the counts of {@link siteFamily}, {@link nameFamily}
+ *   and {@link ruleFamily}; and `instances`, its placements in every assembly, the count of
+ *   {@link documentInstanceFamily}, which "Inclusion cycle" holds above 0;
+ * - **accumulated:** `sites`, the count of its sites that place their target ({@link sitesFold}), the
+ *   children each of its instances holds.
  */
 export const TestDocument = relation(
   "TestDocument",
@@ -289,7 +294,8 @@ export const TestDocument = relation(
     path: EntryPath,
     rootKind: closedId(NodeKind),
     rules: drawn(natural),
-    sites: drawn(natural),
+    sites: accumulated(natural, 0n),
+    targets: drawn(natural),
   },
   ["node"],
 );
@@ -576,7 +582,8 @@ export const SitePath = relation(
  *   and its `ancestry`, its part of the target's context (`Document.context`, the union over the
  *   sites that name a document, spec reading 117);
  * - **its include's:** `splices`, whether it splices its target in place, its {@link Inclusion}'s;
- *   false for a section ref, which places its target whole.
+ *   false for a section ref, which places its target whole; and `places`, whether it places its
+ *   target at all, its {@link Inclusion}'s; true for a section ref.
  */
 export const SiteTarget = relation(
   "SiteTarget",
@@ -590,6 +597,7 @@ export const SiteTarget = relation(
     package: uuid,
     parentKind: closedId(NodeKind),
     path: keyText,
+    places: pg.boolean,
     splices: pg.boolean,
     target: uuid,
     targetNearest: uuid,
@@ -606,8 +614,10 @@ export const SiteTarget = relation(
  * (spec reading 114), and `splices`, whether it splices that document in place: its parent is one
  * of {@link splicingParents} and it may stand for the root (`IncludeRoot`), as the law oracle's
  * `standsFor` judges. An include that may not stand for its target's root, which "Include root"
- * refuses, splices nothing, so its target is judged as no fragment of its document's. An optional
- * value is a row of its own: a section ref has none.
+ * refuses, splices nothing, so its target is judged as no fragment of its document's; and `places`,
+ * whether it places that document at all: it may stand for the root, whatever its parent, so an
+ * include under a section places its target whole without splicing it, and one "Include root"
+ * refuses places nothing. An optional value is a row of its own: a section ref has none.
  */
 export const Inclusion = relation(
   "Inclusion",
@@ -615,6 +625,7 @@ export const Inclusion = relation(
     includeParent: closedId(IncludeParent),
     node: uuid,
     parentKind: closedId(NodeKind),
+    places: pg.boolean,
     root: closedId(NodeKind),
     splices: pg.boolean,
     version: closedId(SchemaVersion),
@@ -936,17 +947,37 @@ export const linkResourceTypes: readonly (typeof ResourceType.handles)[number][]
  * target" judges: the URI an item ref holds is "the URI used to refer to the item's file (e.g.,
  * elsewhere in the same content package)" (information model §5.6.5, `href`), so it names an item
  * of the package, or an LTI link (R36). It is a row only where a resource of the package names the
- * path, so an item ref whose href names none has no target, which the containment over the item
- * refs' hrefs refuses, and one that writes no href has none, which AL3 alone refuses (spec reading
- * 155). An item it names is an {@link ItemRefDocument} row of its own.
+ * path with a type the importer reads, a counted member of its item ref's {@link ItemRefHref}, so
+ * an item ref whose href names none has no target, which "Item ref target" refuses unless a
+ * resource of an unread type names the path, and one that writes no href has none, which AL3 alone
+ * refuses (spec reading 155). Where a resource of an unread type names the path and none of the
+ * item type or an LTI type does, the item ref names nothing a law could judge, and it has no
+ * target either. An item it names is an {@link ItemRefDocument} row of its own.
  *
  * In the corpus, feedbackTest's item ref `Example03-feedbackBlock-solution/...` names no file of
- * its package, and testWithLti's two item refs name LTI links; both packages are refused at the
- * codec today (`unmodeled-vocabulary`), so no verdict moves.
+ * its package, which "Item ref target" refuses (`item-ref-target`, the verdict file's rule for it),
+ * and testWithLti's two item refs name LTI links, a package refused under another rule.
  */
 export const ItemRefTarget = relation(
   "ItemRefTarget",
   { node: uuid, package: uuid, path: keyText, type: closedId(ResourceType) },
+  ["node"],
+);
+
+/**
+ * The href of an item ref that writes one, keyed by the item ref's node: its href's `package` and
+ * `path`, as {@link ItemRefTarget}'s, and `targets`, drawn, its count of {@link ItemRefTarget}
+ * rows: 1 where a resource of the package names the path with a type the importer reads, and 0
+ * where none does. An item ref with no target is judged by no other statement of "Item ref
+ * target", so its path must be one a resource of an unread type names
+ * (`#pantry/qti/package.ts` `UnreadTypePath`, spec reading 67): the type of what it names is
+ * unread, so the law oracle names it no target to judge (its `itemRefTargetOf`). An unread type is
+ * itself a refusal, AL1's value domain, so this narrows the law set, never a verdict. An item ref
+ * that writes no href has none, which AL3 alone refuses (spec reading 155).
+ */
+export const ItemRefHref = relation(
+  "ItemRefHref",
+  { node: uuid, package: uuid, path: keyText, targets: drawn(natural) },
   ["node"],
 );
 
@@ -975,6 +1006,7 @@ export const testRelations = {
   Instance,
   InstanceName,
   ItemRefDocument,
+  ItemRefHref,
   ItemRefTarget,
   Named,
   Section,
@@ -992,11 +1024,31 @@ export const testRelations = {
 };
 
 /**
- * Each document's sites that name a document, counted by `TestDocument.sites`: the children its
- * instance places (reading 85). A site that names none places nothing, and "Include target" alone
- * refuses it (reading 115).
+ * Each document's sites that name a document, counted by `TestDocument.targets`. A site that names
+ * none places nothing, and "Include target" alone refuses it (reading 115).
  */
-export const siteFamily = counted(on(SiteTarget, "document"), fin(TestDocument, "sites"));
+export const siteFamily = counted(on(SiteTarget, "document"), fin(TestDocument, "targets"));
+
+/**
+ * The sites that place their target (`SiteTarget.places`): each section ref, and each include that
+ * may stand for its target's root (`IncludeRoot`, reading 114), whatever its parent.
+ */
+const placingSites = select(SiteTarget, (s) => s.eq(s.places, true));
+
+/**
+ * Each document's sites that place their target, counted into `TestDocument.sites`: the children
+ * each of its instances holds (reading 85), one per site that places its target. An include that
+ * may not stand for its target's root names it (`Document.targetedBy`, reading 117's context) but
+ * places nothing, and "Include root" alone refuses it. A family's member is a whole relation, which
+ * no selection narrows, so the count is a fold over {@link siteFamily}, as {@link splicedFold} is
+ * over {@link siteTargetFamily}.
+ */
+export const sitesFold = fold(
+  siteFamily,
+  Monoid.count,
+  on(placingSites, "document"),
+  on(TestDocument, "node", "sites"),
+);
 
 /**
  * The sites that name each document, counted by `Document.targetedBy` (spec reading 117).
@@ -1525,6 +1577,16 @@ const itemDocuments = select(Document, (d) => d.eq(d.rootKind, itemKind));
 const itemTargets = select(ItemRefTarget, (t) => t.eq(t.type, itemResourceType));
 
 /**
+ * Each item ref's target, counted by `ItemRefHref.targets`: one row or none.
+ */
+export const itemRefTargetFamily = counted(on(ItemRefTarget, "node"), fin(ItemRefHref, "targets"));
+
+/**
+ * The item refs whose href names no resource of a type the importer reads.
+ */
+const untargetedItemRefs = select(ItemRefHref, (h) => h.eq(h.targets, 0n));
+
+/**
  * The token attributes {@link TestToken} copies, each attribute's key and its two copies.
  */
 const tokenCopies = [
@@ -1571,13 +1633,14 @@ const flagCopies = flagCarriers.map(flagCopy);
  * - **the stimulus refs** ({@link StimulusRef}): one per stimulus ref that writes an identifier
  *   (reading 147), no two of one item sharing an identifier (B16);
  * - **the assembly** ({@link Instance}): one tree per document of a test or a section, one child per
- *   site, so an inclusion cycle has no finite tree (reading 85);
+ *   site that places its target, so an inclusion cycle has no finite tree (reading 85);
  * - **the namespace** ({@link InstanceName}, {@link AssembledName}): `Test_name_key`, each written
  *   element once per test, and the key `(assembly, identifier)` (reading 86);
  * - **the jumps** ({@link BranchResolution}, {@link BranchTarget}, {@link BranchShuffle}): each
  *   resolution's target, `Branch_target` and `Branch_forward` (reading 87);
- * - **the items** ({@link ItemRefTarget}, {@link ItemRefDocument}): each item ref's href names an
- *   item document of the package or an LTI link (B2, B3, "Item ref target").
+ * - **the items** ({@link ItemRefHref}, {@link ItemRefTarget}, {@link ItemRefDocument}): each item
+ *   ref's href names an item document of the package or an LTI link, unless only a resource of an
+ *   unread type names it (B2, B3, "Item ref target").
  *
  * The statements by the laws they state:
  *
@@ -1586,12 +1649,14 @@ const flagCopies = flagCarriers.map(flagCopy);
  * and each item ref's href resolved, each its element's row, copying its node's tuple and its
  * attributes' values, and each there exactly where its element is.
  *
- * The statements of reading 85's law, "Inclusion cycle": the instance tree, each instance's copy
- * of its parent's scope and of its site, one child per site, one root per head and none for any
- * other document, and two counts that make a chain returning to a document on it unrepresentable.
+ * The statements of reading 85's law, "Inclusion cycle": the instance tree, each instance's copy of
+ * its parent's scope and of its site, one child per site that places its target
+ * ({@link sitesFold}), one root per head and none for any other document, and two counts that make
+ * a chain returning to a document on it unrepresentable.
  *
  * - **A chain a head reaches:** the deferred foreign key `Instance(document, rootKind, children) →
- *   TestDocument(node, rootKind, sites)`, since no finite tree has one child per site under it.
+ *   TestDocument(node, rootKind, sites)`, since no finite tree has one child per site that places
+ *   its target under it.
  * - **A chain no head reaches**, such as two fragments each of which includes the other, which no
  *   head places, and any fragment only they place: `TestDocument.instances` above 0, since none of
  *   them is placed in any assembly. Its converse, every `Instance` row's document an assembled
@@ -1622,10 +1687,12 @@ const flagCopies = flagCarriers.map(flagCopy);
  * and the two elements it reads, its own `Branch_forward` that it orders the two.
  *
  * The statements of B2's and B3's law, "Item ref target": each item ref that writes an href has
- * one {@link ItemRefTarget}, its href's path, named by a resource of the package of the item type
- * or an LTI type, and no other element has one; and each that names an item has its
- * {@link ItemRefDocument}, the document there, whose root is an item. An item ref that writes no
- * href names nothing, and AL3 alone refuses it (spec reading 155), named or not (reading 147).
+ * one {@link ItemRefHref}, its href's path, and no other element has one; each has one
+ * {@link ItemRefTarget}, named by a resource of the package of the item type or an LTI type,
+ * unless a resource of an unread type names its path, where it may have none; and each that names
+ * an item has its {@link ItemRefDocument}, the document there, whose root is an item. An item ref
+ * that writes no href names nothing, and AL3 alone refuses it (spec reading 155), named or not
+ * (reading 147).
  */
 export const testLawsByName = {
   "Branch forward": [
@@ -1909,9 +1976,15 @@ export const testLawsByName = {
             i.or(i.not(i.in(i.parentKind, splicingParents)), i.not(standsFor(i))),
           ),
         ),
+        i.or(
+          i.and(i.eq(i.places, true), standsFor(i)),
+          i.and(i.eq(i.places, false), i.not(standsFor(i))),
+        ),
       ),
     ),
-    check("E1_derived", SiteTarget, (s) => s.or(s.eq(s.kind, includeKind), s.eq(s.splices, false))),
+    check("E1_derived", SiteTarget, (s) =>
+      s.or(s.eq(s.kind, includeKind), s.and(s.eq(s.splices, false), s.eq(s.places, true))),
+    ),
     check("E1_derived", Site, (s) =>
       s.and(
         s.or(
@@ -2079,7 +2152,7 @@ export const testLawsByName = {
       ),
       on(Site, "document", "node", "parentLooseChain", "parentMixes", "part", "replaced", "start"),
     ),
-    contained(on(instanceMembers, "site", "document"), on(SiteTarget, "node", "target")),
+    contained(on(instanceMembers, "site", "document"), on(placingSites, "node", "target")),
     key(on(instanceMembers, "parent", "site")),
     contained(
       on(Instance, "document", "rootKind", "children"),
@@ -2092,7 +2165,11 @@ export const testLawsByName = {
   ],
   "Item ref target": [
     contained(on(ItemRefTarget, "node"), on(nodesOf(itemRefKind), "id")),
-    contained(on(attributesOf("href", [itemRefKind]), "node"), on(ItemRefTarget, "node")),
+    contained(on(ItemRefHref, "node"), on(nodesOf(itemRefKind), "id")),
+    contained(on(attributesOf("href", [itemRefKind]), "node"), on(ItemRefHref, "node")),
+    contained(on(ItemRefHref, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
+    itemRefTargetFamily,
+    contained(on(untargetedItemRefs, "package", "path"), on(UnreadTypePath, "package", "path")),
     contained(
       on(ItemRefTarget, "package", "path", "type"),
       on(NamedHref, "package", "path", "type"),
@@ -2192,6 +2269,7 @@ export const testLawsByName = {
       on(TestDocument, "node"),
     ),
     siteFamily,
+    sitesFold,
     nameFamily,
     ruleFamily,
     contained(
@@ -2367,8 +2445,8 @@ export const testLawsByName = {
     contained(on(nodesOf(sectionRefKind), "id"), on(Site, "node")),
     contained(on(includes, "id"), on(Site, "node")),
     contained(
-      on(Inclusion, "node", "parentKind", "root", "splices", "version"),
-      on(SiteTarget, "node", "parentKind", "targetRoot", "splices", "version"),
+      on(Inclusion, "node", "parentKind", "places", "root", "splices", "version"),
+      on(SiteTarget, "node", "parentKind", "places", "targetRoot", "splices", "version"),
     ),
     contained(on(includeTargets, "node"), on(Inclusion, "node")),
     contained(

@@ -19,11 +19,13 @@ import { Effect, Option, Result } from "effect";
 import type { FileSystem } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
+import { governorOf } from "#pantry/grammar/attributes.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { fragmentRoots } from "#pantry/grammar/facets.ts";
 import { isForeignKind } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { noType } from "#pantry/grammar/xsi.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
@@ -41,7 +43,13 @@ import type {
   XsdOracle,
 } from "#pantry/test/xsd-catalog.ts";
 import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
-import { asiNamespace, xlinkNamespace, xmlNamespace } from "#pantry/vocab/namespaces.ts";
+import {
+  asiNamespace,
+  xlinkNamespace,
+  xmlNamespace,
+  xsNamespace,
+  xsiNamespace,
+} from "#pantry/vocab/namespaces.ts";
 import { foreignRoots } from "#pantry/vocab/open.ts";
 import { xmllintValidate } from "#pantry/xml/oracle.ts";
 import type { XsdVerdict } from "#pantry/xml/oracle.ts";
@@ -137,6 +145,65 @@ export const laxNilRecord: Recorded = {
     why: "libxml2 never assesses the value of xsi:nil on a foreign element against its built-in declaration",
   },
   rule: "attribute-lexical",
+};
+
+/**
+ * The codec's refusal of an `xsi:nil` its element does not admit, the attribute and its element
+ * captured as written.
+ */
+const unadmittedNil =
+  /^codec at \S*: The attribute (?<attribute>[^\s:]+:nil) in (?<element>\S+) is declared by xml\.xsd or XML Schema, so it is read only under its own name, which its element does not admit/u;
+
+/**
+ * `xsi:nil` that is no `xs:boolean` on an element no declaration makes nillable: libxml2 2.9.13
+ * reports the value and never cvc-elt clause 3.1 (XML Schema Part 1, 3.3.4: an element whose
+ * declaration is not nillable carries no `xsi:nil` at all), since it tests nillability only once
+ * the value is a valid `xs:boolean` (`xmlschemas.c:25264-25287` in v2.9.13). With a boolean value
+ * it says "The element is not 'nillable'.", which the catalog classes `attribute-allowed`, so the
+ * two oracles agree. The law oracle's refusal is the codec's, which names the attribute and not
+ * its value, so the detail cannot tell the two apart: a difference matches only where the document
+ * holds such an `xsi:nil` that is no `xs:boolean` ({@link holdsNilValue}, through
+ * {@link gateHolds}).
+ */
+export const nilValueRecord: Recorded = {
+  class: "attribute-allowed",
+  detail: unadmittedNil,
+  direction: "oracle-only",
+  reason: {
+    _tag: "libxml2",
+    why: "libxml2 tests an element's nillability only when its xsi:nil is a valid xs:boolean, so an xsi:nil that is none on a non-nillable element is refused for its value alone (xmlschemas.c:25264-25287 in v2.9.13)",
+  },
+  rule: "unmodeled-vocabulary",
+};
+
+/**
+ * An `xs:boolean`'s lexical space, its whitespace collapsed (XML Schema Part 2, 3.2.2).
+ */
+const booleanLexical = /^[\t\n\r ]*(?:true|false|1|0)[\t\n\r ]*$/u;
+
+/**
+ * Decide whether a document holds the `xsi:nil` a {@link nilValueRecord} difference names, with a
+ * value that is no `xs:boolean`.
+ *
+ * @param difference - The difference.
+ * @param root - The document's root.
+ * @returns Whether an element of the name the codec wrote carries an `xsi:nil` of the name it
+ *   wrote, whose value is no `xs:boolean`.
+ */
+export const holdsNilValue = (difference: Difference, root: Element): boolean => {
+  const groups = unadmittedNil.exec(difference.detail)?.groups;
+  const holds = (element: Element): boolean =>
+    (element.qname === groups?.["element"] &&
+      element.attributes.some(
+        ({ local, namespace, qname, value }) =>
+          namespace === xsiNamespace &&
+          local === "nil" &&
+          qname === groups["attribute"] &&
+          !booleanLexical.test(value),
+      )) ||
+    element.children.some((child) => child.kind === "element" && holds(child));
+
+  return groups !== undefined && holds(root);
 };
 
 /**
@@ -274,6 +341,105 @@ const invalidIdRecord: Recorded = {
 };
 
 /**
+ * A breach of "DocumentId key" as the comparison writes it: the place of the second element that
+ * holds the ID, and of the first. It names the collapsed ID, not the holders' lexical forms.
+ */
+const documentKeyDetail =
+  /^DocumentId key at (?<second>\/\S*): a second element purports the id [\s\S]*, which (?<first>\/\S*) already holds$/u;
+
+/**
+ * A padded `xml:id` that libxml2 keys apart from its collapsed value: libxml2 2.9.13's parser
+ * registers every `xml:id` by its raw value (`SAX2.c:2128-2147`, `xmlAddID` at
+ * `valid.c:2692-2760`), and the schema validator keys an `xs:ID` by its collapsed value only where
+ * the parser did not register the attribute (`xmlschemastypes.c:2863-2885`). So `v` and `&#x9;v `
+ * are two IDs to it, and so are `&#x9;v ` twice, the second keyed collapsed beside the first's raw
+ * form. XML Schema keys the collapsed value (Part 1, 3.3.4, cvc-id.2; `xs:ID` collapses its
+ * whitespace, Part 2, 3.3.8), and so do the xml:id Recommendation and the law oracle. The detail
+ * names the collapsed ID alone, so a difference matches only where both holders carry an `xml:id`
+ * and one of the two is padded ({@link holdsPaddedId}, through {@link gateHolds}).
+ */
+export const paddedIdRecord: Recorded = {
+  class: "identity",
+  detail: documentKeyDetail,
+  direction: "oracle-only",
+  reason: {
+    _tag: "libxml2",
+    why: "libxml2 keys an xml:id by its raw value at parse time and re-keys only an ID the parser did not register, so a padded xml:id never collides with its collapsed value (SAX2.c:2128-2147, valid.c:2692-2760, xmlschemastypes.c:2863-2885 in v2.9.13)",
+  },
+  rule: "document-key",
+};
+
+/**
+ * Find the lexical forms of the two `xml:id`s a "DocumentId key" difference names, where both of
+ * its holders carry one.
+ *
+ * @param difference - The difference.
+ * @param xmlIds - The document's `xml:id`s, by their holders' places ({@link ForeignNames}).
+ * @returns The first holder's and the second's, or `undefined` where the difference is no key
+ *   breach or a holder carries no `xml:id`.
+ */
+const xmlIdsKeyed = (
+  difference: Difference,
+  xmlIds: ReadonlyMap<string, string>,
+): readonly [string, string] | undefined => {
+  const groups = documentKeyDetail.exec(difference.detail)?.groups;
+  const first = xmlIds.get(groups?.["first"] ?? "");
+  const second = xmlIds.get(groups?.["second"] ?? "");
+
+  return first === undefined || second === undefined ? undefined : [first, second];
+};
+
+/**
+ * Decide whether a {@link paddedIdRecord} difference is libxml2's: both holders carry an `xml:id`,
+ * and one of the two lexical forms is not its collapsed value. Two unpadded forms libxml2 keys
+ * alike, so it refuses the second too and the two oracles agree.
+ *
+ * @param difference - The difference.
+ * @param names - The document's names, whose `xmlIds` hold each `xml:id` by its holder's place.
+ * @returns Whether it is.
+ */
+export const holdsPaddedId = (
+  difference: Difference,
+  names: Pick<ForeignNames, "xmlIds">,
+): boolean =>
+  xmlIdsKeyed(difference, names.xmlIds)?.some(
+    (lexical) =>
+      lexical
+        .split(/[\t\n\r ]+/u)
+        .filter((part) => part !== "")
+        .join(" ") !== lexical,
+  ) ?? false;
+
+/**
+ * The content libxml2 skips: libxml2 2.9.13 assesses nothing more of an element once it refuses the
+ * element's type, cvc-type clause 1 ("The type definition is absent.": an `xsi:type` that names no
+ * type of the document's schema set, or none at all) or cvc-type clause 3.1.2 ("Element content is
+ * not allowed, because the type definition is simple.": an element child of an element a simple
+ * type governs). `xmlSchemaValidateElem` sets `skipDepth` on the first, and
+ * `xmlSchemaValidateChildElem` on the second, after which the element's remaining content, its
+ * descendants and its simple value are never assessed. XML Schema assesses them all (Part 1,
+ * 3.3.4, Schema-Validity Assessment (Element), clause 2: every child, laxly where no type governs
+ * its parent, as spec reading 60 reads it), and so does the law oracle, so each law refusal there
+ * is the law oracle's alone: one of a node below such an element, of the element itself under
+ * cvc-type clause 1, and of its simple value under clause 3.1.2.
+ *
+ * Only an element a wildcard or the codec leaves to lax assessment reaches such a refusal, since
+ * the codec refuses a strictly assessed element whose `xsi:type` names no type, so the detail is a
+ * law refusal at a node within a foreign element. A difference of the corpus or of a generated
+ * document matches it only at the places the document's rows show libxml2 skipped
+ * ({@link isSkippedContent}, through {@link gateHolds}).
+ */
+export const skippedContentRecord: Recorded = {
+  detail:
+    /^.+? at \/\S*?(?:foreign-element|no-namespace-element|own-namespace-element)\[\d+\]\S*: /u,
+  direction: "oracle-only",
+  reason: {
+    _tag: "libxml2",
+    why: "libxml2 assesses nothing more of an element once cvc-type clause 1 or 3.1.2 refuses its type: not its remaining content, its descendants or its simple value (xmlSchemaValidateElem and xmlSchemaValidateChildElem set skipDepth in v2.9.13)",
+  },
+};
+
+/**
  * The classes of disagreement libxml2's validator shows wherever they apply, on corpus and
  * generated documents alike, each shown by a control test below. Each run counts them; none goes
  * stale.
@@ -282,13 +448,16 @@ export const libxml2Records: readonly Recorded[] = [
   idrefRecord,
   locationRecord,
   laxNilRecord,
+  nilValueRecord,
   emptyIdrefsRecord,
   blankListRecord,
   base64Record,
   absentTypeRecord,
   invalidIdRecord,
+  paddedIdRecord,
   paddedTypeRecord,
   widenedOtherRecord,
+  skippedContentRecord,
 ];
 
 /**
@@ -409,7 +578,9 @@ export const isNestedRoot = (difference: Difference, nested: ReadonlySet<string>
  * nothing. A `drd:hazard` beneath a LOM element in an external LOM file is the reading's example.
  *
  * Only a refusal of an element or attribute in a namespace outside the document's set is this
- * class, decided from the law oracle's own rows and the XSDs' imports ({@link isOutsideSet}).
+ * class, decided from the law oracle's own rows and the XSDs' imports ({@link isOutsideSet}). An
+ * `xml:id` held twice in an external LOM file is one, which the reading names: its set declares no
+ * `xml:id`, so XML Schema keys nothing there, and the grammar keys it as a manifest's set types it.
  */
 export const outsideSet: Recorded = {
   direction: "oracle-only",
@@ -585,6 +756,55 @@ export const isPaddedTypeLaw = (
 };
 
 /**
+ * Decide whether a difference is {@link skippedContentRecord}'s: a law refusal at a place whose
+ * every refusal libxml2 skipped, or of the text at a place whose simple value it skipped.
+ *
+ * @param difference - The difference.
+ * @param names - The document's names, whose `skippedPaths` and `skippedValues` hold those places
+ *   as the law oracle writes a node's place.
+ * @returns Whether it is.
+ */
+export const isSkippedContent = (
+  difference: Difference,
+  names: Pick<ForeignNames, "skippedPaths" | "skippedValues">,
+): boolean => {
+  const place = breachDetail.exec(difference.detail)?.groups?.["path"];
+
+  return (
+    difference.direction === skippedContentRecord.direction &&
+    place !== undefined &&
+    (names.skippedPaths.has(place) ||
+      (difference.class === "text-value" && names.skippedValues.has(place)))
+  );
+};
+
+/**
+ * Decide whether a record's gate holds for a difference. Three of libxml2's classes name less in
+ * their detail than in their class, so each is held to the document's own rows:
+ * {@link nilValueRecord} where the document holds an `xsi:nil` that is no `xs:boolean`
+ * ({@link holdsNilValue}), {@link skippedContentRecord} at the places its rows show libxml2 skipped
+ * ({@link isSkippedContent}), and {@link paddedIdRecord} where the two holders' `xml:id`s are one
+ * padded ({@link holdsPaddedId}). Every other record has no gate. The corpus and the generated path
+ * ({@link generatedRecordOf}) both judge by it.
+ *
+ * @param held - The record.
+ * @param difference - The difference.
+ * @param names - The document's names.
+ * @param root - The document's root, or none where it could not be read.
+ * @returns Whether the record may account for the difference.
+ */
+export const gateHolds = (
+  held: Recorded,
+  difference: Difference,
+  names: Pick<ForeignNames, "skippedPaths" | "skippedValues" | "xmlIds">,
+  root: Option.Option<Element>,
+): boolean =>
+  (held !== nilValueRecord ||
+    Option.exists(root, (element) => holdsNilValue(difference, element))) &&
+  (held !== skippedContentRecord || isSkippedContent(difference, names)) &&
+  (held !== paddedIdRecord || holdsPaddedId(difference, names));
+
+/**
  * Decide whether a difference is reading 81's limit ({@link outsideSet}): the law oracle refuses an
  * element whose kind's namespace, or an `xml:` or XLink attribute whose namespace, the document's
  * schema set does not declare, and a kind that stands in more than one set read it: a foreign
@@ -592,7 +812,9 @@ export const isPaddedTypeLaw = (
  * external LOM file, LOM's kinds reading a manifest's set. An `xsi:` attribute is XML Schema's own,
  * which every set declares, and a foreign kind names no namespace of its own, so neither is this
  * class. An element outside the set that no such kind read is not the limit but the grammar reading
- * it where reading 81 makes it foreign, a defect, and stays unrecorded.
+ * it where reading 81 makes it foreign, a defect, and stays unrecorded. A "DocumentId key" breach
+ * names the elements that hold the ID, not the attribute, so one whose two holders both carry an
+ * `xml:id` is read as an `xml:` attribute's.
  *
  * @param difference - The difference.
  * @param names - The document's names, its schema set and what LOM's kinds read beyond it.
@@ -607,6 +829,14 @@ export const isOutsideSet = (
   const groups = breachDetail.exec(difference.detail)?.groups;
   if (difference.direction !== outsideSet.direction || groups === undefined) {
     return false;
+  }
+
+  if (
+    xmlIdsKeyed(difference, names.xmlIds) !== undefined &&
+    !names.set.has(xmlNamespace) &&
+    names.lomReads.has(xmlNamespace)
+  ) {
+    return true;
   }
 
   const kinds = (groups["path"] ?? "")
@@ -907,8 +1137,21 @@ export const generatedRecorded: readonly Recorded[] = [
     reason: {
       _tag: "specification",
       source:
-        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateBlock (§5.145, info.txt:44712 and info301.txt:65416: 'A qti-template-block must not contain any interactions, either directly or indirectly'); VD's ruling of 2026-11-07, its reading to come at schema slot 7",
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateBlock (§5.145: 'A qti-template-block must not contain any interactions, either directly or indirectly'); VD's ruling of 2026-11-07, its reading to come at schema slot 7",
       why: "a template block holds no interaction at any depth; the XSD admits one its content's HTML holds",
+    },
+    rule: "ancestry-ban",
+  },
+  {
+    class: "content",
+    detail:
+      /^N6 ancestry at \S*\/qti-modal-feedback\[\d+\]\/\S*: \S+ sits in \{[^}]*\bmodal\b[^}]*\}: Banned holds \{[^}]*\bmodal\b[^}]*\}/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_ModalFeedback (§5.93: 'The content of the modalFeedback must not contain any interactions')",
+      why: "a modal feedback holds no interaction at any depth; the XSD admits one its content body's HTML holds",
     },
     rule: "ancestry-ban",
   },
@@ -1230,6 +1473,17 @@ export const generatedRecorded: readonly Recorded[] = [
     rule: "binding-declared",
   },
   {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 92,
+      says: "Each response variable declared may be bound to one and only one interaction",
+      why: "each response variable is bound to one interaction only (information model §2.2.2.2), so two interactions of an item that name one response are refused; the XSD resolves no binding",
+    },
+    rule: "binding-unique",
+  },
+  {
     class: "attribute-value",
     detail:
       /^value domain at \S+: (?:src|poster|srcset): "(?: |\\[nrt])*" is outside URLDType \(reading [^)]*\b12[45]\b/u,
@@ -1461,7 +1715,8 @@ const nodeIdOf = (index: number): NodeId =>
  * the document's schema set does not declare (`outside`, reading 81), which a wildcard can only
  * assess laxly; that set's namespaces (`set`); and the namespaces LOM's kinds read beyond it
  * (`lomReads`): in an external LOM file, a manifest's set, since LOM's kinds stand in manifests too
- * (reading 81's limit), and none in any other document.
+ * (reading 81's limit), and none in any other document; and each `xml:id`'s lexical form by its
+ * holder's place (`xmlIds`), which a "DocumentId key" breach names ({@link paddedIdRecord}).
  */
 export interface ForeignNames {
   readonly lax: ReadonlySet<string>;
@@ -1475,6 +1730,19 @@ export interface ForeignNames {
    */
   readonly paddedPaths: ReadonlySet<string>;
   readonly set: ReadonlySet<string>;
+  /**
+   * The places, as the law oracle writes them, of the nodes libxml2 assesses nothing of
+   * ({@link skippedContentRecord}): each element whose `xsi:type` names no type of the schema set
+   * (cvc-type clause 1), and every node below it or below an element a simple type governs that
+   * holds an element child (clause 3.1.2).
+   */
+  readonly skippedPaths: ReadonlySet<string>;
+  /**
+   * The places of the elements a simple type governs that hold an element child, whose simple
+   * value libxml2 never assesses (cvc-type clause 3.1.2).
+   */
+  readonly skippedValues: ReadonlySet<string>;
+  readonly xmlIds: ReadonlyMap<string, string>;
 }
 
 /**
@@ -1519,6 +1787,9 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
       outside: new Set(),
       paddedPaths: new Set(),
       set: new Set(),
+      skippedPaths: new Set(),
+      skippedValues: new Set(),
+      xmlIds: new Map(),
     };
   }
 
@@ -1552,6 +1823,47 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
     ),
   );
   const typed = rows.nodes.filter((node) => padded.has(node.id));
+  // libxml2 skips an element whose xsi:type its schema set resolves to no type (cvc-type clause 1):
+  // a foreign element the codec left ungoverned, or any element whose QName's prefix binds no
+  // namespace, or one neither XML Schema's nor the set's. It skips the content of an element a
+  // simple type governs that holds an element child (clause 3.1.2).
+  const declared = Map.groupBy(rows.namespaces, ({ node }) => node);
+  const boundBy = (node: (typeof rows.nodes)[number], prefix: string): string | undefined => {
+    for (let at = byId.get(node.id); at !== undefined && at.start > 0n; at = byId.get(at.parent)) {
+      const bound = declared.get(at.id)?.find((row) => row.prefix === prefix);
+      if (bound !== undefined) {
+        return bound.uri;
+      }
+    }
+
+    return prefix === "" ? "" : undefined;
+  };
+  const xsiTypes = new Map(
+    rows.attributes.flatMap(({ lexical, name, node }) =>
+      name === "xsi:type" ? [[node, lexical] as const] : [],
+    ),
+  );
+  const typeAbsent = rows.nodes.filter((node) => {
+    const lexical = xsiTypes.get(node.id);
+    if (lexical === undefined) {
+      return false;
+    }
+
+    const prefix = lexical.includes(":") ? lexical.slice(0, lexical.indexOf(":")) : "";
+    const namespace = boundBy(node, prefix);
+
+    return (
+      (isForeignKind(node.kind) && node.governs === noType) ||
+      namespace === undefined ||
+      (namespace !== xsNamespace && !set.has(namespace))
+    );
+  });
+  const parents = new Set(rows.nodes.map(({ parent }) => parent));
+  const simpleHeld = rows.nodes.filter(
+    (node) => Option.isSome(governorOf(grammar.attributes, node)) && parents.has(node.id),
+  );
+  const below = (anchors: readonly (typeof rows.nodes)[number][]) =>
+    rows.nodes.filter((node) => anchors.some((at) => at.start < node.start && node.end <= at.end));
 
   return {
     lax: new Set(opened.values()),
@@ -1579,6 +1891,17 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
         .map(placeOf),
     ),
     set,
+    skippedPaths: new Set([...typeAbsent, ...below([...typeAbsent, ...simpleHeld])].map(placeOf)),
+    skippedValues: new Set(simpleHeld.map(placeOf)),
+    xmlIds: new Map(
+      rows.attributes.flatMap(({ lexical, name, node }) => {
+        const holder = byId.get(node);
+
+        return name === "xml:id" && holder !== undefined
+          ? [[placeOf(holder), lexical] as const]
+          : [];
+      }),
+    ),
   };
 });
 
@@ -2080,7 +2403,8 @@ export interface GeneratedContext {
  * Find the record a generated or bred document's difference matches: reading 114's fragment root,
  * reading 6's nested roots on `xmllint`'s side and on the law oracle's, reading 61's ordering slot,
  * reading 81's schema set by the rows or by an edit the codec refused, reading 60's lax
- * `xsi:type`, and then the corpus's, libxml2's and the generated records.
+ * `xsi:type`, and then the corpus's, libxml2's and the generated records, each held to its gate
+ * ({@link gateHolds}).
  *
  * @param difference - The difference.
  * @param context - What the classes read of the document.
@@ -2118,13 +2442,23 @@ export const generatedRecordOf = (
     return outsideSet;
   }
 
-  return isLaxXsiType(difference, new Set([...names.lax, ...names.outside]))
-    ? laxXsiType
-    : recordOf(context.document, context.version, difference, [
-        ...recorded,
-        ...libxml2Records,
-        ...generatedRecorded,
-      ]);
+  if (isLaxXsiType(difference, new Set([...names.lax, ...names.outside]))) {
+    return laxXsiType;
+  }
+
+  const holds = (held: Recorded): boolean => gateHolds(held, difference, names, Option.some(root));
+  // WHY: nilValueRecord's gate is judged after the match, so a difference it matches by detail in a
+  // document that holds no such xsi:nil is matched by no record rather than by a later one.
+  const record = recordOf(
+    context.document,
+    context.version,
+    difference,
+    [...recorded, ...libxml2Records, ...generatedRecorded].filter(
+      (held) => held === nilValueRecord || holds(held),
+    ),
+  );
+
+  return record === undefined || holds(record) ? record : undefined;
 };
 
 /**

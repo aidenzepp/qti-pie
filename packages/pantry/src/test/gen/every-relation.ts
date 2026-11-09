@@ -56,6 +56,21 @@ import { Effect, FileSystem, Path } from "effect";
 import type { PlatformError, Scope } from "effect";
 
 /**
+ * The stored relations of `Qti` whose rows only a refused package writes, each with the reading
+ * that refuses the package (decision 453 of the genetic repair): no package the law oracle accepts
+ * writes one, so every test that requires a row of each stored relation leaves them out (the
+ * generator's own test, and the one-transaction test of `#pantry/import/transaction.db.test.ts`).
+ * Every other stored relation stays required.
+ *
+ * - `UnreadTypeHref` and `UnreadTypePath`: a resource's `type` that is written and spells no
+ *   `ResourceType` handle, which AL1's value domain refuses (spec reading 67).
+ */
+export const refusedOnly: ReadonlyMap<string, string> = new Map([
+  ["UnreadTypeHref", "reading 67, AL1"],
+  ["UnreadTypePath", "reading 67, AL1"],
+]);
+
+/**
  * The counts an every-relation package is drawn by, each a count some law of its interactions
  * reads.
  */

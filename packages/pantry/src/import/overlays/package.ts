@@ -46,6 +46,8 @@ import type {
   TextReference,
   TextReferencePath,
   TypedHref,
+  UnreadTypeHref,
+  UnreadTypePath,
 } from "#pantry/qti/package.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
@@ -80,6 +82,8 @@ export interface PackageRows {
   readonly ResourceId: ReadonlyMap<string, Addition<typeof ResourceId>>;
   readonly ResourceTyped: ReadonlyMap<string, Addition<typeof ResourceTyped>>;
   readonly TypedHref: ReadonlyMap<string, Addition<typeof TypedHref>>;
+  readonly UnreadTypeHref: ReadonlyMap<string, Addition<typeof UnreadTypeHref>>;
+  readonly UnreadTypePath: ReadonlyMap<string, Addition<typeof UnreadTypePath>>;
 }
 
 /**
@@ -103,6 +107,8 @@ export const noPackageRows: PackageRows = {
   ResourceId: new Map(),
   ResourceTyped: new Map(),
   TypedHref: new Map(),
+  UnreadTypeHref: new Map(),
+  UnreadTypePath: new Map(),
 };
 
 /**
@@ -760,7 +766,9 @@ const unwrittenType = "";
  * identifier space (`ManifestIdSpace`). A row whose existence an attribute's copy proves is left
  * out where the attribute is absent (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`),
  * and a resource's `href` is a row only where it is written; AL3 refuses an absent required
- * attribute. A resource's absent `type` is held as {@link unwrittenType}.
+ * attribute. A resource's absent `type` is held as {@link unwrittenType}. A resource's `href`
+ * whose `type` is written and spells no handle has its `UnreadTypeHref`, beside the
+ * `UnreadTypePath` of its compared path, where a typed one has its `TypedHref`.
  *
  * A dependency names the resource whose identifier its `identifierref` is, its own where its own
  * resource's is (`DependencyTarget`), and none where no resource's is.
@@ -802,6 +810,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
   const resourceIds = new Map<string, Addition<typeof ResourceId>>();
   const resourceTypes = new Map<string, Addition<typeof ResourceTyped>>();
   const typedHrefs = new Map<string, Addition<typeof TypedHref>>();
+  const unreadTypeHrefs = new Map<string, Addition<typeof UnreadTypeHref>>();
+  const unreadTypePaths = new Map<string, Addition<typeof UnreadTypePath>>();
   const spaceOf = (identifier: string, kind: "cp:manifest" | "cp:resource"): void => {
     idSpace.set(headingKey([ids.package, identifier, kind]), {
       identifier,
@@ -872,6 +882,11 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
             type: code,
           });
         }
+
+        if (Option.isNone(type) && typeLexical !== unwrittenType) {
+          unreadTypeHrefs.set(node.id, { node: node.id, package: ids.package, path, typeLexical });
+          unreadTypePaths.set(headingKey([ids.package, path]), { package: ids.package, path });
+        }
       }
     }
 
@@ -921,6 +936,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
     ResourceId: resourceIds,
     ResourceTyped: resourceTypes,
     TypedHref: typedHrefs,
+    UnreadTypeHref: unreadTypeHrefs,
+    UnreadTypePath: unreadTypePaths,
   };
 };
 
