@@ -496,6 +496,36 @@ describe("import/overlays/tests.ts, includes", () => {
       assert.strictEqual(rows?.Inclusion.size, 0, href);
     }
   });
+
+  it("places a child instance for an include only where it may stand for its target's root: one under the item's body, none under a paragraph, which Include root refuses", () => {
+    // Oracle: reading 114 and 117: an include places its target only where `IncludeRoot` gives its
+    // parent that target's root; under `p` a `div` fragment may not stand, so "Include root" refuses
+    // the include, the fragment places nowhere in the item, and is judged as its own document.
+    const fragment = documentOf(
+      el("div", [], [el("qti-hottext-interaction", [["response-identifier", "RESPONSE"]])]),
+    );
+    const cases: readonly (readonly [string, XdmClosedElement<Composed>, number])[] = [
+      ["include in the body", el("xi:include", [["href", "f.xml"]]), 1],
+      ["include in a paragraph", el("p", [], [el("xi:include", [["href", "f.xml"]])]), 0],
+    ];
+
+    for (const [label, holder, children] of cases) {
+      const item = documentOf(
+        el("qti-assessment-item", [["identifier", "I"]], [el("qti-item-body", [], [holder])]),
+      );
+      const documents = rowsOfPackage([
+        ["i.xml", item],
+        ["f.xml", fragment],
+      ]);
+      const assembled = assembledRowsOf(documents, () => idOf(999));
+      const itemRoot = [...assembled.Instance.values()].find(
+        ({ rootKind }) => rootKind === "qti-assessment-item",
+      );
+
+      assert.strictEqual(documents[0]?.SiteTarget.size, 1, label);
+      assert.strictEqual(itemRoot?.children.length, children, label);
+    }
+  });
 });
 
 describe("import/overlays/tests.ts, parts", () => {

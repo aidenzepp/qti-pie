@@ -21,6 +21,7 @@ import { collapse, isNcName } from "#pantry/grammar/domains.ts";
 import {
   attributeRows,
   GoverningOf,
+  grammar,
   ResourceType,
   TextDomain,
   toolLabelKinds,
@@ -385,32 +386,52 @@ interface Tree {
 }
 
 /**
- * Split an ID's lexical form into its `DocumentId` row, bound to an owner: the whitespace before
- * its value, its value, and the whitespace after (`piecesOf`), where the value is an NCName
- * ({@link isNcName}). Any other form, empty, whitespace alone or holding whitespace inside, is no
- * ID value and has no row, so its value domain or TextDomain refuses it alone (spec reading 156).
+ * Decide whether the grammar admits an element where it stands, as `identity.ts`'s
+ * `admittedNodes` selects it: its parent's content model names its kind (`ChildGrammar`). Only
+ * such an element's ID binds (R2); "N5 admitted" alone refuses any other.
  *
  * @param tree - The document's tree.
- * @param node - The element that carries the ID.
+ * @param element - The element's node row.
+ * @returns Whether it is admitted.
+ */
+const admitted = (tree: Tree, element: NodeRow<Composed>): boolean =>
+  Option.isSome(
+    grammar.admission.lookup({
+      child: element.kind,
+      parent: tree.nodeAt(element.parent).kind,
+      version: element.version,
+    }),
+  );
+
+/**
+ * Split an ID's lexical form into its `DocumentId` row, bound to an owner: the whitespace before
+ * its value, its value, and the whitespace after (`piecesOf`), where the value is an NCName
+ * ({@link isNcName}), and whether its element is {@link admitted}. Any other form, empty,
+ * whitespace alone or holding whitespace inside, is no ID value and has no row, so its value domain
+ * or TextDomain refuses it alone (spec reading 156).
+ *
+ * @param tree - The document's tree.
+ * @param element - The element that carries the ID.
  * @param lexical - The ID's lexical form.
  * @param owner - The element its binding names: the attribute's element, or the text's parent.
  * @returns The row, none where the form names nothing.
  */
 const documentIdOf = (
   tree: Tree,
-  node: NodeId,
+  element: NodeRow<Composed>,
   lexical: string,
   owner: NodeId,
 ): Option.Option<Addition<typeof DocumentId>> =>
   Option.map(
     Option.liftPredicate(piecesOf(lexical), ({ token }) => isNcName(token)),
     ({ lead, token, trail }) => ({
+      admitted: admitted(tree, element),
       after: trail,
       before: lead,
       document: tree.document,
       id: token,
       lexical,
-      node,
+      node: element.id,
       owner,
     }),
   );
@@ -433,7 +454,7 @@ const attributeRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "LabelUs
     // An element's first ID-typed attribute whose value names something is its ID; XML Schema
     // gives it no second, which "DocumentId key"'s key over the ID-typed attributes' node refuses.
     if (holdsId(attribute, element) && !documentIds.has(node)) {
-      for (const id of Option.toArray(documentIdOf(tree, node, lexical, node))) {
+      for (const id of Option.toArray(documentIdOf(tree, element, lexical, node))) {
         documentIds.set(node, id);
       }
     }
@@ -517,7 +538,7 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
     });
 
     if (identity === "ID") {
-      for (const id of Option.toArray(documentIdOf(tree, node.id, text, node.parent))) {
+      for (const id of Option.toArray(documentIdOf(tree, node, text, node.parent))) {
         documentIds.set(node.id, id);
       }
     }
@@ -834,9 +855,9 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
     DocumentGenerals: new Map([[tree.document, { document: tree.document }]]),
     DocumentId: documentIds,
     IdBinding: new Map(
-      [...documentIds.values()].map(({ document, id, owner }) => [
+      [...documentIds.values()].map(({ admitted: bound, document, id, owner }) => [
         headingKey([document, id, owner]),
-        { document, id, owner },
+        { admitted: bound, document, id, owner },
       ]),
     ),
     IdentityText: texts.IdentityText,

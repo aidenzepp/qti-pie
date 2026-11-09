@@ -48,6 +48,7 @@ import {
   partKind,
   sectionKind,
   sectionParts,
+  sectionRefKind,
   selectionKind,
   splicingParents,
   stimulusRefKind,
@@ -238,10 +239,33 @@ export const piecesOf = (lexical: string): Pieces => {
 const among = (kinds: readonly string[], kind: string): boolean => kinds.includes(kind);
 
 /**
+ * Decide whether a site places the document it names (`SiteTarget.places`, spec readings 85 and
+ * 117): it is a section ref, or an include that may stand for that document's root (`IncludeRoot`,
+ * reading 114), whatever its parent. An include that may not stand for its target's root names it
+ * but places nothing, and "Include root" alone refuses it.
+ *
+ * @param site - The site: its kind, its parent's kind and its version.
+ * @param root - The root kind of the document its href names.
+ * @returns Whether it places it.
+ */
+const placesAt = (
+  site: Pick<Addition<typeof Site>, "kind" | "parentKind" | "version">,
+  root: string,
+): boolean =>
+  site.kind === sectionRefKind ||
+  Option.isSome(
+    grammar.include.includeRoot.lookup({
+      kind: root,
+      parent: site.parentKind,
+      version: site.version,
+    }),
+  );
+
+/**
  * Decide whether a site splices the document it names in place (`Inclusion.splices`, spec reading
- * 117): it is an include under one of `splicingParents` that may stand for that document's root
- * (`IncludeRoot`, reading 114). A section ref places its target whole, and so does an include under
- * a section; an include that may not stand for its target's root places no fragment there.
+ * 117): it is an include under one of `splicingParents` that places that document, as
+ * {@link placesAt} decides. A section ref places its target whole, and so does an include under a
+ * section.
  *
  * @param site - The site: its kind, its parent's kind and its version.
  * @param root - The root kind of the document its href names.
@@ -251,15 +275,7 @@ const splicesAt = (
   site: Pick<Addition<typeof Site>, "kind" | "parentKind" | "version">,
   root: string,
 ): boolean =>
-  site.kind === includeKind &&
-  among(splicingParents, site.parentKind) &&
-  Option.isSome(
-    grammar.include.includeRoot.lookup({
-      kind: root,
-      parent: site.parentKind,
-      version: site.version,
-    }),
-  );
+  site.kind === includeKind && among(splicingParents, site.parentKind) && placesAt(site, root);
 
 /**
  * One document as the builders read it: its flat rows and the indexes over them.
@@ -972,6 +988,7 @@ const siteTargetsOf = (
                 package: href.package,
                 parentKind: site.parentKind,
                 path: href.path,
+                places: placesAt(site, target.rootKind),
                 splices: splicesAt(site, target.rootKind),
                 target: target.node,
                 targetNearest: target.context.nearest,
@@ -1007,6 +1024,7 @@ const inclusionsOf = (
                 includeParent: site.parentKind,
                 node: site.node,
                 parentKind: site.parentKind,
+                places: site.places,
                 root: site.targetRoot,
                 splices: site.splices,
                 version: site.version,
@@ -1229,11 +1247,13 @@ interface Walk {
 }
 
 /**
- * Place a document and one child per site of it, each the document the site names. A site that
- * names no document of the package places nothing, and its own laws refuse it; nor does a site that
- * names a document on the chain, the document itself included, which would close an inclusion
- * cycle: its instance holds fewer children than its document has sites, which "Inclusion cycle"
- * refuses, and no instance repeats a document, whose placements would break the assembly's keys.
+ * Place a document and one child per site of it that places its target (`SiteTarget.places`), each
+ * the document the site names. A site that names no document of the package places nothing, and its
+ * own laws refuse it; nor does an include that may not stand for its target's root, which "Include
+ * root" alone refuses; nor does a site that names a document on the chain, the document itself
+ * included, which would close an inclusion cycle: its instance holds fewer children than its
+ * document has sites that place their target, which "Inclusion cycle" refuses, and no instance
+ * repeats a document, whose placements would break the assembly's keys.
  *
  * @param walk - The assembly's walk.
  * @param chain - The documents of the instance's ancestors.
@@ -1268,8 +1288,12 @@ const place = (
   const closing = new Set([...chain, self.document]);
   const children = sites.flatMap((site) =>
     Option.toArray(
-      Option.flatMap(Option.fromNullishOr(self.rows.SiteTarget.get(site.node)), ({ target }) =>
-        Option.fromNullishOr(walk.byDocument.get(target)),
+      Option.flatMap(
+        Option.filter(
+          Option.fromNullishOr(self.rows.SiteTarget.get(site.node)),
+          ({ places }) => places,
+        ),
+        ({ target }) => Option.fromNullishOr(walk.byDocument.get(target)),
       ),
     )
       .filter(({ document }) => !closing.has(document.node))

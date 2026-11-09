@@ -14,10 +14,10 @@
  *   it is accepted unchecked (reading 110, its `MappingItemRefType`), their containments into
  *   `ItemRefDocument` and `Declaration`, their CHECKs, a mapped reading's declaration (its
  *   mapping's source's), `MappingLookup`'s forced and justified rows, `VariableMapping`'s key and
- *   session check, and what each item ref names: its `ItemRefTarget` and `ItemRefDocument`, each a
- *   row only where the package holds it, and the assembly's names' copies of them. Each law carries
- *   the name `src/import/refusal.ts` gives the schema's statement of it ({@link hostLaws}, held to
- *   `statedLaws` by the first test).
+ *   session check, and what each item ref names: its `ItemRefHref`, and its `ItemRefTarget` and
+ *   `ItemRefDocument`, each a row only where the package holds it, and the assembly's names' copies
+ *   of them. Each law carries the name `src/import/refusal.ts` gives the schema's statement of it
+ *   ({@link hostLaws}, held to `statedLaws` by the first test).
  *
  * The two must name the same breaches, but one residual the schema states on purpose: the declared
  * half of `Variable mapping target` is judged on a mapping's `MappingSourceDeclaration`, so a
@@ -184,7 +184,15 @@ const restates = (law: Law, restated: Restated): boolean => {
 const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
   [{ kind: "check", name: "Item_ref_target" }, "Item ref target"],
   [
-    { from: ["Attribute", "node"], kind: "contained", to: ["ItemRefTarget", "node"] },
+    { from: ["Attribute", "node"], kind: "contained", to: ["ItemRefHref", "node"] },
+    "Item ref target",
+  ],
+  [
+    {
+      from: ["ItemRefHref", "package", "path"],
+      kind: "contained",
+      to: ["UnreadTypePath", "package", "path"],
+    },
     "Item ref target",
   ],
   [
@@ -729,10 +737,11 @@ const lookupBreaches = (rows: HostRows): readonly HostBreach[] => {
 };
 
 /**
- * The breaches of the laws over what each item ref names (B2, B3, "Item ref target"): each item
- * ref that writes an href has its target, of the item type or an LTI type, named by a resource of
- * the package; each of the item type has its document, whose root is an item, and no other has
- * one; and each found item ref of the assembly's names that names a resource reads its type and
+ * The breaches of the laws over what each item ref names (B2, B3, "Item ref target"): each item ref
+ * that writes an href has its href's row, and its target, of the item type or an LTI type, named by
+ * a resource of the package, unless a resource of an unread type names its path, where it may have
+ * none (decision 454); each of the item type has its document, whose root is an item, and no other
+ * has one; and each found item ref of the assembly's names that names a resource reads its type and
  * its item from them. Each is named by the empty name, as the oracle keys the law by its path
  * alone.
  *
@@ -754,8 +763,20 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
       held && kind === "qti-assessment-item-ref" && resourceType !== "none",
   );
 
+  const unreadPaths = [...inputs.UnreadTypePath.values()];
+
   return [
-    ...hrefs.flatMap(({ node }) => unless(inputs.ItemRefTarget.has(node), law, "")),
+    ...hrefs.flatMap(({ node }) => unless(inputs.ItemRefHref.has(node), law, "")),
+    ...[...inputs.ItemRefHref.values()].flatMap((href) =>
+      unless(
+        inputs.ItemRefTarget.has(href.node) ||
+          unreadPaths.some(
+            ({ package: held, path }) => held === href.package && path === href.path,
+          ),
+        law,
+        "",
+      ),
+    ),
     ...targets.flatMap((target) => [
       ...unless(itemTypes.has(target.type), law, ""),
       ...unless(
