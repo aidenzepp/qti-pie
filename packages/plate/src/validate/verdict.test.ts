@@ -3269,6 +3269,114 @@ const align54Wordings: readonly {
 ];
 
 /**
+ * A hand-built refusal for each `check` and rewording Revision 3 of align-54 adds, with the row of
+ * its contract that adds it and the fragments its sentence must hold: the facts its detail carries,
+ * what settles it and the repair. Each fragment names a fact the rule's default sentence never
+ * names, so each case fails until its branch words it.
+ */
+const align54R3Wordings: readonly {
+  readonly detail: Readonly<Record<string, string>>;
+  readonly name: string;
+  readonly row: string;
+  readonly rule: RefusalRule;
+  readonly says: readonly string[];
+}[] = [
+  {
+    detail: {
+      catalog: "glossary",
+      check: "card-support",
+      source: "info.txt:21097",
+      support: "sign-language",
+    },
+    name: "a catalog holds one card per support",
+    row: "F3a",
+    rule: "duplicate-identifier",
+    says: [
+      "A `qti-card` names the support `sign-language`, as an earlier card of the catalog `glossary` does, and a catalog holds one card per support (info.txt:21097).",
+      "To make it valid: remove the repeated `qti-card`, or merge its entries into the catalog's first card for `sign-language`.",
+    ],
+  },
+  {
+    detail: {
+      check: "card-default",
+      count: "2",
+      element: "qti-card",
+      source: "info.txt:21284",
+      support: "sign-language",
+    },
+    name: "a card holds at most one default entry",
+    row: "F3a",
+    rule: "child-count",
+    says: [
+      "The `qti-card` for the support `sign-language` holds 2 entries that designate themselves default, and a card holds at most one default entry (info.txt:21284).",
+      'To make it valid: keep `default="true"` on one `qti-card-entry` of the card, and remove it from the others.',
+    ],
+  },
+  {
+    detail: {
+      attribute: "data-catalog-idref",
+      check: "catalog-reference",
+      element: "span",
+      source: "info.txt:21437",
+      target: "p",
+      value: "note-1",
+    },
+    name: "a data-catalog-idref names a qti-catalog",
+    row: "F3b",
+    rule: "attribute-type",
+    says: [
+      "`span`'s attribute `data-catalog-idref` is `note-1`, the `id` of the element `p`, not of a `qti-catalog`, and a `data-catalog-idref` names a `qti-catalog` of its own document (info.txt:21437).",
+      "To make it valid: name in `data-catalog-idref` the `id` of a `qti-catalog` of the document.",
+    ],
+  },
+  {
+    detail: {
+      check: "reference",
+      document: "items/q1.xml",
+      element: "qti-file-href",
+      path: "cards/sign.mp4",
+      source: "info.txt:21151",
+    },
+    name: "a file reference an element's text makes names a held file",
+    row: "F4",
+    rule: "package-file-missing",
+    says: [
+      "The document `items/q1.xml` names the file `cards/sign.mp4` in its `qti-file-href`, and the package's manifest lists no such file (info.txt:21151).",
+      "To make it valid: add `cards/sign.mp4` to the package and list it in a `file` entry, or correct the `qti-file-href`.",
+    ],
+  },
+  {
+    detail: {
+      attribute: "module",
+      check: "pci-module-source",
+      element: "qti-portable-custom-interaction",
+      source: "info.txt:37583",
+    },
+    name: "a PCI names its module",
+    row: "F6",
+    rule: "missing-attribute",
+    says: [
+      "`qti-portable-custom-interaction` carries no `module` and holds no `qti-interaction-modules`, and a PCI names its module by `module`, by `qti-interaction-modules`, or by both (info.txt:37583).",
+      "To make it valid: add a `module` to `qti-portable-custom-interaction`, or a `qti-interaction-modules` inside it.",
+    ],
+  },
+  {
+    detail: {
+      check: "remote-section",
+      href: "https://example.org/sections/s1.xml",
+      reading: "170",
+    },
+    name: "a remote section ref is refused under a stated limit",
+    row: "C",
+    rule: "package-path-outside",
+    says: [
+      "The section ref's `href` is `https://example.org/sections/s1.xml`, which leads outside the package; plate assembles a test from its package's documents and never fetches a section, so a remote section ref is refused, a stated limit and not a rule of QTI (reading 170).",
+      "To make it valid: put the section document in the package and point the `href` at its path inside the package.",
+    ],
+  },
+];
+
+/**
  * The facts of a `string-binding` refusal of an interaction's `string-identifier` naming `NOTES`,
  * a response of base type `integer`.
  *
@@ -3300,6 +3408,31 @@ describe("describeRefusal", () => {
     for (const fragment of says) {
       assert.include(sentence, fragment);
     }
+  });
+
+  it.each(align54R3Wordings)("align-54 R3 wording $row: $name", ({ detail, rule, says }) => {
+    const sentence = describeRefusal(refusalOf(rule, detail));
+
+    assert.notMatch(sentence, /[\n\r]/u);
+
+    for (const fragment of says) {
+      assert.include(sentence, fragment);
+    }
+  });
+
+  it("align-54 R3 wording F4: a file reference an attribute makes keeps its sentence, naming the attribute", () => {
+    assert.strictEqual(
+      describeRefusal(
+        refusalOf("package-file-missing", {
+          attribute: "src",
+          check: "reference",
+          document: "items/q1.xml",
+          path: "images/a.png",
+          reading: "103",
+        }),
+      ),
+      "**`item.xml`, at `qti-assessment-item`: refused.** The document `items/q1.xml` names the file `images/a.png` in its `src`, and the package's manifest lists no such file (reading 103). Rule `package-file-missing`. To make it valid: add `images/a.png` to the package and list it in a `file` entry, or correct the `src`.",
+    );
   });
 
   it("align-54 wording D2: compares a LOM title in the document's language, as xs:normalizedString, naming the language when the document has one", () => {
