@@ -1487,7 +1487,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   declarations: 0n,
                   hottexts: 0n,
                 }),
-                "choice_identifier_key",
+                "Choice_identifier_key",
               ],
               [
                 "a choice and a hottext",
@@ -1496,7 +1496,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   declarations: 0n,
                   hottexts: 1n,
                 }),
-                "choice_identifier_key",
+                "Choice_identifier_key",
               ],
               [
                 "two hottexts",
@@ -1505,7 +1505,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   declarations: 0n,
                   hottexts: 2n,
                 }),
-                "choice_identifier_key",
+                "Choice_identifier_key",
               ],
               [
                 "two placed choices",
@@ -1515,7 +1515,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   hottexts: 0n,
                   placedChoices: 2n,
                 }),
-                "choice_identifier_key",
+                "Choice_identifier_key",
               ],
               [
                 "a placed choice and a placed hottext",
@@ -1526,7 +1526,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   placedChoices: 1n,
                   placedHottexts: 1n,
                 }),
-                "choice_identifier_key",
+                "Choice_identifier_key",
               ],
               [
                 "two placed hottexts",
@@ -1536,7 +1536,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                   hottexts: 0n,
                   placedHottexts: 2n,
                 }),
-                "choice_identifier_key",
+                "Choice_identifier_key",
               ],
               [
                 "a declaration alone",
