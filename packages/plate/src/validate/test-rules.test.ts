@@ -2293,3 +2293,81 @@ describe("checkTestRules, align-54 r11 rubric prose rules: a test's and a sectio
     );
   });
 });
+
+/**
+ * The forms of a structure identifier that are no `xs:NCName`, each with the name a case's title
+ * gives it: one that starts with a digit, one with an inner space, the empty string, whitespace
+ * alone, which collapses to the empty string, and one that starts with a character only XML 1.0's
+ * fifth edition admits (reading 94 reads the second edition's).
+ */
+const namelessForms = [
+  { form: "1a", name: "1a" },
+  { form: "a b", name: "a b" },
+  { form: "", name: "the empty string" },
+  { form: "   ", name: "whitespace alone" },
+  { form: "٠a", name: "U+0660 a" },
+] as const;
+
+describe("checkTestRules, align-54 r11 reading 152 names nothing: a structure identifier or a declaration's identifier that is no NCName names nothing, so no law but its value domain judges it (reading 152 as amended)", () => {
+  it.each(namelessForms)(
+    "align-54 r11 reading 152 names nothing decision 457 (2): two parts, a section and an item ref of one name, two section refs and two item refs that each write $name are not refused duplicate-identifier",
+    ({ form }) => {
+      assert.deepStrictEqual(
+        [
+          judged(
+            assessmentTest([
+              part(form, [section("S1", [itemRef("I1")])]),
+              part(form, [section("S2", [itemRef("I2")])]),
+            ]),
+          ),
+          judged(assessmentTest([part("P", [section(form, [itemRef(form, [], "items/a.xml")])])])),
+          judged(
+            oneSection([
+              sectionRef(form, "sections/a.xml"),
+              sectionRef(form, "sections/b.xml"),
+              itemRef("I1"),
+            ]),
+          ),
+          judged(oneSection([itemRef(form, [], "items/a.xml"), itemRef(form, [], "items/b.xml")])),
+        ],
+        [[], [], [], []],
+      );
+    },
+  );
+
+  it.each(namelessForms)(
+    "align-54 r11 reading 152 names nothing decision 457 (2): two test outcomes that each write $name are not refused duplicate-identifier (readings 74 and 157)",
+    ({ form }) => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            declaration("qti-outcome-declaration", form, "single", "float"),
+            declaration("qti-outcome-declaration", form, "single", "float"),
+            part("P", [section("S", [itemRef("I1")])]),
+          ]),
+        ),
+        [],
+      );
+    },
+  );
+
+  it("align-54 r11 reading 152 names nothing decision 457 (2): a branch rule whose target 1a an earlier part writes is unknown, not backward, since no target resolves to a name that is no NCName, and a rule of a part 1a is left to the assembled test (reading 147)", () => {
+    assert.deepStrictEqual(
+      [
+        judged(
+          assessmentTest([
+            part("1a", [section("S1", [itemRef("I1")])]),
+            part("P", [jumpTo("1a"), section("S2", [itemRef("I2")])]),
+          ]),
+        ),
+        judged(
+          assessmentTest([
+            part("1a", [jumpTo("Q"), section("S1", [itemRef("I1")])]),
+            part("Q", [section("S2", [itemRef("I2")])]),
+          ]),
+        ),
+      ],
+      [[refusedTarget("qti-assessment-test/qti-test-part[2]", "unknown", "1a")], []],
+    );
+  });
+});

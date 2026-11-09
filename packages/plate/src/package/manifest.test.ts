@@ -1193,3 +1193,67 @@ describe("package/manifest.ts", () => {
     );
   });
 });
+
+/**
+ * The forms of a `dependency`'s `identifierref` that are no `xs:NCName`, each with the name a
+ * case's title gives it (reading 152 as amended).
+ */
+const namelessRefs = [
+  { form: "1a", name: "1a" },
+  { form: "a b", name: "a b" },
+  { form: "", name: "the empty string" },
+  { form: "   ", name: "whitespace alone" },
+  { form: "٠a", name: "U+0660 a" },
+] as const;
+
+describe("readManifest, align-54 r11 reading 152 names nothing: a dependency's identifierref names a resource as xs:IDREF reads it (reading 152 as amended)", () => {
+  it.effect.each(namelessRefs)(
+    "align-54 r11 reading 152 names nothing decision 457 (2): a dependency whose identifierref is $name names nothing, so it is refused attribute-type alone, not dependency-unresolved",
+    ({ form }) =>
+      Effect.gen(function* namelessDependency() {
+        const refusals = refusalsOf(
+          yield* readXml(
+            manifestXml("3.0.0", itemXml("a", `<dependency identifierref="${form}"/>`)),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          refusals.map((refusal) => [refusal.rule, pathOf(refusal)]),
+          [
+            [
+              "attribute-type",
+              `${cp}manifest/${cp}resources/${cp}resource/${cp}dependency/@identifierref`,
+            ],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "align-54 r11 reading 152 names nothing decision 457 (3): a dependency written ' a ' names the resource a, and one written a names the resource written ' a ', since xs:ID and xs:IDREF collapse their whitespace",
+    () =>
+      Effect.gen(function* paddedDependency() {
+        const paddedRef = manifestOf(
+          yield* readXml(
+            manifestXml(
+              "3.0.0",
+              `${itemXml("a")}${itemXml("c", '<dependency identifierref=" a "/>')}`,
+            ),
+          ),
+        );
+        const paddedResource = manifestOf(
+          yield* readXml(
+            manifestXml(
+              "3.0.0",
+              `<resource identifier=" a " type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/></resource>${itemXml("c", '<dependency identifierref="a"/>')}`,
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          [paddedRef.resources.length, paddedResource.resources.length],
+          [2, 2],
+        );
+      }),
+  );
+});
