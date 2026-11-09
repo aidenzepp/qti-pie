@@ -15,9 +15,10 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
 /**
  * The committed chain's measured counts (the chain regenerated over the align laws' migration by
  * the N5 Follow and AL5 repairs' migration, GEN-S3, then extended by the test-root braced
- * reference's migration, GEN-S4, which changes one check and moves no count, on grizzle
- * `1.0.0-beta.1`), as a ratchet: a change that moves one fails here until the count is measured
- * again. A regeneration updates them here, and only here.
+ * reference's migration, GEN-S4, which changes one check and moves no count, and by the order
+ * interaction's binding migration, GEN-S5, which replaces one closed constant with another and
+ * moves no count, on grizzle `1.0.0-beta.1`), as a ratchet: a change that moves one fails here
+ * until the count is measured again. A regeneration updates them here, and only here.
  *
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
