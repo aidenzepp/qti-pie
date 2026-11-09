@@ -4,8 +4,8 @@
  * author.
  *
  * {@link check} refuses a root outside QTI's namespace, then runs the structural validator, the
- * item prose rules, the test prose rules, a stimulus's rules and the refusals its QTI version
- * decides together, then leaves unchecked what it cannot judge.
+ * item prose rules, the test prose rules, a stimulus's rules, the catalog rules and the refusals
+ * its QTI version decides together, then leaves unchecked what it cannot judge.
  * Every verdict carries the kind of its document's root. On an item it accepts it secures the
  * source before it builds the item: it removes every attribute only a wildcard admits (E3) and
  * passes every URL attribute through `url.ts`, keeping each value in its parsed form or dropping it
@@ -47,6 +47,7 @@ import { buildTest } from "#plate/model/test.ts";
 import type { MarkedFeature, Test } from "#plate/model/test.ts";
 import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
 import { durationForm, trimXmlSpace } from "#plate/model/values.ts";
+import { checkCatalogs } from "#plate/validate/catalog.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { checkRules } from "#plate/validate/rules.ts";
@@ -1052,8 +1053,9 @@ const checkStimulusRules = (source: SourceDocument, tables: Tables): readonly Re
  * Give the verdict on a document, in order:
  *
  * 1. A root outside QTI's namespace is `refused`, of kind `none`, with `not-qti-root` alone.
- * 2. The structural validator's refusals, the item prose rules', the test prose rules' and a
- *    stimulus's ({@link checkStimulusRules}), then those the document's version decides
+ * 2. The structural validator's refusals, the item prose rules', the test prose rules', a stimulus's
+ *    ({@link checkStimulusRules}) and the catalog rules' (`checkCatalogs`, R9-a's cards in a
+ *    document of any kind), then those the document's version decides
  *    (`#plate/validate/versions.ts`, which reads the others), together and in that order, with no
  *    short-circuit: any one makes the document `refused`, with all of them. Each rule set judges
  *    only its own roots, and a document of no stated version earns none of the version's.
@@ -1098,6 +1100,7 @@ export const check = (
     ...checkRules(source, tables),
     ...checkTestRules(source, tables),
     ...checkStimulusRules(source, tables),
+    ...checkCatalogs(source, tables),
   ];
   const refusals = [...judged, ...checkVersion(source, version, judged)];
   if (Arr.isReadonlyArrayNonEmpty(refusals)) {
