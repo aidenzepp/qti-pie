@@ -412,7 +412,6 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
     "MappingCardinality",
     "MapKey",
     "MapKeyType",
-    "MapKeyInteger",
     "MapKeyFloat",
     "MapKeyPoint",
     "MapKeyPair",
@@ -492,8 +491,6 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
   ...namedBy("value domain", "StatisticDate.date"),
   ...namedBy(
     "E1 derived",
-    "MapKeyInteger.negative",
-    "MapKeyInteger.value",
     "MapKeyFloat.value",
     "MapKeyPoint.value",
     "MapKeyPoint.xNegative",

@@ -1,8 +1,9 @@
 /**
  * The mapping overlays' free tests: their statements build beside the layers they read, each check
- * is named by an oracle law, and the typed map keys select exactly the lexical forms their base
- * types give a typed value, read against the deleted schema's lexical forms with JavaScript's
- * engine as the oracle.
+ * is named by an oracle law, the typed map keys select exactly the lexical forms their base types
+ * give a typed value, read against the deleted schema's lexical forms with JavaScript's engine as
+ * the oracle, and an integer key's typed value, the query `MapKeyInteger`, repeats exactly where
+ * the law oracle's `Map key` names a repeat.
  *
  * The database tests (`mapping.db.test.ts`) judge the same laws through PostgreSQL, and the
  * builder's rows are `#pantry/import/overlays/mapping.test.ts`'s.
@@ -31,7 +32,6 @@ import {
   MapKey,
   MapKeyDirectedPair,
   MapKeyFloat,
-  MapKeyInteger,
   MapKeyPair,
   MapKeyPoint,
   Mapping,
@@ -41,9 +41,10 @@ import {
   pointKeyPattern,
 } from "#pantry/qti/mapping.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
-import { Qti } from "#pantry/qti/own.ts";
+import { Qti, QtiBase } from "#pantry/qti/own.ts";
 import { searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { numericNamed } from "#pantry/test/predicates.ts";
 
 /**
  * The deleted schema's `xs:integer` lexical space (`src/schema/patterns.ts` `xsInteger` at the
@@ -84,7 +85,6 @@ const mappingRelations = {
   MapKey,
   MapKeyDirectedPair,
   MapKeyFloat,
-  MapKeyInteger,
   MapKeyPair,
   MapKeyPoint,
   Mapping,
@@ -485,5 +485,131 @@ describe("qti/mapping.ts, the oracle's mapping laws", { timeout: searchTimeout }
           `an integer outcome's target x: ${target.join("; ")}`,
         );
       }),
+  );
+});
+
+/**
+ * The integer box's keys: a sign or none before one or two digits over 0 and 1, and the two texts
+ * no integer's form holds that sit nearest one, a point and an empty sign.
+ */
+const integerKeys = [
+  "0",
+  "1",
+  "00",
+  "01",
+  "10",
+  "11",
+  "+0",
+  "+1",
+  "+00",
+  "+01",
+  "+10",
+  "+11",
+  "-0",
+  "-1",
+  "-00",
+  "-01",
+  "-10",
+  "-11",
+  "1.0",
+  "+",
+] as const;
+
+/**
+ * What a pair of the integer box's keys is: one key twice, two spellings of one integer, two
+ * integers, or a key of no integer's form beside another.
+ */
+type IntegerPairSituation = "one key" | "one integer" | "two integers" | "no integer";
+
+/**
+ * Whether the schema holds two keys of one integer mapping apart, read as its statements state it:
+ * the lexical key over `MapKey(mapping, key)`, and the key over the query `MapKeyInteger`
+ * (`#pantry/qti/queries.ts`), whose rows are the keys `integerKeyPattern` selects, each valued by
+ * `Compute.parseDecimal` of its text, read here by the host's reading of that parse
+ * (`#pantry/test/predicates.ts` `numericNamed`, `numeric_in` over `decimalText`): a selected key
+ * has no point, so its numeric's scale is 0 and its digits are the value.
+ *
+ * @param left - The first key.
+ * @param right - The second key.
+ * @returns Whether the two repeat.
+ */
+const integersRepeat = (left: string, right: string): boolean => {
+  const valueOf = (key: string): bigint | undefined => {
+    const parsed = integerKey.test(key) ? numericNamed(key) : undefined;
+
+    return parsed?.kind === "finite" ? parsed.digits : undefined;
+  };
+  const value = valueOf(left);
+
+  return left === right || (value !== undefined && value === valueOf(right));
+};
+
+describe("qti/mapping.ts, an integer key's typed value", { timeout: searchTimeout }, () => {
+  it("is the query MapKeyInteger of Qti, over each entry's node, its mapping and the numeric it parses, keyed by mapping and value", () => {
+    // Oracle: grizzle's README, "Rules over queries" and "Parsing text": a derived relation is a
+    // set of its head's rows, so the entry's node keeps two entries of one integer two rows the
+    // key refuses, and `Compute.parseDecimal` is a numeric, so `1` and `01` meet as one value;
+    // the type annotation holds the value's SQL type to `numeric` when the file typechecks.
+    // Bound: the one relation and its one rule.
+    const { MapKeyInteger } = Qti.relations;
+    const value: "numeric" = MapKeyInteger.heading.value.sql;
+
+    assert.strictEqual(MapKeyInteger.kind, "derived");
+    assert.strictEqual(value, "numeric");
+    assert.deepStrictEqual(Object.keys(MapKeyInteger.heading).toSorted(), [
+      "mapping",
+      "node",
+      "value",
+    ]);
+    assert.notProperty(QtiBase.relations, "MapKeyInteger");
+  });
+
+  it.effect(
+    "repeats two keys of an integer mapping exactly where the law oracle names a Map key repeat",
+    (ctx) =>
+      // Oracle: the law oracle (`#pantry/test/oracle.ts`), the specification as a checker: two
+      // keys of a mapping repeat where they are one integer by JavaScript's `BigInt` (§5.88.4 and
+      // §7.21, reading 45), or one text; against the schema's two keys, read as its statements
+      // state them ({@link integersRepeat}).
+      // Bound: every ordered pair of the integer box's 20 keys, 400.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every ordered pair of a sign or none before 1 or 2 digits over 0 and 1, 1.0 and +",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<IntegerPairSituation>([
+              "one key",
+              "one integer",
+              "two integers",
+              "no integer",
+            ]),
+            generator: (source) =>
+              [source.draw(element(integerKeys)), source.draw(element(integerKeys))] as const,
+            limit: 500,
+            literal: (keys) => JSON.stringify(keys),
+            oracle: { kind: "specification", name: "the law oracle's Map key" },
+            suite: "qti/mapping-integer-repeat",
+          },
+          ([left, right], c) =>
+            Effect.gen(function* integerRepeat() {
+              const integers = integerKey.test(left) && integerKey.test(right);
+              const situations: readonly [IntegerPairSituation, boolean][] = [
+                ["one key", left === right],
+                ["no integer", !integers],
+                ["one integer", integers && BigInt(left) === BigInt(right)],
+              ];
+              c.note(situations.find(([, holds]) => holds)?.[0] ?? "two integers");
+
+              const breaches = yield* mappingBreachesOf(mappedItem("integer", [left, right], "7"));
+
+              assert.strictEqual(
+                breaches.some((breach) => breach.startsWith("Map key")),
+                integersRepeat(left, right),
+                `${left} ${right}: ${breaches.join("; ")}`,
+              );
+            }),
+        ),
+      ),
   );
 });

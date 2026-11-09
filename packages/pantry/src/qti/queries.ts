@@ -25,6 +25,7 @@ import {
   Compute,
   contained,
   derived,
+  key,
   mirrors,
   on,
   query,
@@ -71,6 +72,7 @@ import {
   objectTypes,
   resourceMetadata,
 } from "#pantry/qti/metadata.ts";
+import { integerKeyPattern, MapKeyType } from "#pantry/qti/mapping.ts";
 import { ResourceDocument, ResourceHref, ResourceTyped } from "#pantry/qti/package.ts";
 import {
   AssembledName,
@@ -790,6 +792,59 @@ export const queriesOf = (base: QtiBase) => {
   const expressionQueryLaws = Object.values(expressionQueryLawsByName).flat();
 
   /**
+   * An integer map key's typed value, one row per entry whose key is in `xs:integer`'s lexical
+   * space (`integerKeyPattern`) and whose mapping's base type is `integer`: its entry's `node`, its
+   * `mapping`, and `value`, the integer the key names, which PostgreSQL reads from the key's text
+   * by grizzle's `Compute.parseDecimal`, XML Schema's lexical mapping of `xs:decimal`, whose
+   * restriction `xs:integer` is (Part 2 §3.3.13): `1`, `01`, `+1` and `+0001` are one value, and
+   * `0` and `-0` another. The parse reads a text of any digits exactly (reading 45: no integer is
+   * too long), and the key's text is `keyText`, inside the 16,384 bytes it reads.
+   *
+   * The `where` selects by the match the parse needs as its guard, restated, since a query's
+   * `where` narrows no term: `Compute.when`'s third argument is the value at a key the guard
+   * refuses, and the `where` has taken that key out, so no row holds it.
+   *
+   * Its head holds the entry's node, so two entries whose keys name one integer are two rows, which
+   * the key over `(mapping, value)` refuses ("Map key"); a key of no integer's form has no row, and
+   * `Typed_attribute_value` refuses it on its `MapKeyType` row alone.
+   *
+   * @see {@link https://www.w3.org/TR/xmlschema-2/#integer | XML Schema Part 2, §3.3.13 integer}
+   */
+  const MapKeyInteger = derived(
+    "MapKeyInteger",
+    query(base).rule((r) => {
+      const { key: form, mapping, node } = v(MapKeyType, "key");
+
+      return r
+        .match(MapKeyType, { baseType: "integer", key: form, mapping, node })
+        .where(Compute.matches(form, integerKeyPattern))
+        .find({
+          mapping,
+          node,
+          value: Compute.when(
+            Compute.matches(form, integerKeyPattern),
+            (integer) => Compute.parseDecimal(integer),
+            0n,
+          ),
+        });
+    }),
+  );
+
+  /**
+   * The mapping overlays' rules over a query, each named by its oracle law: an integer mapping's
+   * keys are distinct by the integers they name ("Map key", information model §5.88.4 and §7.21: a
+   * mapping is a function of its source value).
+   */
+  const mappingQueryLawsByName = {
+    "Map key": [key(on(MapKeyInteger, "mapping", "value"))],
+  } as const;
+
+  /**
+   * The mapping overlays' rules over a query, in one list.
+   */
+  const mappingQueryLaws = Object.values(mappingQueryLawsByName).flat();
+
+  /**
    * Every query `Qti` names, under its own name.
    */
   const relations = {
@@ -804,6 +859,7 @@ export const queriesOf = (base: QtiBase) => {
     HeldType,
     ListedIdentifier,
     ListedTitle,
+    MapKeyInteger,
     MappedReading,
     MatchedIdentifier,
     MatchedTitle,
@@ -818,6 +874,7 @@ export const queriesOf = (base: QtiBase) => {
     identityQueryLawsByName,
     metadataQueryLawsByName,
     expressionQueryLawsByName,
+    mappingQueryLawsByName,
   ] as const;
 
   /**
@@ -832,7 +889,8 @@ export const queriesOf = (base: QtiBase) => {
     | (typeof packageQueryLaws)[number]
     | (typeof identityQueryLaws)[number]
     | (typeof metadataQueryLaws)[number]
-    | (typeof expressionQueryLaws)[number];
+    | (typeof expressionQueryLaws)[number]
+    | (typeof mappingQueryLaws)[number];
 
   /**
    * Every rule over a query, each domain's list spread in `lawsByName`'s order.
@@ -842,6 +900,7 @@ export const queriesOf = (base: QtiBase) => {
     ...identityQueryLaws,
     ...metadataQueryLaws,
     ...expressionQueryLaws,
+    ...mappingQueryLaws,
   ];
 
   return { laws, lawsByName, relations };

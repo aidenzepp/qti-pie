@@ -81,7 +81,6 @@ const unjudged = {
   "LeastCount: a base term": unreadTerm("base"),
   "LeastCount: a when term": unreadTerm("when"),
   "MapKeyFloat.value": typedKeyValue,
-  "MapKeyInteger.value": typedKeyValue,
   "MapKeyPair.value": typedKeyValue,
   "MapKeyPoint.value": typedKeyValue,
   "MasteryCeiling: a when term": unreadTerm("when"),

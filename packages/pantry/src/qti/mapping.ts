@@ -19,11 +19,12 @@
  *   `Attribute` (C18), one row per entry, so two entries with one key are two facts the key law
  *   refuses rather than one fact that set semantics collapses (rows-first §0), and
  *   {@link MapKeyType} holds it beside its mapping's base type, where it has one;
- * - {@link MapKeyInteger}, {@link MapKeyFloat}, {@link MapKeyPoint}, {@link MapKeyPair} and
- *   {@link MapKeyDirectedPair} hold a map key's typed value where it differs from its lexical form,
- *   each a row of its own relation keyed by the entry's node and mirrored with the map keys of its
- *   base type (the addendum's `MapKeyInteger` pattern), its `value` a field PostgreSQL generates
- *   from the key's text;
+ * - {@link MapKeyFloat}, {@link MapKeyPoint}, {@link MapKeyPair} and {@link MapKeyDirectedPair} hold
+ *   a map key's typed value where it differs from its lexical form, each a row of its own relation
+ *   keyed by the entry's node and mirrored with the map keys of its base type, its `value` a field
+ *   PostgreSQL generates from the key's text; an integer key's typed value is no stored row but the
+ *   query `MapKeyInteger` (`#pantry/qti/queries.ts`), PostgreSQL's parse of the key's text, of
+ *   which the import writes nothing;
  * - {@link LookupValue} copies each table entry's `target-value` and each table's `default-value`
  *   with its table's declaration, and {@link LookupValueType} holds it beside the declaration's
  *   base type, where it has one.
@@ -90,9 +91,10 @@ import { doublePattern } from "#pantry/qti/operators.ts";
 
 /**
  * `xs:integer`'s lexical space, an optional sign and digits: the map keys of an integer mapping
- * whose value {@link MapKeyInteger} holds. Its language is the integer base type's (reading 45: no
- * integer is too long), and `mapping.oracle.test.ts` holds it to the deleted schema's `xsInteger`
- * with JavaScript's engine as the oracle.
+ * whose value the query `MapKeyInteger` (`#pantry/qti/queries.ts`) parses. Its language is the
+ * integer base type's (reading 45: no integer is too long), inside grizzle's `decimalText`, and
+ * `mapping.oracle.test.ts` holds it to the deleted schema's `xsInteger` with JavaScript's engine as
+ * the oracle.
  */
 export const integerKeyPattern = "^[+-]?[0-9]+$";
 
@@ -223,38 +225,6 @@ export const Gap = str.regex("^[\\t\\n\\r ]$");
 export const Item = str.regex("^[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+$");
 
 /**
- * An integer map key's typed value, keyed by its entry's node: its key split into `sign`, `zeros`
- * and `digits`, which the host writes and `E1_derived` proves, and two fields PostgreSQL generates
- * from them: `negative`, `-` for a negative integer and empty otherwise, and `value`, the canonical
- * form XML Schema gives `xs:integer` (no `+`, no leading zero, `0` unsigned), `negative ‖ digits`.
- *
- * Two keys name one integer exactly when their canonical forms are equal, so `key(mapping, value)`
- * is uniqueness by typed value at any length the key text holds (reading 45: an integer has no
- * largest value), compared by the write's own statement at the value PostgreSQL stores. A cast
- * would bound it: grizzle's lexical form of `numeric(p, 0)` holds at most 256 digits
- * (`scalar/lexical.ts` `decimalWritable`, `regexMaxRepeat`).
- *
- * @see {@link https://www.w3.org/TR/xmlschema-2/#integer | XML Schema Part 2, §3.3.13 integer}
- */
-export const MapKeyInteger = relation.generated(
-  "MapKeyInteger",
-  { digits: Digits, key: keyText, mapping: uuid, node: uuid, sign: Sign, zeros: Zeros },
-  ["node"],
-  (r) => {
-    const negative = Compute.cond(
-      Compute.and(Compute.eq(r.sign, "-"), Compute.ne(r.digits, "0")),
-      Compute.literal(Negative, "-"),
-      "",
-    );
-
-    return {
-      negative: generated(Negative, negative),
-      value: generated(keyText, Compute.concat(negative, r.digits)),
-    };
-  },
-);
-
-/**
  * The text type of a float map key: `xs:double`'s lexical space as an attribute writes it
  * (`doublePattern` of `#pantry/qti/operators.ts`, XML Schema 1.0's, reading 71's edition, so `+INF`
  * is outside it), every key of which has the value {@link MapKeyFloat} holds (reading 154), and
@@ -288,8 +258,8 @@ export const MapKeyFloat = relation.generated(
 );
 
 /**
- * A point map key's typed value, keyed by its entry's node: its key split into its two integers'
- * parts, as {@link MapKeyInteger} splits one, and the whitespace between them, which the host
+ * A point map key's typed value, keyed by its entry's node: its key split into each of its two
+ * integers' sign, leading zeros and magnitude, and the whitespace between them, which the host
  * writes and `E1_derived` proves, and three fields PostgreSQL generates from them: `xNegative` and
  * `yNegative`, each integer's canonical sign, and `value`, the two canonical integers with one
  * space between, `xNegative ‖ xDigits ‖ " " ‖ yNegative ‖ yDigits`.
@@ -557,13 +527,6 @@ const typedMapKeys = select(MapKey, (k) => k.eq(k.baseTypes, 1n));
 const typedLookupValues = select(LookupValue, (v) => v.eq(v.baseTypes, 1n));
 
 /**
- * The map keys of integer mappings: each has its {@link MapKeyInteger} row, and no other key does.
- */
-const integerKeys = select(MapKeyType, (k) =>
-  k.and(k.eq(k.baseType, "integer"), Compute.matches(k.key, integerKeyPattern)),
-);
-
-/**
  * The map keys of float mappings in `xs:double`'s lexical space: each has its {@link MapKeyFloat}
  * row, and no other key does.
  */
@@ -631,7 +594,8 @@ const lookupAttributes = select(Attribute, (a) =>
  *   has one;
  * - **map keys:** the entry's mapping's `baseTypes`, its `map-key` copy, the lexical key, each typed
  *   relation mirrored with its typed keys, `E1_derived` its split, and its typed key over the value
- *   PostgreSQL generates, and `Typed_attribute_value` its lexical form;
+ *   PostgreSQL generates, and `Typed_attribute_value` its lexical form; an integer key's typed key
+ *   is a rule over the query `MapKeyInteger` (`#pantry/qti/queries.ts`);
  * - **`Lookup_table_cardinality`:** a match or interpolation table's outcome is single, judged where
  *   it has a cardinality;
  * - **lookup values:** each copies its node's tuple, its attribute and its table's declaration, and
@@ -653,9 +617,6 @@ export const mappingLawsByName = {
   ],
   "DocumentId key": [key(on(mapKeyAttributes, "node")), key(on(lookupAttributes, "node"))],
   "E1 derived": [
-    check("E1_derived", MapKeyInteger, (m) =>
-      m.eq(m.key, Compute.concat(Compute.concat(m.sign, m.zeros), m.digits)),
-    ),
     check("E1_derived", MapKeyPoint, (m) =>
       m.eq(
         m.key,
@@ -683,7 +644,6 @@ export const mappingLawsByName = {
   ],
   "Map key": [
     key(on(MapKey, "mapping", "key")),
-    key(on(MapKeyInteger, "mapping", "value")),
     key(on(MapKeyFloat, "mapping", "value")),
     key(on(MapKeyPoint, "mapping", "value")),
     key(on(MapKeyPair, "mapping", "value")),
@@ -744,7 +704,6 @@ export const mappingLawsByName = {
     contained(on(MapKeyType, "node", "mapping", "key"), on(typedMapKeys, "node", "mapping", "key")),
     contained(on(MapKeyType, "mapping", "baseType"), on(MappingBaseType, "node", "baseType")),
     contained(on(mapKeyAttributes, "node", "lexical"), on(MapKey, "node", "key")),
-    mirrors(on(integerKeys, "node", "mapping", "key"), on(MapKeyInteger, "node", "mapping", "key")),
     mirrors(on(floatKeys, "node", "mapping", "key"), on(MapKeyFloat, "node", "mapping", "key")),
     mirrors(on(pointKeys, "node", "mapping", "key"), on(MapKeyPoint, "node", "mapping", "key")),
     mirrors(on(pairKeys, "node", "mapping", "key"), on(MapKeyPair, "node", "mapping", "key")),
