@@ -1171,7 +1171,10 @@ const readItemEnd = (cursor: Cursor, character: string): Result.Result<Escaped, 
  * @param character - The character it stands on.
  * @returns The item's set.
  */
-const readClassItem = (cursor: Cursor, character: string): Result.Result<CodeSet, UnreadPattern> => {
+const readClassItem = (
+  cursor: Cursor,
+  character: string,
+): Result.Result<CodeSet, UnreadPattern> => {
   cursor.at += 1;
   const start = readItemEnd(cursor, character);
   if (Result.isFailure(start)) {
@@ -2427,8 +2430,6 @@ const mapSets = (tree: Regex, map: (set: CodeSet) => Regex): Regex => {
     }
   }
 };
-
-
 
 /**
  * Every character a tree's words may hold: the union of its sets.
