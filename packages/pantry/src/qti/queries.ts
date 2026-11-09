@@ -29,6 +29,8 @@ import {
 } from "@bjornpagen/grizzle";
 import { documentTypes } from "#pantry/grammar/install.ts";
 import { QtiBase } from "#pantry/qti/base.ts";
+import { heldKinds, lookupKindHandle, setKindHandles } from "#pantry/qti/expression-types.ts";
+import { Expression, silentBases, VariableRef, VariableRefTable } from "#pantry/qti/expressions.ts";
 import { GeneralObject } from "#pantry/qti/identity.ts";
 import {
   AssessmentObject,
@@ -280,9 +282,105 @@ const identityQueryLaws = Object.values(identityQueryLawsByName).flat();
 const metadataQueryLaws = Object.values(metadataQueryLawsByName).flat();
 
 /**
+ * The type a setter or a lookup sets its variable to, one row per expression it holds: its
+ * `VariableRef` by `identifier` (`node`, `kind`, `baseType`, `cardinality` and `resolution`, the
+ * reference's) joined with each `Expression` whose parent it is (`heldBase` and `heldCardinality`,
+ * that expression's type). Its content model allows one expression, and a second breaks N5's
+ * `Follow`, so a lawful setter or lookup has one row. `Set_type` (P20) and `Lookup_type` (P22) read
+ * it.
+ *
+ * A setter whose `identifier` names no variable, unwritten or no NCName (spec reading 152), has no
+ * reference, and one that holds no expression holds no type, so neither has a row, and AL3, its
+ * value domain or its content model refuses it alone.
+ */
+export const HeldType = derived(
+  "HeldType",
+  query(QtiBase).rule((r) => {
+    const { baseType, cardinality, kind, node, resolution } = v(VariableRef, "reference");
+    const { baseType: heldBase, cardinality: heldCardinality } = v(Expression, "held");
+
+    return r
+      .match(VariableRef, {
+        attribute: "identifier",
+        baseType,
+        cardinality,
+        kind,
+        node,
+        resolution,
+      })
+      .match(Expression, { baseType: heldBase, cardinality: heldCardinality, parent: node })
+      .where(r.inSet(kind, heldKinds))
+      .find({ baseType, cardinality, heldBase, heldCardinality, kind, node, resolution });
+  }),
+);
+
+/**
+ * The rules over the expression overlays' queries, grouped by the law each states, each `check`
+ * named by its oracle law: `Lookup_type` (P22) and `Set_type` (P20) over {@link HeldType}.
+ */
+export const expressionQueryLawsByName = {
+  "Lookup type": [
+    check("Lookup_type", HeldType, (h) =>
+      h.or(
+        h.ne(h.kind, lookupKindHandle),
+        h.and(
+          h.in(h.heldCardinality, ["single", "unknown"]),
+          h.in(h.heldBase, ["duration", "float", "integer", ...silentBases]),
+        ),
+      ),
+    ),
+    // A match table maps an integer: a declared lookup of a value of another base claims an
+    // interpolation table, its declaration's one lookup table where it claims one.
+    contained(
+      on(
+        select(HeldType, (h) =>
+          h.and(
+            h.eq(h.kind, lookupKindHandle),
+            h.eq(h.resolution, "declared"),
+            h.not(h.in(h.heldBase, ["integer", ...silentBases])),
+          ),
+        ),
+        "node",
+      ),
+      on(
+        select(VariableRefTable, (t) =>
+          t.and(t.eq(t.table, "qti-interpolation-table"), t.eq(t.attribute, "identifier")),
+        ),
+        "node",
+      ),
+    ),
+  ],
+  "Set type": [
+    check("Set_type", HeldType, (h) =>
+      h.or(
+        h.not(h.in(h.kind, setKindHandles)),
+        h.and(
+          h.or(
+            h.eq(h.heldBase, h.baseType),
+            h.in(h.heldBase, silentBases),
+            h.in(h.baseType, silentBases),
+          ),
+          h.or(
+            h.eq(h.heldCardinality, h.cardinality),
+            h.eq(h.heldCardinality, "unknown"),
+            h.eq(h.cardinality, "unknown"),
+          ),
+        ),
+      ),
+    ),
+  ],
+} as const;
+
+/**
+ * The expression overlays' rules over queries, in one list.
+ */
+const expressionQueryLaws = Object.values(expressionQueryLawsByName).flat();
+
+/**
  * Every query `Qti` names, under its own name.
  */
 export const queryRelations = {
+  HeldType,
   ListedIdentifier,
   ListedTitle,
   MatchedIdentifier,
@@ -298,6 +396,7 @@ export const queryLawsByName = [
   packageQueryLawsByName,
   identityQueryLawsByName,
   metadataQueryLawsByName,
+  expressionQueryLawsByName,
 ] as const;
 
 /**
@@ -310,7 +409,8 @@ export const queryLawsByName = [
 type QueryStatement =
   | (typeof packageQueryLaws)[number]
   | (typeof identityQueryLaws)[number]
-  | (typeof metadataQueryLaws)[number];
+  | (typeof metadataQueryLaws)[number]
+  | (typeof expressionQueryLaws)[number];
 
 /**
  * Every rule over a query, each domain's list spread in {@link queryLawsByName}'s order.
@@ -319,4 +419,5 @@ export const queryLaws: readonly QueryStatement[] = [
   ...packageQueryLaws,
   ...identityQueryLaws,
   ...metadataQueryLaws,
+  ...expressionQueryLaws,
 ];

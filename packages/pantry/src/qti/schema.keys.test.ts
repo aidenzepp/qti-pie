@@ -145,10 +145,6 @@ const owed = {
     "lane G: expressions.ts, absentNames, held by VariableLookup's primary key (R7)",
     1,
   ],
-  "VariableRef(node) where 2 conjuncts": [
-    "lane G: expressions.ts, heldReferences, held by VariableRef's primary key, its attribute fixed",
-    1,
-  ],
 } as const satisfies Readonly<Record<string, readonly [site: string, count: number]>>;
 
 describe("qti/schema.ts, its keys", { timeout: compileTimeout }, () => {

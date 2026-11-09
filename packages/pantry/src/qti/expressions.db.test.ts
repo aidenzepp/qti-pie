@@ -46,7 +46,6 @@ import {
   AssembledReference,
   Expression,
   ExpressionAttribute,
-  HeldType,
   LiteralTyped,
   MappingLookup,
   MappingSourceDeclaration,
@@ -66,6 +65,7 @@ import {
 } from "#pantry/qti/expressions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
+import { HeldType } from "#pantry/qti/queries.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import {
@@ -200,27 +200,33 @@ const documentOf = (reference: Addition<typeof VariableRef>): Addition<typeof Do
 /**
  * The rows a case writes beside a reference, each copying it: its declaration, where the case
  * writes one; the table it claims, a claim of that declaration, as `VariableRefTable` copies its
- * `VariableRefDeclaration`; and its held type, where the case writes one.
+ * `VariableRefDeclaration`; and the expression it holds, where the case writes one, whose type
+ * `HeldType`'s query joins to the reference (`#pantry/qti/queries.ts`).
  */
 interface ReferenceRows {
   readonly declarations: readonly Addition<typeof VariableRefDeclaration>[];
-  readonly held: readonly Addition<typeof HeldType>[];
+  readonly held: readonly Addition<typeof Expression>[];
   readonly tables: readonly Addition<typeof VariableRefTable>[];
 }
+
+/**
+ * The type of the expression a setter or a lookup holds, as a case sets it.
+ */
+type HeldExpression = Pick<Addition<typeof Expression>, "baseType" | "cardinality">;
 
 /**
  * The rows a case writes beside a reference ({@link ReferenceRows}).
  *
  * @param reference - The reference.
  * @param declaration - The declaration's fields the case sets, or none for no declaration row.
- * @param held - The held type's fields the case sets, or none for no held type row.
+ * @param held - The type of the expression it holds, or none for no expression.
  * @param table - The table its declaration's row claims, or none for no claim row.
  * @returns The rows.
  */
 const referenceRowsOf = (
   reference: Addition<typeof VariableRef>,
   declaration: Partial<Addition<typeof VariableRefDeclaration>> | undefined,
-  held: Partial<Addition<typeof HeldType>> | undefined,
+  held: HeldExpression | undefined,
   table: Addition<typeof VariableRefTable>["table"] | undefined,
 ): ReferenceRows => {
   const declarations: readonly Addition<typeof VariableRefDeclaration>[] =
@@ -250,19 +256,15 @@ const referenceRowsOf = (
       held === undefined
         ? []
         : [
-            {
-              baseType: reference.baseType,
-              cardinality: reference.cardinality,
-              expression: nodeOf(2),
-              expressionKind: "qti-base-value",
-              heldBase: "unknown",
-              heldCardinality: "unknown",
-              kind: reference.kind,
-              language: reference.language,
-              node: reference.node,
-              resolution: reference.resolution,
+            expressionRow({
               ...held,
-            },
+              document: reference.document,
+              kind: "qti-base-value",
+              language: reference.language,
+              node: nodeOf(2),
+              parent: reference.node,
+              parentKind: reference.kind,
+            }),
           ],
     tables:
       table === undefined
@@ -283,52 +285,78 @@ const referenceRowsOf = (
  *
  * @param reference - The reference.
  * @param declaration - The declaration's fields the case sets, or none for no declaration row.
- * @param held - The held type's fields the case sets, or none for no held type row.
  * @param table - The table its declaration's row claims, or none for no claim row.
  * @returns The change.
  */
 const referenceChange = (
   reference: Addition<typeof VariableRef>,
   declaration: Partial<Addition<typeof VariableRefDeclaration>> | undefined,
-  held?: Partial<Addition<typeof HeldType>>,
   table?: Addition<typeof VariableRefTable>["table"],
 ) => {
-  const rows = referenceRowsOf(reference, declaration, held, table);
+  const rows = referenceRowsOf(reference, declaration, undefined, table);
 
   return ChangeSet.empty(Author)
     .insert(Document, [documentOf(reference)])
     .insert(VariableRef, [reference])
     .insert(VariableRefDeclaration, rows.declarations)
-    .insert(VariableRefTable, rows.tables)
-    .insert(HeldType, rows.held);
+    .insert(VariableRefTable, rows.tables);
 };
 
 /**
- * The facts a direct writer states for the rows a case writes beside a reference
- * ({@link referenceRowsOf}), without the reference and its document: every foreign key the rows
- * name, into those two among them, is deferred and rolled back unchecked, but the one a case sets
- * immediate.
+ * The facts a direct writer states for a reference and the rows a case writes beside it
+ * ({@link referenceRowsOf}): its document, its owner in `Document.variables`, and the reference,
+ * which `HeldType`'s query reads, with the expression it holds, then its declaration and claim.
+ * Every foreign key the rows name is deferred and rolled back unchecked, but the rule or the key a
+ * case sets immediate.
  *
  * @param reference - The reference.
  * @param declaration - The declaration's fields the case sets, or none for no declaration row.
- * @param held - The held type's fields the case sets, or none for no held type row.
+ * @param held - The type of the expression it holds, or none for no expression.
  * @param table - The table its declaration's row claims, or none for no claim row.
  * @returns The facts.
  */
 const referenceFacts = (
   reference: Addition<typeof VariableRef>,
   declaration: Partial<Addition<typeof VariableRefDeclaration>> | undefined,
-  held: Partial<Addition<typeof HeldType>> | undefined,
+  held: HeldExpression | undefined,
   table: Addition<typeof VariableRefTable>["table"] | undefined,
 ): readonly Stated[] => {
   const rows = referenceRowsOf(reference, declaration, held, table);
 
   return [
+    { fact: documentOf(reference), relation: Document },
+    { fact: reference, relation: VariableRef },
+    ...rows.held.map((fact) => ({ fact, relation: Expression })),
     ...rows.declarations.map((fact) => ({ fact, relation: VariableRefDeclaration })),
     ...rows.tables.map((fact) => ({ fact, relation: VariableRefTable })),
-    ...rows.held.map((fact) => ({ fact, relation: HeldType })),
   ];
 };
+
+/**
+ * The one constraint trigger of one of `Qti`'s tables whose comment matches a `LIKE` pattern: a
+ * rule over a query is a deferred constraint trigger on each table its query reads, all under one
+ * name, which grizzle mints from a digest and describes by its comment (`trigger of rule ...`).
+ *
+ * @param client - The session.
+ * @param table - A table the rule's query reads.
+ * @param pattern - The comment's pattern.
+ * @returns The trigger's name, the constraint `SET CONSTRAINTS` sets immediate; none or several
+ *   fail the case.
+ */
+const ruleDescribed = (client: Parameters<typeof rowsOf>[0], table: string, pattern: string) =>
+  rowsOf<{ readonly tgname: string }>(
+    client,
+    `SELECT t.tgname FROM pg_catalog.pg_trigger t
+      WHERE t.tgrelid = pg_catalog.to_regclass($1)
+        AND pg_catalog.obj_description(t.oid, 'pg_trigger') LIKE $2`,
+    [`qti.${table}`, pattern],
+  ).pipe(
+    Effect.map((rows) => {
+      assert.lengthOf(rows, 1, pattern);
+
+      return rows[0]?.tgname ?? "";
+    }),
+  );
 
 /**
  * The type a kind's expression has over `count` operands of no known type, which every rule of
@@ -746,11 +774,13 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
 
       it.effect("refuses each reference row law's breach by its law, and keeps its control", () =>
         // Oracle: PostgreSQL, each CHECK of `VariableRef` and its rows, against the old checker's
-        // rules (P8, P20, P22, P24, P26, P27), and each claim a lookup (P22, §2.5.1.4) or a map
-        // response (P27, §2.11.3.29) must make of its declaration's table, a containment into
-        // `VariableRefTable`: a deferred foreign key, which `db.apply` would judge at COMMIT
-        // behind the stray rows' others, so the direct writer sets it immediate, 23503 and its
-        // name, found by grizzle's comment on it.
+        // rules (P8, P24, P26, P27); each rule over `HeldType`'s query (P20, P22), a deferred
+        // constraint trigger, which `db.apply` would judge at COMMIT behind the stray rows'
+        // foreign keys, so the direct writer sets it immediate, 23514 and the check's name; and
+        // each claim a lookup (P22, §2.5.1.4) or a map response (P27, §2.11.3.29) must make of its
+        // declaration's table, a containment into `VariableRefTable`: a deferred foreign key, or
+        // for a lookup's held type a rule over `HeldType`, which the direct writer sets immediate,
+        // 23503 and its name, found by grizzle's comment on it.
         // Bound: one breach of each law, beside the same rows with the breach repaired.
         Effect.gen(function* referenceLaws() {
           const db = yield* Db.open(AuthorApp.roles.author, {});
@@ -771,12 +801,10 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
           const checks: readonly {
             readonly broken: Addition<typeof VariableRef>;
             readonly declaration?: Partial<Addition<typeof VariableRefDeclaration>>;
-            readonly held?: Partial<Addition<typeof HeldType>>;
             readonly law: string;
-            readonly on: "HeldType" | "VariableRef" | "VariableRefDeclaration";
+            readonly on: "VariableRef" | "VariableRefDeclaration";
             readonly repaired: Partial<Addition<typeof VariableRef>>;
             readonly repairedDeclaration?: Partial<Addition<typeof VariableRefDeclaration>>;
-            readonly repairedHeld?: Partial<Addition<typeof HeldType>>;
             readonly table?: Addition<typeof VariableRefTable>["table"];
           }[] = [
             {
@@ -784,30 +812,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               law: "Variable_declared",
               on: "VariableRef",
               repaired: { rootKind: "qti-response-processing" },
-            },
-            {
-              broken: referenceRow({
-                ...declared,
-                baseType: "integer",
-                cardinality: "single",
-                kind: "qti-set-outcome-value",
-              }),
-              declaration: {},
-              held: { heldBase: "float", heldCardinality: "single" },
-              law: "Set_type",
-              on: "HeldType",
-              repaired: {},
-              repairedHeld: { heldBase: "integer" },
-            },
-            {
-              broken: lookup,
-              declaration: {},
-              held: { heldBase: "string", heldCardinality: "single" },
-              law: "Lookup_type",
-              on: "HeldType",
-              repaired: {},
-              repairedHeld: { heldBase: "float" },
-              table: "qti-interpolation-table",
             },
             {
               broken: referenceRow({
@@ -851,20 +855,17 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
           for (const {
             broken,
             declaration,
-            held,
             law,
             on,
             repaired,
             repairedDeclaration,
-            repairedHeld,
             table,
           } of checks) {
-            const refused = yield* db.apply(referenceChange(broken, declaration, held, table), {});
+            const refused = yield* db.apply(referenceChange(broken, declaration, table), {});
             const kept = yield* db.apply(
               referenceChange(
                 { ...broken, ...repaired },
                 declaration === undefined ? undefined : { ...declaration, ...repairedDeclaration },
-                held === undefined ? undefined : { ...held, ...repairedHeld },
                 table,
               ),
               {},
@@ -874,48 +875,111 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             assert.isFalse(names(kept, on, law), law);
           }
 
+          // Each check over a setter's or a lookup's held type: its reference, declared, and the
+          // expression it holds, of a type the law refuses, then of one it keeps.
+          const heldChecks: readonly {
+            readonly broken: Addition<typeof VariableRef>;
+            readonly held: HeldExpression;
+            readonly law: string;
+            readonly repaired: HeldExpression;
+            readonly table?: Addition<typeof VariableRefTable>["table"];
+          }[] = [
+            {
+              broken: referenceRow({
+                ...declared,
+                baseType: "integer",
+                cardinality: "single",
+                kind: "qti-set-outcome-value",
+              }),
+              held: { baseType: "float", cardinality: "single" },
+              law: "Set_type",
+              repaired: { baseType: "integer", cardinality: "single" },
+            },
+            {
+              broken: lookup,
+              held: { baseType: "string", cardinality: "single" },
+              law: "Lookup_type",
+              repaired: { baseType: "float", cardinality: "single" },
+              table: "qti-interpolation-table",
+            },
+          ];
+          for (const { broken, held, law, repaired, table } of heldChecks) {
+            const constraint = checkConstraintOf(Qti, HeldType.name, law);
+            assertVerdict(
+              yield* judged(client, statedInserts(referenceFacts(broken, {}, held, table)), [
+                constraint,
+              ]),
+              constraint,
+              true,
+              `${law}, broken`,
+            );
+            assertVerdict(
+              yield* judged(client, statedInserts(referenceFacts(broken, {}, repaired, table)), [
+                constraint,
+              ]),
+              constraint,
+              false,
+              `${law}, repaired`,
+            );
+          }
+
           // Each claim's breach writes no claim, or a claim of the other table, and its repair
-          // the claim its law requires; the row the containment reads from (`on`) is the same.
+          // the claim its law requires; the rows the containment reads from are the same.
           const claims: readonly {
             readonly broken: Addition<typeof VariableRef>;
+            readonly constraint: Effect.Effect<string, unknown>;
             readonly declaration: Partial<Addition<typeof VariableRefDeclaration>>;
-            readonly held?: Partial<Addition<typeof HeldType>>;
+            readonly held?: HeldExpression;
             readonly law: string;
-            readonly on: typeof HeldType | typeof VariableRefDeclaration;
             readonly repairedTable: Addition<typeof VariableRefTable>["table"];
             readonly table?: Addition<typeof VariableRefTable>["table"];
           }[] = [
             {
               broken: lookup,
+              constraint: ruleDescribed(
+                client,
+                tableOf(VariableRef.name),
+                `trigger of rule ${HeldType.name}(node)% in ${VariableRefTable.name}(node)%`,
+              ),
               declaration: {},
-              held: { heldBase: "float", heldCardinality: "single" },
+              held: { baseType: "float", cardinality: "single" },
               law: "Lookup type, a float's interpolation table",
-              on: HeldType,
               repairedTable: "qti-interpolation-table",
               table: "qti-match-table",
             },
             {
               broken: lookup,
+              constraint: constraintDescribed(
+                client,
+                tableOf(VariableRefDeclaration.name),
+                `foreign key ${VariableRefDeclaration.name}(%"${lookup.kind}"%) to ${VariableRefTable.name}(%`,
+              ),
               declaration: {},
               law: "Lookup type, a declared lookup's table",
-              on: VariableRefDeclaration,
               repairedTable: "qti-interpolation-table",
             },
             {
               broken: mapResponse,
+              constraint: constraintDescribed(
+                client,
+                tableOf(VariableRefDeclaration.name),
+                `foreign key ${VariableRefDeclaration.name}(%"${mapResponse.kind}"%) to ${VariableRefTable.name}(%`,
+              ),
               declaration: { declarationKind: "qti-response-declaration" },
               law: "Mapped response, a declared map response's mapping",
-              on: VariableRefDeclaration,
               repairedTable: "qti-mapping",
             },
           ];
-          for (const { broken, declaration, held, law, on, repairedTable, table } of claims) {
-            // Each source holds one claim containment of its reference's kind.
-            const claim = yield* constraintDescribed(
-              client,
-              tableOf(on.name),
-              `foreign key ${on.name}(%"${broken.kind}"%) to ${VariableRefTable.name}(%`,
-            );
+          for (const {
+            broken,
+            constraint,
+            declaration,
+            held,
+            law,
+            repairedTable,
+            table,
+          } of claims) {
+            const claim = yield* constraint;
             assertVerdict(
               yield* judged(
                 client,

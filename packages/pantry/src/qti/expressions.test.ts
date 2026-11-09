@@ -79,6 +79,7 @@ import {
 import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { QtiBase } from "#pantry/qti/base.ts";
+import { expressionQueryLawsByName } from "#pantry/qti/queries.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -190,9 +191,12 @@ describe("qti/expressions.ts, declared", () => {
   );
 
   it("names each check by a law whose rule it keeps", () => {
-    // Oracle: the rule table of plan §2.2 (P2, P8, P20 to P27, P29) and the C17 proofs' `derived`.
+    // Oracle: the rule table of plan §2.2 (P2, P8, P20 to P27, P29) and the C17 proofs' `derived`,
+    // over the module's checks and the checks over its queries (`#pantry/qti/queries.ts`).
     const named = new Set(
-      expressionLaws.flatMap((statement) => (statement.kind === "check" ? [statement.name] : [])),
+      [...expressionLaws, ...Object.values(expressionQueryLawsByName).flat()].flatMap((statement) =>
+        statement.kind === "check" ? [statement.name] : [],
+      ),
     );
 
     assert.deepStrictEqual([...named].toSorted(), Object.keys(checkRules).toSorted());

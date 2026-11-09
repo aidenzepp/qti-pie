@@ -639,9 +639,47 @@ const referenceLawsOnHost: readonly (readonly [
 ];
 
 /**
- * A `HeldType` row.
+ * A setter's or a lookup's held type, as `HeldType`'s query joins it (`#pantry/qti/queries.ts`):
+ * its reference by `identifier`, and the type of one expression it holds.
  */
-type Held = ExpressionRows["HeldType"] extends ReadonlyMap<string, infer R> ? R : never;
+interface Held {
+  readonly baseType: string;
+  readonly cardinality: string;
+  readonly heldBase: string;
+  readonly heldCardinality: string;
+  readonly kind: string;
+  readonly node: string;
+  readonly resolution: string;
+}
+
+/**
+ * The setters and the lookup, whose references by `identifier` hold a type.
+ */
+const holders: ReadonlySet<string> = new Set([...setKindHandles, lookupKindHandle]);
+
+/**
+ * Join each setter's and lookup's reference by `identifier` with each expression it holds, as
+ * `HeldType`'s definition does: the database derives these rows, and the import writes none.
+ *
+ * @param rows - The rows.
+ * @returns The held types.
+ */
+const heldTypesOnHost = (rows: ExpressionRows): readonly Held[] =>
+  [...rows.VariableRef.values()]
+    .filter(({ attribute, kind }) => attribute === "identifier" && holders.has(kind))
+    .flatMap((v) =>
+      [...rows.Expression.values()]
+        .filter(({ parent }) => parent === v.node)
+        .map((e) => ({
+          baseType: v.baseType,
+          cardinality: v.cardinality,
+          heldBase: e.baseType,
+          heldCardinality: e.cardinality,
+          kind: v.kind,
+          node: v.node,
+          resolution: v.resolution,
+        })),
+    );
 
 /**
  * Each law over a setter's or a lookup's held type, judged over its row and the table its lookup
@@ -783,7 +821,7 @@ const breachesOf = (rows: ExpressionRows): ReadonlySet<Law> => {
     }
   }
 
-  for (const h of rows.HeldType.values()) {
+  for (const h of heldTypesOnHost(rows)) {
     for (const [law, holds] of heldLawsOnHost) {
       if (!holds(h, rows)) {
         broken.add(law);

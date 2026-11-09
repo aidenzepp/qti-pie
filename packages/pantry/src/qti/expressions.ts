@@ -117,7 +117,6 @@ import {
   declaredKinds,
   expressionKinds,
   firstKinds,
-  heldKinds,
   Language,
   LeadCardinality,
   lookupKindHandle,
@@ -143,7 +142,6 @@ import {
   RpTemplate,
   ruleKindHandles,
   secondKinds,
-  setKindHandles,
   setterKinds,
   TailCardinality,
   ValueBase,
@@ -431,40 +429,6 @@ export const VariableRefTable = relation(
     table: closedId(ReferencedTable),
   },
   ["node", "attribute"],
-);
-
-/**
- * The type a setter or a lookup sets its variable to, keyed by its node: the `exprRef` tuple of its
- * first expression (`expression`, `node` its parent, `expressionKind`, `language`, `heldBase` and
- * `heldCardinality`), the one its content model allows (a second breaks N5's `Follow`), beside the
- * fields of its {@link VariableRef} that `Set_type` and `Lookup_type` read beside it (`kind`,
- * `baseType`, `cardinality` and `resolution`), each copied from the reference. A declared lookup's
- * table is its {@link VariableRefTable}'s, which `Lookup_type` reads by the lookup's node.
- *
- * A row of its own (AGENTS.md's Schema intent: a value that may be missing is a row of its own
- * relation), written where the setter both names a variable and holds an expression. One whose
- * `identifier` names no variable, unwritten or no NCName (spec reading 152), has no reference, and
- * one that holds no expression holds no type, so neither has a row, and AL3, its value domain or
- * its content model refuses it alone. Every field is proved by a copy, but no law forces the row in
- * where both are: a containment's source is one relation's rows, never the join of two. The import
- * writes it there (`heldTypesOf`), and the genetic differential holds it to the oracle's `Set type`
- * and `Lookup type`.
- */
-export const HeldType = relation(
-  "HeldType",
-  {
-    baseType: closedId(ValueBase),
-    cardinality: closedId(ValueCardinality),
-    expression: uuid,
-    expressionKind: closedId(NodeKind),
-    heldBase: closedId(ValueBase),
-    heldCardinality: closedId(ValueCardinality),
-    kind: closedId(NodeKind),
-    language: closedId(Language),
-    node: uuid,
-    resolution: closedId(ReferenceResolution),
-  },
-  ["node"],
 );
 
 /**
@@ -1049,7 +1013,6 @@ export const ReadingCardinality = relation(
  */
 export const referenceRelations = {
   AssembledReference,
-  HeldType,
   MappingLookup,
   MappingSourceDeclaration,
   NameLookup,
@@ -1091,7 +1054,7 @@ type PlacedVariableRefRow = RowScalars<typeof PlacedVariableRef>;
 /**
  * The base types that say nothing: `any`, which passes every rule, and `unknown`.
  */
-const silentBases = ["any", "unknown"] as const;
+export const silentBases = ["any", "unknown"] as const;
 
 /**
  * The bare and braced spellings a reference's lexical form takes: the name with the whitespace a
@@ -1162,14 +1125,6 @@ const typingAttributes = select(Attribute, (a) =>
  */
 const templateAttributes = select(Attribute, (a) =>
   a.and(a.eq(a.kind, "qti-response-processing"), a.eq(a.name, "template")),
-);
-
-/**
- * The setters' and the lookup's references to their variable, whose fields a {@link HeldType}
- * copies.
- */
-const heldReferences = select(VariableRef, (v) =>
-  v.and(v.eq(v.attribute, "identifier"), v.in(v.kind, heldKinds)),
 );
 
 /**
@@ -2724,24 +2679,6 @@ export const expressionLawsByName = {
       on(Processing, "node", "language"),
     ),
     contained(on(VariableRef, "document", "rootKind"), on(Document, "node", "rootKind")),
-    // HeldType: a setter's or a lookup's reference, and its one expression, each copied.
-    key(on(heldReferences, "node")),
-    contained(
-      on(HeldType, "node", "kind", "baseType", "cardinality", "resolution"),
-      on(heldReferences, "node", "kind", "baseType", "cardinality", "resolution"),
-    ),
-    contained(
-      on(
-        HeldType,
-        "expression",
-        "node",
-        "expressionKind",
-        "language",
-        "heldBase",
-        "heldCardinality",
-      ),
-      exprRef,
-    ),
     contained(
       on(
         select(VariableRef, (v) => v.ne(v.resolution, "declared")),
@@ -3021,35 +2958,6 @@ export const expressionLawsByName = {
       ),
       on(VariableRefTable, "node", "attribute"),
     ),
-    check("Lookup_type", HeldType, (h) =>
-      h.or(
-        h.ne(h.kind, lookupKindHandle),
-        h.and(
-          h.in(h.heldCardinality, ["single", "unknown"]),
-          h.in(h.heldBase, ["duration", "float", "integer", ...silentBases]),
-        ),
-      ),
-    ),
-    // A match table maps an integer: a declared lookup of a value of another base claims an
-    // interpolation table, its declaration's one lookup table where it claims one.
-    contained(
-      on(
-        select(HeldType, (h) =>
-          h.and(
-            h.eq(h.kind, lookupKindHandle),
-            h.eq(h.resolution, "declared"),
-            h.not(h.in(h.heldBase, ["integer", ...silentBases])),
-          ),
-        ),
-        "node",
-      ),
-      on(
-        select(VariableRefTable, (t) =>
-          t.and(t.eq(t.table, "qti-interpolation-table"), t.eq(t.attribute, "identifier")),
-        ),
-        "node",
-      ),
-    ),
   ],
   "Mapped response": [
     // A declared map response claims its response's mapping, and a map response point its area
@@ -3122,25 +3030,6 @@ export const expressionLawsByName = {
             d.in(d.baseType, silentBases),
           ),
           d.in(d.cardinality, ["single", "unknown"]),
-        ),
-      ),
-    ),
-  ],
-  "Set type": [
-    check("Set_type", HeldType, (h) =>
-      h.or(
-        h.not(h.in(h.kind, setKindHandles)),
-        h.and(
-          h.or(
-            h.eq(h.heldBase, h.baseType),
-            h.in(h.heldBase, silentBases),
-            h.in(h.baseType, silentBases),
-          ),
-          h.or(
-            h.eq(h.heldCardinality, h.cardinality),
-            h.eq(h.heldCardinality, "unknown"),
-            h.eq(h.cardinality, "unknown"),
-          ),
         ),
       ),
     ),

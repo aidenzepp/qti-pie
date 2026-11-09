@@ -53,7 +53,6 @@ import { flatten } from "#pantry/model/xdm.ts";
 import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import {
   expressionKinds,
-  heldKinds,
   processingReferences,
   rootLanguages,
   ruleKindHandles,
@@ -67,7 +66,6 @@ import type {
   AssembledReference,
   Expression,
   ExpressionAttribute,
-  HeldType,
   Literal,
   LiteralTyped,
   MappingLookup,
@@ -134,7 +132,6 @@ export interface ExpressionIds {
 export interface ExpressionRows {
   readonly Expression: ReadonlyMap<string, Addition<typeof Expression>>;
   readonly ExpressionAttribute: ReadonlyMap<string, Addition<typeof ExpressionAttribute>>;
-  readonly HeldType: ReadonlyMap<string, Addition<typeof HeldType>>;
   readonly Literal: ReadonlyMap<string, Addition<typeof Literal>>;
   readonly LiteralTyped: ReadonlyMap<string, Addition<typeof LiteralTyped>>;
   readonly Operand: ReadonlyMap<string, Addition<typeof Operand>>;
@@ -251,11 +248,6 @@ const rules: ReadonlySet<string> = new Set(ruleKindHandles);
  * The language each root opens.
  */
 const rootLanguage: ReadonlyMap<string, Language> = new Map(rootLanguages);
-
-/**
- * The setters and the lookup, whose one expression's type is a {@link HeldType} row of its own.
- */
-const holders: ReadonlySet<string> = new Set(heldKinds);
 
 /**
  * Each processing reference's spelling, by `kind attribute`.
@@ -1227,54 +1219,6 @@ const withTypes = (
 };
 
 /**
- * Write the type each setter and lookup that names a variable sets it to, as a row of its own: its
- * first expression's `exprRef` tuple, beside its reference's fields. One that holds no expression
- * has none, and one that names no variable has no reference to hold one by, so its expression is
- * refused by AL3 or its value domain alone (spec reading 152).
- *
- * @param references - The document's references, their types filled.
- * @param typedRows - The document's expression rows, in document order.
- * @returns The rows, by the holder's node.
- */
-const heldTypesOf = (
-  references: ReadonlyMap<string, Addition<typeof VariableRef>>,
-  typedRows: ReadonlyMap<string, Addition<typeof Expression>>,
-): ReadonlyMap<string, Addition<typeof HeldType>> => {
-  const held = new Map<string, Addition<typeof Expression>>();
-  for (const expression of typedRows.values()) {
-    if (holders.has(expression.parentKind) && !held.has(expression.parent)) {
-      held.set(expression.parent, expression);
-    }
-  }
-
-  return new Map(
-    [...references.values()].flatMap((reference) => {
-      const expression = held.get(reference.node);
-
-      return reference.attribute !== "identifier" || expression === undefined
-        ? []
-        : [
-            [
-              reference.node,
-              {
-                baseType: reference.baseType,
-                cardinality: reference.cardinality,
-                expression: expression.node,
-                expressionKind: expression.kind,
-                heldBase: expression.baseType,
-                heldCardinality: expression.cardinality,
-                kind: reference.kind,
-                language: expression.language,
-                node: reference.node,
-                resolution: reference.resolution,
-              },
-            ] as const,
-          ];
-    }),
-  );
-};
-
-/**
  * The key text of a (document, name)-keyed row, a lookup's.
  *
  * @param document - The document, or the test or item ref, the name is looked up in.
@@ -1546,7 +1490,6 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
 
   return {
     ...built,
-    HeldType: heldTypesOf(references, built.Expression),
     ReferenceDocument:
       doc.rootKind === itemKind
         ? new Map<string, Addition<typeof ReferenceDocument>>()
