@@ -1178,14 +1178,6 @@ const headDocuments = select(Document, (d) => d.and(d.eq(d.assembled, true), d.e
 export const itemInstances = select(Instance, (i) => i.eq(i.assemblyKind, itemKind));
 
 /**
- * The sites that are section refs whose href stays in the package, each with its href (information
- * model §7.5). One whose href resolves outside it is "Remote section ref"'s alone (reading 170).
- */
-const sectionRefSites = select(Site, (s) =>
-  s.and(s.eq(s.kind, sectionRefKind), s.eq(s.external, false)),
-);
-
-/**
  * The hrefs of the sites that are section refs whose path an entry holds, each naming a section
  * document (information model §7.5).
  */
@@ -1227,6 +1219,17 @@ const externalSites = select(Site, (s) => s.eq(s.external, true));
  */
 const externalHrefs = select(Reference, (r) =>
   r.and(r.eq(r.name, "href"), r.eq(r.scope, "external")),
+);
+
+/**
+ * The `href` references of the section refs that write an href that stays in the package, one per
+ * element, keyed by its node: each such ref has its {@link SitePath}, or breaks "Document entry"
+ * (information model §7.5). A section ref that writes no href has no `Reference` row, so AL3 alone
+ * refuses it (reading 115, one cause per fault); one whose href resolves outside the package is
+ * "Remote section ref"'s alone (reading 170).
+ */
+const sectionRefHrefs = select(Reference, (r) =>
+  r.and(r.eq(r.name, "href"), r.eq(r.kind, sectionRefKind), r.ne(r.scope, "external")),
 );
 
 /**
@@ -1878,7 +1881,7 @@ export const testLawsByName = {
     ),
   ],
   "Document entry": [
-    contained(on(sectionRefSites, "node"), on(SitePath, "node")),
+    contained(on(sectionRefHrefs, "node"), on(SitePath, "node")),
     key(on(sectionDocuments, "package", "path")),
     contained(
       on(sectionRefTargets, "package", "path", "target"),
