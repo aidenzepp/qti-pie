@@ -1642,6 +1642,12 @@ const languageForms = (source: SourceDocument): readonly string[] => {
  * one whose root is no item's or test's ({@link lomBoundRoots}; `checkRoots` refuses a resource
  * whose type it does not bear out).
  *
+ * A document's language forms are read once, when the first `general` of a resource naming it is
+ * judged, and kept by its path for every other resource that names it; a resource with no `general`
+ * reads none. So a package of many resources naming one large document walks that document's
+ * elements once, not once for each resource, and its cost grows with the resources plus the
+ * elements rather than with their product.
+ *
  * @param manifest The manifest.
  * @param lom Each resource's LOM generals, keyed by its location.
  * @param documents The package's documents.
@@ -1654,11 +1660,35 @@ const checkLom = (
   lom: ReadonlyMap<string, readonly LomGeneral[]>,
   documents: ReadonlyMap<string, Document>,
   manifestLocation: string,
-): readonly Refusal[] =>
-  manifest.resources.flatMap((resource) => {
+): readonly Refusal[] => {
+  const formsByPath = new Map<string, readonly string[]>();
+
+  /**
+   * Give a document's language forms ({@link languageForms}), read on the first call for its path
+   * and kept for every later one.
+   *
+   * @param path The document's path, which keys what is kept.
+   * @param document The document at that path.
+   * @returns The forms.
+   */
+  const formsAt = (path: string, document: SourceDocument): readonly string[] => {
+    const kept = formsByPath.get(path);
+    if (kept !== undefined) {
+      return kept;
+    }
+
+    const forms = languageForms(document);
+    formsByPath.set(path, forms);
+
+    return forms;
+  };
+
+  return manifest.resources.flatMap((resource) => {
+    const generals = lom.get(resource.location) ?? [];
     const path = Option.getOrUndefined(documentPath(resource));
     const source = path === undefined ? undefined : documents.get(path)?.source;
     if (
+      generals.length === 0 ||
       !lomBoundTypes.has(resource.type) ||
       path === undefined ||
       source === undefined ||
@@ -1673,7 +1703,6 @@ const checkLom = (
     }
 
     const stated = titleLanguage(root);
-    const forms = languageForms(source.success);
 
     /**
      * Refuse the values one LOM `general` gives for an attribute when none equals the document's.
@@ -1739,7 +1768,7 @@ const checkLom = (
       ];
     };
 
-    return (lom.get(resource.location) ?? []).flatMap((general) => {
+    return generals.flatMap((general) => {
       const listed = new Set(general.languages.map(foldedTag));
 
       return [
@@ -1751,7 +1780,7 @@ const checkLom = (
             inDocumentLanguage(values.languages[index] ?? Option.none(), stated),
           ),
         ),
-        ...forms
+        ...formsAt(path, source.success)
           .filter((form) => !listed.has(foldedTag(form)))
           .map((form) =>
             refuse(manifestLocation, "document-lang", general.location, {
@@ -1764,6 +1793,7 @@ const checkLom = (
       ];
     });
   });
+};
 
 /**
  * What a reading of a dotted reference may name through an item ref, read from its item's

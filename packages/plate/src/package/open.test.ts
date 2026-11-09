@@ -13,6 +13,13 @@ import type {
   PackageVerdict,
 } from "#plate/package/open.ts";
 import { fileLocation, manifestFile } from "#plate/package/store.ts";
+import {
+  cpuMillis,
+  growthFactor,
+  growthLimit,
+  growthRatio,
+  growthRuns,
+} from "#plate/test/growth.ts";
 import { open as openDocument } from "#plate/validate/open.ts";
 import type { Location, Refusal } from "#plate/validate/refusal.ts";
 import { describeRefusal } from "#plate/validate/verdict.ts";
@@ -2069,6 +2076,104 @@ const ltiRefPath =
  */
 const linkMarks = (test: AcceptedTest): readonly string[] =>
   test.unsupported.flatMap(({ feature, path: at }) => (feature === "lti-link" ? [at] : []));
+
+/**
+ * The resources each package of the smaller growth check lists, every one naming the same item.
+ */
+const fewerNamingResources = 2000;
+
+/**
+ * The spans the item of the smaller growth check holds. With {@link fewerNamingResources}, a walk
+ * of the item's elements for every resource that names it outweighs the rest of opening the
+ * package, so 8 times both takes some 45 times as long, while one walk keeps it near 8 times.
+ */
+const fewerNamingSpans = 4000;
+
+/**
+ * The resources the hostile-size case lists, every one naming the same item.
+ */
+const hostileNamingResources = 2000;
+
+/**
+ * The spans the item of the hostile-size case holds.
+ */
+const hostileNamingSpans = 20_000;
+
+/**
+ * The most the hostile-size case's package may take, as a multiple of the thread CPU of the same
+ * package with one resource naming its item: a walk of the item for every resource took over 5
+ * times as long, and one walk leaves only each resource's own share.
+ */
+const namingCpuLimit = 2;
+
+/**
+ * The growth check opens packages of up to 16,000 resources naming an item of 32,000 spans, three
+ * times each. A walk of the item for every resource took over a minute of that, past vitest's
+ * default of 5 s, and a failing check should report its ratio, not a timeout.
+ */
+const growthTimeoutMs = 300_000;
+
+/**
+ * Write an item whose identifier and title are `a`, which writes no `xml:lang`, and whose body's
+ * one `div` holds a number of spans of one letter each: an element apiece for a walk of its
+ * languages to visit, every one stating none.
+ *
+ * @param spans How many spans the body holds.
+ * @returns The item's text.
+ */
+const spannedItemXml = (spans: number): string =>
+  `<qti-assessment-item xmlns="${qti}" identifier="a" title="a" adaptive="false" time-dependent="false"><qti-item-body><div>${"<span>a</span>".repeat(spans)}</div></qti-item-body></qti-assessment-item>`;
+
+/**
+ * Write an item resource that names `items/a.xml` and gives no LOM record.
+ *
+ * @param identifier The resource's identifier.
+ * @returns The resource's text.
+ */
+const bareNamingXml = (identifier: string): string =>
+  resourceXml(identifier, "imsqti_item_xmlv3p0", "items/a.xml");
+
+/**
+ * Write an item resource that names `items/a.xml` and whose own LOM `general` gives the title `a`,
+ * which {@link spannedItemXml}'s item matches, and lists no language, which it needs none of.
+ *
+ * @param identifier The resource's identifier.
+ * @returns The resource's text.
+ */
+const titledNamingXml = (identifier: string): string =>
+  describedXml(identifier, "imsqti_item_xmlv3p0", "items/a.xml", lomTitle("a"));
+
+/**
+ * The files of a package of item resources `R<n>` that all name one item, {@link spannedItemXml}'s
+ * of a number of spans, at `items/a.xml`.
+ *
+ * @param resources How many resources name the item.
+ * @param spans How many spans its body holds.
+ * @param resource Write a resource of an identifier: {@link bareNamingXml} or
+ *   {@link titledNamingXml}.
+ * @returns The package's files.
+ */
+const namingPackage = (
+  resources: number,
+  spans: number,
+  resource: (identifier: string) => string,
+): ReadonlyMap<string, Uint8Array> =>
+  packageOf({
+    "items/a.xml": spannedItemXml(spans),
+    [manifestFile]: manifestXml(
+      ...Array.from({ length: resources }, (_, index) => resource(`R${index}`)),
+    ),
+  });
+
+/**
+ * Open a package to its end, for a timing that runs the opening as plain code.
+ *
+ * @param files The package's files.
+ * @returns The opening, which checks nothing of the verdict.
+ */
+const opening = (files: ReadonlyMap<string, Uint8Array>) => (): void => {
+  Effect.runSync(openPackage(location, files));
+};
 
 describe("package/open.ts", () => {
   describe("openPackage", () => {
@@ -5050,6 +5155,97 @@ describe("package/open.ts", () => {
             },
           ]);
         }),
+    );
+  });
+
+  describe("openPackage, a document many resources name", () => {
+    it.effect(
+      "align-54 r11 LOM languages once finding 13c: two resources naming one item whose body states fr are each refused document-lang at their own general, the second from the language forms the first read, and a third naming it with no LOM record is not judged (reading 134)",
+      () =>
+        Effect.gen(function* sharedForms() {
+          const refusal = (position: number): Seen => ({
+            detail: { document: "items/a.xml", language: "fr", listed: "en", reading: "134" },
+            document: fileLocation(location, manifestFile),
+            location: { kind: "path", path: generalAt(resourceAt(position)) },
+            rule: "document-lang",
+          });
+          const verdict = yield* openPackage(
+            location,
+            packageOf({
+              "items/a.xml": titledItemXml("a", ' xml:lang="fr"'),
+              [manifestFile]: manifestXml(
+                describedXml(
+                  "A1",
+                  "imsqti_item_xmlv3p0",
+                  "items/a.xml",
+                  `${lomTitle("a")}<language>en</language>`,
+                ),
+                bareNamingXml("A2"),
+                describedXml(
+                  "A3",
+                  "imsqti_item_xmlv3p0",
+                  "items/a.xml",
+                  `${lomTitle("a")}<language>en</language>`,
+                ),
+              ),
+            }),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [refusal(1), refusal(3)]);
+        }),
+    );
+
+    it.effect(
+      "align-54 r11 LOM languages once finding 13c: 8 times the resources naming an item of 8 times the spans open in under 32 times the time, as the item's language forms are read once, not once for each resource that names it",
+      () =>
+        Effect.gen(function* namingGrowth() {
+          const fewer = namingPackage(fewerNamingResources, fewerNamingSpans, bareNamingXml);
+          const more = namingPackage(
+            fewerNamingResources * growthFactor,
+            fewerNamingSpans * growthFactor,
+            bareNamingXml,
+          );
+          assert.deepStrictEqual(refusalsOf(yield* openPackage(location, fewer)), []);
+
+          const growth = yield* growthRatio(opening(fewer), opening(more));
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `8 times the resources and spans took ${growth.toFixed(1)} times as long`,
+          );
+        }),
+      growthTimeoutMs,
+    );
+
+    it.effect(
+      "align-54 r11 LOM languages once finding 13c: 2,000 resources naming an item of 20,000 spans open in under twice the thread CPU of one resource naming it, whether no resource gives a LOM record or each gives a title the item matches",
+      () =>
+        Effect.gen(function* namingHostile() {
+          const metadata = [
+            ["with no LOM record", bareNamingXml],
+            ["each with a LOM title", titledNamingXml],
+          ] as const;
+          for (const [described, resource] of metadata) {
+            const one = namingPackage(1, hostileNamingSpans, resource);
+            const many = namingPackage(hostileNamingResources, hostileNamingSpans, resource);
+            acceptedOf(yield* openPackage(location, one));
+            acceptedOf(yield* openPackage(location, many));
+
+            let oneMs = Number.POSITIVE_INFINITY;
+            let manyMs = Number.POSITIVE_INFINITY;
+            for (let run = 0; run < growthRuns; run += 1) {
+              oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
+              manyMs = Math.min(manyMs, yield* cpuMillis(opening(many)));
+            }
+
+            assert.isBelow(
+              manyMs,
+              namingCpuLimit * oneMs,
+              `2,000 resources ${described} took ${(manyMs / oneMs).toFixed(1)} times the CPU of one`,
+            );
+          }
+        }),
+      growthTimeoutMs,
     );
   });
 
