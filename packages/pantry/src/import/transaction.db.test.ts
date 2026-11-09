@@ -1,7 +1,8 @@
 /**
  * One transaction per package (plan W5, Q5.20; the operator's ruling of 2026-11-05 on issue #3),
  * over the every-relation package (`#pantry/test/gen/every-relation.ts`), whose import writes a row
- * of every stored relation of `Qti`: its ChangeSet compiles, it imports in one transaction, its
+ * of every stored relation of `Qti` but those only a refused package writes (`refusedOnly`): its
+ * ChangeSet compiles, it imports in one transaction, its
  * export gives back its source, and a failure injected through `ImportOptions.wrapApply` while the
  * import's transaction runs leaves no row of it.
  *
@@ -42,6 +43,7 @@ import {
   everyRelationPackage,
   scopedPackage,
   memberCounts,
+  refusedOnly,
 } from "#pantry/test/gen/every-relation.ts";
 import type { MemberCounts } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
@@ -66,6 +68,18 @@ const qtiSchema = "qti";
  * `Package`'s table, by grizzle's conversion of a relation's name (`grizzle names`).
  */
 const packageTable = `${qtiSchema}.package`;
+
+/**
+ * A relation's table, by grizzle's conversion of a relation's name for a name of capitalized words
+ * alone: each word lowercased, joined by underscores (`UnreadTypeHref` is `unread_type_href`). The
+ * one-transaction test asserts each table it names this way is installed, so a name it misreads
+ * fails there instead of passing unnoticed.
+ *
+ * @param relation - The relation's name.
+ * @returns Its table's qualified name.
+ */
+const tableOf = (relation: string) =>
+  `${qtiSchema}.${relation.replaceAll(/(?<=[a-z0-9])(?=[A-Z])/gu, "_").toLowerCase()}`;
 
 /**
  * The timeout of each test here: every one imports the package once per case of its box.
@@ -380,11 +394,12 @@ describe.skipIf(!hasLease)(
       );
 
       it.effect(
-        "imports the every-relation package in one transaction that writes every stored relation of Qti",
+        "imports the every-relation package in one transaction that writes every stored relation of Qti but the refused-only ones",
         (ctx) =>
           // Oracle: PostgreSQL's system columns. Every row the import adds to any table of the
           // installation carries the `xmin` of the package's own row, so one transaction inserted
-          // them all, and the tables it inserted into are as many as `Qti`'s stored relations.
+          // them all; the tables it inserted into are as many as `Qti`'s stored relations without
+          // those only a refused package writes (`refusedOnly`), and none of those is among them.
           // Bound: every count the generator draws, 8 cases.
           searched(
             ctx,
@@ -412,10 +427,18 @@ describe.skipIf(!hasLease)(
                     assert.strictEqual(total, (before.get(table) ?? 0) + at, table);
                   }
 
+                  const writtenTables = written.map(([table]) => table);
+                  const refusedTables = [...refusedOnly.keys()].map(tableOf);
+
+                  for (const table of refusedTables) {
+                    assert.include(tables, table, "a refused-only relation's table is installed");
+                    assert.notInclude(writtenTables, table, "a refused-only table is written");
+                  }
+
                   assert.strictEqual(
                     written.length,
-                    writableNamesOf(Qti).length,
-                    `tables written: ${written.map(([table]) => table).join(", ")}`,
+                    writableNamesOf(Qti).filter((name) => !refusedOnly.has(name)).length,
+                    `tables written: ${writtenTables.join(", ")}`,
                   );
                 }).pipe(Effect.scoped),
             ),
