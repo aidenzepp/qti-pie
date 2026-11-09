@@ -1065,15 +1065,23 @@ type MembershipLaw = "N5 Follow" | "N5 admitted" | "N7 Counted" | "N7 Last";
  * evaluates the predicate grizzle keeps for it, the field whose handle it tests, and the set it
  * tests the handle in, read off `install.ts`'s rows. Every other field of its row reaches the
  * membership, and each other `Position` field holds the state the family steps from, so a
- * membership of another `Position` field would give one verdict for every handle.
+ * membership of another `Position` field would give one verdict for every handle. `over` is the
+ * handles a stored row's field can hold, the ones the membership is judged at.
  */
 interface Membership {
   readonly field: "lastState" | "state";
   readonly held: ReadonlySet<string>;
   readonly law: MembershipLaw;
   readonly meets: (row: Readonly<Record<string, Datum>>) => boolean;
+  readonly over: ReadonlySet<string>;
   readonly row: Readonly<Record<string, Datum>>;
 }
+
+/**
+ * Every handle of the `Position` roster, the handles a member's own `state` is judged at: N5
+ * admits only the states its model's transitions reach, and that is the law under test.
+ */
+const everyPosition: ReadonlySet<string> = new Set(install.Position.handles);
 
 /**
  * Read a check of `Node` as the schema states it.
@@ -1130,7 +1138,10 @@ const childRow = ({ from, kind, parent, version }: ReturnType<typeof familyWith>
  * The four memberships of `node.ts`: N5 Follow's `{state} ⊆ Follow(model, was)` and N5 admitted's
  * `{state} ⊆ Symbol(shared, kind)` for a member element, N7 Counted's capped children,
  * `{state} ⊆ Capped(version, parent)`, and N7 Last's `{lastState} ⊆ Last(model)` for the parent's
- * own row.
+ * own row. N7 Last is judged over its model's own states alone: it reads
+ * `FollowSetOf.at("ends", model, lastState)`, unknown at a state no `FollowSetOf` row of the model
+ * holds, so the check passes there, as PostgreSQL's `CHECK` does; and no stored row holds such a
+ * state, since N5 and "N7 last slot" admit only the model's own.
  */
 const memberships: readonly Membership[] = [
   {
@@ -1142,6 +1153,7 @@ const memberships: readonly Membership[] = [
     ),
     law: "N5 Follow",
     meets: nodeCheck("N5 Follow"),
+    over: everyPosition,
     row: childRow(sharedFamily),
   },
   {
@@ -1153,6 +1165,7 @@ const memberships: readonly Membership[] = [
     ),
     law: "N5 admitted",
     meets: nodeCheck("N5 admitted"),
+    over: everyPosition,
     row: childRow(sharedFamily),
   },
   {
@@ -1167,6 +1180,7 @@ const memberships: readonly Membership[] = [
     ),
     law: "N7 Counted",
     meets: (row) => cappedKey.selection(row) === true,
+    over: everyPosition,
     row: childRow(cappedFamily),
   },
   {
@@ -1178,6 +1192,11 @@ const memberships: readonly Membership[] = [
     ),
     law: "N7 Last",
     meets: nodeCheck("N7 Last"),
+    over: new Set(
+      install.FollowSetOf.rows
+        .filter(({ model }) => model === sharedFamily.model)
+        .map(({ from }) => from),
+    ),
     row: { ...childRow(sharedFamily), kind: sharedFamily.parent },
   },
 ];
@@ -1195,7 +1214,8 @@ describe("the memberships of a node's own position, by the host judge", () => {
       // Oracle: the specification, the meaning of the diagonal `Compute.singleton` replaced:
       // {h} ⊆ S exactly where h ∈ S, S read off `install.ts`'s rows, over the predicates grizzle
       // keeps for the laws, evaluated on the host (`#pantry/test/key-copies.ts`).
-      // Bound: every handle of the Position roster in each of the four memberships.
+      // Bound: every handle of the Position roster in each of the four memberships, each judged
+      // at the handles its field can hold.
       searched(
         ctx,
         exhaust(
@@ -1221,7 +1241,9 @@ describe("the memberships of a node's own position, by the host judge", () => {
           (code, c) =>
             Effect.sync(() => {
               const handle = install.Position.handles[code] ?? "";
-              for (const { field, held, law, meets, row } of memberships) {
+              for (const { field, held, law, meets, row } of memberships.filter(({ over }) =>
+                over.has(handle),
+              )) {
                 const expected = held.has(handle);
                 c.note(`${law} ${expected ? "held" : "not held"}`);
                 assert.strictEqual(
