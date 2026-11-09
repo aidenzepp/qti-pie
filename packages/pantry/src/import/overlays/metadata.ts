@@ -380,8 +380,8 @@ const generalRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomGener
   );
 
 /**
- * Build a document's {@link LomEntry} rows: one per `lom:entry`, with its identifier's and holder's
- * tuples and its string value in pieces.
+ * Build a document's {@link LomEntry} rows: one per `lom:entry`, with its identifier's kind, start
+ * and parent (the holder) and its string value in pieces.
  *
  * @param tree - The document's tree.
  * @returns The rows, by their node's id.
@@ -394,7 +394,6 @@ const entryRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomEntry>>
       }
 
       const identifier = tree.parentOf(node);
-      const holder = tree.parentOf(identifier);
       const text = tree.stringValueOf(node.id);
 
       return [
@@ -403,10 +402,7 @@ const entryRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomEntry>>
           {
             ...tree.tupleOf(node),
             ...piecesOf(text),
-            holder: holder.id,
-            holderKind: holder.kind,
-            holderParent: holder.parent,
-            holderStart: holder.start,
+            holder: identifier.parent,
             identifierKind: identifier.kind,
             identifierStart: identifier.start,
             text,
@@ -417,33 +413,16 @@ const entryRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomEntry>>
   );
 
 /**
- * Build a document's {@link LomTitle} rows: one per `lom:title`, with its general category's kind,
- * start and parent (the record).
+ * Build a document's {@link LomTitle} rows: one per `lom:title`, its node's tuple.
  *
  * @param tree - The document's tree.
  * @returns The rows, by their node's id.
  */
 const titleRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomTitle>> =>
   new Map(
-    tree.nodes.flatMap((node) => {
-      if (node.kind !== "lom:title") {
-        return [];
-      }
-
-      const general = tree.parentOf(node);
-
-      return [
-        [
-          node.id,
-          {
-            ...tree.tupleOf(node),
-            generalKind: general.kind,
-            generalStart: general.start,
-            record: general.parent,
-          },
-        ] as const,
-      ];
-    }),
+    tree.nodes.flatMap((node) =>
+      node.kind === "lom:title" ? [[node.id, tree.tupleOf(node)] as const] : [],
+    ),
   );
 
 /**
@@ -498,9 +477,8 @@ const stringRowsOf = (tree: Tree): StringRows => {
 };
 
 /**
- * Build a document's {@link LomTitleString} rows: one per `lom:string` of a title, with its title's
- * record, its string value, and the two as `lom-title` compares them: the value with its whitespace
- * replaced, and its language ({@link languageTagOf}).
+ * Build a document's {@link LomTitleString} rows: one per `lom:string` of a title, with its string
+ * value, and that value as `lom-title` compares it, its whitespace replaced.
  *
  * @param tree - The document's tree.
  * @param titles - The document's {@link LomTitle} rows.
@@ -512,24 +490,14 @@ const titleStringRowsOf = (
 ): ReadonlyMap<string, Addition<typeof LomTitleString>> =>
   new Map(
     tree.nodes.flatMap((node) => {
-      const title = node.kind === "lom:string" ? titles.get(node.parent) : undefined;
-      if (title === undefined) {
+      if (node.kind !== "lom:string" || !titles.has(node.parent)) {
         return [];
       }
 
       const text = tree.stringValueOf(node.id);
 
       return [
-        [
-          node.id,
-          {
-            ...tree.tupleOf(node),
-            languageTag: languageTagOf(tree, node),
-            record: title.record,
-            text,
-            textValue: replaceWhitespace(text),
-          },
-        ] as const,
+        [node.id, { ...tree.tupleOf(node), text, textValue: replaceWhitespace(text) }] as const,
       ];
     }),
   );
@@ -594,10 +562,10 @@ type RootRows = Pick<
 /**
  * Build a document's {@link AssessmentObject}, {@link ObjectIdentifier}, {@link ObjectTitle} and
  * {@link ObjectLang} rows: one {@link AssessmentObject} per item's or test's root, whatever it
- * writes, with its language as `lom-title` compares it; and each attribute's own row where it is
- * written: its `identifier` split around its collapsed value, its `title` as written and with its
- * whitespace replaced, and its `xml:lang` as written and collapsed and case-folded. A root that
- * writes no `identifier` or `title` has no row of it, which AL3 refuses.
+ * writes, its node's tuple; and each attribute's own row where it is written: its `identifier`
+ * split around its collapsed value, its `title` as written and with its whitespace replaced, and
+ * its `xml:lang` as written and collapsed and case-folded. A root that writes no `identifier` or
+ * `title` has no row of it, which AL3 refuses.
  *
  * @param tree - The document's tree.
  * @param document - The document's node.
@@ -607,21 +575,7 @@ const objectRowsOf = (tree: Tree, document: NodeId): RootRows => {
   const roots = tree.nodes.filter(({ kind }) => objects.has(kind));
 
   return {
-    AssessmentObject: new Map(
-      roots.map(
-        (node) =>
-          [
-            node.id,
-            {
-              ...tree.tupleOf(node),
-              langTag: Option.match(Option.fromUndefinedOr(tree.valueOf(node, "xml:lang")), {
-                onNone: () => noLanguage,
-                onSome: langTagOf,
-              }),
-            },
-          ] as const,
-      ),
-    ),
+    AssessmentObject: new Map(roots.map((node) => [node.id, tree.tupleOf(node)] as const)),
     ObjectIdentifier: new Map(
       roots.flatMap((node) => {
         const lexical = tree.valueOf(node, "identifier");

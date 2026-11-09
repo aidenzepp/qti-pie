@@ -48,15 +48,16 @@ import {
 } from "#pantry/qti/expressions.ts";
 import { GeneralObject } from "#pantry/qti/identity.ts";
 import {
-  AssessmentObject,
   languageTagPattern,
   LomEntry,
   LomGeneral,
   LomRecord,
+  LomString,
   LomTitle,
   LomTitleString,
   noLanguage,
   ObjectIdentifier,
+  ObjectLang,
   ObjectTitle,
   objectTypes,
   resourceMetadata,
@@ -169,6 +170,25 @@ export const namingRecords = query(QtiBase).rule((r) => {
 });
 
 /**
+ * The general categories of the records that name a document, each with its record and that
+ * document: a {@link LomGeneral}, whose parent is its record. Every `lom-identifier` and
+ * `lom-title` query reaches its record through one, from an entry's `holder` or a title's
+ * `parent`, so a meta-metadata's or a relation's identifier, whose holder is no general category,
+ * is read by none.
+ *
+ * The category keys a row, since a node has one parent.
+ */
+const namingGenerals = query(QtiBase).rule((r) => {
+  const { node: general, parent: record } = v(LomGeneral, "general");
+  const { document } = v(namingRecords, "named");
+
+  return r
+    .match(LomGeneral, { node: general, parent: record })
+    .match(namingRecords, { document, record })
+    .find({ document, general, record });
+});
+
+/**
  * The records that name a document and whose general category lists an `identifier`, each by its
  * record: `lom-identifier` reads each (§2.7.1.1). A meta-metadata's or a relation's identifier is
  * no general one.
@@ -176,11 +196,12 @@ export const namingRecords = query(QtiBase).rule((r) => {
 export const ListedIdentifier = derived(
   "ListedIdentifier",
   query(QtiBase).rule((r) => {
-    const { holderParent: record } = v(LomEntry, "entry");
+    const { holder: general } = v(LomEntry, "entry");
+    const { record } = v(namingGenerals, "general");
 
     return r
-      .match(LomEntry, { holderKind: "lom:general", holderParent: record })
-      .match(namingRecords, { record })
+      .match(LomEntry, { holder: general })
+      .match(namingGenerals, { general, record })
       .find({ record });
   }),
 );
@@ -195,12 +216,12 @@ export const ListedIdentifier = derived(
 export const MatchedIdentifier = derived(
   "MatchedIdentifier",
   query(QtiBase).rule((r) => {
-    const { holderParent: record, token } = v(LomEntry, "entry");
-    const { document } = v(namingRecords, "named");
+    const { holder: general, token } = v(LomEntry, "entry");
+    const { document, record } = v(namingGenerals, "general");
 
     return r
-      .match(LomEntry, { holderKind: "lom:general", holderParent: record, token })
-      .match(namingRecords, { document, record })
+      .match(LomEntry, { holder: general, token })
+      .match(namingGenerals, { document, general, record })
       .match(ObjectIdentifier, { document, identifier: token })
       .find({ record });
   }),
@@ -213,42 +234,76 @@ export const MatchedIdentifier = derived(
 export const ListedTitle = derived(
   "ListedTitle",
   query(QtiBase).rule((r) => {
-    const { record } = v(LomTitle, "title");
+    const { parent: general } = v(LomTitle, "title");
+    const { record } = v(namingGenerals, "general");
 
-    return r.match(LomTitle, { record }).match(namingRecords, { record }).find({ record });
+    return r
+      .match(LomTitle, { parent: general })
+      .match(namingGenerals, { general, record })
+      .find({ record });
   }),
 );
+
+/**
+ * The strings of a general title of the records that name a document whose value is that
+ * document's title, each with its record and the document's root: the string's `textValue` is the
+ * root's `titleValue` ({@link ObjectTitle}), both in `xs:normalizedString`'s value space. A string
+ * reaches its record through its {@link LomTitle}, whose parent is a general category.
+ */
+const titledStrings = query(QtiBase).rule((r) => {
+  const { node: string, parent: title, textValue } = v(LomTitleString, "string");
+  const { parent: general } = v(LomTitle, "title");
+  const { document, record } = v(namingGenerals, "general");
+  const { node: root } = v(ObjectTitle, "objectTitle");
+
+  return r
+    .match(LomTitleString, { node: string, parent: title, textValue })
+    .match(LomTitle, { node: title, parent: general })
+    .match(namingGenerals, { document, general, record })
+    .match(ObjectTitle, { document, node: root, titleValue: textValue })
+    .find({ record, root, string });
+});
 
 /**
  * The records that name a document one of whose title strings is that document's title in its
  * language, each by its record (§2.7.1.2: "The title must have a value that matches the value of
  * the title attribute of the associated item, test or object bank. The language used to interpret
- * the title is taken from the language attribute"): the string's `textValue` is the root's
- * `titleValue` ({@link ObjectTitle}), both in `xs:normalizedString`'s value space, and the root
- * states no language (its compared `xml:lang` is no language tag, spec reading 151), or the string
- * has none ({@link noLanguage}), or the two are one tag without regard to case.
+ * the title is taken from the language attribute"): a {@link titledStrings} row whose root states
+ * no language or whose string is in the root's. Two rules state it, one for each state of the
+ * root's optional `xml:lang`: where the root writes one ({@link ObjectLang}), its compared form is
+ * no language tag (spec reading 151), or the string's {@link LomString} has none
+ * ({@link noLanguage}), or the two are one tag without regard to case; and where it writes none,
+ * any string is in its language.
  */
 export const MatchedTitle = derived(
   "MatchedTitle",
-  query(QtiBase).rule((r) => {
-    const { languageTag, record, textValue } = v(LomTitleString, "string");
-    const { document } = v(namingRecords, "named");
-    const { langTag } = v(AssessmentObject, "root");
+  query(QtiBase)
+    .rule((r) => {
+      const { record, root, string } = v(titledStrings, "titled");
+      const { languageTag } = v(LomString, "string");
+      const { langTag } = v(ObjectLang, "lang");
 
-    return r
-      .match(LomTitleString, { languageTag, record, textValue })
-      .match(namingRecords, { document, record })
-      .match(ObjectTitle, { document, titleValue: textValue })
-      .match(AssessmentObject, { document, langTag })
-      .where(
-        r.or(
-          Compute.not(Compute.matches(langTag, languageTagPattern)),
-          r.eq(languageTag, noLanguage),
-          r.eq(languageTag, langTag),
-        ),
-      )
-      .find({ record });
-  }),
+      return r
+        .match(titledStrings, { record, root, string })
+        .match(LomString, { languageTag, node: string })
+        .match(ObjectLang, { langTag, node: root })
+        .where(
+          r.or(
+            Compute.not(Compute.matches(langTag, languageTagPattern)),
+            r.eq(languageTag, noLanguage),
+            r.eq(languageTag, langTag),
+          ),
+        )
+        .find({ record });
+    })
+    .rule((r) => {
+      const { record, root } = v(titledStrings, "titled");
+
+      return r
+        .match(titledStrings, { record, root })
+        .where(r.not(ObjectLang, { node: root }))
+        .find({ record });
+    }),
 );
 
 /**

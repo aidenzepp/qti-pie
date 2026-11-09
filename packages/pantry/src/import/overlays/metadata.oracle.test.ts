@@ -37,7 +37,8 @@ import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { noLanguage, objectTypes, resourceMetadata } from "#pantry/qti/metadata.ts";
 import type {
-  AssessmentObject,
+  LomEntry,
+  LomTitleString,
   ObjectIdentifier,
   ObjectLang,
   ObjectTitle,
@@ -174,16 +175,15 @@ const shredded = Effect.fn("test.metadata.shredded")(function* shreddedPackage(
 
 /**
  * A package's metadata rows as the importer builds them: the manifest's {@link rowsOf}; each
- * document's assessment object, its identifier and its title, each by its document, and its
- * `xml:lang`, by its root; and `named`, each record that names a document, with that document, as
- * the database derives it from the package's rows (`namingRecords`, `#pantry/qti/queries.ts`).
+ * document's identifier and title, each by its document, and its `xml:lang`, by its root; and
+ * `named`, each record that names a document, with that document, as the database derives it from
+ * the package's rows (`namingRecords`, `#pantry/qti/queries.ts`).
  */
 interface Built {
   readonly identifiers: ReadonlyMap<string, Addition<typeof ObjectIdentifier>>;
   readonly langs: ReadonlyMap<string, Addition<typeof ObjectLang>>;
   readonly manifest: MetadataRows;
   readonly named: ReadonlyMap<NodeId, NodeId>;
-  readonly objects: ReadonlyMap<string, Addition<typeof AssessmentObject>>;
   readonly titles: ReadonlyMap<string, Addition<typeof ObjectTitle>>;
 }
 
@@ -239,7 +239,6 @@ const namedOf = (
  */
 const builtOf = (input: Shredded): Built => {
   const documents = new Map<string, NodeId>();
-  const objects = new Map<string, Addition<typeof AssessmentObject>>();
   const identifiers = new Map<string, Addition<typeof ObjectIdentifier>>();
   const titles = new Map<string, Addition<typeof ObjectTitle>>();
   const langs = new Map<string, Addition<typeof ObjectLang>>();
@@ -253,10 +252,6 @@ const builtOf = (input: Shredded): Built => {
     const ids = idsFor(number, listed.type);
     const rows = rowsOf(tree, ids);
     documents.set(path, ids.idOf(0));
-    for (const object of rows.AssessmentObject.values()) {
-      objects.set(object.document, object);
-    }
-
     for (const identifier of rows.ObjectIdentifier.values()) {
       identifiers.set(identifier.document, identifier);
     }
@@ -278,10 +273,50 @@ const builtOf = (input: Shredded): Built => {
     langs,
     manifest,
     named: namedOf(input.manifest, manifestIds, manifest.LomRecord, documents),
-    objects,
     titles,
   };
 };
+
+/**
+ * Read the record a general category is of, as the queries join it: its `LomGeneral`'s
+ * parent.
+ *
+ * @param built - The package's rows.
+ * @param general - The category's node, or none.
+ * @returns The record; none where the node has no `LomGeneral`.
+ */
+const generalRecordOf = (built: Built, general: NodeId | undefined): Option.Option<NodeId> =>
+  Option.map(
+    Option.fromUndefinedOr(
+      general === undefined ? undefined : built.manifest.LomGeneral.get(general),
+    ),
+    ({ parent }) => parent,
+  );
+
+/**
+ * Read the record of a general identifier's entry, as `ListedIdentifier` joins it: the entry's
+ * `holder`, a general category of the record.
+ *
+ * @param built - The package's rows.
+ * @param entry - The entry's row.
+ * @returns The record; none where the identifier is no general category's.
+ */
+const entryRecordOf = (built: Built, entry: Addition<typeof LomEntry>): Option.Option<NodeId> =>
+  generalRecordOf(built, entry.holder);
+
+/**
+ * Read the record of a title's string, as `MatchedTitle` joins it: the string's parent, its
+ * `LomTitle`, whose parent is a general category of the record.
+ *
+ * @param built - The package's rows.
+ * @param string - The string's row.
+ * @returns The record; none where its parent has no `LomTitle`.
+ */
+const stringRecordOf = (
+  built: Built,
+  string: Addition<typeof LomTitleString>,
+): Option.Option<NodeId> =>
+  generalRecordOf(built, built.manifest.LomTitle.get(string.parent)?.parent);
 
 /**
  * Judge the `lom-identifier` law over a package's rows as PostgreSQL does: every naming record
@@ -292,13 +327,13 @@ const builtOf = (input: Shredded): Built => {
  * @returns The records that break the law, by id.
  */
 const identifierRefusals = (built: Built): ReadonlySet<string> => {
-  const entries = [...built.manifest.LomEntry.values()].filter(
-    ({ holderKind }) => holderKind === "lom:general",
-  );
+  const entries = [...built.manifest.LomEntry.values()];
 
   return new Set(
     [...built.named].flatMap(([record, document]) => {
-      const listed = entries.filter(({ holderParent }) => holderParent === record);
+      const listed = entries.filter((entry) =>
+        Option.contains(entryRecordOf(built, entry), record),
+      );
       const identifier = Option.fromUndefinedOr(built.identifiers.get(document));
       const matched = listed.some(({ token }) =>
         Option.exists(identifier, (named) => named.identifier === token),
@@ -310,10 +345,30 @@ const identifierRefusals = (built: Built): ReadonlySet<string> => {
 };
 
 /**
+ * Decide whether a title string is in its document's language, as `MatchedTitle`'s two rules read
+ * it: the root writes no `xml:lang`; or it writes one, and the string has its `LomString`,
+ * and the root's form states no language, the string has none, or the two are one tag.
+ *
+ * @param built - The package's rows.
+ * @param root - The document's root.
+ * @param string - The string's row.
+ * @returns Whether it is.
+ */
+const inLanguage = (built: Built, root: NodeId, string: Addition<typeof LomTitleString>): boolean =>
+  Option.match(Option.fromUndefinedOr(built.langs.get(root)), {
+    onNone: () => true,
+    onSome: ({ langTag }) =>
+      Option.exists(
+        Option.fromUndefinedOr(built.manifest.LomString.get(string.node)),
+        ({ languageTag }) =>
+          !statesLanguage(langTag) || languageTag === noLanguage || languageTag === langTag,
+      ),
+  });
+
+/**
  * Judge the `lom-title` law over a package's rows as PostgreSQL does: every naming record with a
  * general title (`ListedTitle`) has a title string whose value is its document's title's, in its
- * document's language (`MatchedTitle`, `#pantry/qti/queries.ts`): the document states no language,
- * the string has none, or the two are one tag.
+ * document's language (`MatchedTitle`, `#pantry/qti/queries.ts`; {@link inLanguage}).
  *
  * @param built - The package's rows.
  * @returns The records that break the law, by id.
@@ -321,19 +376,17 @@ const identifierRefusals = (built: Built): ReadonlySet<string> => {
 const titleRefusals = (built: Built): ReadonlySet<string> =>
   new Set(
     [...built.named].flatMap(([record, document]) => {
-      const listed = [...built.manifest.LomTitle.values()].some((title) => title.record === record);
+      const listed = [...built.manifest.LomTitle.values()].some(({ parent }) =>
+        Option.contains(generalRecordOf(built, parent), record),
+      );
       const title = Option.fromUndefinedOr(built.titles.get(document));
-      const object = Option.fromUndefinedOr(built.objects.get(document));
       const matched = [...built.manifest.LomTitleString.values()].some(
         (string) =>
-          string.record === record &&
-          Option.exists(title, ({ titleValue }) => titleValue === string.textValue) &&
+          Option.contains(stringRecordOf(built, string), record) &&
           Option.exists(
-            object,
-            ({ langTag }) =>
-              !statesLanguage(langTag) ||
-              string.languageTag === noLanguage ||
-              string.languageTag === langTag,
+            title,
+            ({ node: root, titleValue }) =>
+              titleValue === string.textValue && inLanguage(built, root, string),
           ),
       );
 
@@ -674,9 +727,9 @@ const asciiFolded = (tag: string): string => tag.replaceAll(/[A-Z]/gu, (c) => c.
 /**
  * Judge `E1_derived`'s compared forms over a package's rows as PostgreSQL will: each object's
  * title's `titleValue` is its title with its whitespace replaced; each `xml:lang`'s `langTag` is
- * its form collapsed and case-folded, and each object's is its `xml:lang`'s, or `noLanguage` where
- * it writes none; and each title string's `textValue` is its text so read and its `languageTag`
- * its string's, its `language` case-folded, or `noLanguage` where it writes none.
+ * its form collapsed and case-folded; and each title string's `textValue` is its text so read and
+ * its `LomString`'s `languageTag` its `language` case-folded, or `noLanguage` where it writes
+ * none.
  *
  * @param built - The package's rows.
  * @returns The rows whose compared forms differ, by id.
@@ -688,17 +741,11 @@ const comparedFormBreaches = (built: Built): readonly string[] => [
   ...[...built.langs.values()].flatMap((lang) =>
     lang.langTag === asciiFolded(collapse(lang.lang)) ? [] : [lang.node],
   ),
-  ...[...built.objects.values()].flatMap((object) => {
-    const lang = built.langs.get(object.node);
-
-    return object.langTag === (lang === undefined ? noLanguage : lang.langTag) ? [] : [object.node];
-  }),
   ...[...built.manifest.LomTitleString.values()].flatMap((string) => {
     const language = built.manifest.LomStringLanguage.get(string.node);
     const tag = language === undefined ? noLanguage : asciiFolded(language.language);
 
     return string.textValue === normalize(string.text) &&
-      string.languageTag === tag &&
       built.manifest.LomString.get(string.node)?.languageTag === tag
       ? []
       : [string.node];
@@ -925,7 +972,13 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
               c.noteAll(situationsOf(sketch));
 
               const input = yield* shredded(filesOf(sketch));
-              const { manifest, named } = builtOf(input);
+              const built = builtOf(input);
+              const { manifest, named } = built;
+              const nodes = new Map(
+                flatten(input.manifest, idsFor(0, "manifest").idOf).nodes.map(
+                  (node) => [node.id, node] as const,
+                ),
+              );
               const listed = [
                 ...sketch.manifestRecords,
                 ...sketch.resources.flatMap(({ records: of }) => of),
@@ -954,17 +1007,31 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
 
                 const of = (holderKind: string) =>
                   entriesByStart
-                    .filter((e) => e.holderParent === record.node && e.holderKind === holderKind)
+                    .filter(({ holder }) => {
+                      const node = nodes.get(holder);
+
+                      return node?.kind === holderKind && node.parent === record.node;
+                    })
                     .map(({ text }) => text);
                 const texts = (ids: readonly (readonly EntrySketch[])[]) =>
                   ids.flat().map(({ lead, trail, value }) => `${lead}${value}${trail}`);
 
                 assert.deepStrictEqual(of("lom:general"), texts(sketched.general), "general");
+                assert.deepStrictEqual(
+                  entriesByStart
+                    .filter((e) => Option.contains(entryRecordOf(built, e), record.node))
+                    .map(({ text }) => text),
+                  texts(sketched.general),
+                  "general, as ListedIdentifier joins them",
+                );
                 assert.deepStrictEqual(of("lom:metaMetadata"), texts(sketched.meta), "meta");
                 assert.deepStrictEqual(
                   stringsByStart
-                    .filter((s) => s.record === record.node)
-                    .map(({ languageTag, text }) => ({ languageTag, text })),
+                    .filter((s) => Option.contains(stringRecordOf(built, s), record.node))
+                    .map(({ node, text }) => ({
+                      languageTag: manifest.LomString.get(node)?.languageTag,
+                      text,
+                    })),
                   sketched.titles.flat().map(({ language, text }) => ({
                     languageTag: Option.match(language, {
                       onNone: () => noLanguage,
