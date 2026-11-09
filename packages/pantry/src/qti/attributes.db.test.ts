@@ -33,6 +33,7 @@ import {
   attributeRows,
   AttributeSlot,
   GoverningOf,
+  KindGovernor,
   KindNamespace,
   NodeKind,
 } from "#pantry/grammar/install.ts";
@@ -252,8 +253,16 @@ const idrefPiece = (at: number, fields: Readonly<Record<string, string>>): State
 });
 
 /**
+ * The governor of a foreign element no named type governs: its kind's own (`KindGovernor`), as the
+ * importer writes it (`#pantry/import/fold.ts` `governorOf`).
+ */
+const foreignGovernor =
+  KindGovernor.rows.find((row) => row.kind === "foreign-element")?.governor ??
+  assert.fail("KindGovernor holds foreign-element");
+
+/**
  * An open name of an attribute that counts one, which no case writes: a name in no namespace on a
- * foreign element of version 3.0.1 governed by none, unless the case sets otherwise.
+ * foreign element of version 3.0.1 governed by its kind, unless the case sets otherwise.
  *
  * @param fields - Its class and whatever else the case sets.
  * @param attribute - Its attribute.
@@ -267,7 +276,7 @@ const openNameOf = (
     at: 0n,
     attribute,
     elementNamespace: "urn:element",
-    governs: "none",
+    governor: foreignGovernor,
     kind: "foreign-element",
     local: "a",
     node: strayNode,
@@ -280,8 +289,9 @@ const openNameOf = (
 });
 
 /**
- * The fields a closed element's open name copies from it: its namespace and its declared type as
- * the importer writes it, read from `KindNamespace` and `GoverningOf` at 3.0.1, never `none`.
+ * The fields a closed element's open name copies from it: its namespace and the governor its
+ * declared type gives, as the importer writes them, read from `KindNamespace` and `GoverningOf` at
+ * 3.0.1.
  *
  * @param element - The element's kind.
  * @returns The fields.
@@ -290,8 +300,8 @@ const on = (element: string): Stated["fact"] => ({
   elementNamespace:
     KindNamespace.rows.find((row) => row.kind === element)?.namespace ??
     assert.fail(`KindNamespace holds ${element}`),
-  governs:
-    GoverningOf.rows.find((row) => row.kind === element && row.version === "3.0.1")?.governs ??
+  governor:
+    GoverningOf.rows.find((row) => row.kind === element && row.version === "3.0.1")?.governor ??
     assert.fail(`GoverningOf holds ${element} at 3.0.1`),
   kind: element,
 });
