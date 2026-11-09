@@ -775,7 +775,7 @@ interface Installed {
    */
   readonly strictly: ReadonlySet<string>;
   /**
-   * The positions each kind the model admits is named at, in position order.
+   * The positions each kind the model admits is named at, in position order, each once.
    */
   readonly symbols: ReadonlyMap<string, readonly Placed[]>;
   readonly version: SchemaVersion;
@@ -987,27 +987,47 @@ export const contentOf = (input: {
       );
       const caps = yield* cappedBy(automaton, edits, model.kind);
       const signature = signatureOf(automaton);
+      const named = new Set(
+        automaton.positions.flatMap(({ symbol }) => (symbol._tag === "kinds" ? symbol.kinds : [])),
+      );
+      // Whether a wildcard of the model reads global declarations, so its versions' global kinds
+      // are read at all.
+      const readsGlobals = automaton.positions.some(
+        ({ symbol }) => symbol._tag === "wildcard" && symbol.processing !== "skip",
+      );
 
       for (const [at, version] of model.versions.entries()) {
-        const named = new Set(
-          automaton.positions.flatMap(({ symbol }) =>
-            symbol._tag === "kinds" ? symbol.kinds : [],
-          ),
-        );
         // `sources` are aligned with the model's versions, so this version's is at its index.
         const positions = automaton.positions.map((position): Placed => ({
           position,
           source: sourceIn(
             position.sources,
             at,
-            `Position ${String(position.number)} of the content model of ${model.kind}`,
+            () => `Position ${String(position.number)} of the content model of ${model.kind}`,
           ),
         }));
+        // The global kinds a wildcard of the model may admit in the version, read once for all
+        // its wildcards, each by what the kind alone decides: no element particle of the model
+        // names it, reading 6 keeps no foreign root of it, and a namespace a facet states the
+        // roots of admits only those.
+        const globals = readsGlobals
+          ? input
+              .globalKinds(version, model.kind)
+              .filter(
+                (kind) => !named.has(kind) && !input.foreignRoots.has(kind) && rootAdmits(kind),
+              )
+          : [];
         const symbols = new Map<string, Placed[]>();
         // The processing of each wildcard position that admits a foreign kind.
         const processings = new Map<string, string[]>();
+        // The positions are walked in order and all of one position's kinds are admitted before
+        // the next's, so a kind's positions are held ascending, and a kind one position names
+        // twice is held there once.
         const admit = (kind: string, placed: Placed) => {
-          symbols.getOrInsertComputed(kind, () => []).push(placed);
+          const held = symbols.getOrInsertComputed(kind, () => []);
+          if (held.at(-1) !== placed) {
+            held.push(placed);
+          }
         };
         // `automatonOf` gives no position to a particle that never occurs, or sits in a group that
         // never does, so every position is one some family reaches.
@@ -1019,13 +1039,8 @@ export const contentOf = (input: {
             }
           } else {
             if (symbol.processing !== "skip") {
-              for (const kind of input.globalKinds(version, model.kind)) {
-                if (
-                  !named.has(kind) &&
-                  !input.foreignRoots.has(kind) &&
-                  rootAdmits(kind) &&
-                  admitsNamespace(symbol.namespace, own, input.namespaceOf(kind))
-                ) {
+              for (const kind of globals) {
+                if (admitsNamespace(symbol.namespace, own, input.namespaceOf(kind))) {
                   admit(kind, placed);
                 }
               }
@@ -1051,7 +1066,7 @@ export const contentOf = (input: {
           parent: model.kind,
           positions,
           signature,
-          source: sourceIn(model.sources, at, `The content model of ${model.kind}`),
+          source: sourceIn(model.sources, at, () => `The content model of ${model.kind}`),
           strictly: new Set(
             [...processings].flatMap(([kind, held]) =>
               held.every((processing) => processing === "strict") ? [kind] : [],
@@ -1123,9 +1138,7 @@ export const contentOf = (input: {
     // character data the model gives no position, which carries its predecessor's state.
     const admittedOf = (entry: Installed): readonly AdmittedRow[] => [
       ...[...entry.symbols].map(([child, placed]) => {
-        const [only, ...rest] = new Map(
-          placed.map((held) => [held.position.number, held]),
-        ).values();
+        const [only, ...rest] = placed;
 
         return only !== undefined && rest.length === 0
           ? {
@@ -1153,19 +1166,18 @@ export const contentOf = (input: {
           version: entry.version,
         })),
     ];
-    // Each family's kinds that several positions of its model name, with those positions.
+    // Each family's kinds that several positions of its model name, with those positions,
+    // ascending as `symbols` holds them.
     const sharedOf = (entry: Installed) =>
-      [...entry.symbols].flatMap(([kind, placed]) => {
-        const distinct = [...new Set(placed.map(({ position }) => position.number))].toSorted(
-          (left, right) => left - right,
-        );
-
-        return distinct.length > 1 ? [{ kind, numbers: distinct }] : [];
-      });
+      [...entry.symbols].flatMap(([kind, placed]) =>
+        placed.length > 1 ? [{ kind, numbers: placed.map(({ position }) => position.number) }] : [],
+      );
+    // Every (version, parent) family, which both models' readings walk.
+    const families = familiesOf(input);
     // The models, read once per family in (version, parent) code order: a family's automaton is its
     // model's whenever an earlier family's has the same positions, `Follow` and `Last`.
     const contentModels = modelsOf(
-      familiesOf(input).map((family) =>
+      families.map((family) =>
         Option.match(installedAt(family), {
           onNone: () => ({ family, signature: emptySignature, value: emptyLanguage }),
           onSome: (entry) => ({ family, signature: entry.signature, value: entry.automaton }),
@@ -1173,7 +1185,7 @@ export const contentOf = (input: {
       ),
     );
     const sharedModels = modelsOf(
-      familiesOf(input).flatMap((family) =>
+      families.flatMap((family) =>
         Option.toArray(installedAt(family)).flatMap((entry) => {
           const shared = sharedOf(entry);
 
@@ -1217,7 +1229,10 @@ export const contentOf = (input: {
       dependentField(name, positions, (prefix) =>
         countOf(modelSizes, prefixHandle(prefix, "model"), "ModelPositions"),
       );
-    const admitted = installed.flatMap(admittedOf);
+    // Each installed family with the children its model admits, read once: `Admission`'s rows,
+    // and `StrictlyHeld`'s among them.
+    const admittedBy = installed.map((entry) => ({ entry, rows: admittedOf(entry) }));
+    const admitted = admittedBy.flatMap(({ rows }) => rows);
     // A bound of 2…n the automaton relaxes is the particle's; a cap is its reading's, at most one
     // child where the model's enclosing group repeats the particle.
     const countedRows = installed.flatMap(
@@ -1354,8 +1369,8 @@ export const contentOf = (input: {
           key: [version, parent, idField("child", input.kinds)],
           name: "StrictlyHeld",
           payload: [],
-          rows: installed.flatMap((entry) =>
-            admittedOf(entry).flatMap(({ child, parent: held, source, version: in_ }) =>
+          rows: admittedBy.flatMap(({ entry, rows }) =>
+            rows.flatMap(({ child, parent: held, source, version: in_ }) =>
               entry.strictly.has(child)
                 ? [{ row: { child, parent: held, version: in_ }, source }]
                 : [],

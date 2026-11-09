@@ -291,7 +291,7 @@ export const xsiTypesOf = (input: {
     const declared = new Map<string, string>();
     for (const { kind, namespace, sources, type, versions } of input.models) {
       for (const [at, version] of versions.entries()) {
-        const source = sourceIn(sources, at, `The content model of ${kind}`);
+        const source = sourceIn(sources, at, () => `The content model of ${kind}`);
         for (const named of Option.toArray(type)) {
           declared.set(`${version} ${kind}`, typeHandle(named));
         }

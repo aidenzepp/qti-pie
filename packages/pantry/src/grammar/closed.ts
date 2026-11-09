@@ -212,17 +212,18 @@ export interface SourcedRow<
  *
  * @param sources - The row's sources.
  * @param at - The version's index among the row's versions.
- * @param row - The row, as the defect's message names it.
+ * @param row - The row, as the defect's message names it: spelled only for the defect, so a load
+ *   that meets none spells no row.
  * @returns The version's source.
  * @throws {Error} When the row states no source at the index, so its sources do not align with
  *   its versions: a defect of the leaf or the facet that states it.
  */
-export const sourceIn = (sources: Sources, at: number, row: string): Source =>
+export const sourceIn = (sources: Sources, at: number, row: () => string): Source =>
   Option.getOrThrowWith(
     Arr.get(sources, at),
     () =>
       new Error(
-        `${row} states ${String(sources.length)} sources and no source for its version at index ${String(at)}, and a row states one source per version, the first version's first. State the version's source.`,
+        `${row()} states ${String(sources.length)} sources and no source for its version at index ${String(at)}, and a row states one source per version, the first version's first. State the version's source.`,
       ),
   );
 

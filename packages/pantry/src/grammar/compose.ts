@@ -717,14 +717,17 @@ export const compose = <const V extends readonly Vocabulary[]>(
     const installed = yield* contentOf({
       facets: stated.map((facet) => facet.content),
       foreignRoots: open.foreignRoots,
-      globalKinds: (version, parent) =>
-        globalKinds.flatMap(({ kind, versions }) =>
+      globalKinds: (version, parent) => {
+        const reader = namespaceOf(parent);
+
+        return globalKinds.flatMap(({ kind, versions }) =>
           versions.includes(version) &&
           base.nodeKind.has(kind) &&
-          open.wildcardReads(namespaceOf(parent), namespaceOf(kind))
+          open.wildcardReads(reader, namespaceOf(kind))
             ? [kind]
             : [],
-        ),
+        );
+      },
       kinds: base.nodeKind,
       models: list.flatMap((entry) => entry.models),
       namespaceOf,
