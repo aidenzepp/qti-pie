@@ -1041,13 +1041,19 @@ const matchesPattern = (text: string, pattern: string): boolean => {
 };
 
 /**
- * Collapse a text as XML Schema's `collapse` whitespace class does.
+ * Collapse a text as the database's `Compute.collapse` does,
+ * `btrim(regexp_replace(x, '[ \t\n\r]+', ' ', 'g'))` (`@bjornpagen/grizzle-engine`,
+ * `src/scalar/compute/registry.ts:657-674` `textCollapse` and
+ * `src/lower/conservative/expr/ops.ts:168-184` `collapseText`): XML Schema's `collapse`
+ * whitespace class, trimming the one space a run leaves at either end and nothing else, never
+ * `String.prototype.trim`, which also strips U+00A0 and the other Unicode whitespace.
  *
  * @param text - The text.
- * @returns It, each run of tabs, line feeds, carriage returns and spaces one space, none at either
- *   end.
+ * @returns It, each run of tabs, line feeds, carriage returns and spaces one space, no space at
+ *   either end.
  */
-const collapse = (text: string): string => text.replaceAll(/[\t\n\r ]+/gu, " ").trim();
+const collapse = (text: string): string =>
+  text.replaceAll(/[\t\n\r ]+/gu, " ").replaceAll(/^ | $/gu, "");
 
 /**
  * Translate a text's characters as SQL's `translate` does: each character of `from` becomes the
