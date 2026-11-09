@@ -8,14 +8,17 @@
  *
  * Each case is judged twice: by the law oracle over the package as written, and by the schema's own
  * laws over the import's rows on the host (`#pantry/test/host-judge.ts`), the first broken law's
- * rule by precedence. The two verdicts must be one, and both the case's. The fixtures of
- * {@link weightedNames} and `test-mapping` are materialized; the rest are written here.
+ * rule by precedence. The oracle's verdict is the case's rule, and the host's is too, but for a law
+ * the host leaves to the database: "Set type" (P20) is a check over the query `HeldType` since
+ * 0ca5ed68, and a statement over a derived relation only PostgreSQL judges (32692ced), which
+ * `qti/expressions.db.test.ts` holds. The fixtures of {@link weightedNames} and `test-mapping` are
+ * materialized; the rest are written here.
  */
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Array as Arr, ConfigProvider, Effect, FileSystem, Option } from "effect";
-import { rulesOf } from "#pantry/import/refusal.ts";
+import { lawNameOf, rulesOf } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -63,10 +66,12 @@ const testSetting = (declaration: string, expression: string): string =>
   );
 
 /**
- * One case: what it is, its package (a fixture's name or a test written beside the base item), and
- * the rule both judges must give, `accepted` where they accept it.
+ * One case: what it is, its package (a fixture's name or a test written beside the base item), the
+ * rule the law oracle must give, `accepted` where it accepts it, and the rule the host must give,
+ * the oracle's but `accepted` for a law the host leaves to the database.
  */
 interface WeightedCase {
+  readonly host: string;
   readonly name: string;
   readonly rule: string;
   readonly source: { readonly fixture: FixtureName } | { readonly test: string };
@@ -77,21 +82,25 @@ interface WeightedCase {
  */
 const cases: readonly WeightedCase[] = [
   {
+    host: "accepted",
     name: "rtest04's weighted sum into a float single outcome",
     rule: "accepted",
     source: { fixture: "weighted-sum-float" },
   },
   {
+    host: "accepted",
     name: "a weighted test variables into an integer multiple outcome",
     rule: "P20",
     source: { fixture: "weighted-variables-integer" },
   },
   {
+    host: "accepted",
     name: "test-mapping's weighted section sum into a float single outcome",
     rule: "accepted",
     source: { fixture: "test-mapping" },
   },
   {
+    host: "P23",
     name: "a gcd of a weighted test variables",
     rule: "P23",
     source: {
@@ -102,6 +111,7 @@ const cases: readonly WeightedCase[] = [
     },
   },
   {
+    host: "accepted",
     name: "a gcd of an unweighted test variables, unknown",
     rule: "accepted",
     source: {
@@ -112,6 +122,7 @@ const cases: readonly WeightedCase[] = [
     },
   },
   {
+    host: "accepted",
     name: "an unweighted test variables into an integer multiple outcome, unknown",
     rule: "accepted",
     source: {
@@ -207,7 +218,11 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
           assert.deepStrictEqual(
             verdicts,
-            cases.map(({ name, rule }) => ({ host: rule, name, oracle: [rule] })),
+            cases.map(({ host, name, rule }) => ({ host, name, oracle: [rule] })),
+          );
+          assert.isFalse(
+            laws.some(({ law }) => Option.getOrUndefined(lawNameOf(law)) === "Set type"),
+            "the host judges Set type: expect its P20 on the host",
           );
         }),
     );
