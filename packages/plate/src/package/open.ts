@@ -4505,32 +4505,6 @@ const reachingAny = (
 };
 
 /**
- * Give the placements the test reaches through placements outside a set: every one but those a
- * placement of the set lies above on every way down to it, and the set itself.
- *
- * @param graph The assembly's placements.
- * @param avoided The set.
- * @returns The placements reached.
- */
-const reachedAvoiding = (
-  graph: PlacementGraph,
-  avoided: ReadonlySet<Placement>,
-): ReadonlySet<Placement> => {
-  const reached = new Set<Placement>(avoided.has(graph.test) ? [] : [graph.test]);
-  const pending = [...reached];
-  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    for (const { placement } of graph.children.get(next) ?? []) {
-      if (!avoided.has(placement) && !reached.has(placement)) {
-        reached.add(placement);
-        pending.push(placement);
-      }
-    }
-  }
-
-  return reached;
-};
-
-/**
  * Which placements of a test's assembly lie on every way down from the test to which
  * ({@link dominanceOf}).
  */
@@ -4663,51 +4637,35 @@ const dominanceOf = (graph: PlacementGraph): Dominance => {
 };
 
 /**
- * The most section refs {@link reachesAbove} reads before it gives up: a walk that settles within
- * it costs little, and one that does not costs no more than this before the placements are walked
- * once for the target instead ({@link reachedAvoiding}).
- */
-const reachBudget = 64;
-
-/**
  * Report whether a placement can be reached from a placement on every way down to it through
  * placements outside a set, walking up from it, one way at a time, through the placements one step
- * above each. A placement above it that `from` does not lie on every way down to lies above `from`
- * too, and every way up to it passes `from`, so the walk, which ends at `from`, reads only
- * placements `from` lies above.
+ * above each, each placement met once. A placement above it that `from` does not lie on every way
+ * down to lies above `from` too, and every way up to it passes `from`, so the walk, which ends at
+ * `from`, reads only placements `from` lies above: it reads no more placements than lie above the
+ * placement and below `from`, and keeps nothing once it settles.
  *
  * @param graph The assembly's placements.
  * @param below The placement.
  * @param from A placement on every way down to it, not in the set.
  * @param avoided The set.
- * @param budget The most section refs it reads, {@link reachBudget} unless given; with no bound,
- *   it always settles.
- * @returns Whether a way up from `below` through placements outside the set reaches `from`, none
- *   when it read `budget` section refs without settling it.
+ * @returns Whether a way up from `below` through placements outside the set reaches `from`.
  */
 const reachesAbove = (
   graph: PlacementGraph,
   below: Placement,
   from: Placement,
   avoided: ReadonlySet<Placement>,
-  budget = reachBudget,
-): Option.Option<boolean> => {
+): boolean => {
   const met = new Set<Placement>([below]);
   // The walk's way up, each placement with the index of the next placement above it to read.
   const way: { readonly placement: Placement; next: number }[] = [{ next: 0, placement: below }];
-  let read = 0;
   for (let step = way.at(-1); step !== undefined; step = way.at(-1)) {
     if (step.placement === from) {
-      return Option.some(true);
-    }
-
-    if (read === budget) {
-      return Option.none();
+      return true;
     }
 
     const parent = graph.parents.get(step.placement)?.[step.next];
     step.next += 1;
-    read += 1;
     if (parent === undefined) {
       way.pop();
     } else if (!avoided.has(parent) && !met.has(parent)) {
@@ -4716,7 +4674,7 @@ const reachesAbove = (
     }
   }
 
-  return Option.some(false);
+  return false;
 };
 
 /**
@@ -4727,8 +4685,8 @@ const reachesAbove = (
  * placement through none of them reaches the deepest placement on every way down to it and to each
  * of them, which the test reaches through none of them, since none lies above that one
  * ({@link reachesAbove}). That walk reads only placements above the placement and below that one,
- * and keeps nothing once it settles, so it needs no budget and no walk of every placement: it reads
- * no more placements than lie above the placement.
+ * and keeps nothing once it settles, so it needs no walk of every placement: it reads no more
+ * placements than lie above the placement.
  *
  * @param graph The assembly's placements.
  * @param dominance Which placements lie on every way down to which.
@@ -4755,11 +4713,7 @@ const reachedAround = (
     from = deepestCommon(from, one);
   }
 
-  // With no budget the walk always settles.
-  return Option.getOrElse(
-    reachesAbove(graph, placement, from, new Set(lying), Number.POSITIVE_INFINITY),
-    () => false,
-  );
+  return reachesAbove(graph, placement, from, new Set(lying));
 };
 
 /**
@@ -4837,12 +4791,13 @@ interface BranchIndex {
  * reaches a placement of the document through no writer needs no walk of the placements when it
  * has no holder, or one, which reaches it so unless it lies on every way down to it
  * ({@link dominanceOf}, built once, when first needed); only two or more holders that may lie
- * above one placement, none of which alone lies so, walk up from it ({@link reachesAbove}), and,
- * when that walk does not settle it, the placements the test reaches through none of the writers
- * ({@link reachedAvoiding}), once for each target. So the rules cost each one its own judgement,
- * not a scan of every placement and every writer: rules whose target many documents write cost no
- * more than one written once, and rules whose distinct targets each document writes its own of no
- * more than rules to one target.
+ * above one placement, none of which alone lies so, walk up from it ({@link reachedAround}),
+ * reading no placement outside its ancestry, once for each placement and set of holders above it,
+ * however many targets they write. So the rules cost each one its own judgement, not a scan of
+ * every placement and every writer, and nothing is kept for a target but what its rules read:
+ * rules whose target many documents write cost no more than one written once, rules whose distinct
+ * targets each document writes its own of no more than rules to one target, and rules whose
+ * distinct targets the same placements write no more than one walk for them all.
  *
  * @param graph The assembly's placements.
  * @param names Each name of the reach by identifier, each document that writes it in the order the
@@ -4864,10 +4819,11 @@ const branchIndex = (
   const placedFirst = (one: Placement, other: Placement): number =>
     (order.get(one) ?? 0) - (order.get(other) ?? 0);
   const targets = new Map<string, TargetWriters>();
-  // The placements the test reaches through no writer, by target, walked only for a target two or
-  // more holders write, none of which alone lies on every way down to a placement of a document,
-  // when a walk up from that placement does not settle it.
-  const outsides = new Map<string, ReadonlySet<Placement>>();
+  // Whether the test reaches a placement of a rule's document through none of two or more holders
+  // that may lie above it, none of which alone lies on every way down to it, by the placement and
+  // those holders' places in the walk's order, so the targets the same placements write share one
+  // walk ({@link reachedAround}).
+  const around = new Map<Placement, Map<string, boolean>>();
   let dominance: Dominance | undefined;
   let partitioned: boolean | undefined;
   const reachers = new Map<string, ReadonlySet<Placement>>();
@@ -4914,29 +4870,23 @@ const branchIndex = (
    * it; with one, unless that one lies on every way down to it ({@link dominanceOf}); with more,
    * unless one of them alone lies so, when a way up from it through no writer reaches the deepest
    * placement on every way down to it and to each of them, which the test reaches through no
-   * writer since none lies above that one ({@link reachesAbove}), or, when that walk does not
-   * settle it, when it is among the placements the test reaches through no writer, walked once for
-   * the target.
+   * writer since none lies above that one ({@link reachedAround}). That walk reads only the
+   * placements above it and below that one, and runs once for the placement and the holders that
+   * may lie above it, whatever the target: the writers that lie on no way down to it change
+   * nothing.
    *
-   * @param identifier The target.
-   * @param writers Its writers' placements.
-   * @param ruled The document's placements, none of which writes it.
-   * @param holders The writers' placements that reach one of the document's.
+   * @param ruled The document's placements, none of which writes the target.
+   * @param holders The target's writers' placements that reach one of the document's.
    * @returns Whether the test reaches one of the document's placements through no writer.
    */
-  const reachedOutside = (
-    identifier: string,
-    writers: readonly Placement[],
-    ruled: readonly Placement[],
-    holders: readonly Placement[],
-  ): boolean => {
+  const reachedOutside = (ruled: readonly Placement[], holders: readonly Placement[]): boolean => {
     if (holders.length === 0) {
       return ruled.length > 0;
     }
 
     const known = dominance ?? dominanceOf(graph);
     dominance = known;
-    const { deepestCommon, dominates } = known;
+    const { dominates } = known;
     const byPart =
       partitioned ??
       [...graph.placedAt.values()].every(
@@ -4976,17 +4926,17 @@ const branchIndex = (
         return true;
       }
 
-      let from = placement;
-      for (const holder of above) {
-        from = deepestCommon(from, holder);
-      }
+      const key = above
+        .map((holder) => order.get(holder) ?? 0)
+        .toSorted((one, other) => one - other)
+        .join(" ");
+      const byHolders = around.get(placement) ?? new Map<string, boolean>();
+      around.set(placement, byHolders);
 
-      return Option.getOrElse(reachesAbove(graph, placement, from, new Set(above)), () => {
-        const outside = outsides.get(identifier) ?? reachedAvoiding(graph, new Set(writers));
-        outsides.set(identifier, outside);
+      const reached = byHolders.get(key) ?? reachedAround(graph, known, placement, above);
+      byHolders.set(key, reached);
 
-        return outside.has(placement);
-      });
+      return reached;
     });
   };
   /**
@@ -5036,7 +4986,7 @@ const branchIndex = (
       faults: views.every((view) => Option.isSome(view.point))
         ? Option.some(new Map())
         : Option.none(),
-      unresolved: reachedOutside(identifier, writers, ruled, holders)
+      unresolved: reachedOutside(ruled, holders)
         ? Option.some(suppliedTwice ? "ambiguous" : "unknown")
         : Option.none(),
       views,

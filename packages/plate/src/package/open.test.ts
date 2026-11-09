@@ -3036,6 +3036,168 @@ const aroundFiles = (more: string): ReadonlyMap<string, Uint8Array> =>
     ),
   });
 
+/**
+ * The section documents `sections/c<n>.xml` of {@link layeredPackage}, each placing the next, the
+ * last placing `sections/r.xml`: more than the 64 section refs a walk up from `r`'s placement once
+ * read before it gave up and walked every placement for each target instead.
+ */
+const layeredChain = 70;
+
+/**
+ * The test parts of the growth check of {@link layeredPackage}, each placing the hub, so each of
+ * the hub's documents has as many placements.
+ */
+const layeredParts = 64;
+
+/**
+ * The branch rules, and the section documents the hub places, of the smaller growth check of
+ * {@link layeredPackage}.
+ */
+const fewerLayered = 128;
+
+/**
+ * The branch rules of the hostile-size case of {@link layeredPackage}: with
+ * {@link hostileLayeredParts} and {@link hostileLayeredDocuments}, some 0.9 MB, the shape the gate's
+ * re-review measured at 16.9 s and 5.4 GB of heap against 0.86 s with every rule to `X0`, past the
+ * default heap.
+ */
+const hostileLayeredTargets = 2000;
+
+/**
+ * The test parts of the hostile-size case of {@link layeredPackage}, each placing the hub.
+ */
+const hostileLayeredParts = 128;
+
+/**
+ * The section documents the hub places in the hostile-size case of {@link layeredPackage}.
+ */
+const hostileLayeredDocuments = 1000;
+
+/**
+ * The most the hostile-size case of {@link layeredPackage} may take, as a multiple of the thread
+ * CPU of the same package with every rule to `X0`: a walk of every placement for each target took
+ * many times as long, and one walk up from `r`'s placement for the writers above it leaves only
+ * each rule's own share.
+ */
+const layeredCpuLimit = 2;
+
+/**
+ * The most the heap may grow by while the hostile-size case of {@link layeredPackage} opens, in
+ * bytes. A set of every placement kept for each target, some 128,000 placements for each of 2,000
+ * targets, exhausted the default heap of some 4 GB; without them the opening holds about what the
+ * package with every rule to `X0` holds.
+ */
+const layeredHeapLimit = 512 * 2 ** 20;
+
+/**
+ * Which identifier each branch rule of {@link layeredPackage} targets: `X<n>`, its own, or `X0`
+ * for all.
+ */
+type Aimed = "each its own" | "one";
+
+/**
+ * The files of a package whose test `T` holds the test part `P0`, whose section `S0` places the
+ * section document `sections/a.xml` twice, in its section `SA` and in `SB`, which draws its order,
+ * then holds what is given, and further test parts `Q<p>`, each placing the hub `sections/h.xml`,
+ * whose section `H` places the section documents `sections/k<n>.xml`, each holding one item ref.
+ * `a` holds the item refs `X<n>` to `items/b.xml` ({@link otherItemXml}), so it writes every
+ * target, and places `sections/c1.xml`, which leads through {@link layeredChain} section documents
+ * to `sections/r.xml`, whose one item ref `r0` holds a branch rule to each target. So two writers'
+ * placements lie above `r`'s, neither on every way down to it, and a walk up from it reads every
+ * document of the chain before it settles.
+ *
+ * @param targets How many targets `a` writes, and how many branch rules `r0` holds.
+ * @param aimed Which identifier each rule targets.
+ * @param parts How many test parts place the hub.
+ * @param documents How many section documents the hub places.
+ * @param more What `S0` holds after `SA` and `SB`, as written.
+ * @returns The package's files.
+ */
+const layeredPackage = (
+  targets: number,
+  aimed: Aimed,
+  parts: number,
+  documents: number,
+  more = "",
+): ReadonlyMap<string, Uint8Array> => {
+  const written = Array.from({ length: targets }, (_, index) => index);
+  const placed = Array.from({ length: documents }, (_, index) => index);
+  const chain = Array.from({ length: layeredChain }, (_, index) => index + 1);
+  const rules = written.map((index) => branchRuleXml(aimed === "one" ? "X0" : `X${index}`));
+  const hubbed = Array.from({ length: parts }, (_, part) =>
+    partXml(`Q${part}`, sectionRefXml(`H${part}`, "sections/h.xml")),
+  ).join("");
+
+  return packageOf({
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("A", "imsqti_section_xmlv3p0", "sections/a.xml"),
+      ...chain.map((index) =>
+        resourceXml(`C${index}`, "imsqti_section_xmlv3p0", `sections/c${index}.xml`),
+      ),
+      resourceXml("R", "imsqti_section_xmlv3p0", "sections/r.xml"),
+      resourceXml("H", "imsqti_section_xmlv3p0", "sections/h.xml"),
+      ...placed.map((index) =>
+        resourceXml(`K${index}`, "imsqti_section_xmlv3p0", `sections/k${index}.xml`),
+      ),
+    ),
+    "sections/a.xml": sectionDocumentXml(
+      "A",
+      `${written.map((index) => itemRefXml(`X${index}`, "../items/b.xml")).join("")}${sectionRefXml("RC", "c1.xml")}`,
+    ),
+    ...Object.fromEntries(
+      chain.map((index) => [
+        `sections/c${index}.xml`,
+        sectionDocumentXml(
+          `C${index}`,
+          index < layeredChain
+            ? sectionRefXml(`RC${index}`, `c${index + 1}.xml`)
+            : sectionRefXml("RR", "r.xml"),
+        ),
+      ]),
+    ),
+    "sections/h.xml": sectionDocumentXml(
+      "H",
+      placed.map((index) => sectionRefXml(`HR${index}`, `k${index}.xml`)).join(""),
+    ),
+    ...Object.fromEntries(
+      placed.map((index) => [
+        `sections/k${index}.xml`,
+        sectionDocumentXml(`K${index}`, itemRefXml(`KI${index}`, "../items/b.xml")),
+      ]),
+    ),
+    "sections/r.xml": sectionDocumentXml("R", itemRefXml("r0", "../items/b.xml", rules.join(""))),
+    "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T">${partXml("P0", `<qti-assessment-section identifier="S0" title="S0" visible="true"><qti-assessment-section identifier="SA" title="SA" visible="true">${sectionRefXml("RA1", "sections/a.xml")}</qti-assessment-section><qti-assessment-section identifier="SB" title="SB" visible="true"><qti-ordering shuffle="true"/>${sectionRefXml("RA2", "sections/a.xml")}</qti-assessment-section>${more}</qti-assessment-section>`)}${hubbed}</qti-assessment-test>`,
+  });
+};
+
+/**
+ * The refusals of a package of {@link layeredPackage}: each branch rule `branch-target` at
+ * `sections/r.xml`, once for each reason given, in order.
+ *
+ * @param targets How many branch rules it holds, at least 2.
+ * @param aimed Which identifier each rule targets.
+ * @param reasons The reasons each rule is refused for.
+ * @returns The refusals' facts, in order.
+ */
+const layeredRefusals = (
+  targets: number,
+  aimed: Aimed,
+  reasons: readonly string[],
+): readonly Seen[] =>
+  Array.from({ length: targets }, (_, index) =>
+    reasons.map((reason) =>
+      branchRefused(
+        "sections/r.xml",
+        `qti-assessment-section/qti-assessment-item-ref/qti-branch-rule[${index + 1}]`,
+        aimed === "one" ? "X0" : `X${index}`,
+        reason,
+      ),
+    ),
+  ).flat();
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -6708,6 +6870,106 @@ describe("package/open.ts", () => {
             eachMs,
             hubCpuLimit * ownMs,
             `reading each document's item took ${(eachMs / ownMs).toFixed(1)} times the CPU of reading the test's own outcome`,
+          );
+        }),
+      growthTimeoutMs,
+    );
+  });
+
+  describe("openPackage, branch rules below a long chain from two placements of their targets' writer", () => {
+    it.effect(
+      "align-54 r12 branch fallback without per-target sets: branch rules in a section document that a chain of 70 section documents places below two placements of the document that writes their targets, one under a drawn order, are each refused backward alone when the test reaches the rules only through those placements, and ambiguous and backward when the part places the chain's first or a middle document too, as the walk up from the rules' placement settles past 64 section refs both ways (reading 87 (\"one that two placements of a section document supply twice ... is refused as ambiguous\"))",
+      () =>
+        Effect.gen(function* layeredBothWays() {
+          for (const aimed of ["each its own", "one"] as const) {
+            assert.deepStrictEqual(
+              refusalsOf(yield* openPackage(location, layeredPackage(2, aimed, 2, 2))),
+              layeredRefusals(2, aimed, ["backward"]),
+            );
+            for (const more of [
+              sectionRefXml("RC0", "sections/c1.xml"),
+              `<qti-assessment-section identifier="SC" title="SC" visible="true">${sectionRefXml("RC0", "sections/c40.xml")}</qti-assessment-section>`,
+            ]) {
+              assert.deepStrictEqual(
+                refusalsOf(yield* openPackage(location, layeredPackage(2, aimed, 2, 2, more))),
+                layeredRefusals(2, aimed, ["ambiguous", "backward"]),
+              );
+            }
+          }
+        }),
+    );
+
+    it.effect(
+      "align-54 r12 branch fallback without per-target sets: 8 times the branch rules, each to its own target, and 8 times the section documents a hub places under each of 64 parts, beside rules below a chain of 70 section documents from two placements of their targets' writer, open in under 32 times the time, as the walk up from the rules' placement settles each target without a set of every placement kept for it",
+      () =>
+        Effect.gen(function* layeredGrowth() {
+          const fewer = layeredPackage(fewerLayered, "each its own", layeredParts, fewerLayered);
+          const more = layeredPackage(
+            fewerLayered * growthFactor,
+            "each its own",
+            layeredParts,
+            fewerLayered * growthFactor,
+          );
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, fewer)),
+            layeredRefusals(fewerLayered, "each its own", ["backward"]),
+          );
+
+          const growth = yield* growthRatio(opening(fewer), opening(more));
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `8 times the rules and documents took ${growth.toFixed(1)} times as long`,
+          );
+        }),
+      growthTimeoutMs,
+    );
+
+    it.effect(
+      "align-54 r12 branch fallback without per-target sets: 2,000 branch rules, each to its own target, below a chain of 70 section documents from two placements of their targets' writer, beside 1,000 section documents a hub places under each of 128 parts, open in under twice the thread CPU of the same package with every rule to X0, each rule refused backward, and the heap grows by under 512 MiB while it opens",
+      () =>
+        Effect.gen(function* layeredHostile() {
+          const one = layeredPackage(
+            hostileLayeredTargets,
+            "one",
+            hostileLayeredParts,
+            hostileLayeredDocuments,
+          );
+          const each = layeredPackage(
+            hostileLayeredTargets,
+            "each its own",
+            hostileLayeredParts,
+            hostileLayeredDocuments,
+          );
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, one)),
+            layeredRefusals(hostileLayeredTargets, "one", ["backward"]),
+          );
+
+          const before = memoryUsage().heapUsed;
+          const verdict = yield* openPackage(location, each);
+          const grown = memoryUsage().heapUsed - before;
+          assert.deepStrictEqual(
+            refusalsOf(verdict),
+            layeredRefusals(hostileLayeredTargets, "each its own", ["backward"]),
+          );
+          assert.isBelow(
+            grown,
+            layeredHeapLimit,
+            `the heap grew by ${(grown / 2 ** 20).toFixed(0)} MiB while the package opened`,
+          );
+
+          let oneMs = Number.POSITIVE_INFINITY;
+          let eachMs = Number.POSITIVE_INFINITY;
+          for (let run = 0; run < growthRuns; run += 1) {
+            oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
+            eachMs = Math.min(eachMs, yield* cpuMillis(opening(each)));
+          }
+
+          assert.isBelow(
+            eachMs,
+            layeredCpuLimit * oneMs,
+            `a target of its own for each rule took ${(eachMs / oneMs).toFixed(1)} times the CPU of every rule to X0`,
           );
         }),
       growthTimeoutMs,
