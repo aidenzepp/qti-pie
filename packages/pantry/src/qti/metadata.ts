@@ -694,13 +694,14 @@ const spelledUsageBaseTypes = select(Attribute, (a) =>
  * - **the titles and strings:** each `lom:title` has its {@link LomTitle}, whose tuple is its node's;
  *   each `lom:string` its {@link LomString}, whose `languages` counts its `language`, copied both
  *   ways, so no {@link LomStringLanguage} stands without its attribute; and each title's string its
- *   {@link LomTitleString}, whose `text` is its string value and whose compared form is that text's
- *   ("E1 derived").
+ *   {@link LomTitleString}, whose `text` is its string value, whose parent has its
+ *   {@link LomTitle}, and whose compared form is that text's ("E1 derived").
  * - **the objects:** each item's and test's root has its {@link AssessmentObject}, one per document;
  *   and each of its `identifier` (in pieces), `title` and `xml:lang` is copied into its own row,
  *   {@link ObjectIdentifier}, {@link ObjectTitle} or {@link ObjectLang}, with its compared form,
  *   and no such row stands without its attribute, an {@link ObjectLang} by the way back
- *   `#pantry/qti/identity.ts` states ("E1 derived", spec reading 148).
+ *   `#pantry/qti/identity.ts` states, and on its object's root by the containment into
+ *   {@link AssessmentObject} ("E1 derived", spec reading 148).
  * - **`lom-identifier` and `lom-title`** read the document a record names, which no row here holds,
  *   so each is a rule over a query (`metadataQueryLawsByName`, `#pantry/qti/queries.ts`).
  * - **the learning resource types:** each `lom:value` and each `lom:source` of a
@@ -810,6 +811,7 @@ export const metadataLawsByName = {
       nodeRef,
     ),
     contained(on(titleStringNodes, "id", "stringValue"), on(LomTitleString, "node", "text")),
+    contained(on(LomTitleString, "parent"), on(LomTitle, "node")),
     check("E1_derived", LomTitleString, (s) =>
       s.and(s.eq(s.kind, "lom:string"), s.eq(s.textValue, Compute.replaceWhitespace(s.text))),
     ),
@@ -837,6 +839,7 @@ export const metadataLawsByName = {
     key(on(ObjectTitle, "document")),
     check("E1_derived", ObjectTitle, (o) => o.eq(o.titleValue, Compute.replaceWhitespace(o.title))),
     contained(on(objectLangAttributes, "node", "lexical"), on(ObjectLang, "node", "lang")),
+    contained(on(ObjectLang, "node"), on(AssessmentObject, "node")),
     check("E1_derived", ObjectLang, (o) =>
       o.eq(o.langTag, Compute.lowerAscii(Compute.collapse(o.lang))),
     ),

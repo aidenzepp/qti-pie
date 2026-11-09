@@ -2,13 +2,15 @@
  * The metadata overlays' free tests: their statements build beside the layers they read, each check
  * is named by an oracle law, the pieces' patterns say what their names say, collapsed equality with
  * an identifier is trimmed equality, a statistic's typed day admits exactly `DateDType`'s values,
- * and over every learning resource type of a small box the law refuses exactly what QTI 3.0
- * Metadata §2.7.5.1 forbids (spec reading 122).
+ * over every learning resource type of a small box the law refuses exactly what QTI 3.0 Metadata
+ * §2.7.5.1 forbids (spec reading 122), and an overlay row stands on what the tree holds: an
+ * `ObjectLang` on its object's root, a title's string under its title.
  *
  * The database tests (`metadata.db.test.ts`) judge the laws through PostgreSQL, and the builder's
  * tests (`#pantry/import/overlays/metadata.oracle.test.ts`) its rows.
  */
 import { date, lexicalForm, schema } from "@bjornpagen/grizzle";
+import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -21,6 +23,7 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { attributeRows, BaseType, grammar, ValueDomainOf } from "#pantry/grammar/install.ts";
 import { piecesOf } from "#pantry/import/overlays/metadata.ts";
+import { readProgram } from "#pantry/import/program.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
@@ -49,6 +52,7 @@ import {
   UsageValue,
 } from "#pantry/qti/metadata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
 import { qtiRelations } from "#pantry/qti/base.ts";
 import { readPackage } from "#pantry/package/read.ts";
@@ -63,6 +67,7 @@ import {
 } from "#pantry/test/gen/lom-resource-type.ts";
 import type { TermSketch, TypeSketch } from "#pantry/test/gen/lom-resource-type.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
+import { hostRowsOf, judge as judgeRows, judgedLaws } from "#pantry/test/host-judge.ts";
 import {
   documentBreaches,
   judge,
@@ -805,5 +810,72 @@ describe("qti/metadata.ts, the learning resource type", { timeout: testTimeoutMs
             }),
         ),
       ),
+  );
+});
+
+/**
+ * Decide whether a law is the containment of one relation's rows in another's, each read whole.
+ *
+ * @param law - The law.
+ * @param from - The containment's source relation.
+ * @param to - Its target relation.
+ * @returns Whether it is.
+ */
+const containsIn = (law: Law, from: string, to: string): boolean =>
+  law.kind === "contained" && law.from.relation === from && law.to.relation === to;
+
+describe("qti/metadata.ts, the rows an overlay row stands on", { timeout: testTimeoutMs }, () => {
+  it.effect(
+    "holds an ObjectLang to its object's root and a title's string to its title, breaking neither in simple as imported",
+    () =>
+      // Oracle: the specification as a checker, the metadata binding's structure: an assessment
+      // object's `xml:lang` stands on its root ("the objects", spec reading 148), and a title's
+      // `lom:string` under its `lom:title` ("the titles and strings"). The host judge
+      // (`#pantry/test/host-judge.ts`) holds the rows to the schema's laws: the import's own rows
+      // break neither containment, and each planted row breaks its own.
+      // Bound: simple as imported, whose resource record has a general title, and those rows with
+      // one ObjectLang on a node no AssessmentObject holds and one copy of a title string whose
+      // parent no LomTitle holds.
+      Effect.gen(function* standingRows() {
+        const { inputs } = yield* readProgram(yield* materialize("simple"));
+        const laws = judgedLaws(Qti);
+        const brokenBy = (rows: typeof inputs): readonly Law[] =>
+          judgeRows(hostRowsOf(rows), laws).broken.map(({ law }) => law);
+        const titleString = Option.getOrUndefined(Arr.head([...inputs.LomTitleString.values()]));
+        assert.isDefined(titleString, "simple's record has a title string");
+
+        const stray = "00000000-0000-4000-8000-00000000f00d";
+        const strayString = "00000000-0000-4000-8000-00000000f00e";
+        const planted: typeof inputs = {
+          ...inputs,
+          LomTitleString: new Map([
+            ...inputs.LomTitleString,
+            [strayString, { ...titleString, node: strayString, parent: stray }],
+          ]),
+          ObjectLang: new Map([
+            ...inputs.ObjectLang,
+            [stray, { lang: "en", langTag: "en", node: stray }],
+          ]),
+        };
+        const imported = brokenBy(inputs);
+        const breaks = brokenBy(planted);
+
+        assert.isFalse(
+          imported.some((law) => containsIn(law, "ObjectLang", "AssessmentObject")),
+          "an imported ObjectLang stands on its root",
+        );
+        assert.isFalse(
+          imported.some((law) => containsIn(law, "LomTitleString", "LomTitle")),
+          "an imported title string stands under its title",
+        );
+        assert.isTrue(
+          breaks.some((law) => containsIn(law, "ObjectLang", "AssessmentObject")),
+          "an ObjectLang off an object's root",
+        );
+        assert.isTrue(
+          breaks.some((law) => containsIn(law, "LomTitleString", "LomTitle")),
+          "a title string whose parent is no title",
+        );
+      }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

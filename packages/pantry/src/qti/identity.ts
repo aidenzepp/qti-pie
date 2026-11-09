@@ -996,7 +996,7 @@ export const ssmlLexiconReference = contained(
  * - **DocumentLang:** each `xml:lang` copied into its `XmlLang` row and each row an attribute's, the
  *   counted family, and each form carried (`E1_derived`); and each assessment object's `ObjectLang`
  *   (`#pantry/qti/metadata.ts`) an attribute's, through the key over every `xml:lang` (the one-way
- *   rule), its node an assessment object's root by its counted family;
+ *   rule), its node an assessment object's root by its containment into `AssessmentObject`;
  * - **ResourceLomLanguageSet:** each general category's `lom:language` copied into its `LomLanguage`
  *   row, its category its parent and its language its string value, and each row an element's; its
  *   tag the value case-folded, the counted family over the tags, and each language listed
