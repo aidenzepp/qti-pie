@@ -4,15 +4,24 @@
  *
  * A package is judged whole (OD-4, per package). Its files are keyed by their normal form and its
  * manifest is read at `imsmanifest.xml`; a refusal of either ends the reading there. The file rules
- * run against the manifest, then each document a resource names is read once, at its `href`:
+ * run against the manifest, then each document a resource of one of the ten document types names
+ * is read once, at its `href`, as one document of one type (readings 93 and 146):
  *
- * - A resource of one of the four QTI types plate judges, item, test, section and stimulus, has its
- *   document judged as `open` judges one, read by the shared reader and checked against the
- *   committed tables, and keeps that verdict beneath the package's;
+ * - A path the resources name under two document types is read as the first of them, in the
+ *   manifest's order, that its root bears out, and as the first of all where none does; each
+ *   resource of another type is `resource-type-mismatch` with `check: "path-type"` (reading 162). A
+ *   document resource whose `href` names `imsmanifest.xml` is `resource-type-mismatch` with `check:
+ *   "manifest-document"`: the manifest is no resource's document, and it is never read again
+ *   (reading 146);
+ * - A document read as one of the four QTI types plate judges, item, test, section and stimulus, is
+ *   judged as `open` judges one, read by the shared reader and checked against the committed
+ *   tables, and keeps that verdict beneath the package's resources of that type;
  * - A resource of a QTI type with a fixed root (`resourceRoots`) whose document has another root is
  *   `resource-type-mismatch` at the resource (T-h, refuse), which also reads, without judging, the
  *   documents of the three types M3 checks: outcome declarations, response processing and its
  *   templates;
+ * - A fragment, LOM metadata or usage-data document is read for its root alone: one in a namespace of
+ *   QTI 2 is `not-qti-root` at the document (reading 89), and nothing else of it is judged;
  * - Each test places, through its section refs and then each placed section document's, every section
  *   document a section resource names, once for each section ref that names it (reading 86), as if
  *   it were inline; a section ref that returns to a document already on its chain is
@@ -66,19 +75,22 @@
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
  *   62).
  *
- * A resource with no `href`, or with an absolute one (reading 35), names no document the package
- * holds, so nothing of it is read. The package's verdict follows from its parts: `refused` when
- * anything is refused, `unchecked` when nothing is and some document is, then
- * `accepted-with-unsupported` when some document is or some test is delivered with processing the
- * package marks (see below), and `accepted` otherwise. Only an accepting package's documents are
- * delivered. A test is delivered with the model its document's own verdict holds, except that one
- * whose processing reads an item's context variable through its item ref is delivered with that
- * processing marked, `variable:<name>` at it: its outcome processing `marked`, and each template
- * default that reads one left out, so its template variable starts at its declared default. The
- * test document's own verdict cannot carry those marks, since the document is judged without its
- * items, and it keeps its own; the package's verdict carries them, so a read of the built-in
- * `QTI_CONTEXT`, which marks no item, still makes the package `accepted-with-unsupported`. Like
- * `open`, it runs over the shared reader and the Schema-decoded tables, so it stays server-side.
+ * A resource with no `href` names no document (reading 93), so nothing of it is read. A document
+ * resource whose `href` leads outside the package is refused by the manifest's own rules
+ * (`package-path-outside`, `check: "document-entry"`, reading 102), and a resource of another type
+ * whose `href` does names an external link the package does not hold. The package's verdict follows
+ * from its parts: `refused` when anything is refused, `unchecked` when nothing is and some document
+ * is, then `accepted-with-unsupported` when some document is or some test is delivered with
+ * processing the package marks (see below), and `accepted` otherwise. Only an accepting package's
+ * documents are delivered. A test is delivered with the model its document's own verdict holds,
+ * except that one whose processing reads an item's context variable through its item ref is
+ * delivered with that processing marked, `variable:<name>` at it: its outcome processing `marked`,
+ * and each template default that reads one left out, so its template variable starts at its
+ * declared default. The test document's own verdict cannot carry those marks, since the document is
+ * judged without its items, and it keeps its own; the package's verdict carries them, so a read of
+ * the built-in `QTI_CONTEXT`, which marks no item, still makes the package
+ * `accepted-with-unsupported`. Like `open`, it runs over the shared reader and the Schema-decoded
+ * tables, so it stays server-side.
  *
  * @module
  * @see https://www.imsglobal.org/content/packaging/cpv1p2pd2/imscp_infov1p2pd2.html
@@ -181,8 +193,10 @@ export interface PackageContents {
    * manifest lists by a path inside the package, except what each resource of a QTI type (an item,
    * a test, a section, a stimulus, outcome declarations, response processing, a response-processing
    * template and a fragment) withholds. Such a resource whose `href` names a file inside the
-   * package withholds that file, its document; one without an `href`, or with an absolute one
-   * (reading 35), withholds every file it lists, since nothing tells which of them is its document.
+   * package withholds that file, its document; one without an `href` withholds every file it lists,
+   * since nothing tells which of them is its document. One whose `href` leads outside the package
+   * is refused (`package-path-outside`, `check: "document-entry"`, reading 102), so no accepted
+   * package holds it.
    * The manifest is here only when a resource lists it.
    *
    * A QTI document holds what a candidate must not read, an item's correct responses and mappings
@@ -239,8 +253,9 @@ const acceptPackage = Brand.nominal<AcceptedPackage>();
 export interface PackageResource {
   readonly identifier: string;
   /**
-   * The path of the document its `href` names, none for a resource with no `href` or an absolute
-   * one.
+   * The path of the file its `href` names, none for a resource with no `href` or one whose `href`
+   * leads outside the package: an external link of a resource that is no document's, and refused
+   * for a document resource (`package-path-outside`, `check: "document-entry"`, reading 102).
    */
   readonly path: Option.Option<string>;
   /**
@@ -249,7 +264,8 @@ export interface PackageResource {
   readonly type: string;
   /**
    * The verdict on its document, which `openPackage` gives for an item, test, section or stimulus
-   * resource whose document the package holds; none otherwise.
+   * resource whose document the package holds and reads as that type (reading 162); none
+   * otherwise.
    */
   readonly verdict: Option.Option<Verdict>;
 }
@@ -288,14 +304,18 @@ export type PackageVerdict =
     };
 
 /**
- * One document of the package, read once, with the verdict on it when a resource of a type plate
- * judges names it.
+ * One document of the package, read once, as one type, with the verdict on it when that type is one
+ * plate judges.
  */
 interface Document {
   /**
    * Its source, or the shared reader's refusal of its bytes.
    */
   readonly source: Result.Result<SourceDocument, Refusal>;
+  /**
+   * The document type it is read as, of those its resources name it under ({@link readAs}).
+   */
+  readonly type: string;
   readonly verdict: Option.Option<Verdict>;
 }
 
@@ -323,6 +343,81 @@ const qtiTypes: ReadonlySet<string> = new Set(
  * The root each QTI resource type with a fixed root names, by type.
  */
 const rootOfType: ReadonlyMap<string, string> = new Map<string, string>(resourceRoots);
+
+/**
+ * LOM's namespace, the namespace of the root `lom` of a LOM metadata document.
+ */
+const lomNamespace = "http://ltsc.ieee.org/xsd/LOM";
+
+/**
+ * QTI 3's usage-data namespace, the namespace of the root `usageData` of a usage-data document
+ * (`usagedata/imsqti_usagedatav3p0_v1p0.xsd`; reading 89).
+ */
+const usageDataNamespace = "http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0";
+
+/**
+ * The QTI roots no XInclude stands for: an item, a test, a stimulus, an outcome declaration and
+ * response processing, each a root only of its own document type.
+ */
+const unincludedRoots: ReadonlySet<string> = new Set([
+  "qti-assessment-item",
+  "qti-assessment-stimulus",
+  "qti-assessment-test",
+  "qti-outcome-declaration",
+  "qti-response-processing",
+]);
+
+/**
+ * The ten document types, whose resource's `href` names the one document of that path, read as one
+ * type (readings 93 and 146), each with whether a root bears it out (reading 162): the root of a
+ * QTI type with a fixed root (`resourceRoots`), LOM's `lom` for LOM metadata, QTI 3's `usageData`
+ * for usage data, and, for an included fragment, any element an include stands for (reading 114).
+ *
+ * Plate holds no table of what an include stands for, so it reads a fragment's root as borne out by
+ * any element in QTI's namespace but the roots no include stands for ({@link unincludedRoots}); an
+ * include in a section may stand for a section. That decides a type only for a path two types
+ * name, which is refused either way, so the choice moves no verdict, only which resource the
+ * refusal is at (rule `db2ef322`: a limit, recorded here).
+ */
+const documentTypes: ReadonlyMap<string, (root: SourceElement) => boolean> = new Map<
+  string,
+  (root: SourceElement) => boolean
+>([
+  ...resourceRoots.map(
+    ([type, local]) =>
+      [
+        type,
+        (root: SourceElement) => root.namespace === qtiNamespace && root.local === local,
+      ] as const,
+  ),
+  [
+    "imsqti_fragment_xmlv3p0",
+    (root) => root.namespace === qtiNamespace && !unincludedRoots.has(root.local),
+  ],
+  [
+    "qtiusagedata/xml",
+    (root) => root.namespace === usageDataNamespace && root.local === "usageData",
+  ],
+  ["resourcemetadata/xml", (root) => root.namespace === lomNamespace && root.local === "lom"],
+]);
+
+/**
+ * The namespaces of QTI 2's published XSDs, each under `http://www.imsglobal.org/xsd/` (reading
+ * 89): a root in one of them is a QTI 2 document, which no QTI 3 schema reads.
+ */
+const qti2Namespaces: ReadonlySet<string> = new Set(
+  [
+    "imsqti_metadata_v2p1",
+    "imsqti_metadata_v2p2",
+    "imsqti_result_v2p1",
+    "imsqti_result_v2p2",
+    "imsqti_usagedata_v2p1",
+    "imsqti_usagedata_v2p2",
+    "imsqti_v2p0",
+    "imsqti_v2p1",
+    "imsqti_v2p2",
+  ].map((name) => `http://www.imsglobal.org/xsd/${name}`),
+);
 
 /**
  * The resource types whose document reading 62 ties to the resource's LOM metadata: an item and a
@@ -656,18 +751,20 @@ const rootName = (root: SourceElement): string =>
   root.namespace === qtiNamespace ? root.local : `{${root.namespace}}${root.local}`;
 
 /**
- * Give the path of the document a resource's `href` names.
+ * Give the path of the file a resource's `href` names inside the package.
  *
  * @param resource The resource.
- * @returns The path, none for no `href` or an absolute one.
+ * @returns The path, none for no `href` or one that leads outside the package, which the manifest's
+ *   own rules refuse of a document resource (`document-entry`, reading 102).
  */
 const documentPath = (resource: ManifestResource): Option.Option<string> =>
   resource.href.pipe(Option.flatMap((href) => href.path));
 
 /**
  * Give the paths of the files a resource of a QTI type withholds from `files`: the document its
- * `href` names inside the package, or, when it has no `href` or an absolute one (reading 35),
- * every file it lists, since nothing tells which of them is its document.
+ * `href` names inside the package, or, when it has no `href`, every file it lists, since nothing
+ * tells which of them is its document. One whose `href` leads outside the package withholds every
+ * file it lists too, though the manifest's own rules refuse it (`document-entry`, reading 102).
  *
  * @param resource The resource, of a QTI type.
  * @returns The withheld paths.
@@ -713,8 +810,53 @@ const judge = (
     : check(source.success, tables, Option.some(version));
 
 /**
- * Read each document the manifest's QTI resources name, once, and judge each one a resource of a
- * judged type names, under the version the manifest states.
+ * Give the document types the manifest's resources name each path under, each type once, in the
+ * manifest's order: every path a resource of a document type names but the manifest's, which is no
+ * resource's document (reading 146).
+ *
+ * @param manifest The manifest.
+ * @returns The types, keyed by path, in the order the manifest first names each path.
+ */
+const namingTypes = (manifest: Manifest): ReadonlyMap<string, readonly string[]> => {
+  const named = new Map<string, string[]>();
+  for (const resource of manifest.resources) {
+    for (const path of Option.toArray(documentPath(resource))) {
+      if (documentTypes.has(resource.type) && path !== manifestFile) {
+        const types = named.get(path) ?? [];
+        named.set(path, types.includes(resource.type) ? types : [...types, resource.type]);
+      }
+    }
+  }
+
+  return named;
+};
+
+/**
+ * Give the type the document at a path is read as, of the types its resources name it under
+ * (reading 162, "a path two document types name is the document its root bears out"): the first, in
+ * the manifest's order, whose root its root is ({@link documentTypes}), and the first of all where
+ * none is, or where the reader cannot read it.
+ *
+ * @param types The types, in the manifest's order, at least one.
+ * @param source The document's reading, none when the package holds no file there.
+ * @returns The type.
+ */
+const readAs = (
+  types: Arr.NonEmptyReadonlyArray<string>,
+  source: Option.Option<Result.Result<SourceDocument, Refusal>>,
+): string => {
+  const root = Option.getOrUndefined(source.pipe(Option.flatMap(Result.getSuccess)))?.root;
+
+  return (
+    types.find((type) => root !== undefined && (documentTypes.get(type)?.(root) ?? false)) ??
+    types[0]
+  );
+};
+
+/**
+ * Read each document the manifest's document resources name, once, as the type {@link readAs}
+ * gives it, and judge each one read as a type plate judges, under the version the manifest states.
+ * The manifest is never read here (reading 146).
  *
  * @param manifest The manifest.
  * @param files The package's files, keyed by normal form.
@@ -727,24 +869,17 @@ const readDocuments = Effect.fnUntraced(function* readDocuments(
   files: ReadonlyMap<string, Uint8Array>,
   location: string,
 ): Effect.fn.Return<ReadonlyMap<string, Document>> {
-  const judged = new Map<string, boolean>();
-  for (const resource of manifest.resources) {
-    if (judgedTypes.has(resource.type) || rootOfType.has(resource.type)) {
-      for (const path of Option.toArray(documentPath(resource))) {
-        judged.set(path, (judged.get(path) ?? false) || judgedTypes.has(resource.type));
-      }
-    }
-  }
-
   const documents = new Map<string, Document>();
-  for (const [path, isJudged] of judged) {
+  for (const [path, [first, ...others]] of namingTypes(manifest)) {
     const bytes = files.get(path);
-    if (bytes !== undefined) {
+    if (bytes !== undefined && first !== undefined) {
       const documentLocation = fileLocation(location, path);
       const source = yield* Effect.result(readSource(documentLocation, bytes));
+      const type = readAs([first, ...others], Option.some(source));
       documents.set(path, {
         source,
-        verdict: isJudged
+        type,
+        verdict: judgedTypes.has(type)
           ? Option.some(judge(documentLocation, source, manifest.version))
           : Option.none(),
       });
@@ -755,48 +890,102 @@ const readDocuments = Effect.fnUntraced(function* readDocuments(
 });
 
 /**
- * Compare each resource's declared type with its document's root (T-h).
+ * Compare each document resource's declared type with its document (T-h; readings 89, 146 and
+ * 162), in the manifest's order:
  *
- * A resource of a type `resourceRoots` pairs with a root, whose document the package holds and the
- * reader read, is `resource-type-mismatch` at the resource when the document's root is another.
- * The detail names the declared `type`, the document's `path`, the `root` found and, when exactly
- * one type names that root, that type as `expected`. A fragment names no root and is never
- * compared. A document the reader cannot read has no root to compare: a judged document's own
- * verdict refuses it, and one of the three types M3 checks is passed over, as plate does not judge
- * those documents.
+ * - One whose `href` names `imsmanifest.xml` is `resource-type-mismatch` with `check:
+ *   "manifest-document"`, the `path`, its `type` and `reading: "146"`: the manifest is the
+ *   package's one document at that path, and no resource's.
+ * - One whose path's document is read as another type ({@link readAs}) is `resource-type-mismatch`
+ *   with `check: "path-type"`, the `path`, its `type` and `reading: "162"`: a path is one document,
+ *   of one type. The type a missing document is read as is the first its resources name.
+ * - One of a type `resourceRoots` pairs with a root, read as that type, whose document the package
+ *   holds and the reader read, is `resource-type-mismatch` when the document's root is another: the
+ *   detail names the declared `type`, the document's `path`, the `root` found and, when exactly one
+ *   type names that root, that type as `expected`. So a path two types name breaks it only where
+ *   its root bears out neither.
+ * - A fragment, LOM metadata or usage-data document, read for its root alone, whose root is in a
+ *   namespace of QTI 2 is `not-qti-root` at that document, given once for it, its detail the root's
+ *   `element` and `namespace`, as `check` gives one, and `reading: "89"`. Plate reads nothing else
+ *   of those documents.
+ *
+ * A document the reader cannot read has no root to compare: a judged document's own verdict refuses
+ * it, and one of the other types is passed over, as plate does not judge those documents.
  *
  * @param manifest The manifest.
  * @param documents The package's documents.
- * @param manifestLocation The manifest's location, which each refusal carries.
+ * @param manifestLocation The manifest's location, which each refusal of a resource carries.
  * @returns The refusals, in the manifest's order.
  */
 const checkRoots = (
   manifest: Manifest,
   documents: ReadonlyMap<string, Document>,
   manifestLocation: string,
-): readonly Refusal[] =>
-  manifest.resources.flatMap((resource) => {
-    const expected = rootOfType.get(resource.type);
+): readonly Refusal[] => {
+  const named = namingTypes(manifest);
+  const rooted = new Set<string>();
+
+  return manifest.resources.flatMap((resource): readonly Refusal[] => {
     const path = Option.getOrUndefined(documentPath(resource));
-    const source = path === undefined ? undefined : documents.get(path)?.source;
-    if (
-      expected === undefined ||
-      path === undefined ||
-      source === undefined ||
-      Result.isFailure(source)
-    ) {
+    if (path === undefined || !documentTypes.has(resource.type)) {
       return [];
     }
 
-    const { root } = source.success;
+    if (path === manifestFile) {
+      return [
+        refuse(manifestLocation, "resource-type-mismatch", resource.location, {
+          check: "manifest-document",
+          path,
+          reading: "146",
+          type: resource.type,
+        }),
+      ];
+    }
+
+    const document = documents.get(path);
+    const [first = resource.type, ...others] = named.get(path) ?? [];
+    if ((document?.type ?? readAs([first, ...others], Option.none())) !== resource.type) {
+      return [
+        refuse(manifestLocation, "resource-type-mismatch", resource.location, {
+          check: "path-type",
+          path,
+          reading: "162",
+          type: resource.type,
+        }),
+      ];
+    }
+
+    const source = document?.source;
+    if (source === undefined || Result.isFailure(source)) {
+      return [];
+    }
+
+    const { location: documentLocation, root } = source.success;
+    const expected = rootOfType.get(resource.type);
+    if (expected === undefined) {
+      if (rooted.has(path) || !qti2Namespaces.has(root.namespace)) {
+        return [];
+      }
+
+      rooted.add(path);
+
+      return [
+        refuse(documentLocation, "not-qti-root", `{${root.namespace}}${root.local}`, {
+          element: root.local,
+          namespace: root.namespace,
+          reading: "89",
+        }),
+      ];
+    }
+
     if (root.namespace === qtiNamespace && root.local === expected) {
       return [];
     }
 
     const found = rootName(root);
     const facts = { path, root: found, type: resource.type };
-    const [only, ...others] = resourceRoots
-      .filter(([, named]) => named === found)
+    const [only, ...more] = resourceRoots
+      .filter(([, rootNamed]) => rootNamed === found)
       .map(([type]) => type);
 
     return [
@@ -804,10 +993,11 @@ const checkRoots = (
         manifestLocation,
         "resource-type-mismatch",
         resource.location,
-        only === undefined || others.length > 0 ? facts : { expected: only, ...facts },
+        only === undefined || more.length > 0 ? facts : { expected: only, ...facts },
       ),
     ];
   });
+};
 
 /**
  * Compare each item and test resource's own LOM metadata with its document's `identifier` and
@@ -1186,6 +1376,16 @@ const resolvingReadings = (scope: ReferenceScope, reference: string): readonly R
  * @returns Whether it counts.
  */
 const isCounted = (reading: Reading): boolean => reading.form !== "numbered" || reading.repeatable;
+
+/**
+ * Count the readings of one form through some placements that count ({@link isCounted}).
+ *
+ * @param form The readings' form.
+ * @param placed Whether a selection with replacement can repeat the item ref in each placement.
+ * @returns How many count.
+ */
+const countedOf = (form: Reading["form"], placed: readonly boolean[]): number =>
+  placed.filter((repeatable) => form !== "numbered" || repeatable).length;
 
 /**
  * Give every reading of a reference that resolves and counts ({@link isCounted}): the unsplit
@@ -1782,6 +1982,182 @@ const unionOf = (ways: readonly (readonly Refusal[])[]): readonly Refusal[] => {
   }
 
   return union;
+};
+
+/**
+ * One place a dotted name may be read at ({@link waysThrough}): its unsplit reading, or one dot it
+ * may split at that resolves, with how many of its readings count there (reading 48) under each
+ * view of the one document whose view decides that.
+ */
+interface ReadingSlot {
+  /**
+   * How many readings count there under each view of its document, in the views' order.
+   */
+  readonly counts: readonly number[];
+  /**
+   * The index of that document.
+   */
+  readonly document: number;
+}
+
+/**
+ * The views each document a name is read through may still take under some conditions, and how
+ * many documents have none left.
+ */
+interface Narrowing {
+  readonly allowed: (readonly boolean[])[];
+  closed: number;
+}
+
+/**
+ * Copy a narrowing, so narrowing the copy leaves it as it is: each document's views are replaced
+ * when narrowed, never changed in place.
+ *
+ * @param narrowing The narrowing.
+ * @returns The copy.
+ */
+const copiedNarrowing = ({ allowed, closed }: Narrowing): Narrowing => ({
+  allowed: [...allowed],
+  closed,
+});
+
+/**
+ * Narrow the views of a slot's document to those under which the slot's count keeps a condition, in
+ * place, counting the document closed when it loses its last view.
+ *
+ * @param narrowing The narrowing.
+ * @param slot The slot.
+ * @param keep The condition on the slot's count.
+ */
+const narrowTo = (
+  narrowing: Narrowing,
+  { counts, document }: ReadingSlot,
+  keep: (count: number) => boolean,
+): void => {
+  const views = narrowing.allowed[document] ?? [];
+  const kept = views.map((open, view) => open && keep(counts[view] ?? 0));
+  if (views.includes(true) && !kept.includes(true)) {
+    narrowing.closed += 1;
+  }
+
+  narrowing.allowed[document] = kept;
+};
+
+/**
+ * Give the first way a narrowing keeps: each document's first view left, -1 for a closed one.
+ *
+ * @param narrowing The narrowing.
+ * @returns The way.
+ */
+const firstWayOf = ({ allowed }: Narrowing): number[] =>
+  allowed.map((views) => views.indexOf(true));
+
+/**
+ * Give, for each answer the readings of a name may give, the first way of reading it that gives
+ * that answer: the view each document it reads through takes, by index.
+ *
+ * A way takes one view of each document, the views of different documents chosen apart, and every
+ * slot of one document read under that document's view. Under a way, each slot counts some
+ * readings, and the answer is decided by the first two that count, in the slots' order: none
+ * counts; one slot counts one alone; one slot counts two; or one slot counts one and a later slot
+ * the next. So the ways are not enumerated, which would take a number of ways exponential in the
+ * documents. For each answer the slots narrow each document's views to those under which every
+ * slot of it gives that answer's count, none, one, at least one, two or more, or any after the
+ * answer's last slot; the answer is given by some way when every document keeps a view, and the
+ * first way that gives it takes each document's first view kept. Ways are ordered as a list of
+ * every way would list them, by the first document's view first, so the result lists each answer's
+ * first way in the order such a list first meets the answer. The work is, for each slot, linear in
+ * the slots and the documents, and, for each answer found, linear in the documents.
+ *
+ * @param sizes How many views each document has.
+ * @param slots The slots, in the order of the readings they give.
+ * @returns The first way of each answer, in that order; none when a document has no view.
+ */
+const waysThrough = (
+  sizes: readonly number[],
+  slots: readonly ReadingSlot[],
+): readonly (readonly number[])[] => {
+  const opened = (): Narrowing => ({
+    allowed: sizes.map((size) => Array.from({ length: size }, () => true)),
+    closed: sizes.filter((size) => size === 0).length,
+  });
+  const ways: (readonly number[])[] = [];
+
+  // No reading counts.
+  const quiet = opened();
+  for (const slot of slots) {
+    narrowTo(quiet, slot, (count) => count === 0);
+  }
+
+  if (quiet.closed === 0) {
+    ways.push(firstWayOf(quiet));
+  }
+
+  // One slot counts one reading, alone.
+  for (const [index, slot] of slots.entries()) {
+    const own = quiet.allowed[slot.document] ?? [];
+    if (quiet.closed - (own.includes(true) ? 0 : 1) === 0) {
+      const alone = opened();
+      for (const [other, them] of slots.entries()) {
+        if (them.document === slot.document) {
+          narrowTo(alone, them, other === index ? (count) => count === 1 : (count) => count === 0);
+        }
+      }
+
+      const view = (alone.allowed[slot.document] ?? []).indexOf(true);
+      if (view !== -1) {
+        const way = firstWayOf(quiet);
+        way[slot.document] = view;
+        ways.push(way);
+      }
+    }
+  }
+
+  // Two readings count: the first slot that counts two, or counts one and a later slot the next.
+  const before = opened();
+  for (const [index, slot] of slots.entries()) {
+    if (before.closed > 0) {
+      break;
+    }
+
+    const twice = copiedNarrowing(before);
+    narrowTo(twice, slot, (count) => count >= 2);
+    if (twice.closed === 0) {
+      ways.push(firstWayOf(twice));
+    }
+
+    const between = copiedNarrowing(before);
+    narrowTo(between, slot, (count) => count === 1);
+    for (const later of slots.slice(index + 1)) {
+      if (between.closed > 0) {
+        break;
+      }
+
+      const view = (between.allowed[later.document] ?? []).findIndex(
+        (open, at) => open && (later.counts[at] ?? 0) >= 1,
+      );
+      if (view !== -1) {
+        const way = firstWayOf(between);
+        way[later.document] = view;
+        ways.push(way);
+      }
+
+      narrowTo(between, later, (count) => count === 0);
+    }
+
+    narrowTo(before, slot, (count) => count === 0);
+  }
+
+  return ways.toSorted((one, other) => {
+    for (const [document, view] of one.entries()) {
+      const order = view - (other[document] ?? 0);
+      if (order !== 0) {
+        return order;
+      }
+    }
+
+    return 0;
+  });
 };
 
 /**
@@ -3243,17 +3619,18 @@ interface TestJudgement {
  * outside it, each placement, so a reference from outside a section document placed twice reads it
  * twice and is `ambiguous-reference` (reading 86; pantry refuses a reading through a name two
  * placements give wherever the reference stands, `Prefixed_reference`, an agreement difference).
- * Which of these a placement reads from is one reachability over the placements (`viewsAt`
- * within it), and a placement that stands for several chains of documents is judged each way they
- * give. Another document's placements are counted up to 2, once or more than once, which is all
- * reading 48 asks of them. An item ref a selection with replacement can repeat in that placement,
- * in its own document or above the section ref that places it, is repeatable there, and only
- * through one does a numbered reading count (reading 88). A name with no
- * `.` is the test's own check's; every other is judged by {@link judgeReference}. An item ref
- * resolves a reading only through an item whose document the package holds and the reader read, so
- * a reference through any other names nothing, as pantry's reach holds no such item ref. Only the
- * test's own item refs are its items (`refs`): a session delivers no section document's item, and
- * the test model marks a processing that reads through one.
+ * Which of these a placement reads from is one reachability over the placements (`viewsAt` within
+ * it), and a placement that stands for several chains of documents is judged each way they give,
+ * once for each answer those ways give (`waysOf`), never once for each way, so a name read through
+ * many documents costs what its readings do. Another document's placements are counted up to 2,
+ * once or more than once, which is all reading 48 asks of them. An item ref a selection with
+ * replacement can repeat in that placement, in its own document or above the section ref that
+ * places it, is repeatable there, and only through one does a numbered reading count (reading 88).
+ * A name with no `.` is the test's own check's; every other is judged by {@link judgeReference}. An
+ * item ref resolves a reading only through an item whose document the package holds and the reader
+ * read, so a reference through any other names nothing, as pantry's reach holds no such item ref.
+ * Only the test's own item refs are its items (`refs`): a session delivers no section document's
+ * item, and the test model marks a processing that reads through one.
  *
  * The test's expressions are then judged by the item's processing rules (`processingRefusals` in
  * `#plate/validate/rules.ts`: P20 to P24), with each prefixed read typed by the variable its one
@@ -3343,8 +3720,8 @@ const judgeTest = (
   const avoiding = new Map<string, ReadonlySet<Placement>>();
   const reachers = new Map<Placement, ReadonlySet<Placement>>();
   // The placement being judged, the test's first, and the view each reading takes of each document
-  // it reads for one way that placement may read them ({@link assignmentsOf}): the scope reads
-  // both, so it is read only while that placement is judged.
+  // it reads for one way that placement may read them ({@link waysOf}): the scope reads both, so it
+  // is read only while that placement is judged.
   let here = test;
   let chosen: ReadonlyMap<string, DocumentView> = new Map();
   /**
@@ -3372,6 +3749,20 @@ const judgeTest = (
         .map((replaced) => ({ from: "inside", replaced }) as const),
     ];
   };
+  /**
+   * Give the placements a reading through an item ref, part or section of another document reads
+   * under one view of that document ({@link ReferenceScope}): the one it is read from inside, or,
+   * from outside it, every placement of it, counted up to 2, each with whether a selection with
+   * replacement can repeat the item ref there.
+   *
+   * @param at Where the element is written.
+   * @param view The view of its document.
+   * @returns Whether each placement read can repeat it.
+   */
+  const placementsUnder = (at: WrittenAt, view: DocumentView): readonly boolean[] =>
+    (view.from === "inside" ? [view.replaced] : (flags.get(at.document) ?? [])).map(
+      (replaced) => at.replaced || replaced,
+    );
   const scope: ReferenceScope = {
     durations,
     items,
@@ -3385,51 +3776,94 @@ const judgeTest = (
         return [here.replaced || at.replaced];
       }
 
-      const view = chosen.get(at.document) ?? viewsAt(at.document)[0] ?? { from: "outside" };
-
-      return (view.from === "inside" ? [view.replaced] : (flags.get(at.document) ?? [])).map(
-        (replaced) => at.replaced || replaced,
+      return placementsUnder(
+        at,
+        chosen.get(at.document) ?? viewsAt(at.document)[0] ?? { from: "outside" },
       );
     },
     whole,
   };
   /**
-   * Give each way the placement being judged may read the documents a name's readings read through
-   * ({@link viewsAt}): one view of each such document other than its own, every combination of
-   * them. A placement's ways are the union of those of the chains of documents it stands for, so a
-   * name whose readings read one document, as one almost always does, is judged by exactly the
-   * readings each such chain gives it.
+   * Give one way the placement being judged may read a name for each answer its readings may give
+   * ({@link waysThrough}), each the first such way, in the order a list of every way meets each
+   * answer first: one view ({@link viewsAt}) of each document other than its own that a dot of the
+   * name splits it at an element of, the documents in the order the name's dots first reach them.
+   * A placement's ways are the union of those of the chains of documents it stands for, so a name
+   * whose readings read one document, as one almost always does, is judged by exactly the readings
+   * each such chain gives it. Every way that gives an answer gives the same readings' prefixes and
+   * variables, so each consumer reads the same of one as of all; and the ways are found without
+   * being listed, so a name read through many documents costs no more than its readings do.
    *
    * @param name The name.
-   * @returns The assignments of a view to each document, at least one.
+   * @returns The ways, each the view each document takes, at least one unless a document has no
+   *   view.
    */
-  const assignmentsOf = (name: string): readonly ReadonlyMap<string, DocumentView>[] => {
-    let assignments: readonly ReadonlyMap<string, DocumentView>[] = [new Map()];
-    const met = new Set<string>();
-    for (let dot = name.indexOf("."); dot !== -1; dot = name.indexOf(".", dot + 1)) {
-      const path = written.get(name.slice(0, dot))?.document;
-      if (path !== undefined && path !== here.path && !met.has(path)) {
-        met.add(path);
+  const waysOf = (name: string): readonly ReadonlyMap<string, DocumentView>[] => {
+    const paths: string[] = [];
+    const views: (readonly DocumentView[])[] = [];
+    const indices = new Map<string, number>();
+    /**
+     * Give the index of a document a dot reaches, met now or before.
+     *
+     * @param path The document's path.
+     * @returns Its index.
+     */
+    const documentIndex = (path: string): number => {
+      const known = indices.get(path);
+      if (known !== undefined) {
+        return known;
+      }
 
-        const views = viewsAt(path);
-        assignments = assignments.flatMap((assignment) =>
-          views.map((view) => new Map([...assignment, [path, view] as const])),
-        );
+      indices.set(path, paths.length);
+      paths.push(path);
+      views.push(viewsAt(path));
+
+      return paths.length - 1;
+    };
+    // A slot of the placement's own document, or the unsplit reading, reads no other document, so
+    // its document is the last, of one view, which no way names.
+    const fixed = -1;
+    const slots: ReadingSlot[] = whole.has(name) ? [{ counts: [1], document: fixed }] : [];
+    for (let dot = name.indexOf("."); dot !== -1; dot = name.indexOf(".", dot + 1)) {
+      const prefix = name.slice(0, dot);
+      const at = written.get(prefix);
+      if (at !== undefined) {
+        const document = at.document === here.path ? fixed : documentIndex(at.document);
+        for (const [form] of Option.toArray(variableOf(scope, prefix, name.slice(dot + 1)))) {
+          slots.push({
+            counts:
+              document === fixed
+                ? [countedOf(form, [here.replaced || at.replaced])]
+                : (views[document] ?? []).map((view) => countedOf(form, placementsUnder(at, view))),
+            document,
+          });
+        }
       }
     }
 
-    return assignments;
+    return waysThrough(
+      [...views.map((viewed) => viewed.length), 1],
+      slots.map((slot) => (slot.document === fixed ? { ...slot, document: paths.length } : slot)),
+    ).map(
+      (way) =>
+        new Map(
+          paths.map(
+            (path, index) =>
+              [path, views[index]?.[way[index] ?? 0] ?? ({ from: "outside" } as const)] as const,
+          ),
+        ),
+    );
   };
   /**
-   * Read a name each way the placement being judged may read it ({@link assignmentsOf}).
+   * Read a name each way the placement being judged may read it ({@link waysOf}).
    *
    * @param name The name.
    * @param read What to read of it, under one way.
    * @returns What each way gives.
    */
   const eachWay = <A>(name: string, read: () => A): readonly A[] =>
-    assignmentsOf(name).map((assignment) => {
-      chosen = assignment;
+    waysOf(name).map((way) => {
+      chosen = way;
       const result = read();
       chosen = new Map();
 
@@ -3649,8 +4083,8 @@ const pathsOfType = (manifest: Manifest, type: string): readonly string[] => [
 ];
 
 /**
- * Give the verdict on the document at a path, none when the package holds none there or no
- * resource of a judged type names it.
+ * Give the verdict on the document at a path, none when the package holds none there or does not
+ * read it as a type plate judges ({@link readAs}).
  *
  * @param documents The package's documents.
  * @param path The document's path.
@@ -3853,9 +4287,10 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
       identifier: resource.identifier,
       path,
       type: resource.type,
-      verdict: judgedTypes.has(resource.type)
-        ? path.pipe(Option.flatMap((value) => verdictAt(documents, value)))
-        : Option.none(),
+      verdict: path.pipe(
+        Option.filter((value) => documents.get(value)?.type === resource.type),
+        Option.flatMap((value) => verdictAt(documents, value)),
+      ),
     };
   });
   const [first, ...rest] = [
