@@ -710,6 +710,7 @@ export const mappingItemRefTypeFamily = counted(
   fin(MappingItemRef, "types"),
 );
 
+/**
  * A `section-identifier`, keyed by its element's node (the UP audit's A61): the attribute, its
  * element's kind and its lexical form, copied from `Attribute` (C18); its element's document and
  * that document's root kind; and its split around the name it spells, `lexical = before ‖
