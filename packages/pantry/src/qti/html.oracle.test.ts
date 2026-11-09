@@ -23,12 +23,12 @@ import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { htmlLaws, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLaws, identityRelations } from "#pantry/qti/identity.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { QtiBase } from "#pantry/qti/base.ts";
 import { judge, lawNames, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment, LawName } from "#pantry/test/oracle.ts";
 
 /**
- * How long building a schema over every relation of `Qti` may take: its statements are planned
+ * How long building a schema over every relation of `QtiBase` may take: its statements are planned
  * whole, which takes some seconds beside the composed grammar.
  * Measured 2026-11-07: 1.4 s at a load average of 63 to 73.
  */
@@ -38,7 +38,7 @@ describe("qti/html.ts, declared", { timeout: buildTimeout }, () => {
   it("builds a schema of Node, the character data, the attribute layer, the identity and the HTML overlays with every law, each statement once", () => {
     const built = schema(
       "HtmlLayer",
-      { ...Qti.relations, ...identityRelations, ...htmlRelations },
+      { ...QtiBase.relations, ...identityRelations, ...htmlRelations },
       [...nodeLaws, ...chardataLaws, ...attributeLaws, ...identityLaws, ...htmlLaws],
     );
 

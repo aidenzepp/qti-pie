@@ -30,6 +30,7 @@ import {
   resolvedPathPattern,
   srcsetCandidatePattern,
 } from "#pantry/qti/package.ts";
+import { QtiBase } from "#pantry/qti/base.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { judge, judgedLaws } from "#pantry/test/host-judge.ts";
@@ -358,7 +359,7 @@ describe("qti/package.ts", () => {
   it("names every check of the package's laws by an oracle law, and the laws compose with the schema's relations", () => {
     // Oracle: the specification as a checker, the oracle's law names (`src/test/oracle.ts`), each
     // spelled with underscores for its spaces, since a check's name is an identifier; and grizzle's
-    // own description check, which a scratch schema of `Qti`'s relations and these laws passes.
+    // own description check, which a scratch schema of `QtiBase`'s relations and these laws passes.
     const named = new Set<string>(lawNames);
     const checks = packageLaws.flatMap((law) =>
       law.kind === "check" && Predicate.hasProperty(law, "name") && Predicate.isString(law.name)
@@ -371,7 +372,7 @@ describe("qti/package.ts", () => {
       assert.isTrue(named.has(name.replaceAll("_", " ")), name);
     }
 
-    const scratch = schema("QtiPackageProbe", Qti.relations, packageLaws);
+    const scratch = schema("QtiPackageProbe", QtiBase.relations, packageLaws);
     assert.strictEqual(scratch.statements.length, packageLaws.length);
   });
 

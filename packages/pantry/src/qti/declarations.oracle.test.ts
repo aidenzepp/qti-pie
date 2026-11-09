@@ -46,7 +46,7 @@ import {
 } from "#pantry/qti/declarations.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { QtiBase } from "#pantry/qti/base.ts";
 import { lawNames, ruleOf } from "#pantry/test/oracle.ts";
 
 /**
@@ -72,8 +72,8 @@ const overlays = {
 };
 
 describe("qti/declarations.ts, declared", () => {
-  it("builds a schema of Qti's relations and the O2 overlays with every law, each statement once", () => {
-    const built = schema("DeclarationLayer", { ...Qti.relations, ...overlays }, [
+  it("builds a schema of QtiBase's relations and the O2 overlays with every law, each statement once", () => {
+    const built = schema("DeclarationLayer", { ...QtiBase.relations, ...overlays }, [
       ...nodeLaws,
       ...chardataLaws,
       ...attributeLaws,

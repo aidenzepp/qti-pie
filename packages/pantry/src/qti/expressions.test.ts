@@ -78,7 +78,7 @@ import {
 } from "#pantry/qti/expressions.ts";
 import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { QtiBase } from "#pantry/qti/base.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -131,7 +131,7 @@ describe("qti/expressions.ts, declared", () => {
       const built = schema(
         "ExpressionLayer",
         {
-          ...Qti.relations,
+          ...QtiBase.relations,
           AreaMapping,
           BaseTypePattern,
           Declaration,
