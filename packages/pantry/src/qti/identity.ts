@@ -29,7 +29,9 @@
  *   element's text (C50), is an id of its document. Spec reading 14 follows the XSD, so a
  *   text-entry interaction's `response-identifier` and `string-identifier` are IDREFs, and a
  *   response declaration's `identifier`, an `xs:ID`, is what they name; the grammar's value domains
- *   carry it, and nothing here names a kind.
+ *   carry it, and nothing here names a kind. A MathML `share`'s `src` of the form `#id` is no token
+ *   but names an element of its document all the same (MathML 3 §4.2.7), so each such `src` is a
+ *   {@link ShareFragment}, and its id is an id of its document under this rule.
  * - **{@link DocumentLang}** is the set of a document's `xml:lang` lexical forms, keyed by its whole
  *   heading (sets ruling 2), and **{@link ResourceLomLanguageSet}** the set of the languages each
  *   LOM `general` category lists. The rule they replace, `lang-set-copy`, is each one's two
@@ -52,7 +54,12 @@
  *   item's body elements: each item instance's `xml:lang` carriers are placed under its assembly
  *   ({@link PlacedXmlLang}, as many as its document has, `Document.langs`), gathered per form
  *   ({@link AssembledLang}), and each form the assembly states is listed by every category that
- *   describes the item ({@link PlacedGeneralLang}, {@link assembledLang}).
+ *   describes the item ({@link PlacedGeneralLang}, {@link assembledLang}). The binding counts "the
+ *   associated assessmentItem ... and its 'bodyElements'", and a catalog is "outside the content
+ *   body node" (information model §5.28), so R26 counts no `xml:lang` under a `qti-catalog-info`
+ *   (reading R9-c): each {@link XmlLang} names its {@link CatalogScope}, read up the tree as
+ *   {@link SsmlScope} reads a fragment, and {@link DocumentLang}, {@link AssembledLang} and their
+ *   carriers count the carriers whose scope is their document. Every `xml:lang` keeps its row.
  * - **Reading 3** (rule `ssml-fragment`): SSML's "document" is each `speak` fragment. A `speak`'s
  *   `startmark` and `endmark` name a `mark` its fragment defines exactly once (law "SSML trim
  *   mark", SSML 1.1 §3.1.1.1), and a `lookup`'s `ref` a `lexicon` of its fragment (law "SSML
@@ -172,6 +179,11 @@ export const idValuePattern = "^[^\\t\\n\\r ]+$";
 export const namingPattern = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
 
 /**
+ * A same-document fragment reference: `#` and one or more characters (MathML 3 §4.2.7).
+ */
+const shareFragmentPattern = "^#.+$";
+
+/**
  * The nil uuid: the start of the owner-axis copy of `document`, which every member's owner
  * replaces.
  */
@@ -280,10 +292,15 @@ export const TextIdref = relation.generated(
 );
 
 /**
- * One element's `xml:lang`, keyed by the element's node: its document and the attribute's lexical
- * form, the member that carries a {@link DocumentLang} value.
+ * One element's `xml:lang`, keyed by the element's node: its document, the attribute's lexical
+ * form, and `scope`, the element's {@link CatalogScope}, the member that carries a
+ * {@link DocumentLang} value where that scope is the document.
  */
-export const XmlLang = relation("XmlLang", { document: uuid, lang: keyText, node: uuid }, ["node"]);
+export const XmlLang = relation(
+  "XmlLang",
+  { document: uuid, lang: keyText, node: uuid, scope: uuid },
+  ["node"],
+);
 
 /**
  * The `xml:lang` lexical forms a document carries, a projection keyed by its heading (sets ruling
@@ -430,6 +447,30 @@ export const SsmlScope = relation(
 );
 
 /**
+ * One element on the way from an element that carries an `xml:lang` up to its catalog scope, keyed
+ * by its node (spec reading R9-c: a catalog is outside the content body, so the language of its
+ * cards, entries and HTML content is not the item's): its {@link nodeRef} tuple and `scope`, its
+ * nearest `qti-catalog-info`, itself included, or the document node for an element no catalog
+ * holds. A `qti-catalog-info` is its own scope, a document's root the document's where it is no
+ * catalog info, and every other element its parent's, so a scope is read up the tree with no copy
+ * on `Node`, as {@link SsmlScope} reads a fragment.
+ */
+export const CatalogScope = relation(
+  "CatalogScope",
+  {
+    document: uuid,
+    kind: closedId(NodeKind),
+    nearest: uuid,
+    node: uuid,
+    parent: uuid,
+    scope: uuid,
+    start: natural,
+    version: closedId(SchemaVersion),
+  },
+  ["node"],
+);
+
+/**
  * The values each SSML fragment's attributes of each kind of element hold, a projection keyed by
  * its heading: one row per (fragment, element kind, value), its `carriers` the attributes that
  * hold it, so a `mark` name a fragment defines once has `carriers` 1.
@@ -453,6 +494,31 @@ export const IdrefTarget = relation(
   "IdrefTarget",
   { assembled: pg.boolean, document: uuid, id: keyText },
   ["document", "id"],
+);
+
+/**
+ * One `m:share` whose `src` is a fragment of its own document, keyed by the element's node (MathML
+ * 3 §4.2.7; a `src` that is `#` and a name stands in the same document): its document, `src` as
+ * written (C18), and `id`, the text after the `#`, which an {@link IdrefTarget} of the document
+ * names under "Idref target". A `src` with any text before its `#`, or no text after it, is no
+ * same-document fragment and has no row.
+ *
+ * Two fields are not the share's own: `assembled`, its document's `assembled` (as
+ * {@link IdrefTarget}'s is), which tells a document in no assembly, whose share resolves in its own
+ * IDs, from one in an assembly, whose share resolves once per instance; and `placements`, the count
+ * of its `PlacedShareTarget` rows (`#pantry/qti/mathml-share.ts`).
+ */
+export const ShareFragment = relation(
+  "ShareFragment",
+  {
+    assembled: pg.boolean,
+    document: uuid,
+    id: keyText,
+    node: uuid,
+    placements: drawn(natural),
+    src: keyText,
+  },
+  ["node"],
 );
 
 /**
@@ -537,13 +603,34 @@ export const placedIdrefFamily = counted(
 );
 
 /**
+ * One `xml:lang` outside every catalog (R9-c), keyed by its element's node: an {@link XmlLang}
+ * whose scope is its document, the member a counted family can count, as a family counts a relation
+ * and no selection. R26's forms are these.
+ */
+export const BodyXmlLang = relation("BodyXmlLang", { document: uuid, lang: keyText, node: uuid }, [
+  "node",
+]);
+
+/**
  * One `xml:lang` of an instance of an item's assembly (Q5.13's `Instance`, spec reading 117), keyed
  * by the instance and the element's node: an {@link XmlLang} of the instance's document, under the
- * assembly. An included fragment's elements are its item's body elements in place, so their
- * languages are among those R26 holds the item's records to list.
+ * assembly, with its `scope`. An included fragment's elements are its item's body elements in
+ * place, so their languages are among those R26 holds the item's records to list, those a catalog
+ * holds aside.
  */
 export const PlacedXmlLang = relation(
   "PlacedXmlLang",
+  { assembly: uuid, document: uuid, instance: uuid, lang: keyText, node: uuid, scope: uuid },
+  ["instance", "node"],
+);
+
+/**
+ * One `xml:lang` of an instance of an item's assembly outside every catalog (R9-c), keyed as
+ * {@link PlacedXmlLang} is: a placed `xml:lang` whose scope is its document, the member the
+ * assembly's family counts.
+ */
+export const PlacedBodyXmlLang = relation(
+  "PlacedBodyXmlLang",
   { assembly: uuid, document: uuid, instance: uuid, lang: keyText, node: uuid },
   ["instance", "node"],
 );
@@ -581,10 +668,17 @@ export const documentLangFamily = counted(on(XmlLang, "document"), fin(Document,
 export const placedLangFamily = counted(on(PlacedXmlLang, "instance"), fin(Instance, "langs"));
 
 /**
- * The placed elements that carry each assembly's forms, counted by `AssembledLang.carriers`.
+ * The placed `xml:lang`s that R26 counts: those of elements outside every catalog, whose scope is
+ * their document (R9-c), the source of {@link PlacedBodyXmlLang}.
+ */
+const bodyPlacedLangs = select(PlacedXmlLang, (p) => p.eq(p.scope, p.document));
+
+/**
+ * The placed elements outside every catalog that carry each assembly's forms, counted by
+ * `AssembledLang.carriers`.
  */
 export const assembledLangFamily = counted(
-  on(PlacedXmlLang, "assembly", "lang"),
+  on(PlacedBodyXmlLang, "assembly", "lang"),
   fin(AssembledLang, "carriers"),
 );
 
@@ -600,6 +694,8 @@ export const placedGeneralLangFamily = counted(
 export const identityRelations = {
   AssembledId,
   AssembledLang,
+  BodyXmlLang,
+  CatalogScope,
   DocumentGenerals,
   DocumentId,
   DocumentLang,
@@ -612,11 +708,13 @@ export const identityRelations = {
   IdrefTarget,
   LabelUse,
   LomLanguage,
+  PlacedBodyXmlLang,
   PlacedGeneralLang,
   PlacedId,
   PlacedIdref,
   PlacedXmlLang,
   ResourceLomLanguageSet,
+  ShareFragment,
   SsmlAttribute,
   SsmlScope,
   TextIdref,
@@ -744,6 +842,18 @@ const textIds = select(DocumentId, (d) => d.ne(d.owner, d.node));
 const langAttributes = select(Attribute, (a) => a.eq(a.name, "xml:lang"));
 
 /**
+ * Every MathML `share` whose `src` is a fragment of its own document, the source of
+ * {@link ShareFragment}: `#` and one or more characters.
+ */
+const shareSources = select(Attribute, (a) =>
+  a.and(
+    a.eq(a.kind, "m:share"),
+    a.eq(a.name, "src"),
+    Compute.matches(a.lexical, shareFragmentPattern),
+  ),
+);
+
+/**
  * The IDREF targets of documents in no assembly, each an id of its own document; an assembled
  * document's resolve per instance ({@link PlacedIdref}).
  */
@@ -842,6 +952,14 @@ const inheritedScopes = select(SsmlScope, (s) =>
 );
 
 /**
+ * The scopes a catalog scope is read from the parent: every element but a `qti-catalog-info` and a
+ * document's root.
+ */
+const inheritedCatalogScopes = select(CatalogScope, (s) =>
+  s.and(s.ne(s.kind, "qti-catalog-info"), s.ne(s.parent, s.document)),
+);
+
+/**
  * The labels Label tools binds: those in a document whose root is an item's.
  */
 const itemLabels = select(LabelUse, (l) => l.eq(l.rootKind, itemKind));
@@ -860,9 +978,20 @@ export const idBindingFamily = counted(
 export const textIdrefFamily = ordered(on(TextIdref, "node", "at"), fin(IdentityText, "idrefs"));
 
 /**
- * The elements that carry each document's `xml:lang` forms, counted by `DocumentLang.carriers`.
+ * The `xml:lang`s that R26 counts: those of elements outside every catalog, whose scope is their
+ * document (R9-c), the source of {@link BodyXmlLang}. Every `xml:lang` keeps its {@link XmlLang}
+ * row; only this selection narrows.
  */
-export const langFamily = counted(on(XmlLang, "document", "lang"), fin(DocumentLang, "carriers"));
+const bodyLangs = select(XmlLang, (x) => x.eq(x.scope, x.document));
+
+/**
+ * The elements outside every catalog that carry each document's `xml:lang` forms, counted by
+ * `DocumentLang.carriers`.
+ */
+export const langFamily = counted(
+  on(BodyXmlLang, "document", "lang"),
+  fin(DocumentLang, "carriers"),
+);
 
 /**
  * The `lom:language` elements that list each category's languages, counted by
@@ -974,7 +1103,10 @@ export const ssmlLexiconReference = contained(
  *   target" over the assembly, so an item's IDREF may name its fragment's ID and a fragment's its
  *   item's;
  * - **DocumentLang:** each `xml:lang` copied into its `XmlLang` row and each row an attribute's, the
- *   counted family, and each form carried (`E1_derived`);
+ *   counted family over the carriers outside every catalog, and each form carried (`E1_derived`);
+ * - **CatalogScope:** each `XmlLang` on its scope's row, each scope on its node's {@link nodeRef}
+ *   tuple, a `qti-catalog-info` its own scope, a root that is none the document's and every other
+ *   element its parent's (`E1_derived`);
  * - **ResourceLomLanguageSet:** each general category's `lom:language` copied into its `LomLanguage`
  *   row, its category its parent and its language its string value, and each row an element's; its
  *   tag the value case-folded, the counted family over the tags, and each language listed
@@ -1023,6 +1155,7 @@ export const identityLawsByName = {
     key(on(AssembledId, "assembly", "id")),
     key(on(langAttributes, "node")),
     key(on(labelAttributes, "node")),
+    key(on(shareSources, "node")),
   ],
   "E1 derived": [
     check("E1_derived", DocumentId, (d) =>
@@ -1058,6 +1191,7 @@ export const identityLawsByName = {
       i.and(Compute.matches(i.token, idValuePattern), i.or(i.eq(i.at, 0n), i.ne(i.before, ""))),
     ),
     contained(on(IdrefTarget, "document", "assembled"), on(Document, "node", "assembled")),
+    contained(on(ShareFragment, "document", "assembled"), on(Document, "node", "assembled")),
     idrefTargetFamily,
     documentIdFamily,
     placedIdFamily,
@@ -1088,6 +1222,35 @@ export const identityLawsByName = {
       on(XmlLang, "node", "document", "lang"),
     ),
     contained(on(XmlLang, "node"), on(langAttributes, "node")),
+    contained(on(XmlLang, "node", "scope"), on(CatalogScope, "node", "scope")),
+    contained(
+      on(bodyLangs, "node", "document", "lang"),
+      on(BodyXmlLang, "node", "document", "lang"),
+    ),
+    contained(on(BodyXmlLang, "node"), on(bodyLangs, "node")),
+    key(on(bodyLangs, "node")),
+    key(on(bodyPlacedLangs, "instance", "node")),
+    contained(
+      on(bodyPlacedLangs, "instance", "node", "assembly", "document", "lang"),
+      on(PlacedBodyXmlLang, "instance", "node", "assembly", "document", "lang"),
+    ),
+    contained(on(PlacedBodyXmlLang, "instance", "node"), on(bodyPlacedLangs, "instance", "node")),
+    contained(
+      on(CatalogScope, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    check("E1_derived", CatalogScope, (s) =>
+      s.or(
+        s.and(s.eq(s.kind, "qti-catalog-info"), s.eq(s.scope, s.node)),
+        s.and(
+          s.ne(s.kind, "qti-catalog-info"),
+          s.eq(s.parent, s.document),
+          s.eq(s.scope, s.document),
+        ),
+        s.and(s.ne(s.kind, "qti-catalog-info"), s.ne(s.parent, s.document)),
+      ),
+    ),
+    contained(on(inheritedCatalogScopes, "parent", "scope"), on(CatalogScope, "node", "scope")),
     langFamily,
     check("E1_derived", DocumentLang, (d) => d.gt(d.carriers, 0n)),
     contained(
@@ -1120,8 +1283,8 @@ export const identityLawsByName = {
       on(Instance, "id", "document", "assembly"),
     ),
     contained(
-      on(PlacedXmlLang, "node", "document", "lang"),
-      on(XmlLang, "node", "document", "lang"),
+      on(PlacedXmlLang, "node", "document", "lang", "scope"),
+      on(XmlLang, "node", "document", "lang", "scope"),
     ),
     check("E1_derived", AssembledLang, (a) => a.gt(a.carriers, 0n)),
     contained(
@@ -1162,10 +1325,24 @@ export const identityLawsByName = {
       ),
     ),
     contained(on(inheritedScopes, "parent", "fragment"), on(SsmlScope, "node", "fragment")),
+    contained(
+      on(shareSources, "node", "document", "lexical"),
+      on(ShareFragment, "node", "document", "src"),
+    ),
+    contained(on(ShareFragment, "node"), on(shareSources, "node")),
+    check("E1_derived", ShareFragment, (f) =>
+      f.and(
+        f.eq(Compute.startsWith(f.src, "#"), true),
+        f.eq(Compute.endsWith(f.src, f.id), true),
+        f.eq(Compute.charLength(f.src), Compute.add(Compute.charLength(f.id), 1)),
+        Compute.matches(f.src, shareFragmentPattern),
+      ),
+    ),
   ],
   "Idref target": [
     contained(on(Idref, "document", "token"), on(IdrefTarget, "document", "id")),
     contained(on(TextIdref, "document", "token"), on(IdrefTarget, "document", "id")),
+    contained(on(ShareFragment, "document", "id"), on(IdrefTarget, "document", "id")),
     contained(on(unassembledTargets, "document", "id"), on(IdBinding, "document", "id")),
     contained(on(PlacedIdref, "assembly", "id"), on(AssembledId, "assembly", "id")),
   ],

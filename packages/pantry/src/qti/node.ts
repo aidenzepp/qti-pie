@@ -255,17 +255,25 @@ const modeled = (n: NodeRow) => n.or(element(n), n.eq(n.kind, "document"));
 const positionOf = (n: NodeRow) => ChildGrammar.at("position", n.version, n.parentKind, n.kind);
 
 /**
- * State that a member steps its parent's automaton: an element, or character data a particle names,
- * as the document's doctype (position 1) and SSML's text in `ssml:speak` (spec reading 40) are.
- * Every other member is character data that carries its predecessor's state.
+ * State that a member steps its parent's automaton: a kind its parent admits, and an element, or
+ * character data a particle names, as the document's doctype (position 1) and SSML's text in
+ * `ssml:speak` (spec reading 40) are. Every other admitted member is character data that carries
+ * its predecessor's state.
  *
  * The split is by position, not by kind, because `placedStep` steps every child whose position is
- * not 0, character data included.
+ * not 0, character data included. A kind its parent does not admit steps nothing (`stepOf` is
+ * none), and {@link positionOf} reads nothing there, so the `ChildGrammar.has` guard states that
+ * false outright rather than leaving it unknown, which a check refuses (decision 440):
+ * `N5_admitted` alone refuses such a member, as the oracle judges it.
  *
  * @param n - The row.
  * @returns The predicate.
  */
-const positioned = (n: NodeRow) => n.or(element(n), n.ne(positionOf(n), "0"));
+const positioned = (n: NodeRow) =>
+  n.and(
+    ChildGrammar.has(n.version, n.parentKind, n.kind),
+    n.or(element(n), n.ne(positionOf(n), "0")),
+  );
 
 /**
  * The value domains that check nothing: those whose pattern is `xs:anySimpleType`'s, every string
@@ -336,6 +344,10 @@ const inCheckedText = (n: NodeRow) => checkedText(n, n.parentKind, n.parentGover
  * - `lom:language`: Q5.07's identity overlay reads a resource's LOM language set.
  * - `qti-value`: Q5.08's declaration overlay checks its lexical form against its declaration's base
  *   type (C1, O2), not against its governing type.
+ * - `qti-resource-icon`: the text census's `TextReference` reads an icon's string value as a file
+ *   reference (spec reading R9-b); its type, `URLDType`, is an `xs:normalizedString`, so no
+ *   TextDomain check reads it. A card's file is an `xs:anyURI`, which TextDomain checks, so it is
+ *   folded already.
  * - `qti-base-value`: Q5.10's expression overlay checks a literal's lexical form against its own base
  *   type (O4).
  * - `ud:value`: Q5.12's metadata overlay checks a usage statistic's value against the base type its
@@ -347,6 +359,7 @@ export const copiedTextKinds = [
   "lom:language",
   "qti-value",
   "qti-base-value",
+  "qti-resource-icon",
   "ud:value",
 ] as const satisfies readonly (typeof NodeKind.handles)[number][];
 

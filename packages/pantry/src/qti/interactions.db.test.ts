@@ -60,8 +60,15 @@ import {
   SectionFeedbackRefCardinality,
   SectionFeedbackRefDeclaration,
   SectionScope,
+  SectionTemplateName,
+  SectionTemplateRef,
+  SectionTemplateRefCardinality,
+  SectionTemplateRefDeclaration,
   Slider,
   PrintedVariableRef,
+  TemplateRef,
+  TemplateRefCardinality,
+  TemplateRefDeclaration,
 } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
@@ -204,6 +211,7 @@ const cardinalityRow = (at: number, fields: Partial<Fact<typeof BindingCardinali
     baseTypes: 1n,
     cardinality: "single",
     declaration: stray,
+    gaps: 0n,
     kind,
     mosts: boundKinds.includes(kind) ? 1n : 0n,
     node: strayNode(at),
@@ -357,6 +365,40 @@ const feedbackDeclarationOf = (fields: Partial<Fact<typeof FeedbackRefDeclaratio
   }) satisfies Fact<typeof FeedbackRefDeclaration>;
 
 /**
+ * A stray choice's template reference.
+ *
+ * @param fields - The fields the case sets.
+ * @returns The row.
+ */
+const templateOf = (fields: Partial<Fact<typeof TemplateRef>> = {}) =>
+  ({
+    assemblyKind: "qti-assessment-item",
+    attribute: "template-identifier",
+    document: stray,
+    identifier: "T",
+    kind: "qti-simple-choice",
+    node: strayNode(0),
+    ...fields,
+  }) satisfies Fact<typeof TemplateRef>;
+
+/**
+ * The declaration a stray choice's template reference names: a declared identifier template with a
+ * cardinality, which its {@link templateCardinalityOf} row holds (spec reading 159, decision 432).
+ *
+ * @param fields - The fields the case sets.
+ * @returns The row.
+ */
+const templateDeclarationOf = (fields: Partial<Fact<typeof TemplateRefDeclaration>> = {}) =>
+  ({
+    ...templateOf(),
+    baseTypes: 1n,
+    cardinalities: 1n,
+    declaration: stray,
+    declarationKind: "qti-template-declaration",
+    ...fields,
+  }) satisfies Fact<typeof TemplateRefDeclaration>;
+
+/**
  * The cardinality of the outcome a stray feedback block's outcome reference names, the row
  * "Feedback outcome type" judges it on.
  *
@@ -368,6 +410,25 @@ const feedbackCardinalityOf = (cardinality: string) => {
 
   return { attribute, cardinality, declaration: stray, node } satisfies Fact<
     typeof FeedbackRefCardinality
+  >;
+};
+
+/**
+ * The cardinality of the template a stray template reference names, the row "Template variable
+ * type" judges it on (decision 432).
+ *
+ * @param cardinality - The template's cardinality.
+ * @param kind - The reference's kind.
+ * @returns The row.
+ */
+const templateCardinalityOf = (
+  cardinality: string,
+  kind: Fact<typeof TemplateRef>["kind"] = templateOf().kind,
+) => {
+  const { attribute, node } = templateOf();
+
+  return { attribute, cardinality, declaration: stray, kind, node } satisfies Fact<
+    typeof TemplateRefCardinality
   >;
 };
 
@@ -466,11 +527,12 @@ const indexReference = (identifier: string): Stated => ({
 
 /**
  * A used identifier's projection fact, its counts as the case states them, none of whose members
- * it writes: no assembly places it, so its placed counts are 0.
+ * it writes: unless the case states them, no assembly places it, so its placed counts are 0.
  *
  * @param identifier - The identifier.
  * @param rootKind - Its document's root kind.
- * @param counts - Its counts of choices, declarations and hottexts.
+ * @param counts - Its counts of choices, declarations and hottexts, and of the choices and hottexts
+ *   its assembly places.
  * @returns The fact.
  */
 const choiceName = (
@@ -480,14 +542,16 @@ const choiceName = (
     readonly choices: bigint;
     readonly declarations: bigint;
     readonly hottexts: bigint;
+    readonly placedChoices?: bigint;
+    readonly placedHottexts?: bigint;
   },
 ): Stated => ({
   fact: {
+    placedChoices: 0n,
+    placedHottexts: 0n,
     ...counts,
     document: stray,
     identifier,
-    placedChoices: 0n,
-    placedHottexts: 0n,
     rootKind,
   },
   relation: ChoiceVariableName,
@@ -797,6 +861,65 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       );
 
       it.effect(
+        "refuses a gap match bound to a single response over two or more gaps, and accepts one gap, or several bound multiple, by Binding cardinality",
+        () =>
+          // Oracle: PostgreSQL, the `Binding_cardinality` check on `BindingCardinality` with every
+          // foreign key and family proof deferred and none set immediate (reading 169: a gap
+          // match's response is single only where it has at most one gap, §5.57), 23514 on the
+          // check refused.
+          // Bound: a gap match bound single with 2 gaps and most 1, refused; with 1 gap, and with
+          // 2 gaps bound multiple, accepted; a choice interaction bound single with 2 gaps (a
+          // count its kind does not read), accepted.
+          Effect.gen(function* gapCardinality() {
+            const client = yield* loginSession;
+
+            for (const [label, fields, refusedBy] of [
+              [
+                "two gaps bound single",
+                { cardinality: "single", gaps: 2n, kind: "qti-gap-match-interaction", mosts: 1n },
+                "binding_cardinality",
+              ],
+              [
+                "one gap bound single",
+                { cardinality: "single", gaps: 1n, kind: "qti-gap-match-interaction", mosts: 1n },
+                undefined,
+              ],
+              [
+                "two gaps bound multiple",
+                { cardinality: "multiple", gaps: 2n, kind: "qti-gap-match-interaction", mosts: 1n },
+                undefined,
+              ],
+              [
+                "two gaps of another kind bound single",
+                { cardinality: "single", gaps: 2n, kind: "qti-choice-interaction", mosts: 1n },
+                undefined,
+              ],
+            ] as const) {
+              const refused = Option.getOrUndefined(
+                yield* judged(
+                  client,
+                  statedInserts([
+                    { fact: cardinalityRow(0, fields), relation: BindingCardinality },
+                  ]),
+                  [],
+                ),
+              );
+
+              if (refusedBy === undefined) {
+                assert.isUndefined(refused, `${label}: ${refused?.message ?? ""}`);
+              } else {
+                assert.strictEqual(
+                  refused?.code,
+                  "23514",
+                  `${label}: ${refused?.message ?? "accepted"}`,
+                );
+                assert.strictEqual(refused?.constraint, refusedBy, label);
+              }
+            }
+          }).pipe(Effect.scoped),
+      );
+
+      it.effect(
         "refuses a single response bound to an interaction whose most is not 1, and accepts a most of 1 and an interaction whose most has no value, by the containment into MostCount",
         () =>
           // Oracle: PostgreSQL, the foreign key of "Binding cardinality" (reading 92): a single
@@ -1041,6 +1164,81 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       );
 
       it.effect(
+        "refuses a choice's or template element's template variable of another type, in an item's or a section's placement, and accepts a portable custom interaction's, by Template variable type",
+        () =>
+          // Oracle: PostgreSQL, the `Template_variable_type` check over the cardinality rows
+          // (reading R15-l; spec reading 159, decision 432: a row of the reference's own where its
+          // template has a cardinality), on each of the two relations that hold a template
+          // reference's cardinality: it judges a record by its cardinality, and a base type is
+          // judged by the containment into the identifier-typed DeclarationBaseType rows (reading
+          // 153), which a stray row cannot reach, as "Feedback outcome type" is.
+          // Bound: a record template named by a choice, refused; an identifier template of
+          // multiple cardinality named by a choice, and a record template named by a PCI's
+          // qti-template-variable, accepted by this check; the placed section reference of a
+          // record template, refused.
+          Effect.gen(function* templateType() {
+            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const wrong = yield* db.apply(
+              ChangeSet.empty(Author)
+                .insert(TemplateRef, [templateOf()])
+                .insert(TemplateRefDeclaration, [templateDeclarationOf({ baseTypes: 0n })])
+                .insert(TemplateRefCardinality, [templateCardinalityOf("record")]),
+              {},
+            );
+            assert.isTrue(
+              rejectedBy(wrong, checkNamed("TemplateRefCardinality", "Template_variable_type")),
+            );
+
+            for (const { baseTypes, cardinality, kind } of [
+              { baseTypes: 1n, cardinality: "multiple", kind: "qti-simple-choice" },
+              { baseTypes: 0n, cardinality: "record", kind: "qti-template-variable" },
+            ] as const) {
+              const outcome = yield* db.apply(
+                ChangeSet.empty(Author)
+                  .insert(TemplateRef, [templateOf({ kind })])
+                  .insert(TemplateRefDeclaration, [templateDeclarationOf({ baseTypes, kind })])
+                  .insert(TemplateRefCardinality, [templateCardinalityOf(cardinality, kind)]),
+                {},
+              );
+              assert.isFalse(
+                rejectedBy(outcome, checkNamed("TemplateRefCardinality", "Template_variable_type")),
+                `${kind} ${baseTypes} ${cardinality}`,
+              );
+            }
+
+            const { attribute, document, identifier, kind, node } = templateOf();
+            const placement = { assembly: stray, instance: strayNode(1) } as const;
+            const placed = yield* db.apply(
+              ChangeSet.empty(Author)
+                .insert(ReferringDocument, [{ document }])
+                .insert(SectionTemplateName, [{ attribute, document, identifier, kind, node }])
+                .insert(SectionScope, [
+                  {
+                    assembly: stray,
+                    assemblyKind: "qti-assessment-item",
+                    document,
+                    instance: strayNode(1),
+                  },
+                ])
+                .insert(SectionTemplateRef, [{ ...templateOf(), ...placement }])
+                .insert(SectionTemplateRefDeclaration, [
+                  { ...templateDeclarationOf({ baseTypes: 0n }), ...placement },
+                ])
+                .insert(SectionTemplateRefCardinality, [
+                  { ...templateCardinalityOf("record"), instance: placement.instance },
+                ]),
+              {},
+            );
+            assert.isTrue(
+              rejectedBy(
+                placed,
+                checkNamed("SectionTemplateRefCardinality", "Template_variable_type"),
+              ),
+            );
+          }),
+      );
+
+      it.effect(
         "refuses a reference to an undeclared name, and accepts one to the built-in completionStatus, by the containment into its declaration row",
         () =>
           // Oracle: PostgreSQL, the foreign key of a printed variable's `index` reference into its
@@ -1078,10 +1276,12 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // "identifier")): the choice classes' "This identifier must not be used by any other
           // choice or item variable" (§5.132.1, §5.65.1), each class of its own kind, the document
           // its scope (reading 104).
+          // Across classes the nine share one space (reading 104 as amended); that half is the
+          // `Choice_identifier_key` check on `ChoiceVariableName`, held by the name-rows test below.
           // Bound: two simple choices named A of one interaction, and of two; two hottexts named H,
           // one in a hottext interaction and one outside any; a gap and a gap text named A of one
-          // interaction, which the key lets be (the rows are stray, so the deferred foreign keys
-          // refuse them at commit, and the key is not among the laws).
+          // interaction, which these per-class keys let be (the rows are stray, so the deferred
+          // foreign keys refuse them at commit, and the keys are not among the laws).
           Effect.gen(function* choiceKeys() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const second of [
@@ -1146,6 +1346,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               nearest: stray,
               node: strayNode(50),
               parent: stray,
+              parentKind: "qti-assessment-item",
               start: 2n,
               version: "3.0.1",
             } satisfies Addition<typeof Declaration>;
@@ -1159,6 +1360,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               identifierLexical: "A",
               identifierTrail: "",
               node: strayNode(50),
+              parentKind: "qti-assessment-item",
             } satisfies Addition<typeof DeclarationIdentifier>;
 
             const choice = yield* db.apply(
@@ -1204,26 +1406,97 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "accepts a name of choices alone, of a declaration alone and a stimulus choice named as a built-in, and refuses a name counted by both and one counted by none, by the row's own checks",
+        "accepts a name of one choice, of a declaration alone and a stimulus choice named as a built-in, and refuses a name of two choices, a choice and a hottext, two hottexts, in the document or placed, a name counted by both and one counted by none, by the row's own checks",
         () =>
           // Oracle: PostgreSQL, `ChoiceVariableName`'s CHECKs with every foreign key and family
           // proof deferred and none set immediate: `Choice_not_variable` (reading 104) and
-          // `E1_derived` (some count above 0), 23514 on the check refused.
-          // Bound: two choices of one name; one declaration; a stimulus's choice named
-          // numAttempts, accepted; a hottext and a declaration of one name, and a name of no
-          // choice, hottext or declaration, refused.
+          // `Choice_identifier_key` (reading 104 as amended: the nine classes share one space, so
+          // at most one choice or hottext bears a name in the document and one over its assembly)
+          // and `E1_derived` (some count above 0), 23514 on the check refused.
+          // Bound: one choice; one declaration; a stimulus's choice named numAttempts, accepted;
+          // two choices, a choice and a hottext, two hottexts, each in the document and placed, a
+          // hottext and a declaration of one name, and a name of no choice, hottext or declaration,
+          // refused; one placed choice, accepted.
           Effect.gen(function* nameRows() {
             const client = yield* loginSession;
 
             for (const [label, row, refusedBy] of [
               [
-                "choices alone",
+                "one choice",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 1n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                }),
+                undefined,
+              ],
+              [
+                "one placed choice",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                  placedChoices: 1n,
+                }),
+                undefined,
+              ],
+              [
+                "two choices",
                 choiceName("A", "qti-assessment-item", {
                   choices: 2n,
                   declarations: 0n,
                   hottexts: 0n,
                 }),
-                undefined,
+                "choice_identifier_key",
+              ],
+              [
+                "a choice and a hottext",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 1n,
+                  declarations: 0n,
+                  hottexts: 1n,
+                }),
+                "choice_identifier_key",
+              ],
+              [
+                "two hottexts",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 0n,
+                  hottexts: 2n,
+                }),
+                "choice_identifier_key",
+              ],
+              [
+                "two placed choices",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                  placedChoices: 2n,
+                }),
+                "choice_identifier_key",
+              ],
+              [
+                "a placed choice and a placed hottext",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                  placedChoices: 1n,
+                  placedHottexts: 1n,
+                }),
+                "choice_identifier_key",
+              ],
+              [
+                "two placed hottexts",
+                choiceName("A", "qti-assessment-item", {
+                  choices: 0n,
+                  declarations: 0n,
+                  hottexts: 0n,
+                  placedHottexts: 2n,
+                }),
+                "choice_identifier_key",
               ],
               [
                 "a declaration alone",

@@ -26,9 +26,9 @@ import { overlayRowsOf, unionsOf } from "#pantry/import/overlays/index.ts";
 import { namedDocuments, rowsOf as packageRowsOf } from "#pantry/import/overlays/package.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
+import { dataSsmlFaultIn } from "#pantry/vocab/data-ssml.ts";
+import { ImportRefused, ruleOfError } from "#pantry/import/refusal.ts";
 import { documentLayerNames } from "#pantry/import/roster.ts";
-import { ruleOfError } from "#pantry/import/refusal.ts";
-import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { documentRowsOf, nodeIdsOf, rootInsertOf } from "#pantry/import/write.ts";
 import type {
   DocumentLayerRows,
@@ -39,6 +39,7 @@ import type {
   PlacedDocument,
 } from "#pantry/import/write.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
+import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { PackageReadError, readPackage } from "#pantry/package/read.ts";
@@ -104,14 +105,33 @@ export const declaredVersionOf = (manifest: XmlDocument): Option.Option<string> 
 };
 
 /**
- * Read and shred one document of the package.
+ * Read and shred one document of the package, and judge its `data-ssml` values.
+ *
+ * A `data-ssml` is judged here, not by the database: the database holds it as text and does not
+ * re-prove its form (spec reading R7-a), so a value Data-SSML 1.0 does not admit is refused under
+ * `attribute-lexical`, the rule of a value its domain refuses.
  *
  * @param file - Its entry.
  * @param version - The version the manifest declares.
- * @returns Its tree; the reader's or the codec's refusal.
+ * @returns Its tree; the reader's, the codec's or the `data-ssml` refusal.
  */
 const shredFile = (file: PackageFile, version: (typeof versions)[number]) =>
-  Effect.flatMap(readXml(file.bytes), (xml) => shred(xml, version, shredGrammarOf(grammar)));
+  Effect.flatMap(
+    Effect.flatMap(readXml(file.bytes), (xml) => shred(xml, version, shredGrammarOf(grammar))),
+    (tree) => {
+      const fault = dataSsmlFaultIn(tree);
+
+      return fault === undefined
+        ? Effect.succeed(tree)
+        : Effect.fail(
+            new ImportRefused({
+              detail: `${file.path} at ${fault.path}: ${fault.detail}`,
+              origin: readerOrigin,
+              rule: "attribute-lexical",
+            }),
+          );
+    },
+  );
 
 /**
  * Choose the type a path's document is read as, of the types its resources name it under (spec
@@ -254,8 +274,8 @@ export const readProgram = Effect.fn("import.readProgram")(function* readProgram
 /**
  * Count the rows a program writes, relation by relation, each nested member under its own
  * relation: a tree's nodes, attributes, declarations and their families, an attribute's and a
- * text's typed double, an identity text's IDREF tokens, a cell's `headers` tokens, a
- * `tolerance`'s values, an assembly's instances, a record's entries.
+ * text's typed double, an identity text's IDREF tokens, a cell's `headers` tokens, a table cell's
+ * leaves, a `tolerance`'s values, an assembly's instances, a record's entries.
  *
  * @param program - The program.
  * @returns Each relation's number of rows, zero for a relation whose keyed set is empty.
@@ -277,6 +297,10 @@ export const rowCountsOf = (program: ImportProgram): ReadonlyMap<string, number>
 
   for (const headers of flat.CellHeaders.values()) {
     add("HeaderToken", headers.tokens.length);
+  }
+
+  for (const cell of flat.MathCell.values()) {
+    add("CellLeaf", cell.leaves.length);
   }
 
   for (const tolerance of flat.Tolerance.values()) {

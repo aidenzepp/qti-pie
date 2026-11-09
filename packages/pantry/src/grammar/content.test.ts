@@ -2557,3 +2557,45 @@ describe("the document node's content model (R5)", () => {
       }),
   );
 });
+
+describe("decision 324, the empty catalog card and card entry", () => {
+  it.effect(
+    "accepts a qti-card and a qti-card-entry with no children, and the html-only, files-only, html-then-files shapes, and a qti-card's entries alone, in both versions",
+    () =>
+      // Oracle: the XSD's models as the specification reads them (CardDType, CardEntryDType):
+      // the card is `sequence(qti-html-content?, qti-file-href.card*) | qti-card-entry+`, the
+      // entry `sequence(qti-html-content?, qti-file-href.card*)`, so every branch matches empty.
+      // Bound: the named shapes below, under both parents in both versions.
+      Effect.gen(function* emptyCard() {
+        const composedGrammar = yield* grammar;
+        const html = "qti-html-content";
+        const file = "qti-file-href.card";
+        const entry = "qti-card-entry";
+        const shared: readonly (readonly string[])[] = [
+          [],
+          [html],
+          [file],
+          [file, file],
+          [html, file],
+          [html, file, file],
+        ];
+        const wrong: string[] = [];
+        for (const version of schemaVersions) {
+          const probes = [
+            ...shared.map((children) => ["qti-card", children, true] as const),
+            ...shared.map((children) => ["qti-card-entry", children, true] as const),
+            ["qti-card", [entry], true],
+            ["qti-card", [entry, entry], true],
+            ["qti-card-entry", [entry], false],
+          ] as const;
+          for (const [parent, children, expected] of probes) {
+            if (accepts(composedGrammar, version, parent, children) !== expected) {
+              wrong.push(`${version} ${parent} [${children.join(", ")}]`);
+            }
+          }
+        }
+
+        assert.deepStrictEqual(wrong, []);
+      }),
+  );
+});

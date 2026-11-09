@@ -16,7 +16,7 @@ import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Layer, Predicate } from "effect";
+import { Duration, Effect, Formatter, Layer, Predicate, Result } from "effect";
 import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
 import type { PackageRecord } from "#pantry/import/record.ts";
 import { readPackage } from "#pantry/package/read.ts";
@@ -31,12 +31,13 @@ import {
   srcsetCandidatePattern,
 } from "#pantry/qti/package.ts";
 import { Qti } from "#pantry/qti/schema.ts";
+import { composed } from "#pantry/grammar/compose.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
 import { judge } from "#pantry/test/host-judge.ts";
 import type { HostRows } from "#pantry/test/host-judge.ts";
 import { judgedLaws } from "#pantry/test/judged-laws.ts";
 import type { JudgedLaw } from "#pantry/test/key-copies.ts";
-import { lawNames } from "#pantry/test/oracle.ts";
+import { judge as judgeByOracle, lawNames, lawsOf } from "#pantry/test/oracle.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -642,3 +643,140 @@ layer(TestLayer, { excludeTestServices: true })(
     );
   },
 );
+
+/**
+ * The composed grammar the text-reference cases are judged by, and the tables its laws read.
+ */
+const grammar = Result.getOrThrow(composed());
+
+const laws = lawsOf(grammar);
+
+/**
+ * Judge a fixture's package with one of its documents' text edited.
+ *
+ * @param name - The fixture, one of `card-files`, `card-file-missing`, `icon-missing` and
+ *   `card-file-undescribed`.
+ * @param edits - Each document to edit, and the text to replace once with another; none for the
+ *   package as it is. An edit's `at` is the document's path, `from` the text it holds once and
+ *   `to` its replacement.
+ * @returns The laws the oracle breaks, and each `File exists` breach as its document and the path it
+ *   names.
+ */
+const judgedFixture = (
+  name: "card-file-missing" | "card-file-undescribed" | "card-files" | "icon-missing",
+  ...edits: readonly { readonly at: string; readonly from: string; readonly to: string }[]
+) =>
+  Effect.gen(function* judgedPackage() {
+    const files = yield* readPackage(yield* materialize(name));
+    const edited = files.map((file) => {
+      const mine = edits.filter(({ at }) => at === file.path);
+      if (mine.length === 0) {
+        return file;
+      }
+
+      let text = new TextDecoder().decode(file.bytes);
+      for (const edit of mine) {
+        assert.strictEqual(text.split(edit.from).length, 2, edit.from);
+        text = text.replace(edit.from, edit.to);
+      }
+
+      return { ...file, bytes: new TextEncoder().encode(text) };
+    });
+    const judgment = yield* judgeByOracle(edited, grammar, laws);
+    assert.strictEqual(judgment._tag === "Judged" ? "Judged" : JSON.stringify(judgment), "Judged");
+
+    const breaches = judgment._tag === "Judged" ? judgment.breaches : [];
+
+    return {
+      laws: [...new Set(breaches.map(({ law }) => law))],
+      missing: breaches.flatMap(({ document, keys, law }) =>
+        law === "File exists" ? [`${document} ${keys["path"] ?? ""}`] : [],
+      ),
+    };
+  });
+
+layer(TestLayer, { excludeTestServices: true })("qti/package.ts, text references", (suite) => {
+  suite.effect(
+    "breaks nothing for a card file, a card entry's file and an icon that are present and listed",
+    () =>
+      // Oracle: the package's own listing (`card-files` lists every file its cards name), read by
+      // hand: the information model's §6.6 and §5.80.4 make each such file one the package holds.
+      // Bound: the one fixture, and the same with a digital material's icon added, present and listed.
+      Effect.gen(function* present() {
+        assert.deepStrictEqual(yield* judgedFixture("card-files"), { laws: [], missing: [] });
+        assert.deepStrictEqual(
+          yield* judgedFixture("card-files", {
+            at: "choice.xml",
+            from: "<qti-item-body>",
+            to: "<qti-companion-materials-info><qti-digital-material><qti-file-href>images/sign.png</qti-file-href><qti-resource-icon>images/sign-large.png</qti-resource-icon></qti-digital-material></qti-companion-materials-info><qti-item-body>",
+          }),
+          { laws: [], missing: [] },
+        );
+      }),
+  );
+
+  suite.effect(
+    "breaks File exists for a card file and for an icon the package lacks, and File listed for a file no cp:file lists",
+    () =>
+      // Oracle: the information model (§6.6, §5.80.4) and IMS Content Packaging 1.2,
+      // InterchangePackage (d), read by hand: a missing file is named, an unlisted one is described
+      // nowhere.
+      // Bound: the three negative fixtures, one failing input each.
+      Effect.gen(function* missing() {
+        const card = yield* judgedFixture("card-file-missing");
+        const icon = yield* judgedFixture("icon-missing");
+        const unlisted = yield* judgedFixture("card-file-undescribed");
+
+        assert.include(card.missing, "choice.xml images/absent.png");
+        assert.include(icon.missing, "choice.xml images/absent.svg");
+        assert.include(unlisted.laws, "File listed");
+        assert.notInclude(unlisted.laws, "File exists");
+      }),
+  );
+
+  suite.effect(
+    "holds a digital material's file to nothing, and resolves a card file under the xml:base in scope",
+    () =>
+      // Oracle: the information model (§5.80.3: a digital material's file is not one the package must
+      // hold) and RFC 3986, §5.2, read by hand: `video/` merged with `clip.mp4` is `video/clip.mp4`.
+      // Bound: `card-files` with a digital material's file naming an absent path, and with a card file
+      // `clip.mp4` under an `xml:base` of `video/` on its feedback block, and without it.
+      Effect.gen(function* unbound() {
+        const material = yield* judgedFixture("card-files", {
+          at: "choice.xml",
+          from: "<qti-item-body>",
+          to: "<qti-companion-materials-info><qti-digital-material><qti-file-href>images/absent.png</qti-file-href></qti-digital-material></qti-companion-materials-info><qti-item-body>",
+        });
+        const based = yield* judgedFixture(
+          "card-files",
+          {
+            at: "choice.xml",
+            from: "<qti-item-body>",
+            to: '<qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/><qti-item-body>',
+          },
+          {
+            at: "choice.xml",
+            from: "</qti-item-body>",
+            to: '<div><qti-feedback-block outcome-identifier="FEEDBACK" identifier="hint" show-hide="show" xml:base="video/"><qti-content-body><p data-catalog-idref="based">Hint</p></qti-content-body><qti-catalog-info><qti-catalog id="based"><qti-card support="sign-language"><qti-file-href mime-type="video/mp4">clip.mp4</qti-file-href></qti-card></qti-catalog></qti-catalog-info></qti-feedback-block></div></qti-item-body>',
+          },
+        );
+        const unbased = yield* judgedFixture(
+          "card-files",
+          {
+            at: "choice.xml",
+            from: "<qti-item-body>",
+            to: '<qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/><qti-item-body>',
+          },
+          {
+            at: "choice.xml",
+            from: "</qti-item-body>",
+            to: '<div><qti-feedback-block outcome-identifier="FEEDBACK" identifier="hint" show-hide="show"><qti-content-body><p data-catalog-idref="based">Hint</p></qti-content-body><qti-catalog-info><qti-catalog id="based"><qti-card support="sign-language"><qti-file-href mime-type="video/mp4">clip.mp4</qti-file-href></qti-card></qti-catalog></qti-catalog-info></qti-feedback-block></div></qti-item-body>',
+          },
+        );
+
+        assert.notInclude(material.laws, "File exists");
+        assert.deepStrictEqual(based, { laws: [], missing: [] });
+        assert.include(unbased.missing, "choice.xml clip.mp4");
+      }),
+  );
+});

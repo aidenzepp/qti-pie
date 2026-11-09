@@ -9,6 +9,7 @@
  */
 import { schema } from "@bjornpagen/grizzle";
 import {
+  AttributeCountOf,
   AttributeGrammar,
   AttributeModel,
   AttributeModelOf,
@@ -31,10 +32,18 @@ import {
   ChildGrammar,
   ChoiceBound,
   ChoiceCount,
+  CnBase,
+  CnForm,
+  CnPart,
+  CnParts,
+  CnPartForm,
+  CnPattern,
+  CnType,
   ContentModel,
   ContentModelOf,
   ContentReference,
   CountedOf,
+  CountedSlot,
   DeclarationKind,
   Declares,
   DomainPrimitive,
@@ -44,6 +53,7 @@ import {
   Follow,
   GoverningOf,
   Governor,
+  HeadQualifier,
   HeldRootsUnder,
   Identity,
   IncludeParent,
@@ -53,6 +63,8 @@ import {
   KindNamespace,
   Last,
   MappableBaseType,
+  MathArity,
+  MathHeadOperator,
   ModelPositions,
   Needs,
   NodeKind,
@@ -187,6 +199,7 @@ import {
   VariableRef,
 } from "#pantry/qti/expressions.ts";
 import { Node, nodeLaws } from "#pantry/qti/node.ts";
+import { mathmlLaws, mathmlRelations } from "#pantry/qti/mathml.ts";
 import { operatorLaws, operatorRelations } from "#pantry/qti/operators.ts";
 import {
   Dependency,
@@ -207,8 +220,11 @@ import {
   ResourceHref,
   ResourceId,
   ResourceTyped,
+  TextReference,
+  TextReferencePath,
   TypedHref,
 } from "#pantry/qti/package.ts";
+import { catalogLaws, catalogRelations } from "#pantry/qti/catalog.ts";
 import { quotationLaws, quotationRelations } from "#pantry/qti/quotation.ts";
 import { testLaws, testRelations } from "#pantry/qti/tests.ts";
 
@@ -224,6 +240,10 @@ const grammarRosters = {
   BoundZero,
   BuiltIn,
   Cardinality,
+  CnBase,
+  CnPart,
+  CnPartForm,
+  CnType,
   ContentModel,
   DeclarationKind,
   DomainPrimitive,
@@ -248,6 +268,7 @@ const grammarRosters = {
  * a law or a generated field reads them.
  */
 const grammarRelations = {
+  AttributeCountOf,
   AttributeGrammar,
   AttributeModelOf,
   AttributeSlotOf,
@@ -262,14 +283,19 @@ const grammarRelations = {
   ChildGrammar,
   ChoiceBound,
   ChoiceCount,
+  CnForm,
+  CnParts,
+  CnPattern,
   ContentModelOf,
   ContentReference,
   CountedOf,
+  CountedSlot,
   Declares,
   DoubleBound,
   Enters,
   Follow,
   GoverningOf,
+  HeadQualifier,
   HeldRootsUnder,
   IncludeParentKind,
   IncludeRoot,
@@ -277,6 +303,8 @@ const grammarRelations = {
   KindNamespace,
   Last,
   MappableBaseType,
+  MathArity,
+  MathHeadOperator,
   ModelPositions,
   Needs,
   OperatorArity,
@@ -355,6 +383,8 @@ const packageRelations = {
   ResourceHref,
   ResourceId,
   ResourceTyped,
+  TextReference,
+  TextReferencePath,
   TypedHref,
 };
 
@@ -473,11 +503,13 @@ type QtiStatement =
   | (typeof metadataLaws)[number]
   | (typeof htmlLaws)[number]
   | (typeof quotationLaws)[number]
-  | (typeof operatorLaws)[number];
+  | (typeof operatorLaws)[number]
+  | (typeof mathmlLaws)[number]
+  | (typeof catalogLaws)[number];
 
 /**
  * Every module's statements, in module order, each module's list one element: a list of lists
- * holds fourteen types, where a list literal of every statement would hold them all.
+ * holds sixteen types, where a list literal of every statement would hold them all.
  */
 const moduleLaws: readonly (readonly QtiStatement[])[] = [
   nodeLaws,
@@ -494,6 +526,8 @@ const moduleLaws: readonly (readonly QtiStatement[])[] = [
   htmlLaws,
   quotationLaws,
   operatorLaws,
+  mathmlLaws,
+  catalogLaws,
 ];
 
 /**
@@ -524,6 +558,8 @@ export const Qti = schema(
     ...htmlRelations,
     ...quotationRelations,
     ...operatorRelations,
+    ...mathmlRelations,
+    ...catalogRelations,
   },
   qtiLaws,
 );

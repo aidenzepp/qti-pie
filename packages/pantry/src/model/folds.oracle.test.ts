@@ -734,12 +734,17 @@ const unconstructed = {
   "Binding cardinality": "a response binding, over identifiers drawn without reading",
   "Binding declared": "a response binding, over identifiers drawn without reading",
   BindingFit: "a response binding, over identifiers drawn without reading",
+  "Card default entry":
+    "a card's support (or a card entry's default), a value drawn without reading",
+  "Card support": "a card's support (or a card entry's default), a value drawn without reading",
+  "Catalog reference": "an IDREF's target kind, over values drawn without reading",
   "Choice bounds": "an interaction's choice counts, values drawn without reading",
   "Choice identifier key": "a choice's identifier, a value drawn without reading",
   "Choice not variable":
     "a choice's identifier against its document's declarations, values drawn without reading",
   "Condition type": "a condition's type, over expressions drawn without typing",
   "Context variable reference": "a reference, over identifiers drawn without reading",
+  "Custom interaction version": "an interaction's version, drawn without reading",
   "Declaration base type":
     "a declaration's base type against its cardinality, values drawn without reading",
   "Declaration key": "a declaration's identifier, a value drawn without reading",
@@ -765,7 +770,19 @@ const unconstructed = {
   MappableBaseType: "a declaration's base type, a value drawn without reading",
   "Mapped response": "a mapped response's declaration and tables, drawn without reading",
   "Mastery range": "a declaration's mastery and normal bounds, values drawn without reading",
+  "MathML align first":
+    "an alignment group's place in a table cell, which a generated tree draws without reading §3.5.5.2",
+  "MathML align placement":
+    "an alignment group's place in a table cell, which a generated tree draws without reading §3.5.5.2",
   "MathML arity": "an operator's arity, a count of children the content automaton relaxes",
+  "MathML cn form":
+    "a cn's type, base and text, values a generated tree draws without reading them",
+  "MathML head qualifier":
+    "an operator's qualifier children, which a generated tree draws without reading the operator's syntax table",
+  "MathML maction selection":
+    "an maction's selection and children, values a generated tree draws without reading them",
+  "MathML share cycle":
+    "a share's fragment and the elements it dominates, which a generated tree draws without reading §4.2.7",
   "Max strings required":
     "an extended text interaction's binding, over identifiers drawn without reading",
   "N6 ancestry":
@@ -775,6 +792,7 @@ const unconstructed = {
   "One base": "an operator's operand types, over expressions drawn without typing",
   "Operand fit": "an operator's operand types, over expressions drawn without typing",
   "Outcome only": "a test operator's processing language, over expressions drawn without reading",
+  "PCI module source": "a PCI's module forms, attributes and children drawn without reading",
   "Printed variable reference": "a reference, over identifiers drawn without reading",
   "Record field key": "a record value's field identifiers, values drawn without reading",
   RecordBindingFit: "a response binding, over identifiers drawn without reading",
@@ -791,6 +809,7 @@ const unconstructed = {
     "a cell's header tokens against its table's th ids (reading 126), over identifiers drawn without reading",
   "Template reads": "what template processing reads, over identifiers drawn without reading",
   "Template reference": "a reference, over identifiers drawn without reading",
+  "Template variable type": "a reference's declared type, over identifiers drawn without reading",
   TextDomain: "an element's value domain, over text drawn without reading",
   "Typed value": "a value's text against its base type, over text drawn without reading",
   "Usage typed value":

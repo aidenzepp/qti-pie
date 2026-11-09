@@ -39,8 +39,11 @@ import {
   bindingAttributes,
   choiceKinds,
   countDefault,
+  gapKind,
   hotspotKinds,
   hottextKind,
+  modulesKind,
+  pciKind,
   readAttributes,
   references,
   referringRoots,
@@ -67,6 +70,7 @@ import type {
   FeedbackRef,
   FeedbackRefCardinality,
   FeedbackRefDeclaration,
+  GapInteraction,
   Hotspot,
   Hottext,
   Interaction,
@@ -74,6 +78,7 @@ import type {
   ItemMode,
   LeastCount,
   MostCount,
+  PciModuleForm,
   PlacedBinding,
   PlacedBindingBaseType,
   PlacedBindingCardinality,
@@ -96,9 +101,11 @@ import type {
   SectionScope,
   SectionTemplateName,
   SectionTemplateRef,
+  SectionTemplateRefCardinality,
   SectionTemplateRefDeclaration,
   Slider,
   TemplateRef,
+  TemplateRefCardinality,
   TemplateRefDeclaration,
 } from "#pantry/qti/interactions.ts";
 
@@ -144,6 +151,7 @@ export interface InteractionRows {
   readonly FeedbackRef: ReadonlyMap<string, Addition<typeof FeedbackRef>>;
   readonly FeedbackRefCardinality: ReadonlyMap<string, Addition<typeof FeedbackRefCardinality>>;
   readonly FeedbackRefDeclaration: ReadonlyMap<string, Addition<typeof FeedbackRefDeclaration>>;
+  readonly GapInteraction: ReadonlyMap<string, Addition<typeof GapInteraction>>;
   readonly Hotspot: ReadonlyMap<string, Addition<typeof Hotspot>>;
   readonly Hottext: ReadonlyMap<string, Addition<typeof Hottext>>;
   readonly Interaction: ReadonlyMap<string, Addition<typeof Interaction>>;
@@ -151,6 +159,7 @@ export interface InteractionRows {
   readonly ItemMode: ReadonlyMap<string, Addition<typeof ItemMode>>;
   readonly LeastCount: ReadonlyMap<string, Addition<typeof LeastCount>>;
   readonly MostCount: ReadonlyMap<string, Addition<typeof MostCount>>;
+  readonly PciModuleForm: ReadonlyMap<string, Addition<typeof PciModuleForm>>;
   readonly PrintedVariableRef: ReadonlyMap<string, Addition<typeof PrintedVariableRef>>;
   readonly PrintedVariableRefDeclaration: ReadonlyMap<
     string,
@@ -163,6 +172,7 @@ export interface InteractionRows {
   readonly SectionTemplateName: ReadonlyMap<string, Addition<typeof SectionTemplateName>>;
   readonly Slider: ReadonlyMap<string, Addition<typeof Slider>>;
   readonly TemplateRef: ReadonlyMap<string, Addition<typeof TemplateRef>>;
+  readonly TemplateRefCardinality: ReadonlyMap<string, Addition<typeof TemplateRefCardinality>>;
   readonly TemplateRefDeclaration: ReadonlyMap<string, Addition<typeof TemplateRefDeclaration>>;
 }
 
@@ -488,15 +498,39 @@ const declarationIn = (
 
 /**
  * The rows of one content reference relation, of its declarations, and of its declarations'
- * cardinalities where each has one (spec reading 159), each keyed alike. Only a feedback's
- * cardinality rows are a relation's ({@link FeedbackRefCardinality}): "Feedback outcome type" is
- * the one law over a content reference that reads its variable's cardinality.
+ * cardinalities where each has one (spec reading 159), each keyed alike. Only a feedback's and a
+ * template's cardinality rows are a relation's ({@link FeedbackRefCardinality},
+ * {@link TemplateRefCardinality}, the latter with its reference's kind, {@link kindedOf}):
+ * "Feedback outcome type" and "Template variable type" are the laws over a content reference that
+ * read its variable's cardinality (decision 432).
  */
 interface ReferenceRows<Reference, Declared, Cardinal> {
   readonly cardinalities: ReadonlyMap<string, Cardinal>;
   readonly declarations: ReadonlyMap<string, Declared>;
   readonly references: ReadonlyMap<string, Reference>;
 }
+
+/**
+ * Give each of a template reference relation's cardinality rows its reference's kind, which
+ * "Template variable type" reads (a portable custom interaction's `qti-template-variable` is free;
+ * decision 432): each cardinality row's key is its reference's.
+ *
+ * @param rows - The relation's references and cardinality rows, keyed alike.
+ * @param rows.cardinalities - The cardinality rows.
+ * @param rows.references - The references.
+ * @returns Each cardinality row with its reference's kind, under its key.
+ */
+const kindedOf = <Row extends object, Reference extends { readonly kind: unknown }>(rows: {
+  readonly cardinalities: ReadonlyMap<string, Row>;
+  readonly references: ReadonlyMap<string, Reference>;
+}): ReadonlyMap<string, Row & { readonly kind: Reference["kind"] }> =>
+  new Map(
+    [...rows.cardinalities].flatMap(([key, row]) =>
+      Option.toArray(Option.fromUndefinedOr(rows.references.get(key))).map(
+        ({ kind }) => [key, { ...row, kind }] as const,
+      ),
+    ),
+  );
 
 /**
  * Find the response declaration a binding names among its item's named declarations, the first in
@@ -574,6 +608,31 @@ const interactionsOf = (context: Context) =>
   );
 
 /**
+ * Build each portable custom interaction's module forms: an attribute form for its `module`
+ * attribute and an element form for its `qti-interaction-modules` child (R10-a).
+ *
+ * @param context - The document.
+ * @returns The rows, keyed by node and form.
+ */
+const pciModuleFormsOf = (context: Context) => {
+  const forms = new Map<string, Addition<typeof PciModuleForm>>();
+  for (const node of context.rows.nodes) {
+    if (node.kind === pciKind && context.attributes.get(node.id)?.has("module") === true) {
+      forms.set(keyOf([node.id, String(false)]), { element: false, node: node.id });
+    }
+
+    if (
+      node.kind === modulesKind &&
+      heldAt(context.kinds, node.parent, "the document's nodes") === pciKind
+    ) {
+      forms.set(keyOf([node.parent, String(true)]), { element: true, node: node.parent });
+    }
+  }
+
+  return forms;
+};
+
+/**
  * Build each choice's row.
  *
  * @param context - The document.
@@ -618,6 +677,25 @@ const choiceInteractionsOf = (
           ] as const,
       ),
   );
+
+/**
+ * Build each gap's interaction: a copy of its {@link ChoiceInteraction} row, which only a gap among
+ * the choices has (spec reading 169).
+ *
+ * @param choices - The document's choices' rows.
+ * @param owned - Their interactions.
+ * @returns The rows, keyed by the gap's node.
+ */
+const gapInteractionsOf = (
+  choices: ReadonlyMap<string, Addition<typeof Choice>>,
+  owned: ReadonlyMap<string, Addition<typeof ChoiceInteraction>>,
+) => {
+  const gaps = new Set(
+    [...choices.values()].filter(({ kind }) => kind === gapKind).map(({ node }) => node),
+  );
+
+  return new Map([...owned].filter(([, { node }]) => gaps.has(node)));
+};
 
 /**
  * Build each hottext's row, with its nearest interaction's kind.
@@ -753,14 +831,17 @@ const mostsOf = (context: Context, node: NodeRow<Composed>): bigint =>
 /**
  * Build each interaction's binding, and in an item, under its mode, each of its bound variables,
  * the response declaration each names, where one does, whatever its cardinality spells, and that
- * declaration's cardinality and base type, each where it has one (spec reading 159).
+ * declaration's cardinality and base type, each where it has one (spec reading 159). A cardinality
+ * row's `gaps` is its interaction's count of the gaps it owns in its own document:
+ * {@link withPackageChoices} adds those a fragment placed in it holds.
  *
  * @param context - The document.
+ * @param gaps - Each of the document's interactions' count of gaps in the document.
  * @returns The `Binding` rows, keyed by node, and the `BindingName` rows of every document and
  *   the `BoundVariable`, `BindingDeclaration`, `BindingCardinality` and `BindingBaseType` rows of
  *   an item, each keyed by (node, attribute).
  */
-const bindingsOf = (context: Context) => {
+const bindingsOf = (context: Context, gaps: ReadonlyMap<NodeId, bigint>) => {
   const bindings = new Map<string, Addition<typeof Binding>>();
   const names = new Map<string, Addition<typeof BindingName>>();
   const bound = new Map<string, Addition<typeof BoundVariable>>();
@@ -810,6 +891,7 @@ const bindingsOf = (context: Context) => {
                 baseTypes,
                 cardinality,
                 declaration: variable.node,
+                gaps: heldAt(gaps, node.id, "the document's interactions"),
                 kind: node.kind,
                 mosts: mostsOf(context, node),
                 node: node.id,
@@ -1206,9 +1288,17 @@ const sectionPrints = [references.printed, references.variable] as const;
 export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): InteractionRows => {
   const context = contextOf(doc, ids);
   const read = interactionAttributesOf(context);
-  const { baseTyped, bindings, bound, cardinalities, declarations, names } = bindingsOf(context);
   const choices = choicesOf(context);
   const owned = choiceInteractionsOf(context, choices);
+  const gaps = gapInteractionsOf(choices, owned);
+  const interactionRows = interactionsOf(context);
+  const { baseTyped, bindings, bound, cardinalities, declarations, names } = bindingsOf(
+    context,
+    choiceCountsOf(
+      [...interactionRows.values()].map(({ node }) => node),
+      gaps.values(),
+    ),
+  );
   const hottexts = hottextsOf(context);
   const aria = ariaOf(context);
   const counts = boundsOf(context, owned);
@@ -1240,9 +1330,10 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     FeedbackRef: feedbacks.references,
     FeedbackRefCardinality: feedbacks.cardinalities,
     FeedbackRefDeclaration: feedbacks.declarations,
+    GapInteraction: gaps,
     Hotspot: hotspotsOf(context),
     Hottext: hottexts,
-    Interaction: interactionsOf(context),
+    Interaction: interactionRows,
     InteractionAttribute: read,
     ItemMode: new Map(
       Option.toArray(context.itemMode).map(
@@ -1251,6 +1342,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     ),
     LeastCount: counts.leasts,
     MostCount: counts.mosts,
+    PciModuleForm: pciModuleFormsOf(context),
     PrintedVariableRef: new Map(prints.flatMap(({ references: held }) => [...held])),
     PrintedVariableRefDeclaration: new Map(prints.flatMap(({ declarations: held }) => [...held])),
     ReferringDocument: new Map(
@@ -1264,41 +1356,65 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     SectionTemplateName: sectionNamesOf(context, read, sectionTemplates, unfragmentedRoots),
     Slider: slidersOf(context),
     TemplateRef: templates.references,
+    TemplateRefCardinality: kindedOf(templates),
     TemplateRefDeclaration: templates.declarations,
   };
 };
 
 /**
- * Count the choices each bound's node owns across a package: every document's
- * {@link ChoiceInteraction} rows, a fragment's placed in an interaction among them (spec reading
- * 117: a fragment's choices are its item's, as its merged document holds them).
+ * A package's counts of the choices each bound's node owns and of the gaps each interaction owns
+ * ({@link packageChoicesOf}).
+ */
+export interface PackageChoices {
+  /**
+   * Each bound's count of choices, by its node, an interaction's the count `Interaction.choices`
+   * draws.
+   */
+  readonly choices: ReadonlyMap<NodeId, bigint>;
+  /**
+   * Each interaction's count of gaps, by its node, the count `Interaction.gaps` draws.
+   */
+  readonly gaps: ReadonlyMap<NodeId, bigint>;
+}
+
+/**
+ * Count the choices each bound's node owns, and the gaps each interaction owns, across a package:
+ * every document's {@link ChoiceInteraction} and {@link GapInteraction} rows, a fragment's placed in
+ * an interaction among them (spec reading 117: a fragment's choices are its item's, as its merged
+ * document holds them).
  *
  * @param parts - Every document's interaction rows.
- * @returns Each bound's count, by its node, an interaction's the count `Interaction.choices`
- * draws.
+ * @returns The counts.
  */
-export const packageChoicesOf = (parts: Iterable<InteractionRows>): ReadonlyMap<NodeId, bigint> => {
+export const packageChoicesOf = (parts: Iterable<InteractionRows>): PackageChoices => {
   const read = [...parts];
 
-  return choiceCountsOf(
-    read.flatMap(({ CountBound: bounds }) => [...bounds.values()].map(({ node }) => node)),
-    read.flatMap(({ ChoiceInteraction: owned }) => [...owned.values()]),
-  );
+  return {
+    choices: choiceCountsOf(
+      read.flatMap(({ CountBound: bounds }) => [...bounds.values()].map(({ node }) => node)),
+      read.flatMap(({ ChoiceInteraction: owned }) => [...owned.values()]),
+    ),
+    gaps: choiceCountsOf(
+      read.flatMap(({ Interaction: held }) => [...held.values()].map(({ node }) => node)),
+      read.flatMap(({ GapInteraction: gaps }) => [...gaps.values()]),
+    ),
+  };
 };
 
 /**
  * Give each bound in one document's rows its package count of choices, which `CountBound.choices`
  * copies from `Interaction.choices` for an interaction, and its `LeastCount` and `MostCount` from
- * `CountBound`.
+ * `CountBound`; and each binding's cardinality row its interaction's package count of gaps, which
+ * `BindingCardinality.gaps` copies from `Interaction.gaps`.
  *
  * @param rows - A document's interaction rows.
- * @param counts - The package's counts ({@link packageChoicesOf}), whose bounds hold the
- *   document's.
- * @returns The same rows, each bound and count recounted.
+ * @param counts - The package's counts ({@link packageChoicesOf}), whose bounds and interactions
+ *   hold the document's.
+ * @returns The same rows, each bound, count and binding cardinality recounted.
  */
 export const withPackageChoices = (
   rows: InteractionRows,
-  counts: ReadonlyMap<NodeId, bigint>,
+  counts: PackageChoices,
 ): InteractionRows => {
   const recounted = <Row extends Pick<Addition<typeof CountBound>, "choices" | "node">>(
     bounds: ReadonlyMap<string, Row>,
@@ -1306,12 +1422,18 @@ export const withPackageChoices = (
     new Map(
       [...bounds].map(([key, bound]) => [
         key,
-        { ...bound, choices: heldAt(counts, bound.node, "the package's counted bounds") },
+        { ...bound, choices: heldAt(counts.choices, bound.node, "the package's counted bounds") },
       ]),
     );
 
   return {
     ...rows,
+    BindingCardinality: new Map(
+      [...rows.BindingCardinality].map(([key, binding]) => [
+        key,
+        { ...binding, gaps: heldAt(counts.gaps, binding.node, "the package's interactions") },
+      ]),
+    ),
     CountBound: recounted(rows.CountBound),
     LeastCount: recounted(rows.LeastCount),
     MostCount: recounted(rows.MostCount),
@@ -1344,6 +1466,10 @@ export interface SectionRows {
   >;
   readonly SectionScope: ReadonlyMap<string, Addition<typeof SectionScope>>;
   readonly SectionTemplateRef: ReadonlyMap<string, Addition<typeof SectionTemplateRef>>;
+  readonly SectionTemplateRefCardinality: ReadonlyMap<
+    string,
+    Addition<typeof SectionTemplateRefCardinality>
+  >;
   readonly SectionTemplateRefDeclaration: ReadonlyMap<
     string,
     Addition<typeof SectionTemplateRefDeclaration>
@@ -1494,9 +1620,9 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
  * and of an included fragment under an item, and under it each of the document's references of each
  * class, under the assembly's root kind, with its declaration row where the name is that of an
  * assembly's declaration of a kind it may name, whatever its cardinality spells, and a feedback's
- * cardinality row where that declaration has one (spec reading 159): a built-in of the assembly's
- * root has none, and its law reads `BuiltInVariable`; a name no allowed declaration holds has none,
- * and its law refuses it (lane NIL's NS2: never the nil uuid).
+ * or a template's cardinality row where that declaration has one (spec reading 159, decision 432):
+ * a built-in of the assembly's root has none, and its law reads `BuiltInVariable`; a name no
+ * allowed declaration holds has none, and its law refuses it (lane NIL's NS2: never the nil uuid).
  *
  * @param input - The package's rows the placements read.
  * @param input.baseTypes - Every declaration's base type, where it has one (Q5.08's
@@ -1583,6 +1709,7 @@ export const sectionRowsOf = (input: {
       ),
     ),
     SectionTemplateRef: templates.references,
+    SectionTemplateRefCardinality: kindedOf(templates),
     SectionTemplateRefDeclaration: templates.declarations,
   };
 };
@@ -1626,7 +1753,9 @@ export interface PlacedBindingRows {
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
  *   `assembledRowsOf`).
  * @param input.mosts - Every document's most counts that have a value ({@link rowsOf}'s
- *   `MostCount`), whose nodes a placed binding's `mosts` counts.
+ *   `MostCount`), whose nodes a placed binding's `mosts` counts. A placed binding's `gaps` counts
+ *   the gaps among `input.choices` whose nearest is its interaction, the {@link GapInteraction}
+ *   rows its interaction owns.
  * @param input.names - Every document's binding attributes ({@link rowsOf}'s `BindingName`).
  * @returns The rows.
  */
@@ -1642,6 +1771,10 @@ export const placedBindingRowsOf = (input: {
   readonly names: Iterable<Addition<typeof BindingName>>;
 }): PlacedBindingRows => {
   const counted = new Set([...input.mosts].map(({ node }) => node));
+  const gapsAt = Map.groupBy(
+    [...input.choices].filter(({ kind }) => kind === gapKind),
+    ({ nearest }) => nearest,
+  );
   const declarations = namedVariablesOf(input.declarations, input.cardinalities, input.baseTypes);
   const modes = new Map([...input.adaptive].map((row) => [row.document, row.adaptive] as const));
   const placements = [...input.instances].flatMap((root) => instancesOf(root));
@@ -1738,6 +1871,7 @@ export const placedBindingRowsOf = (input: {
               baseTypes: typedCountOf(variable.baseType),
               cardinality,
               declaration: variable.node,
+              gaps: BigInt(gapsAt.get(binding.node)?.length ?? 0),
               instance: binding.instance,
               kind: binding.kind,
               mosts: counted.has(binding.node) ? 1n : 0n,

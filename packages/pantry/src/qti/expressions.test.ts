@@ -9,7 +9,7 @@
  */
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 import { contentEnds, stepOf } from "#pantry/grammar/content.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import {
@@ -26,6 +26,7 @@ import {
   grammar,
   OperatorArity,
   ValueDomainOf,
+  VariableReference,
 } from "#pantry/grammar/install.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
@@ -79,6 +80,7 @@ import {
 import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
+import { itemRefKind, linkResourceTypes } from "#pantry/qti/tests.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -458,6 +460,368 @@ describe("qti/expressions.ts, arity", () => {
           assert.isTrue(admits(version, kind, Number(count)), `${kind} ${count} in ${version}`);
         }
       }
+    }
+  });
+});
+
+/**
+ * A value a stored selection compares.
+ */
+type Value = boolean | string;
+
+/**
+ * A selection's predicate term as grizzle keeps it, each field optional.
+ */
+interface StoredTerm {
+  readonly arg?: StoredTerm;
+  readonly args?: readonly StoredTerm[];
+  readonly field?: string;
+  readonly fn?: string;
+  readonly kind: string;
+  readonly left?: StoredTerm;
+  readonly op?: string;
+  readonly right?: StoredTerm;
+  readonly value?: Value;
+  readonly values?: readonly Value[];
+}
+
+const ValueSchema = Schema.Union([Schema.Boolean, Schema.String]);
+
+const isText = Schema.is(Schema.String);
+
+const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
+  arg: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  args: Schema.optionalKey(
+    Schema.Array(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  ),
+  field: Schema.optionalKey(Schema.String),
+  fn: Schema.optionalKey(Schema.String),
+  kind: Schema.String,
+  left: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  op: Schema.optionalKey(Schema.String),
+  right: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  value: Schema.optionalKey(ValueSchema),
+  values: Schema.optionalKey(Schema.Array(ValueSchema)),
+});
+
+const SideSchema = Schema.Struct({
+  source: Schema.Union([
+    Schema.Struct({
+      desc: Schema.Struct({ predicate: StoredTermSchema }),
+      relation: Schema.Struct({ name: Schema.String }),
+    }),
+    Schema.Struct({ name: Schema.String }),
+  ]),
+  terms: Schema.Array(Schema.Unknown),
+});
+
+const ContainedSchema = Schema.Struct({
+  kind: Schema.Literal("contained"),
+  left: SideSchema,
+  right: SideSchema,
+});
+
+/**
+ * A row's values by field, as a selection's predicate reads them.
+ */
+type Row = Readonly<Record<string, Value>>;
+
+/**
+ * Evaluate a stored predicate term on a row. A term of a kind this does not read is no value, so a
+ * predicate that holds one never holds.
+ *
+ * @param term - The term.
+ * @param row - The row.
+ * @returns Its value, none for a term of another kind.
+ */
+const valueOf = (term: StoredTerm, row: Row): Value | undefined => {
+  const holds = (operand: StoredTerm | undefined) =>
+    operand !== undefined && valueOf(operand, row) === true;
+  const readers = new Map<string, () => Value | undefined>([
+    ["and", () => (term.args ?? []).every((arg) => holds(arg))],
+    [
+      "compare",
+      () =>
+        term.left !== undefined && term.right !== undefined
+          ? (valueOf(term.left, row) === valueOf(term.right, row)) === (term.op === "eq")
+          : undefined,
+    ],
+    [
+      "closedAt",
+      () => {
+        // A closed lookup of `VariableReference`'s spelling by a row's kind and attribute.
+        const [kind, attribute] = (term.args ?? []).map((arg) => valueOf(arg, row));
+
+        return term.field === "spelling"
+          ? VariableReference.rows.find((r) => r.kind === kind && r.attribute === attribute)
+              ?.spelling
+          : undefined;
+      },
+    ],
+    [
+      "compute",
+      () => {
+        const [text, pattern] = (term.args ?? []).map((arg) => valueOf(arg, row));
+
+        return term.fn === "matches" && isText(text) && isText(pattern)
+          ? new RegExp(pattern, "u").test(text)
+          : undefined;
+      },
+    ],
+    ["field", () => (term.field === undefined ? undefined : row[term.field])],
+    [
+      "in",
+      () => {
+        const value = term.arg === undefined ? undefined : valueOf(term.arg, row);
+
+        return value === undefined ? undefined : (term.values ?? []).includes(value);
+      },
+    ],
+    ["literal", () => term.value],
+    ["not", () => term.arg !== undefined && valueOf(term.arg, row) === false],
+    ["or", () => (term.args ?? []).some((arg) => holds(arg))],
+  ]);
+
+  return readers.get(term.kind)?.();
+};
+
+type StoredSide = typeof SideSchema.Type;
+
+/**
+ * Whether a side of a statement holds a row: every row of a whole relation, a selection's row
+ * where its predicate holds.
+ *
+ * @param side - The side.
+ * @param row - The row.
+ * @returns Whether it holds it.
+ */
+const selects = (side: StoredSide, row: Row): boolean =>
+  "desc" in side.source ? valueOf(side.source.desc.predicate, row) === true : true;
+
+const relationOf = (side: StoredSide): string =>
+  "desc" in side.source ? side.source.relation.name : side.source.name;
+
+/**
+ * The expression layer's containments from one relation's terms into another's.
+ *
+ * @param from - The contained side's relation and terms.
+ * @param to - The containing side's relation and terms.
+ * @returns The containments.
+ */
+const containmentsOf = (
+  from: readonly [string, ...string[]],
+  to: readonly [string, ...string[]],
+): readonly (typeof ContainedSchema.Type)[] =>
+  expressionLaws.flatMap((statement) =>
+    Option.toArray(Schema.decodeUnknownOption(ContainedSchema)(statement)).filter(
+      ({ left, right }) =>
+        relationOf(left) === from[0] &&
+        relationOf(right) === to[0] &&
+        left.terms.length === from.length - 1 &&
+        right.terms.length === to.length - 1 &&
+        left.terms.every((term, at) => term === from[at + 1]) &&
+        right.terms.every((term, at) => term === to[at + 1]),
+    ),
+  );
+
+const CheckSchema = Schema.Struct({
+  desc: Schema.Struct({ predicate: StoredTermSchema }),
+  kind: Schema.Literal("check"),
+  name: Schema.String,
+  relation: Schema.Struct({ name: Schema.String }),
+});
+
+describe("qti/expressions.ts, a test's braced reference that names no variable (reading R15-k)", () => {
+  // Oracle: information model §9.3.4, "if a string appears to be a reference to a template or
+  // outcome variable but there is no variable with the given name it should be treated simply as
+  // string value", over the stored statements, evaluated on a row each.
+  const pattern = { attribute: "pattern", kind: "qti-pattern-match" } as const;
+  const bare = { attribute: "identifier", kind: "qti-variable" } as const;
+  const unresolved = { form: "unsplit", identifier: "NOSUCH", source: "none" } as const;
+  const [resolving, ...more] = containmentsOf(
+    ["AssembledReference", "assembly", "node", "attribute"],
+    ["Reading", "assembly", "node", "attribute"],
+  );
+  const [declared, ...moreChecks] = expressionLaws.flatMap((statement) =>
+    Option.toArray(Schema.decodeUnknownOption(CheckSchema)(statement)).filter(
+      ({ name, relation }) => name === "Variable_declared" && relation.name === "Reading",
+    ),
+  );
+
+  it("needs no resolving reading of a braced reference, and one of a bare one", () => {
+    assert.deepStrictEqual(more, []);
+    assert.isDefined(resolving, "the reference's resolving reading");
+    if (resolving !== undefined) {
+      const reference = { role: "variable" };
+
+      assert.isFalse(selects(resolving.left, { ...reference, ...pattern }), "a braced pattern");
+      assert.isTrue(selects(resolving.left, { ...reference, ...bare }), "a bare identifier");
+      assert.isFalse(
+        selects(resolving.left, {
+          ...reference,
+          attribute: "identifier",
+          kind: "qti-set-outcome-value",
+        }),
+        "a setter's is the other containment's",
+      );
+    }
+  });
+
+  it("declares a braced name no variable a string value, and a bare one still refused", () => {
+    assert.deepStrictEqual(moreChecks, []);
+    assert.isDefined(declared, "the reading's Variable_declared");
+    if (declared !== undefined) {
+      const holds = (row: Row) => valueOf(declared.desc.predicate, row) === true;
+
+      assert.isTrue(holds({ ...unresolved, ...pattern }), "a braced pattern naming nothing");
+      assert.isFalse(holds({ ...unresolved, ...bare }), "a bare identifier naming nothing");
+      assert.isTrue(holds({ ...unresolved, ...bare, source: "declared" }));
+      assert.isTrue(holds({ ...unresolved, ...bare, form: "split" }));
+      assert.isTrue(holds({ ...unresolved, ...bare, identifier: "A.B" }));
+    }
+  });
+});
+
+describe("qti/expressions.ts, an LTI item ref", () => {
+  const [lti] = linkResourceTypes;
+  const reading = {
+    form: "split",
+    found: true,
+    kind: "qti-variable",
+    namedKind: itemRefKind,
+    number: "",
+    replaced: false,
+    resourceType: lti ?? "none",
+    source: "none",
+  } as const;
+
+  it("resolves a prefixed reference through an LTI item ref that names no variable, unchecked (reading 110)", () => {
+    // Oracle: reading 110 as p15-2.1 amends it: an LTI link has no declarations to resolve
+    // against, so `LTI01.SCORE` is accepted unchecked.
+    assert.isDefined(lti, "an LTI resource type");
+
+    const [resolving, ...more] = containmentsOf(
+      ["AssembledReference", "assembly", "node", "attribute"],
+      ["Reading", "assembly", "node", "attribute"],
+    );
+    assert.isDefined(resolving, "the reference's resolving reading");
+    assert.deepStrictEqual(more, []);
+    if (resolving !== undefined) {
+      assert.isTrue(selects(resolving.right, reading), "an LTI item ref's reading resolves");
+      assert.isFalse(
+        selects(resolving.right, { ...reading, resourceType: "imsqti_item_xmlv3p0" }),
+        "an item ref's item that declares no such variable still does not",
+      );
+      assert.isFalse(selects(resolving.right, { ...reading, resourceType: "none" }));
+      assert.isFalse(selects(resolving.right, { ...reading, found: false }));
+      assert.isFalse(
+        selects(resolving.right, { ...reading, kind: "qti-set-outcome-value" }),
+        "a setter's prefixed reading resolves nothing (reading 112)",
+      );
+      assert.isFalse(selects(resolving.right, { ...reading, form: "name" }));
+    }
+  });
+
+  it("judges a variable mapping's source in an item, not in an LTI link's none", () => {
+    // Oracle: reading 110: a variable mapping under an LTI item ref names no declaration of an
+    // item (its MappingItemRefType names the link, and it has no MappingSourceDeclaration), and is
+    // accepted unchecked, as is a reading through it; a mapping under an item ref that names an
+    // item or a missing document, or one with no target (no href, or nothing the package lists,
+    // so no MappingItemRefType, decision 428), must still have its source's declaration.
+    assert.isDefined(lti, "an LTI resource type");
+
+    // A mapping with no target is selected by its count of type rows, a bigint the shared
+    // evaluator does not read, so its one containment is decoded here whole.
+    const untargeted = expressionLaws.flatMap((statement) =>
+      Option.toArray(
+        Schema.decodeUnknownOption(
+          Schema.Struct({
+            kind: Schema.Literal("contained"),
+            left: Schema.Struct({
+              source: Schema.Struct({
+                desc: Schema.Struct({
+                  predicate: Schema.Struct({
+                    kind: Schema.String,
+                    left: Schema.Struct({ field: Schema.String }),
+                    op: Schema.String,
+                    right: Schema.Struct({ value: Schema.BigInt }),
+                  }),
+                }),
+                relation: Schema.Struct({ name: Schema.Literal("MappingItemRef") }),
+              }),
+              terms: Schema.Tuple([Schema.Literal("node")]),
+            }),
+            right: Schema.Struct({
+              source: Schema.Struct({ name: Schema.Literal("MappingSourceDeclaration") }),
+              terms: Schema.Tuple([Schema.Literal("node")]),
+            }),
+          }),
+        )(statement),
+      ).map(({ left }) => left.source.desc.predicate),
+    );
+    assert.deepStrictEqual(
+      untargeted.map(({ kind, left, op, right }) => [kind, op, left.field, right.value]),
+      [["compare", "eq", "types", 0n]],
+      "a mapping with no target, no type row, must have its source's declaration",
+    );
+
+    const [held, ...moreHeld] = containmentsOf(
+      ["MappingItemRefType", "node"],
+      ["MappingSourceDeclaration", "node"],
+    );
+    assert.isDefined(held, "the mapping's source declaration");
+    assert.deepStrictEqual(moreHeld, []);
+    if (held !== undefined) {
+      assert.isFalse(selects(held.left, { type: lti ?? "none" }), "an LTI link's mapping");
+      assert.isTrue(selects(held.left, { type: "imsqti_item_xmlv3p0" }), "an item's mapping");
+    }
+
+    const [mappedReading, ...moreReadings] = containmentsOf(
+      [
+        "Reading",
+        "named",
+        "variable",
+        "declaration",
+        "declarationKind",
+        "declCardinalities",
+        "declBaseTypes",
+      ],
+      [
+        "MappingSourceDeclaration",
+        "itemRef",
+        "target",
+        "declaration",
+        "declarationKind",
+        "declCardinalities",
+        "declBaseTypes",
+      ],
+    );
+    assert.isDefined(mappedReading, "a mapped reading's source declaration");
+    assert.deepStrictEqual(moreReadings, []);
+    if (mappedReading !== undefined) {
+      const mapped = { ...reading, source: "mapped" };
+      assert.isFalse(
+        selects(mappedReading.left, mapped),
+        "a reading through an LTI link's mapping",
+      );
+      assert.isTrue(
+        selects(mappedReading.left, { ...mapped, resourceType: "imsqti_item_xmlv3p0" }),
+        "a reading through an item's mapping",
+      );
+    }
+  });
+
+  it("still judges a template default under an LTI item ref, which has no template variables", () => {
+    // Oracle: reading 110 keeps a template default under an LTI item ref refused (p15-37's brief):
+    // every template default must have its target, which only an item's declaration gives.
+    const [held, ...more] = containmentsOf(
+      ["TemplateDefault", "node"],
+      ["TemplateDefaultTarget", "node"],
+    );
+    assert.isDefined(held, "the template default's target");
+    assert.deepStrictEqual(more, []);
+    if (held !== undefined) {
+      assert.isTrue(selects(held.left, { itemRef: "11111111-1111-4111-8111-111111111111" }));
     }
   });
 });

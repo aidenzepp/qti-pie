@@ -59,6 +59,8 @@ import {
   referenceLawsByName,
   Literal,
   LiteralTyped,
+  MappingItemRef,
+  MappingItemRefType,
   MappingLookup,
   MappingSourceDeclaration,
   NameLookup,
@@ -120,6 +122,7 @@ import {
   FeedbackRef,
   FeedbackRefCardinality,
   FeedbackRefDeclaration,
+  GapInteraction,
   Hotspot,
   Hottext,
   Interaction,
@@ -128,6 +131,7 @@ import {
   ItemMode,
   LeastCount,
   MostCount,
+  PciModuleForm,
   PlacedBinding,
   PlacedBindingBaseType,
   PlacedBindingCardinality,
@@ -150,9 +154,11 @@ import {
   SectionScope,
   SectionTemplateName,
   SectionTemplateRef,
+  SectionTemplateRefCardinality,
   SectionTemplateRefDeclaration,
   Slider,
   TemplateRef,
+  TemplateRefCardinality,
   TemplateRefDeclaration,
 } from "#pantry/qti/interactions.ts";
 import {
@@ -194,14 +200,25 @@ import {
   ObjectTitle,
   ResourceLomGeneral,
   StatisticDate,
+  UsageBaseType,
   UsageValue,
+  UsageValueBaseType,
 } from "#pantry/qti/metadata.ts";
 import { Chars, EndCharacter, nodeLawsByName, Prefix } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
+import { catalogLawsByName } from "#pantry/qti/catalog.ts";
 import { HeaderToken, htmlLawsByName } from "#pantry/qti/html.ts";
 import { identityLawsByName, TextIdref } from "#pantry/qti/identity.ts";
 import { operatorLawsByName, ToleranceToken } from "#pantry/qti/operators.ts";
-import { HrefParams, packageLawsByName, Reference, ReferencePath } from "#pantry/qti/package.ts";
+import {
+  HrefParams,
+  packageLawsByName,
+  Reference,
+  ReferencePath,
+  TextReference,
+  TextReferencePath,
+} from "#pantry/qti/package.ts";
+import { mathmlLawsByName } from "#pantry/qti/mathml.ts";
 import { quotationLawsByName } from "#pantry/qti/quotation.ts";
 import { SectionSelection, SelectForm, testLawsByName, testRelations } from "#pantry/qti/tests.ts";
 import { Qti } from "#pantry/qti/schema.ts";
@@ -232,7 +249,9 @@ const codecRules = [
  * href the importer reads no name from (reading 102, `overlays/package.ts` `Limit`), and
  * `fragment-context` the one context an included fragment's rows are judged in (reading 117,
  * `tests.ts` `Fragment_context`): a fragment two includes place in different interactions would
- * need two rows per node.
+ * need two rows per node, and `remote-section` a section ref whose href resolves outside the
+ * package (reading 170, `tests.ts` `Remote_section_ref`): the import is offline and never fetches
+ * the section, which is the test's own content, so it cannot assemble the test.
  *
  * A value over the bound is valid QTI the model cannot key, so its verdict says so by its rule. The
  * import meets it as the bound's pattern law: grizzle's encoder and its family fill check a text's
@@ -245,6 +264,7 @@ export const limitRules = [
   "key-text-bound",
   "href-form",
   "fragment-context",
+  "remote-section",
 ] as const satisfies readonly (typeof precedence)[number][];
 
 /**
@@ -647,20 +667,31 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
   [primaryKeyOf("DocumentId", "node"), "DocumentId key"],
   [primaryKeyOf("XmlLang", "node"), "E1 derived"],
   [primaryKeyOf("DocumentLang", "document", "lang"), "E1 derived"],
+  [primaryKeyOf("ShareFragment", "node"), "E1 derived"],
   [primaryKeyOf("GeneralNamed", "general"), "E1 derived"],
   [primaryKeyOf("GeneralObject", "general"), "E1 derived"],
   [primaryKeyOf("DocumentGenerals", "document"), "E1 derived"],
   [primaryKeyOf("GeneralLang", "general", "lang"), "E1 derived"],
+  [primaryKeyOf("PlacedBodyXmlLang", "instance", "node"), "E1 derived"],
   [primaryKeyOf("PlacedXmlLang", "instance", "node"), "E1 derived"],
   [primaryKeyOf("AssembledLang", "assembly", "lang"), "E1 derived"],
   [primaryKeyOf("PlacedGeneralLang", "general", "lang"), "E1 derived"],
   [primaryKeyOf("SsmlAttribute", "node", "name"), "E1 derived"],
+  [primaryKeyOf("BodyXmlLang", "node"), "E1 derived"],
+  [primaryKeyOf("CatalogScope", "node"), "E1 derived"],
   [primaryKeyOf("SsmlScope", "node"), "E1 derived"],
   [primaryKeyOf("FragmentValue", "fragment", "kind", "value"), "E1 derived"],
   [primaryKeyOf("LomLanguage", "node"), "E1 derived"],
   [primaryKeyOf("ResourceLomLanguageSet", "general", "lang"), "E1 derived"],
   [primaryKeyOf("Quotation", "node"), "E1 derived"],
   [primaryKeyOf("LabelUse", "node"), "Label tools"],
+  [primaryKeyOf("CardSupport", "node"), "E1 derived"],
+  [primaryKeyOf("DefaultEntry", "node"), "E1 derived"],
+  [primaryKeyOf("CatalogRef", "node"), "E1 derived"],
+  [primaryKeyOf("CatalogId", "node"), "E1 derived"],
+  [primaryKeyOf("CatalogTarget", "document", "id"), "E1 derived"],
+  [primaryKeyOf("PlacedCatalogRef", "instance", "id"), "E1 derived"],
+  [primaryKeyOf("AssembledCatalog", "assembly", "id"), "E1 derived"],
   [primaryKeyOf("TableScope", "node"), "E1 derived"],
   [primaryKeyOf("CellHeaders", "node"), "E1 derived"],
   [primaryKeyOf("HeaderToken", "node", "at"), "E1 derived"],
@@ -755,7 +786,9 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     ObjectTitle,
     ResourceLomGeneral,
     StatisticDate,
+    UsageBaseType,
     UsageValue,
+    UsageValueBaseType,
   ].map(
     ({ name, primaryKey }) =>
       [
@@ -789,6 +822,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     FeedbackRef,
     FeedbackRefCardinality,
     FeedbackRefDeclaration,
+    GapInteraction,
     Hotspot,
     Hottext,
     Interaction,
@@ -796,6 +830,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     ItemMode,
     LeastCount,
     MostCount,
+    PciModuleForm,
     PlacedBinding,
     PlacedBindingBaseType,
     PlacedBindingCardinality,
@@ -818,9 +853,11 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     SectionScope,
     SectionTemplateName,
     SectionTemplateRef,
+    SectionTemplateRefCardinality,
     SectionTemplateRefDeclaration,
     Slider,
     TemplateRef,
+    TemplateRefCardinality,
     TemplateRefDeclaration,
   ].map(
     ({ name, primaryKey }) =>
@@ -856,6 +893,8 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     HeldType,
     Literal,
     LiteralTyped,
+    MappingItemRef,
+    MappingItemRefType,
     MappingLookup,
     MappingSourceDeclaration,
     NameLookup,
@@ -890,13 +929,31 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
   // texts, none NULL, so no row breaks this. A token past its keyText bound is refused by the
   // token's own pattern law, named by keyText's row, "Key text bound".
   [generatedOf(ReferenceSegment, "token"), "E1 derived"],
-  ...[Reference, ReferencePath].map(
+  ...[Reference, ReferencePath, TextReference, TextReferencePath].map(
     ({ name, primaryKey }) =>
       [
         { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
         "Reference overlay",
       ] as const,
   ),
+  [primaryKeyOf("MathApply", "node"), "E1 derived"],
+  [primaryKeyOf("MathArgument", "node"), "E1 derived"],
+  [primaryKeyOf("MathQualifier", "node"), "E1 derived"],
+  [primaryKeyOf("CnAttribute", "node", "name"), "E1 derived"],
+  [primaryKeyOf("CnPartText", "node", "part"), "E1 derived"],
+  [primaryKeyOf("CnCount", "node"), "E1 derived"],
+  [primaryKeyOf("CnSlot", "node", "part"), "E1 derived"],
+  [primaryKeyOf("MathCn", "node"), "E1 derived"],
+  [primaryKeyOf("CellLeaf", "cell", "at"), "E1 derived"],
+  [primaryKeyOf("MathAction", "node"), "E1 derived"],
+  [primaryKeyOf("MathAlignGroup", "node"), "E1 derived"],
+  [primaryKeyOf("MathAlignScope", "node"), "E1 derived"],
+  [primaryKeyOf("MathCell", "node"), "E1 derived"],
+  [primaryKeyOf("MathDir", "node"), "E1 derived"],
+  [primaryKeyOf("MathRank", "node"), "E1 derived"],
+  [primaryKeyOf("PlacedMathRank", "instance", "node"), "E1 derived"],
+  [primaryKeyOf("PlacedShareTarget", "instance", "node"), "E1 derived"],
+  [primaryKeyOf("ShareTarget", "node"), "E1 derived"],
 ];
 
 /**
@@ -924,6 +981,8 @@ export const namedLaws: readonly LawsByName[] = [
   htmlLawsByName,
   quotationLawsByName,
   operatorLawsByName,
+  catalogLawsByName,
+  mathmlLawsByName,
   testLawsByName,
 ];
 

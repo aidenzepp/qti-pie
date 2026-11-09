@@ -105,6 +105,7 @@ import {
 } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
+import { itemKind, testKind } from "#pantry/qti/tests.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
@@ -147,7 +148,9 @@ export const valueSetKinds = ["qti-default-value", "qti-correct-response"] as co
  * and 5.151.1 ("The identifiers of the built-in session variables are reserved. They are
  * completionStatus, numAttempts and duration"). Spec reading 72: the name is spelled exactly, with
  * no alias, so `completion_status` is an ordinary identifier. Each name is read once, though
- * `BuiltInVariable` holds `duration` under an item's roots and a test's alike.
+ * `BuiltInVariable` holds `duration` under an item's roots and a test's alike. Which of them a
+ * declaration may not name depends on its parent: {@link itemSessionVariables} and
+ * {@link testSessionVariables}.
  *
  * The built-in context variable `QTI_CONTEXT` is no session variable: the implementation guide
  * declares it explicitly, "an explicit (though unnecessary) qti-context-declaration of QTI_CONTEXT"
@@ -162,24 +165,59 @@ export const sessionVariables = [
 ];
 
 /**
- * A name the specification types wherever it is declared: the declaration kind a declaration of the
- * name must be, and the base type it must have.
+ * The session variables the processing of one root holds, which are the ones a declaration under
+ * that root's kind may not name.
+ *
+ * @param root - The root kind.
+ * @returns The names, each once.
+ */
+const sessionVariablesOf = (root: string): readonly string[] => [
+  ...new Set(
+    BuiltInVariable.rows
+      .filter(
+        ({ declaration, root: held }) => held === root && declaration !== "qti-context-declaration",
+      )
+      .map(({ variable }) => variable),
+  ),
+];
+
+/**
+ * The session variables an item's declaration may not name: the three of an item, `numAttempts`,
+ * `duration` and `completionStatus` (reading 168).
+ */
+export const itemSessionVariables = sessionVariablesOf(itemKind);
+
+/**
+ * The session variables a test's declaration may not name: `duration` alone, since a test's own
+ * `numAttempts` and `completionStatus` are ordinary names there (reading 168).
+ */
+export const testSessionVariables = sessionVariablesOf(testKind);
+
+/**
+ * A name the specification types where it is declared: the declaration kind a declaration of the
+ * name must be, the base type it must have, and the documents that type binds, `any` of them or
+ * the items' only.
  */
 interface ReservedBaseType {
   readonly baseType: (typeof BaseType.handles)[number];
   readonly identifier: string;
   readonly kind: (typeof DeclarationKind.handles)[number];
+  readonly root: "any" | "item";
 }
 
 /**
- * The outcome names the specification types (information model §2.2.2.3, Outcomes Variable:
- * "SCORE MUST be a float", "MAXSCORE MUST be a float", "PASSED MUST be a boolean"). An outcome of
- * another name is untyped by them.
+ * The outcome names the specification types (information model §2.2.2.3, Outcomes Variable: "Items
+ * that declare a numeric outcome variable ... should use the outcome name 'SCORE' ... SCORE MUST be
+ * a float", "Items that declare a maximum score ... MAXSCORE MUST be a float", "Items or tests that
+ * want to make the fact that the candidate scored above a predefined threshold available as a
+ * variable should use the 'PASSED' variable. PASSED MUST be a boolean"). SCORE and MAXSCORE are the
+ * items' only (`item`: a test declares either of any base type), PASSED binds an item and a test
+ * alike (`any`). An outcome of another name is untyped by them.
  */
 export const reservedBaseTypes: readonly ReservedBaseType[] = [
-  { baseType: "float", identifier: "SCORE", kind: "qti-outcome-declaration" },
-  { baseType: "float", identifier: "MAXSCORE", kind: "qti-outcome-declaration" },
-  { baseType: "boolean", identifier: "PASSED", kind: "qti-outcome-declaration" },
+  { baseType: "float", identifier: "SCORE", kind: "qti-outcome-declaration", root: "item" },
+  { baseType: "float", identifier: "MAXSCORE", kind: "qti-outcome-declaration", root: "item" },
+  { baseType: "boolean", identifier: "PASSED", kind: "qti-outcome-declaration", root: "any" },
 ];
 
 /**
@@ -211,6 +249,8 @@ export const contextVariable = {
  *
  * - The node's {@link nodeRef} tuple: `node`, `document`, `kind`, `start`, `nearest`, `version` and
  *   `parent`;
+ * - `parentKind`, its parent's kind, copied from `Node`: `Reserved type` reads it, since a test's
+ *   SCORE and MAXSCORE, a `qti-assessment-test`'s children, may be of any base type (reading 163);
  * - `declarationKind`, its kind as a `DeclarationKind`, `Declares` of `kind`;
  * - `cardinalities` and `baseTypes`, drawn: its counts of {@link DeclarationCardinality} and
  *   {@link DeclarationBaseType} rows, each 1 where its attribute spells a code and 0 where it does
@@ -234,6 +274,7 @@ export const Declaration = relation(
     nearest: uuid,
     node: uuid,
     parent: uuid,
+    parentKind: closedId(NodeKind),
     start: natural,
     version: closedId(SchemaVersion),
   },
@@ -288,8 +329,9 @@ export const DeclarationBaseType = relation(
  * NCName: `identifier`, the lexical form without its outer whitespace, and `identifierLead` and
  * `identifierTrail`, the whitespace written around it, which `E1_derived` proves concatenate to
  * `identifierLexical`, the lexical form as written (C18's copy), as {@link RecordFieldName} holds a
- * field's; and its {@link Declaration}'s {@link declarationRef} tuple. The laws over a declared
- * name read it: `Declaration key`, `Declaration not reserved` and `Reserved type`.
+ * field's; and its {@link Declaration}'s {@link declarationRef} tuple and its `parentKind`, which
+ * `Reserved type` reads (reading 163). The laws over a declared name read it: `Declaration key`,
+ * `Declaration not reserved` and `Reserved type`.
  *
  * An `identifier` that is unwritten, or no NCName once collapsed, whitespace alone among them,
  * names nothing, so it has no row, and AL3 or its value domain (`IdentifierDType`, an `xs:NCName`)
@@ -309,6 +351,7 @@ export const DeclarationIdentifier = relation(
     identifierLexical: keyText,
     identifierTrail: Space,
     node: uuid,
+    parentKind: closedId(NodeKind),
   },
   ["node"],
 );
@@ -318,7 +361,8 @@ export const DeclarationIdentifier = relation(
  * has both a name and a cardinality: its {@link DeclarationIdentifier}'s `identifier`, document,
  * declaration kind and count of base types, and its {@link DeclarationCardinality}'s
  * `cardinality`, which `Reserved type` reads beside the name (a typed outcome name is no record,
- * and QTI_CONTEXT is one).
+ * and QTI_CONTEXT is one); and `parentKind`, its {@link Declaration}'s, which `Reserved type`
+ * reads where it reads the cardinality (reading 163).
  *
  * A named declaration whose cardinality is unwritten or spells nothing has no row, so no law reads
  * a cardinality it does not have, and AL3 or its value domain refuses it alone (spec reading 158);
@@ -335,6 +379,7 @@ export const DeclarationName = relation(
     document: uuid,
     identifier: keyText,
     node: uuid,
+    parentKind: closedId(NodeKind),
   },
   ["node"],
 );
@@ -924,10 +969,11 @@ const reservedNotRecord = (d: DeclarationNameRow, reserved: ReservedBaseType) =>
   );
 
 /**
- * State that a declaration of each typed outcome name that has a base type has the one the
- * specification gives it: its {@link DeclarationBaseType} is that type's. A declaration of the name
- * with no base type is a record, which {@link reservedNotRecord} refuses, or one `Declaration base
- * type` refuses alone.
+ * State that a declaration of each typed outcome name that has a base type, where its type binds
+ * the declaration's document, has the one the specification gives it: its
+ * {@link DeclarationBaseType} is that type's. A declaration of the name with no base type is a
+ * record, which {@link reservedNotRecord} refuses where the type binds it, or one `Declaration
+ * base type` refuses alone.
  */
 const reservedBaseTypeLaws = reservedBaseTypes.map((reserved) =>
   contained(
@@ -937,6 +983,7 @@ const reservedBaseTypeLaws = reservedBaseTypes.map((reserved) =>
           d.eq(d.declarationKind, reserved.kind),
           d.eq(d.identifier, reserved.identifier),
           d.eq(d.baseTypes, 1n),
+          ...(reserved.root === "any" ? [] : [d.ne(d.parentKind, testKind)]),
         ),
       ),
       "node",
@@ -1101,12 +1148,16 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   image; each name is its lexical form collapsed; a normal minimum not written is its version's
  *   default.
  * - **`Declaration key`** (spec reading 74): `key(document, identifier)` over the identifiers.
- * - **`Declaration not reserved`** (reading 72): no declaration names a built-in session variable, in
- *   any document, an item's, a test's or a section's alike, since every named declaration element
- *   has its identifier whatever its root (information model tables 4.5.1, 5.115.1 and 5.151.1).
- * - **`Reserved type`**: SCORE, MAXSCORE, PASSED and QTI_CONTEXT keep their specified types: a typed
- *   name has its type where it has a base type, QTI_CONTEXT is declared as a context, and, where it
- *   has a cardinality, a typed outcome name is no record and QTI_CONTEXT is one.
+ * - **`Declaration not reserved`** (readings 72 and 168): no declaration names a built-in session
+ *   variable of its parent: an item's declaration, none of the three, and a test's, `duration`
+ *   alone, so a test's own `numAttempts` and `completionStatus` are ordinary names (information
+ *   model tables 4.5.1, 5.115.1 and 5.151.1; §2.2.2).
+ * - **`Reserved type`**: SCORE and MAXSCORE of an item, PASSED and QTI_CONTEXT keep their specified
+ *   types: a typed name has its type where it has a base type, QTI_CONTEXT is declared as a
+ *   context, and, where it has a cardinality, a typed outcome name is no record and QTI_CONTEXT is
+ *   one (reading 153). A SCORE or MAXSCORE whose declaration is a child of a `qti-assessment-test`
+ *   (`parentKind`) is held to neither, since "SCORE needs to be a float" is said of items (§4.5,
+ *   reading 163).
  * - **`Declaration base type`**: a record has no base type, and every declaration of another
  *   cardinality writes one; one that spells nothing is its value domain's alone (spec reading
  *   158).
@@ -1133,7 +1184,12 @@ export const declarationLawsByName = {
   "Declaration key": [key(on(DeclarationIdentifier, "document", "identifier"))],
   "Declaration not reserved": [
     check("Declaration_not_reserved", DeclarationIdentifier, (d) =>
-      d.not(d.in(d.identifier, sessionVariables)),
+      d.not(
+        d.or(
+          d.and(d.eq(d.parentKind, testKind), d.in(d.identifier, testSessionVariables)),
+          d.and(d.ne(d.parentKind, testKind), d.in(d.identifier, itemSessionVariables)),
+        ),
+      ),
     ),
   ],
   "Declaration overlay": [
@@ -1141,6 +1197,7 @@ export const declarationLawsByName = {
       on(Declaration, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
+    contained(on(Declaration, "parent", "parentKind"), on(Node, "id", "kind")),
     contained(
       on(
         select(Node, (n) => n.in(n.kind, declarationKinds)),
@@ -1177,6 +1234,10 @@ export const declarationLawsByName = {
       declarationRef,
     ),
     contained(
+      on(DeclarationIdentifier, "node", "parentKind"),
+      on(Declaration, "node", "parentKind"),
+    ),
+    contained(
       on(
         select(DeclarationIdentifier, (d) => d.eq(d.cardinalities, 1n)),
         "node",
@@ -1199,6 +1260,7 @@ export const declarationLawsByName = {
       on(DeclarationName, "node", "cardinality"),
       on(DeclarationCardinality, "node", "cardinality"),
     ),
+    contained(on(DeclarationName, "node", "parentKind"), on(Declaration, "node", "parentKind")),
     contained(
       on(ValueSet, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
@@ -1379,7 +1441,11 @@ export const declarationLawsByName = {
     ),
     check("Reserved_type", DeclarationName, (d) =>
       d.and(
-        ...reservedBaseTypes.map((reserved) => reservedNotRecord(d, reserved)),
+        ...reservedBaseTypes.map((reserved) =>
+          reserved.root === "any"
+            ? reservedNotRecord(d, reserved)
+            : d.or(d.eq(d.parentKind, testKind), reservedNotRecord(d, reserved)),
+        ),
         d.or(
           d.ne(d.identifier, contextVariable.identifier),
           d.eq(d.cardinality, contextVariable.cardinality),

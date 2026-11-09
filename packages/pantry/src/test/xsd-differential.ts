@@ -91,11 +91,12 @@ export interface Recorded {
 /**
  * A dangling `xs:IDREF`: libxml2 2.9.13 never resolves an `xs:IDREF` under `--schema`, so a
  * dangling one, which XML Schema refuses (Part 1, 3.3.4 and the ID/IDREF table, cvc-id.1),
- * validates; it does refuse a repeated `xs:ID`.
+ * validates; it does refuse a repeated `xs:ID`. A dangling `m:share` `src` is no `xs:IDREF` (the
+ * XSD types it `xs:anyURI`), so it is left to its own reading-2 record, not to libxml2.
  */
 const idrefRecord: Recorded = {
   class: "identity",
-  detail: /^Idref target /u,
+  detail: /^Idref target (?!at \S+\/m:share\[\d+\]: src names )/u,
   direction: "oracle-only",
   reason: { _tag: "libxml2", why: "libxml2 never resolves IDREF targets under --schema" },
   rule: "idref-target",
@@ -720,8 +721,8 @@ export const recorded: readonly Recorded[] = [
     reason: {
       _tag: "reading",
       reading: 104,
-      says: "A choice's identifier names it among its document's choices of its class",
-      why: "no two choices of one class in a document share an identifier, whichever interactions hold them; the XSD states no key over choice identifiers",
+      says: "A choice's identifier is used by no other choice of any class in its document",
+      why: "no two choices of the nine classes in a document share an identifier, whichever interactions hold them and whatever their classes; the XSD states no key over choice identifiers",
     },
     rule: "choice-identifier-distinct",
   },
@@ -817,6 +818,35 @@ const bcp47Tag = [
     tag.replaceAll(/[A-Za-z]/gu, (letter) => `[${letter.toLowerCase()}${letter.toUpperCase()}]`),
   ),
 ].join("|");
+
+/**
+ * The two messages of xmllint's that reading 2 records on MathML content, each as one `line N
+ * {MathML}name: ...` segment: an element whose XSD content type is empty holding text, and a
+ * `semantics` where the XSD's content expression, `apply` through `piecewise` and perhaps more
+ * members, does not name it. A document's message joins its segments with " | ", and only a
+ * document every segment of which matches is covered.
+ */
+const mathmlSegment = (() => {
+  const name = String.raw`\{http://www\.w3\.org/1998/Math/MathML\}`;
+  const members = [
+    "apply",
+    "bind",
+    "ci",
+    "cn",
+    "csymbol",
+    "cbytes",
+    "cerror",
+    "cs",
+    "share",
+    "piecewise",
+  ]
+    .map((member) => `${name}${member}`)
+    .join(", ");
+
+  return String.raw`line \d+ ${name}(?:\S+: Character content is not allowed, because the content type is empty|semantics: This element is not expected\. Expected is one of \( ${members}(?:, ${name}[\w.-]+)* \))\.`;
+})();
+
+const coveredMessages = new RegExp(String.raw`^${mathmlSegment}(?: \| ${mathmlSegment})*$`, "u");
 
 /**
  * One message of libxml2's refusing a match table entry's `target-value` as no base-type name: the
@@ -1019,6 +1049,142 @@ export const generatedRecorded: readonly Recorded[] = [
     rule: "math-arity",
   },
   {
+    class: "content",
+    detail:
+      /^N5 Follow at \S+: (?:m:\S+ follows state \d+, after which m:\S+'s content model in \S+ admits |no position of m:\S+'s content model that names m:\S+ follows its predecessor in )/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: 'qualifiers appear in the order "bvar, lowlimit, uplimit, interval, condition, domainofapplication, degree, momentabout, logbase"',
+      why: "MathML's qualifiers stand in the order bvar, lowlimit, uplimit, interval, condition, domainofapplication, degree, momentabout, logbase, a condition only after a bvar (MathML 3, 4.3.3 and 4.3.3.1), and a bind's bound variables come before its body (4.2.6.1); the XSD's apply and bind take their qualifiers in any order",
+    },
+    rule: "ordering",
+  },
+  {
+    class: "content",
+    detail: /^N7 Last at \S+: m:(?:bind|mlongdiv|mstack) holds /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "It is an error for mscarries to be the last element of an mstack or mlongdiv element",
+      why: "an mscarries is not the last element of an mstack or an mlongdiv, and a bind holds at least one bvar (MathML 3, 3.6.5.1 and 4.2.6.1); both schemas repeat those children in any order, so the automaton's last-position law states it",
+    },
+    rule: "child-set",
+  },
+  {
+    class: "content",
+    detail: /^MathML head qualifier at \S+: m:apply applies /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "for an `apply` that holds no qualifier but its operator's own",
+      why: "spec reading R6-head-qualifiers: an apply's operator takes only the qualifiers its MathML 3 syntax table lists (degree with root, logbase with log, momentabout with moment, 4.4); the XSD's apply takes any qualifier beside any operator",
+    },
+    rule: "admission",
+  },
+  {
+    class: "attribute-value",
+    detail: /^MathML cn form at \S+: (?:a cn of type|part \d+ of a cn of type) /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "`cn`'s content has the form its `type` implies",
+      why: "spec reading R6-hexdouble: a cn's content has the form its type implies, split at m:sep, with digits read in its base (MathML 3, 4.2.1); the XSD types the content as mixed text",
+    },
+    rule: "attribute-lexical",
+  },
+  {
+    class: "content",
+    detail: /^MathML maction selection at \S+: an m:maction /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "an `maction`'s `selection` names one of its children",
+      why: "an maction's selection names one of its children, and one with no child selects none (MathML 3, 3.7.1.1: 'If the value specified is out of range, it is an error'); the XSD types selection a positive integer and counts no children",
+    },
+    rule: "union-count",
+  },
+  {
+    class: "content",
+    detail: /^MathML align placement at \S+: an m:maligngroup /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "an `maligngroup` inside a table cell stands only where §3.5.5.2 lets it",
+      why: "an maligngroup in a table cell stands only where MathML 3, 3.5.5.2 lets it (an mrow or mstyle that changes no direction, mphantom, mfenced, the selected child of an maction, semantics); the XSD admits it under any presentation element",
+    },
+    rule: "admission",
+  },
+  {
+    class: "content",
+    detail: /^MathML align first at \S+: the table cell at /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "the cell's first complete element is a group",
+      why: "a table cell holding an alignment group starts with one (MathML 3, 3.5.5.2: 'the first complete element must be an maligngroup element'); the XSD's mtd takes its children in any order",
+    },
+    rule: "ordering",
+  },
+  {
+    class: "identity",
+    detail: /^MathML share cycle at \S+: the m:share at /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: 'no element dominates itself: "An element may not dominate itself"',
+      why: "no element dominates itself, and a share's same-document src names the element it stands for (MathML 3, 4.2.7: 'An element may not dominate itself'); the XSD types src xs:anyURI and follows no reference",
+    },
+    rule: "document-key",
+  },
+  {
+    class: "identity",
+    detail: /^Idref target at \S+\/m:share\[\d+\]: src names /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "a `share`'s `#id` names an element of its document",
+      why: "a share's src, a same-document fragment '#id', names an element of its document (MathML 3, 4.2.7); the XSD types src xs:anyURI and resolves it nowhere",
+    },
+    rule: "idref-target",
+  },
+  {
+    class: "content",
+    detail:
+      /^line \d+ \{http:\/\/www\.w3\.org\/1998\/Math\/MathML\}\S+: Character content is not allowed, because the content type is empty\.(?: \| line \d+ \{http:\/\/www\.w3\.org\/1998\/Math\/MathML\}\S+: Character content is not allowed, because the content type is empty\.)*$/u,
+    direction: "xsd-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "RELAX NG matches a whitespace-only text against `empty`",
+      why: "a MathML element whose RelaxNG content is empty admits whitespace-only text, as RELAX NG matches it against empty; the normative MathML 3 RelaxNG is followed over QTI's bundled XSD, whose empty types refuse it (xmllint's XSD validator)",
+    },
+  },
+  {
+    class: "content",
+    // Every message is one a reading records: the XSD's empty types refusing whitespace text (the
+    // record above), or its content expression refusing a `semantics` the RelaxNG's `ContExp`
+    // admits, where xmllint expects the members the XSD's group names, `apply` first. Any other
+    // message of the document stands unrecorded and fails it.
+    detail: coveredMessages,
+    direction: "xsd-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "a `semantics` stands wherever a content expression does",
+      why: 'a semantics stands wherever a MathML 3 content expression does, as the RelaxNG\'s ContExp names semantics-contexp; the XSD drops it ("Ambiguous content model altered (ContExp)", mathml3-strict-content.xsd line 8), so xmllint refuses it there',
+    },
+  },
+  {
     class: "beyond",
     detail: /^SSML (?:lexicon reference|trim mark) /u,
     direction: "beyond",
@@ -1062,6 +1228,87 @@ export const generatedRecorded: readonly Recorded[] = [
       why: "an interaction's response-identifier names a response its item declares; the XSD types it an identifier and resolves it nowhere",
     },
     rule: "binding-declared",
+  },
+  {
+    class: "attribute-value",
+    detail:
+      /^value domain at \S+: (?:src|poster|srcset): "(?: |\\[nrt])*" is outside URLDType \(reading [^)]*\b12[45]\b/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 124,
+      says: 'Each media URL the information model describes as "a valid non-empty URL potentially surrounded by spaces" holds a character other than a space',
+      why: 'a media URL "must contain a valid non-empty URL potentially surrounded by spaces" (information model §5.9.1, §5.135.1, §5.163.2, §5.166.1, §5.166.9; reading 125 for track), so an empty or blank src, poster or srcset is refused; the XSD\'s URLDType is any xs:normalizedString',
+    },
+    rule: "attribute-lexical",
+  },
+  {
+    class: "attribute-value",
+    detail: /^value domain at \S+: xref: ".*" is outside xs:IDREF\b/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      says: "`xref` names an `id` of its document, an `xs:IDREF`",
+      why: "MathML 3's xref names an id of its document (an xs:IDREF, §5.4.2), where QTI's bundled MathML XSD types it xs:anySimpleType, so text that is no IDREF is refused",
+    },
+    rule: "attribute-lexical",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "R10-a: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_PortableCustomInteraction.Attr_module (§5.106.2: 'If this characteristic is provided the qti-interaction-modules child attribute is not required, if omitted then the modules child element is mandatory')",
+      why: "a portable custom interaction names its module by module, by qti-interaction-modules, or by both; the XSD makes both optional",
+    },
+    rule: "pci-module-source",
+  },
+  {
+    class: "content",
+    direction: "oracle-only",
+    reason: {
+      _tag: "specification",
+      source:
+        "R10-b: https://www.imsglobal.org/spec/qti/v3p0/info#Data_PortableCustomInteraction (§5.106, 3.0.0: 'PCIs MUST be used instead of custom interactions (the latter have been deprecated)')",
+      why: "a 3.0.0 document holds no custom interaction, which the XSD still declares; a 3.0.1 document may",
+    },
+    rule: "admission",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Card (§5.26.1, Card's support: 'Use only one card for any particular named support in a catalog')",
+      why: "a catalog holds one card for each support; the XSD states no key over the cards' support",
+    },
+    rule: "card-support",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_CardEntry (§5.27.2, CardEntry's default: 'Only one of the CardEntry instances can have a default designation')",
+      why: "a card holds at most one entry designated by default; the XSD types default xs:boolean and states no count over a card's entries",
+    },
+    rule: "card-default",
+  },
+  {
+    class: "identity",
+    detail: /^Catalog reference /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "specification",
+      source:
+        "R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Catalog (§5.28.1, a catalog's id, which §5.15.9's data-catalog-idref names)",
+      why: "a data-catalog-idref names the id of a qti-catalog of its document; the XSD types it xs:IDREF, which any ID of the document satisfies",
+    },
+    rule: "idref-target",
   },
   {
     class: "beyond",

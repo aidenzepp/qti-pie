@@ -12,7 +12,7 @@
  * deferred constraint under test immediate, and rolls back. A row's CHECKs, keys and non-deferrable
  * foreign keys (a key whose target holds no field beyond the ones it names) are judged at its
  * INSERT's end. A family's owner axis is deferred, so a case that judges one sets it immediate: a
- * `DocumentId`'s and an `XmlLang`'s document is a `Document` row (`Document.ids`,
+ * `DocumentId`'s and a `BodyXmlLang`'s document is a `Document` row (`Document.ids`,
  * `Document.langs`), stated beside them. A refused case's verdict is its SQLSTATE and
  * the constraint that states the law, and a control's is that the same constraint passes.
  *
@@ -30,6 +30,7 @@ import { describe } from "vitest";
 import { Flag } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
+  BodyXmlLang,
   DocumentGenerals,
   DocumentId,
   DocumentLang,
@@ -42,7 +43,6 @@ import {
   ResourceLomLanguageSet,
   SsmlAttribute,
   SsmlScope,
-  XmlLang,
 } from "#pantry/qti/identity.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
@@ -160,7 +160,7 @@ const casePackage = uuidOf(255);
 /**
  * A `Document` fact of an item document, the owner of its IDs' and its `xml:lang` carriers'
  * families, each count the members the case states under it: a counted family's owner axis is not
- * deferrable, so a `DocumentId` or `XmlLang` row is judged against its document's row at its
+ * deferrable, so a `DocumentId` or `BodyXmlLang` row is judged against its document's row at its
  * INSERT. Every other field is lawful on the row's own CHECKs: no XML declaration, no site naming
  * the document (so its context is the empty set and its nearest context the document node), and an
  * item's resource type over an item root (`RootOfType`). Its foreign keys are deferred and never
@@ -201,7 +201,7 @@ const described = (generals: bigint): Stated => ({
 });
 
 /**
- * The family of one projection and its members: `DocumentLang` over `XmlLang`, and
+ * The family of one projection and its members: `DocumentLang` over `BodyXmlLang`, and
  * `ResourceLomLanguageSet` over `LomLanguage`. `count` is the projection's family. `beside` states
  * the other rows a case's owner and members are judged against at their INSERT, each owner axis
  * and a foreign key whose target holds no field beyond the ones it names being immediate: the
@@ -217,7 +217,8 @@ interface Projection {
 }
 
 /**
- * The two projections, each over its owner field: a document, or a LOM general category. A LOM
+ * The two projections, each over its owner field: a document (its members the `BodyXmlLang` rows,
+ * the `xml:lang` outside every catalog), or a LOM general category. A LOM
  * language's tag is its value case-folded, so a lower-case value is its own tag. An owner's
  * carriers are the members a case states under it.
  */
@@ -227,9 +228,9 @@ const projections: readonly Projection[] = [
     count: "DocumentLang.carriers",
     member: (node, document, lang) => ({
       fact: { document, lang, node: uuidOf(node) },
-      relation: XmlLang,
+      relation: BodyXmlLang,
     }),
-    memberTable: "xml_lang",
+    memberTable: "body_xml_lang",
     owner: (document, lang) => ({ fact: { document, lang }, relation: DocumentLang }),
   },
   {
@@ -393,8 +394,10 @@ const fragmentValue = (
  *
  * @param node - Its element's number.
  * @param fragment - Its fragment's `speak`, by number.
- * @param read - The attribute: its element kind, its name, the kind it names, and its value.
+ * @param read - The attribute: its element kind, its name, the kind it names, its value and, where it
+ *   differs, its lexical form.
  * @param read.kind - The element kind.
+ * @param read.lexical - The lexical form; the value where none is given.
  * @param read.name - The attribute's name.
  * @param read.refers - The kind its value names.
  * @param read.value - The value.
@@ -405,6 +408,7 @@ const ssmlAttribute = (
   fragment: number,
   read: {
     readonly kind: string;
+    readonly lexical?: string;
     readonly name: string;
     readonly refers: string;
     readonly value: string;
@@ -413,7 +417,7 @@ const ssmlAttribute = (
   fact: {
     fragment: uuidOf(fragment),
     kind: read.kind,
-    lexical: read.value,
+    lexical: read.lexical ?? read.value,
     name: read.name,
     node: uuidOf(node),
     refers: read.refers,
@@ -899,6 +903,47 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
             refused,
             label,
             "23503",
+          );
+        }
+      }).pipe(Effect.scoped),
+    leaseTestTimeoutMs,
+  );
+
+  it.effect(
+    "refuses an attribute whose value is not its lexical form collapsed, by E1_derived, and accepts one that is",
+    () =>
+      // Oracle: PostgreSQL, `SsmlAttribute`'s `E1_derived` CHECK (`s.value = collapse(s.lexical)`),
+      // against SSML 1.1 §3.3.2 (a mark's name is an `xs:token`, whose whiteSpace is `collapse`)
+      // under spec reading 3.
+      // The fragment holds its mark once under each value, so the trim's foreign key is met and the
+      // check is the one verdict left.
+      // Bound: an inner run of two spaces and a leading space left in the value, and a lexical form
+      // whose tab and outer spaces collapse away.
+      Effect.gen(function* ssmlAttributeCollapse() {
+        const client = yield* loginSession;
+        for (const [label, lexical, value, refused] of [
+          ["an inner run of spaces left in the value", "a  b", "a  b", true],
+          ["a leading space left in the value", " a b", " a b", true],
+          ["a tab and outer spaces collapsed away", " a\t b ", "a b", false],
+        ] as const) {
+          assertVerdict(
+            yield* judged(
+              client,
+              statedInserts([
+                fragmentValue(3, "ssml:speak", value, 1n),
+                fragmentValue(3, "ssml:mark", value, 1n),
+                ssmlAttribute(3, 3, {
+                  kind: "ssml:speak",
+                  lexical,
+                  name: "startmark",
+                  refers: "ssml:mark",
+                  value,
+                }),
+              ]),
+            ),
+            derivedCheck,
+            refused,
+            label,
           );
         }
       }).pipe(Effect.scoped),

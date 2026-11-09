@@ -51,7 +51,9 @@ import {
   StatisticDate,
   statisticKinds,
   trimmedPattern,
+  UsageBaseType,
   UsageValue,
+  UsageValueBaseType,
 } from "#pantry/qti/metadata.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
@@ -107,7 +109,9 @@ const metadataRelations = {
   ObjectTitle,
   ResourceLomGeneral,
   StatisticDate,
+  UsageBaseType,
   UsageValue,
+  UsageValueBaseType,
 };
 
 /**
@@ -580,35 +584,33 @@ describe(
   "qti/metadata.ts, the usage typed value by the law oracle",
   { timeout: testTimeoutMs },
   () => {
-    it.effect(
-      "breaks Usage typed value on a float under integer, and not on the typed or padded values",
-      () =>
-        // Oracle: the specification as a checker, reading 105: a `ud:value` that writes `baseType` is
-        // a lexical form of that base type, outer whitespace formatting, and one that writes none is
-        // any text; each fixture's expected verdict is read off its edit of the usage-data example.
-        // Bound: `usage3` (no value writes a baseType), `usage3-typed` (24 typed values),
-        // `usage3-float-padded` (a padded float) and `usage3-integer-float` (`0.87` under integer).
-        Effect.gen(function* usageOracle() {
-          for (const [name, breaks] of [
-            ["usage3", 0],
-            ["usage3-typed", 0],
-            ["usage3-float-padded", 0],
-            ["usage3-integer-float", 1],
-          ] as const satisfies readonly (readonly [FixtureName, number])[]) {
-            const judgment = yield* judge(
-              yield* readPackage(yield* materialize(name)),
-              grammar,
-              lawsOf(grammar),
-            );
-            assert.strictEqual(judgment._tag, "Judged", name);
+    it.effect("breaks Usage typed value on no usage-data fixture the importer accepts", () =>
+      // Oracle: the specification as a checker, reading 105: a `ud:value` that writes `baseType`
+      // and no `fieldIdentifier` is untyped text, so `usage3-integer-float` (`0.87` under integer,
+      // outside a record) is accepted, as the oracle judges it.
+      // Bound: `usage3-integer-float`, `usage3` (no value writes a baseType), `usage3-typed` (24 typed values outside a
+      // record) and `usage3-float-padded` (a padded float outside a record).
+      Effect.gen(function* usageOracle() {
+        for (const [name, breaks] of [
+          ["usage3", 0],
+          ["usage3-integer-float", 0],
+          ["usage3-typed", 0],
+          ["usage3-float-padded", 0],
+        ] as const satisfies readonly (readonly [FixtureName, number])[]) {
+          const judgment = yield* judge(
+            yield* readPackage(yield* materialize(name)),
+            grammar,
+            lawsOf(grammar),
+          );
+          assert.strictEqual(judgment._tag, "Judged", name);
 
-            const found =
-              judgment._tag === "Judged"
-                ? judgment.breaches.filter(({ law }) => law === "Usage typed value")
-                : [];
-            assert.lengthOf(found, breaks, name);
-          }
-        }).pipe(Effect.provide(NodeServices.layer)),
+          const found =
+            judgment._tag === "Judged"
+              ? judgment.breaches.filter(({ law }) => law === "Usage typed value")
+              : [];
+          assert.lengthOf(found, breaks, name);
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
     );
   },
 );

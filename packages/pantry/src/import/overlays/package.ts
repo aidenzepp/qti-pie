@@ -21,7 +21,9 @@
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Option, Result } from "effect";
 import { documentTypes, grammar, ResourceType } from "#pantry/grammar/install.ts";
+import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
+import { stringValuesOf } from "#pantry/import/overlays/string-values.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -41,6 +43,8 @@ import type {
   ResourceHref,
   ResourceId,
   ResourceTyped,
+  TextReference,
+  TextReferencePath,
   TypedHref,
 } from "#pantry/qti/package.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
@@ -1061,6 +1065,8 @@ export const referenceCensus: ReferenceCensus = (version, kind, name) =>
 export interface ReferenceRows {
   readonly Reference: ReadonlyMap<string, Addition<typeof Reference>>;
   readonly ReferencePath: ReadonlyMap<string, Addition<typeof ReferencePath>>;
+  readonly TextReference: ReadonlyMap<string, Addition<typeof TextReference>>;
+  readonly TextReferencePath: ReadonlyMap<string, Addition<typeof TextReferencePath>>;
 }
 
 /**
@@ -1091,9 +1097,18 @@ const censusResolutionOf = (
 };
 
 /**
+ * The whitespace class each kind of the text census reads its text under, by kind.
+ */
+const textWhiteSpaces: ReadonlyMap<string, WhiteSpace> = new Map(
+  textReferenceKinds.map(({ kind, whiteSpace }) => [kind, whiteSpace] as const),
+);
+
+/**
  * Build a document's reference rows (`#pantry/qti/package.ts`): each attribute of the census with
  * its written split and its `HrefScope`, and each that resolves in the package with the
- * entry path it names, its `ReferencePath`.
+ * entry path it names, its `ReferencePath`; and each element of the text census
+ * (`textReferenceKinds`, spec reading R9-b) with its string value split and resolved the same way,
+ * its `TextReference` and `TextReferencePath`.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under, and its path.
@@ -1111,6 +1126,37 @@ export const referenceRowsOf = (
   const nodes = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const references = new Map<string, Addition<typeof Reference>>();
   const paths = new Map<string, Addition<typeof ReferencePath>>();
+  const textReferences = new Map<string, Addition<typeof TextReference>>();
+  const textPaths = new Map<string, Addition<typeof TextReferencePath>>();
+  const values = stringValuesOf(rows);
+
+  for (const element of rows.nodes) {
+    const whiteSpace = textWhiteSpaces.get(element.kind);
+    if (whiteSpace === undefined) {
+      continue;
+    }
+
+    const lexical = values.get(element.id) ?? "";
+    const resolution = resolve(element.id, lexical, whiteSpace);
+    const key = headingKey([element.id]);
+    textReferences.set(key, {
+      document,
+      kind: element.kind,
+      lexical,
+      node: element.id,
+      scope: resolution.scope,
+      ...referencePiecesOf(lexical),
+    });
+    if (resolution.scope === "entry") {
+      textPaths.set(key, {
+        document,
+        kind: element.kind,
+        node: element.id,
+        package: ids.package,
+        path: resolution.path,
+      });
+    }
+  }
 
   for (const { lexical, name: attribute, node } of rows.attributes) {
     const element = nodes.get(node);
@@ -1149,5 +1195,10 @@ export const referenceRowsOf = (
     }
   }
 
-  return { Reference: references, ReferencePath: paths };
+  return {
+    Reference: references,
+    ReferencePath: paths,
+    TextReference: textReferences,
+    TextReferencePath: textPaths,
+  };
 };

@@ -698,20 +698,23 @@ const nonEmptyUrl = (domain: Domain): Domain => withPattern(domain, ".*[^ ].*");
  * conversion specifier starts with a '%' character and is followed by zero or more flag characters
  * (#, 0, -, " " [space] and +), an optional digit string indicating the minimum field width, an
  * optional precision (consisting of a "." followed by zero or more digits) and finally one of the
- * conversion type codes: E, e, f, G, g, r, R, i, o, X, or x" (§2.3.4). So a format is a printf
- * format string over those codes: characters but `%`, the escape `%%`, and conversion specifiers,
- * any number of them. Spec reading 161 sets aside reading 132's rule of at most one specifier: QTI
- * bans no second conversion, C's undefined behaviour for a missing argument (C11 §7.21.6.1) is no
- * QTI prohibition, and pantry never renders, so `%i of %i` is stored as written and how it prints
- * is the renderer's call. `%%` converts no argument, and a format with no specifier prints its
- * text alone. A `%` that begins no specifier, and a code the sentence does not list (`d`), are
- * refused, wherever they stand.
+ * conversion type codes: E, e, f, G, g, r, R, i, o, X, or x" (§2.3.4). Spec reading 171 adds `d`
+ * to that list: the sentence stands in a section the information model marks not normative, the
+ * implementation guide's own example writes `format="%d"`, and C reads `d` as it reads `i` (C11
+ * §7.21.6.1; PR #46, comment 6722164084). So a format is a printf format string over those codes
+ * and `d`: characters but `%`, the escape `%%`, and conversion specifiers, any number of them. Spec
+ * reading 161 sets aside reading 132's rule of at most one specifier: QTI bans no second
+ * conversion, C's undefined behaviour for a missing argument (C11 §7.21.6.1) is no QTI prohibition,
+ * and pantry never renders, so `%i of %i` is stored as written and how it prints is the renderer's
+ * call. `%%` converts no argument, and a format with no specifier prints its text alone. A `%` that
+ * begins no specifier, and a code that is not listed, are refused, wherever they stand.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Variable | QTI 3.0 information model, 2.3.4 Variable Content}
  * @see {@link https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf | C11 (N1570), 7.21.6.1 The fprintf function}
  * @see {@link https://github.com/aidenzepp/qti-pie/pull/46#issuecomment-6701102861 | The ruling of two or more conversions, PR #46}
+ * @see {@link https://github.com/aidenzepp/qti-pie/pull/46#issuecomment-6722164084 | The ruling admitting d, PR #46}
  */
-const printfFormat = String.raw`([^%]|%%|%[#0 +\-]*[0-9]*(\.[0-9]*)?[EefGgrRioXx])*`;
+const printfFormat = String.raw`([^%]|%%|%[#0 +\-]*[0-9]*(\.[0-9]*)?[EefGgrRiodXx])*`;
 
 /**
  * A token of RFC 2045's media type, "1*<any (US-ASCII) CHAR except SPACE, CTLs, or tspecials>"
@@ -877,6 +880,39 @@ const mathmlNotationReadings: readonly SpecReading[] = Object.values(
 );
 
 /**
+ * `xs:IDREF`'s definition, the one `xs:IDREFS` lists: a name that is a token, whitespace collapsed.
+ */
+const idrefDomain: Domain = {
+  _tag: "atomic",
+  builtin: "IDREF",
+  facets: [{ facet: "whiteSpace", value: "collapse" }],
+  patterns: [["\\i\\c*"], ["[\\i-[:]][\\c-[:]]*"]],
+  primitive: "string",
+};
+
+/**
+ * Spec reading 2's `xref` readings: MathML 3's cross-references "are established by the use of the
+ * id and xref attributes" (§5.4.2), so an `xref` names an `id` of its document. Each MathML kind
+ * that declares it reads it as an `xs:IDREF`, not the XSD's `xs:anySimpleType`, and the law "Idref
+ * target" reads its token.
+ *
+ * @see {@link https://www.w3.org/TR/MathML3/chapter5.html#mixing.cr | MathML 3, 5.4.2 Parallel Markup via Cross-References}
+ */
+const mathmlXrefReading: SpecReading = on(
+  2,
+  [
+    ...new Set(
+      attributeDeclarations
+        .filter(({ kind, name }) => kind.startsWith("m:") && name === "xref")
+        .map(({ kind }) => kind),
+    ),
+  ],
+  "xref",
+  "xsd",
+  () => idrefDomain,
+);
+
+/**
  * A content `cn`'s `base`, which the XSD leaves untyped (`mathml3-content.xsd` line 18) and the
  * RelaxNG types `text` (`mathml3-content.rnc` line 34): spec reading 2 reads it as MathML 3 states
  * it, "a base 10 positive integer giving the value of base in which the text content of the cn is
@@ -902,8 +938,9 @@ const cnBaseReadings: readonly SpecReading[] = attributeDeclarations
  * - 2: a MathML attribute of a notation type takes the notation's pattern (MathML 3 §2.1.5.1):
  *   `length` digits only, `columnspan`, `rowspan` and `selection` digits not all zero, `position`,
  *   `shift` and `index` an optional `-` and digits, `scriptsizemultiplier` a `number` with no `+`
- *   ({@link mathmlNotationReadings}); and a content `cn`'s `base` is a positive integer
- *   ({@link cnBaseReadings}).
+ *   ({@link mathmlNotationReadings}); a content `cn`'s `base` is a positive integer
+ *   ({@link cnBaseReadings}); and every MathML kind's `xref` is an `xs:IDREF`, naming an `id` of
+ *   its document ({@link mathmlXrefReading}).
  * - 7: a typed QTI value in an attribute is exact, outer whitespace invalid: its listed attributes
  *   read no whitespace class.
  * - 8: a match table entry's `target-value` is a value of the outcome's base type, not a base-type
@@ -932,8 +969,9 @@ const cnBaseReadings: readonly SpecReading[] = attributeDeclarations
  * - 129: an `xml:lang` is a BCP 47 language tag or empty, but on an item or a stimulus, where it is a
  *   tag ({@link xmlLanguage}, {@link rootLanguage}); a `lang` is a tag or empty
  *   ({@link languageOrEmpty}); a `track`'s `srclang` is a tag ({@link languageOnly}).
- * - 132 and 161: a `qti-printed-variable`'s `format` is a printf format string over the information
- *   model's conversion codes, of any number of conversions ({@link printfFormat}).
+ * - 132, 161 and 171: a `qti-printed-variable`'s `format` is a printf format string over the
+ *   information model's conversion codes and `d`, of any number of conversions
+ *   ({@link printfFormat}).
  * - 135: a MIME type, and each item of a list of them, is RFC 2045's type and subtype, two tokens
  *   joined by a slash ({@link mediaType}, {@link mediaTypeReadings}).
  *
@@ -1002,6 +1040,7 @@ export const specReadings: readonly SpecReading[] = [
   })),
   ...mathmlNotationReadings,
   ...cnBaseReadings,
+  mathmlXrefReading,
   on(120, ["qti-index"], "n", "xsd", positiveIndex),
   on(123, ["bdo"], "dir", "xsd", overrideDirection),
   on(124, ["audio", "source", "video"], "src", "xsd", nonEmptyUrl),

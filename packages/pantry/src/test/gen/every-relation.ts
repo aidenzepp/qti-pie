@@ -17,15 +17,24 @@
  *   mapping, outcomes with a normal range, a match table, an interpolation table and a record
  *   default, and templates; it holds a stimulus ref, an identity-typed text whose IDREF names an ID
  *   of its body, a body with a label (its root naming its tool), an open `data-*` attribute, an
- *   ARIA range and an IDREFS, an SSML fragment with a mark, a table whose cell's `headers` names
- *   its header, a printed variable whose base names a variable, a `q` with no quotation mark beside
- *   or inside it, template and feedback content, choice, hottext, hotspot, slider, custom (holding
- *   a foreign element) and portable custom interactions, and response processing that holds a
+ *   ARIA range and an IDREFS, an SSML fragment with a mark, a MathML formula that applies `log` to
+ *   a `logbase` and an argument, a table whose cell's `headers` names its header, a printed
+ *   variable whose base names a variable, a `q` with no quotation mark beside or inside it,
+ *   template and feedback content, choice, hottext, hotspot, slider, gap match (one gap text and
+ *   one gap, bound to a multiple directed pair response, so a gap writes its `GapInteraction`) and
+ *   portable custom interactions (the item's holds a foreign element in its markup's `template` and
+ *   names its module by the `module` attribute, the included fragment's by both forms, so the
+ *   package writes each form of "PCI module source"; it holds no custom interaction, which a 3.0.0
+ *   package may not), a catalog whose keyword-translation card holds two entries (the first its
+ *   default, in `es`, the second in `de`, languages the item's LOM does not list, since a catalog
+ *   sits outside the body) and whose sign-language card names the image as its file, a span in the
+ *   body whose `data-catalog-idref` names the catalog, and response processing that holds a
  *   `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a `tolerance`;
  * - **a second item** whose response processing is a published template, which the test places three
- *   times;
- * - **a third item** whose response processing includes a rule fragment, and whose custom interaction
- *   holds a text a bounded `xsi:type` types;
+ *   times, and which holds a catalog `cat2` that the included fragment's `data-catalog-idref`
+ *   names, a reference the schema resolves in each placement;
+ * - **a third item** whose response processing includes a rule fragment, and whose portable custom
+ *   interaction's markup holds a text a bounded `xsi:type` types;
  * - **the stimulus** has a declaration that writes `standalone`, a doctype, a processing instruction,
  *   a comment, an `xml:base` and an unexpanded entity reference in an attribute, and no reference
  *   the base would govern;
@@ -36,7 +45,7 @@
  * - **the section document** holds a printed variable whose index names a test variable, a feedback
  *   element, and a precondition, each resolved under its placement;
  * - **the usage data** holds a dated statistic with a typed value;
- * - **an image**, which two elements of the item reference.
+ * - **an image**, which two elements of the item reference, and its card's file.
  *
  * A {@link Bulk} adds identical binary entries, listed by a web content resource, so the package
  * passes one statement's transport bounds (`#pantry/import/package.large.db.test.ts`).
@@ -186,6 +195,7 @@ const itemOf = (members: MemberCounts): string =>
     '  <qti-response-declaration identifier="LINKS" cardinality="multiple" base-type="directedPair">',
     '    <qti-mapping default-value="0"><qti-map-entry map-key="A B" mapped-value="1"/></qti-mapping>',
     "  </qti-response-declaration>",
+    '  <qti-response-declaration identifier="BLANKS" cardinality="multiple" base-type="directedPair"/>',
     '  <qti-response-declaration identifier="SPOT" cardinality="single" base-type="point">',
     '    <qti-mapping default-value="0"><qti-map-entry map-key="10 20" mapped-value="1"/></qti-mapping>',
     '    <qti-area-mapping default-value="0">',
@@ -239,10 +249,12 @@ const itemOf = (members: MemberCounts): string =>
     '      <img src="media/pic.png" alt="A picture"/>',
     "    </div>",
     '    <p><ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak></p>',
+    '    <p>Solve <m:math xmlns:m="http://www.w3.org/1998/Math/MathML"><m:apply><m:log/><m:logbase><m:cn>2</m:cn></m:logbase><m:ci>x</m:ci></m:apply><m:apply><m:plus/><m:ci id="shared">y</m:ci><m:share src="#shared"/></m:apply><m:cn type="rational">1<m:sep/>2</m:cn><m:mtable><m:mtr><m:mtd><m:maligngroup/><m:maction actiontype="toggle" selection="1"><m:mi dir="ltr">a</m:mi><m:mi>b</m:mi></m:maction></m:mtd></m:mtr></m:mtable></m:math>.</p>',
     '    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>',
     '    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="SHOWN" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>',
     "    <p>It says <q>read this</q> and stops.</p>",
     '    <p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="RIGHT" show-hide="show">Right.</qti-feedback-inline></p>',
+    '    <p>See <span data-catalog-idref="cat1">the glossary</span>.</p>',
     '    <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1" min-choices="0">',
     "      <qti-prompt>Which one?</qti-prompt>",
     ...choiceIds
@@ -264,14 +276,30 @@ const itemOf = (members: MemberCounts): string =>
     ].slice(0, members.hotspots),
     "    </qti-hotspot-interaction>",
     '    <qti-slider-interaction response-identifier="LEVER" lower-bound="0" upper-bound="10" step="1"/>',
-    '    <qti-custom-interaction response-identifier="WIDGET">',
-    '      <w:widget xmlns:w="urn:example:widget">A widget.</w:widget>',
-    "    </qti-custom-interaction>",
     '    <qti-portable-custom-interaction response-identifier="PORTABLE" custom-interaction-type-identifier="urn:example:portable" module="portable">',
-    "      <qti-interaction-markup><div>A portable interaction.</div></qti-interaction-markup>",
+    '      <qti-interaction-markup><div>A portable interaction.</div><template><w:widget xmlns:w="urn:example:widget">A widget.</w:widget></template></qti-interaction-markup>',
     '      <qti-context-variable identifier="CTX"/>',
     "    </qti-portable-custom-interaction>",
+    '    <qti-gap-match-interaction response-identifier="BLANKS">',
+    '      <qti-gap-text identifier="FILL1" match-max="1">here</qti-gap-text>',
+    '      <p>Put it <qti-gap identifier="BLANK1"/>.</p>',
+    "    </qti-gap-match-interaction>",
     "  </qti-item-body>",
+    "  <qti-catalog-info>",
+    '    <qti-catalog id="cat1">',
+    '      <qti-card support="keyword-translation">',
+    '        <qti-card-entry default="true" xml:lang="es">',
+    "          <qti-html-content><p>cuadro</p></qti-html-content>",
+    "        </qti-card-entry>",
+    '        <qti-card-entry xml:lang="de">',
+    "          <qti-html-content><p>Bild</p></qti-html-content>",
+    "        </qti-card-entry>",
+    "      </qti-card>",
+    '      <qti-card support="sign-language">',
+    '        <qti-file-href mime-type="image/png">media/pic.png</qti-file-href>',
+    "      </qti-card>",
+    "    </qti-catalog>",
+    "  </qti-catalog-info>",
     "  <qti-response-processing>",
     '    <qti-set-outcome-value identifier="SCORE">',
     "      <qti-sum>",
@@ -323,11 +351,12 @@ const itemOf = (members: MemberCounts): string =>
  * The second item: one choice interaction, scored by the published match-correct template, and an
  * included fragment (spec reading 117) whose text entry binds the item's `TEXT`, whose hottext
  * interaction binds its `WORD`, whose portable custom interaction binds its `WIDGET2` and reads its
- * context variable `CTX2`, and whose template inline names its template variable `SHOWN`.
+ * context variable `CTX2`, and whose template inline names its template variable `SHOWN`. It holds
+ * an `m:mi` whose id the fragment's `m:share` names (reading 117).
  */
 const templatedItem = [
   declaration,
-  `<qti-assessment-item xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="item2" title="Templated" adaptive="false" time-dependent="false">`,
+  `<qti-assessment-item xmlns="${asi}" xmlns:m="http://www.w3.org/1998/Math/MathML" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="item2" title="Templated" adaptive="false" time-dependent="false">`,
   '  <qti-context-declaration identifier="CTX2" cardinality="single" base-type="integer"/>',
   '  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
   "    <qti-correct-response><qti-value>ChoiceA</qti-value></qti-correct-response>",
@@ -344,8 +373,14 @@ const templatedItem = [
   '      <qti-simple-choice identifier="ChoiceA">Yes.</qti-simple-choice>',
   '      <qti-simple-choice identifier="ChoiceB">No.</qti-simple-choice>',
   "    </qti-choice-interaction>",
+  '    <m:math><m:mi id="share-target">x</m:mi></m:math>',
   '    <xi:include href="fragment.xml"/>',
   "  </qti-item-body>",
+  "  <qti-catalog-info>",
+  '    <qti-catalog id="cat2">',
+  '      <qti-card support="spoken"><qti-html-content><p>word</p></qti-html-content></qti-card>',
+  "    </qti-catalog>",
+  "  </qti-catalog-info>",
   '  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>',
   "</qti-assessment-item>",
   "",
@@ -357,17 +392,20 @@ const templatedItem = [
  * hottext interaction naming its `WORD`, whose hottext counts among the item's assembly's, a
  * portable custom interaction naming its `WIDGET2` and its context variable `CTX2`, and a template
  * inline naming its template variable `SHOWN`, each resolved among the item's declarations; its
- * `xml:lang`, which the item's record lists (R26 in place).
+ * `xml:lang`, which the item's record lists (R26 in place); and an `m:share` naming the item's
+ * `m:mi`, resolved in the item's assembly.
  */
 const fragment = [
   declaration,
-  `<div xmlns="${asi}" xml:lang="en">`,
-  '  <p id="fragment-note">Type the word.</p>',
+  `<div xmlns="${asi}" xmlns:m="http://www.w3.org/1998/Math/MathML" xml:lang="en">`,
+  '  <p id="fragment-note" data-catalog-idref="cat2">Type the word.</p>',
+  '  <m:math><m:share src="#share-target"/></m:math>',
   '  <qti-text-entry-interaction response-identifier="TEXT"/>',
   '  <qti-hottext-interaction response-identifier="WORD" max-choices="1">',
   '    <p>Pick <qti-hottext identifier="W1">this</qti-hottext>.</p>',
   "  </qti-hottext-interaction>",
   '  <qti-portable-custom-interaction response-identifier="WIDGET2" custom-interaction-type-identifier="urn:example:portable" module="portable">',
+  '    <qti-interaction-modules><qti-interaction-module id="portable" primary-path="portable.js"/></qti-interaction-modules>',
   "    <qti-interaction-markup><div>A placed portable interaction.</div></qti-interaction-markup>",
   '    <qti-context-variable identifier="CTX2"/>',
   "  </qti-portable-custom-interaction>",
@@ -379,9 +417,11 @@ const fragment = [
 /**
  * The third item: a score and response processing that includes a response rule fragment (spec
  * reading 117), whose references name the item's `SCORE` and its built-in `numAttempts`; and a
- * custom interaction holding a foreign element whose text an `xsi:type` gives
- * `NonNegativeDoubleDType`, a bounded double (spec reading 144). It is here, not in the first
- * item's custom interaction, whose one foreign element the oracle's mutations draw.
+ * portable custom interaction whose markup's template holds a foreign element whose text an
+ * `xsi:type` gives `NonNegativeDoubleDType`, a bounded double (spec reading 144). A portable one,
+ * since a 3.0.0 item holds no custom interaction ("Custom interaction version"). It is here, not in
+ * the first item's portable custom interaction, whose one foreign element the oracle's mutations
+ * draw.
  */
 const ruledItem = [
   declaration,
@@ -390,9 +430,9 @@ const ruledItem = [
   '  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
   "  <qti-item-body>",
   "    <p>Scored by its included rule.</p>",
-  '    <qti-custom-interaction response-identifier="SIZE">',
-  '      <w:size xmlns:w="urn:example:widget" xsi:type="qti:NonNegativeDoubleDType">2.5</w:size>',
-  "    </qti-custom-interaction>",
+  '    <qti-portable-custom-interaction response-identifier="SIZE" custom-interaction-type-identifier="urn:example:portable" module="portable">',
+  '      <qti-interaction-markup><template><w:size xmlns:w="urn:example:widget" xsi:type="qti:NonNegativeDoubleDType">2.5</w:size></template></qti-interaction-markup>',
+  "    </qti-portable-custom-interaction>",
   "  </qti-item-body>",
   '  <qti-response-processing><xi:include href="rules.xml"/></qti-response-processing>',
   "</qti-assessment-item>",
@@ -529,7 +569,7 @@ const usage = [
   '<usageData xmlns="http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0">',
   '  <ordinaryStatistic name="P-value" context="http://example.org/contexts/every-relation" caseCount="10" stdError="0.01" lastUpdated="2026-11-06">',
   '    <targetObject identifier="item1"/>',
-  '    <value baseType="float">0.5</value>',
+  '    <value fieldIdentifier="F" baseType="float">0.5</value>',
   "  </ordinaryStatistic>",
   "</usageData>",
   "",

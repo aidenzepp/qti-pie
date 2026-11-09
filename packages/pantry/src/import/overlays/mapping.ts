@@ -18,8 +18,10 @@ import { declarationOf, typedCountOf } from "#pantry/import/overlays/declaration
 import type { TypedDeclaration } from "#pantry/import/overlays/declarations.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
+import { lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
 import { pairKeyPattern } from "#pantry/qti/mapping.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
 import type {
@@ -374,12 +376,38 @@ const addTypedKey = (typed: TypedKeys, baseType: BaseTypeHandle, entry: TypedEnt
 };
 
 /**
+ * How a map entry's key is matched: its `case-sensitive` as written (empty where unwritten),
+ * `folded` where its mapping is of strings and the value is not true, and `matched`, the key's
+ * ASCII lowercase where `folded`.
+ *
+ * @param baseType - The entry's mapping's base type, none for a record's mapping.
+ * @param caseText - The entry's `case-sensitive`, where written.
+ * @param key - The entry's `map-key`.
+ * @returns The `MapKey` row's matching fields.
+ */
+const matchingOf = (
+  baseType: Option.Option<BaseTypeHandle>,
+  caseText: string | undefined,
+  key: string,
+) => {
+  const written = caseText ?? "";
+  const folded =
+    Option.contains(baseType, "string") && !booleanTrue.some((form) => form === collapse(written));
+
+  return { caseText: written, folded, matched: folded ? lowerAscii(key) : key };
+};
+
+/**
  * Build the mapping overlays' rows of one document.
  *
  * A declared overlay copies its parent's declaration fields as `Declaration`'s builder writes them
  * (`#pantry/import/overlays/declarations.ts` `declarationOf`), and exists below every declaration,
  * whatever its attributes spell (spec readings 157 and 158): a table below no declaration, which
  * the content model never admits, has no row, and its parent's own law refuses it.
+ *
+ * A map entry's `MapKey` row also holds how its key is matched: its `case-sensitive` as written
+ * (empty where unwritten), `folded` where its mapping is of strings and the value is not true, and
+ * `matched`, the key's ASCII lowercase where `folded`.
  *
  * A map entry with no `map-key` has no `MapKey` row, and AL3 refuses the element. A key past the
  * key-text bound keeps its `MapKey` row and its typed row, whose `keyText` fields alone refuse it
@@ -519,6 +547,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
 
     mapKeys.set(node.id, {
       ...tupleOf(node),
+      ...matchingOf(mappingDeclaration.baseType, valueOf(node.id, "case-sensitive"), key),
       baseTypes: typedCountOf(mappingDeclaration.baseType),
       key,
       mapping: node.parent,

@@ -394,6 +394,24 @@ const targetsOf = (statements: readonly Statement[]): readonly Target[] => {
   return targetNames.filter((name) => meets[name]);
 };
 
+/**
+ * A migration file creating a roster's names constant.
+ */
+const created = (name: string): MigrationFile => ({
+  file: "02-structure.sql",
+  folder: "20260101000000_init",
+  sql: `CREATE FUNCTION "qti"."${name}__names"() RETURNS "pg_catalog"."name"[] LANGUAGE sql IMMUTABLE PARALLEL SAFE RETURN '{a}'::name[];\n`,
+});
+
+/**
+ * A later migration's file dropping that constant.
+ */
+const dropped = (name: string): MigrationFile => ({
+  file: "06-publish.sql",
+  folder: "20260101000001_later",
+  sql: `DROP FUNCTION "qti"."${name}__names"() RESTRICT;\n`,
+});
+
 describe("census", () => {
   it.effect("reports for every generated migration the counts of the statements it holds", (ctx) =>
     searched(
@@ -441,4 +459,8 @@ describe("census", () => {
       ),
     ),
   );
+
+  it("counts a function a later migration drops no more", () => {
+    assert.strictEqual(census([created("a"), created("b"), dropped("a")]).functions.names, 1);
+  });
 });
