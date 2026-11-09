@@ -3854,8 +3854,7 @@ const overlayLaws: readonly ((
     // Metadata §2.7.5.1), of a term of the LOM vocabulary: its source LOMv1.0, or empty, which
     // the loose binding's default="LOMv1.0" fills, or not written; both compared collapsed. The
     // first value and the first source stand for the type, as the binding caps each at one (N7).
-    // It reads a type in a record's document alone (170356bd), the document typed as
-    // documentTypeOf types it.
+    // It reads a type only in a record's document (`recordTypes`, ruling `170356bd`).
     if (node.kind !== "lom:learningResourceType" || !recordTypes.has(documentTypeOf(view, laws))) {
       return [];
     }
