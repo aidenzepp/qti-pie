@@ -788,7 +788,8 @@ const media = (attributes: readonly SourceAttribute[]): SourceElement =>
   );
 
 /**
- * Construct an Order over the given number of simple choices.
+ * Construct an Order over the given number of simple choices, each choice's identifier prefixed by
+ * its response's, so two Orders of one item give none twice (reading 104, E19).
  *
  * @param choices How many `qti-simple-choice`s it holds.
  * @param attributes Its counts.
@@ -805,7 +806,11 @@ const order = (
     responseIdentifier,
     attributes,
     Array.from({ length: choices }, (_, index) =>
-      el("qti-simple-choice", [attr("identifier", `C${index}`)], [text(`c${index}`)]),
+      el(
+        "qti-simple-choice",
+        [attr("identifier", `${responseIdentifier}-C${index}`)],
+        [text(`c${index}`)],
+      ),
     ),
   );
 
@@ -830,6 +835,47 @@ const pairRefusal = (
   path,
   rule: "count-range" as const,
 });
+
+/**
+ * Construct a pooled choice's or a gap's `duplicate-identifier` refusal (reading 104, E19).
+ *
+ * @param path The repeated `identifier` attribute's path.
+ * @param choiceClass The refused choice's class.
+ * @param identifier The identifier it repeats.
+ * @param otherClass The earlier choice's class, when it differs.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const repeated = (path: string, choiceClass: string, identifier: string, otherClass?: string) => ({
+  detail:
+    otherClass === undefined
+      ? { class: choiceClass, identifier, reading: "104" }
+      : { class: choiceClass, identifier, otherClass, reading: "104" },
+  path,
+  rule: "duplicate-identifier" as const,
+});
+
+/**
+ * Construct a Gap Match bound to `PAIRS` over the given gap texts and gaps.
+ *
+ * @param texts The identifier of each `qti-gap-text`.
+ * @param gaps The identifier of each `qti-gap`, in one paragraph.
+ * @returns The interaction.
+ */
+const gapping = (texts: readonly string[], gaps: readonly string[]): SourceElement =>
+  el(
+    "qti-gap-match-interaction",
+    [attr("response-identifier", "PAIRS")],
+    [
+      ...texts.map((identifier) =>
+        el("qti-gap-text", [attr("identifier", identifier), attr("match-max", "1")], [text("w")]),
+      ),
+      el(
+        "p",
+        [],
+        gaps.map((identifier) => el("qti-gap", [attr("identifier", identifier)])),
+      ),
+    ],
+  );
 
 describe("checkRules", () => {
   describe("undeclared-response", () => {
@@ -911,7 +957,7 @@ describe("checkRules", () => {
         ),
         [
           {
-            detail: { identifier: "A" },
+            detail: { class: "qti-simple-choice", identifier: "A", reading: "104" },
             path: "qti-assessment-item/qti-item-body/qti-choice-interaction/qti-simple-choice[2]/@identifier",
             rule: "duplicate-identifier",
           },
@@ -929,7 +975,7 @@ describe("checkRules", () => {
         ),
         [
           {
-            detail: { identifier: "A" },
+            detail: { class: "qti-inline-choice", identifier: "A", reading: "104" },
             path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction/qti-inline-choice[3]/@identifier",
             rule: "duplicate-identifier",
           },
@@ -937,7 +983,9 @@ describe("checkRules", () => {
       );
     });
 
-    it("[Q-12] accepts the same inline choice identifier in two Inline Choices", () => {
+    it("align-54 choice identifiers E19: refuses the same inline choice identifiers in two Inline Choices, each at the second (reading 104)", () => {
+      const second = "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction[2]";
+
       assert.deepStrictEqual(
         judged(
           item(
@@ -948,11 +996,15 @@ describe("checkRules", () => {
             [el("p", [], [inlineChoice("RESPONSE"), inlineChoice("RESPONSE2")])],
           ),
         ),
-        [],
+        ["A", "B"].map((identifier, index) => ({
+          detail: { class: "qti-inline-choice", identifier, reading: "104" },
+          path: `${second}/qti-inline-choice[${index + 1}]/@identifier`,
+          rule: "duplicate-identifier",
+        })),
       );
     });
 
-    it("[I-1] accepts distinct declarations, and the same choice identifier in two interactions", () => {
+    it("[I-1] accepts distinct declarations, and distinct choice identifiers across two interactions", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -961,7 +1013,7 @@ describe("checkRules", () => {
               response("RESPONSE2", "multiple", "identifier"),
               outcome("SCORE"),
             ],
-            [choice("RESPONSE", ["A", "B"]), choice("RESPONSE2", ["A", "B"])],
+            [choice("RESPONSE", ["A", "B"]), choice("RESPONSE2", ["C", "D"])],
           ),
         ),
         [],
@@ -1362,7 +1414,7 @@ describe("checkRules", () => {
             ],
             [
               choice("RESPONSE"),
-              choice("RESPONSE"),
+              choice("RESPONSE", ["C", "D"]),
               el(
                 "p",
                 [],
@@ -1828,6 +1880,177 @@ describe("checkRules", () => {
           },
         ],
       );
+    });
+  });
+
+  describe("align-54 choice identifiers: a choice identifier names one choice of the pooled classes and no item variable", () => {
+    const body = "qti-assessment-item/qti-item-body";
+
+    /**
+     * Construct the choice-variable refusal of a simple choice of the body's Choice that names a
+     * variable or a built-in (reading 104, E19).
+     *
+     * @param identifier The identifier the choice gives.
+     * @returns The refusal, as {@link judged} reduces it.
+     */
+    const namesVariable = (identifier: string) => ({
+      detail: {
+        check: "choice-variable",
+        class: "qti-simple-choice",
+        identifier,
+        reading: "104",
+      },
+      path: `${body}/qti-choice-interaction/qti-simple-choice/@identifier`,
+      rule: "duplicate-identifier" as const,
+    });
+
+    const pairs = response("PAIRS", "multiple", "directedPair");
+
+    it("align-54 choice identifiers E19: refuses one identifier on two simple choices of two Choices, at the second (reading 104)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              response("RESPONSE2", "single", "identifier"),
+            ],
+            [choice("RESPONSE", ["A", "B"]), choice("RESPONSE2", ["C", "A"])],
+          ),
+        ),
+        [
+          repeated(
+            `${body}/qti-choice-interaction[2]/qti-simple-choice[2]/@identifier`,
+            "qti-simple-choice",
+            "A",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses a gap text sharing a simple choice's identifier, two classes of one pool", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier"), pairs],
+            [choice("RESPONSE", ["A", "B"]), gapping(["A"], ["G"])],
+          ),
+        ),
+        [
+          repeated(
+            `${body}/qti-gap-match-interaction/qti-gap-text/@identifier`,
+            "qti-gap-text",
+            "A",
+            "qti-simple-choice",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses a hottext sharing an inline choice's identifier", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier"), response("HOT", "single", "identifier")],
+            [
+              el("p", [], [inlineChoice("RESPONSE", ["A", "B"])]),
+              el(
+                "qti-hottext-interaction",
+                [attr("response-identifier", "HOT")],
+                [el("p", [], [el("qti-hottext", [attr("identifier", "B")], [text("b")])])],
+              ),
+            ],
+          ),
+        ),
+        [
+          repeated(
+            `${body}/qti-hottext-interaction/p/qti-hottext/@identifier`,
+            "qti-hottext",
+            "B",
+            "qti-inline-choice",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses an associable hotspot sharing a gap img's identifier", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [pairs],
+            [
+              el(
+                "qti-graphic-gap-match-interaction",
+                [attr("response-identifier", "PAIRS")],
+                [
+                  el("img", [attr("src", "images/map.png"), attr("alt", "A map")]),
+                  el(
+                    "qti-gap-img",
+                    [attr("identifier", "H"), attr("match-max", "1")],
+                    [el("img", [attr("src", "images/pin.png"), attr("alt", "A pin")])],
+                  ),
+                  el("qti-associable-hotspot", [
+                    attr("identifier", "H"),
+                    attr("shape", "circle"),
+                    attr("coords", "10,10,5"),
+                    attr("match-max", "1"),
+                  ]),
+                ],
+              ),
+            ],
+          ),
+        ),
+        [
+          repeated(
+            `${body}/qti-graphic-gap-match-interaction/qti-associable-hotspot/@identifier`,
+            "qti-associable-hotspot",
+            "H",
+            "qti-gap-img",
+          ),
+        ],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses a choice named as a response, as choice-variable (reading 104)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item([response("RESPONSE", "single", "identifier")], [choice("RESPONSE", ["RESPONSE"])]),
+        ),
+        [namesVariable("RESPONSE")],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses a choice named as an outcome, as choice-variable (reading 104)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier"), outcome("SCORE")],
+            [choice("RESPONSE", ["SCORE"])],
+          ),
+        ),
+        [namesVariable("SCORE")],
+      );
+    });
+
+    it("align-54 choice identifiers E19: refuses a choice named as the built-in numAttempts, as choice-variable (reading 104)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier")],
+            [choice("RESPONSE", ["numAttempts"])],
+          ),
+        ),
+        [namesVariable("numAttempts")],
+      );
+    });
+
+    it("align-54 choice identifiers E19: accepts a gap and a gap text sharing an identifier, a gap being outside the pool", () => {
+      assert.deepStrictEqual(judged(item([pairs], [gapping(["G"], ["G"])])), []);
+    });
+
+    it("align-54 choice identifiers E19: refuses two gaps sharing an identifier, at the second (reading 104)", () => {
+      assert.deepStrictEqual(judged(item([pairs], [gapping(["W"], ["G", "G"])])), [
+        repeated(`${body}/qti-gap-match-interaction/p/qti-gap[2]/@identifier`, "qti-gap", "G"),
+      ]);
     });
   });
 
@@ -3854,7 +4077,7 @@ describe("checkRules", () => {
         ),
         [
           {
-            detail: { identifier: "A" },
+            detail: { class: "qti-simple-choice", identifier: "A", reading: "104" },
             path: `${laxDiv}/qti-choice-interaction/qti-simple-choice[2]/@identifier`,
             rule: "duplicate-identifier",
           },
