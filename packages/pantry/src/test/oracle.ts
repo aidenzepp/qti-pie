@@ -3742,6 +3742,14 @@ const toleranceSignOf = (value: string): "not positive" | "positive" | "string" 
 const lomForbidden: ReadonlySet<string> = new Set(["exam", "self assessment"]);
 
 /**
+ * The types of the documents a package's records are read from, as {@link documentTypeOf} types
+ * them: the package's own manifest (`none`) and an external record file, whose root is a `lom:lom`
+ * (`resourcemetadata/xml`, reading 81). A `cp:metadata` of any other document describes no part of
+ * the package, so its `lom:*` elements are no record's (ruling `170356bd`).
+ */
+const recordTypes: ReadonlySet<string> = new Set(["none", "resourcemetadata/xml"]);
+
+/**
  * The kinds of an item whose `label` is text for a reader and asks for no tool (spec reading 128):
  * the information model describes `ItemFileInfo`'s, the type of `qti-calculator-info` and
  * `qti-digital-material`, as "A human readable label/short description for the file" (§5.80.2),
@@ -3841,12 +3849,14 @@ const overlayLaws: readonly ((
             : [{ keys: { baseType, text }, law: "Usage typed value" }];
         })
       : [],
-  (node, { view }) => {
+  (node, { laws, view }) => {
     // Reading 122: "the LOM-defined values self assessment and exam are forbidden" (QTI 3.0
     // Metadata §2.7.5.1), of a term of the LOM vocabulary: its source LOMv1.0, or empty, which
     // the loose binding's default="LOMv1.0" fills, or not written; both compared collapsed. The
     // first value and the first source stand for the type, as the binding caps each at one (N7).
-    if (node.kind !== "lom:learningResourceType") {
+    // It reads a type in a record's document alone (170356bd), the document typed as
+    // documentTypeOf types it.
+    if (node.kind !== "lom:learningResourceType" || !recordTypes.has(documentTypeOf(view, laws))) {
       return [];
     }
 
