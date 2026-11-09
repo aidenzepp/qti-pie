@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option, Result } from "effect";
+import { Effect, Option, Result } from "effect";
+import { begin } from "#plate/begin.ts";
+import { decodeRecord } from "#plate/codec/record.ts";
 import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { defaultLabel, drawBelow, drawStream } from "#plate/engine/random.ts";
@@ -22,6 +24,9 @@ import type {
 import type { TemplateDefault, Test } from "#plate/model/test.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
+import { score } from "#plate/score.ts";
+import { open } from "#plate/validate/open.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * Construct a single integer value.
@@ -890,4 +895,97 @@ describe("template defaults in template processing", () => {
     );
     assert.strictEqual(stream.count(), 0);
   });
+});
+
+/**
+ * Open a hand-built item document, which `check` must accept with no unsupported feature, start
+ * its first record with `begin` and score one attempt with no response.
+ *
+ * @param children The root's children, as written.
+ * @returns The record `score` returned, decoded.
+ */
+const scoredBuiltIns = Effect.fnUntraced(function* scoredBuiltIns(children: string) {
+  const verdict = yield* open(
+    "items/built-ins.xml",
+    new TextEncoder().encode(
+      `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="builtins" title="Built-ins" adaptive="false" time-dependent="false">${children}</qti-assessment-item>`,
+    ),
+  );
+  assert.strictEqual(
+    verdict.verdict,
+    "accepted",
+    verdict.verdict === "refused"
+      ? JSON.stringify(verdict.refusals.map((each) => [each.rule, each.detail]))
+      : verdict.verdict,
+  );
+
+  const accepted = Option.getOrElse(acceptedItem(verdict), () => assert.fail("not an item"));
+  const started = yield* Effect.fromResult(begin(accepted, { instance: "q1", seed: "7" }));
+
+  return yield* Effect.fromResult(
+    decodeRecord(yield* Effect.fromResult(score(accepted, {}, started))),
+  );
+});
+
+describe("align-54 built-ins by kind: template processing sets a built-in's correct response or default (reading 111)", () => {
+  it("align-54 built-ins by kind E22a: records a correct response of numAttempts and a default of numAttempts and of completionStatus, typed as the built-in", () => {
+    const left = values(
+      run([
+        setCorrect("numAttempts", base(integer(7n))),
+        setDefault("numAttempts", nothing),
+        setDefault("completionStatus", base(identifier("completed"))),
+      ]),
+    );
+
+    assert.deepStrictEqual(
+      [left.correct, left.defaults],
+      [
+        { numAttempts: integer(7n) },
+        { completionStatus: identifier("completed"), numAttempts: nullOf("integer", "single") },
+      ],
+    );
+  });
+
+  it("align-54 built-ins by kind E22a: still fails a set of a built-in of another kind, or to a value of another type than the built-in's", () => {
+    assert.deepStrictEqual(
+      [
+        failure(run([setCorrect("completionStatus", base(identifier("completed")))])),
+        failure(run([setTemplate("numAttempts", base(integer(1n)))])),
+        failure(run([setDefault("numAttempts", base(float(1.5)))])),
+      ],
+      [
+        new UnknownIdentifierError({
+          holder: "item",
+          identifier: "completionStatus",
+          role: "response",
+        }),
+        new UnknownIdentifierError({ holder: "item", identifier: "numAttempts", role: "variable" }),
+        new OutcomeMismatchError({
+          actual: "float single",
+          expected: "integer single",
+          identifier: "numAttempts",
+        }),
+      ],
+    );
+  });
+
+  it.effect(
+    "align-54 built-ins by kind E22a: begin and score of an accepted item read back the defaults its template processing set for numAttempts and completionStatus, while the count and the built-in outcome start as an attempt gives them",
+    () =>
+      Effect.gen(function* readsBackBuiltInDefaults() {
+        const record = yield* scoredBuiltIns(
+          '<qti-outcome-declaration identifier="N" cardinality="single" base-type="integer"/><qti-outcome-declaration identifier="C" cardinality="single" base-type="identifier"/><qti-template-processing><qti-set-default-value identifier="numAttempts"><qti-base-value base-type="integer">5</qti-base-value></qti-set-default-value><qti-set-default-value identifier="completionStatus"><qti-base-value base-type="identifier">completed</qti-base-value></qti-set-default-value></qti-template-processing><qti-item-body><p>x</p></qti-item-body><qti-response-processing><qti-set-outcome-value identifier="N"><qti-default identifier="numAttempts"/></qti-set-outcome-value><qti-set-outcome-value identifier="C"><qti-default identifier="completionStatus"/></qti-set-outcome-value></qti-response-processing>',
+        );
+
+        assert.deepStrictEqual(
+          [
+            record.outcomes["N"],
+            record.outcomes["C"],
+            record.numAttempts,
+            record.outcomes["completionStatus"],
+          ],
+          [integer(5n), identifier("completed"), 1, identifier("unknown")],
+        );
+      }),
+  );
 });

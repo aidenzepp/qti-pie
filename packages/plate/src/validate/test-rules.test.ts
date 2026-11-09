@@ -681,6 +681,45 @@ const judged = (source: SourceDocument) =>
     };
   });
 
+/**
+ * Construct a test whose float outcome `SCORE` carries the attributes given, before a part holding
+ * one item ref.
+ *
+ * @param attributes The declaration's further attributes, such as `mastery-value`.
+ * @returns The test.
+ */
+const mastered = (attributes: Readonly<Record<string, string>>): SourceDocument =>
+  assessmentTest([
+    el("qti-outcome-declaration", [
+      attr("identifier", "SCORE"),
+      attr("cardinality", "single"),
+      attr("base-type", "float"),
+      ...Object.entries(attributes).map(([local, value]) => attr(local, value)),
+    ]),
+    part("P", [section("S", [itemRef("I1")])]),
+  ]);
+
+/**
+ * Construct the reduced refusal of a test outcome's `mastery-value` outside a written bound.
+ *
+ * @param value The `mastery-value`, as written.
+ * @param bound `least` for a `normal-minimum`, `greatest` for a `normal-maximum`.
+ * @param written The bound, as written.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const outOfRange = (value: string, bound: "greatest" | "least", written: string) => ({
+  detail: {
+    attribute: "mastery-value",
+    [bound]: written,
+    check: "mastery-range",
+    element: "qti-outcome-declaration",
+    reading: "9",
+    value,
+  },
+  path: "qti-assessment-test/qti-outcome-declaration/@mastery-value",
+  rule: "attribute-type",
+});
+
 describe("checkTestRules", () => {
   describe("duplicate-identifier", () => {
     it("refuses the second of two item refs named I1 in different sections", () => {
@@ -1586,6 +1625,32 @@ describe("checkTestRules", () => {
 
     it("[I-1] accepts a record field in a test declaration with both attributes and an integer, trimmed (reading 7)", () => {
       assert.deepStrictEqual(judged(recordOutcome([field([named, integerBase], " 1 ")])), []);
+    });
+
+    it("align-54 built-ins by kind B7: refuses a test's record value writing a field twice, as duplicate-identifier field at the second, as an item's (reading 158)", () => {
+      assert.deepStrictEqual(
+        judged(recordOutcome([field([named, integerBase], "5"), field([named, integerBase], "6")])),
+        [
+          {
+            detail: { check: "field", field: "n", reading: "158" },
+            path: "qti-assessment-test/qti-outcome-declaration/qti-default-value/qti-value[2]",
+            rule: "duplicate-identifier",
+          },
+        ],
+      );
+    });
+
+    it("align-54 built-ins by kind E42a: refuses a test outcome's mastery-value below its written normal-minimum and one above its written normal-maximum, as attribute-type mastery-range, as an item's (reading 9)", () => {
+      assert.deepStrictEqual(
+        [
+          judged(mastered({ "mastery-value": "-1", "normal-minimum": "0" })),
+          judged(mastered({ "mastery-value": "11", "normal-maximum": "1E1" })),
+          judged(
+            mastered({ "mastery-value": "0.5", "normal-maximum": "1", "normal-minimum": "0" }),
+          ),
+        ],
+        [[outOfRange("-1", "least", "0")], [outOfRange("11", "greatest", "1E1")], []],
+      );
     });
   });
 

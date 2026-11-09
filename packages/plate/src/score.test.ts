@@ -1795,6 +1795,34 @@ describe("fitting a templated item", () => {
       ["fits"],
     );
   });
+
+  it("align-54 built-ins by kind E22a: fits a correct response of numAttempts and a default of numAttempts and of completionStatus, as template processing sets them, and refuses one of another type than the built-in's, naming the built-in", () => {
+    const held = {
+      ...started,
+      correct: { numAttempts: integer(7n) },
+      defaults: { completionStatus: identifiers("single", "completed"), numAttempts: integer(5n) },
+    };
+
+    assert.deepStrictEqual(Result.getSuccess(fitting(templatedItem, held)), Option.some(held));
+    assert.deepStrictEqual(
+      Result.match(fitting(templatedItem, { ...started, defaults: { numAttempts: float(5) } }), {
+        onFailure: (failure) => [
+          failure._tag,
+          failure.stage,
+          failure.issue.includes('the built-in "numAttempts" takes'),
+        ],
+        onSuccess: () => ["fits"],
+      }),
+      ["InvalidRecord", "decode", true],
+    );
+    assert.deepStrictEqual(
+      fitOf(
+        { ...started, correct: { completionStatus: identifiers("single", "done") } },
+        "completionStatus",
+      ),
+      ["InvalidRecord", "decode", true],
+    );
+  });
 });
 
 describe("checkResponses", () => {

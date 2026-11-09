@@ -18,7 +18,10 @@
  * the processing scope: a test's processing reads more built-ins than its printed variables name.
  *
  * A field of a record declaration's value is judged as an item's is (`recordFieldRefusals`): it
- * carries `field-identifier` and `base-type`, and its text is a value of its own `base-type`.
+ * carries `field-identifier` and `base-type`, its text is a value of its own `base-type`, and no
+ * field of the same value wrote its `field-identifier` before it (`repeatedField`, reading 158). An
+ * outcome declaration's `mastery-value` lies within the bounds it writes, as an item's does
+ * (`masteryRange`, reading 9).
  *
  * A branch rule's target is judged as far as the document alone shows it (reading 87): a target
  * only where it lies inside the document, and one no name of it gives only in a test that places
@@ -52,9 +55,11 @@ import type { RefusalRule } from "#plate/validate/refusal.ts";
 import {
   declarationType,
   declarationsOf,
+  masteryRange,
   printedVariableReferences,
   processingRefusals,
   recordFieldRefusals,
+  repeatedField,
 } from "#plate/validate/rules.ts";
 import type { NamedVariable, PrefixedTyper, VariableScope } from "#plate/validate/rules.ts";
 import { governingTables } from "#plate/validate/structure.ts";
@@ -1079,6 +1084,7 @@ export const checkTestRules = (source: SourceDocument, tables: Tables): readonly
 
   const seen = new Set<string>();
   const declared = new Set<string>();
+  const fields = new Map<SourceElement, Set<string>>();
   const test = isQti(source.root, (local) => local === "qti-assessment-test");
   const scope = test ? Option.some(testScope(source)) : Option.none();
   const outcomes = declarationsOf(source, "qti-outcome-declaration");
@@ -1100,6 +1106,8 @@ export const checkTestRules = (source: SourceDocument, tables: Tables): readonly
       ...misplacedInTestContent(source, visit, parents),
       ...expressionPlacement(source, visit, parents),
       ...recordFieldRefusals(source, visit, parents),
+      ...repeatedField(source, visit, parents, fields),
+      ...masteryRange(source, visit),
       ...Option.match(scope, {
         onNone: () => [],
         onSome: (variables) => [

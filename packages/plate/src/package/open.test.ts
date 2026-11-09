@@ -2803,28 +2803,38 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      'built-in maps nothing in an item: a qti-map-response of numAttempts, and a qti-map-response-point of a timed item\'s duration, are refused as undeclared-variable expecting a response at the item\'s own document, and AREA_POINT is accepted (info.txt:9306, info.txt:9314; reading 111 ("a processing element\'s `identifier` names a variable of the kind the element reads or sets"), with G-R3 194, pending, for the mapping ("a prefixed map-response or map-response-point of a response with no mapping is refused"))',
+      "align-54 built-ins by kind E22a: a built-in maps nothing in an item: a qti-map-response of numAttempts, and a qti-map-response-point of a timed item's duration, are refused as template-requirements at the item's own document, since a built-in response has no mapping, and AREA_POINT is accepted (info.txt:9306, info.txt:9314; reading 111 (\"a processing element's `identifier` names a variable of the kind the element reads or sets\"); pantry's Mapped response law, P27; with G-R3 194, pending, for the mapping (\"a prefixed map-response or map-response-point of a response with no mapping is refused\"))",
       () =>
         Effect.gen(function* itemBuiltInMapsNothing() {
           const cases = [
-            ["qti-map-response", "numAttempts", "false"],
-            ["qti-map-response-point", "duration", "true"],
+            ["qti-map-response", "numAttempts", "false", { child: "qti-mapping" }],
+            [
+              "qti-map-response-point",
+              "duration",
+              "true",
+              { baseType: "point", child: "qti-area-mapping" },
+            ],
           ] as const;
 
-          for (const [element, identifier, timeDependent] of cases) {
+          for (const [element, identifier, timeDependent, needs] of cases) {
             assert.deepStrictEqual(
               refusalsOf(
                 yield* openScoringPoints(timeDependent, `<${element} identifier="${identifier}"/>`),
               ),
               [
                 {
-                  detail: { element, expected: "response", identifier },
+                  detail: {
+                    ...needs,
+                    declaration: "qti-response-declaration",
+                    element,
+                    identifier,
+                  },
                   document: fileLocation(location, "items/a.xml"),
                   location: {
                     kind: "path",
                     path: `qti-assessment-item/qti-response-processing/qti-set-outcome-value/${element}`,
                   },
-                  rule: "undeclared-variable",
+                  rule: "template-requirements",
                 },
               ],
               `${element} ${identifier}`,

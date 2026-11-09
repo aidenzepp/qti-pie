@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Array as Arr, Effect, Option, Result } from "effect";
+import { begin } from "#plate/begin.ts";
+import { decodeRecord } from "#plate/codec/record.ts";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import {
@@ -26,6 +28,9 @@ import { buildItem } from "#plate/model/item.ts";
 import { match, nullOf, parseLexical } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 import { expressionKinds } from "#plate/model/expression.ts";
+import { score as scoreAttempt } from "#plate/score.ts";
+import { open as openDocument } from "#plate/validate/open.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * Construct a single identifier value.
@@ -1633,4 +1638,55 @@ describe("evaluators", () => {
 
     assert.deepStrictEqual(entries.map(([kind]) => kind).toSorted(), expressionKinds.toSorted());
   });
+});
+
+describe("align-54 built-ins by kind: a lookup of the built-in completionStatus runs (reading 111)", () => {
+  it("align-54 built-ins by kind E22a: a lookup of completionStatus, whose built-in has no lookup table, stores its NULL, a single identifier", () => {
+    const after = Result.getOrThrow(
+      runRules([lookupOutcome("completionStatus", base(integerValue(1n)))], lookupItem, {
+        ...lookupVariables,
+        outcomes: { ...lookupVariables.outcomes, completionStatus: identifierValue("completed") },
+      }),
+    );
+
+    assert.deepStrictEqual(after.outcomes["completionStatus"], nullOf("identifier", "single"));
+  });
+
+  it.effect(
+    "align-54 built-ins by kind E22a: begin and score of an accepted item run a lookup of completionStatus after a set of it, which leaves the built-in NULL",
+    () =>
+      Effect.gen(function* runsBuiltInLookup() {
+        const verdict = yield* openDocument(
+          "items/built-ins.xml",
+          new TextEncoder().encode(
+            '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="builtins" title="Built-ins" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="B" cardinality="single" base-type="boolean"/><qti-item-body><p>x</p></qti-item-body><qti-response-processing><qti-set-outcome-value identifier="completionStatus"><qti-base-value base-type="identifier">completed</qti-base-value></qti-set-outcome-value><qti-lookup-outcome-value identifier="completionStatus"><qti-base-value base-type="integer">1</qti-base-value></qti-lookup-outcome-value><qti-set-outcome-value identifier="B"><qti-is-null><qti-variable identifier="completionStatus"/></qti-is-null></qti-set-outcome-value></qti-response-processing></qti-assessment-item>',
+          ),
+        );
+        assert.strictEqual(
+          verdict.verdict,
+          "accepted",
+          verdict.verdict === "refused"
+            ? JSON.stringify(verdict.refusals.map((each) => [each.rule, each.detail]))
+            : verdict.verdict,
+        );
+
+        const accepted = Option.getOrElse(acceptedItem(verdict), () => assert.fail("not an item"));
+        const started = yield* Effect.fromResult(begin(accepted, { instance: "q1", seed: "7" }));
+        const record = yield* Effect.fromResult(
+          decodeRecord(yield* Effect.fromResult(scoreAttempt(accepted, {}, started))),
+        );
+
+        assert.deepStrictEqual(
+          [record.outcomes["completionStatus"], record.outcomes["B"]],
+          [
+            nullOf("identifier", "single"),
+            {
+              baseType: "boolean",
+              cardinality: "single",
+              values: [{ baseType: "boolean", value: true }],
+            },
+          ],
+        );
+      }),
+  );
 });

@@ -4049,26 +4049,6 @@ describe("describeRefusal", () => {
     assert.notInclude(sentence, "outcome, to a");
   });
 
-  it("[I-9a] names the built-in a qti-lookup-outcome-value sets, which only a qti-set-outcome-value may set, and cites the information model's line", () => {
-    const sentence = describeRefusal(
-      refusalOf("undeclared-variable", {
-        check: "built-in-target",
-        element: "qti-lookup-outcome-value",
-        identifier: "completionStatus",
-        source: "info.txt:8488",
-      }),
-    );
-
-    assert.include(
-      sentence,
-      "`qti-lookup-outcome-value` sets the built-in `completionStatus`, which only a `qti-set-outcome-value` may set (info.txt:8488).",
-    );
-    assert.include(
-      sentence,
-      "To make it valid: set `completionStatus` with a `qti-set-outcome-value`, or name a declared outcome.",
-    );
-  });
-
   it("[T-9] words the lookup operand of a dotted target by what every lookup reads, and names no table (reading 28)", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {
@@ -4229,6 +4209,41 @@ describe("describeRefusal", () => {
       "To make it valid: declare `RESPONSE` in a `qti-response-declaration` with a `qti-mapping`.",
     );
     assert.notInclude(sentence, "item ref");
+  });
+
+  it("align-54 built-ins by kind E22a: words a map-response or map-response-point of a built-in as naming it, which has no declaration, and never asks to declare it (reading 111)", () => {
+    const cases = [
+      ["qti-map-response", "numAttempts", { child: "qti-mapping" }, "with a `qti-mapping`"],
+      [
+        "qti-map-response-point",
+        "duration",
+        { baseType: "point", child: "qti-area-mapping" },
+        "of base type `point` with a `qti-area-mapping`",
+      ],
+    ] as const;
+
+    for (const [element, identifier, needs, lacks] of cases) {
+      const sentence = describeRefusal(
+        refusalOf("template-requirements", {
+          ...needs,
+          declaration: "qti-response-declaration",
+          element,
+          identifier,
+        }),
+      );
+
+      assert.include(
+        sentence,
+        `\`${element}\` needs a \`qti-response-declaration\` ${lacks}, and names the built-in \`${identifier}\`, which has no declaration.`,
+        element,
+      );
+      assert.include(
+        sentence,
+        `To make it valid: name a response the item declares in a \`qti-response-declaration\` ${lacks}.`,
+        element,
+      );
+      assert.notInclude(sentence, `declare \`${identifier}\``, element);
+    }
   });
 
   it.each(m2Wordings)("writes the author facts of $name in code spans", ({ args, spans }) => {
