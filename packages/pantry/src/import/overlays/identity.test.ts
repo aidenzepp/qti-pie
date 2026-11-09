@@ -19,7 +19,7 @@ import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { patternFlags } from "#pantry/grammar/domains.ts";
-import { GoverningOf } from "#pantry/grammar/install.ts";
+import { AnonymousType, GoverningOf } from "#pantry/grammar/install.ts";
 import { rowsOf } from "#pantry/import/overlays/identity.ts";
 import { governorOf, ownContext } from "#pantry/import/fold.ts";
 import type { IdentityIds } from "#pantry/import/overlays/identity.ts";
@@ -97,18 +97,21 @@ type CaseKind =
   | "ssml:speak";
 
 /**
- * Read the type a kind's element is governed by under its own declaration, `GoverningOf`'s row
- * whose governor is the kind itself.
+ * Read the type a kind's element is governed by under its own declaration: none for a kind whose
+ * type is anonymous (`AnonymousType`), as every MathML kind's is, else `GoverningOf`'s row whose
+ * governor is the kind itself.
  *
  * @param kind - The kind.
- * @returns Its declared type's `TypeName` handle.
+ * @returns Its declared type's `TypeName` handle, if it names one.
  */
 const declaredType = (kind: CaseKind): Option.Option<string> =>
-  Option.some(
-    GoverningOf.rows.find(
-      (row) => row.kind === kind && row.governor === kind && row.version === version,
-    )?.governs ?? assert.fail(`GoverningOf holds ${kind} under its own governor`),
-  );
+  AnonymousType.rows.some((row) => row.kind === kind && row.version === version)
+    ? Option.none()
+    : Option.some(
+        GoverningOf.rows.find(
+          (row) => row.kind === kind && row.governor === kind && row.version === version,
+        )?.governs ?? assert.fail(`GoverningOf holds ${kind} under its own governor`),
+      );
 
 /**
  * Write a closed attribute.
