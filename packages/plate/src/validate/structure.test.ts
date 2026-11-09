@@ -1232,7 +1232,7 @@ const printed = (format: string): SourceDocument =>
   literal("qti-printed-variable", attr("identifier", "SCORE"), attr("format", format));
 
 /**
- * The detail of a refused printed variable's `format` (pantry R38).
+ * The detail of a refused printed variable's `format` (reading 132).
  *
  * @param format The `format`, as written.
  * @returns The detail.
@@ -1242,25 +1242,25 @@ const formatDetail = (format: string) => ({
   check: "printf-format",
   element: "qti-printed-variable",
   expected:
-    "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
-  pantry: "R38",
-  source: "info.txt:70323",
+    "a printf format: any text, %% for a percent sign, and conversions, each a %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the codes E, e, f, G, g, r, R, i, o, X, x and d",
+  reading: "132",
   value: format,
 });
 
 /**
- * The printed variable's `format` pattern as it stood before review `079e8c44` P2-13, kept as the
- * oracle the check must agree with. Its flags and its width both match `0`, so a refused `%`, a run
- * of zeros and a letter that is no code backtracks over every split of the run: quadratic time.
+ * The printed variable's `format` as readings 132 and 161 and the operator's P1 write it, a width
+ * of any digits, kept as the oracle the check must agree with. Its flags and its width both match
+ * `0`, so a refused `%`, a run of zeros and a letter that is no code backtracks over every split of
+ * the run: quadratic time.
  */
-const quadraticPrintfFormat = /^%[#0 +-]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXx]$/u;
+const quadraticPrintfFormat = /^(?:[^%]|%%|%[#0 +-]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXxd])*$/u;
 
 /**
  * The characters the `format` agreement check builds its strings from: the percent sign, every
- * flag, the digits that start a width with and without a zero, the point, two codes and `d`, which
- * is no code.
+ * flag, the digits that start a width with and without a zero, the point, three codes, `d` among
+ * them, and `q`, which is no code.
  */
-const formatAlphabet = ["%", "#", "0", " ", "+", "-", "1", "9", ".", "f", "i", "d"] as const;
+const formatAlphabet = ["%", "#", "0", " ", "+", "-", "1", "9", ".", "f", "i", "d", "q"] as const;
 
 /**
  * List every string of at most `length` characters over an alphabet, shortest first.
@@ -1296,8 +1296,9 @@ const formatZeros = 64_000;
 const formatGrowthTimeoutMs = 60_000;
 
 /**
- * The `format` equivalence check judges 271,453 strings. It takes about 0.75 s alone and took
- * 6.9 s on a loaded machine, past vitest's default of 5 s, so it is given room to finish there.
+ * The `format` equivalence check judges 402,234 strings. It took about 0.75 s alone over 271,453 of
+ * them and 6.9 s on a loaded machine, past vitest's default of 5 s, so it is given room to finish
+ * there.
  */
 const formatEquivalenceTimeoutMs = 60_000;
 
@@ -2963,7 +2964,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("the built-in variables' reserved identifiers (pantry DeclarationNotReserved) and qti-equal's tolerance tokens (pantry P6)", () => {
+  describe("the built-in variables' reserved identifiers (pantry DeclarationNotReserved) and qti-equal's tolerance values (reading 121)", () => {
     it("[I-9a] refuses a declaration named completionStatus, numAttempts or duration as attribute-type, on each of the four declarations (pantry DeclarationNotReserved; info.txt:12006, :22603, :39226, :45843)", () => {
       for (const [name, line] of reservations) {
         for (const identifier of ["completionStatus", "numAttempts", "duration", " duration "]) {
@@ -3167,54 +3168,87 @@ describe("checkStructure", () => {
       ]);
     });
 
-    it("[I-9a] refuses a qti-equal tolerance token that is neither an xs:double nor an NCName, such as 1,5, as attribute-type (pantry P6, info.txt:24946)", () => {
+    it("align-54 value grammars E24: refuses a qti-equal tolerance of no value, of three values, or with a number not above 0, 0, -1 and NaN among them, as attribute-type (reading 121)", () => {
       for (const tolerance of [
-        "1,5",
-        "0.5 1,5",
-        "{TOL}",
-        "+INF",
-        "1.5.5",
-        "5%",
-        "-TOL",
-        "TOL 1e",
+        "",
+        " ",
+        "1 2 3",
+        "TOL 1 2",
+        "0",
+        "-1",
+        "NaN",
+        "-INF",
+        "-0",
+        "+0",
+        "0.0",
+        "0e5",
+        ".0E-3",
+        "-0.1234567890123456",
+        "0.5 0",
+        "TOL -1",
+        "NaN 1",
       ]) {
         const source = tolerated(tolerance);
 
         assert.deepStrictEqual(
           found(source, generatedTables),
           [["attribute-type", at("qti-equal/@tolerance")]],
-          tolerance,
+          JSON.stringify(tolerance),
         );
         assert.deepStrictEqual(first(source, generatedTables)?.detail, {
           attribute: "tolerance",
           check: "tolerance-token",
           element: "qti-equal",
-          expected: "a list of numbers (xs:double) and variable names (NCName), one space apart",
-          pantry: "P6",
-          source: "info.txt:24946",
+          expected:
+            "one or two values, one space apart, each a number above 0 or a variable's name",
+          reading: "121",
           value: tolerance,
         });
       }
     });
 
-    it("[I-9a] admits tolerance tokens that are each an xs:double or an NCName, 0.5, 1 2, TOL and INF among them, and an empty tolerance, as pantry's toleranceList does", () => {
+    it("align-54 value grammars E24: accepts one or two values, each a number above 0 or a variable's name, +INF and 1,5 among them, which name variables read at run time (reading 121)", () => {
       for (const tolerance of [
+        "+INF",
+        "1,5",
+        "0.5 1,5",
+        "{TOL}",
+        "1.5.5",
+        "5%",
+        "-TOL",
+        "TOL 1e",
         "0.5",
         "1 2",
         "TOL",
         "INF",
-        "-INF",
-        "NaN",
+        "INF INF",
         "1e-3",
+        "1e-400",
+        "0.5e0",
         ".5",
         "5.",
         "+2",
+        "00.010",
         "TOL 0.5",
         "_low é",
         " 0.5\t1\n",
-        "",
       ]) {
-        assert.deepStrictEqual(found(tolerated(tolerance), generatedTables), [], tolerance);
+        assert.deepStrictEqual(
+          found(tolerated(tolerance), generatedTables),
+          [],
+          JSON.stringify(tolerance),
+        );
+      }
+    });
+
+    it("align-54 value grammars E24: refuses a tolerance of 0 under exact, the default mode, as under absolute, since the count and the sign bind every tolerance (reading 121)", () => {
+      for (const exact of [
+        literal("qti-equal", attr("tolerance", "0")),
+        literal("qti-equal", attr("tolerance-mode", "exact"), attr("tolerance", "")),
+      ]) {
+        assert.deepStrictEqual(found(exact, generatedTables), [
+          ["attribute-type", at("qti-equal/@tolerance")],
+        ]);
       }
     });
   });
@@ -3938,27 +3972,27 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("a printed variable's format (pantry R38)", () => {
-    it("[I-5] refuses a format that is not one whole printf conversion, %d, %u and Score: %.1f among them, as attribute-type at format (pantry R38, info.txt:70323)", () => {
+  describe("a printed variable's format (readings 132 and 161, and the operator's P1)", () => {
+    it("align-54 value grammars B2c: refuses %q, %u, a conversion with no code and a trailing %, as attribute-type at format (reading 132)", () => {
       for (const format of [
-        "%d",
-        "%u",
-        "Score: %.1f",
-        "%i of %i",
-        "%.1f%%",
-        "%%",
         "%q",
+        "%u",
         "%5.2",
-        "2f",
         "%",
-        "",
+        "2f%",
+        "%i of %",
+        "Score: %",
+        "%%%",
+        "%i%q",
+        "100% sure",
+        "%%%%%",
       ]) {
         const source = printed(format);
 
         assert.deepStrictEqual(
           found(source, generatedTables),
           [["attribute-type", at("qti-printed-variable/@format")]],
-          format,
+          JSON.stringify(format),
         );
         assert.deepStrictEqual(
           first(source, generatedTables)?.detail,
@@ -3968,16 +4002,30 @@ describe("checkStructure", () => {
       }
     });
 
-    it("[I-5] refuses a format padded at either end, which pantry R38 reads as xs:normalizedString does, without trimming", () => {
-      for (const format of [" %.1f", "%.1f ", "\t%i", "%i\n"]) {
-        const source = printed(format);
+    it("align-54 value grammars P1a, B2b.1: accepts %d, several conversions, %%, text around a conversion and a format of text alone (readings 132 and 161, the operator's P1)", () => {
+      for (const format of [
+        "%d",
+        "%d %d",
+        "%i of %i",
+        "Score: %.1f",
+        "100%%",
+        "Points",
+        "",
+        "%.1f%%",
+        "%%",
+        "2f",
+        "%%%e%%%G",
+        "%i, %.2f and %#x",
+        "%05d of %-3d",
+        "%%d",
+      ]) {
+        assert.deepStrictEqual(found(printed(format), generatedTables), [], JSON.stringify(format));
+      }
+    });
 
-        assert.deepStrictEqual(
-          found(source, generatedTables),
-          [["attribute-type", at("qti-printed-variable/@format")]],
-          JSON.stringify(format),
-        );
-        assert.deepStrictEqual(first(source, generatedTables)?.detail, formatDetail(format));
+    it("align-54 value grammars P1a: accepts a format padded at either end, its tabs and line breaks replaced, as text around the conversion (reading 161)", () => {
+      for (const format of [" %.1f", "%.1f ", "\t%i", "%i\n"]) {
+        assert.deepStrictEqual(found(printed(format), generatedTables), [], JSON.stringify(format));
       }
     });
 
@@ -3987,7 +4035,7 @@ describe("checkStructure", () => {
       }
     });
 
-    it("[I-5] admits one whole printf conversion, %.1f, %i, %08.3e and %-8X among them, and a printed variable with no format (pantry R38)", () => {
+    it("[I-5] admits one whole printf conversion, %.1f, %i, %08.3e and %-8X among them, and a printed variable with no format (reading 132)", () => {
       for (const format of [
         "%.1f",
         "%i",
@@ -4011,7 +4059,7 @@ describe("checkStructure", () => {
       );
     });
 
-    it("[I-5] refuses %d at format on a printed variable inside an item body, and leaves a text entry interaction's format unchecked (pantry R38)", () => {
+    it("[I-5] refuses %q at format on a printed variable inside an item body, and leaves a text entry interaction's format unchecked (reading 132)", () => {
       const source = item([
         el(
           "qti-item-body",
@@ -4021,10 +4069,10 @@ describe("checkStructure", () => {
               "p",
               [],
               [
-                el("qti-printed-variable", [attr("identifier", "SCORE"), attr("format", "%d")]),
+                el("qti-printed-variable", [attr("identifier", "SCORE"), attr("format", "%q")]),
                 el("qti-text-entry-interaction", [
                   attr("response-identifier", "RESPONSE"),
-                  attr("format", "%d"),
+                  attr("format", "%q"),
                 ]),
               ],
             ),
@@ -4038,7 +4086,7 @@ describe("checkStructure", () => {
     });
 
     it(
-      "[I-5] admits exactly the formats the quadratic pattern admits, every string of at most 5 characters over %, #, 0, space, +, -, 1, 9, ., f, i and d (review 079e8c44 P2-13)",
+      "[I-5] admits exactly the formats the quadratic pattern admits, every string of at most 5 characters over %, #, 0, space, +, -, 1, 9, ., f, i, d and q (review 079e8c44 P2-13)",
       () => {
         const strings = stringsUpTo(formatAlphabet, 5);
         const disagreeing = strings.filter(
@@ -4047,18 +4095,18 @@ describe("checkStructure", () => {
             (found(printed(format), generatedTables).length === 0),
         );
 
-        assert.strictEqual(strings.length, 271_453);
+        assert.strictEqual(strings.length, 402_234);
         assert.deepStrictEqual(disagreeing, []);
       },
       formatEquivalenceTimeoutMs,
     );
 
     it.effect(
-      "[I-5] refuses a format of %, 64,000 zeros and d as attribute-type at format, 8 times the zeros in under 32 times the time (review 079e8c44 P2-13)",
+      "[I-5] refuses a format of %, 64,000 zeros and q as attribute-type at format, 8 times the zeros in under 32 times the time (review 079e8c44 P2-13)",
       () =>
         Effect.gen(function* checksFormatInLinearTime() {
-          const fewer = printed(`%${"0".repeat(formatZeros / growthFactor)}d`);
-          const more = printed(`%${"0".repeat(formatZeros)}d`);
+          const fewer = printed(`%${"0".repeat(formatZeros / growthFactor)}q`);
+          const more = printed(`%${"0".repeat(formatZeros)}q`);
           assert.deepStrictEqual(found(more, generatedTables), [
             ["attribute-type", at("qti-printed-variable/@format")],
           ]);
