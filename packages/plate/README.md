@@ -460,14 +460,13 @@ point that two areas of a `qti-area-mapping` hold maps by the first area listed.
 
 The verdict marks each of these, and `score` runs no processing that holds one:
 
-- An `xi:include`, which plate never fetches
 - A `%` coordinate in a `qti-inside`, or in an area mapping that `qti-map-response-point` reads
 - A `qti-pattern-match` pattern that plate cannot translate
 - A `qti-lookup-outcome-value` that sets an outcome of cardinality `multiple` or `ordered`
 - A variable that plate holds no value for, such as a `file` response, a `record` response with a
   `file` field, a `record` outcome or template variable, `QTI_CONTEXT` or another context variable,
-  the built-in `duration` of a time-dependent item, or a template variable of template processing
-  that does not run
+  the built-in `duration`, whether or not the item is time dependent, or a template variable of
+  template processing that does not run
 
 The item's outcomes then stay at their defaults. The verdict also marks `qti-custom-operator`, but
 its processing runs, and the operator's value is NULL. A `qti-multiple`, `qti-ordered` or
@@ -483,24 +482,34 @@ build the container from that variable.
 | An operand of a type its expression does not take | `expression-type` | P23 |
 | A reference attribute, such as `qti-index`'s `n`, that names a variable other than a single template or outcome variable of the attribute's base type | `expression-type` | P24 |
 | A reference attribute that names no declared variable | `undeclared-variable` | P8 |
-| The built-in `duration`, read in an item that is not time dependent | `undeclared-variable` | `item-duration` |
-| A `qti-lookup-outcome-value` that sets the built-in `completionStatus` | `undeclared-variable` | P9 |
 | A `qti-variable` with a `weight-identifier`, which only a test's outcome processing may hold | `expression-placement` | P12 |
 | A literal `figures` below 1, or below 0 in `decimalPlaces` mode | `attribute-type` | P10 |
 | A literal `n` of `qti-index` below 1 | `attribute-type` | P11 |
-| A declaration named `completionStatus`, `numAttempts` or `duration`, the names of the built-in variables | `attribute-type` | `DeclarationNotReserved` |
-| An item's outcome declaration named `SCORE` or `MAXSCORE` whose base type is not `float`, or an item's or a test's named `PASSED` whose base type is not `boolean`. A `record` one is accepted *(pending)* | `attribute-type` | `ReservedOutcomeTypes` |
-| A `qti-equal` whose `tolerance` holds a token that is neither an `xs:double` nor a variable's name (an NCName), such as `1,5` | `attribute-type` | P6 |
+| An item's declaration named `completionStatus`, `numAttempts` or `duration`, the names of an item's built-in variables, or a test's named `duration` | `attribute-type` | `declaration-reserved` |
+| An item's outcome declaration named `SCORE` or `MAXSCORE` whose base type is not `float`, or an item's or a test's named `PASSED` whose base type is not `boolean`, a `record` one among them | `attribute-type` | `reserved-type` |
+| A `qti-equal` whose `tolerance` is not one or two values, each a number above 0 or a variable's name, such as `0`, `-1`, an empty value or three values. `+INF` is accepted, and so is `1,5`, as a name read at run time | `attribute-type` | P36 |
 | A `qti-equal` in `absolute` or `relative` mode that has no `tolerance` | `missing-attribute` | P36 |
 | A `qti-mapping` in a response declaration of base type `file` or `duration`, or of cardinality `record`, or a `qti-area-mapping` in one whose base type is not `point` | `misplaced-element` | `mapping-base-type`, `area-mapping-point` |
 | A `qti-value` without `field-identifier` or `base-type` in the `qti-correct-response` or `qti-default-value` of a `record` declaration | `missing-attribute` | `RecordFieldIdentifier`, and pantry's import for `base-type` |
 
 The refusals with `expression-type` and `undeclared-variable` judge inline response processing and
 template processing. [Template processing](#template-processing) lists the refusals that only
-template processing meets. The refusals of a declaration named after a built-in variable, and of
-a mistyped `PASSED`, judge a test's declarations as well as an item's. A test's `SCORE` and
-`MAXSCORE` may have any base type, since QTI 3.0 types only an item's. pantry refuses them in a
-test too, so there plate accepts what pantry refuses until pantry follows.
+template processing meets. The refusal of a mistyped `PASSED` judges a test's declarations as well
+as an item's. A test may declare `numAttempts` or `completionStatus`, and only `duration` is
+reserved there ([reading 168](../../docs/spec-readings.md), "a test may declare a variable named
+`numAttempts` or `completionStatus`; in a test only `duration` is reserved"). A test's `SCORE` and
+`MAXSCORE` may have any base type, a `record` among them, since QTI 3.0 types only an item's. pantry
+accepts them too.
+
+A built-in variable is named as the kind of variable it stands as
+([reading 111](../../docs/spec-readings.md), "a processing element's `identifier` names a variable
+of the kind the element reads or sets"): `numAttempts` and `duration` as responses, and
+`completionStatus` as an outcome. So `open` accepts a `qti-correct` of `numAttempts` or `duration`,
+a `qti-lookup-outcome-value` that sets `completionStatus`, and in template processing a
+`qti-set-default-value` of `completionStatus` or `numAttempts` and a `qti-set-correct-response` of
+`numAttempts`, and processing runs each. A `qti-correct` or `qti-default` of a built-in reads what
+template processing set, or NULL, and never the built-in's own value. A built-in declares no
+mapping, so `open` still refuses a `qti-map-response` of one.
 
 Integers are exact. `qti-sum`, `qti-subtract`, `qti-product` and `qti-lcm` give NULL for an
 integer result of more than 1,000,000 bits. `qti-multiple`, `qti-ordered` and `qti-repeat` give
@@ -639,7 +648,9 @@ and can change.
 - `qti-random-integer` gives NULL when `max` is below `min` or `step` is 0 or below, and when `min`
   or `max` has more than 1,000,000 bits *(pending)*. `qti-random-float` gives NULL for a NaN or
   infinite bound, or when `max` is below `min` *(pending)*. `qti-random` of NULL is NULL.
-- A printed variable with a `format` prints as its one printf conversion writes the value. A tie
+- A printed variable with a `format` prints its value in the format's first conversion, and the text
+  around it as written, `%%` as a percent sign. A format of text alone prints the text. `%d` prints
+  as `%i` does, and a conversion after the first prints as written, as the operator ruled. A tie
   rounds half away from zero on the shortest decimal that reads back, so 0.25 at `%.1f` prints
   `0.3`, where C's `printf` prints `0.2`.
 - Under `%i`, `%o`, `%x` or `%X`, a float prints its shortest decimal's integer digits
@@ -661,22 +672,16 @@ and can change.
   the printed-value defaults: a container passes its values joined by `;`, and NULL passes an empty
   value.
 
-`open` refuses the following. pantry refuses the same, except in the three places named below the
-table.
+`open` refuses the following. pantry refuses the same.
 
 | Refused | Rule | pantry's rule |
 | --- | --- | --- |
 | A `qti-set-template-value`, `qti-set-correct-response` or `qti-set-default-value` whose expression is not of its variable's base type and cardinality | `expression-type` | P20 |
 | A read in template processing of a response, an outcome or a built-in other than `QTI_CONTEXT`, through `qti-variable`, `qti-correct`, `qti-default`, `qti-map-response`, `qti-map-response-point` or a reference attribute. Template processing reads only template and context variables | `expression-type` | P26 |
-| A `qti-set-template-value` that names no template variable, a `qti-set-correct-response` that names no response, or a `qti-set-default-value` that names neither a response nor an outcome | `undeclared-variable` | P8, or P9 for a built-in |
-| A printed variable's `format` that is not one printf conversion with a code from `E e f G g r R i o X x`, such as `%d`, `%u` or `Score: %.1f` | `attribute-type` | R38 |
+| A `qti-set-template-value` that names no template variable, a `qti-set-correct-response` that names no response, or a `qti-set-default-value` that names neither a response nor an outcome, each built-in named as the kind it stands as | `undeclared-variable` | P8, or `variable-kind` for a built-in |
+| A printed variable's `format` with a conversion that ends in no code from `d E e f G g r R i o X x`, such as `%q`, `%u` or a trailing `%` | `attribute-type` | `attribute-lexical` |
 | A printed variable whose `identifier` names no outcome or template variable, or whose `base` or `index`, written as a name, names no single integer outcome or template variable; in a test, whose `identifier` names no outcome the test declares, or whose `base` or `index` names no single integer outcome the test declares | `undeclared-variable` for a name nothing declares, else `expression-type` | `printed-variable-ref` |
 | A `template-identifier`, on a template block or inline or on a choice, that names no template variable of base type `identifier` and cardinality `single` or `multiple` | `undeclared-variable` for a name nothing declares, else `expression-type` | `template-ref` |
-
-plate and pantry differ in three places until pantry follows. plate accepts a `format` whose
-precision has no digits, such as `%.f`, and a printed variable that names the built-in
-`completionStatus`. It refuses a wrong `template-identifier` on a `qti-simple-choice`, which pantry
-does not check.
 
 The verdict marks a template declaration of base type `file`, of cardinality `record`, or with no
 base type, as it marks such an outcome declaration and a response declaration of base type `file`
@@ -708,26 +713,28 @@ Outcome processing runs every outcome rule, and the eight expressions only a tes
 `qti-number-correct`, `qti-number-incorrect`, `qti-number-presented`, `qti-number-responded`,
 `qti-number-selected`, `qti-outcome-minimum`, `qti-outcome-maximum` and `qti-test-variables`. A
 dotted name such as `ITEM1.SCORE` reads the variable `SCORE` of the item that the item ref `ITEM1`
-names ([reading 48](../../docs/spec-readings.md)). An item ref's `qti-variable-mapping` applies to
-every read by name, dotted or through one of the eight expressions, so a mapped name reads the
-item's source outcome. A `qti-variable` whose `weight-identifier` names a `qti-weight` of its item
-ref reads an integer or a float as a float times the weight.
+names ([reading 48](../../docs/spec-readings.md), "a dotted reference is accepted when exactly one
+reading names a real item ref, test part or section and its variable"). An item ref's
+`qti-variable-mapping` applies to every read by name, dotted or through one of the eight
+expressions, so a mapped name reads the item's source outcome. A `qti-variable` whose
+`weight-identifier` names a `qti-weight` of its item ref reads an integer or a float as a float
+times the weight.
 
 The verdict marks a test's outcome processing, and the session does not run it, when it holds an
-expression plate does not run or an `xi:include`. It does the same when the processing reads or
-sets a variable plate holds no value for in a test *(pending)*: the test's own `numAttempts`,
-`completionStatus`, `QTI_CONTEXT` or a context variable, the `duration` of a part, a section or an
-item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`, or a
+expression plate does not run. It does the same when the processing reads or sets a variable plate
+holds no value for in a test *(pending)*: the test's own `numAttempts` or `completionStatus` where
+the test declares none, `QTI_CONTEXT` or a context variable, the `duration` of a part, a section or
+an item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`, or a
 `qti-test-variables` of `duration`. In a test that holds a `qti-assessment-section-ref`, it also
 marks a dotted name that does not start with a part, section or item ref of the test document
 itself, such as `I1.SCORE` where `I1` is an item ref in a section document. It also marks such a
 test's outcome processing when the processing holds one of the eight expressions above, because they
 would look up only the test document's own items: a session delivers none of a section document's
-items. `openPackage` also marks a test's outcome processing, and leaves out a template default,
-that reads an item's context variable through its item ref, such as `ITEM1.CTX` where the item
-declares `CTX` in a `qti-context-declaration`: the item marks that declaration, and plate holds no
-value of it. A test checked apart from its items cannot see this, so there its processing runs and
-fails at that read with `UnknownIdentifierError`. `open` accepts these, as pantry does.
+items. `openPackage` also marks a test's outcome processing, and leaves out a template default, that
+reads an item's context variable through its item ref, such as `ITEM1.CTX` where the item declares
+`CTX` in a `qti-context-declaration`: the item marks that declaration, and plate holds no value of
+it. A test checked apart from its items cannot see this, so there its processing runs and fails at
+that read with `UnknownIdentifierError`. `open` accepts these, as pantry does.
 
 `openPackage` accepts a test that sets a variable from `qti-field-value` of an item's `record`
 response, whatever the field, in its outcome processing or in an item ref's template default.
@@ -778,8 +785,11 @@ and can change.
   response with a `file` field, reads NULL, which matches no correct response, so an item with one
   that declares a correct response is never correct *(pending)*. `qti-number-responded` counts an
   item whose `record` response differs from its declared default.
-- `qti-outcome-minimum` leaves out an item whose outcome declares no `normal-minimum`, and applies
-  no default in its place *(pending)*.
+- In a package whose manifest says QTI 3.0.1, an outcome that writes no `normal-minimum` has the
+  minimum 0.0 ([reading 149](../../docs/spec-readings.md), "an outcome declaration's
+  `normal-minimum` is 0.0 where a QTI 3.0.1 document writes none"), so `qti-outcome-minimum` counts
+  it, and `results` writes `normalMinimum="0"` for it. Elsewhere `qti-outcome-minimum` leaves out an
+  item whose outcome declares no `normal-minimum`, and applies no default in its place *(pending)*.
 - `qti-test-variables`, `qti-outcome-minimum` and `qti-outcome-maximum` read an item's
   `numAttempts` and `completionStatus` as a dotted name reads them. A built-in declares no
   `normal-minimum` or `normal-maximum`, so the minimum leaves the item out and the maximum is NULL
@@ -819,24 +829,36 @@ and the table judges it as it judges an undotted name. A `qti-correct` of `S.TOT
 since it names an outcome and not a response.
 
 `openPackage` also refuses the following, which need the documents that a test's item refs and
-section refs name. It never splits a dotted name the test declares whole into an item ref and a
-variable.
+section refs name. A name that a rule sets is the test's own variable, so `openPackage` never splits
+it into an item ref and a variable ([reading 112](../../docs/spec-readings.md), "a test's setter
+sets a variable of its own document, so a prefixed reading never resolves it"). A name that the test
+reads counts every reading: the test's own variable of the whole name, each item ref, part or
+section that a split reaches, and a numbered reading such as `Q1.2.SCORE` only where a selection
+with replacement can repeat `Q1` ([reading 88](../../docs/spec-readings.md), "a numbered reference
+such as `Q01.2.SCORE` names an instance of an item ref that a selection with replacement can repeat,
+and nothing else").
 
 | Refused | Rule | pantry's rule |
 | --- | --- | --- |
-| A dotted name, read or set by `qti-set-outcome-value` or `qti-lookup-outcome-value`, that no reading resolves to an item ref, a test part or a section and one of its variables | `undeclared-variable` | `prefixed-ref` |
-| A dotted name, read or set, that two readings resolve | `ambiguous-reference` | `prefixed-ref` |
-| A dotted name that reads the built-in `duration` of an item that is not time dependent | `undeclared-variable` | `item-duration` |
+| A dotted name, read, that no reading resolves to an item ref, a test part or a section and one of its variables, a numbered name with no selection that can repeat its item ref among them | `undeclared-variable` | `prefixed-ref` |
+| A dotted name, read, that two readings resolve, such as `a.b` that the test declares whole beside an item ref `a` whose item declares `b` | `ambiguous-reference` | `prefixed-ref` |
+| A dotted name that `qti-set-outcome-value` or `qti-lookup-outcome-value` sets and the test does not declare, such as `ITEM1.SCORE` | `undeclared-variable` | `variable-kind` |
+| A name read from outside a section document that the test places twice, through that document | `ambiguous-reference` | `prefixed-ref` |
 | A dotted read whose variable's type breaks a rule of the table above, a braced name in a string attribute such as `pattern="{ITEM1.N}"` among them, or a template default whose value is not of its variable's type | `expression-type` | P20 to P24 |
 | A `qti-variable-mapping` whose `source-identifier` names no outcome its item declares | `undeclared-variable` | `variable-mapping-source` |
-| A second `qti-variable-mapping` on one item ref with the same `target-identifier` | `duplicate-identifier` | `variable-mapping-target` |
+| A `qti-variable-mapping` whose `target-identifier` names another variable of its item or a built-in, or a second mapping on one item ref with the same `target-identifier` | `duplicate-identifier` | `variable-mapping-target` |
 | A `qti-template-default` whose `template-identifier` names no template variable of its item | `undeclared-variable` | `template-default-target` |
 | A part, section or item ref identifier given twice across a test and the section documents it reaches, refused at the second | `duplicate-identifier` | `structure-identifier` |
-| A dotted `qti-correct` that reads anything but a response *(pending)* | `undeclared-variable` | none |
-| A dotted `qti-map-response` or `qti-map-response-point` that reads anything but a response *(pending)* | `undeclared-variable` | none |
-| A dotted `qti-map-response` or `qti-map-response-point` whose response declares no mapping or area mapping *(pending)* | `template-requirements` | none |
+| A section ref that leads back to a section document already on its chain | `inclusion-cycle` | `inclusion-cycle` |
+| A branch rule, in the test or in a section document it places, that jumps backward, to itself, into another part, to a name the assembled test does not hold, or to an item ref a selection with replacement can repeat | `branch-target` | `branch-target`, `branch-forward` |
+| A dotted `qti-correct` that reads anything but a response | `undeclared-variable` | `variable-kind` |
+| A dotted `qti-map-response` or `qti-map-response-point` that reads anything but a response | `undeclared-variable` | `variable-kind` |
+| A dotted `qti-map-response` or `qti-map-response-point` whose response declares no mapping or area mapping | `template-requirements` | P27 |
 
-plate and pantry differ in the last three rows until pantry follows: pantry accepts all three.
+pantry refuses the last three rows too, under its laws "Variable kind" and "Mapped response"
+([reading 166](../../docs/spec-readings.md), "a test's prefixed `qti-map-response` names a response
+variable whose declaration holds a `qti-mapping`, and a test's prefixed `qti-correct` names a
+response variable").
 
 `openPackage` reads a section document that a test reaches through a `qti-assessment-section-ref`
 as if it were inline in that test ([reading 5](../../docs/spec-readings.md)). The test's dotted
@@ -844,6 +866,108 @@ names resolve through the section document's item refs. `openPackage` refuses th
 document's variable mappings and template defaults as it refuses the test's, and judges its
 expressions under each test that reaches it. A session delivers only the items of the test
 document's own item refs, so the verdict marks a dotted name that reads through a section document.
+
+A section ref whose `href`, through the `xml:base` in scope, leads outside the package is refused
+`package-path-outside` with the check `remote-section`, in the test and in each section document it
+places. plate never fetches a section, so it cannot assemble that test.
+[Reading 170](../../docs/spec-readings.md) ("a section ref whose href is external is refused under
+the stated limit 'Remote section ref'") calls the refusal a stated limit, not a rule of QTI.
+
+## Documents and packages
+
+`open` checks a document against the QTI 3.0 XSD and the readings in
+[`docs/spec-readings.md`](../../docs/spec-readings.md), which pantry follows too. A refusal names
+its `rule`, and its `detail` names the `check` where a rule has several. The
+[changelog](CHANGELOG.md) lists each check as it lands. A host can rely on these:
+
+- A document that holds MathML, SSML, an unexpanded entity reference or an `xi:include` is
+  `unchecked`, whatever its root, and plate gives no accepted document for it. plate never fetches
+  an included fragment, so it cannot judge the document that places one.
+- A choice's identifier is used by no other choice of its item, of any class, a `qti-gap` among
+  them, and names no item variable or built-in ([reading 104](../../docs/spec-readings.md), "a
+  choice's identifier is used by no other choice of any class in its document, and names no item
+  variable").
+- On an element that the Schematron's extension-attribute lists cover, an attribute the XSD does not
+  declare is refused unless it is a `data-` attribute ([reading 90](../../docs/spec-readings.md),
+  "an attribute its XSD does not declare is a `data-` attribute, or the document is refused"). The
+  ASI XSD declares no `xml:base` on a test, a test part, a section or an item ref, so `open` refuses
+  one there. Where QTI allows it, an `xml:base` is a base for the references under it.
+- A catalog holds one card per support, and a card holds at most one default entry. A
+  `data-catalog-idref` names a `qti-catalog` (R9-a, "the catalog sentences of the information model
+  hold as written").
+- A `qti-portable-custom-interaction` names its module by `module`, by `qti-interaction-modules`, or
+  by both (R10-a, "a PCI names its module by `module`, by `qti-interaction-modules`, or by both").
+- A `data-ssml` value is Data-SSML JSON in every document, as the operator ruled, or the document is
+  refused `attribute-type`, the check `data-ssml` naming the problem.
+
+In a package, the manifest's QTI version decides three more rules, which a document you `open` alone
+does not meet, since plate cannot know its version. Under 3.0.0, an item that holds a
+`qti-custom-interaction` is refused `unknown-element`, as the operator ruled, since 3.0.0 deprecates
+it for a PCI. Under 3.0.1, an item whose root carries a `label` carries `tool-name` and
+`tool-version` ([reading 128](../../docs/spec-readings.md), "a `label` asks for the tool that
+labelled it where its own characteristic's description says so"). Also under 3.0.1, an outcome that
+writes no `normal-minimum` has the minimum 0.0, which `qti-outcome-minimum`, a `mastery-value` and
+`results` read ([reading 149](../../docs/spec-readings.md)).
+
+`openPackage` reads the files you unzipped, never a zip, so
+[reading 139](../../docs/spec-readings.md) ("a package zip's central directory ends where its end
+record begins") is your unzip's to keep. Refuse a zip that holds other bytes between the two. A file
+key that holds a backslash or begins with a drive prefix, such as `C:/x.xml`, is refused
+`package-path-outside` ([reading 138](../../docs/spec-readings.md)). Beyond each document's own
+verdict, `openPackage` refuses:
+
+- A file reference that resolves inside the package, through the `xml:base` in scope, and names no
+  file the package holds or its manifest lists, with `package-file-missing`
+  ([reading 103](../../docs/spec-readings.md), "a document's file references are the attributes its
+  vocabularies define as the location of a file"). The references are those reading 103 lists, an
+  image, a stylesheet, an item ref and a module configuration among them, and a card's
+  `qti-file-href` and a `qti-resource-icon` (R9-b, "card files and resource icons are file
+  references").
+- A language an item's or a test's `xml:lang` states that the general category of its LOM record
+  does not list, with `document-lang`. An `xml:lang` inside a catalog asks for no listing (R9-c,
+  "R26 counts the metadata binding's elements, and catalog content is not among them").
+- An item's or a test's title that matches no LOM title string of the document's language, read as
+  an `xs:normalizedString`, with `lom-title`.
+- A QTI 2 document, such as QTI 2 usage data, with `not-qti-root`.
+- A document resource whose `href` is absolute, rooted or leads outside the package, with
+  `package-path-outside`. A `cp:file` or another resource's `href` that leads outside is an external
+  link, and is not refused.
+
+An item ref may name an LTI link in place of an item ([reading 110](../../docs/spec-readings.md),
+"under an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded
+limit, and a template default is refused"). `openPackage` delivers the test with the ref marked
+`lti-link` and left out, since plate launches no LTI link. No rule judges a variable mapping under
+the ref. A name read through it is accepted, and the processing that reads it is marked and does not
+run. The package also marks outcome processing that counts over the test's items, which would count
+only the delivered items. A template default under the ref is refused `undeclared-variable`.
+
+## Limits
+
+Each row is a limit of plate's own, not a rule of QTI. In each, plate refuses valid content it
+cannot represent, or accepts content it cannot check, for the cause the row names.
+
+| Limit | Cause | What would lift it |
+| --- | --- | --- |
+| A document nested deeper than 256 elements is refused `reader-refused`, its `readerRule` `element-depth`, as crust refuses it. XML and QTI set no depth | The bound protects the recursive walks over a read document | Walks that keep their own stack, then a higher bound in crust's reader |
+| A section ref whose `href` leads outside the package is refused `package-path-outside`, check `remote-section` (reading 170) | plate never fetches a section, so it cannot assemble the test | Fetching the section when the package is opened |
+| A document that holds an `xi:include` is `unchecked`. A loop through includes is not seen, and the `xml:lang` of an included fragment asks for no LOM listing | plate never fetches an included fragment | Fetching each fragment and judging it in place |
+| Under an item ref that names an LTI link, a variable mapping and a name read through the ref are accepted unchecked (readings 106 and 110) | The package declares nothing that a link reports | A source that lists the outcomes a link reports |
+| Text that an `xsi:type` types with a simple type, under a wildcard, is accepted unchecked (reading 60), and an ID such text carries takes no part in the ID table | plate does not check simply typed text | A check of XML Schema's simple types on text |
+| Under a `strict` wildcard, an element of a namespace plate holds no tables for, such as MathML in an item or XLink in a manifest, is not walked, nor is what a `skip` wildcard admits. An `xml:lang` there is not checked (reading 129), and an IDREF that names an `id` there is not refused | plate holds no tables for those namespaces | Tables for each namespace the schemas import |
+| An IDREF is not refused in a document that includes a fragment, or where an ID's value holds an unexpanded entity reference | The document's IDs are not all known | Fetching fragments and expanding entities |
+| A manifest's IDs and IDREFs are not judged by the ID table | The manifest's own rules already refuse a dependency that names no resource (`dependency-unresolved`) | Applying the content-packaging XSD's ID types |
+| A default hotspot whose interaction's type an `xsi:type` gives, under another element name, is not judged | No official package has one | Judging hotspots by their governing type |
+| A comment or processing instruction between a quotation mark and a `q` is not seen, so the mark is refused (reading 127) | plate's reader drops comments and processing instructions | A reader that keeps them |
+| A `data-ssml` value's `break.time` is not checked against CSS's time format, nor `prosody.rate` against its percentage, beyond their whitespace | The binding's JSON Schema types both as strings | A check of each format |
+| A `data-ssml` name written twice in one JSON object is judged by its last value | plate's JSON reader keeps the last value | A JSON reader that keeps every value |
+| A test's or a section's `data-catalog-idref` that names a catalog of a section document it places is refused `attribute-type`, check `idref-target` | plate judges each document's IDs alone | Judging catalog references over the assembled test |
+| `a%2Fb.xml` and `a%252Fb.xml` name one file, the one whose name is spelled `a%2Fb.xml` | A package keys a file by one text, which holds no `/` inside a segment | Keys that keep a segment's escapes |
+| With item refs `a` and `a.2` and no selection with replacement, `openPackage` accepts `a.2.SCORE` through its split reading, but a session counts the numbered reading too and reads nothing | The engine counts every numbered reading | Counting a numbered reading only through an item ref a selection with replacement can repeat, as `openPackage` does |
+| A fragment, LOM metadata or usage-data document is read for its root alone. A QTI 2 root is refused, and nothing else of it is judged | plate models none of these documents | Judging each document, usage data's values among them |
+| Where resources name an included fragment's path as two types of document, any element in QTI's namespace but a root no include stands for bears out the fragment's type. The choice moves no verdict, only which resource is refused | plate holds no table of what an include stands for | That table |
+| A `srcset` URL that holds a comma not followed by whitespace is split at the comma | plate splits a `srcset` at its commas | HTML's `srcset` parsing algorithm |
+| A `qti-interaction-modules` that writes no `primary-configuration` is not checked for its default file, `modules/module_resolution.js` | Only a written attribute is a reference, and no official package leaves it unwritten without the file | Looking for the default file |
+| A branch rule's backward target that a `fixed` choice keeps in order under a shuffle is accepted (reading 87) | plate does not read `fixed` when it judges order | Reading `fixed` |
 
 ## Server and browser
 
