@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import { readCorpusFile } from "#plate/document/corpus.ts";
+import { readSource } from "#plate/document/read.ts";
 import {
   attr,
   doc,
@@ -21,6 +23,7 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { packageTables } from "#plate/package/tables.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { checkStructure, governingTables } from "#plate/validate/structure.ts";
@@ -35,6 +38,7 @@ import type {
   TypeEntry,
   Wildcard,
 } from "#plate/validate/xsd.ts";
+import { manifestNamespace } from "#plate/vocabulary.ts";
 
 /**
  * The location every hand-built document in these tests carries.
@@ -600,7 +604,8 @@ const mappable =
 /**
  * Where a `qti-area-mapping` must sit, as its placement row words it.
  */
-const pointed = "in a qti-response-declaration whose base type is point";
+const pointed =
+  "in a qti-response-declaration whose base type is point and whose cardinality is not record";
 
 /**
  * Construct an item whose catalog holds one card.
@@ -616,11 +621,6 @@ const carded = (...children: readonly SourceChild[]): SourceDocument =>
       [el("qti-catalog", [attr("id", "glossary")], [el("qti-card", [], children)])],
     ),
   ]);
-
-/**
- * The path of the card {@link carded} builds.
- */
-const card = "qti-assessment-item/qti-catalog-info/qti-catalog/qti-card";
 
 /**
  * Construct an item whose body holds one PCI with the given children.
@@ -1232,7 +1232,7 @@ const printed = (format: string): SourceDocument =>
   literal("qti-printed-variable", attr("identifier", "SCORE"), attr("format", format));
 
 /**
- * The detail of a refused printed variable's `format` (pantry R38).
+ * The detail of a refused printed variable's `format` (reading 132).
  *
  * @param format The `format`, as written.
  * @returns The detail.
@@ -1242,25 +1242,25 @@ const formatDetail = (format: string) => ({
   check: "printf-format",
   element: "qti-printed-variable",
   expected:
-    "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
-  pantry: "R38",
-  source: "info.txt:70323",
+    "a printf format: any text, %% for a percent sign, and conversions, each a %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the codes E, e, f, G, g, r, R, i, o, X, x and d",
+  reading: "132",
   value: format,
 });
 
 /**
- * The printed variable's `format` pattern as it stood before review `079e8c44` P2-13, kept as the
- * oracle the check must agree with. Its flags and its width both match `0`, so a refused `%`, a run
- * of zeros and a letter that is no code backtracks over every split of the run: quadratic time.
+ * The printed variable's `format` as readings 132 and 161 and the operator's P1 write it, a width
+ * of any digits, kept as the oracle the check must agree with. Its flags and its width both match
+ * `0`, so a refused `%`, a run of zeros and a letter that is no code backtracks over every split of
+ * the run: quadratic time.
  */
-const quadraticPrintfFormat = /^%[#0 +-]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXx]$/u;
+const quadraticPrintfFormat = /^(?:[^%]|%%|%[#0 +-]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXxd])*$/u;
 
 /**
  * The characters the `format` agreement check builds its strings from: the percent sign, every
- * flag, the digits that start a width with and without a zero, the point, two codes and `d`, which
- * is no code.
+ * flag, the digits that start a width with and without a zero, the point, three codes, `d` among
+ * them, and `q`, which is no code.
  */
-const formatAlphabet = ["%", "#", "0", " ", "+", "-", "1", "9", ".", "f", "i", "d"] as const;
+const formatAlphabet = ["%", "#", "0", " ", "+", "-", "1", "9", ".", "f", "i", "d", "q"] as const;
 
 /**
  * List every string of at most `length` characters over an alphabet, shortest first.
@@ -1296,8 +1296,9 @@ const formatZeros = 64_000;
 const formatGrowthTimeoutMs = 60_000;
 
 /**
- * The `format` equivalence check judges 271,453 strings. It takes about 0.75 s alone and took
- * 6.9 s on a loaded machine, past vitest's default of 5 s, so it is given room to finish there.
+ * The `format` equivalence check judges 402,234 strings. It took about 0.75 s alone over 271,453 of
+ * them and 6.9 s on a loaded machine, past vitest's default of 5 s, so it is given room to finish
+ * there.
  */
 const formatEquivalenceTimeoutMs = 60_000;
 
@@ -1424,6 +1425,307 @@ const mistyped = (source: SourceDocument): readonly Location[] =>
   checkStructure(source, generatedTables)
     .filter((refusal) => refusal.rule === "attribute-type")
     .map((refusal) => refusal.location);
+
+/**
+ * Construct an item, whole by the generated tables, holding the given children: its root writes
+ * the three attributes the tables require of it.
+ *
+ * @param children The item's children.
+ * @returns The item as a source document.
+ */
+const wholeItem = (children: readonly SourceChild[]): SourceDocument =>
+  item(children, [
+    attr("identifier", "item"),
+    attr("title", "Item"),
+    attr("time-dependent", "false"),
+  ]);
+
+/**
+ * Check a document against the generated tables, keeping each refusal's rule, location and detail.
+ *
+ * @param source The document.
+ * @returns Its refusals, in the order found.
+ */
+const judged = (source: SourceDocument) =>
+  checkStructure(source, generatedTables).map(
+    (refusal) => [refusal.rule, refusal.location, refusal.detail] as const,
+  );
+
+/**
+ * An image, as a graphic interaction or a position object stage holds one.
+ */
+const picture = el("img", [attr("alt", "A map"), attr("src", "map.png")]);
+
+/**
+ * Construct a hotspot of a graphic interaction: a `qti-hotspot-choice`, or a
+ * `qti-associable-hotspot` with the `match-max` it requires.
+ *
+ * @param local The hotspot's local name.
+ * @param identifier Its `identifier`.
+ * @param geometry Its `shape`, as written.
+ * @returns The hotspot.
+ */
+const hotspot = (local: string, identifier: string, geometry: string): SourceElement =>
+  el(local, [
+    attr("identifier", identifier),
+    attr("shape", geometry),
+    attr("coords", "10,10,5"),
+    ...(local === "qti-associable-hotspot" ? [attr("match-max", "1")] : []),
+  ]);
+
+/**
+ * Construct a whole item whose body holds one graphic interaction with an image and the given
+ * children after it.
+ *
+ * @param interaction The interaction's local name.
+ * @param children The interaction's children after its image: hotspots, and text between them.
+ * @returns The item as a source document.
+ */
+const graphicItem = (interaction: string, ...children: readonly SourceChild[]): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-item-body",
+      [],
+      [el(interaction, [attr("response-identifier", "RESPONSE")], [picture, ...children])],
+    ),
+  ]);
+
+/**
+ * The detail of the refusal of a default hotspot out of its place (reading 80).
+ *
+ * @param local The hotspot's local name.
+ * @param context The interaction that holds it.
+ * @returns The detail.
+ */
+const defaultHotspot = (local: string, context: string) => ({
+  check: "default-hotspot",
+  context,
+  element: local,
+  reading: "80",
+});
+
+/**
+ * Construct a whole item whose body holds a position object stage with one position object
+ * interaction.
+ *
+ * @param attributes The interaction's attributes beside its `response-identifier`.
+ * @returns The item as a source document.
+ */
+const positioned = (...attributes: readonly SourceAttribute[]): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-item-body",
+      [],
+      [
+        el(
+          "qti-position-object-stage",
+          [],
+          [
+            picture,
+            el(
+              "qti-position-object-interaction",
+              [attr("response-identifier", "RESPONSE"), ...attributes],
+              [picture],
+            ),
+          ],
+        ),
+      ],
+    ),
+  ]);
+
+/**
+ * Construct a whole item with one outcome declaration holding a lookup table.
+ *
+ * @param identifier The outcome's `identifier`.
+ * @param cardinality Its `cardinality`, as written.
+ * @param base Its `base-type`, none for a record.
+ * @param table The lookup table.
+ * @returns The item as a source document.
+ */
+const lookedUp = (
+  identifier: string,
+  cardinality: string,
+  base: Option.Option<string>,
+  table: SourceElement,
+): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-outcome-declaration",
+      [
+        attr("identifier", identifier),
+        attr("cardinality", cardinality),
+        ...Option.match(base, {
+          onNone: () => [],
+          onSome: (written) => [attr("base-type", written)],
+        }),
+      ],
+      [table],
+    ),
+  ]);
+
+/**
+ * A match table with one entry, as the research probe `p100-multiple-table` writes it.
+ */
+const matchTable = el(
+  "qti-match-table",
+  [attr("default-value", "0")],
+  [el("qti-match-table-entry", [attr("source-value", "1"), attr("target-value", "1.5")])],
+);
+
+/**
+ * An interpolation table with one entry.
+ */
+const interpolationTable = el(
+  "qti-interpolation-table",
+  [],
+  [el("qti-interpolation-table-entry", [attr("source-value", "1"), attr("target-value", "1.5")])],
+);
+
+/**
+ * The location of the lookup table a {@link lookedUp} item's outcome holds.
+ *
+ * @param local The table's local name.
+ * @returns Its location.
+ */
+const lookupTable = (local: string): Location =>
+  at(`qti-assessment-item/qti-outcome-declaration/${local}`);
+
+/**
+ * The detail of the refusal of a lookup table under an outcome that is not single (reading 100).
+ *
+ * @param local The table's local name.
+ * @param identifier The outcome's identifier.
+ * @returns The detail.
+ */
+const lookupCardinality = (local: string, identifier: string) => ({
+  check: "lookup-cardinality",
+  element: local,
+  identifier,
+  reading: "100",
+});
+
+/**
+ * Check a document against the generated tables, keeping each refusal's rule and location.
+ *
+ * @param source The document.
+ * @returns Its refusals' rules and locations, in the order found.
+ */
+const ruled = (source: SourceDocument) =>
+  judgedMapping(source).map(({ location: where, rule }) => [rule, where]);
+
+/**
+ * An image, as a `picture` holds one after its sources.
+ */
+const pictureImage = el("img", [attr("alt", "A map"), attr("src", "map.png")]);
+
+/**
+ * Construct a whole item whose body holds the given content.
+ *
+ * @param content The body's children.
+ * @returns The item as a source document.
+ */
+const bodied = (...content: readonly SourceChild[]): SourceDocument =>
+  wholeItem([el("qti-item-body", [], content)]);
+
+/**
+ * The location of an element or attribute in a {@link bodied} item's body.
+ *
+ * @param step The path below the body.
+ * @returns Its location.
+ */
+const inBody = (step: string): Location => at(`qti-assessment-item/qti-item-body/${step}`);
+
+/**
+ * Check a document against the generated tables, and keep each refusal's rule and location and
+ * the reading its detail cites.
+ *
+ * @param source The document.
+ * @returns Its refusals' rules, locations and readings, in the order found.
+ */
+const cited = (source: SourceDocument) =>
+  judged(source).map(([rule, where, detail]) => [rule, where, detail["reading"]] as const);
+
+/**
+ * Construct a whole item whose body holds a video with one track.
+ *
+ * @param attributes The track's attributes beside its `src`.
+ * @returns The item as a source document.
+ */
+const trackedVideo = (...attributes: readonly SourceAttribute[]): SourceDocument =>
+  bodied(
+    el("video", [attr("src", "clip.mp4")], [el("track", [attr("src", "en.vtt"), ...attributes])]),
+  );
+
+/**
+ * LOM's namespace, whose elements a manifest's metadata holds.
+ */
+const lomNamespace = "http://ltsc.ieee.org/xsd/LOM";
+
+/**
+ * Construct a 3.0.0 manifest whose own LOM record holds one title string.
+ *
+ * @param language The string's `xml:lang`, as written.
+ * @returns The manifest as a source document.
+ */
+const titledManifest = (language: string): SourceDocument =>
+  doc(
+    "imsmanifest.xml",
+    el(
+      "manifest",
+      [attr("identifier", "M")],
+      [
+        el(
+          "metadata",
+          [],
+          [
+            el("schema", [], [text("QTI Package")], manifestNamespace),
+            el("schemaversion", [], [text("3.0.0")], manifestNamespace),
+            el(
+              "lom",
+              [],
+              [
+                el(
+                  "general",
+                  [],
+                  [
+                    el(
+                      "title",
+                      [],
+                      [
+                        el(
+                          "string",
+                          [attr("lang", language, xmlNamespace)],
+                          [text("A test")],
+                          lomNamespace,
+                        ),
+                      ],
+                      lomNamespace,
+                    ),
+                  ],
+                  lomNamespace,
+                ),
+              ],
+              lomNamespace,
+            ),
+          ],
+          manifestNamespace,
+        ),
+        el("organizations", [], [], manifestNamespace),
+        el("resources", [], [], manifestNamespace),
+      ],
+      manifestNamespace,
+    ),
+  );
+
+/**
+ * Check a manifest as the manifest walk does: no QTI tables, and the 3.0.0 profile's tables of
+ * every namespace it reaches.
+ *
+ * @param source The manifest.
+ * @returns Its refusals.
+ */
+const walkedManifest = (source: SourceDocument) =>
+  checkStructure(source, { elements: {}, types: {} }, packageTables.get("3.0.0"));
 
 describe("checkStructure", () => {
   describe("the six rules", () => {
@@ -2045,7 +2347,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("readings 16, 17 and 18: the narrowed attributes", () => {
+  describe('readings 16 and 17, and reading 18 ("an order or graphic-order interaction\'s `min-choices`, where written, is from 1 to its number of choices"): the narrowed attributes', () => {
     it("[I-2] refuses normal-maximum 0, 0.0, -0 and 0e0 as attribute-type, and admits 1 (reading 16)", () => {
       const path = "qti-assessment-item/qti-outcome-declaration/@normal-maximum";
 
@@ -2068,7 +2370,7 @@ describe("checkStructure", () => {
       assert.deepStrictEqual(found(item([outcome(attr("view", "candidate"))])), []);
     });
 
-    it('[I-8] refuses min-choices="0" on an order interaction as attribute-type, and admits it on a choice interaction (reading 18)', () => {
+    it('[I-8] refuses min-choices="0" on an order interaction as attribute-type, and admits it on a choice interaction, by reading 18 ("an order or graphic-order interaction\'s `min-choices`, where written, is from 1 to its number of choices")', () => {
       const order = body(
         el("qti-order-interaction", [
           attr("response-identifier", "RESPONSE"),
@@ -2341,7 +2643,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("readings 20, 21 and 31, and single cardinality: child counts", () => {
+  describe("readings 20 and 21, and single cardinality: child counts", () => {
     it("[Q-31] refuses a PCI with no qti-interaction-markup, or two, as child-count (reading 20)", () => {
       const path = "qti-assessment-item/qti-item-body/qti-portable-custom-interaction";
       const none = customInteraction();
@@ -2381,36 +2683,6 @@ describe("checkStructure", () => {
               [],
               [el("qti-base-value", [attr("base-type", "integer")], [text("1")])],
             ),
-          ),
-        ),
-        [],
-      );
-    });
-
-    it("refuses a card or a card entry with no content as child-count (reading 31)", () => {
-      const empty = carded();
-      const emptyEntry = carded(el("qti-card-entry"));
-
-      assert.deepStrictEqual(found(empty), [["child-count", at(card)]]);
-      assert.deepStrictEqual(first(empty)?.detail, {
-        child: "qti-html-content or qti-file-href or qti-card-entry",
-        element: "qti-card",
-        required: "at least one",
-        source: "reading 31",
-      });
-      assert.deepStrictEqual(found(emptyEntry), [["child-count", at(`${card}/qti-card-entry`)]]);
-      assert.deepStrictEqual(first(emptyEntry)?.detail, {
-        child: "qti-html-content or qti-file-href",
-        element: "qti-card-entry",
-        required: "at least one",
-        source: "reading 31",
-      });
-      assert.deepStrictEqual(found(carded(el("qti-html-content", [], [text("A word.")]))), []);
-      assert.deepStrictEqual(
-        found(
-          carded(
-            el("qti-card-entry", [], [el("qti-file-href", [], [text("a.mp3")])]),
-            el("qti-card-entry", [], [el("qti-file-href", [], [text("b.mp3")])]),
           ),
         ),
         [],
@@ -2692,7 +2964,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("the built-in variables' reserved identifiers (pantry DeclarationNotReserved) and qti-equal's tolerance tokens (pantry P6)", () => {
+  describe("the built-in variables' reserved identifiers (pantry DeclarationNotReserved) and qti-equal's tolerance values (reading 121)", () => {
     it("[I-9a] refuses a declaration named completionStatus, numAttempts or duration as attribute-type, on each of the four declarations (pantry DeclarationNotReserved; info.txt:12006, :22603, :39226, :45843)", () => {
       for (const [name, line] of reservations) {
         for (const identifier of ["completionStatus", "numAttempts", "duration", " duration "]) {
@@ -2896,54 +3168,87 @@ describe("checkStructure", () => {
       ]);
     });
 
-    it("[I-9a] refuses a qti-equal tolerance token that is neither an xs:double nor an NCName, such as 1,5, as attribute-type (pantry P6, info.txt:24946)", () => {
+    it("align-54 value grammars E24: refuses a qti-equal tolerance of no value, of three values, or with a number not above 0, 0, -1 and NaN among them, as attribute-type (reading 121)", () => {
       for (const tolerance of [
-        "1,5",
-        "0.5 1,5",
-        "{TOL}",
-        "+INF",
-        "1.5.5",
-        "5%",
-        "-TOL",
-        "TOL 1e",
+        "",
+        " ",
+        "1 2 3",
+        "TOL 1 2",
+        "0",
+        "-1",
+        "NaN",
+        "-INF",
+        "-0",
+        "+0",
+        "0.0",
+        "0e5",
+        ".0E-3",
+        "-0.1234567890123456",
+        "0.5 0",
+        "TOL -1",
+        "NaN 1",
       ]) {
         const source = tolerated(tolerance);
 
         assert.deepStrictEqual(
           found(source, generatedTables),
           [["attribute-type", at("qti-equal/@tolerance")]],
-          tolerance,
+          JSON.stringify(tolerance),
         );
         assert.deepStrictEqual(first(source, generatedTables)?.detail, {
           attribute: "tolerance",
           check: "tolerance-token",
           element: "qti-equal",
-          expected: "a list of numbers (xs:double) and variable names (NCName), one space apart",
-          pantry: "P6",
-          source: "info.txt:24946",
+          expected:
+            "one or two values, one space apart, each a number above 0 or a variable's name",
+          reading: "121",
           value: tolerance,
         });
       }
     });
 
-    it("[I-9a] admits tolerance tokens that are each an xs:double or an NCName, 0.5, 1 2, TOL and INF among them, and an empty tolerance, as pantry's toleranceList does", () => {
+    it("align-54 value grammars E24: accepts one or two values, each a number above 0 or a variable's name, +INF and 1,5 among them, which name variables read at run time (reading 121)", () => {
       for (const tolerance of [
+        "+INF",
+        "1,5",
+        "0.5 1,5",
+        "{TOL}",
+        "1.5.5",
+        "5%",
+        "-TOL",
+        "TOL 1e",
         "0.5",
         "1 2",
         "TOL",
         "INF",
-        "-INF",
-        "NaN",
+        "INF INF",
         "1e-3",
+        "1e-400",
+        "0.5e0",
         ".5",
         "5.",
         "+2",
+        "00.010",
         "TOL 0.5",
         "_low é",
         " 0.5\t1\n",
-        "",
       ]) {
-        assert.deepStrictEqual(found(tolerated(tolerance), generatedTables), [], tolerance);
+        assert.deepStrictEqual(
+          found(tolerated(tolerance), generatedTables),
+          [],
+          JSON.stringify(tolerance),
+        );
+      }
+    });
+
+    it("align-54 value grammars E24: refuses a tolerance of 0 under exact, the default mode, as under absolute, since the count and the sign bind every tolerance (reading 121)", () => {
+      for (const exact of [
+        literal("qti-equal", attr("tolerance", "0")),
+        literal("qti-equal", attr("tolerance-mode", "exact"), attr("tolerance", "")),
+      ]) {
+        assert.deepStrictEqual(found(exact, generatedTables), [
+          ["attribute-type", at("qti-equal/@tolerance")],
+        ]);
       }
     });
   });
@@ -3129,27 +3434,565 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("a printed variable's format (pantry R38)", () => {
-    it("[I-5] refuses a format that is not one whole printf conversion, %d, %u and Score: %.1f among them, as attribute-type at format (pantry R38, info.txt:70323)", () => {
+  describe("align-54 interaction rows: a default hotspot's place, a position object's least count, a lookup table's outcome, a declaration read as written, and an empty card (readings 80, 92, 100, 157 and 158, and P5)", () => {
+    it("align-54 interaction rows E5: refuses a default hotspot choice that is not the last hotspot of its hotspot or graphic order interaction as misplaced-element, and admits one last, before trailing text (reading 80)", () => {
+      for (const interaction of ["qti-hotspot-interaction", "qti-graphic-order-interaction"]) {
+        const path = `qti-assessment-item/qti-item-body/${interaction}/qti-hotspot-choice[1]`;
+
+        assert.deepStrictEqual(
+          judged(
+            graphicItem(
+              interaction,
+              hotspot("qti-hotspot-choice", "ELSEWHERE", "default"),
+              hotspot("qti-hotspot-choice", "TOWN", "circle"),
+            ),
+          ),
+          [["misplaced-element", at(path), defaultHotspot("qti-hotspot-choice", interaction)]],
+          interaction,
+        );
+        assert.deepStrictEqual(
+          judged(
+            graphicItem(
+              interaction,
+              hotspot("qti-hotspot-choice", "TOWN", "circle"),
+              hotspot("qti-hotspot-choice", "ELSEWHERE", "default"),
+              text("\n  "),
+            ),
+          ),
+          [],
+          `${interaction}, default last`,
+        );
+        assert.deepStrictEqual(
+          judged(
+            graphicItem(
+              interaction,
+              hotspot("qti-hotspot-choice", "ELSEWHERE", " default"),
+              hotspot("qti-hotspot-choice", "TOWN", "circle"),
+            ),
+          ).map(([rule, where]) => [rule, where]),
+          [["attribute-type", at(`${path}/@shape`)]],
+          `${interaction}, a shape that spells no shape`,
+        );
+      }
+    });
+
+    it("align-54 interaction rows E5: refuses a default associable hotspot in a graphic gap match interaction, last or not, as misplaced-element, and admits one anywhere in a graphic associate interaction (reading 80)", () => {
+      const interaction = "qti-graphic-gap-match-interaction";
+
+      assert.deepStrictEqual(
+        judged(
+          graphicItem(
+            interaction,
+            hotspot("qti-associable-hotspot", "TOWN", "circle"),
+            hotspot("qti-associable-hotspot", "ELSEWHERE", "default"),
+          ),
+        ),
+        [
+          [
+            "misplaced-element",
+            at(`qti-assessment-item/qti-item-body/${interaction}/qti-associable-hotspot[2]`),
+            defaultHotspot("qti-associable-hotspot", interaction),
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        judged(
+          graphicItem(
+            "qti-graphic-associate-interaction",
+            hotspot("qti-associable-hotspot", "ELSEWHERE", "default"),
+            hotspot("qti-associable-hotspot", "TOWN", "circle"),
+          ),
+        ),
+        [],
+      );
+    });
+
+    it('align-54 interaction rows E11b: refuses min-choices="0" on a position object interaction as attribute-type, and admits 1 and none written (reading 92)', () => {
+      const refusals = judged(positioned(attr("min-choices", "0")));
+
+      assert.deepStrictEqual(
+        refusals.map(([rule, where]) => [rule, where]),
+        [
+          [
+            "attribute-type",
+            at(
+              "qti-assessment-item/qti-item-body/qti-position-object-stage/qti-position-object-interaction/@min-choices",
+            ),
+          ],
+        ],
+      );
+      assert.strictEqual(refusals[0]?.[2]["reading"], "92");
+      assert.strictEqual(refusals[0]?.[2]["expected"], "an integer at least 1");
+      assert.deepStrictEqual(judged(positioned(attr("min-choices", "1"))), []);
+      assert.deepStrictEqual(judged(positioned()), []);
+    });
+
+    it("align-54 interaction rows E15: refuses a lookup table under an outcome that is not single as misplaced-element, the research probe p100-multiple-table among them, and leaves a cardinality that spells none to the value domain alone (reading 100)", () => {
+      assert.deepStrictEqual(
+        judged(lookedUp("SCORE", "multiple", Option.some("float"), matchTable)),
+        [
+          [
+            "misplaced-element",
+            lookupTable("qti-match-table"),
+            lookupCardinality("qti-match-table", "SCORE"),
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        judged(lookedUp("GRADE", "ordered", Option.some("float"), interpolationTable)),
+        [
+          [
+            "misplaced-element",
+            lookupTable("qti-interpolation-table"),
+            lookupCardinality("qti-interpolation-table", "GRADE"),
+          ],
+        ],
+      );
+      assert.deepStrictEqual(judged(lookedUp("GRADE", "record", Option.none(), matchTable)), [
+        [
+          "misplaced-element",
+          lookupTable("qti-match-table"),
+          lookupCardinality("qti-match-table", "GRADE"),
+        ],
+      ]);
+      assert.deepStrictEqual(
+        [matchTable, interpolationTable].map((held) =>
+          judged(lookedUp("SCORE", "single", Option.some("float"), held)),
+        ),
+        [[], []],
+      );
+      assert.deepStrictEqual(
+        judged(lookedUp("GRADE", " multiple", Option.some("float"), matchTable)).map(
+          ([rule, where]) => [rule, where],
+        ),
+        [["attribute-type", at("qti-assessment-item/qti-outcome-declaration/@cardinality")]],
+      );
+    });
+
+    it("align-54 interaction rows E40b: reads a response declaration's base-type and cardinality exactly as written for its mapping and area mapping, so one that spells nothing, or a base type unwritten, is refused alone (readings 157 and 158)", () => {
+      const declaration = "qti-assessment-item/qti-response-declaration";
+
+      assert.deepStrictEqual(ruled(mappingItem("single", Option.some(" file"), mapping)), [
+        ["attribute-type", at(`${declaration}/@base-type`)],
+      ]);
+      assert.deepStrictEqual(ruled(mappingItem(" record", Option.none(), mapping)), [
+        ["attribute-type", at(`${declaration}/@cardinality`)],
+      ]);
+      for (const base of [" point", "bogus"]) {
+        assert.deepStrictEqual(
+          ruled(mappingItem("single", Option.some(base), areaMapping)),
+          [["attribute-type", at(`${declaration}/@base-type`)]],
+          base,
+        );
+      }
+      assert.deepStrictEqual(ruled(mappingItem("single", Option.none(), areaMapping)), [
+        ["missing-attribute", at(declaration)],
+      ]);
+      assert.deepStrictEqual(ruled(mappingItem("record", Option.some("point"), areaMapping)), [
+        ["unknown-attribute", at(`${declaration}/@base-type`)],
+        ["misplaced-element", at(`${declaration}/qti-area-mapping`)],
+      ]);
+    });
+
+    it("align-54 interaction rows P5: admits a card and a card entry with no content, as the operator ruled", () => {
+      assert.deepStrictEqual(found(carded()), []);
+      assert.deepStrictEqual(found(carded(el("qti-card-entry"))), []);
+      assert.deepStrictEqual(
+        found(carded(el("qti-card-entry"), el("qti-html-content", [], [text("A word.")]))),
+        [],
+      );
+    });
+  });
+
+  describe("align-54 HTML rows: ARIA roles, a bdo's direction, media sources and URLs, a subtitles track, MIME types and language tags (readings 9, 123, 124, 125, 129 and 135)", () => {
+    it("align-54 HTML rows D5: refuses a role on a source as unknown-attribute, and an h1's role other than heading, tab or presentation as attribute-type, and leaves an h2 every role the XSD lists (reading 9)", () => {
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el(
+              "video",
+              [],
+              [el("source", [attr("src", "clip.mp4"), attr("role", "presentation")])],
+            ),
+          ),
+        ),
+        [
+          [
+            "unknown-attribute",
+            inBody("video/source/@role"),
+            { attribute: "role", element: "source", reading: "9" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(cited(bodied(el("h1", [attr("role", "banner")], [text("Maps")]))), [
+        ["attribute-type", inBody("h1/@role"), "9"],
+      ]);
+      for (const role of ["heading", "tab", "presentation"]) {
+        assert.deepStrictEqual(
+          judged(bodied(el("h1", [attr("role", role)], [text("Maps")]))),
+          [],
+          role,
+        );
+      }
+      assert.deepStrictEqual(
+        judged(bodied(el("h2", [attr("role", "banner")], [text("Maps")]))),
+        [],
+      );
+    });
+
+    it('align-54 HTML rows E26: refuses a bdo with no dir as missing-attribute, and dir="auto" on it as attribute-type, and admits ltr and rtl, and auto on another element (reading 123)', () => {
+      const overridden = (...attributes: readonly SourceAttribute[]) =>
+        bodied(el("p", [], [el("bdo", attributes, [text("abc")])]));
+
+      assert.deepStrictEqual(judged(overridden()), [
+        [
+          "missing-attribute",
+          inBody("p/bdo"),
+          { attribute: "dir", element: "bdo", reading: "123" },
+        ],
+      ]);
+      assert.deepStrictEqual(cited(overridden(attr("dir", "auto"))), [
+        ["attribute-type", inBody("p/bdo/@dir"), "123"],
+      ]);
+      for (const dir of ["ltr", "rtl"]) {
+        assert.deepStrictEqual(judged(overridden(attr("dir", dir))), [], dir);
+      }
+      assert.deepStrictEqual(judged(bodied(el("p", [attr("dir", "auto")], [text("abc")]))), []);
+    });
+
+    it("align-54 HTML rows E27: refuses a picture's source with no srcset, and an audio's or a video's source with no src, as missing-attribute, and admits each with it (reading 124)", () => {
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el(
+              "div",
+              [],
+              [el("picture", [], [el("source", [attr("type", "image/webp")]), pictureImage])],
+            ),
+          ),
+        ),
+        [
+          [
+            "missing-attribute",
+            inBody("div/picture/source"),
+            { attribute: "srcset", element: "source", reading: "124" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el(
+              "div",
+              [],
+              [el("picture", [], [el("source", [attr("srcset", "map.webp")]), pictureImage])],
+            ),
+          ),
+        ),
+        [],
+      );
+      for (const media of ["audio", "video"]) {
+        assert.deepStrictEqual(
+          judged(bodied(el(media, [], [el("source", [attr("type", `${media}/ogg`)])]))),
+          [
+            [
+              "missing-attribute",
+              inBody(`${media}/source`),
+              { attribute: "src", element: "source", reading: "124" },
+            ],
+          ],
+          media,
+        );
+        assert.deepStrictEqual(
+          judged(bodied(el(media, [], [el("source", [attr("src", "clip.ogg")])]))),
+          [],
+          `${media}, with src`,
+        );
+      }
+    });
+
+    it('align-54 HTML rows E27: refuses a blank media URL, src=" " among them, as attribute-type, and admits one padded with spaces (reading 124, and reading 125 for a track\'s src)', () => {
+      const blanks = [
+        [el("audio", [attr("src", " ")]), "audio/@src", "124"],
+        [el("video", [attr("src", "")]), "video/@src", "124"],
+        [el("video", [attr("poster", "\t")]), "video/@poster", "124"],
+        [el("video", [], [el("source", [attr("src", " ")])]), "video/source/@src", "124"],
+        [
+          el(
+            "div",
+            [],
+            [el("picture", [], [el("source", [attr("srcset", " \n ")]), pictureImage])],
+          ),
+          "div/picture/source/@srcset",
+          "124",
+        ],
+        [
+          el("video", [], [el("track", [attr("kind", "captions"), attr("src", " ")])]),
+          "video/track/@src",
+          "125",
+        ],
+      ] as const;
+
+      for (const [content, step, reading] of blanks) {
+        assert.deepStrictEqual(
+          cited(bodied(content)),
+          [["attribute-type", inBody(step), reading]],
+          step,
+        );
+      }
+      assert.deepStrictEqual(
+        judged(bodied(el("video", [attr("src", " clip.mp4 "), attr("poster", "\tstill.png")]))),
+        [],
+      );
+    });
+
+    it('align-54 HTML rows E28: refuses a track with no kind, or kind="subtitles", and no srclang as missing-attribute, and admits a track of another kind without one (reading 125)', () => {
+      for (const kind of [[], [attr("kind", "subtitles")]]) {
+        assert.deepStrictEqual(
+          judged(trackedVideo(...kind)),
+          [
+            [
+              "missing-attribute",
+              inBody("video/track"),
+              { attribute: "srclang", element: "track", reading: "125" },
+            ],
+          ],
+          kind.length === 0 ? "no kind" : "subtitles",
+        );
+      }
+      assert.deepStrictEqual(judged(trackedVideo(attr("srclang", "en"))), []);
+      for (const kind of ["captions", "chapters", "descriptions", "metadata"]) {
+        assert.deepStrictEqual(judged(trackedVideo(attr("kind", kind))), [], kind);
+      }
+    });
+
+    it('align-54 HTML rows E35: refuses a MIME type that is not two tokens joined by a slash, type="image /png" among them, as attribute-type, and admits image/svg+xml, */* and a padded upload list (reading 135)', () => {
+      const typedAt = (mime: string) =>
+        [
+          [
+            bodied(
+              el("p", [], [el("a", [attr("href", "x.html"), attr("type", mime)], [text("x")])]),
+            ),
+            "p/a/@type",
+          ],
+          [
+            bodied(el("div", [], [el("object", [attr("data", "x.svg"), attr("type", mime)])])),
+            "div/object/@type",
+          ],
+          [
+            bodied(
+              el(
+                "div",
+                [],
+                [
+                  el(
+                    "object",
+                    [attr("data", "x.svg"), attr("type", "image/svg+xml")],
+                    [
+                      el("param", [
+                        attr("name", "n"),
+                        attr("value", "v"),
+                        attr("valuetype", "DATA"),
+                        attr("type", mime),
+                      ]),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            "div/object/param/@type",
+          ],
+          [
+            bodied(el("video", [], [el("source", [attr("src", "clip.mp4"), attr("type", mime)])])),
+            "video/source/@type",
+          ],
+          [
+            bodied(
+              el("qti-upload-interaction", [
+                attr("response-identifier", "RESPONSE"),
+                attr("type", `text/plain ${mime}`),
+              ]),
+            ),
+            "qti-upload-interaction/@type",
+          ],
+        ] as const;
+
+      for (const mime of ["image /png", " image/png", "image/png ", "a b/c", "image/png\u007F"]) {
+        for (const [source, step] of typedAt(mime)) {
+          const where = inBody(step);
+          const listed = step.startsWith("qti-upload-interaction");
+          if (listed && mime !== "image/png\u007F") {
+            continue;
+          }
+
+          assert.deepStrictEqual(
+            cited(source),
+            [["attribute-type", where, "135"]],
+            `${step}: ${JSON.stringify(mime)}`,
+          );
+        }
+      }
+      for (const mime of ["image/svg+xml", "*/*", "IMAGE/PNG", "application/vnd.ms-excel"]) {
+        for (const [source, step] of typedAt(mime)) {
+          assert.deepStrictEqual(judged(source), [], `${step}: ${mime}`);
+        }
+      }
+      assert.deepStrictEqual(
+        cited(
+          wholeItem([
+            el("qti-stylesheet", [attr("href", "style.css"), attr("type", "text /css")]),
+            el("qti-item-body"),
+          ]),
+        ),
+        [["attribute-type", at("qti-assessment-item/qti-stylesheet/@type"), "135"]],
+      );
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el("qti-upload-interaction", [
+              attr("response-identifier", "RESPONSE"),
+              attr("type", " image/png  text/plain "),
+            ]),
+          ),
+        ),
+        [],
+      );
+    });
+
+    it('align-54 HTML rows E32b: refuses xml:lang="en_US", lang="1en", lang="en " and srclang="" as attribute-type, and an empty xml:lang on an item or a stimulus, and admits x-none, an empty xml:lang and lang on body content, and a padded xml:lang (reading 129)', () => {
+      const paragraph = (attribute: SourceAttribute) =>
+        bodied(el("p", [attribute], [text("Colour")]));
+
+      assert.deepStrictEqual(cited(paragraph(attr("lang", "en_US", xmlNamespace))), [
+        ["attribute-type", inBody("p/@xml:lang"), "129"],
+      ]);
+      for (const tag of ["1en", "en "]) {
+        assert.deepStrictEqual(
+          cited(paragraph(attr("lang", tag))),
+          [["attribute-type", inBody("p/@lang"), "129"]],
+          JSON.stringify(tag),
+        );
+      }
+      assert.deepStrictEqual(
+        cited(
+          bodied(
+            el(
+              "video",
+              [attr("src", "clip.mp4")],
+              [el("track", [attr("src", "en.vtt"), attr("srclang", "")])],
+            ),
+          ),
+        ),
+        [["attribute-type", inBody("video/track/@srclang"), "129"]],
+      );
+      assert.deepStrictEqual(
+        cited(
+          item(
+            [el("qti-item-body")],
+            [
+              attr("identifier", "item"),
+              attr("title", "Item"),
+              attr("time-dependent", "false"),
+              attr("lang", "", xmlNamespace),
+            ],
+          ),
+        ),
+        [["attribute-type", at("qti-assessment-item/@xml:lang"), "129"]],
+      );
+      assert.deepStrictEqual(
+        cited(
+          doc(
+            location,
+            el(
+              "qti-assessment-stimulus",
+              [attr("identifier", "S"), attr("title", "Stimulus"), attr("lang", " ", xmlNamespace)],
+              [el("qti-stimulus-body", [], [el("p", [], [text("Colour")])])],
+            ),
+          ),
+        ),
+        [["attribute-type", at("qti-assessment-stimulus/@xml:lang"), "129"]],
+      );
+      for (const attribute of [
+        attr("lang", "x-none", xmlNamespace),
+        attr("lang", "", xmlNamespace),
+        attr("lang", " en-GB ", xmlNamespace),
+        attr("lang", ""),
+        attr("lang", "zh-Hant-TW"),
+      ]) {
+        assert.deepStrictEqual(
+          judged(paragraph(attribute)),
+          [],
+          `${attribute.namespace === "" ? "" : "xml:"}${attribute.local}=${JSON.stringify(attribute.value)}`,
+        );
+      }
+    });
+
+    it('align-54 HTML rows E32b: the manifest walk reads the same row, so it refuses xml:lang="en_US" on a LOM string its attribute wildcard admits, and admits x-none (reading 129)', () => {
+      const string = `{${manifestNamespace}}manifest/{${manifestNamespace}}metadata/{${lomNamespace}}lom/{${lomNamespace}}general/{${lomNamespace}}title/{${lomNamespace}}string`;
+
+      assert.deepStrictEqual(
+        walkedManifest(titledManifest("en_US")).map((refusal) => [
+          refusal.rule,
+          refusal.location,
+          refusal.detail["reading"],
+        ]),
+        [["attribute-type", at(`${string}/@xml:lang`), "129"]],
+      );
+      assert.deepStrictEqual(walkedManifest(titledManifest("x-none")), []);
+    });
+
+    describe("the manifest walk's corpus control", { tags: ["corpus"] }, () => {
+      it.effect(
+        'align-54 HTML rows E32b: admits the languages of BBQsTest.zip\'s manifest, whose LOM strings write xml:lang="x-none" (reading 129)',
+        () =>
+          Effect.gen(function* manifestLanguages() {
+            const path = "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip.d/imsmanifest.xml";
+            const source = yield* readCorpusFile(path).pipe(
+              Effect.flatMap((bytes) => readSource(path, bytes)),
+            );
+            const languages = [...walkDocument(source)].flatMap(({ element: walked }) =>
+              walked.attributes.filter(
+                (attribute) => attribute.namespace === xmlNamespace && attribute.local === "lang",
+              ),
+            );
+
+            assert.include(
+              languages.map((attribute) => attribute.value),
+              "x-none",
+            );
+            assert.deepStrictEqual(
+              walkedManifest(source).filter(
+                (refusal) =>
+                  refusal.location.kind === "path" && refusal.location.path.endsWith("/@xml:lang"),
+              ),
+              [],
+            );
+          }),
+      );
+    });
+  });
+
+  describe("a printed variable's format (readings 132 and 161, and the operator's P1)", () => {
+    it("align-54 value grammars B2c: refuses %q, %u, a conversion with no code and a trailing %, as attribute-type at format (reading 132)", () => {
       for (const format of [
-        "%d",
-        "%u",
-        "Score: %.1f",
-        "%i of %i",
-        "%.1f%%",
-        "%%",
         "%q",
+        "%u",
         "%5.2",
-        "2f",
         "%",
-        "",
+        "2f%",
+        "%i of %",
+        "Score: %",
+        "%%%",
+        "%i%q",
+        "100% sure",
+        "%%%%%",
       ]) {
         const source = printed(format);
 
         assert.deepStrictEqual(
           found(source, generatedTables),
           [["attribute-type", at("qti-printed-variable/@format")]],
-          format,
+          JSON.stringify(format),
         );
         assert.deepStrictEqual(
           first(source, generatedTables)?.detail,
@@ -3159,16 +4002,30 @@ describe("checkStructure", () => {
       }
     });
 
-    it("[I-5] refuses a format padded at either end, which pantry R38 reads as xs:normalizedString does, without trimming", () => {
-      for (const format of [" %.1f", "%.1f ", "\t%i", "%i\n"]) {
-        const source = printed(format);
+    it("align-54 value grammars P1a, B2b.1: accepts %d, several conversions, %%, text around a conversion and a format of text alone (readings 132 and 161, the operator's P1)", () => {
+      for (const format of [
+        "%d",
+        "%d %d",
+        "%i of %i",
+        "Score: %.1f",
+        "100%%",
+        "Points",
+        "",
+        "%.1f%%",
+        "%%",
+        "2f",
+        "%%%e%%%G",
+        "%i, %.2f and %#x",
+        "%05d of %-3d",
+        "%%d",
+      ]) {
+        assert.deepStrictEqual(found(printed(format), generatedTables), [], JSON.stringify(format));
+      }
+    });
 
-        assert.deepStrictEqual(
-          found(source, generatedTables),
-          [["attribute-type", at("qti-printed-variable/@format")]],
-          JSON.stringify(format),
-        );
-        assert.deepStrictEqual(first(source, generatedTables)?.detail, formatDetail(format));
+    it("align-54 value grammars P1a: accepts a format padded at either end, its tabs and line breaks replaced, as text around the conversion (reading 161)", () => {
+      for (const format of [" %.1f", "%.1f ", "\t%i", "%i\n"]) {
+        assert.deepStrictEqual(found(printed(format), generatedTables), [], JSON.stringify(format));
       }
     });
 
@@ -3178,7 +4035,7 @@ describe("checkStructure", () => {
       }
     });
 
-    it("[I-5] admits one whole printf conversion, %.1f, %i, %08.3e and %-8X among them, and a printed variable with no format (pantry R38)", () => {
+    it("[I-5] admits one whole printf conversion, %.1f, %i, %08.3e and %-8X among them, and a printed variable with no format (reading 132)", () => {
       for (const format of [
         "%.1f",
         "%i",
@@ -3202,7 +4059,7 @@ describe("checkStructure", () => {
       );
     });
 
-    it("[I-5] refuses %d at format on a printed variable inside an item body, and leaves a text entry interaction's format unchecked (pantry R38)", () => {
+    it("[I-5] refuses %q at format on a printed variable inside an item body, and leaves a text entry interaction's format unchecked (reading 132)", () => {
       const source = item([
         el(
           "qti-item-body",
@@ -3212,10 +4069,10 @@ describe("checkStructure", () => {
               "p",
               [],
               [
-                el("qti-printed-variable", [attr("identifier", "SCORE"), attr("format", "%d")]),
+                el("qti-printed-variable", [attr("identifier", "SCORE"), attr("format", "%q")]),
                 el("qti-text-entry-interaction", [
                   attr("response-identifier", "RESPONSE"),
-                  attr("format", "%d"),
+                  attr("format", "%q"),
                 ]),
               ],
             ),
@@ -3229,7 +4086,7 @@ describe("checkStructure", () => {
     });
 
     it(
-      "[I-5] admits exactly the formats the quadratic pattern admits, every string of at most 5 characters over %, #, 0, space, +, -, 1, 9, ., f, i and d (review 079e8c44 P2-13)",
+      "[I-5] admits exactly the formats the quadratic pattern admits, every string of at most 5 characters over %, #, 0, space, +, -, 1, 9, ., f, i, d and q (review 079e8c44 P2-13)",
       () => {
         const strings = stringsUpTo(formatAlphabet, 5);
         const disagreeing = strings.filter(
@@ -3238,18 +4095,18 @@ describe("checkStructure", () => {
             (found(printed(format), generatedTables).length === 0),
         );
 
-        assert.strictEqual(strings.length, 271_453);
+        assert.strictEqual(strings.length, 402_234);
         assert.deepStrictEqual(disagreeing, []);
       },
       formatEquivalenceTimeoutMs,
     );
 
     it.effect(
-      "[I-5] refuses a format of %, 64,000 zeros and d as attribute-type at format, 8 times the zeros in under 32 times the time (review 079e8c44 P2-13)",
+      "[I-5] refuses a format of %, 64,000 zeros and q as attribute-type at format, 8 times the zeros in under 32 times the time (review 079e8c44 P2-13)",
       () =>
         Effect.gen(function* checksFormatInLinearTime() {
-          const fewer = printed(`%${"0".repeat(formatZeros / growthFactor)}d`);
-          const more = printed(`%${"0".repeat(formatZeros)}d`);
+          const fewer = printed(`%${"0".repeat(formatZeros / growthFactor)}q`);
+          const more = printed(`%${"0".repeat(formatZeros)}q`);
           assert.deepStrictEqual(found(more, generatedTables), [
             ["attribute-type", at("qti-printed-variable/@format")],
           ]);

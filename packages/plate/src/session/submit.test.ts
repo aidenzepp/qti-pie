@@ -1238,10 +1238,10 @@ describe("submitItem", () => {
               templatedItemXml("hidden", "X", {
                 body: [
                   choiceXml("RESPONSE", ["A", "B", "C"].map(plainChoice).join("")),
-                  blockShownByT("Y", choiceXml("HIDDEN", ["A", "B"].map(plainChoice).join(""))),
+                  blockShownByT("Y", choiceXml("HIDDEN", ["D", "E"].map(plainChoice).join(""))),
                 ].join(""),
                 declarations:
-                  '<qti-response-declaration identifier="HIDDEN" cardinality="single" base-type="identifier"><qti-default-value><qti-value>B</qti-value></qti-default-value></qti-response-declaration>',
+                  '<qti-response-declaration identifier="HIDDEN" cardinality="single" base-type="identifier"><qti-default-value><qti-value>E</qti-value></qti-default-value></qti-response-declaration>',
               }),
             ],
           ],
@@ -1249,7 +1249,7 @@ describe("submitItem", () => {
         const configuration = yield* configure({});
         const begun = started(delivery, configuration);
 
-        assert.deepStrictEqual(itemAt(begun, 1).record.responses["HIDDEN"], chosen("B"));
+        assert.deepStrictEqual(itemAt(begun, 1).record.responses["HIDDEN"], chosen("E"));
 
         const answered = accepted(
           submitItem(

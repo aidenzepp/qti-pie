@@ -9,7 +9,8 @@
  * `xsi:noNamespaceSchemaLocation`, whitespace between elements, entity references and whatever a
  * wildcard matches all pass. Given the tables of other namespaces, such as a content package
  * manifest's, it walks their elements too, each by its own namespace's tables and by the same
- * rules, reading `##other` against that namespace; the readings stay QTI's. An element in a
+ * rules, reading `##other` against that namespace; the readings stay QTI's, but for the rows that
+ * read XML's own `xml:lang`, which hold on every element it checks (reading 129). An element in a
  * namespace it holds no tables for that its parent's table names, such as MathML, is kept and not
  * walked, and so is what a `strict` or `skip` element wildcard admits: for a `strict` one, plate's
  * open limit that reading 60 ("a simple type it names governs its text and is checked") records.
@@ -30,11 +31,11 @@
  * {@link governingTables} gives the table that governs each element the walk checks.
  *
  * Over the XSD's rules it applies the shared readings that set the XSD aside where the walk can see
- * them, each a row of {@link readingRows}: attributes narrowed or retyped, `data-*` names,
- * placements, child counts and the range of the count attributes, and beside them the information
- * model's own sentences the XSD does not hold: the floor of a literal `figures` or `n`, the
- * `tolerance` an absolute or relative `qti-equal` must carry, the identifiers the built-in
- * variables keep from every declaration, and the tokens a `tolerance` may hold. The XSD's own order
+ * them, each a row of {@link readingRows}: attributes narrowed, retyped, withdrawn or required,
+ * `data-*` names, placements, child counts and the range of the count attributes, and beside them
+ * the information model's own sentences the XSD does not hold: the floor of a literal `figures` or
+ * `n`, the `tolerance` an absolute or relative `qti-equal` must carry, the identifiers the built-in
+ * variables keep from every declaration, and the values a `tolerance` holds. The XSD's own order
  * and counts of children are not checked.
  *
  * @module
@@ -60,6 +61,7 @@ import {
   decimalLexical,
   doubleLexical,
   integerLexical,
+  isLanguageTag,
   isNcName,
   parseLexical,
 } from "#plate/model/values.ts";
@@ -77,6 +79,7 @@ import type {
   TypeEntry,
   Wildcard,
 } from "#plate/validate/xsd.ts";
+import { baseTypes } from "#plate/vocabulary.ts";
 
 /**
  * An attribute name QTI 3.0's schema spells differently from a name authors write: the element it
@@ -471,6 +474,48 @@ interface ConditionalAttribute {
 }
 
 /**
+ * An attribute a reading requires where the XSD makes it optional: on `element`, when `applies`
+ * accepts the element and its parent, `attribute` in no namespace must be written, or it is
+ * `missing-attribute` at the element, citing `reading`. The row holds by the element's name, so an
+ * element an `xsi:type` governs is held to it too (reading 84).
+ */
+interface RequiredAttribute {
+  readonly applies: (element: SourceElement, parent: Option.Option<SourceElement>) => boolean;
+  readonly attribute: string;
+  readonly element: string;
+  readonly kind: "required-attribute";
+  readonly reading: string;
+}
+
+/**
+ * An attribute the XSD declares on an element that a reading refuses there: on `element`,
+ * `attribute` in no namespace is `unknown-attribute`, citing `reading`, whatever its value. The row
+ * holds by the element's name, whether or not the table that governs the element declares the
+ * attribute (reading 84).
+ */
+interface WithdrawnAttribute {
+  readonly attribute: string;
+  readonly element: string;
+  readonly kind: "withdrawn-attribute";
+  readonly reading: string;
+}
+
+/**
+ * A reading that narrows an attribute of XML's own namespace, which XML defines for every element:
+ * on every element the walk checks, in every namespace, whether the table that governs it declares
+ * the attribute or an attribute wildcard admits it, the value collapsed must satisfy `holds`, which
+ * also reads the element, or it is `attribute-type` with `expected` as the values the row admits,
+ * citing `reading`. An attribute the walk refuses as `unknown-attribute` is not read again.
+ */
+interface XmlAttribute {
+  readonly attribute: string;
+  readonly expected: string;
+  readonly holds: (lexical: string, element: SourceElement) => boolean;
+  readonly kind: "xml-attribute";
+  readonly reading: string;
+}
+
+/**
  * One reading applied over the XSD's rules, or one sentence of the information model.
  */
 type ReadingRow =
@@ -481,12 +526,16 @@ type ReadingRow =
   | IntegerFloor
   | NarrowedAttribute
   | Placement
-  | RetypedAttribute;
+  | RequiredAttribute
+  | RetypedAttribute
+  | WithdrawnAttribute
+  | XmlAttribute;
 
 /**
  * Accept every parent, for a child count that holds wherever its element sits, every root, for a
- * placement that holds in every document, and every container, for a placement that asks nothing
- * of its container but its name.
+ * placement that holds in every document, every container, for a placement that asks nothing of
+ * its container but its name, and every element, for an attribute a reading requires wherever its
+ * element sits.
  *
  * @returns Always true.
  */
@@ -533,31 +582,26 @@ const modeOf = (
 };
 
 /**
- * Report whether a declaration gives an attribute in no namespace one of some values, read as
- * {@link modeOf} reads a row's condition. A response declaration's table declares no default for
- * `base-type` or `cardinality`, so only a value written counts.
+ * Report whether a declaration spells one of some values in an attribute in no namespace, compared
+ * exactly as written: the XSD types a declaration's `base-type` and `cardinality`, like a
+ * hotspot's `shape`, as enumerations of `xs:string`, whose whiteSpace is `preserve`, and declares
+ * no default for any of them. One that is unwritten, holds an unexpanded entity reference or
+ * spells no code, such as `base-type=" file"`, spells none of them, so no law over that attribute
+ * judges its declaration; its value domain, or the XSD's required attribute, refuses it alone
+ * (readings 157 and 158).
  *
- * @param declaration The declaration.
+ * @param declaration The declaration, or a hotspot.
  * @param local The attribute's local name.
  * @param values The values.
- * @returns Whether the declaration writes one of them; not when it writes none, or writes one that
- *   holds an unexpanded entity reference, whose value is unknown.
+ * @returns Whether the declaration's attribute is one of them.
  */
 const declares = (declaration: SourceElement, local: string, values: readonly string[]): boolean =>
-  Option.exists(modeOf(declaration, [], local), (value) => values.includes(value));
-
-/**
- * Report whether a declaration writes an attribute in no namespace whose value holds an unexpanded
- * entity reference, and so is unknown.
- *
- * @param declaration The declaration.
- * @param local The attribute's local name.
- * @returns Whether its value is unknown.
- */
-const unknownValue = (declaration: SourceElement, local: string): boolean =>
   declaration.attributes.some(
     (attribute) =>
-      attribute.namespace === "" && attribute.local === local && attribute.references.length > 0,
+      attribute.namespace === "" &&
+      attribute.local === local &&
+      attribute.references.length === 0 &&
+      values.includes(attribute.value),
   );
 
 /**
@@ -573,15 +617,23 @@ const holdsMapping = (declaration: SourceElement): boolean =>
   !declares(declaration, "cardinality", ["record"]);
 
 /**
+ * The base types other than `point`, whose declarations hold no `qti-area-mapping`.
+ */
+const otherThanPoint: readonly string[] = baseTypes.filter((name) => name !== "point");
+
+/**
  * Report whether a response declaration may hold a `qti-area-mapping`: its base type is `point`
- * (info.txt:39388), or is unknown, which is not refused. A record declaration writes no base type,
- * so it holds none.
+ * (info.txt:39388), and it is no record, which has no base type (reading 153). Each half reads one
+ * attribute and judges only where it spells a code (reading 158), so a base type unwritten, unknown
+ * or spelling nothing is not refused here: a record is refused by its cardinality alone, and
+ * another declaration that writes no base type is `missing-attribute` alone ({@link checkUntyped}).
  *
  * @param declaration The response declaration.
  * @returns Whether its area mapping is placed.
  */
 const holdsAreaMapping = (declaration: SourceElement): boolean =>
-  declares(declaration, "base-type", ["point"]) || unknownValue(declaration, "base-type");
+  !declares(declaration, "base-type", otherThanPoint) &&
+  !declares(declaration, "cardinality", ["record"]);
 
 /**
  * The declarations whose `qti-default-value` and `qti-correct-response` hold their values.
@@ -604,13 +656,7 @@ const declarations: ReadonlySet<string> = new Set([
  * @returns Whether its `cardinality` is one of them.
  */
 const spellsCardinality = (declaration: SourceElement, cardinalities: readonly string[]): boolean =>
-  declaration.attributes.some(
-    (attribute) =>
-      attribute.namespace === "" &&
-      attribute.local === "cardinality" &&
-      attribute.references.length === 0 &&
-      cardinalities.includes(attribute.value),
-  );
+  declares(declaration, "cardinality", cardinalities);
 
 /**
  * Report whether a parent is a declaration whose `cardinality` is `single`, compared exactly as
@@ -770,39 +816,179 @@ const valuedAs =
     lexical !== "record" || !typedHere(identifier, inTests, element, path);
 
 /**
- * Report whether a collapsed `tolerance` holds only tokens the qti package's `toleranceList`
- * pattern admits (`packages/pantry/src/schema/patterns.ts:401`, refused there as P6): each an
- * `xs:double` or an NCName, one space apart, and the empty list too. The XSD's union of `xs:string`
- * and `xs:double` admits any token, but a token that is not a number names the variable that holds
- * one, and a variable's name is an NCName. The pattern bounds an NCName to 256 characters for the
- * qti package's keys; that bound is its storage's, not the standard's, so no length is compared.
- *
- * @param lexical The `tolerance`, collapsed.
- * @returns Whether every token is a number or a variable's name.
+ * A number in `xs:double`'s lexical space that is above 0 but for `INF`, read off the number as
+ * written (reading 121): no `-` sign and a mantissa digit other than 0. No character of the class
+ * crosses the exponent's `E` or `e`, so the digit is the mantissa's and `0e5` has none, and the
+ * pattern checks in linear time. `NaN` and `-INF` have no such digit.
  */
-const toleranceTokens = (lexical: string): boolean =>
-  lexical === "" ||
-  lexical.split(" ").every((token) => doubleLexical.test(token) || isNcName(token));
+const positiveMantissa = /^\+?[.0-9]*[1-9]/u;
 
 /**
- * A printed variable's `format` as the qti package's `printfFormat` pattern admits it
- * (`packages/pantry/src/schema/patterns.ts:343`, refused there as R38), over the whole attribute:
- * one conversion, a percent sign, flags from `#`, `0`, space, `+` and `-`, a width, a precision,
- * and one of `E e f G g r R i o X x`, with nothing around it.
+ * Report whether a collapsed `tolerance` is what reading 121 ("every `tolerance` is one or two
+ * values, each number among them above 0") reads the information model to allow: "two positive
+ * numbers, t0 and t1 ... If only one value is given it is used for both" (§5.46.2), each value of
+ * its ToleranceList "either strings (must not contain a space) or numbers" (§9.1.5).
  *
- * The precision is a point "followed by zero or more digits" (info.txt:8686), so `%.f` is
- * admitted. R38 requires a digit after the point and refuses `%.f`; the standard does not refuse
- * it, so this pattern admits it, a difference from the qti package that awaits the operator (G-R2,
- * pending). The information model does not address text around the conversion; the pattern
- * refuses it as R38 does, so when the qti package narrows R38 this pattern follows it.
+ * A value in `xs:double`'s lexical space under XML Schema 1.0 is a number; any other value is a
+ * string, which names a variable read at run time and is not judged here, so `1,5` and `+INF`,
+ * which XML Schema 1.0 does not admit as a double, are accepted. A number is positive as written,
+ * by its sign and a mantissa digit other than 0, not by its nearest double: `0`, `-0`, `0e5`, `-1`,
+ * `NaN` and `-INF` are refused, and `INF` and `1e-400` accepted. The count binds in every mode, so
+ * an empty `tolerance` holds no value and is refused, and so are three values. Pantry's "Equal
+ * tolerance" law (`packages/pantry/src/qti/operators.ts`) judges the count and the sign alike.
  *
- * The width cannot start with `0`, so no character can end the flags and start the width: R38's
- * pattern lets both match `0`, and a refused `%`, a run of zeros and a letter that is no code then
- * backtracks over every split of the run, quadratic time on an untrusted attribute (review
- * `079e8c44` P2-13). A `0` after the flags is a flag here, so the pattern admits exactly the
- * strings a width of any digits admits, and checks in linear time.
+ * @param lexical The `tolerance`, collapsed.
+ * @returns Whether it is one or two values, each a number above 0 or a variable's name.
  */
-const printfFormat = /^%[#0 +-]*(?:[1-9][0-9]*)?(?:\.[0-9]*)?[EefGgrRioXx]$/u;
+const toleranceTokens = (lexical: string): boolean => {
+  const values = lexical.split(" ");
+
+  return (
+    lexical !== "" &&
+    values.length <= 2 &&
+    values.every(
+      (value) => !doubleLexical.test(value) || value === "INF" || positiveMantissa.test(value),
+    )
+  );
+};
+
+/**
+ * One piece of a printed variable's `format` that begins with `%`: the escape `%%`, or a conversion
+ * specifier, a `%`, flags from `#`, `0`, space, `+` and `-`, a width, a precision of a point
+ * "followed by zero or more digits" (info.txt:8686), so `%.f` is one, and a conversion code.
+ *
+ * The codes are the information model's, `E e f G g r R i o X x` (reading 132), and `d`: the
+ * operator's ruling on P1 admits `%d`, which prints as `%i`, where readings 132 and 161 refuse it.
+ *
+ * The width cannot start with `0`, so no character can end the flags and start the width. A
+ * pattern whose flags and width both match `0` makes a refused `%`, a run of zeros and a letter
+ * that is no code backtrack over every split of the run, quadratic time on an untrusted attribute
+ * (review `079e8c44` P2-13). A `0` after the flags is a flag here, so the pattern admits exactly
+ * the pieces a width of any digits admits, and each attempt takes time linear in the run it reads.
+ */
+const printfPiece = /%(?:%|[#0 +-]*(?:[1-9][0-9]*)?(?:\.[0-9]*)?[EefGgrRioXxd])/gu;
+
+/**
+ * Report whether a printed variable's `format` is a printf format string, as reading 132 reads the
+ * information model's syntax (§2.3.4) and reading 161 its count: any text but `%`, the escape `%%`,
+ * and conversion specifiers ({@link printfPiece}), any number of them, none included. So `%d`,
+ * `%d %d`, `%i of %i`, `Score: %.1f`, `100%%` and a format of text alone are formats, and `%q`,
+ * `%u` and a trailing `%`, which ends in no code, are not (the operator's B2c).
+ *
+ * Every escape and specifier is removed, left to right; a `%` left over begins neither. Pantry's
+ * `printfFormat` grammar (`packages/pantry/src/grammar/attributes.ts`) is the same over the
+ * information model's codes alone, without `d`.
+ *
+ * @param lexical The `format`, its tabs and line breaks replaced.
+ * @returns Whether every `%` in it begins an escape or a conversion specifier.
+ */
+const printfFormat = (lexical: string): boolean =>
+  !lexical.replaceAll(printfPiece, "").includes("%");
+
+/**
+ * Report whether an integer count, already in its XSD type, is at least 1.
+ *
+ * @param lexical The count, collapsed.
+ * @returns Whether it is an integer of 1 or more.
+ */
+const atLeastOne = (lexical: string): boolean =>
+  integerLexical.test(lexical) && BigInt(lexical) >= 1n;
+
+/**
+ * Accept an element whose parent is a QTI element of one of some names, for a row that holds by
+ * where its element sits.
+ *
+ * @param locals The parents' local names.
+ * @returns Whether an element's parent is one of them.
+ */
+const childOf =
+  (...locals: readonly string[]) =>
+  (_element: SourceElement, parent: Option.Option<SourceElement>): boolean =>
+    Option.exists(
+      parent,
+      (container) => container.namespace === qtiNamespace && locals.includes(container.local),
+    );
+
+/**
+ * Report whether a `track` is in HTML's subtitles state: it writes no `kind`, whose missing value
+ * default is that state (reading 125), or writes `kind="subtitles"` exactly, as the XSD's
+ * enumeration of `xs:string` compares it. A `kind` that holds an unexpanded entity reference is
+ * unknown, and is in no state.
+ *
+ * @param track The track.
+ * @returns Whether it is in the subtitles state.
+ */
+const inSubtitlesState = (track: SourceElement): boolean => {
+  const kind = track.attributes.find(
+    (attribute) => attribute.namespace === "" && attribute.local === "kind",
+  );
+
+  return kind === undefined || (kind.references.length === 0 && kind.value === "subtitles");
+};
+
+/**
+ * Report whether a URL holds a character other than a space, as the information model's "a valid
+ * non-empty URL potentially surrounded by spaces" requires (reading 124). The value is read with
+ * each tab and line break replaced by a space, as its `xs:normalizedString` type reads it.
+ *
+ * @param lexical The URL, its tabs and line breaks replaced.
+ * @returns Whether it is not blank.
+ */
+const isNonBlank = (lexical: string): boolean => nonXmlSpace.test(lexical);
+
+/**
+ * RFC 2045's media type, `type "/" subtype` (section 5.1), as reading 135 reads it: each a `token`,
+ * one or more US-ASCII characters other than space, the control characters and the tspecials
+ * `( ) < > @ , ; : \ " / [ ] ? =`. No character of a token is a slash, so the pattern checks in
+ * linear time.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc2045#section-5.1
+ */
+const mimeType = /^[!#$%&'*+.^_`{|}~0-9A-Za-z-]+\/[!#$%&'*+.^_`{|}~0-9A-Za-z-]+$/u;
+
+/**
+ * Report whether a collapsed list holds only MIME types, each as {@link mimeType} reads one. The
+ * empty list is admitted, as the XSD's list type admits it.
+ *
+ * @param lexical The list, collapsed.
+ * @returns Whether every item is a MIME type.
+ */
+const isMimeTypeList = (lexical: string): boolean =>
+  lexical === "" || lexical.split(" ").every((item) => mimeType.test(item));
+
+/**
+ * Report whether a text is a well-formed BCP 47 language tag or empty, the values reading 129 gives
+ * `lang` and, on every element but an item's and a stimulus's root, `xml:lang`.
+ *
+ * @param lexical The value, read under its whitespace facet.
+ * @returns Whether it is a language tag or empty.
+ */
+const isLanguageOrEmpty = (lexical: string): boolean => lexical === "" || isLanguageTag(lexical);
+
+/**
+ * The QTI elements whose `xml:lang` is a language tag and never empty: the item's and the
+ * stimulus's `language`, "Natural language identifiers as defined by [BCP 47]" (information model,
+ * sections 4.1.4 and 4.3.4), which state no empty value (reading 129).
+ */
+const languageRoots: ReadonlySet<string> = new Set([
+  "qti-assessment-item",
+  "qti-assessment-stimulus",
+]);
+
+/**
+ * Report whether an element is one of {@link languageRoots}.
+ *
+ * @param element The element.
+ * @returns Whether its `xml:lang` may not be empty.
+ */
+const isLanguageRoot = (element: SourceElement): boolean =>
+  element.namespace === qtiNamespace && languageRoots.has(element.local);
+
+/**
+ * What a MIME type admits, for the wording of its refusal.
+ */
+const mimeTypeText =
+  "a type and a subtype joined by one slash, each one or more ASCII letters, digits or the characters ! # $ % & ' * + - . ^ _ ` { | } ~";
 
 /**
  * The shared readings this module applies over the XSD's rules, one row each.
@@ -850,15 +1036,31 @@ const readingRows: readonly ReadingRow[] = [
   },
   // Reading 18 ("an order or graphic-order interaction's `min-choices`, where written, is from 1
   // to its number of choices, and a `max-choices` written beside it is from `min-choices` to its
-  // number of choices"): `min-choices` is at least 1, where the XSD admits 0. `max-choices="0"`
-  // means unlimited, and no count is compared.
+  // number of choices"): `min-choices` is at least 1, where the XSD admits 0. This row holds that
+  // floor alone. The prose rules (D4a) hold each count to the interaction's number of choices, and
+  // a `max-choices` written beside a `min-choices` to at least that `min-choices`, with no
+  // exemption for 0: neither interaction gives `max-choices="0"` the choice interaction's meaning
+  // of no limit.
   {
     attribute: "min-choices",
     elements: ["qti-graphic-order-interaction", "qti-order-interaction"],
     expected: "an integer at least 1",
-    holds: (lexical) => integerLexical.test(lexical) && BigInt(lexical) >= 1n,
+    holds: atLeastOne,
     kind: "narrowed-attribute",
     settled: { reading: "18" },
+    whiteSpace: "collapse",
+  },
+  // Reading 92 ("the information model's binding and count sentences that no other reading
+  // restates hold as written"): a position object interaction's `min-choices`, where written, is
+  // at least 1, "If specified, min-choices must be 1 or greater" (section 5.107.2), where the XSD
+  // admits 0.
+  {
+    attribute: "min-choices",
+    elements: ["qti-position-object-interaction"],
+    expected: "an integer at least 1",
+    holds: atLeastOne,
+    kind: "narrowed-attribute",
+    settled: { reading: "92" },
     whiteSpace: "collapse",
   },
   // Reading 20 ("a PCI has exactly one `qti-interaction-markup`, which may be empty").
@@ -884,6 +1086,8 @@ const readingRows: readonly ReadingRow[] = [
     required: "at least one",
     source: "reading 21",
   },
+  // No row counts a card's or a card entry's children: one with no content is accepted, as the
+  // operator ruled (P5, overseer `b7d702d6`), where the shared readings refuse it.
   // Reading 22 ("a `qti-template-constraint` is a direct child of `qti-template-processing`"),
   // where the XSD also admits it in the template conditions' branches.
   {
@@ -918,30 +1122,6 @@ const readingRows: readonly ReadingRow[] = [
     requires: "inside qti-outcome-processing",
     roots: outsideTests,
     within: "ancestor",
-  },
-  // Reading 31 ("a card holds at least one of an HTML content node or file hrefs, and may hold
-  // both"; `CardDType`, XSD:26089-26104): a card holds at least one of an HTML content node, file
-  // hrefs or card entries.
-  {
-    applies: anywhere,
-    child: "qti-html-content or qti-file-href or qti-card-entry",
-    counted: ["qti-card-entry", "qti-file-href", "qti-html-content"],
-    elements: ["qti-card"],
-    kind: "child-count",
-    refuses: (count) => count === 0,
-    required: "at least one",
-    source: "reading 31",
-  },
-  // Reading 31 again: each card entry holds at least one of an HTML content node or file hrefs.
-  {
-    applies: anywhere,
-    child: "qti-html-content or qti-file-href",
-    counted: ["qti-file-href", "qti-html-content"],
-    elements: ["qti-card-entry"],
-    kind: "child-count",
-    refuses: (count) => count === 0,
-    required: "at least one",
-    source: "reading 31",
   },
   // Reading 38 ("a `qti-gap` appears only within a gap-match interaction, and a `qti-hottext` may
   // appear in any flow or inline content"): the row also refuses a gap in a graphic gap-match
@@ -983,7 +1163,8 @@ const readingRows: readonly ReadingRow[] = [
     elements: ["qti-area-mapping"],
     kind: "placement",
     reading: Option.none(),
-    requires: "in a qti-response-declaration whose base type is point",
+    requires:
+      "in a qti-response-declaration whose base type is point and whose cardinality is not record",
     roots: anywhere,
     within: "parent",
   },
@@ -1059,8 +1240,8 @@ const readingRows: readonly ReadingRow[] = [
   },
   // The information model's `qti-equal` (info.txt:24946): "If the tolerance mode is absolute or
   // relative then the tolerance must be specified", as pantry (P36) refuses an absolute or relative
-  // `Equal` with no `EqualTolerance` row. A `tolerance` written empty is specified, as pantry's
-  // `toleranceList` admits it; `tolerance-mode` defaults to `exact`, which needs none.
+  // `Equal` with no `Tolerance` row. A `tolerance` written empty is specified, and holds no value,
+  // which its own row refuses (reading 121); `tolerance-mode` defaults to `exact`, which needs none.
   {
     attribute: "tolerance",
     element: "qti-equal",
@@ -1130,33 +1311,33 @@ const readingRows: readonly ReadingRow[] = [
       },
     ],
   ),
-  // The information model's `tolerance` (info.txt:24946) is two numbers, t0 and t1, or one for
-  // both, and a token that is not a number names the variable that holds one. So each token is an
-  // `xs:double` or an NCName, as pantry's `toleranceList` pattern (P6) admits, where the XSD's
-  // `xs:string` member admits any token, such as `1,5`.
+  // Reading 121: the information model's `tolerance` (info.txt:24946) is two positive numbers, t0
+  // and t1, or one for both, in every mode, and a value that is not a number is a string that names
+  // a variable read at run time, such as `1,5`. The XSD's unbounded list of `xs:string` and
+  // `xs:double` bounds neither the count nor the sign (see toleranceTokens).
   {
     attribute: "tolerance",
     elements: ["qti-equal"],
-    expected: "a list of numbers (xs:double) and variable names (NCName), one space apart",
+    expected: "one or two values, one space apart, each a number above 0 or a variable's name",
     holds: toleranceTokens,
     kind: "narrowed-attribute",
-    settled: { check: "tolerance-token", pantry: "P6", source: "info.txt:24946" },
+    settled: { check: "tolerance-token", reading: "121" },
     whiteSpace: "collapse",
   },
   // The information model's printed variable `format` is "The format conversion specifier"
-  // (info.txt:70323), whose syntax is a C `printf` conversion (info.txt:8686). Pantry's R38 admits
-  // one whole conversion, with codes `E e f G g r R i o X x`, so `%d`, `%u` and `Score: %.1f` are
-  // refused as there. Pantry reads the `xs:normalizedString` with its tabs and line breaks
-  // replaced, not trimmed, so a padded format is refused too. A precision with no digit, `%.f`,
-  // is admitted, as the information model admits it and R38 does not (see printfFormat).
+  // (info.txt:70323), whose syntax is a C `printf` conversion (info.txt:8686). Readings 132 and 161
+  // read it as a printf format string of any number of conversions over the listed codes, and the
+  // operator's ruling on P1 adds `d`, so `%d`, `%i of %i`, `Score: %.1f` and `100%%` are formats,
+  // and `%q`, `%u` and a trailing `%` are not (see printfFormat). The `xs:normalizedString` is
+  // read with its tabs and line breaks replaced, so text around a conversion is any text.
   {
     attribute: "format",
     elements: ["qti-printed-variable"],
     expected:
-      "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
-    holds: (lexical) => printfFormat.test(lexical),
+      "a printf format: any text, %% for a percent sign, and conversions, each a %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the codes E, e, f, G, g, r, R, i, o, X, x and d",
+    holds: printfFormat,
     kind: "narrowed-attribute",
-    settled: { check: "printf-format", pantry: "R38", source: "info.txt:70323" },
+    settled: { check: "printf-format", reading: "132" },
     whiteSpace: "replace",
   },
   // Single cardinality is "a single value" (info.txt:73049, the information model's
@@ -1172,6 +1353,183 @@ const readingRows: readonly ReadingRow[] = [
     refuses: (count) => count > 1,
     required: "exactly one",
     source: "info.txt:73049",
+  },
+  // Reading 9 ("the Schematron's rules are read by their intent, not their text"): its two ARIA
+  // role rules bind. RULE ARIA ROLE 1a, "The 'source' tag must not have an ARIA role attribute",
+  // withdraws the `role` the XSD declares on `source`.
+  { attribute: "role", element: "source", kind: "withdrawn-attribute", reading: "9" },
+  // RULE ARIA ROLE 1b, "The 'h1' tag may have an ARIA role value of 'heading' or 'tab' or
+  // 'presentation' only", where the XSD lists 74 roles. `h2` to `h6` keep every role it lists. The
+  // XSD's enumeration of `xs:string` has already compared the value as written.
+  {
+    attribute: "role",
+    elements: ["h1"],
+    expected: "heading, tab or presentation, the roles an h1 may take",
+    holds: (lexical) => lexical === "heading" || lexical === "tab" || lexical === "presentation",
+    kind: "narrowed-attribute",
+    settled: { reading: "9" },
+    whiteSpace: "replace",
+  },
+  // Reading 123 ("a `bdo` carries `dir`, and its value is `ltr` or `rtl`"): "Authors must specify
+  // the dir attribute on this tag" and "The auto value must not be specified" (information model,
+  // section 5.11), where the XSD declares `dir` optional with the default `auto`. The default is
+  // never read, since a valid `bdo` writes the attribute. Every other element's `dir` keeps `auto`.
+  {
+    applies: anywhere,
+    attribute: "dir",
+    element: "bdo",
+    kind: "required-attribute",
+    reading: "123",
+  },
+  {
+    attribute: "dir",
+    elements: ["bdo"],
+    expected: "ltr or rtl, the directions a bdo overrides to",
+    holds: (lexical) => lexical !== "auto",
+    kind: "narrowed-attribute",
+    settled: { reading: "123" },
+    whiteSpace: "replace",
+  },
+  // Reading 124 ("a `source` in a `picture` carries `srcset`, and one in an `audio` or a `video`
+  // carries `src`"), by the parent, as the HTML Standard the Source class restates splits the two.
+  // A `source` QTI admits elsewhere is bound by neither.
+  {
+    applies: childOf("picture"),
+    attribute: "srcset",
+    element: "source",
+    kind: "required-attribute",
+    reading: "124",
+  },
+  {
+    applies: childOf("audio", "video"),
+    attribute: "src",
+    element: "source",
+    kind: "required-attribute",
+    reading: "124",
+  },
+  // Reading 124: each media URL is "a valid non-empty URL potentially surrounded by spaces", so it
+  // holds a character other than a space, where the XSD's `xs:normalizedString` admits the empty
+  // and the blank value: an `audio`'s and a `video`'s `src`, a `video`'s `poster`, a `source`'s
+  // `src` and its `srcset`. Spaces around the URL are admitted. The URL's own syntax is the
+  // reading's stated limit.
+  {
+    attribute: "src",
+    elements: ["audio", "source", "video"],
+    expected: "a URL holding a character other than a space",
+    holds: isNonBlank,
+    kind: "narrowed-attribute",
+    settled: { reading: "124" },
+    whiteSpace: "replace",
+  },
+  {
+    attribute: "poster",
+    elements: ["video"],
+    expected: "a URL holding a character other than a space",
+    holds: isNonBlank,
+    kind: "narrowed-attribute",
+    settled: { reading: "124" },
+    whiteSpace: "replace",
+  },
+  {
+    attribute: "srcset",
+    elements: ["source"],
+    expected: "a URL holding a character other than a space",
+    holds: isNonBlank,
+    kind: "narrowed-attribute",
+    settled: { reading: "124" },
+    whiteSpace: "replace",
+  },
+  // Reading 125 ("a `track` in the subtitles state carries `srclang`, and a `track` with no `kind`
+  // is in that state"), HTML's missing value default; a `track` of another state need not. Its
+  // `src`, which the XSD already requires, is read as reading 124 reads a media URL.
+  {
+    applies: inSubtitlesState,
+    attribute: "srclang",
+    element: "track",
+    kind: "required-attribute",
+    reading: "125",
+  },
+  {
+    attribute: "src",
+    elements: ["track"],
+    expected: "a URL holding a character other than a space",
+    holds: isNonBlank,
+    kind: "narrowed-attribute",
+    settled: { reading: "125" },
+    whiteSpace: "replace",
+  },
+  // Reading 129 ("`xml:lang`, `lang` and a track's `srclang` hold BCP 47 language tags,
+  // well-formed as RFC 5646 defines them"), where the XSD's `xs:normalizedString` admits any
+  // value: `lang`, on every element that declares it, is a tag or empty, its `replace` whitespace
+  // kept, so `lang="en "` is refused; a track's `srclang` is a tag and never empty. Validity
+  // against the IANA registry is the reading's stated limit.
+  {
+    attribute: "lang",
+    elements: "declaring",
+    expected: "a well-formed BCP 47 language tag, or empty",
+    holds: isLanguageOrEmpty,
+    kind: "narrowed-attribute",
+    settled: { reading: "129" },
+    whiteSpace: "replace",
+  },
+  {
+    attribute: "srclang",
+    elements: ["track"],
+    expected: "a well-formed BCP 47 language tag",
+    holds: (lexical) => isLanguageTag(lexical),
+    kind: "narrowed-attribute",
+    settled: { reading: "129" },
+    whiteSpace: "replace",
+  },
+  // Reading 129: `xml:lang`, on every element, is a tag or empty (XML 1.0, section 2.12), its
+  // whitespace collapsed as `xs:language` collapses it, and on an item's or a stimulus's root a tag
+  // and never empty. XML defines it for every element, so these rows read it in every namespace
+  // the walk checks, a manifest's LOM strings among them, where `xml.xsd`'s type, or the wildcard
+  // that admits it, says nothing of its value. An element the walk passes over, such as MathML
+  // under its `skip` wildcard, is not read: plate's open limit, beside reading 60's.
+  {
+    attribute: "lang",
+    expected: "a well-formed BCP 47 language tag, which an item or a stimulus may not leave empty",
+    holds: (lexical, element) => !isLanguageRoot(element) || isLanguageTag(lexical),
+    kind: "xml-attribute",
+    reading: "129",
+  },
+  {
+    attribute: "lang",
+    expected: "a well-formed BCP 47 language tag, or empty",
+    holds: (lexical, element) => isLanguageRoot(element) || isLanguageOrEmpty(lexical),
+    kind: "xml-attribute",
+    reading: "129",
+  },
+  // Reading 135 ("a MIME type is RFC 2045's type and subtype: two tokens joined by a slash"), on
+  // its nine attributes by their elements' names, where the XSD's pattern also admits a space and
+  // the control character U+007F. Registration with IANA is the reading's stated limit.
+  {
+    attribute: "type",
+    elements: ["a", "object", "param", "qti-stylesheet", "source"],
+    expected: `a MIME type: ${mimeTypeText}`,
+    holds: (lexical) => mimeType.test(lexical),
+    kind: "narrowed-attribute",
+    settled: { reading: "135" },
+    whiteSpace: "replace",
+  },
+  {
+    attribute: "mime-type",
+    elements: ["qti-calculator-info", "qti-digital-material", "qti-file-href"],
+    expected: `a MIME type: ${mimeTypeText}`,
+    holds: (lexical) => mimeType.test(lexical),
+    kind: "narrowed-attribute",
+    settled: { reading: "135" },
+    whiteSpace: "replace",
+  },
+  {
+    attribute: "type",
+    elements: ["qti-upload-interaction"],
+    expected: `a list of MIME types, each ${mimeTypeText}`,
+    holds: isMimeTypeList,
+    kind: "narrowed-attribute",
+    settled: { reading: "135" },
+    whiteSpace: "collapse",
   },
 ];
 
@@ -1225,6 +1583,21 @@ const integerFloors = rowsOf("integer-floor");
  * The rows that require an attribute under a mode.
  */
 const conditionalAttributes = rowsOf("conditional-attribute");
+
+/**
+ * The rows that require an attribute the XSD makes optional.
+ */
+const requiredAttributes = rowsOf("required-attribute");
+
+/**
+ * The rows that withdraw an attribute the XSD declares.
+ */
+const withdrawnAttributes = rowsOf("withdrawn-attribute");
+
+/**
+ * The rows that narrow an attribute of XML's own namespace.
+ */
+const xmlAttributes = rowsOf("xml-attribute");
 
 /**
  * Report whether a row's condition holds on an element.
@@ -1889,10 +2262,47 @@ const checkUndeclared = (
 };
 
 /**
+ * Check an attribute of XML's own namespace against the rows that narrow it, on an element of any
+ * namespace the walk checks, whether its table declares the attribute or a wildcard admits it.
+ *
+ * @param source The document.
+ * @param element The attribute's element.
+ * @param path The element's path.
+ * @param attribute The attribute.
+ * @returns Its `attribute-type` refusals; none for an attribute in another namespace, or one whose
+ *   value holds an unexpanded entity reference, which is unknown.
+ */
+const checkXml = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  attribute: SourceAttribute,
+): readonly Refusal[] => {
+  if (attribute.namespace !== xmlNamespace || attribute.references.length > 0) {
+    return [];
+  }
+
+  const lexical = collapse(attribute.value);
+
+  return xmlAttributes
+    .filter((row) => row.attribute === attribute.local && !row.holds(lexical, element))
+    .map((row) =>
+      refuse(source, "attribute-type", attributePath(path, attribute), {
+        attribute: attributeName(attribute),
+        element: elementName(element),
+        expected: row.expected,
+        reading: row.reading,
+        value: attribute.value,
+      }),
+    );
+};
+
+/**
  * Check a declared attribute's value: against the XSD's type, unless a reading retypes it, and then
  * against the readings that narrow it, the count ranges and the information model's integer
  * floors. The readings are QTI's, so an attribute of an element in another namespace is checked
- * against its type alone.
+ * against its type alone, but for an attribute of XML's own namespace, which {@link checkXml}
+ * reads on every element.
  *
  * @param source The document.
  * @param element The attribute's element.
@@ -1983,7 +2393,7 @@ const checkValue = (
       });
     });
 
-  return [...narrowed, ...ranged, ...floored];
+  return [...narrowed, ...ranged, ...floored, ...checkXml(source, element, path, attribute)];
 };
 
 /**
@@ -2022,6 +2432,63 @@ const checkConditional = (
           }),
         )
     : [];
+
+/**
+ * Check the attributes a reading requires of an element where the XSD makes them optional.
+ *
+ * @param source The document.
+ * @param element The element.
+ * @param path The element's path.
+ * @param parent The element's parent, none for the root.
+ * @returns Its `missing-attribute` refusals, one per row that applies to the element and whose
+ *   attribute it does not write.
+ */
+const checkRequired = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  parent: Option.Option<SourceElement>,
+): readonly Refusal[] =>
+  element.namespace === qtiNamespace
+    ? requiredAttributes
+        .filter(
+          (row) =>
+            row.element === element.local &&
+            row.applies(element, parent) &&
+            !element.attributes.some(
+              (attribute) => attribute.namespace === "" && attribute.local === row.attribute,
+            ),
+        )
+        .map((row) =>
+          refuse(source, "missing-attribute", path, {
+            attribute: row.attribute,
+            element: elementName(element),
+            reading: row.reading,
+          }),
+        )
+    : [];
+
+/**
+ * Find the {@link readingRows} row that withdraws an attribute from its element, if any. The
+ * readings are QTI's, so an element in another namespace has none.
+ *
+ * @param element The attribute's element.
+ * @param attribute The attribute.
+ * @returns The row that names the element and the attribute.
+ */
+const withdrawnFrom = (
+  element: SourceElement,
+  attribute: SourceAttribute,
+): Option.Option<WithdrawnAttribute> =>
+  Option.fromUndefinedOr(
+    withdrawnAttributes.find(
+      (row) =>
+        element.namespace === qtiNamespace &&
+        attribute.namespace === "" &&
+        row.element === element.local &&
+        row.attribute === attribute.local,
+    ),
+  );
 
 /**
  * Check that a variable's declaration writes a `base-type` where it has a base type: a record has
@@ -2153,6 +2620,123 @@ const checkPlacement = (
         requires: row.requires,
       }),
     );
+
+/**
+ * Report whether a hotspot is a default hotspot: its `shape` spells `default`, compared exactly as
+ * written ({@link declares}), for the XSD types it as an enumeration of `xs:string`, whose
+ * whiteSpace is `preserve`. A shape that spells no shape, such as `" default"`, is its value
+ * domain's alone.
+ *
+ * @param hotspot A `qti-hotspot-choice` or a `qti-associable-hotspot`.
+ * @returns Whether it is a default hotspot.
+ */
+const isDefaultHotspot = (hotspot: SourceElement): boolean =>
+  declares(hotspot, "shape", ["default"]);
+
+/**
+ * The interactions whose default hotspot choice comes last (reading 80): "The default hotspot, if
+ * defined, must appear last".
+ */
+const lastDefaultHotspot: ReadonlySet<string> = new Set([
+  "qti-graphic-order-interaction",
+  "qti-hotspot-interaction",
+]);
+
+/**
+ * The lookup tables an outcome declaration may hold (reading 100).
+ */
+const lookupTables: ReadonlySet<string> = new Set(["qti-interpolation-table", "qti-match-table"]);
+
+/**
+ * Report whether an element is its parent's last element child. Text, whitespace and entity
+ * references after it do not count, nor do comments and processing instructions, which the shared
+ * reader does not keep.
+ *
+ * @param element The element.
+ * @param parent Its parent.
+ * @returns Whether no element follows it in its parent.
+ */
+const isLastElement = (element: SourceElement, parent: SourceElement): boolean =>
+  parent.children.findLast((child) => child.kind === "element") === element;
+
+/**
+ * Check a hotspot's place by reading 80 ("a default hotspot is the last hotspot choice of its
+ * interaction, and a graphic gap match interaction has none"), where the XSD admits a default
+ * hotspot anywhere among its interaction's hotspots. A hotspot or graphic order interaction's
+ * default hotspot choice is its last element child, after its image and every other hotspot, and
+ * of a graphic gap match interaction's hotspots "The default hotspot must not be defined", last or
+ * not; either out of place is `misplaced-element`, `check: "default-hotspot"`, naming the
+ * interaction, its `context`. A graphic associate interaction's default hotspot may stand
+ * anywhere: of it the information model says nothing. A hotspot whose parent is of another name,
+ * an element an `xsi:type` gives an interaction's type, is not judged, plate's limit for an
+ * outlandish case (rule `db2ef322`).
+ *
+ * @param source The document.
+ * @param element The element.
+ * @param path The element's path.
+ * @param parent The element's parent, if it was walked.
+ * @returns Its `misplaced-element` refusal, or none.
+ */
+const checkDefaultHotspot = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  parent: SourceElement | undefined,
+): readonly Refusal[] =>
+  element.namespace === qtiNamespace &&
+  parent?.namespace === qtiNamespace &&
+  isDefaultHotspot(element) &&
+  ((element.local === "qti-hotspot-choice" &&
+    lastDefaultHotspot.has(parent.local) &&
+    !isLastElement(element, parent)) ||
+    (element.local === "qti-associable-hotspot" &&
+      parent.local === "qti-graphic-gap-match-interaction"))
+    ? [
+        refuse(source, "misplaced-element", path, {
+          check: "default-hotspot",
+          context: parent.local,
+          element: element.local,
+          reading: "80",
+        }),
+      ]
+    : [];
+
+/**
+ * Check a lookup table's outcome by reading 100 ("a lookup table sets a single outcome"): a
+ * `qti-match-table` or `qti-interpolation-table` belongs to an outcome declaration of single
+ * cardinality, so one under a declaration whose cardinality spells `multiple`, `ordered` or
+ * `record` is `misplaced-element`, `check: "lookup-cardinality"`, naming the outcome's collapsed
+ * `identifier`, empty where it writes none or one that holds an unexpanded entity reference. The
+ * law reads the cardinality alone, so it judges the declaration whatever its identifier spells
+ * (reading 157), and leaves one whose cardinality spells no cardinality to its value domain
+ * (reading 158).
+ *
+ * @param source The document.
+ * @param element The element.
+ * @param path The element's path.
+ * @param parent The element's parent, if it was walked.
+ * @returns Its `misplaced-element` refusal, or none.
+ */
+const checkLookupTable = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  parent: SourceElement | undefined,
+): readonly Refusal[] =>
+  element.namespace === qtiNamespace &&
+  lookupTables.has(element.local) &&
+  parent?.namespace === qtiNamespace &&
+  parent.local === "qti-outcome-declaration" &&
+  declares(parent, "cardinality", ["multiple", "ordered", "record"])
+    ? [
+        refuse(source, "misplaced-element", path, {
+          check: "lookup-cardinality",
+          element: element.local,
+          identifier: Option.getOrElse(modeOf(parent, [], "identifier"), () => ""),
+          reading: "100",
+        }),
+      ]
+    : [];
 
 /**
  * Check one element against the child-count rows that name it.
@@ -2290,16 +2874,21 @@ const namedType = (
  * Check the attributes and the text of one element the walk admitted.
  *
  * A required attribute that is absent is `missing-attribute` at the element, and so is one the
- * information model requires under a mode the element sets ({@link checkConditional}), and a
- * variable's `base-type` where it has a base type ({@link checkUntyped}). `xsi:type` and `xsi:nil`
- * go to {@link checkInstance}, before any other attribute. A declared attribute goes to
- * {@link checkValue} and is checked for `padded-attribute`, unless its value holds an unexpanded
- * entity reference, whose value is unknown, or it is a record's `base-type`, which is
- * `unknown-attribute` ({@link isRecordBaseType}). An undeclared one goes to {@link checkUndeclared}.
+ * information model requires under a mode the element sets ({@link checkConditional}), one a
+ * reading requires where the XSD makes it optional ({@link checkRequired}), and a variable's
+ * `base-type` where it has a base type ({@link checkUntyped}). `xsi:type` and `xsi:nil` go to
+ * {@link checkInstance}, before any other attribute. An attribute a reading withdraws from the
+ * element is `unknown-attribute` ({@link withdrawnFrom}), declared or not. A declared attribute
+ * goes to {@link checkValue} and is checked for `padded-attribute`, unless its value holds an
+ * unexpanded entity reference, whose value is unknown, or it is a record's `base-type`, which is
+ * `unknown-attribute` ({@link isRecordBaseType}). An undeclared one goes to {@link checkUndeclared},
+ * and one a wildcard admits then to {@link checkXml}, which reads `xml:lang` wherever it is written.
  * Non-whitespace text in an element whose table admits none is `text-not-allowed`. The placement
- * and child-count rows go to {@link checkPlacement} and {@link checkChildCounts}. The attributes and
- * the text are checked by the table that governs the element, and its `xsi:type` by the types its
- * name is declared with. The readings' rows name QTI's elements and attributes only.
+ * and child-count rows go to {@link checkPlacement} and {@link checkChildCounts}, and a default
+ * hotspot's place and a lookup table's outcome to {@link checkDefaultHotspot} and
+ * {@link checkLookupTable}. The attributes and the text are checked by the table that governs the
+ * element, and its `xsi:type` by the types its name is declared with. The readings' rows name QTI's
+ * elements and attributes only.
  *
  * @param source The document.
  * @param element The element.
@@ -2310,7 +2899,7 @@ const namedType = (
  * @param parents Each walked element's parent, for the declaration a padded value reads and the
  *   namespace declarations in scope.
  * @param schemas The tables by namespace, for the derivations an `xsi:type` follows.
- * @returns The element's refusals: its placement, missing attributes, its `xsi:type` and `xsi:nil`,
+ * @returns The element's refusals: its placements, missing attributes, its `xsi:type` and `xsi:nil`,
  *   then each other attribute's in document order, then its text, then its child counts.
  */
 const checkElement = (
@@ -2323,7 +2912,11 @@ const checkElement = (
   schemas: Schemas,
 ): readonly Refusal[] => {
   const { table } = governed;
-  const refusals: Refusal[] = [...checkPlacement(source, element, path, parents)];
+  const refusals: Refusal[] = [
+    ...checkPlacement(source, element, path, parents),
+    ...checkDefaultHotspot(source, element, path, parents.get(element)),
+    ...checkLookupTable(source, element, path, parents.get(element)),
+  ];
   const label = elementName(element);
   const declared = table.attributes.filter((declaration) => declaration.use !== "prohibited");
 
@@ -2344,6 +2937,7 @@ const checkElement = (
 
   refusals.push(
     ...checkConditional(source, element, path, declared),
+    ...checkRequired(source, element, path, Option.fromUndefinedOr(parents.get(element))),
     ...checkUntyped(source, element, path),
     ...checkInstance(source, element, path, name, parents, schemas),
   );
@@ -2352,12 +2946,29 @@ const checkElement = (
       continue;
     }
 
+    const withdrawn = withdrawnFrom(element, attribute);
+    if (Option.isSome(withdrawn)) {
+      refusals.push(
+        refuse(source, "unknown-attribute", attributePath(path, attribute), {
+          attribute: attributeName(attribute),
+          element: label,
+          reading: withdrawn.value.reading,
+        }),
+      );
+      continue;
+    }
+
     const declaration = declared.find(
       (candidate) =>
         candidate.namespace === attribute.namespace && candidate.local === attribute.local,
     );
     if (declaration === undefined) {
-      refusals.push(...Option.toArray(checkUndeclared(source, element, path, governed, attribute)));
+      refusals.push(
+        ...Option.match(checkUndeclared(source, element, path, governed, attribute), {
+          onNone: () => checkXml(source, element, path, attribute),
+          onSome: (refusal) => [refusal],
+        }),
+      );
       continue;
     }
 
@@ -2768,12 +3379,14 @@ export const governingTables = (
  * It refuses `unknown-element`, `unknown-attribute`, `missing-attribute`, `attribute-type`,
  * `padded-attribute` and `text-not-allowed`, and the readings' `misplaced-element`, `child-count`
  * and `count-range`, each at the path of the element or attribute at fault. The readings are QTI's
- * and apply to QTI's elements only. Each element is checked by the table {@link governingTables}
- * gives it, except one a simple type governs in lax wildcard content, whose attributes and element
- * children are refused and whose text is not checked, plate's open limit that reading 60 ("a simple
- * type it names governs its text and is checked") records. It does not enter an element it refuses
- * as unknown, and does enter a misplaced one. A document whose root is outside QTI's namespace and
- * every namespace of `others` yields nothing here: that is the verdict's `not-qti-root`.
+ * and apply to QTI's elements only, but for the rows that read XML's own `xml:lang`, which hold on
+ * every element the walk checks (reading 129). Each element is checked by the table
+ * {@link governingTables} gives it, except one a simple type governs in lax wildcard content, whose
+ * attributes and element children are refused and whose text is not checked, plate's open limit
+ * that reading 60 ("a simple type it names governs its text and is checked") records. It does not
+ * enter an element it refuses as unknown, and does enter a misplaced one. A document whose root is
+ * outside QTI's namespace and every namespace of `others` yields nothing here: that is the
+ * verdict's `not-qti-root`.
  *
  * @param source The document, as the reader adapter built it.
  * @param tables The tables generated from the QTI XSD.

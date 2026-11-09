@@ -37,6 +37,7 @@ import type {
 } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import {
+  integerLexical,
   isModelled,
   isNcName,
   parseElementText,
@@ -101,6 +102,158 @@ const requirements = {
     cardinalities: ["single", "record"],
   },
 } as const satisfies Record<InteractionName, Requirement>;
+
+/**
+ * The count that decides the cardinality of the response an interaction binds: its attribute, and
+ * the XSD's default for it, which an unwritten count is read as.
+ */
+interface CardinalityCount {
+  readonly attribute: "max-associations" | "max-choices";
+  readonly unwritten: bigint;
+}
+
+/**
+ * The interactions whose most count decides the cardinality of the response they bind, by local
+ * name, under reading 92 ("the information model's binding and count sentences that no other
+ * reading restates hold as written"): "If max-choices is greater than 1 (or 0) then the interaction
+ * must be bound to a response with multiple cardinality", of the `max-choices` of the choice,
+ * hottext, hotspot, position object and select point interactions and the `max-associations` of the
+ * associate, gap match, graphic associate, graphic gap match and match interactions, each unwritten
+ * count read as its XSD default. Both XSDs give every one of them the default `1` but the select
+ * point's `max-choices`, whose default is `0`.
+ */
+const cardinalityCounts: ReadonlyMap<string, CardinalityCount> = new Map([
+  ["qti-associate-interaction", { attribute: "max-associations", unwritten: 1n }],
+  ["qti-choice-interaction", { attribute: "max-choices", unwritten: 1n }],
+  ["qti-gap-match-interaction", { attribute: "max-associations", unwritten: 1n }],
+  ["qti-graphic-associate-interaction", { attribute: "max-associations", unwritten: 1n }],
+  ["qti-graphic-gap-match-interaction", { attribute: "max-associations", unwritten: 1n }],
+  ["qti-hotspot-interaction", { attribute: "max-choices", unwritten: 1n }],
+  ["qti-hottext-interaction", { attribute: "max-choices", unwritten: 1n }],
+  ["qti-match-interaction", { attribute: "max-associations", unwritten: 1n }],
+  ["qti-position-object-interaction", { attribute: "max-choices", unwritten: 1n }],
+  ["qti-select-point-interaction", { attribute: "max-choices", unwritten: 0n }],
+]);
+
+/**
+ * The interactions that bind a second response through a `string-identifier`, the only ones whose
+ * XSD declares it: "If the string interaction is bound to a numeric response variable then the
+ * actual string entered by the candidate can also be captured by binding the interaction to a
+ * second response variable (of base-type string)" (info.txt:25400 and info.txt:48078, the
+ * Extended Text's and the Text Entry's `string-identifier`).
+ */
+const stringBindings: ReadonlySet<string> = new Set([
+  "qti-extended-text-interaction",
+  "qti-text-entry-interaction",
+]);
+
+/**
+ * A least count and the most it may reach, both written on one element.
+ *
+ * Only the most's XSD default is kept: an unwritten least is at most any most, since its XSD
+ * default, where it has one, is `0`.
+ */
+interface CountPair {
+  /**
+   * The least count's attribute.
+   */
+  readonly least: string;
+  /**
+   * The most count's attribute.
+   */
+  readonly most: string;
+  /**
+   * The reading that settles the pair.
+   */
+  readonly reading: string;
+  /**
+   * The most's XSD default, which an unwritten most is read as, none where the XSD gives none.
+   */
+  readonly unwritten: Option.Option<bigint>;
+  /**
+   * Whether a most of `0` sets no limit, so that any least meets it.
+   */
+  readonly zeroUnlimited: boolean;
+}
+
+/**
+ * Construct one of reading 76's count pairs, in which a most of `0` sets no limit.
+ *
+ * @param least The least count's attribute.
+ * @param most The most count's attribute.
+ * @param unwritten The most's XSD default, none where the XSD gives none.
+ * @returns The pair.
+ */
+const limitPair = (least: string, most: string, unwritten: Option.Option<bigint>): CountPair => ({
+  least,
+  most,
+  reading: "76",
+  unwritten,
+  zeroUnlimited: true,
+});
+
+/**
+ * The `min-associations` and `max-associations` pair, whose most every interaction that writes it
+ * defaults to `1`.
+ */
+const associations = limitPair("min-associations", "max-associations", Option.some(1n));
+
+/**
+ * The `match-min` and `match-max` pair, whose most the XSD requires and so gives no default.
+ */
+const matches = limitPair("match-min", "match-max", Option.none());
+
+/**
+ * The count pairs reading 76 ("a least count is at most its most, unless the most is 0") holds, by
+ * the local name of the element that writes them: the `min-choices` and `max-choices` of the
+ * choice, hottext, hotspot, position object and select point interactions, the `min-associations`
+ * and `max-associations` of the associate, gap match, graphic associate, graphic gap match and
+ * match interactions, the `match-min` and `match-max` of the associable hotspot, gap image, gap
+ * text and simple associable choice, an extended text interaction's `min-strings` and
+ * `max-strings`, and a media interaction's `min-plays` and `max-plays`. Each most's default is the
+ * XSD's: `1` but the select point's `max-choices` and the media interaction's `max-plays`, `0`,
+ * and none for `match-max` and `max-strings`.
+ */
+const countPairs: ReadonlyMap<string, CountPair> = new Map([
+  ["qti-associable-hotspot", matches],
+  ["qti-associate-interaction", associations],
+  ["qti-choice-interaction", limitPair("min-choices", "max-choices", Option.some(1n))],
+  ["qti-extended-text-interaction", limitPair("min-strings", "max-strings", Option.none())],
+  ["qti-gap-img", matches],
+  ["qti-gap-match-interaction", associations],
+  ["qti-gap-text", matches],
+  ["qti-graphic-associate-interaction", associations],
+  ["qti-graphic-gap-match-interaction", associations],
+  ["qti-hotspot-interaction", limitPair("min-choices", "max-choices", Option.some(1n))],
+  ["qti-hottext-interaction", limitPair("min-choices", "max-choices", Option.some(1n))],
+  ["qti-match-interaction", associations],
+  ["qti-media-interaction", limitPair("min-plays", "max-plays", Option.some(0n))],
+  ["qti-position-object-interaction", limitPair("min-choices", "max-choices", Option.some(1n))],
+  ["qti-select-point-interaction", limitPair("min-choices", "max-choices", Option.some(0n))],
+  ["qti-simple-associable-choice", matches],
+]);
+
+/**
+ * The `min-choices` and `max-choices` pair of an order or graphic order interaction, under reading
+ * 18: neither interaction gives `0` the meaning "no limit", and the XSD gives neither count a
+ * default.
+ */
+const orderPair: CountPair = {
+  least: "min-choices",
+  most: "max-choices",
+  reading: "18",
+  unwritten: Option.none(),
+  zeroUnlimited: false,
+};
+
+/**
+ * The interactions reading 18 bounds by their number of choices, by local name, each with the
+ * local name of the children that are its choices.
+ */
+const orderedChoices: ReadonlyMap<string, string> = new Map([
+  ["qti-graphic-order-interaction", "qti-hotspot-choice"],
+  ["qti-order-interaction", "qti-simple-choice"],
+]);
 
 /**
  * Read an identifier attribute's value as its XSD type reads it.
@@ -194,7 +347,7 @@ const renderedInteraction = (element: SourceElement): Option.Option<InteractionN
  *
  * @param requirement The interaction's requirement.
  * @param cardinality The declaration's cardinality.
- * @param baseType The declaration's base type, none when it carries no `base-type`.
+ * @param baseType The declaration's base type, none when its `base-type` is absent or spells none.
  * @returns Whether the cardinality is one the requirement allows and, unless it is `record`, the
  *   base type is one it allows.
  */
@@ -260,65 +413,148 @@ const refusal = (
   });
 
 /**
- * The choice elements whose `identifier` is unique within their interaction: each choice's local
- * name, with the local name of the interaction that scopes it.
- *
- * A `qti-simple-choice` is scoped only inside a Choice. In any other interaction that holds one,
- * such as an Order, these rules do not judge its identifier.
+ * The choice classes whose identifiers share one pool across an item: the eight classes the
+ * information model's prose calls choices. Each says of its identifier that it "must not be used by
+ * any other choice or item variable" (SimpleChoice 5.132.1, `info.txt:42411`; InlineChoice 5.73.1,
+ * `info.txt:31918`) or names its own noun ("any other image", "any other text", "any other
+ * hotspot", "any other hottext choice"). Reading 104 reads each class as its own scope; the
+ * overseer extended it (`9c42437e`, Appendix A line 25, E19) to pool the eight, so no two choices
+ * of these classes in one item share an identifier, whichever interactions hold them. A `qti-gap`
+ * stays outside the pool ({@link choicePool}).
  */
-const choiceScopes: ReadonlyMap<string, string> = new Map([
-  ["qti-inline-choice", "qti-inline-choice-interaction"],
-  ["qti-simple-choice", "qti-choice-interaction"],
+const pooledChoices: ReadonlySet<string> = new Set([
+  "qti-associable-hotspot",
+  "qti-gap-img",
+  "qti-gap-text",
+  "qti-hotspot-choice",
+  "qti-hottext",
+  "qti-inline-choice",
+  "qti-simple-associable-choice",
+  "qti-simple-choice",
 ]);
 
 /**
- * Find the scope in which an element's `identifier` must be unique, if it has one.
- *
- * The item's declarations share one scope, the root: "All item variables declared in an item share
- * the same namespace" (info.txt:12006). A Choice's simple choices share another, the interaction:
- * the identifier of a simple choice "must not be used by any other choice" (info.txt:42411). An
- * Inline Choice's inline choices share theirs the same way: "This identifier must not be used by
- * any other choice or item variable." (info.txt:31918, InlineChoice 5.73.1). Both sentences also
- * forbid a choice identifier equal to an item variable's, which these rules do not refuse.
- *
- * @param source The document.
- * @param visit The element's visit.
- * @returns The element whose children share the scope, or none when no rule here scopes it.
+ * The identifiers an item's choices have given so far, each with the class of the first element
+ * that gave it: one pool for the {@link pooledChoices}, and one for the gaps.
  */
-const uniquenessScope = (source: SourceDocument, visit: Visit): Option.Option<SourceElement> =>
-  visit.parent.pipe(
-    Option.filter(
-      (parent) =>
-        (parent === source.root && isDeclaration(visit.element)) ||
-        (isQti(visit.element, (local) => choiceScopes.has(local)) &&
-          isQti(parent, (local) => local === choiceScopes.get(visit.element.local))),
-    ),
-  );
+interface ChoicePools {
+  readonly choices: Map<string, string>;
+  readonly gaps: Map<string, string>;
+}
 
 /**
- * Apply `duplicate-identifier` to one element: its `identifier` is not one an earlier element of
- * its scope already declared.
+ * Find the pool an element's `identifier` is unique within, if it is a choice or a gap.
+ *
+ * A gap is unique among the item's gaps, "any other gap" (Gap 5.55.1, reading 104), and outside the
+ * choices' pool, so a gap and a gap text of one Gap Match may share an identifier.
+ *
+ * @param element The element.
+ * @param pools The item's pools.
+ * @returns The pool, or none for an element that is neither.
+ */
+const choicePool = (
+  element: SourceElement,
+  pools: ChoicePools,
+): Option.Option<Map<string, string>> => {
+  if (isQti(element, (local) => pooledChoices.has(local))) {
+    return Option.some(pools.choices);
+  }
+
+  return isQti(element, (local) => local === "qti-gap") ? Option.some(pools.gaps) : Option.none();
+};
+
+/**
+ * Apply `duplicate-identifier` to one choice or gap (reading 104, as extended, E19): its
+ * `identifier` names no item variable, and no earlier element of its pool ({@link choicePool}) gave
+ * it.
+ *
+ * The item variables are its declarations of all four kinds and its built-ins, `completionStatus`,
+ * `numAttempts`, `duration` and `QTI_CONTEXT`, which "are declared implicitly". A choice that names
+ * one is refused under `check: "choice-variable"` alone, whether or not it also repeats an earlier
+ * choice's identifier, and still counts toward its pool.
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param seen The identifiers each scope has declared so far, which this adds the element's to.
- * @returns The refusal at the repeated `identifier` attribute's path, or none for the first
- *   occurrence and for an element no scope holds.
+ * @param variables The identifiers of the item's variables, declared and built in.
+ * @param pools The identifiers each pool has given so far, which this adds the element's to.
+ * @returns The refusal at the `identifier` attribute's path, with the element's `class` and, for a
+ *   repeat of a choice of another class, its `otherClass`; none for an element that is no choice or
+ *   gap, and for a first occurrence that names no variable.
  */
-const duplicateIdentifier = (
+const choiceIdentifier = (
   source: SourceDocument,
   visit: Visit,
-  seen: Map<SourceElement, Set<string>>,
+  variables: ReadonlySet<string>,
+  pools: ChoicePools,
 ): readonly Refusal[] => {
-  const scope = uniquenessScope(source, visit);
+  const pool = choicePool(visit.element, pools);
   const attribute = attributeOf(visit.element, "identifier");
-  if (Option.isNone(scope) || Option.isNone(attribute)) {
+  if (Option.isNone(pool) || Option.isNone(attribute)) {
     return [];
   }
 
   const identifier = identifierOf(attribute.value);
-  const declared = seen.get(scope.value) ?? new Set<string>();
-  seen.set(scope.value, declared);
+  const path = attributePath(visit.path, attribute.value);
+  const choiceClass = visit.element.local;
+  const earlier = Option.fromUndefinedOr(pool.value.get(identifier));
+  if (Option.isNone(earlier)) {
+    pool.value.set(identifier, choiceClass);
+  }
+
+  if (variables.has(identifier)) {
+    return [
+      refusal(source, "duplicate-identifier", path, {
+        check: "choice-variable",
+        class: choiceClass,
+        identifier,
+        reading: "104",
+      }),
+    ];
+  }
+
+  return Option.match(earlier, {
+    onNone: () => [],
+    onSome: (otherClass) => [
+      refusal(
+        source,
+        "duplicate-identifier",
+        path,
+        otherClass === choiceClass
+          ? { class: choiceClass, identifier, reading: "104" }
+          : { class: choiceClass, identifier, otherClass, reading: "104" },
+      ),
+    ],
+  });
+};
+
+/**
+ * Apply `duplicate-identifier` to one of the item's declarations: its `identifier` is not one an
+ * earlier declaration gave.
+ *
+ * The item's declarations share one scope, the root: "All item variables declared in an item share
+ * the same namespace" (info.txt:12006). A choice's identifier is judged against them, and against
+ * the other choices, by {@link choiceIdentifier}.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param declared The identifiers the item's declarations have given so far, which this adds the
+ *   element's to.
+ * @returns The refusal at the repeated `identifier` attribute's path, or none for the first
+ *   occurrence and for an element that is no declaration of the root.
+ */
+const duplicateDeclaration = (
+  source: SourceDocument,
+  visit: Visit,
+  declared: Set<string>,
+): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "identifier");
+  const declaration =
+    Option.exists(visit.parent, (parent) => parent === source.root) && isDeclaration(visit.element);
+  if (!declaration || Option.isNone(attribute)) {
+    return [];
+  }
+
+  const identifier = identifierOf(attribute.value);
   if (!declared.has(identifier)) {
     declared.add(identifier);
 
@@ -333,14 +569,297 @@ const duplicateIdentifier = (
 };
 
 /**
- * Apply `binding` and reading 19 to an interaction plate renders and the declaration it names.
+ * Read a declaration's cardinality, where its `cardinality` spells one.
+ *
+ * Reading 158 ("a declaration whose cardinality or base type spells nothing is still a declaration:
+ * each law over it judges what it does spell"): a `cardinality` that is absent or outside the
+ * vocabulary is the structural validator's refusal, and a law that reads it judges nothing here.
+ *
+ * @param declaration The declaration.
+ * @returns Its cardinality, none when it spells none.
+ */
+const cardinalityOf = (declaration: SourceElement): Option.Option<Cardinality> =>
+  Option.flatMap(attributeOf(declaration, "cardinality"), (attribute) =>
+    Arr.findFirst(cardinalities, (value) => value === attribute.value),
+  );
+
+/**
+ * A declaration's `base-type` as written, and the base type it spells.
+ */
+interface DeclaredBaseType {
+  readonly baseType: Option.Option<BaseType>;
+  readonly written: Option.Option<string>;
+}
+
+/**
+ * Read a declaration's `base-type` as written, and the base type it spells.
+ *
+ * Under reading 158 a `base-type` that spells nothing types nothing, as an unwritten one does, so
+ * a law that reads the base type judges neither.
+ *
+ * @param declaration The declaration.
+ * @returns The `base-type` as written, none when absent, and the base type it spells, none when
+ *   absent or outside the vocabulary.
+ */
+const baseTypeOf = (declaration: SourceElement): DeclaredBaseType => {
+  const written = Option.map(attributeOf(declaration, "base-type"), (attribute) => attribute.value);
+
+  return {
+    baseType: written.pipe(
+      Option.flatMap((value) => Arr.findFirst(baseTypes, (candidate) => candidate === value)),
+    ),
+    written,
+  };
+};
+
+/**
+ * Read a count attribute's value as an `xs:nonNegativeInteger`, exactly and unbounded (reading 45).
+ *
+ * @param attribute The count attribute.
+ * @returns The count, none when its value is not a non-negative integer, which the structural
+ *   validator refuses as `attribute-type`.
+ */
+const nonNegativeOf = (attribute: SourceAttribute): Option.Option<bigint> => {
+  const lexical = trimXmlSpace(attribute.value);
+
+  return integerLexical.test(lexical)
+    ? Option.filter(Option.some(BigInt(lexical)), (value) => value >= 0n)
+    : Option.none();
+};
+
+/**
+ * Read an interaction's count as an `xs:nonNegativeInteger`, or as the XSD's default where the
+ * interaction does not write it, exactly and unbounded (reading 45).
+ *
+ * @param element The interaction.
+ * @param count The count and its default.
+ * @returns The count, none when its value is not a non-negative integer, which the structural
+ *   validator refuses as `attribute-type`.
+ */
+const countOf = (element: SourceElement, count: CardinalityCount): Option.Option<bigint> =>
+  Option.match(attributeOf(element, count.attribute), {
+    onNone: () => Option.some(count.unwritten),
+    onSome: nonNegativeOf,
+  });
+
+/**
+ * List the `qti-gap`s an element holds, at any depth.
+ *
+ * @param element The element.
+ * @returns Its QTI `qti-gap` descendants, in document order.
+ */
+const gapsIn = (element: SourceElement): readonly SourceElement[] =>
+  element.children.flatMap((child) =>
+    child.kind === "element"
+      ? [...(isQti(child, (local) => local === "qti-gap") ? [child] : []), ...gapsIn(child)]
+      : [],
+  );
+
+/**
+ * Apply a count pair to an element: its least count is at most its most, unless the most is `0`
+ * and the pair reads `0` as no limit.
+ *
+ * Each count is read as written, exactly and unbounded (reading 45); an unwritten most is read as
+ * its XSD default, and an unwritten least is at most any most. A pair whose most is unwritten with
+ * no default is not compared, nor one whose count's value is not a non-negative integer, which is
+ * the structural validator's `attribute-type`. A least above its most is `count-range` with
+ * `check: "count-pair"`, at the most where it is written and otherwise at the element that would
+ * write it.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param pair The pair it writes.
+ * @returns The refusal, or none when the least is at most the most.
+ */
+const pairRefusals = (
+  source: SourceDocument,
+  visit: Visit,
+  pair: CountPair,
+): readonly Refusal[] => {
+  const written = attributeOf(visit.element, pair.most);
+  const least = Option.flatMap(attributeOf(visit.element, pair.least), nonNegativeOf);
+  const most = Option.match(written, { onNone: () => pair.unwritten, onSome: nonNegativeOf });
+  if (
+    Option.isNone(least) ||
+    Option.isNone(most) ||
+    least.value <= most.value ||
+    (pair.zeroUnlimited && most.value === 0n)
+  ) {
+    return [];
+  }
+
+  const at = Option.match(written, {
+    onNone: () => visit.path,
+    onSome: (attribute) => attributePath(visit.path, attribute),
+  });
+
+  return [
+    refusal(source, "count-range", at, {
+      check: "count-pair",
+      element: visit.element.local,
+      least: pair.least,
+      leastValue: least.value.toString(),
+      most: pair.most,
+      mostValue: most.value.toString(),
+      reading: pair.reading,
+    }),
+  ];
+};
+
+/**
+ * Apply reading 18 to an order or graphic order interaction that writes `min-choices`: that count,
+ * and a `max-choices` beside it, is at most the interaction's number of choices, its
+ * `qti-simple-choice` or `qti-hotspot-choice` children, and its `max-choices` is at least its
+ * `min-choices`, `0` included ({@link orderPair}).
+ *
+ * The information model's sentences for both interactions: "If specified, min-choices must be 1 or
+ * greater but must not exceed the number of choices available. If unspecified, all of the choices
+ * must be ordered and max-choices is ignored", and "max-choices must be greater than or equal to
+ * min-choices and must not exceed the number of choices available". So without a `min-choices` no
+ * count is read. A count above the number of choices is `count-range` with `check:
+ * "choice-count"`, at the count; a `min-choices` below 1 is the structural validator's refusal.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @returns The refusals, none for an element that is no order or graphic order interaction, or
+ *   that writes no `min-choices`.
+ */
+const orderCounts = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
+  const choice = qtiEntry(orderedChoices, visit.element);
+  if (Option.isNone(choice) || Option.isNone(attributeOf(visit.element, "min-choices"))) {
+    return [];
+  }
+
+  const choices = BigInt(
+    visit.element.children.filter(
+      (child) => child.kind === "element" && isQti(child, (local) => local === choice.value),
+    ).length,
+  );
+  const overChoices = [orderPair.least, orderPair.most].flatMap((local) =>
+    Option.toArray(
+      Option.flatMap(attributeOf(visit.element, local), (attribute) =>
+        Option.map(
+          Option.filter(nonNegativeOf(attribute), (value) => value > choices),
+          (value) =>
+            refusal(source, "count-range", attributePath(visit.path, attribute), {
+              attribute: local,
+              check: "choice-count",
+              choices: choices.toString(),
+              reading: orderPair.reading,
+              value: value.toString(),
+            }),
+        ),
+      ),
+    ),
+  );
+
+  return [...overChoices, ...pairRefusals(source, visit, orderPair)];
+};
+
+/**
+ * Apply the count rules to an element: reading 76's pairs ({@link countPairs}) and reading 18's
+ * counts of an order or graphic order interaction ({@link orderCounts}).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @returns The `count-range` refusals, none when every count it writes holds.
+ */
+const countRules = (source: SourceDocument, visit: Visit): readonly Refusal[] => [
+  ...Option.match(qtiEntry(countPairs, visit.element), {
+    onNone: () => [],
+    onSome: (pair) => pairRefusals(source, visit, pair),
+  }),
+  ...orderCounts(source, visit),
+];
+
+/**
+ * Apply reading 92's count sentence, then the operator's ruling on a gap match, to an interaction
+ * and the cardinality of the response it binds.
+ *
+ * Reading 92 ("the information model's binding and count sentences that no other reading restates
+ * hold as written"): "If max-choices is greater than 1 (or 0) then the interaction must be bound to
+ * a response with multiple cardinality", of each count {@link cardinalityCounts} lists, read as
+ * written or as its XSD default. A count above 1, or 0, which sets no limit, bound to a response
+ * that is not `multiple` is `binding` with `check: "count-cardinality"`. A count whose value is not
+ * a non-negative integer is the structural validator's refusal and is not compared.
+ *
+ * The operator's ruling P7, a disputed reading plate keeps over main's reading 92, which follows
+ * `max-associations` alone: the gap match "must be bound to a response variable with base-type
+ * 'directedPair' and either single or multiple cardinality, depending on the number of gaps"
+ * (info.txt:8792), so one of two or more `qti-gap`s bound to a `single` response is `binding` with
+ * `check: "gap-match-single"`. It is judged only where the count gives no refusal, so a gap match
+ * bound single gets one refusal, whose remedy, a `multiple` response, is the same.
+ *
+ * @param source The document.
+ * @param visit The interaction's visit.
+ * @param response The response identifier it binds.
+ * @param cardinality That response's cardinality.
+ * @returns The refusal, or none when the interaction binds as its count and its gaps need.
+ */
+const cardinalityRules = (
+  source: SourceDocument,
+  visit: Visit,
+  response: string,
+  cardinality: Cardinality,
+): readonly Refusal[] => {
+  const count = qtiEntry(cardinalityCounts, visit.element);
+  if (Option.isNone(count) || cardinality === "multiple") {
+    return [];
+  }
+
+  const counted = Option.match(countOf(visit.element, count.value), {
+    onNone: () => [],
+    onSome: (value) =>
+      value === 1n
+        ? []
+        : [
+            refusal(source, "binding", visit.path, {
+              attribute: count.value.attribute,
+              check: "count-cardinality",
+              count: value.toString(),
+              interaction: visit.element.local,
+              reading: "92",
+              response,
+            }),
+          ],
+  });
+  const gaps =
+    counted.length === 0 &&
+    cardinality === "single" &&
+    visit.element.local === "qti-gap-match-interaction"
+      ? gapsIn(visit.element).length
+      : 0;
+
+  return gaps > 1
+    ? [
+        refusal(source, "binding", visit.path, {
+          check: "gap-match-single",
+          gaps: gaps.toString(),
+          interaction: visit.element.local,
+          response,
+        }),
+      ]
+    : counted;
+};
+
+/**
+ * Apply `binding`, reading 92's counts and reading 19 to an interaction and the declaration its
+ * `response-identifier` names.
  *
  * `binding` reads the declaration the interaction's `response-identifier` names, never any other
  * declaration in the document: QTI's Schematron runs some base-type tests against every
  * declaration, and by reading 9 ("the Schematron's rules are read by their intent, not their
- * text") each rule applies over the bound declaration. A
- * declaration whose `cardinality` is absent or outside the vocabulary, or whose `base-type` is
- * outside it, is the structural validator's refusal and is not judged here.
+ * text") each rule applies over the bound declaration. The interactions plate renders are held to
+ * {@link requirements}; every interaction {@link cardinalityCounts} lists is held to its count, and
+ * a gap match to its gaps ({@link cardinalityRules}), only where the requirement gives no refusal,
+ * since that refusal already names the response's cardinality.
+ *
+ * Reading 158 ("a declaration whose cardinality or base type spells nothing is still a declaration:
+ * each law over it judges what it does spell"): a declaration whose `cardinality` spells nothing is
+ * not judged. The requirement reads both attributes but for a `record`, which it judges by its
+ * cardinality alone, so a declaration of another cardinality whose `base-type` is absent (E39a's
+ * `missing-attribute`) or spells nothing (its value domain's `attribute-type`) is not held to it;
+ * the counts read the cardinality alone.
  *
  * Reading 19: an Extended Text bound to a `multiple` or `ordered` declaration carries `max-strings`
  * (the information model requires it of a container binding; the XSD makes it optional because it
@@ -349,7 +868,6 @@ const duplicateIdentifier = (
  *
  * @param source The document.
  * @param visit The interaction's visit.
- * @param name Which of the interactions plate renders it is.
  * @param response The response identifier it names.
  * @param declaration The declaration of that identifier.
  * @returns The refusals `binding` and reading 19 give, empty when the binding holds.
@@ -357,92 +875,320 @@ const duplicateIdentifier = (
 const bindingRules = (
   source: SourceDocument,
   visit: Visit,
-  name: InteractionName,
   response: string,
   declaration: SourceElement,
 ): readonly Refusal[] => {
-  const cardinality = Option.flatMap(attributeOf(declaration, "cardinality"), (attribute) =>
-    Arr.findFirst(cardinalities, (value) => value === attribute.value),
-  );
+  const cardinality = cardinalityOf(declaration);
   if (Option.isNone(cardinality)) {
     return [];
   }
 
-  const written = Option.map(attributeOf(declaration, "base-type"), (attribute) => attribute.value);
-  const baseType = written.pipe(
-    Option.flatMap((value) => Arr.findFirst(baseTypes, (candidate) => candidate === value)),
-  );
-  const judged = Option.isNone(written) || Option.isSome(baseType);
-  const binding =
-    judged && !meets(requirements[name], cardinality.value, baseType)
-      ? [
-          refusal(source, "binding", visit.path, {
-            baseType: Option.getOrElse(written, () => ""),
-            cardinality: cardinality.value,
-            interaction: name,
-            response,
-          }),
-        ]
-      : [];
+  const { baseType, written } = baseTypeOf(declaration);
+  const judged = cardinality.value === "record" || Option.isSome(baseType);
+  const binding = Option.match(renderedInteraction(visit.element), {
+    onNone: () => [],
+    onSome: (name) =>
+      judged && !meets(requirements[name], cardinality.value, baseType)
+        ? [
+            refusal(source, "binding", visit.path, {
+              baseType: Option.getOrElse(written, () => ""),
+              cardinality: cardinality.value,
+              interaction: name,
+              response,
+            }),
+          ]
+        : [],
+  });
+  const counted =
+    binding.length === 0 ? cardinalityRules(source, visit, response, cardinality.value) : [];
 
+  const extendedText = isQti(visit.element, (local) => local === "qti-extended-text-interaction");
   const container = cardinality.value === "multiple" || cardinality.value === "ordered";
   const maxStrings =
-    name === "qti-extended-text-interaction" &&
-    container &&
-    Option.isNone(attributeOf(visit.element, "max-strings"))
+    extendedText && container && Option.isNone(attributeOf(visit.element, "max-strings"))
       ? [
           refusal(source, "missing-attribute", visit.path, {
             attribute: "max-strings",
-            element: name,
+            element: visit.element.local,
           }),
         ]
       : [];
 
-  return [...binding, ...maxStrings];
+  return [...binding, ...counted, ...maxStrings];
 };
 
 /**
- * Apply `undeclared-response` to an interaction, then `binding` and reading 19 to the declaration
- * it names.
- *
- * Reading I-8.6 (the goal's decision `01e90255`): an interaction's `response-identifier` names a
- * declared `qti-response-declaration`. Reading 14 makes a Text Entry's `response-identifier` a
- * plain identifier like every other interaction's, not an `xs:IDREF`, so this rule is the only
- * check on it. A text interaction's `string-identifier` is not resolved: reading 14 types it as a
- * plain identifier, and the qti package stores it unresolved. An interaction with no
- * `response-identifier` is the structural validator's `missing-attribute`.
+ * Apply reading 92's "Each response variable declared may be bound to one and only one
+ * interaction" to one binding: a response that an earlier binding of the item already binds is
+ * `binding` with `check: "bound-once"`, at the attribute that binds it the second time.
  *
  * @param source The document.
- * @param visit The element's visit.
- * @param declarations The item's response declarations by identifier.
- * @returns The refusal at the `response-identifier` attribute's path when it names no
- *   declaration, otherwise the binding rules' refusals; none for an element that is not an
- *   interaction.
+ * @param visit The interaction's visit.
+ * @param attribute The attribute that binds the response, a `response-identifier` or a
+ *   `string-identifier`.
+ * @param response The declared response it names.
+ * @param bound The responses earlier bindings bind, which this adds `response` to.
+ * @param reading The reading that settles a second binding here: `92` for another interaction's,
+ *   `14` for a `string-identifier` that names its own interaction's response.
+ * @returns The refusal, or none for the response's first binding.
  */
-const responseRules = (
+const boundOnce = (
   source: SourceDocument,
   visit: Visit,
-  declarations: ReadonlyMap<string, SourceElement>,
+  attribute: SourceAttribute,
+  response: string,
+  bound: Set<string>,
+  reading: string,
 ): readonly Refusal[] => {
-  const attribute = attributeOf(visit.element, "response-identifier");
-  if (!isInteraction(visit.element) || Option.isNone(attribute)) {
+  if (!bound.has(response)) {
+    bound.add(response);
+
     return [];
   }
 
-  const response = identifierOf(attribute.value);
+  return [
+    refusal(source, "binding", attributePath(visit.path, attribute), {
+      attribute: attribute.local,
+      check: "bound-once",
+      interaction: visit.element.local,
+      reading,
+      response,
+    }),
+  ];
+};
+
+/**
+ * Apply `undeclared-response` to an interaction's `response-identifier`, then reading 92's single
+ * binding and {@link bindingRules} to the declaration it names.
+ *
+ * Reading I-8.6 (the goal's decision `01e90255`): an interaction's `response-identifier` names a
+ * declared `qti-response-declaration`; reading 14 ("a text-entry interaction's
+ * `response-identifier` and `string-identifier` are `xs:IDREF`s, as the XSD types them") resolves a
+ * Text Entry's to the declaration it names, as every interaction's is resolved here.
+ *
+ * @param source The document.
+ * @param visit The interaction's visit.
+ * @param declarations The item's response declarations by identifier.
+ * @param bound The responses earlier bindings bind.
+ * @param attribute The interaction's `response-identifier`.
+ * @returns The refusal at the attribute's path when it names no declaration, otherwise the
+ *   refusals of its binding.
+ */
+const responseBinding = (
+  source: SourceDocument,
+  visit: Visit,
+  declarations: ReadonlyMap<string, SourceElement>,
+  bound: Set<string>,
+  attribute: SourceAttribute,
+): readonly Refusal[] => {
+  const response = identifierOf(attribute);
   const declaration = declarations.get(response);
   if (declaration === undefined) {
     return [
-      refusal(source, "undeclared-response", attributePath(visit.path, attribute.value), {
+      refusal(source, "undeclared-response", attributePath(visit.path, attribute), { response }),
+    ];
+  }
+
+  return [
+    ...boundOnce(source, visit, attribute, response, bound, "92"),
+    ...bindingRules(source, visit, response, declaration),
+  ];
+};
+
+/**
+ * Find the cardinality of the text an interaction with a `string-identifier` captures, which the
+ * response its `string-identifier` names must have.
+ *
+ * A Text Entry captures one string, so `single`. An Extended Text captures a string for each value
+ * its own response holds, so the cardinality of the declaration its `response-identifier` names: a
+ * `multiple` `float` binding captures a `multiple` `string`.
+ *
+ * @param visit The interaction's visit.
+ * @param declarations The item's response declarations by identifier.
+ * @param own The response its `response-identifier` names, none when it writes none.
+ * @returns The cardinality, none for an Extended Text whose own response is undeclared or spells
+ *   no cardinality.
+ */
+const capturedCardinality = (
+  visit: Visit,
+  declarations: ReadonlyMap<string, SourceElement>,
+  own: Option.Option<string>,
+): Option.Option<Cardinality> =>
+  isQti(visit.element, (local) => local === "qti-text-entry-interaction")
+    ? Option.some<Cardinality>("single")
+    : own.pipe(
+        Option.flatMap((identifier) => Option.fromUndefinedOr(declarations.get(identifier))),
+        Option.flatMap(cardinalityOf),
+      );
+
+/**
+ * Apply `undeclared-response`, reading 92's single binding and `binding` to a Text Entry's or an
+ * Extended Text's `string-identifier`.
+ *
+ * Reading 14 ("a text-entry interaction's `response-identifier` and `string-identifier` are
+ * `xs:IDREF`s, as the XSD types them") resolves a `string-identifier` to the declaration it names,
+ * as a `response-identifier` is resolved: naming no declared response is `undeclared-response`,
+ * its `attribute` naming the `string-identifier`. The response it names is "a second response
+ * variable (of base-type string)" (info.txt:48078), and the information model asks nothing more of
+ * it (rule `5b8ee08b`): align-54's D3a holds it to base type `string` and to the cardinality of
+ * the text it captures ({@link capturedCardinality}), so another is `binding` with `check:
+ * "string-binding"`. Reading 158 holds the base type to it only where it spells one; a declaration
+ * whose `cardinality` spells nothing is not judged, nor its cardinality where the captured one is
+ * unknown. A response bound already, the interaction's own among them, is bound a second time
+ * ({@link boundOnce}).
+ *
+ * @param source The document.
+ * @param visit The interaction's visit.
+ * @param declarations The item's response declarations by identifier.
+ * @param bound The responses earlier bindings bind.
+ * @param attribute The interaction's `string-identifier`.
+ * @param own The response its `response-identifier` names, none when it writes none.
+ * @returns The refusals of its binding, empty when it binds a string response of the captured
+ *   cardinality that no other binding binds.
+ */
+const stringBinding = (
+  source: SourceDocument,
+  visit: Visit,
+  declarations: ReadonlyMap<string, SourceElement>,
+  bound: Set<string>,
+  attribute: SourceAttribute,
+  own: Option.Option<string>,
+): readonly Refusal[] => {
+  const response = identifierOf(attribute);
+  const declaration = declarations.get(response);
+  if (declaration === undefined) {
+    return [
+      refusal(source, "undeclared-response", attributePath(visit.path, attribute), {
+        attribute: attribute.local,
+        element: visit.element.local,
+        identifier: response,
+        reading: "14",
         response,
       }),
     ];
   }
 
-  return Option.match(renderedInteraction(visit.element), {
-    onNone: () => [],
-    onSome: (name) => bindingRules(source, visit, name, response, declaration),
+  const reading = Option.exists(own, (identifier) => identifier === response) ? "14" : "92";
+  const cardinality = cardinalityOf(declaration);
+  const { baseType, written } = baseTypeOf(declaration);
+  const captured = capturedCardinality(visit, declarations, own);
+  const fits = Option.match(cardinality, {
+    onNone: () => true,
+    onSome: (value) =>
+      !Option.exists(captured, (wanted) => wanted !== value) &&
+      !Option.exists(baseType, (type) => type !== "string"),
   });
+
+  return [
+    ...boundOnce(source, visit, attribute, response, bound, reading),
+    ...(fits
+      ? []
+      : [
+          refusal(source, "binding", visit.path, {
+            baseType: Option.getOrElse(written, () => ""),
+            cardinality: Option.getOrElse(cardinality, () => ""),
+            check: "string-binding",
+            interaction: visit.element.local,
+            reading: "14",
+            response,
+          }),
+        ]),
+  ];
+};
+
+/**
+ * Resolve the bindings of an interaction: its `response-identifier`, then, on a Text Entry or an
+ * Extended Text, its `string-identifier`, in that order, so a `string-identifier` that names the
+ * interaction's own response is its second binding.
+ *
+ * Only an interaction's bindings are read: the XSD declares `response-identifier` on the
+ * `qti-*-interaction` elements and `string-identifier` on the two {@link stringBindings}, and on
+ * any other element only an attribute wildcard admits either, which binds nothing. An interaction
+ * with no `response-identifier` is the structural validator's `missing-attribute`.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param declarations The item's response declarations by identifier.
+ * @param bound The responses earlier bindings bind, which this adds the interaction's to.
+ * @returns The refusals of its bindings; none for an element that is not an interaction.
+ */
+const responseRules = (
+  source: SourceDocument,
+  visit: Visit,
+  declarations: ReadonlyMap<string, SourceElement>,
+  bound: Set<string>,
+): readonly Refusal[] => {
+  if (!isInteraction(visit.element)) {
+    return [];
+  }
+
+  const own = attributeOf(visit.element, "response-identifier");
+  const second = isQti(visit.element, (local) => stringBindings.has(local))
+    ? attributeOf(visit.element, "string-identifier")
+    : Option.none();
+  const first = Option.match(own, {
+    onNone: () => [],
+    onSome: (attribute) => responseBinding(source, visit, declarations, bound, attribute),
+  });
+
+  return [
+    ...first,
+    ...Option.match(second, {
+      onNone: () => [],
+      onSome: (attribute) =>
+        stringBinding(
+          source,
+          visit,
+          declarations,
+          bound,
+          attribute,
+          own.pipe(Option.map(identifierOf)),
+        ),
+    }),
+  ];
+};
+
+/**
+ * Apply reading 92 to a Portable Custom Interaction's `qti-context-variable`: it names a context
+ * variable, one the item declares in a `qti-context-declaration` or the built-in `QTI_CONTEXT`.
+ * The reading's bullet: the element "allows an item author to bind a context variable to the PCI
+ * instance", the context variables are the declared ones and `QTI_CONTEXT`, and "All variables must
+ * be declared except for the built-in session variables"; the Schematron's rule 20Ba states the
+ * same. Another name is `undeclared-variable` with `check: "context-variable"`. The XSD declares
+ * the element only inside a `qti-portable-custom-interaction`, and requires its `identifier`, whose
+ * absence is the structural validator's `missing-attribute`.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param contexts The item's context declarations by identifier.
+ * @returns The refusal at the element, or none when it names a context variable or is no
+ *   `qti-context-variable`.
+ */
+const contextVariableReference = (
+  source: SourceDocument,
+  visit: Visit,
+  contexts: ReadonlyMap<string, SourceElement>,
+): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "identifier");
+  if (
+    !isQti(visit.element, (local) => local === "qti-context-variable") ||
+    Option.isNone(attribute)
+  ) {
+    return [];
+  }
+
+  const identifier = identifierOf(attribute.value);
+
+  return identifier === "QTI_CONTEXT" || contexts.has(identifier)
+    ? []
+    : [
+        refusal(source, "undeclared-variable", visit.path, {
+          check: "context-variable",
+          element: visit.element.local,
+          identifier,
+          reading: "92",
+        }),
+      ];
 };
 
 /**
@@ -3230,26 +3976,36 @@ const setCorrectResponses = (
 
 /**
  * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
- * `binding`, `template-requirements`, `value-type`, `undeclared-variable` and `expression-type`,
- * reading 19's `max-strings` on an Extended Text bound to a container, and reading 23's
+ * `binding`, `count-range`, `template-requirements`, `value-type`, `undeclared-variable` and
+ * `expression-type`, reading 19's `max-strings` on an Extended Text bound to a container, and
+ * reading 23's
  * `expression-placement` on a `qti-variable` that carries `weight-identifier`, which only a test's
- * outcome processing may hold ({@link weightPlacement}, pantry's P12). `template-requirements`
+ * outcome processing may hold ({@link weightPlacement}, pantry's P12). `undeclared-response` and
+ * `binding` judge each binding an interaction makes, its `response-identifier` and a Text Entry's
+ * or an Extended Text's `string-identifier` ({@link responseRules}): the declaration each names,
+ * its fit, reading 92's counts and single binding, and a gap match's gaps. `count-range` judges a
+ * least count against its most (reading 76) and an order interaction's counts against its choices
+ * (reading 18, {@link countRules}). `duplicate-identifier` judges the item's declarations among
+ * themselves ({@link duplicateDeclaration}), and each choice of the eight pooled classes and each
+ * gap against its pool and the item's variables (reading 104, as extended, E19,
+ * {@link choiceIdentifier}). `template-requirements`
  * judges the declarations a standard template, an inline `qti-map-response` or
  * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `undeclared-variable` judges the
  * variable a rule or an expression names, through its kind's declaration facet in the registry, and
  * the variables its reference attributes name, through its kind's reference facet, and refuses a
  * rule other than `qti-set-outcome-value` that sets a built-in, a template rule that sets a
  * variable of a kind it may not set, and a name a `qti-printed-variable` or a `template-identifier`
- * gives that the item declares no variable of. `expression-type` judges what a
- * `qti-set-outcome-value`, `qti-set-template-value`, `qti-set-correct-response` or
- * `qti-set-default-value` sets, a branch's or a template constraint's condition, a lookup's
- * operand, every expression's operands by its kind's rule, the variables its reference attributes
- * name, a read template processing may not make, and the kind and type of the variables a
- * `qti-printed-variable` or a `template-identifier` names. Each expression is typed through its
- * kind's rule in the registry (`kindRules` in `#plate/model/expressions/read.ts`). The variable,
- * type and reference rules judge inline response processing and template processing alike, as the
- * qti package does. A field of a record declaration's value that lacks its `field-identifier` or
- * its `base-type` is `missing-attribute` ({@link recordFieldAttributes}).
+ * gives that the item declares no variable of, or a Portable Custom Interaction's
+ * `qti-context-variable` names that is no context variable ({@link contextVariableReference}).
+ * `expression-type` judges what a `qti-set-outcome-value`, `qti-set-template-value`,
+ * `qti-set-correct-response` or `qti-set-default-value` sets, a branch's or a template constraint's
+ * condition, a lookup's operand, every expression's operands by its kind's rule, the variables its
+ * reference attributes name, a read template processing may not make, and the kind and type of the
+ * variables a `qti-printed-variable` or a `template-identifier` names. Each expression is typed
+ * through its kind's rule in the registry (`kindRules` in `#plate/model/expressions/read.ts`). The
+ * variable, type and reference rules judge inline response processing and template processing
+ * alike, as the qti package does. A field of a record declaration's value that lacks its
+ * `field-identifier` or its `base-type` is `missing-attribute` ({@link recordFieldAttributes}).
  *
  * The rules judge exactly what the structural walk checks, and only an item they can read whole:
  *
@@ -3300,7 +4056,11 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
     types: new Map(),
     variables: new Map(variableDeclarations.flatMap((kind) => [...declarationsOf(source, kind)])),
   };
-  const seen = new Map<SourceElement, Set<string>>();
+  const declared = new Set<string>();
+  const pools: ChoicePools = { choices: new Map(), gaps: new Map() };
+  const variables = new Set([...context.variables.keys(), ...itemBuiltIns.keys()]);
+  const bound = new Set<string>();
+  const contexts = declarationsOf(source, "qti-context-declaration");
   const refusals: Refusal[] = [];
   for (const visit of visits) {
     if (Option.isSome(visit.parent)) {
@@ -3308,8 +4068,11 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
     }
 
     refusals.push(
-      ...duplicateIdentifier(source, visit, seen),
-      ...responseRules(source, visit, context.responses),
+      ...duplicateDeclaration(source, visit, declared),
+      ...choiceIdentifier(source, visit, variables, pools),
+      ...responseRules(source, visit, context.responses, bound),
+      ...countRules(source, visit),
+      ...contextVariableReference(source, visit, contexts),
       ...templateRequirements(source, visit, context),
       ...mapResponseRequirements(source, visit, context),
       ...attributeValueType(source, visit, context),

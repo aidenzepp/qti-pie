@@ -42,6 +42,7 @@ import {
 } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest, RootSummary, Verdict } from "#plate/validate/verdict.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
+import type { CpVersion } from "#plate/vocabulary.ts";
 
 /**
  * A `javascript:` URL, which every URL attribute drops.
@@ -1088,7 +1089,7 @@ const tolerating = (tolerance: string): SourceDocument =>
     ),
   ]);
 
-describe("check, the built-in variables' identifiers and qti-equal's tolerance tokens (pantry DeclarationNotReserved and P6)", () => {
+describe("check, the built-in variables' identifiers (pantry DeclarationNotReserved) and qti-equal's tolerance values (reading 121, \"every tolerance is one or two values, each number among them above 0\")", () => {
   it("[I-9a] refuses an item that declares a variable named completionStatus, numAttempts or duration as attribute-type at its identifier (pantry DeclarationNotReserved)", () => {
     for (const [kind, identifier, baseType] of [
       ["qti-outcome-declaration", "completionStatus", "identifier"],
@@ -1116,8 +1117,8 @@ describe("check, the built-in variables' identifiers and qti-equal's tolerance t
     }
   });
 
-  it("[I-9a] refuses an item whose qti-equal tolerance holds a token that is neither an xs:double nor an NCName, 1,5, as attribute-type (pantry P6)", () => {
-    assert.deepStrictEqual(refusalsOf(verdictOf(tolerating("1,5"))), [
+  it('[I-9a] refuses an item whose qti-equal tolerance holds a number not above 0, -1, as attribute-type (reading 121, "each number among them above 0")', () => {
+    assert.deepStrictEqual(refusalsOf(verdictOf(tolerating("-1"))), [
       {
         location: {
           kind: "path",
@@ -1128,8 +1129,8 @@ describe("check, the built-in variables' identifiers and qti-equal's tolerance t
     ]);
   });
 
-  it("[I-9a] accepts an item whose qti-equal tolerance is 0.5, 1 2, TOL (an NCName) or INF", () => {
-    for (const tolerance of ["0.5", "1 2", "TOL", "INF"]) {
+  it("[I-9a] accepts an item whose qti-equal tolerance is 0.5, 1 2, TOL or INF, or 1,5 or +INF, which name variables read at run time (reading 121)", () => {
+    for (const tolerance of ["0.5", "1 2", "TOL", "INF", "1,5", "+INF"]) {
       assert.notStrictEqual(verdictOf(tolerating(tolerance)).verdict, "refused", tolerance);
     }
   });
@@ -1333,6 +1334,96 @@ describe("check, the base types of a test's SCORE, MAXSCORE and PASSED", () => {
         },
       ],
     );
+  });
+});
+
+/**
+ * Construct a single float outcome declaration that writes a `normal-minimum`.
+ *
+ * @param identifier Its `identifier`.
+ * @param minimum Its `normal-minimum`, as written.
+ * @returns The declaration.
+ */
+const bounded = (identifier: string, minimum: string): SourceElement =>
+  el("qti-outcome-declaration", [
+    attr("base-type", "float"),
+    attr("cardinality", "single"),
+    attr("identifier", identifier),
+    attr("normal-minimum", minimum),
+  ]);
+
+/**
+ * Give the `normal-minimum` the built model holds of each outcome, in declaration order.
+ *
+ * @param outcomes The model's outcome declarations.
+ * @returns Each outcome's identifier and its minimum, none when it has none.
+ */
+const minimaOf = (
+  outcomes: Item["outcomes"],
+): readonly (readonly [string, Option.Option<number>])[] =>
+  Array.from(outcomes.values(), (declaration) => [
+    declaration.identifier,
+    declaration.normalMinimum,
+  ]);
+
+describe("check, the default normal-minimum of a QTI 3.0.1 outcome (reading 149)", () => {
+  /**
+   * The versions a document is checked under: a 3.0.1 package's, a 3.0.0 package's, and none, as
+   * a document opened alone states.
+   */
+  const versions: readonly Option.Option<CpVersion>[] = [
+    Option.some("3.0.1"),
+    Option.some("3.0.0"),
+    Option.none(),
+  ];
+
+  /**
+   * What a 3.0.1 package's document holds of each outcome: 0.0 where it writes none, and what it
+   * writes where it writes one.
+   *
+   * @param unwritten The outcomes that write no `normal-minimum`.
+   * @param written The outcome that writes one, and its value.
+   * @returns The minima, and the minima under a 3.0.0 package and a lone document.
+   */
+  const expected = (
+    unwritten: readonly string[],
+    written: readonly [string, number],
+  ): readonly (readonly (readonly [string, Option.Option<number>])[])[] =>
+    versions.map((version) => [
+      ...unwritten.map(
+        (identifier) =>
+          [
+            identifier,
+            Option.exists(version, (stated) => stated === "3.0.1") ? Option.some(0) : Option.none(),
+          ] as const,
+      ),
+      [written[0], Option.some(written[1])] as const,
+    ]);
+
+  it("align-54 default minimum B3a: gives every outcome of a 3.0.1 package's item that writes no normal-minimum 0.0, an identifier outcome among them, keeps a written one, and gives none under 3.0.0 or alone", () => {
+    const source = item([
+      score(),
+      outcome("FEEDBACK", "identifier"),
+      bounded("LOW", "-2"),
+      body([el("p", [], [text("Hello")])]),
+    ]);
+    const minima = versions.map((version) =>
+      minimaOf(acceptedOf(check(source, tables, version), "accepted").item.outcomes),
+    );
+
+    assert.deepStrictEqual(minima, expected(["SCORE", "FEEDBACK"], ["LOW", -2]));
+  });
+
+  it("align-54 default minimum B3a: gives every outcome of a 3.0.1 package's test that writes no normal-minimum 0.0, an identifier outcome among them, keeps a written one, and gives none under 3.0.0 or alone", () => {
+    const source = assessmentTest(
+      [itemRef("q1")],
+      [outcome("TOTAL", "float"), outcome("BAND", "identifier"), bounded("FLOOR", "-1")],
+    );
+    const minima = versions.map((version) =>
+      minimaOf(acceptedTestOf(check(source, tables, version), "accepted").test.outcomes),
+    );
+
+    assert.deepStrictEqual(minima, expected(["TOTAL", "BAND"], ["FLOOR", -1]));
   });
 });
 
@@ -1575,17 +1666,65 @@ describe("check, every QTI 3 root", () => {
     }
   });
 
-  it("marks a test's xi:include rather than leaving the test unchecked", () => {
+  it("align-54 includes E23: leaves a test holding an XInclude include unchecked, with no accepted test", () => {
     const include = el("include", [attr("href", "shared/items.xml")], [], xincludeNamespace);
-    const accepted = acceptedTestOf(
-      verdictOf(assessmentTest([itemRef("q1"), include])),
-      "accepted-with-unsupported",
-    );
+    const verdict = verdictOf(assessmentTest([itemRef("q1"), include]));
 
-    assert.deepStrictEqual(featuresOf(accepted.unsupported), [
-      `xi:include@qti-assessment-test/qti-test-part/qti-assessment-section/{${xincludeNamespace}}include`,
-    ]);
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "test");
+    assert.isFalse("accepted" in verdict);
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        {
+          path: `qti-assessment-test/qti-test-part/qti-assessment-section/{${xincludeNamespace}}include`,
+          reason: "xinclude",
+        },
+      ]);
+    }
   });
+
+  it("align-54 includes E23: leaves a section document holding an XInclude include unchecked, with no accepted section", () => {
+    const include = el("include", [attr("href", "shared/items.xml")], [], xincludeNamespace);
+    const verdict = verdictOf(doc("section.xml", assessmentSection("S", [itemRef("q1"), include])));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "section");
+    assert.isFalse("accepted" in verdict);
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        { path: `qti-assessment-section/{${xincludeNamespace}}include`, reason: "xinclude" },
+      ]);
+    }
+  });
+
+  /**
+   * Includes whose form XInclude or the readings would refuse, each of which plate leaves only
+   * unchecked (P4): none is refused for its form.
+   */
+  const includeForms = [
+    {
+      attributes: [attr("href", "shared/items.xml"), attr("xpointer", "element(/1)")],
+      form: "an xpointer",
+    },
+    { attributes: [attr("href", "shared/items.xml"), attr("parse", "text")], form: 'parse="text"' },
+    { attributes: [attr("href", "https://example.com/items.xml")], form: "an external href" },
+  ];
+  for (const { attributes, form } of includeForms) {
+    it(`align-54 includes E23: leaves a test's include with ${form} only unchecked, never refused (P4)`, () => {
+      const include = el("include", attributes, [], xincludeNamespace);
+      const verdict = verdictOf(assessmentTest([itemRef("q1"), include]));
+
+      assert.strictEqual(verdict.verdict, "unchecked");
+      if (verdict.verdict === "unchecked") {
+        assert.deepStrictEqual(verdict.reasons, [
+          {
+            path: `qti-assessment-test/qti-test-part/qti-assessment-section/{${xincludeNamespace}}include`,
+            reason: "xinclude",
+          },
+        ]);
+      }
+    });
+  }
 
   it("refuses a test's outcome-only expression outside outcome processing once, as expression-placement", () => {
     const branch = el(
@@ -2947,6 +3086,23 @@ const align54Wordings: readonly {
   },
 ];
 
+/**
+ * The facts of a `string-binding` refusal of an interaction's `string-identifier` naming `NOTES`,
+ * a response of base type `integer`.
+ *
+ * @param interaction The interaction's name.
+ * @param cardinality The cardinality `NOTES` is declared with.
+ * @returns The refusal's detail.
+ */
+const stringBound = (interaction: string, cardinality: string) => ({
+  baseType: "integer",
+  cardinality,
+  check: "string-binding",
+  interaction,
+  reading: "14",
+  response: "NOTES",
+});
+
 describe("describeRefusal", () => {
   it("words every rule in refusalRules", () => {
     for (const rule of refusalRules) {
@@ -3030,6 +3186,37 @@ describe("describeRefusal", () => {
       sentence,
       "To make it valid: end each conversion in one of those codes, and write a percent sign as `%%`.",
     );
+  });
+
+  it("align-54 default minimum D3a: words a Text Entry's string-identifier as naming a single string response (reading 14)", () => {
+    const sentence = describeRefusal(
+      refusalOf("binding", stringBound("qti-text-entry-interaction", "multiple")),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-text-entry-interaction`'s attribute `string-identifier` names `NOTES`, a multiple response of base type `integer`, and a `string-identifier` binds a single `string` response (reading 14).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: name a single `string` response in `string-identifier`, or change the declaration of `NOTES`.",
+    );
+  });
+
+  it("align-54 default minimum D3a: words an Extended Text's string-identifier as naming a string response of the cardinality its own response binds, never a single one (reading 14)", () => {
+    const sentence = describeRefusal(
+      refusalOf("binding", stringBound("qti-extended-text-interaction", "single")),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-extended-text-interaction`'s attribute `string-identifier` names `NOTES`, a single response of base type `integer`, and its `string-identifier` binds a `string` response of the cardinality of the response its `response-identifier` binds (reading 14).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: name in `string-identifier` a `string` response of the cardinality of the response `response-identifier` binds, or change the declaration of `NOTES`.",
+    );
+    assert.notInclude(sentence, "a single `string` response");
   });
 
   it("keeps a value holding backticks inside one code span, whole", () => {

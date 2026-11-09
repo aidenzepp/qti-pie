@@ -472,6 +472,11 @@ const expressionPlacement = (
  *   structural walk refuses it.
  * - Only the elements the structural walk checks are visited, the keys of `governingTables` for the
  *   same tables (reading 57).
+ * - Nothing inside an XInclude `include` is judged, its `xi:fallback` included: the walk passes over
+ *   an include and everything below it, in a section, in outcome processing and in wildcard content
+ *   alike, so no rule here or in the processing rules reads what a fragment stands in for. The
+ *   verdict leaves a document holding an include unchecked (E23), since an included fragment is
+ *   judged in place, as its merged document holds it (reading 117), and plate never fetches it.
  *
  * Every refusal is located at an element or attribute path. An empty list means no rule this module
  * implements refuses the document, not that it is valid: the structural validator judges the XSD's
