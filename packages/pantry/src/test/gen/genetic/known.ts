@@ -14,6 +14,7 @@
  * that states it, its fix what would lift it, and it stays while the limit stands.
  */
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
+import type { Noise } from "#pantry/test/gen/genetic/noise.ts";
 
 /**
  * Who owns a disagreement's fix: the lane, and the fix it waits on.
@@ -29,10 +30,16 @@ export interface Owned {
 type KnownFile = readonly [path: string, form: "b64" | "xml", content: string];
 
 /**
- * One known disagreement, or one a fix closed: its owner, the fix, and its package's files.
+ * One known disagreement, or one a fix closed: its owner, the fix, its package's files, and, for a
+ * noise's class, the noise and salt that make its package's noised twin.
  */
 export interface Known extends Owned {
   readonly files: readonly KnownFile[];
+  /**
+   * The noise and salt of a `noise-moved` class: such a class shows only beside its package's
+   * noised twin, as the search judges it, so the check judges the twin too.
+   */
+  readonly noised?: { readonly noise: Noise; readonly salt: number };
 }
 
 /**
@@ -293,6 +300,54 @@ export const known = {
       fix: "a stated limit (spec reading 1): a record file whose root is a cp:manifest still has its resource-owned record read, so the import names lom-identifier where the law oracle names root-type-reverse (decision 449's shape); RootOfType refuses it on both sides; lifted by reading no record a record file's cp:resource owns",
       owner: "decision 463",
     },
+  "noise-moved: the import's verdict under resource-order": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="items/media/pic.png"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "items/media/pic.png",
+        "b64",
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=",
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test/>`,
+      ],
+    ],
+    fix: "a stated limit (spec reading 1): two documents fail the codec differently (a binary file typed as a fragment, a namespace-less root), and each side names the first in manifest order (the law oracle at src/test/oracle.ts:6710-6718, the import at src/import/program.ts:190-193), so the rule named moves with resource order; the codec refuses it on both sides; lifted by a codec precedence that names one rule whatever the order",
+    noised: { noise: "resource-order", salt: 90 },
+    owner: "decision 463",
+  },
+  "noise-moved: the oracle's verdict under resource-order": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_fragment_xmlv3p0" href="items/media/pic.png"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "items/media/pic.png",
+        "b64",
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=",
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test/>`,
+      ],
+    ],
+    fix: "a stated limit (spec reading 1): two documents fail the codec differently (a binary file typed as a fragment, a namespace-less root), and each side names the first in manifest order (the law oracle at src/test/oracle.ts:6710-6718, the import at src/import/program.ts:190-193), so the rule named moves with resource order; the codec refuses it on both sides; lifted by a codec precedence that names one rule whatever the order",
+    noised: { noise: "resource-order", salt: 90 },
+    owner: "decision 463",
+  },
 } satisfies Entries;
 
 /**
