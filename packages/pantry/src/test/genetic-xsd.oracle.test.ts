@@ -461,7 +461,7 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * difference a record matches, so these controls show the two agree there, not that the record
  * stays narrow.
  *
- * The last four are the LOM xml:id class gr-lom-1 found with seed 1281456798, two causes each of
+ * The next four are the LOM xml:id class gr-lom-1 found with seed 1281456798, two causes each of
  * which the law oracle's "DocumentId key" refuses and xmllint accepts. The first two are an
  * external LOM file holding one `xml:id` twice, padded and plain: the loose LOM binding's set
  * declares no `xml:id`, so XML Schema keys nothing there, while the grammar types it as a
@@ -470,6 +470,15 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * declares `xml:id`, and libxml2 keys it by its raw value at parse time (`paddedIdRecord`). With
  * `v` twice there both refuse, which gr-lom-1's controls showed and the replay cannot: it reports
  * no agreement.
+ *
+ * The last six are genetic repair round 4's X1, X2 and X3a, each a reading that refuses more than
+ * the XSD. The two context declarations sharing an identifier, in a test and in an item, are
+ * reading 74's: a context's identifier is unique among its document's IDs, which 3.0.0's XSD types
+ * `xs:ID` and 3.0.1's `IdentifierDType`, so they differ in 3.0.1 alone. The three sources without
+ * their attribute are reading 124's: a source in a video or an audio carries `src`, and one in a
+ * picture `srcset`, where the XSD makes both optional; reading 124's earlier records held only a
+ * blank value. The stylesheet's type opening with a space is reading 135's: a MIME type is two
+ * RFC 2045 tokens, where the XSD's `MimeTypeDType` pattern admits a space.
  */
 const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
   {
@@ -595,6 +604,30 @@ const keptDocuments: readonly { readonly name: string; readonly text: string }[]
   {
     name: "a padded xml:id held twice on two foreign elements of a section's selection",
     text: '<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="s" title="t" visible="true"><qti-selection select="1"><w:config xmlns:w="urn:w"><w:a xml:id="&#x9;vé "/><w:b xml:id="&#x9;vé "/></w:config></qti-selection></qti-assessment-section>',
+  },
+  {
+    name: "two context declarations of a test that share an identifier",
+    text: '<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-context-declaration identifier="a1"/><qti-context-declaration identifier="a1"/></qti-assessment-test>',
+  },
+  {
+    name: "two context declarations of an item that share an identifier",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-context-declaration identifier="a1"/><qti-context-declaration identifier="a1"/></qti-assessment-item>',
+  },
+  {
+    name: "a video's source with no src",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-item-body><div><video><source/></video></div></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "an audio's source with no src",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-item-body><div><audio><source/></audio></div></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "a picture's source with no srcset",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-item-body><div><picture><source/><img src="a.png" alt="a"/></picture></div></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "a modal feedback's stylesheet whose type opens with a space",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-modal-feedback><qti-stylesheet type=" text/plain"/></qti-modal-feedback></qti-assessment-item>',
   },
 ];
 
