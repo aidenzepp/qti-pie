@@ -1666,17 +1666,65 @@ describe("check, every QTI 3 root", () => {
     }
   });
 
-  it("marks a test's xi:include rather than leaving the test unchecked", () => {
+  it("align-54 includes E23: leaves a test holding an XInclude include unchecked, with no accepted test", () => {
     const include = el("include", [attr("href", "shared/items.xml")], [], xincludeNamespace);
-    const accepted = acceptedTestOf(
-      verdictOf(assessmentTest([itemRef("q1"), include])),
-      "accepted-with-unsupported",
-    );
+    const verdict = verdictOf(assessmentTest([itemRef("q1"), include]));
 
-    assert.deepStrictEqual(featuresOf(accepted.unsupported), [
-      `xi:include@qti-assessment-test/qti-test-part/qti-assessment-section/{${xincludeNamespace}}include`,
-    ]);
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "test");
+    assert.isFalse("accepted" in verdict);
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        {
+          path: `qti-assessment-test/qti-test-part/qti-assessment-section/{${xincludeNamespace}}include`,
+          reason: "xinclude",
+        },
+      ]);
+    }
   });
+
+  it("align-54 includes E23: leaves a section document holding an XInclude include unchecked, with no accepted section", () => {
+    const include = el("include", [attr("href", "shared/items.xml")], [], xincludeNamespace);
+    const verdict = verdictOf(doc("section.xml", assessmentSection("S", [itemRef("q1"), include])));
+
+    assert.strictEqual(verdict.verdict, "unchecked");
+    assert.strictEqual(verdict.kind, "section");
+    assert.isFalse("accepted" in verdict);
+    if (verdict.verdict === "unchecked") {
+      assert.deepStrictEqual(verdict.reasons, [
+        { path: `qti-assessment-section/{${xincludeNamespace}}include`, reason: "xinclude" },
+      ]);
+    }
+  });
+
+  /**
+   * Includes whose form XInclude or the readings would refuse, each of which plate leaves only
+   * unchecked (P4): none is refused for its form.
+   */
+  const includeForms = [
+    {
+      attributes: [attr("href", "shared/items.xml"), attr("xpointer", "element(/1)")],
+      form: "an xpointer",
+    },
+    { attributes: [attr("href", "shared/items.xml"), attr("parse", "text")], form: 'parse="text"' },
+    { attributes: [attr("href", "https://example.com/items.xml")], form: "an external href" },
+  ];
+  for (const { attributes, form } of includeForms) {
+    it(`align-54 includes E23: leaves a test's include with ${form} only unchecked, never refused (P4)`, () => {
+      const include = el("include", attributes, [], xincludeNamespace);
+      const verdict = verdictOf(assessmentTest([itemRef("q1"), include]));
+
+      assert.strictEqual(verdict.verdict, "unchecked");
+      if (verdict.verdict === "unchecked") {
+        assert.deepStrictEqual(verdict.reasons, [
+          {
+            path: `qti-assessment-test/qti-test-part/qti-assessment-section/{${xincludeNamespace}}include`,
+            reason: "xinclude",
+          },
+        ]);
+      }
+    });
+  }
 
   it("refuses a test's outcome-only expression outside outcome processing once, as expression-placement", () => {
     const branch = el(
