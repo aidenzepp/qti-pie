@@ -1575,15 +1575,29 @@ export type UnheldRead =
     };
 
 /**
- * Report whether an expression or one of its operands reads a variable, its value or its default
- * (`qti-variable` or `qti-default`), by one of some names.
+ * The kinds of expression that read a variable by an `identifier` a test may prefix with an item
+ * ref: its value, its default, a response's correct response, and a response mapped through its
+ * mapping or its area mapping.
+ */
+const prefixedReads: ReadonlySet<Expression["kind"]> = new Set([
+  "correct",
+  "default",
+  "map-response",
+  "map-response-point",
+  "variable",
+]);
+
+/**
+ * Report whether an expression or one of its operands reads a variable by one of some names, by
+ * any of the expressions whose `identifier` a test may prefix ({@link prefixedReads}).
  *
  * @param expression The expression.
  * @param names The names.
  * @returns Whether it reads one of them.
  */
 const readsAny = (expression: Expression, names: ReadonlySet<string>): boolean =>
-  ((expression.kind === "variable" || expression.kind === "default") &&
+  ("identifier" in expression &&
+    prefixedReads.has(expression.kind) &&
     names.has(expression.identifier)) ||
   expression.operands.some((operand) => readsAny(operand, names));
 
@@ -1592,8 +1606,9 @@ const readsAny = (expression: Expression, names: ReadonlySet<string>): boolean =
  * marks the test model would give, had it seen what the package sees.
  *
  * When the outcome processing reads one, it is `marked`, as {@link outcomeProcessingOf} marks an
- * unheld read. Each template default of an item ref whose expression reads one, by a `qti-variable`
- * or a `qti-default`, is left out of the item ref's `templateDefaults`, as
+ * unheld read. Each template default of an item ref whose expression reads one, by a
+ * `qti-variable`, a `qti-default`, a `qti-correct`, a `qti-map-response` or a
+ * `qti-map-response-point` ({@link readsAny}), is left out of the item ref's `templateDefaults`, as
  * {@link templateDefaultOf} leaves out one the engine cannot apply, so its template variable starts
  * at its item's declared default. Each read is the mark `variable:<name>` at its path, and the
  * marks follow the test's own in `unsupported`, each once per feature and path. A test with no

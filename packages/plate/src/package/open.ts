@@ -587,14 +587,6 @@ const templateDefaultElements: ReadonlySet<string> = new Set(["qti-template-defa
 const processingElements: ReadonlySet<string> = new Set(["qti-outcome-processing"]);
 
 /**
- * The expressions that read a variable by its `identifier`, its value or its default, by local name
- * in QTI's namespace: in a template default, the ones a read through an item ref that the engine
- * holds no value of is found in ({@link unheldReadsIn}), since they are the reads for which the
- * test model leaves a template default out (`withUnheldReads` in `#plate/model/test.ts`).
- */
-const variableReadElements: ReadonlySet<string> = new Set(["qti-default", "qti-variable"]);
-
-/**
  * The item ref, the one element of a test that references an item document, by local name in
  * QTI's namespace.
  */
@@ -1420,25 +1412,51 @@ const inDocumentLanguage = (
   });
 
 /**
+ * The element that holds a document's catalogs, by local name in QTI's namespace: dormant content
+ * outside the body (section 5.28, "A container of content or resource references that is outside
+ * the content body node"), whose languages {@link languageForms} does not read.
+ */
+const catalogInfoElements: ReadonlySet<string> = new Set(["qti-catalog-info"]);
+
+/**
  * Give the languages a document's elements state, in document order: each `xml:lang` collapsed, as
  * an `xs:language` is, once for each language, compared as a tag ({@link foldedTag}), with the
  * first form that states it. None that collapses to nothing is given, since an empty `xml:lang`
  * states no language (XML 1.0, section 2.12) and one of whitespace alone is refused by AL1 before
  * reading 134 reads it.
  *
+ * A `qti-catalog-info` and everything under it are passed over (R9-c, "R26 counts the metadata
+ * binding's elements, and catalog content is not among them", which reading 134 is read with): a
+ * catalog is dormant content outside the body, so the `xml:lang` of a `qti-card`, a
+ * `qti-card-entry`, a `qti-html-content` and everything they hold asks for no listing.
+ *
  * The forms are the document's own: an XInclude `include` is not performed, so a fragment it would
  * splice in is not read, and its `xml:lang` forms ask for no listing. A document holding one is
  * `unchecked` (E23), and this is the limit that leaves.
+ *
+ * The walk keeps its own stack, as {@link walk} does, so a deeply nested document cannot exhaust
+ * the call stack.
  *
  * @param source The document.
  * @returns The forms, collapsed.
  */
 const languageForms = (source: SourceDocument): readonly string[] => {
   const forms = new Map<string, string>();
-  for (const { element } of walk(source)) {
+  const pending: SourceElement[] = [source.root];
+  for (let element = pending.pop(); element !== undefined; element = pending.pop()) {
+    if (isQti(element, catalogInfoElements)) {
+      continue;
+    }
+
     const form = Option.getOrElse(Option.map(xmlLangOf(element), collapse), () => "");
     if (form !== "" && !forms.has(foldedTag(form))) {
       forms.set(foldedTag(form), form);
+    }
+
+    for (const child of element.children.toReversed()) {
+      if (child.kind === "element") {
+        pending.push(child);
+      }
     }
   }
 
@@ -3655,16 +3673,17 @@ const repeatsIn = (
 /**
  * Give each read through an item ref in a test document's processing of a variable the engine holds
  * no value of: an expression whose `identifier` a test may prefix ({@link referenceElements}) that
- * lies in the test's `qti-outcome-processing`, or a `qti-variable` or a `qti-default`
- * ({@link variableReadElements}) that lies in a `qti-template-default` of one of its item refs,
- * whose `identifier` is a name the predicate takes. The test model, built from the document alone,
- * holds such a read and would run it; the engine holds no value of it: the item marks a declared
- * context variable, the engine holds no item's `QTI_CONTEXT`, and a session delivers no LTI link.
- * In the outcome processing a `qti-correct`, a `qti-map-response` or a `qti-map-response-point` is
- * found as well, since a name read through an LTI link is accepted whatever reads it (reading 166,
- * "a name read through an LTI link (reading 110)" is accepted), and the processing would run it on
- * nothing. A context variable meets none of those three on a checked package: each reads a
- * response alone ({@link judgeReference}).
+ * lies in the test's `qti-outcome-processing` or in a `qti-template-default` of one of its item
+ * refs, whose `identifier` is a name the predicate takes. The test model, built from the document
+ * alone, holds such a read and would run it; the engine holds no value of it: the item marks a
+ * declared context variable, the engine holds no item's `QTI_CONTEXT`, and a session delivers no
+ * LTI link. A `qti-correct`, a `qti-map-response` or a `qti-map-response-point` is found as a
+ * `qti-variable` or a `qti-default` is, since a name read through an LTI link is accepted whatever
+ * reads it (reading 166, "a name read through an LTI link (reading 110)" is accepted), and the
+ * processing or the template default would run it on nothing; the test model leaves a template
+ * default out for each of the five (`withUnheldReads` in `#plate/model/test.ts`). A context
+ * variable meets none of those three on a checked package: each reads a response alone
+ * ({@link judgeReference}).
  *
  * @param source The test's source.
  * @param visits The visits of its elements, in document order.
@@ -3698,9 +3717,7 @@ const unheldReadsIn = (
       places.set(element, inherited);
 
       const read = Option.getOrUndefined(Option.map(identifierOf(element), inherited));
-      const readers =
-        read?.kind === "outcome-processing" ? referenceElements : variableReadElements;
-      if (read !== undefined && isQti(element, readers) && isUnheld(read.name)) {
+      if (read !== undefined && isQti(element, referenceElements) && isUnheld(read.name)) {
         reads.push(read);
       }
     }
