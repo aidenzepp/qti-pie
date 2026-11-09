@@ -13,7 +13,7 @@ import {
   fold,
   generated,
   key,
-  lawsOf,
+  lawsByStatement,
   lexical,
   Monoid,
   mirrors,
@@ -41,7 +41,6 @@ import {
   Array as Arr,
   Duration,
   Effect,
-  Function as Fn,
   Formatter,
   Option,
   pipe,
@@ -65,6 +64,7 @@ import {
   ruleOfLaws,
   schemaLawsOf,
   statedLaws,
+  statementLawsOf,
   textLaws,
 } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
@@ -99,8 +99,8 @@ const grammar = Result.getOrThrow(composed());
  * A scratch schema, in the shapes `node.ts` and `attributes.ts` state, built with grizzle's own
  * constructors: a tree with its parent copy, predecessor copy, last slot, `Follow` step and two
  * count folds, an ordered family with its owner copy and `or` fold, and a counted family whose
- * owner copy rides its owner axis; its laws as grizzle's `lawsOf` names them, and the law of each
- * statement an axis carries, by the statement's name.
+ * owner copy rides its owner axis; its laws as grizzle's `lawsByStatement` names them, and the law
+ * of each statement an axis carries, by the statement's name.
  *
  * `grizzle generate` compiled this schema at 4016b69, with no database, and its foreign keys carry
  * exactly: the tree's owner axis (parent, ‹n›, document, parentKind, parentNearest, ‹ps›, version);
@@ -240,16 +240,15 @@ const scratch = (() => {
     mirrors(on(Choice, "node"), on(Node, "id")),
     key(on(Choice, "interaction", "identifier")),
   ]);
-  const statementLaws = lawsOf(built);
+  const lawsOfStatement = lawsByStatement(built);
   const lawOf = (statement: (typeof built.statements)[number]): Law =>
     pipe(
-      Arr.findFirst(statementLaws, (held) => held.statement === statement),
-      Option.flatMap(({ laws }) => Arr.head(laws)),
+      Arr.head(lawsOfStatement(statement)),
       Option.getOrThrowWith(() => new Error("a scratch statement grizzle states no law of")),
     );
 
   return {
-    laws: statementLaws.flatMap(({ laws }) => laws),
+    laws: built.statements.flatMap(lawsOfStatement),
     named: {
       attributeFamily: lawOf(attributeFamily),
       attributeOwner: lawOf(attributeOwner),
@@ -1616,12 +1615,14 @@ const composedQti = Effect.promise(() => import("#pantry/qti/schema.ts")).pipe(
 );
 
 /**
- * Every law a schema's statements state, as grizzle's `lawsOf` names them, compiled once per
- * schema.
+ * Every law a schema's statements state, as grizzle's `lawsByStatement` names them, through the one
+ * lookup `refusal.ts` builds per schema (its `statementLawsOf`).
+ *
+ * @param built - The schema, `Qti`.
+ * @returns The laws, in statement order.
  */
-const statementLawsOf = Fn.memoize((built: AnySchema): readonly Law[] =>
-  lawsOf(built).flatMap(({ laws }) => laws),
-);
+const lawsStatedBy = (built: Parameters<typeof statementLawsOf>[0]): readonly Law[] =>
+  statementLawsOf(built).flatMap(({ laws }) => laws);
 
 describe("the pattern laws, one per field", () => {
   it("names each law grizzle states by its field's own type's row, a generated field's included, and refuses a law whose field's type no row holds", () => {
@@ -1691,14 +1692,14 @@ describe("the census of the composed Qti schema", () => {
     (ctx) =>
       Effect.gen(function* census() {
         const Qti = yield* composedQti;
-        const laws = [...statementLawsOf(Qti), ...primaryKeysOf(Qti.relations)];
+        const laws = [...lawsStatedBy(Qti), ...primaryKeysOf(Qti.relations)];
         const unowned = laws
           .filter((law) => Option.isNone(lawNameOf(law)))
           .map((law) => Formatter.format(law));
 
         assert.deepStrictEqual(unowned, [], "laws Qti states that no row of the table owns");
 
-        const axes = mergedAxes(statementLawsOf(Qti), Qti.relations);
+        const axes = mergedAxes(lawsStatedBy(Qti), Qti.relations);
         for (const { laws: carried } of axes) {
           assertResolves(carried);
         }
@@ -1787,7 +1788,7 @@ describe("the census of the composed Qti schema", () => {
       // states, under its own rule, so a dangling site of either kind is refused under one rule.
       Effect.gen(function* siteKinds() {
         const Qti = yield* composedQti;
-        const stated = statementLawsOf(Qti);
+        const stated = lawsStatedBy(Qti);
         const kinds: readonly (readonly [LawSide, LawSide, Rule])[] = [
           [sideOf("SitePath", "node"), sideOf("SiteTarget", "node"), "include-target"],
           [sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind"), "include-target"],

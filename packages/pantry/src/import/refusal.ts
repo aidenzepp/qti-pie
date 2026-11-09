@@ -19,7 +19,7 @@
  *   grammar's rows; for a content-order law it names the positions `Follow` allows next, each with
  *   its XSD particle. There is no catalog of messages.
  */
-import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
+import { lawsByStatement, lawsOf, sameLaw } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, RegexText, Statement, Witness } from "@bjornpagen/grizzle";
 import {
   Array as Arr,
@@ -959,14 +959,21 @@ const nameOfStatement: ReadonlyMap<Statement, LawName> = new Map(
 );
 
 /**
- * Each statement of a schema beside its laws, as grizzle's `lawsOf` names them.
+ * Each statement of a schema beside its laws, as grizzle's `lawsByStatement` names them: each law
+ * one `lawsOf` lists, in `lawsOf`'s order, a mirrors' two containments and an alternatives law's
+ * each its statement's.
  *
- * `lawsOf` compiles the schema's law model, which takes seconds, so this is memoized by the
- * schema's identity: the laws this module names ({@link statedIn}) and the laws the import's host
- * judge judges (`#pantry/import/host-judge.ts`) share one compile per process, and loading either
- * module runs none.
+ * `lawsByStatement` compiles the schema's law model, which takes seconds, and returns a lookup that
+ * compiles nothing, so this builds one lookup per schema, on its first call, and pairs every
+ * statement through it, memoized by the schema's identity: the laws this module names
+ * ({@link statedIn}) and the laws the import's host judge judges (`#pantry/import/host-judge.ts`)
+ * share that one lookup per process, and loading either module builds none.
  */
-export const statementLawsOf = Fn.memoize((schema: typeof Qti) => lawsOf(schema));
+export const statementLawsOf = Fn.memoize((schema: typeof Qti) => {
+  const lawsOfStatement = lawsByStatement(schema);
+
+  return schema.statements.map((statement) => ({ laws: lawsOfStatement(statement), statement }));
+});
 
 /**
  * The laws a schema states that are no check, each with its name, and the same laws filed by

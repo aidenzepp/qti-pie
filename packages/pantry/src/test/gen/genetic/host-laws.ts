@@ -2,7 +2,7 @@
  * The import's rows judged on the host: the laws `Qti` states that a package's rows can be held to
  * before any of them is written, evaluated over the rows `readProgram` builds, each named by its
  * law as a refusal names it (`#pantry/import/refusal.ts` `lawNameOf`), each statement's laws as
- * grizzle's `lawsOf` gives them.
+ * grizzle's `lawsByStatement` gives them.
  *
  * Four kinds of statement are evaluated, from the statements grizzle keeps for them, never from a
  * list written here:
@@ -29,9 +29,9 @@
  * the program names no row PostgreSQL can hold, as a sentinel standing for an absent target does.
  */
 import { Array as Arr, Formatter, Option, pipe, Predicate, Schema } from "effect";
-import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
+import { sameLaw } from "@bjornpagen/grizzle";
 import type { Law, LawSide } from "@bjornpagen/grizzle";
-import { lawNameOf, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
+import { lawNameOf, lawOfCheck, statedLaws, statementLawsOf } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
@@ -515,10 +515,10 @@ const evaluatedOf = (
 };
 
 /**
- * Each statement of `Qti` with its laws, as grizzle's `lawsOf` names them: the one compile of
- * Qti's law model this module runs.
+ * Each statement of `Qti` with its laws, as grizzle's `lawsByStatement` names them: the one lookup
+ * `#pantry/import/refusal.ts` builds per process (`statementLawsOf`).
  */
-const statementLaws = lawsOf(Qti);
+const statementLaws = statementLawsOf(Qti);
 
 /**
  * The stored statements of `Qti`, each as this module reads it with its laws, none for one it does
