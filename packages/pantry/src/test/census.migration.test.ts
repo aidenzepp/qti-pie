@@ -11,8 +11,8 @@ import { Qti } from "#pantry/qti/own.ts";
 import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
 
 /**
- * The committed migration's measured counts (the `_init` drafted from zero on grizzle `1ab3847`,
- * after the merge of Sterling's upstream), as a ratchet: a change that moves one fails here until
+ * The committed migration's measured counts (the `_init` drafted from zero on grizzle `a50b31f`,
+ * after lane J's P2 restatements), as a ratchet: a change that moves one fails here until
  * the count is measured again. A regeneration updates them here, and only here.
  *
  * - `tables`: one per stored relation;
@@ -30,10 +30,10 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * - `validateFiles`: the one `-validate.sql` file those rules are validated in.
  */
 const measured = {
-  constants: 122,
+  constants: 119,
   constraintTriggers: 88,
   live: 7,
-  names: 45,
+  names: 48,
   nodeAxes: 5,
   nodeKeys: 48,
   tables: 250,
