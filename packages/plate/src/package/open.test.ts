@@ -2643,6 +2643,97 @@ const cyclingChain = (index: number): string =>
     cyclingAt(0),
   ].join(" ");
 
+/**
+ * The section documents, and the item refs whose branch rule targets `X`, of the smaller growth
+ * check of branch rules whose target many documents write.
+ */
+const fewerBranchingDocuments = 125;
+
+/**
+ * The section documents, and the item refs whose branch rule targets `X`, of the hostile-size
+ * case of branch rules whose target many documents write, the size the gate's review measured at
+ * 16.7 s against 0.54 s with `X` written once.
+ */
+const hostileBranchingDocuments = 2000;
+
+/**
+ * The most the hostile-size case of branch rules whose target many documents write may take, as a
+ * multiple of the thread CPU of the same package with the target written once: a scan of every
+ * placement and every writer for each rule took many times as long, and indexing them once leaves
+ * only each rule's own share.
+ */
+const branchingCpuLimit = 2;
+
+/**
+ * Which section documents of {@link branchingPackage} write the section identifier `X`: every one,
+ * so every one after the first gives it again, or the first alone, the others writing `X<n>`.
+ */
+type Writing = "every document" | "the first document";
+
+/**
+ * The files of a package whose test `T` holds one part `P` whose section `SEC` holds item refs
+ * `r<n>` to `items/a.xml` ({@link reachedItemXml}), each with a branch rule to `X`, then section
+ * refs `R<n>`, each placing a section document of its own, `sections/s<n>.xml`, whose one section
+ * holds nothing. A branch rule's target never lies inside a section document a ref places (reading
+ * 87), so each rule is refused `branch-target`: `ambiguous` when every document writes `X`, as the
+ * test places them all, and `unknown` when only the first does.
+ *
+ * @param documents How many section documents the test places, and how many item refs it holds.
+ * @param writing Which section documents write `X`.
+ * @returns The package's files.
+ */
+const branchingPackage = (documents: number, writing: Writing): ReadonlyMap<string, Uint8Array> => {
+  const indices = Array.from({ length: documents }, (_, index) => index);
+  const writes = (index: number): string =>
+    writing === "every document" || index === 0 ? "X" : `X${index}`;
+  const rules = indices
+    .map((index) => itemRefXml(`r${index}`, "items/a.xml", branchRuleXml("X")))
+    .join("");
+  const refs = indices
+    .map((index) => sectionRefXml(`R${index}`, `sections/s${index}.xml`))
+    .join("");
+
+  return packageOf({
+    "items/a.xml": reachedItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I", "imsqti_item_xmlv3p0", "items/a.xml"),
+      ...indices.map((index) =>
+        resourceXml(`S${index}`, "imsqti_section_xmlv3p0", `sections/s${index}.xml`),
+      ),
+    ),
+    ...Object.fromEntries(
+      indices.map((index) => [`sections/s${index}.xml`, sectionDocumentXml(writes(index), "")]),
+    ),
+    "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T">${partXml("P", `<qti-assessment-section identifier="SEC" title="SEC" visible="true">${rules}</qti-assessment-section>${refs}`)}</qti-assessment-test>`,
+  });
+};
+
+/**
+ * The refusals of a package of {@link branchingPackage}: each branch rule `branch-target` at the
+ * test, at its item ref's position, for a reason, then, when every document writes `X`, each
+ * document after the first `duplicate-identifier`.
+ *
+ * @param documents How many section documents and item refs it holds.
+ * @param writing Which section documents write `X`.
+ * @returns The refusals' facts, in order.
+ */
+const branchingRefusals = (documents: number, writing: Writing): readonly Seen[] => [
+  ...Array.from({ length: documents }, (_, index) =>
+    branchRefused(
+      "test.xml",
+      `qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[${index + 1}]/qti-branch-rule`,
+      "X",
+      writing === "every document" ? "ambiguous" : "unknown",
+    ),
+  ),
+  ...(writing === "every document"
+    ? Array.from({ length: documents - 1 }, (_, index) =>
+        duplicateIn(`sections/s${index + 1}.xml`, "qti-assessment-section", "X"),
+      )
+    : []),
+];
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -6112,6 +6203,60 @@ describe("package/open.ts", () => {
           );
           assert.isString(JSON.stringify(verdict));
         }),
+    );
+  });
+
+  describe("openPackage, branch rules whose target many documents write", () => {
+    it.effect(
+      "align-54 r11 branch writers indexed finding 11: 8 times the section documents, each writing the section identifier X, and 8 times the item refs whose branch rule targets X open in under 32 times the time, each rule refused branch-target ambiguous once, as each target's writers and reach are indexed once, not again for each rule",
+      () =>
+        Effect.gen(function* branchingGrowth() {
+          const fewer = branchingPackage(fewerBranchingDocuments, "every document");
+          const more = branchingPackage(fewerBranchingDocuments * growthFactor, "every document");
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, fewer)),
+            branchingRefusals(fewerBranchingDocuments, "every document"),
+          );
+
+          const growth = yield* growthRatio(opening(fewer), opening(more));
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `8 times the section documents and rules took ${growth.toFixed(1)} times as long`,
+          );
+        }),
+      growthTimeoutMs,
+    );
+
+    it.effect(
+      'align-54 r11 branch writers indexed finding 11: 2,000 section documents each writing X and 2,000 item refs whose branch rule targets X open in under twice the thread CPU of the same package with X written once, each rule refused branch-target ambiguous there and unknown here (reading 87 ("from outside a section document a ref places, no target lies inside it"))',
+      () =>
+        Effect.gen(function* branchingHostile() {
+          const once = branchingPackage(hostileBranchingDocuments, "the first document");
+          const every = branchingPackage(hostileBranchingDocuments, "every document");
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, once)),
+            branchingRefusals(hostileBranchingDocuments, "the first document"),
+          );
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, every)),
+            branchingRefusals(hostileBranchingDocuments, "every document"),
+          );
+
+          let onceMs = Number.POSITIVE_INFINITY;
+          let everyMs = Number.POSITIVE_INFINITY;
+          for (let run = 0; run < growthRuns; run += 1) {
+            onceMs = Math.min(onceMs, yield* cpuMillis(opening(once)));
+            everyMs = Math.min(everyMs, yield* cpuMillis(opening(every)));
+          }
+
+          assert.isBelow(
+            everyMs,
+            branchingCpuLimit * onceMs,
+            `X written by every document took ${(everyMs / onceMs).toFixed(1)} times the CPU of X written once`,
+          );
+        }),
+      growthTimeoutMs,
     );
   });
 
