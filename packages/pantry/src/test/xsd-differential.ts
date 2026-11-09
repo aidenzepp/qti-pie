@@ -189,7 +189,7 @@ const booleanLexical = /^[\t\n\r ]*(?:true|false|1|0)[\t\n\r ]*$/u;
  * @returns Whether an element of the name the codec wrote carries an `xsi:nil` of the name it
  *   wrote, whose value is no `xs:boolean`.
  */
-const holdsNilValue = (difference: Difference, root: Element): boolean => {
+export const holdsNilValue = (difference: Difference, root: Element): boolean => {
   const groups = unadmittedNil.exec(difference.detail)?.groups;
   const holds = (element: Element): boolean =>
     (element.qname === groups?.["element"] &&
@@ -397,7 +397,10 @@ const xmlIdsKeyed = (
  * @param names - The document's names, whose `xmlIds` hold each `xml:id` by its holder's place.
  * @returns Whether it is.
  */
-const holdsPaddedId = (difference: Difference, names: Pick<ForeignNames, "xmlIds">): boolean =>
+export const holdsPaddedId = (
+  difference: Difference,
+  names: Pick<ForeignNames, "xmlIds">,
+): boolean =>
   xmlIdsKeyed(difference, names.xmlIds)?.some(
     (lexical) =>
       lexical
