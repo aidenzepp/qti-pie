@@ -464,7 +464,7 @@ export const weightedNames = ["weighted-sum-float", "weighted-variables-integer"
  * hand-edited packages, one for each shape the corpus lacks: `catalog-hosts` (a catalog in a
  * feedback block, a modal feedback, a template block, a feedback block in a template block and a
  * template block in a rubric block), `card-files` (cards that hold files), `catalog-padded` (outer
- * whitespace and a tab in the values that collapse or normalize), `catalog-lang` (decision 85:
+ * whitespace in the values that collapse), `catalog-lang` (decision 85:
  * languages in catalog content that the item's metadata does not list), `card-qti-content`
  * (decision 216: a printed variable and an interaction in a card), `card-gap-inside` (decision
  * 309's case B: a gap in a card inside a gap match), `card-empty` (a card with no content) and
