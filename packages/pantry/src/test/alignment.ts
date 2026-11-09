@@ -634,7 +634,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     117,
     {
       owner:
-        "IN's document context (`Document.context`, `contextNearest`, `src/qti/chardata.ts`, through its document node's fixed target; `SiteTarget`'s fold and `Fragment_context`, `src/qti/tests.ts`), `PlacedBinding`, `PlacedChoice`, `PlacedHottext`, `ChoiceVariableName`'s placed counts and the section references' fragment placements (`SectionScope`, `SectionTemplateRef`, `SectionContextRef`, `src/qti/interactions.ts`) `IdrefTarget`, `PlacedId`, `AssembledId`, `PlacedIdref`, `PlacedXmlLang`, `AssembledLang` and `PlacedGeneralLang` (`src/qti/identity.ts`) and `PlacedVariableRef` (`src/qti/expressions.ts`) under Q5.13's `Instance`; the importer's `contextsOf` (`src/import/context.ts`); the oracle's in-place splice (`inPlaceBreaches`), Fragment context and Document lang over the merged item; the laws it lists are known under-refusals",
+        "IN's document context (`Document.context`, `contextNearest`, `src/qti/chardata.ts`, through its document node's fixed target; `SiteTarget`'s fold and `Fragment_context`, `src/qti/tests.ts`), `PlacedBinding`, `PlacedChoice`, `PlacedHottext`, `ChoiceVariableName`'s placed counts and the section references' fragment placements (`SectionScope`, `SectionTemplateRef`, `SectionContextRef`, `src/qti/interactions.ts`) `IdrefTarget`, `PlacedId`, `AssembledId`, `PlacedIdref`, `PlacedXmlLang` and `AssembledLang` (`src/qti/identity.ts`) and `PlacedVariableRef` (`src/qti/expressions.ts`) under Q5.13's `Instance`; the importer's `contextsOf` (`src/import/context.ts`); the oracle's in-place splice (`inPlaceBreaches`), Fragment context and Document lang over the merged item; the laws it lists are known under-refusals",
       status: "G",
     },
   ],
@@ -769,7 +769,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     134,
     {
       owner:
-        "R26 `document-lang` (identity.ts `GeneralLang`'s `value`, `lowerAscii(collapse(lang))`, and `LomLanguage`'s `tag`, `lowerAscii(lang)`; `documentLang`); the oracle's Document lang",
+        "R26 `document-lang` (identity.ts `DocumentLang`'s and `AssembledLang`'s generated `value`, `lowerAscii(collapse(lang))`, and `LomLanguage`'s `tag`, `lowerAscii(lang)`; `DescribedLang` and `DescribedAssembledLang`, `src/qti/queries.ts`); the oracle's Document lang",
       status: "G",
     },
   ],
@@ -1009,7 +1009,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     164,
     {
       owner:
-        "the schema's stated `xml:lang` forms, `statedLanguagePattern` over the grammar's one `languageTag`, read by `statedLangs`, `statedAssembledLangs` and R26's witnesses' `E1_derived` (`GeneralLang`, `PlacedGeneralLang`, `src/qti/identity.ts`); the import's `statesLanguage` (`src/import/overlays/metadata.ts`), read by `languageRowsOf` and `placedLanguageRowsOf` (`src/import/overlays/identity.ts`) and by lom-title's `inLanguage`; the oracle's Document lang (`documentLangBreaches`, `languageTagForm`, `src/test/oracle.ts`); held by `src/import/overlays/document-lang.oracle.test.ts`",
+        "the schema's stated `xml:lang` forms, `statedLanguagePattern` over the grammar's one `languageTag`, read by R26's rules over queries (`DescribedLang`, `DescribedAssembledLang`, `src/qti/queries.ts`); the oracle's Document lang (`documentLangBreaches`, `languageTagForm`, `src/test/oracle.ts`); held by `src/import/overlays/document-lang.oracle.test.ts`",
       status: "G",
     },
   ],

@@ -23,9 +23,10 @@ import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { inject } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
+import { patternFlags } from "#pantry/grammar/domains.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { ownContext } from "#pantry/import/fold.ts";
-import { piecesOf, rowsOf, statesLanguage } from "#pantry/import/overlays/metadata.ts";
+import { piecesOf, rowsOf } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataIds, MetadataRows } from "#pantry/import/overlays/metadata.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
@@ -35,7 +36,12 @@ import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { noLanguage, objectTypes, resourceMetadata } from "#pantry/qti/metadata.ts";
+import {
+  languageTagPattern,
+  noLanguage,
+  objectTypes,
+  resourceMetadata,
+} from "#pantry/qti/metadata.ts";
 import type {
   LomEntry,
   LomTitleString,
@@ -191,6 +197,12 @@ interface Built {
  * The resource types whose records name their document, as a set.
  */
 const namingTypes: ReadonlySet<string> = new Set(objectTypes);
+
+/**
+ * A root's compared `xml:lang` that states a language to `lom-title` (`languageTagPattern`, spec
+ * readings 151 and 164), as `MatchedTitle` reads it.
+ */
+const languageTagForm = new RegExp(languageTagPattern, patternFlags);
 
 /**
  * Read the records of a manifest that name a document, as `namingRecords` derives them: a record of
@@ -361,7 +373,7 @@ const inLanguage = (built: Built, root: NodeId, string: Addition<typeof LomTitle
       Option.exists(
         Option.fromUndefinedOr(built.manifest.LomString.get(string.node)),
         ({ languageTag }) =>
-          !statesLanguage(langTag) || languageTag === noLanguage || languageTag === langTag,
+          !languageTagForm.test(langTag) || languageTag === noLanguage || languageTag === langTag,
       ),
   });
 

@@ -50,7 +50,12 @@ import {
   VariableRef,
   VariableRefTable,
 } from "#pantry/qti/expressions.ts";
-import { GeneralObject } from "#pantry/qti/identity.ts";
+import {
+  AssembledLang,
+  DocumentLang,
+  ResourceLomLanguageSet,
+  statedLanguagePattern,
+} from "#pantry/qti/identity.ts";
 import {
   languageTagPattern,
   LomEntry,
@@ -187,9 +192,11 @@ export const queriesOf = (base: QtiBase) => {
    * document: a {@link LomGeneral}, whose parent is its record. Every `lom-identifier` and
    * `lom-title` query reaches its record through one, from an entry's `holder` or a title's
    * `parent`, so a meta-metadata's or a relation's identifier, whose holder is no general category,
-   * is read by none.
+   * is read by none; and R26 reads a document's languages against each category that describes it
+   * (`DescribedLang`).
    *
-   * The category keys a row, since a node has one parent.
+   * The category keys a row, since a node has one parent, and a category describes one document,
+   * the one its record names.
    */
   const namingGenerals = query(base).rule((r) => {
     const { node: general, parent: record } = v(LomGeneral, "general");
@@ -320,31 +327,61 @@ export const queriesOf = (base: QtiBase) => {
   );
 
   /**
-   * The general categories of the records that name a document, keyed by the category's node, each
-   * with that document: the categories R26 reads a document's languages against
-   * (`#pantry/qti/identity.ts` `documentLang`).
+   * Each language a document's `xml:lang` states, under each general category that describes the
+   * document (`namingGenerals`): the form's compared value ({@link DocumentLang}'s generated
+   * `value`), which R26 asks the category to list. A form that states no language
+   * ({@link statedLanguagePattern}: the empty one, one of whitespace alone, or one that is no tag
+   * once collapsed) asks nothing, so its value domain alone refuses one that is no tag (spec
+   * reading 164), and an empty one is lawful beside an empty `lom:language`.
    */
-  const NamingGeneral = derived(
-    "NamingGeneral",
+  const DescribedLang = derived(
+    "DescribedLang",
     query(base).rule((r) => {
-      const { node: general, parent: record } = v(LomGeneral, "general");
-      const { document } = v(namingRecords, "named");
+      const { document, lang, value } = v(DocumentLang, "form");
+      const { general } = v(namingGenerals, "described");
 
       return r
-        .match(LomGeneral, { node: general, parent: record })
-        .match(namingRecords, { document, record })
-        .find({ document, general });
+        .match(DocumentLang, { document, lang, value })
+        .match(namingGenerals, { document, general })
+        .where(Compute.matches(lang, statedLanguagePattern))
+        .find({ general, value });
     }),
   );
 
   /**
-   * The identity overlays' rules over a query, each named by its oracle law: each `GeneralObject`,
-   * the stored copy R26's count reads (gap G2), is exactly a {@link NamingGeneral} row, both ways
-   * ("E1 derived").
+   * Each language an item's assembly states in place (spec reading 117), under each general
+   * category that describes the item, as `DescribedLang` is a document's: the form's compared value
+   * ({@link AssembledLang}'s generated `value`).
+   */
+  const DescribedAssembledLang = derived(
+    "DescribedAssembledLang",
+    query(base).rule((r) => {
+      const { assembly, lang, value } = v(AssembledLang, "form");
+      const { general } = v(namingGenerals, "described");
+
+      return r
+        .match(AssembledLang, { assembly, lang, value })
+        .match(namingGenerals, { document: assembly, general })
+        .where(Compute.matches(lang, statedLanguagePattern))
+        .find({ general, value });
+    }),
+  );
+
+  /**
+   * The identity overlays' rules over a query, each named by its oracle law: R26 (law "Document
+   * lang", QTI 3.0 Metadata §2.7.1.3), each language a document or an item's assembly states is one
+   * every general category describing it lists ({@link ResourceLomLanguageSet}).
    */
   const identityQueryLawsByName = {
-    "E1 derived": [
-      mirrors(on(GeneralObject, "document", "general"), on(NamingGeneral, "document", "general")),
+    "Document lang": [
+      contained(
+        on(DescribedLang, "general", "value"),
+        on(ResourceLomLanguageSet, "general", "lang"),
+      ),
+      contained(
+        on(DescribedAssembledLang, "general", "value"),
+        on(ResourceLomLanguageSet, "general", "lang"),
+      ),
     ],
   } as const;
 
@@ -760,6 +797,8 @@ export const queriesOf = (base: QtiBase) => {
     DeclaredReading,
     DeclaredReference,
     DeclaredTarget,
+    DescribedAssembledLang,
+    DescribedLang,
     FoundName,
     HeldScope,
     HeldType,
@@ -768,7 +807,6 @@ export const queriesOf = (base: QtiBase) => {
     MappedReading,
     MatchedIdentifier,
     MatchedTitle,
-    NamingGeneral,
     TypedHref,
   };
 

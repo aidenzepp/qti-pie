@@ -1519,7 +1519,6 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
                         context: ownContext(idOf(0)),
                         documentType: "imsqti_item_xmlv3p0",
                         idOf,
-                        targetAt: () => Option.none(),
                       }).LabelUse.values();
                       const verdict = yield* judged(
                         client,

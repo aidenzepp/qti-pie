@@ -374,12 +374,8 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
     "E1 derived",
     "XmlLang",
     "DocumentLang",
-    "GeneralObject",
-    "DocumentGenerals",
-    "GeneralLang",
     "PlacedXmlLang",
     "AssembledLang",
-    "PlacedGeneralLang",
     "SsmlAttribute",
     "SsmlScope",
     "FragmentValue",
@@ -477,6 +473,9 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
  *   float key's `Compute.parseDouble`, which its key's pattern law, named by FloatKey's row of
  *   {@link textLaws}, holds to `xs:double`'s lexical space, inside the `doubleText` the parse reads
  *   total. No term reads a closed relation, so none is NULL.
+ * - A document's and an item's assembly's `xml:lang` form's compared `value` is the form collapsed
+ *   and case-folded, cast into the form's own key text, a cast the schema proves total: a written
+ *   text, never NULL.
  */
 export const generatedNames: readonly (readonly [string, LawName])[] = [
   ...namedBy(
@@ -501,6 +500,8 @@ export const generatedNames: readonly (readonly [string, LawName])[] = [
     "MapKeyPoint.yNegative",
     "MapKeyPair.value",
     "MapKeyDirectedPair.value",
+    "DocumentLang.value",
+    "AssembledLang.value",
   ),
 ];
 

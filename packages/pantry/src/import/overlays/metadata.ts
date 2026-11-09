@@ -14,7 +14,7 @@
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
-import { collapse, patternFlags } from "#pantry/grammar/domains.ts";
+import { collapse } from "#pantry/grammar/domains.ts";
 import type { DocumentType } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
@@ -22,7 +22,6 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import {
-  languageTagPattern,
   noLanguage,
   objectKinds,
   recordDocumentTypes,
@@ -95,23 +94,6 @@ export interface MetadataRows {
  * The kinds of an assessment object's root, as a set.
  */
 const objects: ReadonlySet<string> = new Set(objectKinds);
-
-/**
- * A well-formed language tag as a whole text, the compared form of an `xml:lang` that states a
- * language (spec readings 151 and 164).
- */
-const languageTagForm = new RegExp(languageTagPattern, patternFlags);
-
-/**
- * Decide whether an `xml:lang` states a language by its compared form, its value collapsed and
- * case-folded: where the form is a well-formed language tag (spec readings 151 and 164). The empty
- * form, and one that is no tag, states none, so `lom-title` reads no language and
- * `document-lang` asks no record to list it.
- *
- * @param compared - The compared form, {@link noLanguage} where the attribute is unwritten.
- * @returns Whether it states a language.
- */
-export const statesLanguage = (compared: string): boolean => languageTagForm.test(compared);
 
 /**
  * The usage statistics, as a set.

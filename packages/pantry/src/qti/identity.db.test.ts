@@ -20,22 +20,29 @@
  * restates them over a package: a dangling IDREF token, refused at COMMIT by `foreign key
  * Idref(document, token) to IdrefTarget(document, id)` (23503), and a text's by `TextIdref`'s,
  * which this file holds to their fields by the catalogue, since a token's owner axis into
- * `Attribute` or `IdentityText` is not deferrable; the copies between `Attribute`, `Node` and each
- * overlay, both ways; and R26 over a manifest and an item.
+ * `Attribute` or `IdentityText` is not deferrable; and the copies between `Attribute`, `Node` and
+ * each overlay, both ways.
+ *
+ * R26 is a rule over a query (`DescribedLang`, `#pantry/qti/queries.ts`), a deferred constraint
+ * trigger on every table its query reads, so its cases are whole packages through the importer,
+ * which names a refusal by its rule; and `DocumentLang.value`, the compared form R26 reads, is a
+ * field PostgreSQL generates from the form, read back in a direct writer's case.
  */
-import { assert, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { assert, it, layer } from "@effect/vitest";
+import { Effect, Layer, Option } from "effect";
 import type { Client } from "pg";
 import { describe } from "vitest";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { Flag } from "#pantry/grammar/install.ts";
+import { importPackage } from "#pantry/import/package.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
 import { governorOf } from "#pantry/import/fold.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
-  DocumentGenerals,
   DocumentId,
   DocumentLang,
   FragmentValue,
-  GeneralLang,
   IdBinding,
   IdentityText,
   LabelUse,
@@ -49,8 +56,10 @@ import { Qti } from "#pantry/qti/own.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   assertVerdict,
+  authorViews,
   constraintDescribed,
   judged,
+  judgedCase,
   loginSession,
   qtiSchema,
   rowsOf,
@@ -58,7 +67,9 @@ import {
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
-import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { writePackage } from "#pantry/test/gen/every-relation.ts";
+import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * Read a foreign key's referencing and referenced columns from the catalogue.
@@ -186,24 +197,11 @@ const documentOf = (document: string): Stated => ({
 });
 
 /**
- * The first document's `DocumentGenerals` fact, its count of describing categories as a case
- * states it, none of which it writes.
- *
- * @param generals - The count.
- * @returns The fact.
- */
-const described = (generals: bigint): Stated => ({
-  fact: { document: first, generals },
-  relation: DocumentGenerals,
-});
-
-/**
  * The family of one projection and its members: `DocumentLang` over `XmlLang`, and
  * `ResourceLomLanguageSet` over `LomLanguage`. `count` is the projection's family. `beside` states
  * the other rows a case's owner and members are judged against at their INSERT, each owner axis
  * and a foreign key whose target holds no field beyond the ones it names being immediate: the
- * document's `Document` row, the owner of its `xml:lang` carriers too (`Document.langs`), and its
- * `DocumentGenerals` row, the one a form's `generals` of 0 names.
+ * document's `Document` row, the owner of its `xml:lang` carriers too (`Document.langs`).
  */
 interface Projection {
   readonly beside: readonly Stated[];
@@ -220,7 +218,7 @@ interface Projection {
  */
 const projections: readonly Projection[] = [
   {
-    beside: [documentOf(first), described(0n)],
+    beside: [documentOf(first)],
     count: "DocumentLang.carriers",
     member: (node, document, lang) => ({
       fact: { document, lang, node: uuidOf(node) },
@@ -253,34 +251,6 @@ const labelled = (rootKind: string): Stated => ({
 });
 
 /**
- * A `DocumentLang` fact of the first document, carried once, its count of listing categories as a
- * case states it; the case writes neither its carrier nor its witnesses.
- *
- * @param lang - The `xml:lang` form.
- * @param generals - The count of its witnesses.
- * @returns The fact.
- */
-const form = (lang: string, generals: bigint): Stated => ({
-  fact: { carriers: 1n, document: first, generals, lang },
-  relation: DocumentLang,
-});
-
-/**
- * One R26 witness of the first document's form, its one listing category's, beside the form's
- * `DocumentLang` row and the document's `DocumentGenerals` row of one category, which a stated
- * form's foreign key names at its INSERT.
- *
- * @param lang - The `xml:lang` form.
- * @param value - The witness's value, as the case writes it.
- * @returns The facts.
- */
-const witness = (lang: string, value: string): readonly Stated[] => [
-  described(1n),
-  form(lang, 1n),
-  { fact: { document: first, general: uuidOf(9), lang, value }, relation: GeneralLang },
-];
-
-/**
  * Fold ASCII capitals to lower case, RFC 5646 §2.1.1's comparison of language tags
  * (`Compute.lowerAscii`).
  *
@@ -304,36 +274,6 @@ const collapsed = (text: string): string =>
     .replaceAll(/ +/gu, " ")
     .replace(/^ /u, "")
     .replace(/ $/u, "");
-
-/**
- * The general category every listing case's LOM language belongs to: the one that describes the
- * first document, which {@link witness}'s row names.
- */
-const listingGeneral = uuidOf(9);
-
-/**
- * One R26 listing, the builder's facts for it: a LOM language of the first document's one general
- * category, its tag its value case-folded as written (`LomLanguage`'s `E1_derived`), the category's
- * language set over that tag, and the first document's stated `xml:lang` form with its one witness,
- * whose value is the form collapsed and case-folded (`GeneralLang`'s `E1_derived`). Every row's own
- * CHECKs and immediate keys hold, so the one key left to judge is the witness's containment into
- * the category's languages.
- *
- * @param xmlLang - The document's `xml:lang` form.
- * @param lomLang - The `lom:language` element's string value, as written.
- * @returns The facts.
- */
-const listing = (xmlLang: string, lomLang: string): readonly Stated[] => [
-  {
-    fact: { general: listingGeneral, lang: lowerAscii(lomLang) },
-    relation: ResourceLomLanguageSet,
-  },
-  {
-    fact: { general: listingGeneral, lang: lomLang, node: uuidOf(6), tag: lowerAscii(lomLang) },
-    relation: LomLanguage,
-  },
-  ...witness(xmlLang, lowerAscii(collapsed(xmlLang))),
-];
 
 /**
  * An `IdentityText` fact of a `qti-description` under a governing type, its governor the one the
@@ -682,111 +622,38 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
   );
 
   it.effect(
-    "refuses a stated xml:lang form whose listing categories fall short of its document's, by Document lang, and accepts an equal count, an unstated form, one that is no tag and a document no category describes",
+    "generates an xml:lang form's compared value, the form collapsed and case-folded",
     () =>
-      // Oracle: PostgreSQL, the foreign key of `documentLang`, against QTI 3.0 Metadata §2.7.1.3
-      // ("There must be one value for each of the languages referred to by the language
-      // attributes"), counted: a form that states a language is listed by as many general
-      // categories (`DocumentLang.generals`, its witnesses) as describe its document
-      // (`DocumentGenerals.generals`), and an empty or all-whitespace form states none (XML 1.0
-      // §2.12), nor does one that is no language tag once collapsed (RFC 5646 §2.1, spec reading
-      // 164). Its target holds no field beyond the two it names, so PostgreSQL judges it at the
-      // form's INSERT (README, "Direct SQL access": a foreign key is deferred to COMMIT only as a
-      // family's proof needs, or when its target has another field or it lies on a cycle); it is
-      // set immediate too, which PostgreSQL takes as a no-op on a key it does not defer, so the
-      // case holds wherever grizzle places it.
-      // Bound: a stated form listed by none of one category; listed by it; the empty form, a form
-      // of whitespace alone and one that is no tag beside one category; a stated form of a
-      // document no category describes.
-      Effect.gen(function* documentLangLaw() {
+      // Oracle: PostgreSQL, `DocumentLang`'s generated `value`, `lowerAscii(collapse(lang))` cast
+      // into its key text, read back before the rollback, against XML Schema 1.0 Part 2 §3.3.3, an
+      // xs:language's value is its form collapsed, and RFC 5646 §2.1.1, tags compared without
+      // regard to case. Each case states the form beside its document, so its own key holds at
+      // its INSERT.
+      // Bound: a bare tag, outer whitespace, upper case, a form that is no tag, and the empty form.
+      Effect.gen(function* comparedValues() {
         const client = yield* loginSession;
-        const law = yield* constraintDescribed(
-          client,
-          "document_lang",
-          "foreign key DocumentLang(document where %, generals where %) to DocumentGenerals(document, generals)",
-        );
-        for (const [label, stated, refused] of [
-          ["a stated form no category lists", [described(1n), form("en", 0n)], true],
-          ["a stated form its one category lists", [described(1n), form("en", 1n)], false],
-          ["the empty form", [described(1n), form("", 0n)], false],
-          ["a form of whitespace alone", [described(1n), form(" \t", 0n)], false],
-          ["a form that is no tag", [described(1n), form("en_GB", 0n)], false],
-          ["a document no category describes", [described(0n), form("en", 0n)], false],
+        for (const [lang, value] of [
+          ["en", "en"],
+          [" fr\n", "fr"],
+          ["EN-GB", "en-gb"],
+          ["en_GB", "en_gb"],
+          ["", ""],
         ] as const) {
-          assertVerdict(
-            yield* judged(client, statedInserts(stated), [law]),
-            law,
-            refused,
-            label,
-            "23503",
-          );
-        }
-      }).pipe(Effect.scoped),
-    leaseTestTimeoutMs,
-  );
+          const { read, refused } = yield* judgedCase(client, {
+            inserts: statedInserts([
+              documentOf(first),
+              { fact: { carriers: 1n, document: first, lang }, relation: DocumentLang },
+            ]),
+            reads: [
+              {
+                text: `SELECT value FROM ${authorViews}.document_lang WHERE document = $1`,
+                values: [first],
+              },
+            ],
+          });
 
-  it.effect(
-    "refuses an R26 witness whose value is not its form's collapsed value, by E1_derived, and accepts the collapsed value",
-    () =>
-      // Oracle: PostgreSQL, `GeneralLang`'s `E1_derived` CHECK, `value = lowerAscii(collapse(lang))`
-      // of a form that states a language, against XML Schema 1.0 Part 2 §3.3.3: an xs:language's
-      // value is its form collapsed, outer whitespace removed, and a form states a language only
-      // where that value is a language tag (spec reading 164). Each case states its document's
-      // one category and its form, so the witness's owner axis and the form's own key hold at
-      // their INSERTs and the CHECK is the verdict.
-      // Bound: another value, whitespace kept in the value, an empty value, the value of a form
-      // that is no tag, and the control.
-      Effect.gen(function* witnessSplit() {
-        const client = yield* loginSession;
-        for (const [label, lang, value] of [
-          ["another value", "en", "fr"],
-          ["whitespace kept in the value", " en", " en"],
-          ["an empty value", " ", ""],
-          ["the value of a form that is no tag", "en_GB", "en_gb"],
-          ["the collapsed value", " fr\n", "fr"],
-        ] as const) {
-          assertVerdict(
-            yield* judged(client, statedInserts(witness(lang, value))),
-            checkConstraintOf(Qti, GeneralLang.name, "E1_derived"),
-            label !== "the collapsed value",
-            label,
-          );
-        }
-      }).pipe(Effect.scoped),
-    leaseTestTimeoutMs,
-  );
-
-  it.effect(
-    "refuses a document language no LOM language of its category lists as written, by the witness's containment into the category's languages, and accepts one listed in another case (spec reading 134)",
-    () =>
-      // Oracle: the specification as a checker, spec reading 134: QTI 3.0 Metadata §2.7.1.3 ("There
-      // must be one value for each of the languages referred to by the language attributes"),
-      // compared as language tags, case-insensitively (RFC 5646 §2.1.1); `xml:lang` is an
-      // `xs:language`, collapsed (XML Schema 1.0 Part 2 §3.3.3), and a LOM language is
-      // `CharacterString`, an `xs:string` as written, so whitespace around it makes it no tag (RFC
-      // 5646 §2.1: "Whitespace is not permitted in a language tag"). PostgreSQL judges it by the
-      // foreign key `GeneralLang(general, value) to ResourceLomLanguageSet(general, lang)`, set
-      // immediate: 23503 on that key where the category lists no language the form states.
-      // Bound: the small scope exhausted, every pair of four forms of `xml:lang` (plain, padded,
-      // upper case and a region subtag) and six LOM languages (plain, padded with spaces, upper
-      // case, the region in lower case, a trailing line feed, and another language), 24 cases.
-      Effect.gen(function* listedAsWritten() {
-        const client = yield* loginSession;
-        const key = yield* constraintDescribed(
-          client,
-          "general_lang",
-          "foreign key GeneralLang(general, value) to ResourceLomLanguageSet(general, lang)",
-        );
-        for (const xmlLang of ["en", " en\t", "EN", "en-GB"]) {
-          for (const lomLang of ["en", " en ", "EN", "en-gb", "en\n", "fr"]) {
-            assertVerdict(
-              yield* judged(client, statedInserts(listing(xmlLang, lomLang)), [key]),
-              key,
-              lowerAscii(collapsed(xmlLang)) !== lowerAscii(lomLang),
-              `xml:lang ${JSON.stringify(xmlLang)} beside LOM ${JSON.stringify(lomLang)}`,
-              "23503",
-            );
-          }
+          assert.isTrue(Option.isNone(refused), JSON.stringify(lang));
+          assert.deepStrictEqual(read, [[{ value }]], JSON.stringify(lang));
         }
       }).pipe(Effect.scoped),
     leaseTestTimeoutMs,
@@ -955,3 +822,91 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
     leaseTestTimeoutMs,
   );
 });
+
+/**
+ * A package of one item resource whose href names the item, unless `named` is false, and whose
+ * record's one general category lists `lomLang`, and the item whose root writes `xmlLang`.
+ *
+ * @param xmlLang - The item root's `xml:lang`, as written.
+ * @param lomLang - The category's `lom:language`, as written.
+ * @param named - Whether the resource's href names the item.
+ * @returns The package's entries.
+ */
+const r26PackageOf = (xmlLang: string, lomLang: string, named: boolean) => {
+  const text = new TextEncoder();
+  const href = named ? ' href="item.xml"' : "";
+
+  return new Map([
+    [
+      "imsmanifest.xml",
+      text.encode(
+        `<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="R" type="imsqti_item_xmlv3p0"${href}><metadata><imsmd:lom><imsmd:general><imsmd:language>${lomLang}</imsmd:language></imsmd:general></imsmd:lom></metadata><file href="item.xml"/></resource></resources></manifest>\n`,
+      ),
+    ],
+    [
+      "item.xml",
+      text.encode(
+        `<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="item" title="Item" time-dependent="false" xml:lang="${xmlLang}"><qti-item-body><p>Hi</p></qti-item-body></qti-assessment-item>\n`,
+      ),
+    ],
+  ]);
+};
+
+describe.skipIf(!hasLease)(
+  "qti/identity.db.test.ts, R26 through the importer",
+  { timeout: leaseTestTimeoutMs },
+  () => {
+    layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
+      excludeTestServices: true,
+      timeout: authorLayerHookTimeoutMs,
+    })("document-lang, judged by PostgreSQL's rule over a query", (r26) => {
+      r26.effect(
+        "refuses a package whose item states a language its record's category does not list, by document-lang, and accepts one listed in another case, an unstated form and an item no record names",
+        () =>
+          // Oracle: the specification as a checker, QTI 3.0 Metadata §2.7.1.3 ("There must be one
+          // value for each of the languages referred to by the language attributes"), compared as
+          // tags without regard to case (RFC 5646 §2.1.1), the xml:lang collapsed (XML Schema 1.0
+          // Part 2 §3.3.3) and a LOM language as written (spec reading 134); an empty xml:lang
+          // states none (XML 1.0 §2.12), even beside an empty lom:language; and an item no record
+          // names is read against no category (reading 93). PostgreSQL judges it by
+          // `DescribedLang` contained in `ResourceLomLanguageSet`, a deferred trigger, and the
+          // importer names the refusal's rule.
+          // Bound: four xml:lang forms by six LOM languages (24, each named), the empty form beside
+          // an empty LOM language, and an unlisted form of an item no record names.
+          Effect.gen(function* documentLangRule() {
+            const directory = yield* scratchDirectory("identity-r26-");
+            const cases = [
+              ...["en", " en\t", "EN", "en-GB"].flatMap((xmlLang) =>
+                ["en", " en ", "EN", "en-gb", "en\n", "fr"].map((lomLang) => ({
+                  lomLang,
+                  named: true,
+                  refused: lowerAscii(collapsed(xmlLang)) !== lowerAscii(lomLang),
+                  xmlLang,
+                })),
+              ),
+              { lomLang: "", named: true, refused: false, xmlLang: "" },
+              { lomLang: "fr", named: false, refused: false, xmlLang: "en" },
+            ];
+            for (const [at, { lomLang, named, refused, xmlLang }] of cases.entries()) {
+              const label = `xml:lang ${JSON.stringify(xmlLang)} beside LOM ${JSON.stringify(lomLang)}${named ? "" : ", no record naming the item"}`;
+              const dir = `${directory}/c${String(at)}`;
+              yield* writePackage(r26PackageOf(xmlLang, lomLang, named), dir);
+
+              const outcome = yield* Effect.result(importPackage(dir));
+              const rules =
+                outcome._tag === "Failure" && outcome.failure instanceof ImportRefused
+                  ? outcome.failure.rules
+                  : [];
+
+              assert.strictEqual(
+                rules.includes("document-lang"),
+                refused,
+                `${label}: ${outcome._tag === "Failure" ? outcome.failure.message : "accepted"}`,
+              );
+            }
+          }).pipe(Effect.scoped),
+        leaseTestTimeoutMs,
+      );
+    });
+  },
+);
