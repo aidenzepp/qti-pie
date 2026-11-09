@@ -815,6 +815,40 @@ const order = (
   );
 
 /**
+ * An item whose body holds a Graphic Order of two hotspots over one image, bound to `RESPONSE`.
+ *
+ * @param cardinality The declaration's cardinality.
+ * @param baseType The declaration's base type, none when absent.
+ * @returns The item.
+ */
+const graphicOrderItem = (cardinality: string, baseType?: string) =>
+  item(
+    [response("RESPONSE", cardinality, baseType)],
+    [
+      counting(
+        "qti-graphic-order-interaction",
+        "RESPONSE",
+        [],
+        [
+          el("img", [
+            attr("alt", "A map"),
+            attr("height", "100"),
+            attr("src", "images/map.png"),
+            attr("width", "100"),
+          ]),
+          ...["H1", "H2"].map((identifier) =>
+            el("qti-hotspot-choice", [
+              attr("coords", "10,10,5"),
+              attr("identifier", identifier),
+              attr("shape", "circle"),
+            ]),
+          ),
+        ],
+      ),
+    ],
+  );
+
+/**
  * Construct a count pair's refusal.
  *
  * @param path The path it points at.
@@ -1262,6 +1296,53 @@ describe("checkRules", () => {
           },
         ],
       );
+    });
+  });
+
+  describe("align-54 bindings by name: a graphic order interaction binds identifier, ordered; an order interaction's binding is not refused", () => {
+    const body = "qti-assessment-item/qti-item-body";
+
+    it("align-54 bindings by name e3bc2c3d: refuses a Graphic Order bound to a single identifier, a multiple identifier, an ordered string or a record, as binding (§5.61, info.txt:29186)", () => {
+      for (const [cardinality, baseType] of [
+        ["single", "identifier"],
+        ["multiple", "identifier"],
+        ["ordered", "string"],
+        ["record", undefined],
+      ] as const) {
+        assert.deepStrictEqual(
+          judged(graphicOrderItem(cardinality, baseType)),
+          [
+            {
+              detail: {
+                baseType: baseType ?? "",
+                cardinality,
+                interaction: "qti-graphic-order-interaction",
+                response: "RESPONSE",
+              },
+              path: `${body}/qti-graphic-order-interaction`,
+              rule: "binding",
+            },
+          ],
+          `${cardinality} ${baseType ?? "(no base type)"}`,
+        );
+      }
+    });
+
+    it("align-54 bindings by name e3bc2c3d: accepts a Graphic Order bound to an ordered identifier (§5.61, info.txt:29186)", () => {
+      assert.deepStrictEqual(judged(graphicOrderItem("ordered", "identifier")), []);
+    });
+
+    it("align-54 bindings by name e3bc2c3d: accepts an Order bound to a single identifier, and one bound to an ordered string, since only non-normative §2.4.1.2 states its binding (the operator's ruling)", () => {
+      for (const [cardinality, baseType] of [
+        ["single", "identifier"],
+        ["ordered", "string"],
+      ] as const) {
+        assert.deepStrictEqual(
+          judged(item([response("RESPONSE", cardinality, baseType)], [order(2, [], "RESPONSE")])),
+          [],
+          `${cardinality} ${baseType}`,
+        );
+      }
     });
   });
 
