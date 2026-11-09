@@ -4000,10 +4000,11 @@ export const ncNamePattern = `(?:${emit(ncName)})`;
 
 /**
  * A lexical form that names something once collapsed: an NCName ({@link ncNamePattern}) with XML
- * whitespace around it, which collapsing strips. Only such a form names something: a declaration's
- * or a record field's identifier (spec reading 152), and an ID-typed attribute's or text's ID
- * value, `xs:ID` being a restriction of `xs:NCName` (spec reading 156). Any other form names
- * nothing, and its value domain refuses it alone.
+ * whitespace around it, which collapsing strips. Only such a form names something: a declaration's,
+ * a record field's or a test structure's identifier and a dependency's `identifierref` (spec
+ * reading 152), and an ID-typed attribute's or text's ID value, `xs:ID` being a restriction of
+ * `xs:NCName` (spec reading 156). Any other form names nothing, and its value domain refuses it
+ * alone.
  */
 export const namingPattern = `^[\\t\\n\\r ]*${ncNamePattern}[\\t\\n\\r ]*$`;
 

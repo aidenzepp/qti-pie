@@ -3051,11 +3051,10 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      braces. IMS Content Packaging 1.2's binding types a `cp:dependency`'s `identifierref` `xs:IDREF`, which restricts
      `xs:NCName` (`imsqtiv3p0_imscpv1p2_v1p0.xsd`). A form outside a type's lexical space denotes no value of it (XML
      Schema Part 2, §2.3), so `""`, a form of whitespace alone, `1a`, `a b`, or a name only XML 1.0's fifth edition
-     admits, such as one that starts with
-     ARABIC-INDIC DIGIT ZERO, which the `Letter` tables `\i` and `\c` read (XML Schema Part 2, Appendix F) hold as a
-     digit, names no variable, declaration or field. It shares no name with another, no
-     reference resolves to it, and the law a reference, a binding or a name is held to does not judge it; the
-     attribute's value domain refuses it under its own rule. The grammar states the NCName once
+     admits, such as one that starts with ARABIC-INDIC DIGIT ZERO, which the `Letter` tables `\i` and `\c` read (XML
+     Schema Part 2, Appendix F) hold as a digit, names no variable, declaration, field, test structure or resource. It
+     shares no name with another, no reference resolves to it, and the law a reference, a binding or a name is held to
+     does not judge it; the attribute's value domain refuses it under its own rule. The grammar states the NCName once
      (`ncNamePattern`, `src/grammar/domains.ts`), and the schema's sources and the importer's readers each read it.
      This sets aside the importer's reading of any string as a name: a content reference or a binding by its
      collapsed value, so `template-identifier=""` was a template reference no declaration held, a declaration's or a

@@ -1176,7 +1176,7 @@ const StoredRelationSchema = Schema.Struct({
  * database fills it: grizzle keeps an accumulator's type at its `field` and a generated field's at
  * its `type`, and the import writes neither.
  */
-const keyTextDecoded: readonly { readonly field: string; readonly filled: boolean }[] =
+const keyTextFieldFills: readonly { readonly field: string; readonly filled: boolean }[] =
   Object.values(Qti.relations).flatMap((member) =>
     Option.match(Schema.decodeUnknownOption(StoredRelationSchema)(member), {
       onNone: () => [],
@@ -1195,14 +1195,16 @@ const keyTextDecoded: readonly { readonly field: string; readonly filled: boolea
  * Every field of the composed schema whose type is `keyText`, an accumulator or a generated field
  * of it included, as `Relation.field`.
  */
-export const keyTextFields: ReadonlySet<string> = new Set(keyTextDecoded.map(({ field }) => field));
+export const keyTextFields: ReadonlySet<string> = new Set(
+  keyTextFieldFills.map(({ field }) => field),
+);
 
 /**
  * The fields of {@link keyTextFields} the database fills, an accumulator's or a generated field's,
  * as `Relation.field`: the import never writes them, so no row of the import holds their text.
  */
 export const filledKeyTextFields: ReadonlySet<string> = new Set(
-  keyTextDecoded.flatMap(({ field, filled }) => (filled ? [field] : [])),
+  keyTextFieldFills.flatMap(({ field, filled }) => (filled ? [field] : [])),
 );
 
 /**
