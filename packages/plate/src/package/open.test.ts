@@ -2328,6 +2328,207 @@ const rootPackage = (resources: number, attributes: number): ReadonlyMap<string,
     ),
   });
 
+/**
+ * The parts placing one section document, and the pre-conditions of its one item ref, in the
+ * smaller growth check of a section document many parts place.
+ */
+const fewerPlacingParts = 20;
+
+/**
+ * The parts placing one section document, and the pre-conditions of its one item ref, in the
+ * hostile-size case, the size the gate's review measured at 7.5 s against 0.12 s.
+ */
+const hostilePlacingParts = 640;
+
+/**
+ * The most the hostile-size case of a section document many parts place may take, as a multiple
+ * of the thread CPU of the same section refs in one part: a judgement of the document's references
+ * and processing for every part took many times as long, and one judgement leaves only each part's
+ * own share.
+ */
+const placingCpuLimit = 2;
+
+/**
+ * How a package's section refs to one section document are placed: each in a test part of its
+ * own, so each places the document under its own part, or all in one part, so they place it once
+ * under that part.
+ */
+type Placing = "a part each" | "one part";
+
+/**
+ * Write a linear test part of individual submission.
+ *
+ * @param identifier The part's identifier.
+ * @param content What it holds, as written.
+ * @returns The part's text.
+ */
+const partXml = (identifier: string, content: string): string =>
+  `<qti-test-part identifier="${identifier}" navigation-mode="linear" submission-mode="individual">${content}</qti-test-part>`;
+
+/**
+ * The files of a package whose test `T` holds a part `P` whose section `SEC` holds the item ref
+ * `ITEM0`, to `items/b.xml` ({@link otherItemXml}), then a number of section refs to the section
+ * document `S2` at `sections/s2.xml`, whose one item ref `I1` holds as many pre-conditions, each
+ * over `ITEM0.N`, a dotted reading through the test's own item ref.
+ *
+ * @param refs How many section refs place `S2`, and how many pre-conditions `I1` holds.
+ * @param placing How the section refs are placed.
+ * @returns The package's files.
+ */
+const placingPackage = (refs: number, placing: Placing): ReadonlyMap<string, Uint8Array> => {
+  const sectionRefs = Array.from({ length: refs }, (_, index) =>
+    sectionRefXml(`R${index}`, "sections/s2.xml"),
+  );
+
+  return packageOf({
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("S", "imsqti_section_xmlv3p0", "sections/s2.xml"),
+    ),
+    "sections/s2.xml": sectionDocumentXml(
+      "S2",
+      itemRefXml(
+        "I1",
+        "../items/b.xml",
+        Array.from({ length: refs }, () => preConditionXml(greaterXml("ITEM0.N"))).join(""),
+      ),
+    ),
+    "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T">${partXml("P", `<qti-assessment-section identifier="SEC" title="SEC" visible="true">${itemRefXml("ITEM0", "items/b.xml")}</qti-assessment-section>`)}${placing === "one part" ? partXml("Q", sectionRefs.join("")) : sectionRefs.map((ref, index) => partXml(`Q${index}`, ref)).join("")}</qti-assessment-test>`,
+  });
+};
+
+/**
+ * Write the test `T` of one part `P`, whose `xml:base` is given, holding one section `S` of item
+ * refs `I1`, `I2` and so on, each naming a given `href`.
+ *
+ * @param base The part's `xml:base`, as written.
+ * @param hrefs Each item ref's `href`, as written.
+ * @returns The test's text.
+ */
+const basedRefsTestXml = (base: string, hrefs: readonly string[]): string =>
+  `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual" xml:base="${base}"><qti-assessment-section identifier="S" title="S" visible="true">${hrefs.map((href, index) => itemRefXml(`I${index + 1}`, href)).join("")}</qti-assessment-section></qti-test-part></qti-assessment-test>`;
+
+/**
+ * The `a/` segments of the deep `xml:base` in the smaller growth check of item refs under a deep
+ * base.
+ */
+const fewerRefSegments = 8000;
+
+/**
+ * The item refs under the deep `xml:base` in the smaller growth check of item refs under a deep
+ * base.
+ */
+const fewerBasedRefs = 800;
+
+/**
+ * The `a/` segments of the deep `xml:base` whose item refs' verdict must serialise: at this size
+ * every item ref's whole path totalled some 4×10⁹ characters, past the longest string a host can
+ * make.
+ */
+const serialisedRefSegments = 200_000;
+
+/**
+ * The item refs under the deep `xml:base` whose verdict must serialise.
+ */
+const serialisedBasedRefs = 10_000;
+
+/**
+ * What the item refs under a deep `xml:base` name: an item the manifest lists at that path, or no
+ * document the manifest lists.
+ */
+type RefNaming = "a listed item" | "no listed document";
+
+/**
+ * The files of a package whose test `tests/t.xml` holds one part whose `xml:base` writes `a/` a
+ * number of times, and whose one section holds a number of item refs `I<n>`, each naming `x.xml`
+ * under it: the item `x`, which the package holds and lists there, or nothing it lists, so each is
+ * refused `item-ref-unresolved`.
+ *
+ * @param segments How many times the `xml:base` writes `a/`.
+ * @param refs How many item refs the section holds.
+ * @param naming What each names.
+ * @returns The package's files.
+ */
+const deepRefsPackage = (
+  segments: number,
+  refs: number,
+  naming: RefNaming,
+): ReadonlyMap<string, Uint8Array> => {
+  const itemPath = `tests/${"a/".repeat(segments)}x.xml`;
+  const listed = naming === "a listed item";
+
+  return packageOf(
+    Object.fromEntries([
+      ...(listed ? [[itemPath, itemXml("x")] as const] : []),
+      [
+        manifestFile,
+        manifestXml(
+          resourceXml("T", "imsqti_test_xmlv3p0", "tests/t.xml"),
+          ...(listed ? [resourceXml("X", "imsqti_item_xmlv3p0", itemPath)] : []),
+        ),
+      ] as const,
+      [
+        "tests/t.xml",
+        basedRefsTestXml(
+          "a/".repeat(segments),
+          Array.from({ length: refs }, () => "x.xml"),
+        ),
+      ] as const,
+    ]),
+  );
+};
+
+/**
+ * The path of an item ref of {@link basedRefsTestXml}'s test, as a refusal at it is located.
+ *
+ * @param position The item ref's 1-based position.
+ * @returns Its path.
+ */
+const basedRefAt = (position: number): string =>
+  `qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[${position}]`;
+
+/**
+ * The `item-ref-unresolved` refusal of an item ref of {@link basedRefsTestXml}'s test, at
+ * `tests/t.xml`, that names no document the manifest lists.
+ *
+ * @param position The item ref's 1-based position.
+ * @param href Its `href`.
+ * @param named The path it names, as the refusal gives it.
+ * @returns The refusal's facts.
+ */
+const unresolvedBasedRef = (position: number, href: string, named: string): Seen => ({
+  detail: { href, identifier: `I${position}`, path: named },
+  document: fileLocation(location, "tests/t.xml"),
+  location: { kind: "path", path: basedRefAt(position) },
+  rule: "item-ref-unresolved",
+});
+
+/**
+ * Open a package of the test of {@link basedRefsTestXml} under a base, beside the item `x` at
+ * `held.xml` under it, which the manifest lists, and give its `item-ref-unresolved` refusals.
+ *
+ * @param base The part's `xml:base`.
+ * @param hrefs Each item ref's `href`.
+ * @returns The `item-ref-unresolved` refusals.
+ */
+const unresolvedUnder = (base: string, hrefs: readonly string[]) =>
+  Effect.map(
+    openPackage(
+      location,
+      packageOf({
+        [`tests/${base}held.xml`]: itemXml("x"),
+        [manifestFile]: manifestXml(
+          resourceXml("T", "imsqti_test_xmlv3p0", "tests/t.xml"),
+          resourceXml("X", "imsqti_item_xmlv3p0", `tests/${base}held.xml`),
+        ),
+        "tests/t.xml": basedRefsTestXml(base, hrefs),
+      }),
+    ),
+    (verdict) => refusedUnder(verdict, "item-ref-unresolved"),
+  );
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -5573,6 +5774,170 @@ describe("package/open.ts", () => {
             growthLimit,
             `8 times the resources and attributes took ${growth.toFixed(1)} times as long`,
           );
+        }),
+      growthTimeoutMs,
+    );
+  });
+
+  describe("openPackage, a section document many parts place", () => {
+    it.effect(
+      'align-54 r11 placements judged once finding 10: a section document U placed under one part through S0, which that part places twice, and under another part directly reads I0.SCORE from inside S0 under the first, accepted, and from outside S0 under the second, so the package is refused ambiguous-reference at U, as it is when one part places U both ways; placed by the first part alone, it is accepted (reading 86 ("a section document a test places twice is written once"))',
+      () =>
+        Effect.gen(function* placementsReadApart() {
+          const ambiguous: Seen = {
+            detail: {
+              firstPrefix: "I0",
+              firstVariable: "SCORE",
+              reading: "86",
+              reference: "I0.SCORE",
+              secondPrefix: "I0",
+              secondVariable: "SCORE",
+            },
+            document: fileLocation(location, "sections/u.xml"),
+            location: {
+              kind: "path",
+              path: "qti-assessment-section/qti-assessment-item-ref/qti-pre-condition/qti-gt/qti-variable/@identifier",
+            },
+            rule: "ambiguous-reference",
+          };
+          // Closes the part that places S0 twice and opens a second, which places U directly.
+          const otherPart = `</qti-test-part><qti-test-part identifier="P2" navigation-mode="linear" submission-mode="individual">${sectionRefXml("R3", "sections/u.xml")}`;
+
+          acceptedOf(yield* openPackage(location, holdingFiles("")));
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, holdingFiles(otherPart))),
+            [ambiguous],
+          );
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(location, holdingFiles(sectionRefXml("R3", "sections/u.xml"))),
+            ),
+            [ambiguous],
+          );
+        }),
+    );
+
+    it.effect(
+      "align-54 r11 placements judged once finding 10: 8 times the parts, each placing one section document whose item ref holds 8 times the dotted pre-conditions, open in under 32 times the time, as the document's references and processing are judged once for every part that places it alike",
+      () =>
+        Effect.gen(function* placingGrowth() {
+          const fewer = placingPackage(fewerPlacingParts, "a part each");
+          const more = placingPackage(fewerPlacingParts * growthFactor, "a part each");
+          assert.deepStrictEqual(refusalsOf(yield* openPackage(location, fewer)), []);
+
+          const growth = yield* growthRatio(opening(fewer), opening(more));
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `8 times the parts and pre-conditions took ${growth.toFixed(1)} times as long`,
+          );
+        }),
+      growthTimeoutMs,
+    );
+
+    it.effect(
+      "align-54 r11 placements judged once finding 10: 640 parts, each placing one section document whose item ref holds 640 dotted pre-conditions, open in under twice the thread CPU of the same 640 section refs in one part, with the same verdict",
+      () =>
+        Effect.gen(function* placingHostile() {
+          const one = placingPackage(hostilePlacingParts, "one part");
+          const many = placingPackage(hostilePlacingParts, "a part each");
+          const oneVerdict = yield* openPackage(location, one);
+          const manyVerdict = yield* openPackage(location, many);
+          assert.deepStrictEqual(refusalsOf(manyVerdict), []);
+          assert.deepStrictEqual(refusalsOf(oneVerdict), []);
+          assert.strictEqual(manyVerdict.verdict, oneVerdict.verdict);
+
+          let oneMs = Number.POSITIVE_INFINITY;
+          let manyMs = Number.POSITIVE_INFINITY;
+          for (let run = 0; run < growthRuns; run += 1) {
+            oneMs = Math.min(oneMs, yield* cpuMillis(opening(one)));
+            manyMs = Math.min(manyMs, yield* cpuMillis(opening(many)));
+          }
+
+          assert.isBelow(
+            manyMs,
+            placingCpuLimit * oneMs,
+            `a part each took ${(manyMs / oneMs).toFixed(1)} times the CPU of one part`,
+          );
+        }),
+      growthTimeoutMs,
+    );
+  });
+
+  describe("openPackage, item refs under a deep xml:base", () => {
+    it.effect(
+      "align-54 r11 placements judged once finding 13b, item refs under a deep base: an item ref naming the item the manifest lists under a deep xml:base resolves, and one naming no listed document is refused item-ref-unresolved with its path bounded: a path of 1,024 characters is given whole, and one of 1,025 or 4,011 keeps its first 512 and its last 511 characters around one … (U+2026)",
+      () =>
+        Effect.gen(function* boundedRefPaths() {
+          const deep = "a/".repeat(2000);
+          const deepPath = `tests/${deep}x.xml`;
+
+          assert.deepStrictEqual(yield* unresolvedUnder(deep, ["held.xml", "x.xml"]), [
+            unresolvedBasedRef(2, "x.xml", boundedAs(deepPath)),
+          ]);
+          assert.lengthOf(boundedAs(deepPath), 1024);
+          assert.include(boundedAs(deepPath), "…");
+
+          const edge = "a/".repeat(506);
+          assert.deepStrictEqual(yield* unresolvedUnder(edge, ["xy.xml", "xyz.xml", "held.xml"]), [
+            unresolvedBasedRef(1, "xy.xml", `tests/${edge}xy.xml`),
+            unresolvedBasedRef(2, "xyz.xml", boundedAs(`tests/${edge}xyz.xml`)),
+          ]);
+          assert.lengthOf(`tests/${edge}xy.xml`, 1024);
+          assert.include(boundedAs(`tests/${edge}xyz.xml`), "…");
+        }),
+    );
+
+    it.effect(
+      "align-54 r11 placements judged once finding 13b, item refs under a deep base: 8 times the segments of a test part's xml:base and 8 times the item refs under it open in under 32 times the time, whether each names the item listed there or no listed document, as each ref is looked for from its base's directory without its path written out",
+      () =>
+        Effect.gen(function* deepRefsGrowth() {
+          const namings: readonly RefNaming[] = ["a listed item", "no listed document"];
+          for (const naming of namings) {
+            const fewer = deepRefsPackage(fewerRefSegments, fewerBasedRefs, naming);
+            const more = deepRefsPackage(
+              fewerRefSegments * growthFactor,
+              fewerBasedRefs * growthFactor,
+              naming,
+            );
+            assert.lengthOf(
+              refusedUnder(yield* openPackage(location, fewer), "item-ref-unresolved"),
+              naming === "a listed item" ? 0 : fewerBasedRefs,
+            );
+
+            const growth = yield* growthRatio(opening(fewer), opening(more));
+            assert.isBelow(
+              growth,
+              growthLimit,
+              `8 times the segments and item refs naming ${naming} took ${growth.toFixed(1)} times as long`,
+            );
+          }
+        }),
+      growthTimeoutMs,
+    );
+
+    it.effect(
+      "align-54 r11 placements judged once finding 13b, item refs under a deep base: the verdict on 10,000 item refs under an xml:base of 200,000 segments serialises, every item-ref-unresolved path at most 1,024 characters and holding the …",
+      () =>
+        Effect.gen(function* serialisedRefs() {
+          const verdict = yield* openPackage(
+            location,
+            deepRefsPackage(serialisedRefSegments, serialisedBasedRefs, "no listed document"),
+          );
+          const named = refusedUnder(verdict, "item-ref-unresolved").map(
+            ({ detail }) => detail["path"] ?? "",
+          );
+
+          assert.isString(JSON.stringify(verdict));
+          assert.lengthOf(named, serialisedBasedRefs);
+          assert.deepStrictEqual(
+            new Set(named),
+            new Set([boundedAs(`tests/${"a/".repeat(serialisedRefSegments)}x.xml`)]),
+          );
+          for (const text of named) {
+            assert.isAtMost(text.length, 1024);
+            assert.include(text, "…");
+          }
         }),
       growthTimeoutMs,
     );

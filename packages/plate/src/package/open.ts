@@ -871,17 +871,6 @@ const locate = (base: Base, reference: string): Option.Option<Resolved> =>
     : base.pipe(Option.flatMap((directory) => resolveIn(directory, reference)));
 
 /**
- * Resolve a reference a document makes against its base ({@link locate}) to the text of the path it
- * names.
- *
- * @param base The base in scope where the reference is written ({@link basesOf}).
- * @param reference The reference, read by its attribute's whitespace class.
- * @returns The path it names from the package's root, none where {@link locate} gives none.
- */
-const resolveReference = (base: Base, reference: string): Option.Option<string> =>
-  Option.map(locate(base, reference), pathOf);
-
-/**
  * Give an element's `xml:base`, as written.
  *
  * @param element The element.
@@ -1206,11 +1195,12 @@ const boundedFact = (fact: string): string =>
   fact.length <= factLimit ? fact : `${fact.slice(0, factHead)}…${fact.slice(-factTail)}`;
 
 /**
- * A directory of the files a package holds or lists, the names of its files and of the
- * directories in it by name, each a folder of its own.
+ * A directory of some paths inside a package, the files a package holds or lists, or the documents
+ * a ref may name: the names of its files, each with its path as given, and of the directories in it
+ * by name, each a folder of its own.
  */
 interface Folder {
-  readonly files: Set<string>;
+  readonly files: Map<string, string>;
   readonly folders: Map<string, Folder>;
 }
 
@@ -1218,19 +1208,23 @@ interface Folder {
  * Give the folders of a set of paths inside a package, each path split at `/` into the folders that
  * hold it and its file's name. A resolved path's segments never hold a `/` (an escaped one stays
  * escaped, by `decodeSegment` in `src/document/href.ts`), so a path is in the set exactly when its
- * directory's folder holds its name.
+ * directory's folder holds its name, and the folder gives that path as the set gave it, which is
+ * the text `pathOf` writes for it.
  *
  * @param paths The paths, `/` separating each one's segments.
  * @returns The package root's folder.
  */
 const foldersOf = (paths: Iterable<string>): Folder => {
-  const root: Folder = { files: new Set(), folders: new Map() };
+  const root: Folder = { files: new Map(), folders: new Map() };
   for (const path of paths) {
     const segments = path.split("/");
     let folder = root;
     for (const name of segments.slice(0, -1)) {
       const known = folder.folders.get(name);
-      const next = known ?? { files: new Set<string>(), folders: new Map<string, Folder>() };
+      const next = known ?? {
+        files: new Map<string, string>(),
+        folders: new Map<string, Folder>(),
+      };
       if (known === undefined) {
         folder.folders.set(name, next);
       }
@@ -1238,21 +1232,21 @@ const foldersOf = (paths: Iterable<string>): Folder => {
       folder = next;
     }
 
-    folder.files.add(segments.at(-1) ?? "");
+    folder.files.set(segments.at(-1) ?? "", path);
   }
 
   return root;
 };
 
 /**
- * What a file reference's check needs of the directory its path resolves into, each fact found
- * from its parent's: the folder of the package's files under it, and the start and length of the
- * text a name in it follows, its path and a `/`.
+ * What a reference's check needs of the directory its path resolves into, each fact found from its
+ * parent's: the folder of the paths it is looked for among under it, the package's files for a
+ * file reference and the documents a ref may name for a ref, and the start and length of the text
+ * a name in it follows, its path and a `/`.
  */
 interface DirectoryFacts {
   /**
-   * The folder of the files the package holds or lists under the directory, none when it holds
-   * none.
+   * The folder of the paths under the directory, none when there are none.
    */
   readonly folder: Option.Option<Folder>;
   /**
@@ -1269,10 +1263,10 @@ interface DirectoryFacts {
 /**
  * Give each directory's facts ({@link DirectoryFacts}), found from its parent's on the first call
  * for it and kept by the directory for every later one. A directory many references resolve into,
- * a deep `xml:base`'s, is climbed once, so whether a held file lies under it is decided once, not
- * once for each reference.
+ * a deep `xml:base`'s, is climbed once, so whether a held file, or a document a ref may name, lies
+ * under it is decided once, not once for each reference.
  *
- * @param files The package root's folder ({@link foldersOf}).
+ * @param files The package root's folder of the paths looked for ({@link foldersOf}).
  * @returns The facts of a directory.
  */
 const directoryFacts = (files: Folder): ((directory: Directory) => DirectoryFacts) => {
@@ -2106,6 +2100,51 @@ interface ItemRefVariables extends TargetVariables {
 type DocumentView =
   | { readonly from: "inside"; readonly replaced: boolean }
   | { readonly from: "outside" };
+
+/**
+ * Name a view in one letter, for {@link viewsKey}: `o` from outside, `i` from inside a placement
+ * no selection with replacement lies above, `r` from inside one that one does.
+ *
+ * @param view The view.
+ * @returns Its letter.
+ */
+const viewLetter = (view: DocumentView): string => {
+  if (view.from === "outside") {
+    return "o";
+  }
+
+  return view.replaced ? "r" : "i";
+};
+
+/**
+ * Key the views some documents take from a placement, one list for each document, in the order
+ * the documents are listed.
+ *
+ * @param views Each document's views.
+ * @returns The key.
+ */
+const viewsKey = (views: readonly (readonly DocumentView[])[]): string =>
+  JSON.stringify(views.map((list) => list.map((view) => viewLetter(view)).join("")));
+
+/**
+ * What a section document's dotted references and typed processing give from one placement of it
+ * under a test (`judgeTest`): the references' refusals, and those of its expressions that only the
+ * test's scope and typed reach give.
+ */
+interface SectionJudgement {
+  readonly processing: readonly Refusal[];
+  readonly references: readonly Refusal[];
+}
+
+/**
+ * The judgements of a section document from its placements of one replacement that read the same
+ * other documents, in the order first read, each judgement by the views those documents took from
+ * the placement it was judged from ({@link viewsKey}).
+ */
+interface ViewedJudgements {
+  readonly byViews: Map<string, SectionJudgement>;
+  readonly read: readonly string[];
+}
 
 /**
  * What a test's dotted references resolve against, its reach, from where a reference stands: the
@@ -3171,12 +3210,25 @@ const waysThrough = (
 };
 
 /**
- * What an item ref's `href` may resolve to, keyed by the path of the document a resource the
- * manifest lists names: an item resource's, `item`, or an LTI link resource's, `lti-link`
- * ({@link ltiLinkTypes}), which an item ref may name in place of an item (reading 110). A path both
- * name is an item's.
+ * What a ref's `href` may resolve to: the documents of the resources the manifest lists that an
+ * item ref or a section ref may name, each found from the directory a resolved `href` names
+ * without the path being written out.
  */
-type RefTargets = ReadonlyMap<string, "item" | "lti-link">;
+interface RefTargets {
+  /**
+   * The facts of a directory ({@link directoryFacts}) over the paths of the documents {@link kinds}
+   * keys and of every section resource's document, whose folder gives a path a ref resolves to as
+   * the manifest names it, so a ref under a deep `xml:base` costs its own length, not the base's.
+   */
+  readonly factsOf: (directory: Directory) => DirectoryFacts;
+  /**
+   * What an item ref's `href` may resolve to, keyed by the path of the document a resource the
+   * manifest lists names: an item resource's, `item`, or an LTI link resource's, `lti-link`
+   * ({@link ltiLinkTypes}), which an item ref may name in place of an item (reading 110). A path
+   * both name is an item's.
+   */
+  readonly kinds: ReadonlyMap<string, "item" | "lti-link">;
+}
 
 /**
  * One item ref of a test or a section document whose `href` resolves to an item resource or an LTI
@@ -3222,6 +3274,9 @@ interface SectionPlacement {
    * The section ref's own path in its document, where a refusal of it is located.
    */
   readonly at: string;
+  /**
+   * The path its `href` names, as the manifest names it.
+   */
   readonly path: string;
   /**
    * Whether the section ref lies under a section of its own document whose `qti-selection` has
@@ -3273,7 +3328,10 @@ interface DocumentStructure {
    */
   readonly links: readonly LtiLink[];
   /**
-   * Each of its section refs whose `href` names a path inside the package, in document order.
+   * Each of its section refs whose `href` names the document of a resource an item ref or a section
+   * ref may name ({@link RefTargets}), in document order. One that names any other path inside the
+   * package places nothing, since only a section resource's document is placed
+   * ({@link sectionDocumentAt}), so it is not listed.
    */
   readonly sectionRefs: readonly SectionPlacement[];
   /**
@@ -3342,19 +3400,22 @@ const replacingSections = (visits: readonly Visit[]): ReadonlySet<SourceElement>
  * replacingSections}).
  *
  * An item ref that resolves to no listed item resource and no listed LTI link resource is
- * `item-ref-unresolved` at the item ref,
- * its detail the `identifier`, the `href` and, when the `href` names a path inside the package,
- * that `path`. An item ref that writes no identifier names nothing, so it holds no place in the
- * document's identifiers and no reading resolves through it; its missing identifier is the test's
- * own verdict's (reading 147). It is otherwise judged like any other (reading 155, "the laws over
- * what an item ref names judge every item ref, whether or not it ... write[s] an identifier"): one
- * that resolves to neither is `item-ref-unresolved` with `check: "unwritten"`, the
- * missing `attribute`, the `href`, the `path` when there is one, and `reading: "155"`, and one that
- * resolves has its variable mappings and template defaults judged (`targets`). An item ref that
- * writes no `href` names nothing, and is the test's own verdict's (reading 155). Each `href` is
- * collapsed and resolved by {@link resolveReference} against the `xml:base` in scope, or else the
- * document's path ({@link basesOf}, reading 103), so one under an `xml:base` outside the package
- * names no path inside it.
+ * `item-ref-unresolved` at the item ref, its detail the `identifier`, the `href` and, when the
+ * `href` names a path inside the package, that `path`, bounded ({@link boundedPath}): one longer
+ * than 1,024 characters keeps its first 512 and its last 511 around a `…`. An item ref that writes
+ * no identifier names nothing, so it holds no place in the document's identifiers and no reading
+ * resolves through it; its missing identifier is the test's own verdict's (reading 147). It is
+ * otherwise judged like any other (reading 155, "the laws over what an item ref names judge every
+ * item ref, whether or not it ... write[s] an identifier"): one that resolves to neither is
+ * `item-ref-unresolved` with `check: "unwritten"`, the missing `attribute`, the `href`, the `path`
+ * when there is one, and `reading: "155"`, and one that resolves has its variable mappings and
+ * template defaults judged (`targets`). An item ref that writes no `href` names nothing, and is the
+ * test's own verdict's (reading 155). Each `href` is collapsed and resolved by {@link locate}
+ * against the `xml:base` in scope, or else the document's path ({@link basesOf}, reading 103), so
+ * one under an `xml:base` outside the package names no path inside it. The path it names is looked
+ * for among the documents a ref may name from its directory's folder ({@link RefTargets}), never
+ * written out whole, so a document whose refs sit under a deep `xml:base` costs the base's depth
+ * once, not once for each ref.
  *
  * A section ref whose `href` names no path inside the package, an absolute URI, a path from a
  * host's root, a `..` that climbs above the package's root, or any `href` under an `xml:base`
@@ -3368,8 +3429,8 @@ const replacingSections = (visits: readonly Visit[]): ReadonlySet<SourceElement>
  * @param source The document's source.
  * @param base The document's path, which its `href`s resolve against where no `xml:base` is in
  *   scope.
- * @param refTargets What an item ref may resolve to: the path of every item resource's document and
- *   every LTI link resource's.
+ * @param refTargets What a ref may resolve to: the documents of every item resource, LTI link
+ *   resource and section resource.
  * @returns What it holds.
  */
 const structureIn = (
@@ -3386,6 +3447,24 @@ const structureIn = (
   const sectionRefs: SectionPlacement[] = [];
   const targets: ItemRefTarget[] = [];
   const unresolved: Refusal[] = [];
+  /**
+   * Find the document a ref's `href` names among those a ref may name ({@link RefTargets}),
+   * through its directory's folder.
+   *
+   * @param resolved The path the `href` names inside the package.
+   * @returns Its directory's facts, and the document's path as the manifest names it, none when
+   *   the path names no such document.
+   */
+  const listedAt = (resolved: Resolved) => {
+    const facts = refTargets.factsOf(resolved.directory);
+
+    return {
+      facts,
+      listed: facts.folder.pipe(
+        Option.flatMap((folder) => Option.fromUndefinedOr(folder.files.get(resolved.name))),
+      ),
+    };
+  };
   for (const { element, path } of visits) {
     const identifier = Option.getOrUndefined(identifierOf(element));
     const href = Option.getOrUndefined(attributeOf(element, "href"));
@@ -3402,15 +3481,17 @@ const structureIn = (
 
     if (href !== undefined && isQti(element, sectionRefElements)) {
       const written = collapse(href);
-      const resolved = resolveReference(bases.get(element) ?? Option.none(), written);
+      const resolved = locate(bases.get(element) ?? Option.none(), written);
       if (Option.isSome(resolved)) {
-        sectionRefs.push({
-          at: path,
-          element,
-          href: written,
-          path: resolved.value,
-          replaced: replacing.has(element),
-        });
+        for (const listed of Option.toArray(listedAt(resolved.value).listed)) {
+          sectionRefs.push({
+            at: path,
+            element,
+            href: written,
+            path: listed,
+            replaced: replacing.has(element),
+          });
+        }
       } else {
         unresolved.push(
           refuse(source.location, "package-path-outside", path, {
@@ -3422,9 +3503,12 @@ const structureIn = (
       }
     } else if (href !== undefined && isQti(element, itemRefElements)) {
       const written = collapse(href);
-      const resolved = resolveReference(bases.get(element) ?? Option.none(), written);
-      const named = Option.getOrUndefined(resolved);
-      const kind = named === undefined ? undefined : refTargets.get(named);
+      const found = Option.map(locate(bases.get(element) ?? Option.none(), written), (inside) => ({
+        inside,
+        ...listedAt(inside),
+      }));
+      const named = Option.getOrUndefined(found.pipe(Option.flatMap(({ listed }) => listed)));
+      const kind = named === undefined ? undefined : refTargets.kinds.get(named);
       if (named !== undefined && kind !== undefined) {
         const link = kind === "lti-link";
         targets.push({ element, link, path: named });
@@ -3441,9 +3525,9 @@ const structureIn = (
           }
         }
       } else {
-        const at = Option.match(resolved, {
+        const at = Option.match(found, {
           onNone: () => ({}),
-          onSome: (resolvedPath) => ({ path: resolvedPath }),
+          onSome: ({ facts, inside }) => ({ path: boundedPath(inside, facts) }),
         });
         unresolved.push(
           refuse(
@@ -3898,8 +3982,8 @@ const countsOf = (
  *
  * @param test The test's own placement.
  * @param sectionPaths The path of every section resource's document.
- * @param refTargets What an item ref may resolve to: the path of every item resource's document and
- *   every LTI link resource's.
+ * @param refTargets What a ref may resolve to: the documents of every item resource, LTI link
+ *   resource and section resource.
  * @param documents The package's documents.
  * @returns The placements, the cycles' refusals, and how the placements place one another.
  */
@@ -4550,7 +4634,9 @@ interface Reach {
 const reachOf = (test: Placement, { counts, placements }: Assembly): Reach => {
   const placedAt = new Map<string, Placement[]>();
   for (const placement of placements) {
-    placedAt.set(placement.path, [...(placedAt.get(placement.path) ?? []), placement]);
+    const placed = placedAt.get(placement.path) ?? [];
+    placed.push(placement);
+    placedAt.set(placement.path, placed);
   }
 
   const flags = new Map(
@@ -4776,7 +4862,11 @@ interface TestJudgement {
  * assembled test. Each refusal is at the section document, and given once however many placements
  * give it. As for the test, only what that run adds is reported: the same rules over the section
  * alone, every name unknown, are the section document's own verdict's, and so are the branch
- * refusals its own check already gives.
+ * refusals its own check already gives. Its references and expressions read a placement only
+ * through its document, its replacement and the views it takes of the other documents they read,
+ * so they are judged once for each of those, not once for each placement: a document many parts
+ * place is judged once for them all unless the documents above it differ; only its branch rules,
+ * which read the placement's part, are judged for each placement.
  *
  * An item ref that names an LTI link resource in place of an item (reading 110, "an item ref may
  * name an LTI link instead of an item") resolves, and the package declares nothing a link reports:
@@ -4804,8 +4894,8 @@ interface TestJudgement {
  *
  * @param source The test's source.
  * @param testPath The test's path.
- * @param refTargets What an item ref may resolve to: the path of every item resource's document and
- *   every LTI link resource's.
+ * @param refTargets What a ref may resolve to: the documents of every item resource, LTI link
+ *   resource and section resource.
  * @param sectionPaths The path of every section resource's document.
  * @param documents The package's documents.
  * @returns Its own item refs' item paths, its own item refs that name an LTI link, the section
@@ -4849,7 +4939,9 @@ const judgeTest = (
   const whole = wholeOf(source);
   const placedAt = new Map<string, Placement[]>();
   for (const placement of placements) {
-    placedAt.set(placement.path, [...(placedAt.get(placement.path) ?? []), placement]);
+    const placed = placedAt.get(placement.path) ?? [];
+    placed.push(placement);
+    placedAt.set(placement.path, placed);
   }
 
   const avoiding = new Map<string, ReadonlySet<Placement>>();
@@ -4859,6 +4951,9 @@ const judgeTest = (
   // is read only while that placement is judged.
   let here = test;
   let chosen: ReadonlyMap<string, DocumentView> = new Map();
+  // While a section document's references and processing are judged from a placement, the views
+  // each other document took ({@link viewsAt}), by path, in the order first taken; else none.
+  let taken: Map<string, readonly DocumentView[]> | undefined;
   /**
    * Give the ways the placement being judged may read the placements of another document (reading
    * 86): from inside each placement of it that lies above this one, by its replacement, and from
@@ -4877,12 +4972,15 @@ const judgeTest = (
     const above = reachers.get(here) ?? reachingAny(graph, [here]);
     reachers.set(here, above);
 
-    return [
+    const views = [
       ...(outside.has(here) ? [{ from: "outside" } as const] : []),
       ...[false, true]
         .filter((replaced) => there.some((one) => one.replaced === replaced && above.has(one)))
         .map((replaced) => ({ from: "inside", replaced }) as const),
     ];
+    taken?.set(path, views);
+
+    return views;
   };
   /**
    * Give the placements a reading through an item ref, part or section of another document reads
@@ -5109,11 +5207,61 @@ const judgeTest = (
       readonly targets: ReadonlyMap<SourceElement, ExpressionType>;
     }
   >();
+  // Each section document's references and typed processing judged from a placement, by the
+  // document's path and the placement's replacement, then by the other documents those judgements
+  // read, then by the views each of those documents took (see `judgedFrom`).
+  const judged = new Map<string, Map<string, ViewedJudgements>>();
+  /**
+   * Judge a section document's dotted references by reading 48 and its expressions by the item's
+   * processing rules under the test's scope and typed reach, from the placement being judged, or
+   * give what an earlier placement of the document gave when the two read alike.
+   *
+   * Those judgements read the placement only through its document, its replacement and the view
+   * ({@link viewsAt}) each other document a reference reads through takes from it: its part and
+   * whether its order is drawn are read by the branch rules alone, and the documents above it only
+   * through those views. So each is judged once for each document, replacement and set of views,
+   * not once for each placement: several parts that place one document, each through its own
+   * section ref, give it one placement for each part, and each reads it alike unless the documents
+   * above it differ, as when one part places it through a document placed twice and another places
+   * it directly (reading 86). The views a judgement took are recorded as it runs, so a later
+   * placement reuses it only when every one of those documents takes the same views from it, and
+   * the judgement, a function of the document, the replacement and those views, would give the
+   * same.
+   *
+   * @param placement The placement being judged.
+   * @param judgeAll The judgements, from the placement being judged.
+   * @returns What the document's references and typed processing give from it.
+   */
+  const judgedFrom = (placement: Placement, judgeAll: () => SectionJudgement): SectionJudgement => {
+    const key = JSON.stringify([placement.path, placement.replaced]);
+    const byRead = judged.get(key) ?? new Map<string, ViewedJudgements>();
+    judged.set(key, byRead);
+    for (const { byViews, read } of byRead.values()) {
+      const earlier = byViews.get(viewsKey(read.map((path) => viewsAt(path))));
+      if (earlier !== undefined) {
+        return earlier;
+      }
+    }
+
+    taken = new Map();
+    const judgement = judgeAll();
+    const read = [...taken];
+    taken = undefined;
+    const readKey = JSON.stringify(read.map(([path]) => path));
+    const group = byRead.get(readKey) ?? {
+      byViews: new Map<string, SectionJudgement>(),
+      read: read.map(([path]) => path),
+    };
+    group.byViews.set(viewsKey(read.map(([, views]) => views)), judgement);
+    byRead.set(readKey, group);
+
+    return judgement;
+  };
   /**
    * Judge one placement of a section document under the test, the placement being judged: at its
    * document's first placement, the identifiers it gives again across the reach; its references',
-   * those of its expressions that only the test's scope and typed reach give, and its branch
-   * rules', beyond those its own verdict already gives.
+   * those of its expressions that only the test's scope and typed reach give ({@link judgedFrom}),
+   * and its branch rules', beyond those its own verdict already gives.
    *
    * @param placement The placement.
    * @returns The refusals, at the section document, in its document order.
@@ -5131,7 +5279,27 @@ const judgeTest = (
     };
     once.set(path, { alone, targets });
 
-    const sectionReferences = judgeReferences(section.location, structure.visits);
+    const { processing: sectionProcessing, references: sectionReferences } = judgedFrom(
+      placement,
+      () => {
+        const read = judgeReferences(section.location, structure.visits);
+
+        return {
+          processing: notHeld(
+            processingRefusals(
+              section,
+              tables,
+              typed,
+              (templateDefault) => Option.fromUndefinedOr(targets.get(templateDefault)),
+              Option.some(source),
+              collected,
+            ),
+            [...alone, ...read],
+          ),
+          references: read,
+        };
+      },
+    );
 
     return [
       ...(known === undefined
@@ -5140,17 +5308,7 @@ const judgeTest = (
           )
         : []),
       ...sectionReferences,
-      ...notHeld(
-        processingRefusals(
-          section,
-          tables,
-          typed,
-          (templateDefault) => Option.fromUndefinedOr(targets.get(templateDefault)),
-          Option.some(source),
-          collected,
-        ),
-        [...alone, ...sectionReferences],
-      ),
+      ...sectionProcessing,
       ...notHeld(
         judgeBranches(graph, placement, known === undefined, names),
         ownRefusals(documents, path),
@@ -5416,13 +5574,17 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
 ): Effect.fn.Return<PackageVerdict> {
   const fileRules = checkFiles(manifest, files, location);
   const documents = yield* readDocuments(manifest, held, location);
-  const refTargets: RefTargets = new Map([
+  const kinds = new Map([
     ...ltiLinkTypes.flatMap((type) =>
       pathsOfType(manifest, type).map((path) => [path, "lti-link"] as const),
     ),
     ...pathsOfType(manifest, "imsqti_item_xmlv3p0").map((path) => [path, "item"] as const),
   ]);
   const sectionPaths = new Set(pathsOfType(manifest, "imsqti_section_xmlv3p0"));
+  const refTargets: RefTargets = {
+    factsOf: directoryFacts(foldersOf([...kinds.keys(), ...sectionPaths])),
+    kinds,
+  };
   const tests = new Map<string, Pick<TestJudgement, "links" | "reads" | "refs">>();
   const testRefusals: Refusal[] = [];
   const underTests: Refusal[] = [];
