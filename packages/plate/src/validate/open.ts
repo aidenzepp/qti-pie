@@ -3,8 +3,8 @@
  *
  * It reads the bytes with the shared reader's adapter and checks the source against the committed
  * XSD tables. Its verdict is the only way a host reaches an `Accepted`, which `redact` and `score`
- * take. It stays server-side: the tables load from a committed JSON module through `Schema`, and
- * the reader is crust's.
+ * take. It stays server-side: the tables load from a committed JSON module of 5 MB, and the reader
+ * is crust's.
  *
  * @module
  */

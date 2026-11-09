@@ -2,14 +2,15 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { readSource } from "#plate/document/read.ts";
 import { qtiNamespace, xmlNamespace, xsdNamespace } from "#plate/document/source.ts";
 import { htmlSubset } from "#plate/emit/body.ts";
 import { baseTypes } from "#plate/vocabulary.ts";
+import committed from "#plate/validate/tables.generated.json" with { type: "json" };
 import { tables, xsdSha256 } from "#plate/validate/tables.ts";
 import type { AttributeTable, ContentTable, ElementTable, TypeEntry } from "#plate/validate/xsd.ts";
-import { generateTables, xsdPath } from "#plate/validate/xsd.ts";
+import { generateTables, Tables, xsdPath } from "#plate/validate/xsd.ts";
 
 /**
  * The XSD's bytes, read from the cache under `HOME`.
@@ -116,6 +117,12 @@ const keyShortcuts = "aria-keyshortcuts";
 const keyShortcutsMisspelt = "aria-keyshorts";
 
 /**
+ * Decode a tables file as {@link Tables}, refusing a key `Tables` does not name, so a stray field
+ * fails as a wrong value does.
+ */
+const decodeExactly = Schema.decodeUnknownResult(Tables, { onExcessProperty: "error" });
+
+/**
  * Parsing the full XSD and regenerating the tables nears vitest's 5 s default under load.
  */
 const regenerateTimeoutMs = 60_000;
@@ -143,6 +150,36 @@ describe("validate/tables.ts", () => {
       }),
     { tags: ["qti-xsd"] },
   );
+
+  it("the committed file decodes as Tables, with no key Tables does not name, to itself", () => {
+    // `tables` asserts this type without a decode at load, so this case is the file's one check
+    // that needs no cache.
+    assert.deepStrictEqual(Result.getOrUndefined(decodeExactly(committed)), tables);
+
+    // The plants: a field Tables does not name, and a `use` outside its literals, each fail it.
+    const div = elementNamed("div");
+    const stray = { ...tables, elements: { ...tables.elements, div: { ...div, stray: true } } };
+    const [first, ...rest] = div.attributes;
+    assert.isDefined(first, "div declares an attribute");
+
+    const misused = {
+      ...tables,
+      elements: {
+        ...tables.elements,
+        div: { ...div, attributes: [{ ...first, use: "maybe" }, ...rest] },
+      },
+    };
+    assert.isTrue(Result.isFailure(decodeExactly(stray)));
+    assert.isTrue(Result.isFailure(decodeExactly(misused)));
+  });
+
+  it("holds the JSON module's own object, so loading the tables decodes and copies nothing", () => {
+    assert.strictEqual<unknown>(tables, committed);
+
+    // The plant: a module that decodes its file at load holds the decode's output, a copy, which
+    // this case refuses.
+    assert.notStrictEqual<unknown>(Schema.decodeUnknownSync(Tables)(committed), committed);
+  });
 
   it("qti-interaction-modules declares secondary-configuration and not fallback-configuration", () => {
     assert.isTrue(

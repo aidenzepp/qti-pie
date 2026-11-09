@@ -23,9 +23,9 @@ import { isNcName } from "#plate/model/values.ts";
  * Where the XSD is cached: `.cache/gr8des/qti3/xsd/imsqti_asiv3p0p1_v1p0.xsd` under `HOME`. Only
  * the script that regenerates the tables and the tables' test read it.
  *
- * It is defined here, not beside the committed tables in `src/validate/tables.ts`, because that
- * module decodes the committed tables when it loads: after a change to the tables' Schema the old
- * file no longer decodes, and importing it would stop the regeneration that replaces it.
+ * It is defined here, not beside the committed tables in `src/validate/tables.ts`, because `open`
+ * loads that module on a host's serving path, and it holds nothing but the tables and the digest of
+ * the XSD they came from.
  */
 export const xsdPath = Config.String("HOME").pipe(
   Config.map((home) => `${home}/.cache/gr8des/qti3/xsd/imsqti_asiv3p0p1_v1p0.xsd`),
