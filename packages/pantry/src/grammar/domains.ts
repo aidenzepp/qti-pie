@@ -76,12 +76,55 @@ const setOf = (ranges: Iterable<CodeRange>): CodeSet => {
 };
 
 /**
- * The union of sets.
+ * The union of two sets, in one pass over both: their runs in order of their starts, each joined
+ * to the run before it where the two overlap or touch, so the result is a {@link CodeSet} with no
+ * sort and no normalizing pass.
+ *
+ * @param left - A set.
+ * @param right - A set.
+ * @returns Every code point either holds.
+ */
+const unionOfTwo = (left: CodeSet, right: CodeSet): CodeSet => {
+  const merged: [number, number][] = [];
+  const add = ([lo, hi]: CodeRange): void => {
+    const last = merged.at(-1);
+    if (last !== undefined && lo <= last[1] + 1) {
+      last[1] = Math.max(last[1], hi);
+    } else {
+      merged.push([lo, hi]);
+    }
+  };
+  let at = 0;
+  let other = 0;
+  while (at < left.length || other < right.length) {
+    const mine = left[at];
+    const theirs = right[other];
+    if (mine !== undefined && (theirs === undefined || mine[0] <= theirs[0])) {
+      add(mine);
+      at += 1;
+    } else if (theirs !== undefined) {
+      add(theirs);
+      other += 1;
+    }
+  }
+
+  return merged;
+};
+
+/**
+ * The union of sets ({@link unionOfTwo}, left to right).
  *
  * @param sets - The sets.
  * @returns Every code point one of them holds.
  */
-const union = (...sets: readonly CodeSet[]): CodeSet => setOf(sets.flat());
+const union = (...sets: readonly CodeSet[]): CodeSet => {
+  let held: CodeSet = [];
+  for (const set of sets) {
+    held = unionOfTwo(held, set);
+  }
+
+  return held;
+};
 
 /**
  * The intersection of two sets.
@@ -124,15 +167,34 @@ const intersect = (left: CodeSet, right: CodeSet): CodeSet => {
  * @returns `left` without `right`.
  */
 const subtract = (left: CodeSet, right: CodeSet): CodeSet => {
-  const gaps: CodeRange[] = [];
-  let next = 0;
-  for (const [lo, hi] of right) {
-    gaps.push([next, lo - 1]);
-    next = hi + 1;
-  }
-  gaps.push([next, 0x10_ff_ff]);
+  const kept: CodeRange[] = [];
+  let other = 0;
+  // Both sets' runs are read once, in order: a run taken away that ends before a run of `left`
+  // ends is passed for good, since every later run of `left` starts after it.
+  for (const [lo, hi] of left) {
+    let from = lo;
+    let cut = right[other];
+    while (cut !== undefined && cut[0] <= hi) {
+      const [cutLo, cutHi] = cut;
+      if (cutLo > from) {
+        kept.push([from, cutLo - 1]);
+      }
 
-  return intersect(left, setOf(gaps));
+      from = Math.max(from, cutHi + 1);
+      if (cutHi > hi) {
+        break;
+      }
+
+      other += 1;
+      cut = right[other];
+    }
+
+    if (from <= hi) {
+      kept.push([from, hi]);
+    }
+  }
+
+  return kept;
 };
 
 /**
@@ -1202,6 +1264,11 @@ const readBraces = (
 };
 
 /**
+ * XSD's `.`: every character but line feed and carriage return (XML Schema Part 2, F.1.1).
+ */
+const dot = chars(subtract(xmlChar, charactersOf("\n\r")));
+
+/**
  * Read an alternation of branches up to a `)` or the end.
  *
  * @param cursor - The cursor.
@@ -1232,7 +1299,7 @@ const readAlternation = (cursor: Cursor): Result.Result<Regex, UnreadPattern> =>
         } else if (character === "\\") {
           atom = chars(setOfEscaped(yield* readEscape(cursor)));
         } else if (character === ".") {
-          atom = chars(subtract(xmlChar, charactersOf("\n\r")));
+          atom = dot;
         } else if ("?*+{}]".includes(character)) {
           return yield* unread(cursor, `a ${character} with nothing to quantify`);
         } else {
@@ -2838,14 +2905,15 @@ const minimized = (dfa: Dfa): Dfa => {
   const refine = (partition: readonly number[]): readonly number[] => {
     const numbering = new Map<string, number>();
     const next = dfa.moves.map((moves, state) => {
-      const byBlock = new Map<number, CodeRange[]>();
+      const byBlock = new Map<number, CodeSet>();
       for (const [set, target] of moves) {
-        byBlock.getOrInsertComputed(entryAt(partition, target), () => []).push(...set);
+        const block = entryAt(partition, target);
+        byBlock.set(block, unionOfTwo(byBlock.get(block) ?? [], set));
       }
 
       const signature = `${entryAt(partition, state)}/${[...byBlock]
         .toSorted(([a], [b]) => a - b)
-        .map(([block, runs]) => `${block}:${JSON.stringify(setOf(runs))}`)
+        .map(([block, runs]) => `${block}:${JSON.stringify(runs)}`)
         .join(";")}`;
 
       return numbering.getOrInsertComputed(signature, () => numbering.size);
@@ -2860,12 +2928,13 @@ const minimized = (dfa: Dfa): Dfa => {
   return {
     accepting: representative.map((state) => entryAt(dfa.accepting, state)),
     moves: representative.map((state) => {
-      const byBlock = new Map<number, CodeRange[]>();
+      const byBlock = new Map<number, CodeSet>();
       for (const [set, target] of entryAt(dfa.moves, state)) {
-        byBlock.getOrInsertComputed(entryAt(merged, target), () => []).push(...set);
+        const block = entryAt(merged, target);
+        byBlock.set(block, unionOfTwo(byBlock.get(block) ?? [], set));
       }
 
-      return [...byBlock].map(([block, runs]): readonly [CodeSet, number] => [setOf(runs), block]);
+      return [...byBlock].map(([block, runs]): readonly [CodeSet, number] => [runs, block]);
     }),
   };
 };
@@ -2893,7 +2962,7 @@ const dfaOf = (tree: Regex): Option.Option<Dfa> => {
 
     const candidates = successorsOf(automaton, state);
     const points = representatives(candidates.map((at) => entryAt(automaton.sets, at)));
-    const byTarget = new Map<number, CodeRange[]>();
+    const byTarget = new Map<number, [number, number][]>();
     // Each point's run ends before the next point, the last's at the code space's end.
     for (const [point, after] of Arr.zip(points, [...points.slice(1), codeSpaceEnd])) {
       const next = candidates.filter((at) => holds(entryAt(automaton.sets, at), point));
@@ -2903,13 +2972,19 @@ const dfaOf = (tree: Regex): Option.Option<Dfa> => {
 
           return states.length - 1;
         });
-        byTarget.getOrInsertComputed(target, () => []).push([point, after - 1]);
+        // The points ascend, so a target's runs do too, and a run that starts where the last
+        // ended joins it: each target's runs are a set as they are written.
+        const runs = byTarget.getOrInsertComputed(target, () => []);
+        const last = runs.at(-1);
+        if (last !== undefined && last[1] + 1 === point) {
+          last[1] = after - 1;
+        } else {
+          runs.push([point, after - 1]);
+        }
       }
     }
 
-    moves.push(
-      [...byTarget].map(([target, runs]): readonly [CodeSet, number] => [setOf(runs), target]),
-    );
+    moves.push([...byTarget].map(([target, runs]): readonly [CodeSet, number] => [runs, target]));
   }
 
   return Option.some(
