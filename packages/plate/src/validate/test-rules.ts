@@ -58,10 +58,13 @@ import {
   declarationsOf,
   holdsUnexpanded,
   masteryRange,
+  placingOf,
   printedVariableReferences,
   processingRefusals,
+  quotation,
   recordFieldRefusals,
   repeatedField,
+  tableHeaders,
 } from "#plate/validate/rules.ts";
 import type { NamedVariable, PrefixedTyper, VariableScope } from "#plate/validate/rules.ts";
 import { governingTables } from "#plate/validate/structure.ts";
@@ -1032,7 +1035,12 @@ const branchTarget = (
  * `base-type` is `value-type`, at the paths and with the details an item's gets
  * (`recordFieldRefusals`, `info.txt:73046`). A `data-ssml` value that is not Data-SSML JSON, in a
  * rubric block or test feedback of a test or a section, is `attribute-type`, `check: "data-ssml"`,
- * as an item's is ({@link dataSsml}, the operator's P3).
+ * as an item's is ({@link dataSsml}, the operator's P3). Readings 126 and 127 name no document
+ * kind, so a rubric block's and a test feedback's content is judged as an item's body is: a `td`'s
+ * or a `th`'s `headers` that names no header of the cell's own table, or names one twice, is
+ * `attribute-type`, `check: "headers"` ({@link tableHeaders}, reading 126, E29), and a `q` a
+ * quotation mark stands against is `text-not-allowed`, `check: "quotation"` ({@link quotation},
+ * reading 127, E30), each read through the document's own placing ({@link placingOf}).
  *
  * A section's parts are not counted: a section that holds a rubric block alone, or nothing, is
  * valid, since reading 26 holds that "an assessment section may hold no part".
@@ -1097,6 +1105,7 @@ export const checkTestRules = (source: SourceDocument, tables: Tables): readonly
     resolvesAll: test && !includes && !placesSections,
   });
   const processing = Map.groupBy(processingRefusals(source, tables, unknownPrefix), elementPathOf);
+  const placing = placingOf(source);
   const placed = visits.flatMap((visit) => {
     const atVisit = processing.get(visit.path) ?? [];
     processing.delete(visit.path);
@@ -1118,6 +1127,8 @@ export const checkTestRules = (source: SourceDocument, tables: Tables): readonly
       }),
       ...selectionCount(source, visit),
       ...branchTarget(source, visit, branches),
+      ...tableHeaders(source, visit, placing),
+      ...quotation(source, visit, placing),
       ...dataSsml(source, visit, tables),
       ...atVisit,
     ];
