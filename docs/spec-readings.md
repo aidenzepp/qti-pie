@@ -3042,13 +3042,16 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat
      FIX-LOMLANG.)
 152. **A value names something only where it is an NCName: a variable reference's, an interaction's binding, a
-     declaration's `identifier` and a record field's `field-identifier`. Any other value names nothing: no row holds
-     it as a name, and its value domain alone refuses it.** The ASI XSD types each such attribute `IdentifierDType`,
+     declaration's `identifier`, a record field's `field-identifier`, a test part's, section's, section ref's or item
+     ref's `identifier` and a `cp:dependency`'s `identifierref`. Any other value names nothing: no row holds it as a
+     name, and its value domain alone refuses it.** The ASI XSD types each such attribute `IdentifierDType`,
      which restricts `xs:NCName` (`imsqti_asiv3p0_v1p0.xsd`), or, in a literal-or-reference union, holds the
      variable by its `VariableStringDType` member, an `xs:NCName` too (a printed variable's `base` and `index`, a
      random integer's `min` and `max`, a rounding's `figures`), or by `EncVariableStringDType`, an NCName between
-     braces. A form outside a type's lexical space denotes no value of it (XML Schema Part 2, §2.3), so `""`, a form
-     of whitespace alone, `1a`, `a b`, or a name only XML 1.0's fifth edition admits, such as one that starts with
+     braces. IMS Content Packaging 1.2's binding types a `cp:dependency`'s `identifierref` `xs:IDREF`, which restricts
+     `xs:NCName` (`imsqtiv3p0_imscpv1p2_v1p0.xsd`). A form outside a type's lexical space denotes no value of it (XML
+     Schema Part 2, §2.3), so `""`, a form of whitespace alone, `1a`, `a b`, or a name only XML 1.0's fifth edition
+     admits, such as one that starts with
      ARABIC-INDIC DIGIT ZERO, which the `Letter` tables `\i` and `\c` read (XML Schema Part 2, Appendix F) hold as a
      digit, names no variable, declaration or field. It shares no name with another, no
      reference resolves to it, and the law a reference, a binding or a name is held to does not judge it; the
@@ -3063,7 +3066,8 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      ask a row of every declaration, still break beside its value domain, as they did for an empty identifier
      before; that wants the declaration's name as a row of its own, as `RecordFieldName` is a field's. This
      binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
-     coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-NCNAME.)
+     coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-NCNAME.) (Amended 2026-11-09,
+     decision 457 (2).)
 153. **A record has no base type, so no value stands for one: a law about a record's whole value judges its cardinality,
      and a law over a base type reads the declaration's own, where it writes one.** The information model says
      "Variables with record cardinality have no base-type" (tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3,
