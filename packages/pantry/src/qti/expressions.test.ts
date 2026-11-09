@@ -195,16 +195,18 @@ describe("qti/expressions.ts, declared", () => {
 
   it("names each check by a law whose rule it keeps", () => {
     // Oracle: the rule table of plan §2.2 (P2, P8, P20 to P27, P29) and the C17 proofs' `derived`,
-    // over the module's checks and the checks over its query `HeldType` (`#pantry/qti/queries.ts`),
-    // as `Qti` holds them.
+    // over the module's checks and the checks over its queries `HeldType` and `DeclaredTarget`
+    // (`#pantry/qti/queries.ts`), as `Qti` holds them.
+    const queries: ReadonlySet<unknown> = new Set([
+      Qti.relations.HeldType,
+      Qti.relations.DeclaredTarget,
+    ]);
     const named = new Set([
       ...expressionLaws.flatMap((statement) =>
         statement.kind === "check" ? [statement.name] : [],
       ),
       ...Qti.statements.flatMap((statement) =>
-        statement.kind === "check" && statement.relation === Qti.relations.HeldType
-          ? [statement.name]
-          : [],
+        statement.kind === "check" && queries.has(statement.relation) ? [statement.name] : [],
       ),
     ]);
 
@@ -695,6 +697,9 @@ describe("qti/expressions.ts, a test's braced reference that names no variable (
 
 describe("qti/expressions.ts, an LTI item ref", () => {
   const [lti] = linkResourceTypes;
+  // A reading through a found item ref that names an LTI link is a `link` reading (`LinkReading`
+  // of `#pantry/qti/queries.ts`); one through an item ref whose item declares no such variable, or
+  // through a scope the assembly holds no element of, is `none`.
   const reading = {
     form: "split",
     found: true,
@@ -702,8 +707,7 @@ describe("qti/expressions.ts, an LTI item ref", () => {
     namedKind: itemRefKind,
     number: "",
     replaced: false,
-    resourceType: lti ?? "none",
-    source: "none",
+    source: "link",
   } as const;
 
   it("resolves a prefixed reference through an LTI item ref that names no variable, unchecked (reading 110)", () => {
@@ -720,11 +724,9 @@ describe("qti/expressions.ts, an LTI item ref", () => {
     if (resolving !== undefined) {
       assert.isTrue(selects(resolving.right, reading), "an LTI item ref's reading resolves");
       assert.isFalse(
-        selects(resolving.right, { ...reading, resourceType: "imsqti_item_xmlv3p0" }),
-        "an item ref's item that declares no such variable still does not",
+        selects(resolving.right, { ...reading, source: "none" }),
+        "an item ref's item that declares no such variable, or a scope not found, still does not",
       );
-      assert.isFalse(selects(resolving.right, { ...reading, resourceType: "none" }));
-      assert.isFalse(selects(resolving.right, { ...reading, found: false }));
       assert.isFalse(
         selects(resolving.right, { ...reading, kind: "qti-set-outcome-value" }),
         "a setter's prefixed reading resolves nothing (reading 112)",
@@ -789,7 +791,7 @@ describe("qti/expressions.ts, an LTI item ref", () => {
 
     const [mappedReading, ...moreReadings] = containmentsOf(
       [
-        "Reading",
+        "ReadingDeclaration",
         "named",
         "variable",
         "declaration",
@@ -810,14 +812,19 @@ describe("qti/expressions.ts, an LTI item ref", () => {
     assert.isDefined(mappedReading, "a mapped reading's source declaration");
     assert.deepStrictEqual(moreReadings, []);
     if (mappedReading !== undefined) {
-      const mapped = { ...reading, source: "mapped" };
+      // A reading through an item's mapping is `mapped`; one through an LTI link's mapping is
+      // `link`, never `mapped`, so it has no source declaration to hold.
+      assert.isTrue(
+        selects(mappedReading.left, { source: "mapped" }),
+        "a reading through an item's mapping",
+      );
       assert.isFalse(
-        selects(mappedReading.left, mapped),
+        selects(mappedReading.left, { source: "link" }),
         "a reading through an LTI link's mapping",
       );
-      assert.isTrue(
-        selects(mappedReading.left, { ...mapped, resourceType: "imsqti_item_xmlv3p0" }),
-        "a reading through an item's mapping",
+      assert.isFalse(
+        selects(mappedReading.left, { source: "declared" }),
+        "a declared reading, whose declaration is its document's",
       );
     }
   });
