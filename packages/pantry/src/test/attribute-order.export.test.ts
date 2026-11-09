@@ -34,7 +34,8 @@ import { ownContext } from "#pantry/import/fold.ts";
 import { rootInsertOf } from "#pantry/import/write.ts";
 import type { NodeMember } from "#pantry/import/write.ts";
 import { assemble } from "#pantry/model/assemble.ts";
-import { namesOf, shredGrammarOf } from "#pantry/model/composed.ts";
+import { shredGrammarOf } from "#pantry/model/composed.ts";
+import { names } from "#pantry/model/names.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { unshred } from "#pantry/model/unshred.ts";
@@ -65,11 +66,6 @@ const grammar = Result.getOrThrow(composed());
  * The grammar shred reads through, projected once.
  */
 const shredGrammar = shredGrammarOf(grammar);
-
-/**
- * The names unshred writes under, projected once.
- */
-const names = namesOf(grammar);
 
 /**
  * Generate a shuffle of every list of a document's rows, the order a scan may hand them over in,

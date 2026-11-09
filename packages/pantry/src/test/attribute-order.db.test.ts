@@ -27,7 +27,7 @@ import { exportEntries } from "#pantry/export/package.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
-import { namesOf } from "#pantry/model/composed.ts";
+import { names } from "#pantry/model/names.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import {
   elementsOf,
@@ -42,11 +42,6 @@ import {
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
-
-/**
- * The names a generated tree is written under.
- */
-const names = namesOf(grammar);
 
 /**
  * How long the search may run: each case imports its package twice and exports what it accepts,

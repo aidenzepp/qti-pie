@@ -29,7 +29,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Effect, Formatter, Option, Result } from "effect";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
 import { composed } from "#pantry/grammar/compose.ts";
-import { namesOf } from "#pantry/model/composed.ts";
+import { names } from "#pantry/model/names.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import {
   declaresLate,
@@ -54,11 +54,6 @@ const grammar = Result.getOrThrow(composed());
  * The tables the laws read, derived from {@link grammar} once.
  */
 const laws = lawsOf(grammar);
-
-/**
- * The names a generated tree is written under.
- */
-const names = namesOf(grammar);
 
 /**
  * Compare two texts by their UTF-16 code units, the order a set of breaches is listed in.

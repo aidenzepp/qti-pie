@@ -50,7 +50,7 @@ import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { namesOf } from "#pantry/model/composed.ts";
+import { names as documentNames } from "#pantry/model/names.ts";
 import { toXmlDocument } from "#pantry/model/unshred.ts";
 import { corpusFrom } from "#pantry/test/gen/genetic/corpus.ts";
 import {
@@ -589,7 +589,7 @@ const seedsOf = (grammar: ComposedGrammar, stream: Stream, count: number): Seeds
     stream,
     count,
   ).map(({ document }, at) => ({
-    doc: toXmlDocument(document, namesOf(grammar)),
+    doc: toXmlDocument(document, documentNames),
     name: `drawn #${String(at)}`,
   }));
   const named = [...lawful, ...drawn];

@@ -6,7 +6,8 @@ import { ConfigProvider, Effect, FileSystem, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { assemble } from "#pantry/model/assemble.ts";
-import { namesOf, shredGrammarOf } from "#pantry/model/composed.ts";
+import { shredGrammarOf } from "#pantry/model/composed.ts";
+import { names as documentNames } from "#pantry/model/names.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import { unshred } from "#pantry/model/unshred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -167,7 +168,7 @@ const roundTripped = Effect.fn("fixtures.ssml.roundTripped")(function* roundTrip
   );
   const version = Result.getOrThrow(versionOf(schemaVersions, declared));
   const shredding = shredGrammarOf(grammar);
-  const names = namesOf(grammar);
+  const names = documentNames;
   const items: string[] = [];
 
   for (const file of files.filter((entry) => entry.path.endsWith(".xml"))) {

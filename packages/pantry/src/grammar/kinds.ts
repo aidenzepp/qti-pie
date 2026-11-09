@@ -231,6 +231,36 @@ const namesIn = <V extends readonly Vocabulary[]>(
 ): readonly V[number]["attributes"][number][] => vocabulary.attributes;
 
 /**
+ * Read the element kinds of a vocabulary list with the names they are written with: each kind with
+ * a local name of a namespaced vocabulary, its local name and its namespace as crust's tree spells
+ * it (`spelledNamespace`). A nameless vocabulary's kinds name no element. `ElementName`'s rows are
+ * these, and the names a document is written under (`#pantry/model/names.ts`) are read off them
+ * with no composition.
+ *
+ * @param vocabularies - The vocabularies, in composition order.
+ * @returns Each element kind and its name, in the vocabularies' order.
+ */
+export const elementsOf = <Kind extends string>(
+  vocabularies: readonly {
+    readonly kinds: readonly { readonly handle: Kind; readonly local: string }[];
+    readonly namespace: Nameless | NamespaceName;
+  }[],
+): readonly {
+  readonly handle: Kind;
+  readonly row: { readonly local: string; readonly namespace: string };
+}[] =>
+  vocabularies.flatMap(({ kinds, namespace }) =>
+    namespace._tag === "nameless"
+      ? []
+      : kinds
+          .filter(({ local }) => local !== "")
+          .map(({ handle, local }) => ({
+            handle,
+            row: { local, namespace: spelledNamespace(namespace) },
+          })),
+  );
+
+/**
  * Generate the kind and name relations of a vocabulary list.
  *
  * A code is a handle's position in its roster, and a roster's handles only append (grizzle's D1,
@@ -261,17 +291,7 @@ export const generate = <const V extends readonly Vocabulary[]>(source: {
     ...openClasses,
     ...new Set([...source.layer, ...vocabularies.flatMap(namesIn<V>)]),
   ]);
-  // A nameless vocabulary's kinds name no element, so only a namespaced one's are elements.
-  const elements = vocabularies.flatMap(({ kinds, namespace }) =>
-    namespace._tag === "nameless"
-      ? []
-      : kinds
-          .filter(({ local }) => local !== "")
-          .map(({ handle, local }) => ({
-            handle,
-            row: { local, namespace: spelledNamespace(namespace) },
-          })),
-  );
+  const elements = elementsOf<KindOf<V>>(vocabularies);
   const kind = idField("kind", nodeKind);
   const elementName = indexed(
     closed({

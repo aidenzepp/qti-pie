@@ -11,7 +11,8 @@ import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { assemble } from "#pantry/model/assemble.ts";
 import type { AssembleError } from "#pantry/model/assemble.ts";
-import { foldGrammarOf, namesOf } from "#pantry/model/composed.ts";
+import { foldGrammarOf } from "#pantry/model/composed.ts";
+import { names } from "#pantry/model/names.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { toXmlDocument } from "#pantry/model/unshred.ts";
@@ -52,11 +53,6 @@ import type {
  * The composed grammar every property draws its trees over.
  */
 const grammar = Result.getOrThrow(composed());
-
-/**
- * The names every tree is converted back to a crust tree under.
- */
-const names = namesOf(grammar);
 
 /**
  * The trees every property is checked over: the one generator's, over the composed grammar.

@@ -30,7 +30,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, FileSystem, Layer, Option, pipe, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
-import { namesOf } from "#pantry/model/composed.ts";
+import { names as documentNames } from "#pantry/model/names.ts";
 import { toXmlDocument } from "#pantry/model/unshred.ts";
 import {
   encodedIn,
@@ -890,7 +890,7 @@ const genomes: readonly (readonly [string, CodecGenome])[] = [
   ),
   ...sample(xdmDocument(grammar), floorSeed("pantry/xml/malformed/qti-seeds"), 8).map(
     ({ document }, at) =>
-      [`QTI seed ${String(at)}`, genomeOfTree(toXmlDocument(document, namesOf(grammar)))] as const,
+      [`QTI seed ${String(at)}`, genomeOfTree(toXmlDocument(document, documentNames))] as const,
   ),
   ...lawfulDocuments(grammar, (kind) => lawfulRoots.has(kind))
     .filter(({ name }) => name.includes(" minimal "))

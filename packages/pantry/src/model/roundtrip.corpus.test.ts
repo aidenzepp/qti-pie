@@ -32,7 +32,8 @@ import type { ChildProcessSpawner } from "effect/process";
 import { composed } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { assemble } from "#pantry/model/assemble.ts";
-import { namesOf, shredGrammarOf } from "#pantry/model/composed.ts";
+import { shredGrammarOf } from "#pantry/model/composed.ts";
+import { names as documentNames } from "#pantry/model/names.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { NotQti3, ShredGrammar } from "#pantry/model/shred.ts";
@@ -89,7 +90,7 @@ const scratchRoot = path.resolve(import.meta.dirname, "..", "..", "work", "round
  */
 const composedGrammar = Effect.map(Effect.fromResult(composed()), (grammar) => ({
   grammar: shredGrammarOf(grammar),
-  names: namesOf(grammar),
+  names: documentNames,
 }));
 
 /**

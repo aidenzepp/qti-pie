@@ -20,7 +20,8 @@ import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import { typeHandle } from "#pantry/grammar/xsi.ts";
 import { assemble } from "#pantry/model/assemble.ts";
-import { foldGrammarOf, namesOf, shredGrammarOf } from "#pantry/model/composed.ts";
+import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
+import { names } from "#pantry/model/names.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { NotQti3, shred, UnmodeledVocabulary, versionOf } from "#pantry/model/shred.ts";
@@ -75,11 +76,6 @@ const grammar = Result.getOrThrow(composed());
  * The grammar shred reads through, projected once.
  */
 const shredGrammar = shredGrammarOf(grammar);
-
-/**
- * The names unshred writes under, projected once.
- */
-const names = namesOf(grammar);
 
 /**
  * The trees every property is checked over: the one generator's, over the composed grammar.

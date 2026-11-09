@@ -36,7 +36,8 @@ import { floorSeed, rotatingSeed } from "@grizzle/testing/random";
 import { sample } from "@grizzle/testing/source";
 import { runOfProcess } from "@grizzle/testing/vitest/run";
 import { composed } from "#pantry/grammar/compose.ts";
-import { namesOf, shredGrammarOf } from "#pantry/model/composed.ts";
+import { shredGrammarOf } from "#pantry/model/composed.ts";
+import { names } from "#pantry/model/names.ts";
 import { toXmlDocument } from "#pantry/model/unshred.ts";
 import {
   encodedIn,
@@ -271,7 +272,7 @@ const qtiSeeds: readonly CodecGenome[] = sample(
   floorSeed("pantry/genetic-codec/qti-seeds"),
   48,
 ).map(({ document }, at) => {
-  const written = genomeOfTree(toXmlDocument(document, namesOf(grammar)));
+  const written = genomeOfTree(toXmlDocument(document, names));
   const genome = at % 2 === 1 ? reversedAttributes(written) : written;
 
   return Option.isSome(document.doctype)
@@ -335,7 +336,7 @@ const keptWorld: CodecWorld = {
   concurrency: 1,
   directory: scratch,
   grammar: shredGrammarOf(grammar),
-  names: namesOf(grammar),
+  names,
 };
 
 /**
@@ -372,7 +373,7 @@ const searched = Effect.fnUntraced(function* searched(label: string, seed: numbe
     concurrency: 8,
     directory: `${scratch}/${label}`,
     grammar: shredGrammarOf(grammar),
-    names: namesOf(grammar),
+    names,
   };
   const judge = judgeOf(world);
   const [weights = evenWeights] = sample(

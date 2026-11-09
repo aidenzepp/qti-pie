@@ -24,7 +24,7 @@ import { readProgram } from "#pantry/import/program.ts";
 import type { ImportProgram } from "#pantry/import/program.ts";
 
 import { assemble } from "#pantry/model/assemble.ts";
-import { namesOf } from "#pantry/model/composed.ts";
+import { names } from "#pantry/model/names.ts";
 import { unshred } from "#pantry/model/unshred.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -44,11 +44,6 @@ const laws = lawsOf(grammar);
  * Every law the host judges, read once.
  */
 const hostLaws = judgedLaws(Qti);
-
-/**
- * The names the export writes under.
- */
-const names = namesOf(grammar);
 
 /**
  * The QTI 3 ASI namespace, of every item element.
