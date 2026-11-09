@@ -94,7 +94,7 @@ import {
   Compute,
   contained,
   counted,
-  Decimal,
+  decimalText,
   drawn,
   fin,
   key,
@@ -1860,18 +1860,6 @@ const integerReadOf = (names: readonly Name[]) =>
   );
 
 /**
- * The numeric an `xs:decimal` ARIA value is compared in: the widest `numeric(p, s)` with a lexical
- * form, 256 integer and 255 fraction digits (grizzle's `decimalWritable`). A value outside it is
- * not ordered, a stated limit of G-parse.
- */
-const AriaDecimal = pg.numeric(511, 255);
-
-/**
- * The lexical form {@link AriaDecimal} casts from.
- */
-const decimalForm = lexicalForm(AriaDecimal);
-
-/**
  * State the default-hotspot law of each `LastWhere` rule over `shape` (reading 80, ruling D3): a
  * hotspot of the rule's kind, under one of its parents, in one of its versions, whose shape is the
  * rule's value, is its parent's last element child, so whitespace, comments and instructions after
@@ -2297,7 +2285,19 @@ const identifierTyped = on(
  *   §3.3.5.2, reading 144), of any digits and any exponent. `NaN` is ordered against nothing, and a
  *   bound that is no `xs:double` has no value, which its value domain alone refuses, so it stands
  *   as the end of the order that holds it and the pair is not judged. And "Aria value range" over
- *   the elements that carry both ARIA bounds.
+ *   the elements that carry both ARIA bounds, each value collapsed and read where it is in
+ *   `xs:decimal`'s lexical space, grizzle's `decimalText`, the language pantry's own value domain
+ *   admits (`decimalLexical` of `#pantry/grammar/domains.ts`): the decimal it names, exactly and of
+ *   any digits, by grizzle's `Compute.parseDecimal` (XML Schema 1.1's decimalLexicalMap, Part 2
+ *   §3.3.3.1), so a value past 256 integer or 255 fraction digits is ordered as any other. A pair
+ *   with a value that is no `xs:decimal` holds the law by its own arm, since its value domain alone
+ *   refuses it; each parse's otherwise is never read, since that arm holds wherever its guard
+ *   fails. A grizzle check is a predicate and a `Compute.when`'s branch a term
+ *   (`scalar/compute/builders.ts:946` of grizzle-engine at the vendored commit), so the arms stand
+ *   beside the comparison rather than in a guard's otherwise. A value is a `keyText`, at most
+ *   `keyTextBytes`, below the 16,384 bytes the parse reads (`decimalTextMaxBytes`), and a match
+ *   guard keeps its subject's byte bound in its branch (`scalar/compute/lower.ts:930-934` and
+ *   `:2951-2958` of grizzle-engine at the vendored commit), so the parse needs no byte guard.
  * - **section documents' and fragments' references:** each one's row, counted per document and class;
  *   one placement row per instance of an item's or a test's assembly whose document is neither, a
  *   section document's or a fragment's (spec reading 117), counting as many resolutions of each
@@ -2341,16 +2341,12 @@ export const interactionLawsByName = {
   ],
   "Aria value range": [
     check("Aria_value_range", AriaRange, (r) =>
-      r.le(
-        Compute.when(
-          Compute.matches(r.min, decimalForm),
-          (min) => Compute.cast(min, AriaDecimal),
-          Decimal.negativeInfinity,
-        ),
-        Compute.when(
-          Compute.matches(r.max, decimalForm),
-          (max) => Compute.cast(max, AriaDecimal),
-          Decimal.infinity,
+      r.or(
+        r.not(Compute.matches(r.min, decimalText)),
+        r.not(Compute.matches(r.max, decimalText)),
+        r.le(
+          Compute.when(Compute.matches(r.min, decimalText), (min) => Compute.parseDecimal(min), 0n),
+          Compute.when(Compute.matches(r.max, decimalText), (max) => Compute.parseDecimal(max), 0n),
         ),
       ),
     ),

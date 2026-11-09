@@ -949,11 +949,14 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // Oracle: PostgreSQL, the `Slider_bounds` check (reading 9, the Schematron's 14Ba), each
           // bound read by grizzle's `Compute.parseDouble` (XML Schema 1.1's doubleLexicalMap,
           // reading 144) of any digits and any exponent, and the `Aria_value_range` check
-          // (§5.2.31), each value cast by G-parse.
+          // (§5.2.31), each value read by grizzle's `Compute.parseDecimal` (XML Schema 1.1's
+          // decimalLexicalMap) of any digits.
           // Bound: 5 above 3, 1e1 above 9.5, and past grizzle's former bounded form of double
           // precision (15 significant digits, an exponent of at most 293): a 17-digit lower bound
           // above 1, 1e294 above 1e293, 1e400 (+INF) above the greatest finite double, and 1e-300
-          // above -1e-400 (-0); and aria 2 above 1.5.
+          // above -1e-400 (-0); and aria 2 above 1.5, and past the former bounded form of numeric
+          // (256 integer and 255 fraction digits): 2 above 1 at 257 integer digits, and two values
+          // one unit apart in their 300th fraction digit.
           Effect.gen(function* ranges() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const row of [
@@ -969,13 +972,18 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               assert.isTrue(rejectedBy(outcome, checkNamed("Slider", "Slider_bounds")), row.lower);
             }
 
-            const outcome = yield* db.apply(
-              ChangeSet.empty(Author).insert(AriaRange, [
-                { max: "1.5", min: "2", node: strayNode(0) },
-              ]),
-              {},
-            );
-            assert.isTrue(rejectedBy(outcome, checkNamed("AriaRange", "Aria_value_range")));
+            for (const row of [
+              { max: "1.5", min: "2", node: strayNode(0) },
+              { max: `1${"0".repeat(256)}`, min: `2${"0".repeat(256)}`, node: strayNode(0) },
+              { max: `0.${"3".repeat(299)}3`, min: `0.${"3".repeat(299)}4`, node: strayNode(0) },
+            ] satisfies Fact<typeof AriaRange>[]) {
+              const outcome = yield* db.apply(ChangeSet.empty(Author).insert(AriaRange, [row]), {});
+
+              assert.isTrue(
+                rejectedBy(outcome, checkNamed("AriaRange", "Aria_value_range")),
+                `${row.min} ${row.max}`,
+              );
+            }
           }),
       );
 

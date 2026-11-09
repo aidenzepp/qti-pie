@@ -7,12 +7,13 @@
  * - **The schema's checks**, `Slider_bounds` (`#pantry/qti/interactions.ts`) and `Mastery_range`
  *   (`#pantry/qti/declarations.ts`), read from `Qti`'s statements, so the predicate judged is the
  *   one the database installs, and evaluated over each row of the case on the host as PostgreSQL
- *   evaluates it ({@link truthOf}): a `Compute.matches` guard as a regular expression under `u`,
- *   `Compute.parseDouble` as the double the decimal text names, and `float8`'s order, in which NaN
- *   equals NaN and is above every other value. A term of any other kind fails the case, so no
- *   predicate is ever judged in part. The rows are the case's bounds as the import copies them: a
- *   slider's collapsed (`InteractionAttribute.value`), a scale attribute's as written; the copies
- *   themselves are their containments' (C18), which other tests hold.
+ *   evaluates it (`#pantry/test/order-checks.ts`): a `Compute.matches` guard as a regular
+ *   expression under `u`, `Compute.parseDouble` as the double the decimal text names, and
+ *   `float8`'s order, in which NaN equals NaN and is above every other value. A term of any other
+ *   kind fails the case, so no predicate is ever judged in part. The rows are the case's bounds as
+ *   the import copies them: a slider's collapsed (`InteractionAttribute.value`), a scale
+ *   attribute's as written; the copies themselves are their containments' (C18), which other tests
+ *   hold.
  * - **The law oracle** (`documentBreaches` of `#pantry/test/oracle.ts`) names `Slider bounds` or
  *   `Mastery range` over the item that writes the case's bounds.
  * - **The reference** written here from the specifications: a form is read where it is in XML Schema
@@ -33,7 +34,6 @@
  * `Number` does, `+INF` and `0x10` among them. The search must catch each.
  */
 import { check, Compute, lexicalForm, pg } from "@bjornpagen/grizzle";
-import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
 import { required } from "@grizzle/testing/features";
@@ -42,7 +42,7 @@ import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Option, Schema } from "effect";
+import { Duration, Effect, Formatter, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
@@ -50,307 +50,15 @@ import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { MasteryCeiling, MasteryFloor } from "#pantry/qti/declarations.ts";
 import { Slider } from "#pantry/qti/interactions.ts";
-import { Qti } from "#pantry/qti/schema.ts";
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
-
-/**
- * A term of a check's predicate as grizzle keeps it in the check's description, read field by
- * field: every field the kinds {@link truthOf} and {@link doubleOf} read have, each optional.
- */
-interface StoredExpr {
-  readonly arg?: StoredExpr;
-  readonly args?: readonly StoredExpr[];
-  readonly field?: string;
-  readonly fn?: string;
-  readonly guard?: { readonly kind: string; readonly pattern?: string };
-  readonly kind: string;
-  readonly left?: StoredExpr;
-  readonly op?: string;
-  readonly otherwise?: StoredExpr;
-  readonly proved?: StoredExpr;
-  readonly right?: StoredExpr;
-  readonly subject?: StoredExpr;
-  readonly to?: { readonly kind: string; readonly type?: string };
-  readonly value?: unknown;
-}
-
-/**
- * The schema of a {@link StoredExpr}.
- */
-const StoredExprSchema: Schema.Codec<StoredExpr> = Schema.Struct({
-  arg: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredExpr> => StoredExprSchema)),
-  args: Schema.optionalKey(
-    Schema.Array(Schema.suspend((): Schema.Codec<StoredExpr> => StoredExprSchema)),
-  ),
-  field: Schema.optionalKey(Schema.String),
-  fn: Schema.optionalKey(Schema.String),
-  guard: Schema.optionalKey(
-    Schema.Struct({ kind: Schema.String, pattern: Schema.optionalKey(Schema.String) }),
-  ),
-  kind: Schema.String,
-  left: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredExpr> => StoredExprSchema)),
-  op: Schema.optionalKey(Schema.String),
-  otherwise: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredExpr> => StoredExprSchema)),
-  proved: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredExpr> => StoredExprSchema)),
-  right: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredExpr> => StoredExprSchema)),
-  subject: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredExpr> => StoredExprSchema)),
-  to: Schema.optionalKey(
-    Schema.Struct({ kind: Schema.String, type: Schema.optionalKey(Schema.String) }),
-  ),
-  value: Schema.optionalKey(Schema.Unknown),
-});
-
-/**
- * A check statement as grizzle keeps it: its relation, and its description's name and predicate.
- */
-const CheckSchema = Schema.Struct({
-  desc: Schema.Struct({ name: Schema.String, predicate: StoredExprSchema }),
-  kind: Schema.Literal("check"),
-  relation: Schema.Struct({ name: Schema.String }),
-});
-
-/**
- * A double literal as a check's description holds it that JSON cannot write as a number: its name.
- */
-const FloatNameSchema = Schema.Struct({
-  float: Schema.Literals(["Infinity", "-Infinity", "NaN"]),
-});
-
-/**
- * A row as a check reads it: its text fields by name.
- */
-type CheckRow = Readonly<Record<string, string>>;
-
-/**
- * One check, its predicate as the description holds it, over the relation it is stated on.
- */
-interface ReadCheck {
-  readonly name: string;
-  readonly predicate: StoredExpr;
-  readonly relation: string;
-}
-
-/**
- * Read a check statement.
- *
- * @param statement - The statement.
- * @returns The check, none for a statement of another kind.
- */
-const checkOf = (statement: Statement): Option.Option<ReadCheck> =>
-  Option.map(Schema.decodeUnknownOption(CheckSchema)(statement), ({ desc, relation }) => ({
-    name: desc.name,
-    predicate: desc.predicate,
-    relation: relation.name,
-  }));
-
-/**
- * The double a decimal text names, `INF`, `+INF`, `-INF` and `NaN` by name: grizzle's
- * `Compute.parseDouble` over its operand, and PostgreSQL's `float8in` over a text a guard has held
- * to a double's form, each XML Schema 1.1's doubleLexicalMap, which `Number` computes exactly for
- * the numerals drawn here.
- *
- * @param text - The text.
- * @returns The double.
- */
-const doubleNamed = (text: string): number => {
-  if (text === "INF" || text === "+INF") {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  return text === "-INF" ? Number.NEGATIVE_INFINITY : Number(text);
-};
-
-/**
- * Order two doubles as PostgreSQL's `float8` does: NaN equal to NaN and above every other value,
- * -0 equal to 0.
- *
- * @param left - The first.
- * @param right - The second.
- * @returns Below zero, zero or above zero.
- */
-const float8Order = (left: number, right: number): number => {
-  if (Number.isNaN(left) || Number.isNaN(right)) {
-    return Number(Number.isNaN(left)) - Number(Number.isNaN(right));
-  }
-
-  return Math.sign(left - right) || 0;
-};
-
-/**
- * The comparisons a check's description names, each over the order of its two sides.
- */
-const doubleComparisons: ReadonlyMap<string, (order: number) => boolean> = new Map([
-  ["eq", (order: number) => order === 0],
-  ["ge", (order: number) => order >= 0],
-  ["gt", (order: number) => order > 0],
-  ["le", (order: number) => order <= 0],
-  ["lt", (order: number) => order < 0],
-  ["ne", (order: number) => order !== 0],
-]);
-
-/**
- * The comparisons of two texts the double orders hold, each over whether the two are one text.
- */
-const textComparisons: ReadonlyMap<string, (same: boolean) => boolean> = new Map([
-  ["eq", (same: boolean) => same],
-  ["ne", (same: boolean) => !same],
-]);
-
-/**
- * Take a term's operand that its kind requires.
- *
- * @param operand - The operand, none where the description leaves it out.
- * @param what - What the term is, for the failure.
- * @returns The operand; the test fails where it is missing.
- */
-const operandOf = (operand: StoredExpr | undefined, what: string): StoredExpr =>
-  operand ?? assert.fail(`${what} without its operand`);
-
-/**
- * Evaluate a text term over a row: a field, or a text literal.
- *
- * @param expr - The term.
- * @param row - The row.
- * @returns Its value; the test fails on a term of any other kind.
- */
-const textOf = (expr: StoredExpr, row: CheckRow): string => {
-  if (expr.kind === "field") {
-    return Option.getOrElse(
-      Option.flatMap(Option.fromUndefinedOr(expr.field), (field) =>
-        Option.fromUndefinedOr(row[field]),
-      ),
-      () => assert.fail(`the row holds no field ${String(expr.field)}`),
-    );
-  }
-
-  return Option.getOrElse(
-    expr.kind === "literal" ? Schema.decodeUnknownOption(Schema.String)(expr.value) : Option.none(),
-    () => assert.fail(`a text term, not ${Formatter.format(expr)}`),
-  );
-};
-
-/**
- * Decide whether a term is a text: a field, every one of the double orders' rows being text, or a
- * text literal.
- *
- * @param expr - The term.
- * @returns Whether it is one.
- */
-const isText = (expr: StoredExpr): boolean =>
-  expr.kind === "field" ||
-  (expr.kind === "literal" && Option.isSome(Schema.decodeUnknownOption(Schema.String)(expr.value)));
-
-/**
- * Evaluate a double term over a row as PostgreSQL evaluates it: a double literal, `Compute.when`
- * over a `Compute.matches` guard, `Compute.parseDouble`, or a cast of a text into `double
- * precision`.
- *
- * @param expr - The term.
- * @param row - The row.
- * @returns Its value; the test fails on a term of any other kind.
- */
-const doubleOf = (expr: StoredExpr, row: CheckRow): number => {
-  switch (expr.kind) {
-    case "literal": {
-      return Option.getOrElse(
-        Option.orElse(Schema.decodeUnknownOption(Schema.Number)(expr.value), () =>
-          Option.map(Schema.decodeUnknownOption(FloatNameSchema)(expr.value), ({ float }) =>
-            Number(float),
-          ),
-        ),
-        () => assert.fail(`a double literal, not ${Formatter.format(expr.value)}`),
-      );
-    }
-    case "when": {
-      const { guard } = expr;
-      if (guard?.kind !== "matches" || guard.pattern === undefined) {
-        return assert.fail(`a when over a ${String(guard?.kind)} guard, which no check here holds`);
-      }
-
-      const held = new RegExp(guard.pattern, "u").test(
-        textOf(operandOf(expr.subject, "a when"), row),
-      );
-
-      return doubleOf(operandOf(held ? expr.proved : expr.otherwise, "a when"), row);
-    }
-    case "compute": {
-      return expr.fn === "parseDouble"
-        ? doubleNamed(textOf(operandOf(expr.args?.[0], "a parse"), row))
-        : assert.fail(`a Compute.${String(expr.fn)}, which no check here holds`);
-    }
-    case "cast": {
-      return expr.to?.type === "double precision"
-        ? doubleNamed(textOf(operandOf(expr.arg, "a cast"), row))
-        : assert.fail(`a cast into ${Formatter.format(expr.to)}, which no check here holds`);
-    }
-    default: {
-      return assert.fail(`a ${expr.kind} term where a double stands, which no check here holds`);
-    }
-  }
-};
-
-/**
- * Evaluate a comparison over a row: two texts by equality, two doubles by {@link float8Order}.
- *
- * @param expr - The comparison.
- * @param row - The row.
- * @returns Whether it holds; the test fails on a comparison no check here holds.
- */
-const comparisonOf = (expr: StoredExpr, row: CheckRow): boolean => {
-  const left = operandOf(expr.left, "a comparison");
-  const right = operandOf(expr.right, "a comparison");
-  const op = expr.op ?? assert.fail("a comparison without its operator");
-  if (isText(left) && isText(right)) {
-    const holds = textComparisons.get(op) ?? assert.fail(`a ${op} of two texts`);
-
-    return holds(textOf(left, row) === textOf(right, row));
-  }
-
-  const holds = doubleComparisons.get(op) ?? assert.fail(`a comparison ${op}`);
-
-  return holds(float8Order(doubleOf(left, row), doubleOf(right, row)));
-};
-
-/**
- * Evaluate a check's predicate over a row as PostgreSQL evaluates the CHECK grizzle installs for
- * it, for the kinds the two double orders hold: `or`, `and`, `not` and comparisons, over fields,
- * literals and the double terms {@link doubleOf} reads. No column is nullable, so the logic is
- * two-valued, and every operand is evaluated, so a term of any other kind anywhere fails the test.
- *
- * @param expr - The predicate.
- * @param row - The row.
- * @returns Whether it holds.
- */
-const truthOf = (expr: StoredExpr, row: CheckRow): boolean => {
-  const args = new Set((expr.args ?? []).map((arg) => truthOf(arg, row)));
-  switch (expr.kind) {
-    case "or": {
-      return args.has(true);
-    }
-    case "and": {
-      return !args.has(false);
-    }
-    case "not": {
-      return !truthOf(operandOf(expr.arg, "a not"), row);
-    }
-    case "compare": {
-      return comparisonOf(expr, row);
-    }
-    default: {
-      return assert.fail(`a ${expr.kind} term where a predicate stands, which no check here holds`);
-    }
-  }
-};
+import { breaks, checkOf, doubleNamed, installedChecks } from "#pantry/test/order-checks.ts";
+import type { CheckRow, ReadCheck } from "#pantry/test/order-checks.ts";
 
 /**
  * The checks of the two double orders that `Qti` installs, by the relation each is stated on.
  */
-const installed: readonly ReadCheck[] = Qti.statements.flatMap((statement) =>
-  Option.toArray(checkOf(statement)).filter(
-    ({ name }) => name === "Slider_bounds" || name === "Mastery_range",
-  ),
-);
+const installed = installedChecks("Slider_bounds", "Mastery_range");
 
 /**
  * Grizzle's former bounded form of `double precision`: the form the deleted checks guarded their
@@ -423,21 +131,6 @@ const former: readonly ReadCheck[] = [
     ),
   ),
 ].flatMap((statement) => Option.toArray(checkOf(statement)));
-
-/**
- * Whether some row of a case breaks one of a set of checks.
- *
- * @param checks - The checks.
- * @param rows - The case's rows, by relation.
- * @returns Whether one is broken.
- */
-const breaks = (
-  checks: readonly ReadCheck[],
-  rows: ReadonlyMap<string, readonly CheckRow[]>,
-): boolean =>
-  checks.some(({ predicate, relation }) =>
-    (rows.get(relation) ?? []).some((row) => !truthOf(predicate, row)),
-  );
 
 /**
  * XML Schema 1.0's `xs:double` lexical space (Part 2 §3.2.5.1), the reference's.

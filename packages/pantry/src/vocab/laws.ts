@@ -223,7 +223,7 @@ export const lawTable = {
   "Aria value range": {
     rule: "aria-value-range",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ARIABase.Attr_aria-valuemax (§5.2.31, and §7.1.31 of ARIABaseEmpty: 'Authors MUST ensure the value of 'aria-valuemax' is greater than or equal to the value of 'aria-valuemin''), both read as xs:decimal, as the XSD types them (interactions.ts AriaRange); reading 91 makes the MUST a law",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ARIABase.Attr_aria-valuemax (§5.2.31, and §7.1.31 of ARIABaseEmpty: 'Authors MUST ensure the value of 'aria-valuemax' is greater than or equal to the value of 'aria-valuemin''), both read as xs:decimal, as the XSD types them, each collapsed value in xs:decimal's lexical space read as the decimal XML Schema 1.1's decimalLexicalMap maps it to (Part 2 §3.3.3.1; grizzle's Compute.parseDecimal), exactly and of any digits, a pair with a value outside it not judged, since its value domain alone refuses it (interactions.ts AriaRange); reading 91 makes the MUST a law",
   },
   Arity: {
     rule: "P2",

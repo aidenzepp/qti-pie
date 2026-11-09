@@ -1776,14 +1776,20 @@ const numberOf = (form: string): number => {
 };
 
 /**
- * An `xs:decimal`'s lexical form, collapsed: a sign, integer digits and fraction digits.
+ * `xs:decimal`'s lexical space, read on a collapsed form: a sign, then integer digits with an
+ * optional point and fraction digits, or a point and fraction digits, so a digit stands on one
+ * side of the point at least (XML Schema 1.1 Part 2 §3.3.3.1, the `decimalLexicalRep` production,
+ * the lexical space pantry's own value domain admits). `+`, `.`, `-.` and the empty text are no
+ * decimal, and have no value to order.
  *
- * @see {@link https://www.w3.org/TR/xmlschema-2/#decimal | XML Schema Part 2, 3.2.3 decimal}
+ * @see {@link https://www.w3.org/TR/xmlschema11-2/#decimal | XML Schema 1.1 Part 2, 3.3.3 decimal}
  */
-const decimalForm = /^(?<sign>[+-]?)(?<whole>[0-9]*)(?:\.(?<fraction>[0-9]*))?$/u;
+const decimalForm = /^(?<sign>[+-]?)(?=\.?[0-9])(?<whole>[0-9]*)(?:\.(?<fraction>[0-9]*))?$/u;
 
 /**
- * Order two `xs:decimal` lexical forms exactly, by their values.
+ * Order two `xs:decimal` lexical forms exactly, by the values XML Schema 1.1's decimalLexicalMap
+ * gives them (Part 2 §3.3.3.1 and §E.1): each form's digits, signed, over ten to the count of its
+ * fraction digits, of any digits.
  *
  * @param a - The first form.
  * @param b - The second form.
