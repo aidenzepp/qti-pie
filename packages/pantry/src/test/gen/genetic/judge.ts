@@ -22,6 +22,7 @@
  */
 import { Cause, Effect, Exit, FileSystem, Formatter, Option, Result } from "effect";
 import type { Path, PlatformError } from "effect";
+import type { Element } from "@qti-pie/crust/tree.ts";
 import type { Law } from "@bjornpagen/grizzle";
 import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
@@ -34,10 +35,17 @@ import type { PackageInputs } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { kindNamer } from "#pantry/test/gen/genetic/corpus.ts";
 import type { Judgment } from "#pantry/test/gen/genetic/engine.ts";
-import { entriesOf } from "#pantry/test/gen/genetic/genome.ts";
+import {
+  attributeValue,
+  elementsOf,
+  entriesOf,
+  manifestPath,
+  resolvedPath,
+} from "#pantry/test/gen/genetic/genome.ts";
 import type { Genome } from "#pantry/test/gen/genetic/genome.ts";
 import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import type { HostVerdict } from "#pantry/test/gen/genetic/host-laws.ts";
+import { fixed } from "#pantry/test/gen/genetic/known.ts";
 import type { Noise } from "#pantry/test/gen/genetic/noise.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
 import { filledKeyTextFields, keyCopies } from "#pantry/test/key-copies.ts";
@@ -60,8 +68,11 @@ import type { Breach, Judgment as OracleJudgment, Laws } from "#pantry/test/orac
  * - `lone-refusal`: the oracle breaks one law alone, and the refusal the import names over the laws
  *   its rows break (`refusalOfLaws`, as the database's outcome names it) is under another rule than
  *   that law's, or carries another witness than the outcome's.
+ *
+ * Any of them may carry the stated limit its package falls under ({@link limitOf}), which
+ * {@link signatureOf} keys it by where its plain signature is a fixed entry's.
  */
-export type Disagreement =
+export type Disagreement = (
   | {
       readonly importRule: string;
       readonly kind: "lone-refusal";
@@ -98,18 +109,110 @@ export type Disagreement =
       readonly kind: "oracle-only-law";
       readonly law: string;
       readonly rule: string;
-    };
+    }
+) & { readonly limit?: Limit };
 
 /**
- * Key a disagreement by its class: its kind and the law or rules it names, and for a law the
- * import's rows break the statement that broke it (one law, `E1 derived` above all, is stated by
- * many statements, each its own writer), never its witness, so a run keeps one candidate per
- * class.
+ * A stated limit of spec reading 1 a package can fall under, each refused on both sides by a law
+ * the oracle raises or a shape the package manifest writes ({@link limitOf}).
+ */
+export type Limit =
+  | "a forbidden ancestor"
+  | "a record file whose root is a cp:manifest"
+  | "an inclusion cycle"
+  | "xml:base on a cp:resource";
+
+/**
+ * The namespace of IMS Content Packaging's elements, a package manifest's and a record file's.
+ */
+const cpNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
+
+/**
+ * The XML namespace, which `xml:base` is in.
+ */
+const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
+
+/**
+ * Tell whether an element is a Content Packaging element of a local name.
+ *
+ * @param element - The element.
+ * @param local - The local name, such as `manifest` or `resource`.
+ * @returns Whether it is that `cp:` element.
+ */
+const isCp = (element: Element, local: string): boolean =>
+  element.namespace === cpNamespace && element.local === local;
+
+/**
+ * Name the stated limit a package falls under: the first of these, in this order, that holds.
+ *
+ * 1. `a record file whose root is a cp:manifest`: the oracle raises "RootOfType" at a document whose
+ *    root is a `cp:manifest` and which the package manifest lists as `resourcemetadata/xml`
+ *    (decision 449);
+ * 2. `a forbidden ancestor`: the oracle raises "N5 admitted" (decision 452's kin);
+ * 3. `an inclusion cycle`: the oracle raises "Inclusion cycle" (decision 451's kin);
+ * 4. `xml:base on a cp:resource`: the package manifest writes `xml:base` on a `cp:resource` (reading
+ *    1's family I).
+ *
+ * A class under one of them is refused on both sides by the law that names it, so its rows' laws
+ * decide no verdict.
+ *
+ * @param breaches - The oracle's breaches, none where it did not judge every law.
+ * @param genome - The package.
+ * @returns The limit, none where the package falls under none of the four.
+ */
+export const limitOf = (breaches: readonly Breach[], genome: Genome): Option.Option<Limit> => {
+  const manifest = genome.find(({ path }) => path === manifestPath);
+  const resources =
+    manifest?.body.kind === "xml"
+      ? elementsOf(manifest.body.doc.root).flatMap(({ element }) =>
+          isCp(element, "resource") ? [element] : [],
+        )
+      : [];
+  const recordFile = (path: string): boolean => {
+    const document = genome.find((entry) => entry.path === path);
+
+    return (
+      document?.body.kind === "xml" &&
+      isCp(document.body.doc.root, "manifest") &&
+      resources.some(
+        (resource) =>
+          attributeValue(resource, "type") === "resourcemetadata/xml" &&
+          resolvedPath(manifestPath, attributeValue(resource, "href") ?? "") === path,
+      )
+    );
+  };
+  const raised = (law: string): boolean => breaches.some((breach) => breach.law === law);
+  const tests: readonly (readonly [Limit, () => boolean])[] = [
+    [
+      "a record file whose root is a cp:manifest",
+      () =>
+        breaches.some(
+          (breach) => breach.law === "RootOfType" && recordFile(breach.keys["path"] ?? ""),
+        ),
+    ],
+    ["a forbidden ancestor", () => raised("N5 admitted")],
+    ["an inclusion cycle", () => raised("Inclusion cycle")],
+    [
+      "xml:base on a cp:resource",
+      () =>
+        resources.some((resource) =>
+          resource.attributes.some(
+            ({ local, namespace }) => namespace === xmlNamespace && local === "base",
+          ),
+        ),
+    ],
+  ];
+
+  return Option.map(Option.fromUndefinedOr(tests.find(([, holds]) => holds())), ([limit]) => limit);
+};
+
+/**
+ * Key a disagreement by its class without its stated limit, as {@link signatureOf} does.
  *
  * @param disagreement - The disagreement.
- * @returns Its signature.
+ * @returns Its plain signature.
  */
-export const signatureOf = (disagreement: Disagreement): string => {
+const plainSignatureOf = (disagreement: Disagreement): string => {
   switch (disagreement.kind) {
     case "import-died":
     case "oracle-died": {
@@ -143,6 +246,27 @@ export const signatureOf = (disagreement: Disagreement): string => {
       return disagreement satisfies never;
     }
   }
+};
+
+/**
+ * Key a disagreement by its class: its kind and the law or rules it names, and for a law the
+ * import's rows break the statement that broke it (one law, `E1 derived` above all, is stated by
+ * many statements, each its own writer), never its witness, so a run keeps one candidate per
+ * class.
+ *
+ * A disagreement that carries a stated limit ({@link limitOf}) is keyed `<signature> (under
+ * <limit>)`. `judgeOne` gives it one only where its plain signature is a key of
+ * `#pantry/test/gen/genetic/known.ts` `fixed`, so no signature sits in both tables: a known class
+ * under a limit is recorded apart, and the fixed entry keeps guarding the cause it closed, which
+ * shows again under its plain key wherever no limit holds.
+ *
+ * @param disagreement - The disagreement.
+ * @returns Its signature.
+ */
+export const signatureOf = (disagreement: Disagreement): string => {
+  const plain = plainSignatureOf(disagreement);
+
+  return disagreement.limit === undefined ? plain : `${plain} (under ${disagreement.limit})`;
 };
 
 /**
@@ -678,13 +802,20 @@ const summaryOf = (oracle: OracleSide, side: ImportSide): Summary => {
 };
 
 /**
+ * The signatures of the fixed entries, each a cause a fix closed: a disagreement whose plain
+ * signature is one of them carries its stated limit, where it has one.
+ */
+const fixedKeys: ReadonlySet<string> = new Set(Object.keys(fixed));
+
+/**
  * Judge one candidate both ways and compare.
  *
  * @param genome - The candidate.
  * @param bench - The bench.
  * @param index - The candidate's number in its run, which names its scratch directory.
- * @returns The judgment: the features both sides showed, every disagreement, and each side's
- *   verdict for the metamorphic relation.
+ * @returns The judgment: the features both sides showed, every disagreement (one whose plain
+ *   signature is a fixed entry's carrying the stated limit the package falls under), and each
+ *   side's verdict for the metamorphic relation.
  */
 export const judgeOne = Effect.fnUntraced(function* judgeOne(
   genome: Genome,
@@ -722,8 +853,16 @@ export const judgeOne = Effect.fnUntraced(function* judgeOne(
         ]
       : [];
 
+  const limit = limitOf(oracle.kind === "judged" ? oracle.breaches : [], genome);
+  const limited = (disagreement: Disagreement): Disagreement =>
+    Option.match(limit, {
+      onNone: () => disagreement,
+      onSome: (under) =>
+        fixedKeys.has(signatureOf(disagreement)) ? { ...disagreement, limit: under } : disagreement,
+    });
+
   return {
-    disagreements: [...died, ...codecDisagreements(oracle, side), ...rows],
+    disagreements: [...died, ...codecDisagreements(oracle, side), ...rows].map(limited),
     features: new Set([
       ...oracleFeatures(oracle, roots, bench.grammar),
       ...importFeatures(side),
