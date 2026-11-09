@@ -7,7 +7,17 @@ changes. [`docs/spec-readings.md`](../../docs/spec-readings.md) numbers the read
 ## Unreleased
 
 The first entry lists the surface of M1 and M2, and what M3 adds to it. plate is not published,
-and both of its entry points are unstable until M3.
+and each of its entry points is unstable until M3.
+
+### Content packages on their own entry (2026-11-09)
+
+- `openPackage` and the types of its verdict, `AcceptedPackage`, `PackageResource`, `PackageTest`
+  and `PackageVerdict`, move from `@qti-pie/plate` to a new entry, `@qti-pie/plate/package`.
+  Import `openPackage` from there. `@qti-pie/plate` no longer exports them.
+- `itemRefs` and `ItemRefEntry` stay in `@qti-pie/plate`: they read an `AcceptedTest`, which
+  `open` gives without a package.
+- A host that imports only `@qti-pie/plate` no longer loads the content packaging profiles' tables
+  (423 KB of JSON), which only `openPackage` reads.
 
 ### Feedback (M3)
 

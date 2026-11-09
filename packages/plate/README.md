@@ -25,12 +25,17 @@ plate is a private workspace package of [qti-pie](../../README.md). In a sibling
 "dependencies": { "@qti-pie/plate": "workspace:*", "effect": "4.1.2" }
 ```
 
-Then run `pnpm install` from the repository root. The package has two entry points:
+Then run `pnpm install` from the repository root. The package has three entry points:
 
 | Entry point | Gives | Stability |
 | --- | --- | --- |
 | `@qti-pie/plate` | Every function, type and error in [`src/index.ts`](src/index.ts) | Unstable until M3 |
+| `@qti-pie/plate/package` | `openPackage` and its verdict's types, in [`src/package/index.ts`](src/package/index.ts) | Unstable until M3 |
 | `@qti-pie/plate/styles.css` | The default theme, [`src/styles.css`](src/styles.css) | Unstable until M3 |
+
+`openPackage` has an entry of its own because it checks a manifest against the content packaging
+profiles' tables, which load with it. A host that serves items imports `@qti-pie/plate` alone and
+never loads them.
 
 Until M3, plate's next milestone, any name or signature can change in any commit. The
 [changelog](CHANGELOG.md) records each change a host can see.
@@ -67,15 +72,8 @@ first item:
 
 ```ts
 import { Effect, Result } from "effect";
-import {
-  configure,
-  encodeSession,
-  itemView,
-  openPackage,
-  redact,
-  render,
-  startTest,
-} from "@qti-pie/plate";
+import { configure, encodeSession, itemView, redact, render, startTest } from "@qti-pie/plate";
+import { openPackage } from "@qti-pie/plate/package";
 
 const verdict = await Effect.runPromise(openPackage("package", files));
 if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") {
@@ -117,7 +115,7 @@ request. [Navigation](#navigation) moves the session on.
 | `score` | Scores a map of responses, each a `ResponseValue`, and returns the record the host stores |
 | `restore` | Gives an item's record and values back from its stored record |
 | `solution` | Gives an item's correct responses, from its record where template processing set them |
-| `openPackage` | Reads and checks a content package's files, and returns a verdict on the package |
+| `openPackage` | Reads and checks a content package's files, and returns a verdict on the package. It comes from `@qti-pie/plate/package` |
 | `itemRefs` | Lists a test's item refs in document order |
 | `startTest` | Starts a test session, and fails with `EngineFailure` when a template default of its first part does not fit its variable |
 | `current`, `itemView` | Give what a session shows now, and what any of its items renders with |

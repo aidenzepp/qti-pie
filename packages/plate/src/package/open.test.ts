@@ -5,7 +5,7 @@ import { Effect, Option, Result } from "effect";
 import { corpusRoot, readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import { readManifest } from "#plate/package/manifest.ts";
-import { acceptPackageForTest, itemRefs, openPackage } from "#plate/package/open.ts";
+import { acceptPackageForTest, openPackage } from "#plate/package/open.ts";
 import type {
   AcceptedPackage,
   PackageResource,
@@ -13,6 +13,7 @@ import type {
   PackageVerdict,
 } from "#plate/package/open.ts";
 import { fileLocation, manifestFile } from "#plate/package/store.ts";
+import { itemRefs } from "#plate/session/item-refs.ts";
 import type { Location, Refusal } from "#plate/validate/refusal.ts";
 import { describeRefusal } from "#plate/validate/verdict.ts";
 import type { AcceptedTest } from "#plate/validate/verdict.ts";

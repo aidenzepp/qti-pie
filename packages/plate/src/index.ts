@@ -4,22 +4,22 @@
  *
  * Items: `open` checks a document, `begin` starts an item's stored record, `redact` and `render`
  * show an item, `checkResponses` and `score` take its answers, `solution` gives its correct
- * responses and `restore` reads its stored record back. Packages and tests: `openPackage` checks a
- * content package and `itemRefs` lists a test's item refs; `startTest`, `current`, `itemView`,
- * `permits`, `allowedIntents` and `advance` run a test session, which `encodeSession` and
- * `decodeSession` store; `navigationState` and the intent helpers (`intentName`, `encodeIntent`,
- * `decodeIntent`) are the navigation API, and `renderNavigation` adds plain-button parts over it.
- * `results` writes a Results Reporting document.
+ * responses and `restore` reads its stored record back. Tests: `itemRefs` lists a test's item refs;
+ * `startTest`, `current`, `itemView`, `permits`, `allowedIntents` and `advance` run a test session,
+ * which `encodeSession` and `decodeSession` store; `navigationState` and the intent helpers
+ * (`intentName`, `encodeIntent`, `decodeIntent`) are the navigation API, and `renderNavigation`
+ * adds plain-button parts over it. `results` writes a Results Reporting document. Content packages
+ * have their own entry, `@qti-pie/plate/package` (`src/package/index.ts`), so that a host serving
+ * items never loads the package tables `openPackage` checks a manifest by.
  *
- * `open`, `openPackage` and `configure` return Effects. Every other function is plain, callable
- * with no Effect runtime: it returns its value, or a `Result` when a caller can make it fail.
+ * `open` and `configure` return Effects. Every other function is plain, callable with no Effect
+ * runtime: it returns its value, or a `Result` when a caller can make it fail.
  *
- * Nothing else under `src/` is reachable from outside the package. The tests' seams
- * (`acceptForTest`, `acceptTestForTest`, `acceptSectionForTest`, `acceptStimulusForTest` and
- * `acceptPackageForTest`) and the redacted item's brand constructor (`brandRedacted`) are never
- * exported here, so only `check` makes an `Accepted` and the other accepted roots, only
- * `openPackage` makes an `AcceptedPackage`, and only `redact` and `decodeRedacted` make a
- * `Redacted`.
+ * Nothing else under `src/` is reachable from outside the package but the package entry. The
+ * tests' seams (`acceptForTest`, `acceptTestForTest`, `acceptSectionForTest` and
+ * `acceptStimulusForTest`) and the redacted item's brand constructor (`brandRedacted`) are never
+ * exported here, so only `check` makes an `Accepted` and the other accepted roots, and only
+ * `redact` and `decodeRedacted` make a `Redacted`.
  *
  * @module
  */
@@ -105,16 +105,6 @@ export type {
 
 export { navigationState, renderNavigation } from "#plate/navigation.ts";
 
-export type {
-  AcceptedPackage,
-  ItemRefEntry,
-  PackageResource,
-  PackageTest,
-  PackageVerdict,
-} from "#plate/package/open.ts";
-
-export { itemRefs, openPackage } from "#plate/package/open.ts";
-
 export type { Posting, Redacted, RenderMode, ValidationMessage } from "#plate/payload.ts";
 
 export { postings } from "#plate/payload.ts";
@@ -148,6 +138,10 @@ export { advance, IntentRefused, StepResponseMisfit } from "#plate/session/advan
 export { UnknownItemRef } from "#plate/session/control.ts";
 
 export { allowedIntents } from "#plate/session/intents.ts";
+
+export type { ItemRefEntry } from "#plate/session/item-refs.ts";
+
+export { itemRefs } from "#plate/session/item-refs.ts";
 
 export type {
   Intent,

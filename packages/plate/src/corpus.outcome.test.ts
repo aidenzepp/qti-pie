@@ -15,7 +15,8 @@ import {
   solution,
   startTest,
 } from "#plate/index.ts";
-import type { Configuration, Intent, PackageTest, Step, TestSession, Value } from "#plate/index.ts";
+import type { Configuration, Intent, Step, TestSession, Value } from "#plate/index.ts";
+import type { PackageTest } from "#plate/package/index.ts";
 import { validateAgainst } from "#plate/test/xsd.ts";
 
 /**

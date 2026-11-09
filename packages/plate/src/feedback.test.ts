@@ -35,7 +35,6 @@ import {
   configure,
   encodeRedacted,
   open,
-  openPackage,
   postings,
   redact,
   render,
@@ -53,6 +52,7 @@ import type {
 } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
+import { openPackage } from "#plate/package/index.ts";
 import { textOf } from "#plate/test/accessibility.ts";
 import { float } from "#plate/test/fixtures.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";

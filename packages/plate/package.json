@@ -10,6 +10,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./package": "./src/package/index.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {

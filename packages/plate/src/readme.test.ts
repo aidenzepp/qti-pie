@@ -455,6 +455,24 @@ describe("README.md", () => {
     }
   });
 
+  it("imports from @qti-pie/plate/package only names src/package/index.ts exports, openPackage among them", () => {
+    const exported = new Set(
+      readImports(packageFile("src/package/index.ts")).imports.flatMap(({ names }) =>
+        names.map(({ name }) => name),
+      ),
+    );
+    const imported = codeBlocks(readme()).flatMap((block) =>
+      readImports(scriptOf(block)).imports.flatMap(({ names, specifier }) =>
+        specifier === `${packageName}/package` ? names.map(({ name }) => name) : [],
+      ),
+    );
+
+    assert.include(imported, "openPackage");
+    for (const name of imported) {
+      assert.isTrue(exported.has(name), `${name} is imported from ${packageName}/package`);
+    }
+  });
+
   it("names the stylesheet's entry point, which resolves to src/styles.css", () => {
     const entry = `${packageName}/styles.css`;
 

@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import * as plate from "#plate/index.ts";
 import { PartlessTestDefect } from "#plate/navigation.ts";
+import * as packageEntry from "#plate/package/index.ts";
 import { acceptPackageForTest } from "#plate/package/open.ts";
 import { brandRedacted } from "#plate/payload.ts";
 import {
@@ -50,13 +51,13 @@ interface Crossing {
 
 /**
  * The specifiers the core may not load (rules `b454bdf7` and `6f47762b`, and the composition ruling
- * `a9d04969` points 1 and 5, so the one `"."` entry stays callable anywhere): the dev playground,
- * the example hosts, the conformance ledger, test support, the Node-only corpus reader, every Node
- * built-in, the HTML parser the tests use, the browser drivers, the test runner by package
- * (`vitest`, every `@vitest/` package, `@effect/vitest` and `vite-plus`, so a re-export under
- * another name, such as vite-plus's in-page context re-exporting `vitest/browser`, cannot route
- * around the list), the QTI database package and grizzle. One that ends in `/` or `:` forbids every
- * specifier it begins; any other forbids itself and its subpaths.
+ * `a9d04969` points 1 and 5, so the `"."` and `"./package"` entries stay callable anywhere): the
+ * dev playground, the example hosts, the conformance ledger, test support, the Node-only corpus
+ * reader, every Node built-in, the HTML parser the tests use, the browser drivers, the test runner
+ * by package (`vitest`, every `@vitest/` package, `@effect/vitest` and `vite-plus`, so a re-export
+ * under another name, such as vite-plus's in-page context re-exporting `vitest/browser`, cannot
+ * route around the list), the QTI database package and grizzle. One that ends in `/` or `:`
+ * forbids every specifier it begins; any other forbids itself and its subpaths.
  */
 const forbiddenSpecifiers: readonly string[] = [
   "#plate/dev/",
@@ -287,19 +288,53 @@ const modules = sourceModules();
 const closure = valueClosure(modules, ["src/index.ts"]);
 
 /**
- * List the public surface's exports that are one of some named values, by its own name or under
- * any other.
+ * List the exports of both public entries, `src/index.ts` and `src/package/index.ts`, that are one
+ * of some named values, by its own name or under any other.
  *
  * @param named The values, by the name each is declared with.
- * @returns The names `src/index.ts` exports one of them under, empty when it exports none.
+ * @returns `<entry>.<name>` for each name an entry exports one of them under, empty when neither
+ *   exports one.
  */
 const exportedAmong = (named: ReadonlyMap<string, unknown>): readonly string[] => {
   const values = new Set(named.values());
 
-  return Object.entries(plate).flatMap(([name, value]) =>
-    named.has(name) || values.has(value) ? [name] : [],
+  const surfaces: readonly (readonly [string, object])[] = [
+    ["index", plate],
+    ["package", packageEntry],
+  ];
+
+  return surfaces.flatMap(([entry, surface]) =>
+    Object.entries(surface).flatMap(([name, value]) =>
+      named.has(name) || values.has(value) ? [`${entry}.${name}`] : [],
+    ),
   );
 };
+
+/**
+ * The committed JSON modules the serving entry may load, each with what reads it while a host
+ * serves items. Any other JSON its closure reaches is a table serving never reads, loaded and
+ * parsed on every cold start for nothing.
+ */
+const servedTables = {
+  "src/model/blocks.generated.json":
+    "the block names of XML Schema Part 2, which model/regex.ts reads to check a pattern facet",
+  "src/validate/tables.generated.json": "the XSD tables, which open checks a document by",
+} satisfies Readonly<Record<string, string>>;
+
+/**
+ * List the committed JSON modules the roots reach that {@link servedTables} does not name.
+ *
+ * @param sources The modules' sources, by path under the package (`src/<x>`).
+ * @param roots The paths to start from.
+ * @returns Each such JSON module, in the order the walk first reached it.
+ */
+const unservedTables = (
+  sources: ReadonlyMap<string, string>,
+  roots: readonly string[],
+): readonly string[] =>
+  valueClosure(sources, roots).filter(
+    (module) => module.endsWith(".json") && !Object.hasOwn(servedTables, module),
+  );
 
 /**
  * The parts of `package.json` this witness reads.
@@ -334,7 +369,7 @@ describe("the core, from src/index.ts", () => {
     );
   });
 
-  it("exports no test seam, brand constructor or defect, under any name (ledger security note)", () => {
+  it("exports from neither entry a test seam, brand constructor or defect, under any name (ledger security note)", () => {
     // The seams that make an accepted root, an `AcceptedPackage` or a `Redacted` without `check`,
     // `openPackage` or `redact`, and the defect no accepted test can raise.
     const seams: ReadonlyMap<string, unknown> = new Map<string, unknown>([
@@ -348,6 +383,7 @@ describe("the core, from src/index.ts", () => {
     ]);
 
     assert.includeMembers(Object.keys(plate), ["open", "redact"]);
+    assert.includeMembers(Object.keys(packageEntry), ["openPackage"]);
     assert.deepStrictEqual(exportedAmong(seams), []);
   });
 
@@ -356,11 +392,53 @@ describe("the core, from src/index.ts", () => {
     assert.deepStrictEqual(exportedAmong(new Map([["acceptMarkedTest", acceptMarkedTest]])), []);
   });
 
-  it("publishes src/index.ts as the exports map's only script module", () => {
+  it("publishes src/index.ts and src/package/index.ts as the exports map's only script modules", () => {
     assert.deepStrictEqual(
       Object.entries(readManifest().exports).filter(([, target]) => /\.[cm]?[jt]s$/u.test(target)),
-      [[".", "./src/index.ts"]],
+      [
+        [".", "./src/index.ts"],
+        ["./package", "./src/package/index.ts"],
+      ],
     );
+  });
+
+  it.effect(
+    "resolves @qti-pie/plate/package through the exports map to the package entry, which exports openPackage alone",
+    () =>
+      Effect.gen(function* packageSelfImport() {
+        const surface = yield* Effect.promise(() => import("@qti-pie/plate/package"));
+
+        assert.deepStrictEqual(Object.keys(surface), ["openPackage"]);
+        assert.strictEqual(surface.openPackage, packageEntry.openPackage);
+      }),
+  );
+
+  it("loads from src/package/index.ts, the package entry, none of what the core may not load", () => {
+    assert.deepStrictEqual(crossings(modules, ["src/package/index.ts"]), []);
+  });
+
+  it('loads from the serving entry, the exports map\'s ".", no committed JSON but the XSD tables and the block table', () => {
+    const entry = readManifest().exports["."]?.replace(/^\.\//u, "") ?? "";
+
+    assert.strictEqual(entry, "src/index.ts");
+    assert.deepStrictEqual(unservedTables(modules, [entry]), []);
+    // The package tables are the package entry's alone.
+    assert.includeMembers(
+      [...valueClosure(modules, ["src/package/index.ts"])],
+      ["src/package/tables.generated.json"],
+    );
+  });
+
+  it("refuses the package tables on the serving entry once it re-exports openPackage (the plant)", () => {
+    const planted = new Map(modules);
+    planted.set(
+      "src/index.ts",
+      `${modules.get("src/index.ts") ?? ""}\nexport { openPackage } from "#plate/package/open.ts";\n`,
+    );
+
+    assert.deepStrictEqual(unservedTables(planted, ["src/index.ts"]), [
+      "src/package/tables.generated.json",
+    ]);
   });
 
   it("holds playwright-core and playwright at exactly 1.64.1 and @vitest/browser-playwright at exactly 5.1.0 among the devDependencies, never the dependencies", () => {

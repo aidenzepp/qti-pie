@@ -1923,7 +1923,6 @@ describe("the public surface", () => {
         "itemView",
         "navigationState",
         "open",
-        "openPackage",
         "partition",
         "permits",
         "postings",
