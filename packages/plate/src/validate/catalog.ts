@@ -38,7 +38,8 @@ import { xmlWhitespaceRun, xsBooleanOf } from "#plate/model/attributes.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
-import { governingTables, idHoldersOf } from "#plate/validate/structure.ts";
+import { holdsUnexpanded } from "#plate/validate/rules.ts";
+import { governingTables, idHoldersOf, isIdrefType } from "#plate/validate/structure.ts";
 import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
 
 /**
@@ -169,9 +170,9 @@ interface Unresolved {
 
 /**
  * Find an element's `data-catalog-idref` as the ID table reads it: an attribute in no namespace
- * that the table governing the element declares, not prohibited, typed `xs:IDREF`, as QTI's XSD
- * types it everywhere it declares it. An undeclared one is no IDREF, and the structural walk
- * judges it.
+ * that the table governing the element declares, not prohibited, of a type the ID table reads as an
+ * IDREF ({@link isIdrefType}), as QTI's XSD types it `xs:IDREF` everywhere it declares it. An
+ * undeclared one is no IDREF, and the structural walk judges it.
  *
  * @param element The element.
  * @param table The table that governs it.
@@ -186,8 +187,7 @@ const catalogReferenceOf = (
       declaration.namespace === "" &&
       declaration.local === referenceName &&
       declaration.use !== "prohibited" &&
-      declaration.type.kind === "builtin" &&
-      declaration.type.name === "IDREF",
+      isIdrefType(declaration.type),
   )
     ? attributeOf(element, referenceName)
     : Option.none();
@@ -325,12 +325,7 @@ const checkReference = (
 export const checkCatalogs = (source: SourceDocument, tables: Tables): readonly Refusal[] => {
   const governing = governingTables(source, tables);
   const visits = [...walk(source)].filter((visit) => governing.has(visit.element));
-  const unexpanded = visits.some(
-    ({ element }) =>
-      element.attributes.some((attribute) => attribute.references.length > 0) ||
-      element.children.some((child) => child.kind === "entity"),
-  );
-  if (unexpanded) {
+  if (visits.some((visit) => holdsUnexpanded(visit.element))) {
     return [];
   }
 

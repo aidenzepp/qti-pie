@@ -236,9 +236,11 @@ const checkedInstance = (
  * is computed, so a printed variable that names a template variable shows the notice
  * `qti-printed-variable`, which the redacted item's notices name and the record's do not.
  *
- * It takes only `check`'s `Accepted` (rule `723e580c`), so a hand-built item, which may hold a
- * `javascript:` href or an `onclick` that `check` would strip, never reaches {@link render}. It
- * always gives a redacted item: what it cannot print shows as a notice.
+ * It takes only `check`'s `Accepted` (rule `723e580c`), so a hand-built item never reaches
+ * {@link render} unchecked: `check` drops a `javascript:` href, and refuses an `onclick` on every
+ * element the Schematron's extension-attribute lists cover (reading 90, E10). The emitter still
+ * drops every event-handler attribute it meets, as defence in depth. It always gives a redacted
+ * item: what it cannot print shows as a notice.
  *
  * @example
  *   const shown = redact(accepted, record, configuration); // record: the attempt's Restored["record"]

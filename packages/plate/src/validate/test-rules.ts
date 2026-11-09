@@ -39,7 +39,7 @@
  *
  * @module
  */
-import { Option, Result } from "effect";
+import { Option } from "effect";
 import { attributePath, qtiNamespace, walk, xincludeNamespace } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -50,12 +50,13 @@ import type {
 import { xsBooleanOf } from "#plate/model/attributes.ts";
 import { singleOf } from "#plate/model/expression.ts";
 import { integerLexical, isNcName, trimXmlSpace } from "#plate/model/values.ts";
-import { decodeDataSsml } from "#plate/validate/data-ssml.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import {
+  dataSsml,
   declarationType,
   declarationsOf,
+  holdsUnexpanded,
   masteryRange,
   printedVariableReferences,
   processingRefusals,
@@ -344,17 +345,6 @@ const holdsInclude = (element: SourceElement): boolean =>
   element.children.some(
     (child) => child.kind === "element" && child.namespace === xincludeNamespace,
   );
-
-/**
- * Report whether a judged element holds an unexpanded entity reference where a rule may read it:
- * in an attribute's value or among its children.
- *
- * @param element The element.
- * @returns Whether its attributes or its children hold a reference whose value is unknown.
- */
-const holdsUnexpanded = (element: SourceElement): boolean =>
-  element.attributes.some((attribute) => attribute.references.length > 0) ||
-  element.children.some((child) => child.kind === "entity");
 
 /**
  * Apply `duplicate-identifier` to one element: a part's, a section's, an item ref's or a section
@@ -799,6 +789,13 @@ const rootScope: BranchScope = {
  * (`keep-together`, true when unwritten). An item ref or a section ref takes its parent's part and
  * replacement, and draws no order.
  *
+ * It reads the judged visits, where `openPackage`'s E8b (`layoutOf` in `#plate/package/open.ts`)
+ * reads every element. The two differ only for an identified element in content the structural walk
+ * passes over (what a `skip` wildcard admits, or an element under a `strict` one of a namespace
+ * plate holds no tables for). No such element is a part, section or item ref the test delivers, so
+ * the judged visits are the right reading, and a target that names one names nothing of the test.
+ * The walks stay apart: moving E8b onto the judged visits would change what it refuses there.
+ *
  * @param visits The judged visits, in document order, each parent before its children.
  * @param context Whether the document is a section document a section ref places, and whether a
  *   target no name gives is refused as `unknown`.
@@ -1012,66 +1009,6 @@ const branchTarget = (
         target,
       }),
     ],
-  });
-};
-
-/**
- * Report whether an element's kind declares `data-ssml`: a QTI element whose name's table holds the
- * attribute in no namespace. The XSD declares it on exactly the 45 elements the Data-SSML binding
- * lists (§5), a rubric block among them; on any other, only an attribute wildcard admits a
- * `data-ssml`, laxly and unchecked, so nothing the standard states makes its value Data-SSML and it
- * is not refused (rule `5b8ee08b`). The item rules judge an item's by the same test.
- *
- * @param tables The tables generated from the QTI XSD.
- * @param element The element.
- * @returns Whether its kind declares `data-ssml`.
- */
-const declaresDataSsml = (tables: Tables, element: SourceElement): boolean =>
-  element.namespace === qtiNamespace &&
-  Option.exists(Option.fromUndefinedOr(tables.elements[element.local]), (table) =>
-    table.attributes.some(
-      (attribute) => attribute.namespace === "" && attribute.local === "data-ssml",
-    ),
-  );
-
-/**
- * Apply `attribute-type` with `check: "data-ssml"` to a `data-ssml` value that is not Data-SSML
- * JSON (the operator's P3), where the element's kind declares the attribute
- * ({@link declaresDataSsml}): the value, with its entities replaced, decodes as the Data-SSML
- * binding's JSON (`decodeDataSsml`). The XSD types it `xs:string`, so the binding alone judges it.
- *
- * The item rules judge an item's `data-ssml` by the same decoder, with the same refusal; this one
- * judges the documents they do not, a test's and a section's rubric blocks and test feedback here,
- * and a stimulus's body through the verdict's own stimulus rules. A value that decodes keeps the
- * notices its document has.
- *
- * @param source The document.
- * @param visit The element's visit.
- * @param tables The tables generated from the QTI XSD.
- * @returns One refusal at the attribute's path, naming the first `problem` the decoding found;
- *   none when the value is Data-SSML JSON, and for an element that carries no `data-ssml` or whose
- *   kind does not declare it.
- */
-export const dataSsml = (
-  source: SourceDocument,
-  visit: Visit,
-  tables: Tables,
-): readonly Refusal[] => {
-  const attribute = attributeOf(visit.element, "data-ssml");
-  if (Option.isNone(attribute) || !declaresDataSsml(tables, visit.element)) {
-    return [];
-  }
-
-  return Result.match(decodeDataSsml(attribute.value.value), {
-    onFailure: ({ problem }) => [
-      refusal(source, "attribute-type", attributePath(visit.path, attribute.value), {
-        attribute: attribute.value.local,
-        check: "data-ssml",
-        element: visit.element.local,
-        problem,
-      }),
-    ],
-    onSuccess: () => [],
   });
 };
 

@@ -736,8 +736,9 @@ export type ResourceType = (typeof resourceTypes)[CpVersion][number];
 
 /**
  * The resource types of an LTI link, which an item ref may name in place of an item (reading 110,
- * "a variable mapping and a template default name variables an item declares, so under an item ref
- * that names an LTI link both are refused"; the implementation guide's section 6.2.9,
+ * "under an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded
+ * limit, and a template default is refused", and a prefixed reference through it is accepted
+ * unchecked too, reading 106; the implementation guide's section 6.2.9,
  * informative): the LTI types of both profiles, 3.0.0's `imsbasiclti_xmlv1p3` and 3.0.1's
  * `imslti_xmlv1p1` and `imsltia_xmlv1p0`, as pantry's `linkResourceTypes` reads them from its
  * roster (`packages/pantry/src/qti/tests.ts`). Whether a manifest's profile admits the type is the
@@ -825,8 +826,9 @@ export type AnsweredStatus = (typeof answeredStatuses)[number];
  * verdict at its path, never a notice, and the delivered sequence ignores it.
  *
  * An element feature is keyed by its QTI name. `qti-adaptive-selection` is selection, which M3
- * delivers. `xi:include` is XInclude's `include`, which is never fetched (S-6), so the content it
- * names is missing from the delivered sequence. `allow-comment="true"` is a session control that
+ * delivers. `xi:include` is XInclude's `include`, which is never fetched (S-6): a test holding one
+ * is left unchecked (E23) and never built, so no accepted test carries this key, which stays as
+ * spec §4.6 lists it. `allow-comment="true"` is a session control that
  * asks for a comment box; `max-attempts:negative` is a negative `max-attempts`, delivered as no
  * limit; `root:<name>` is a section or a stimulus given as a document's root, which is not
  * delivered alone; `lti-link` is an item ref that names an LTI link in place of an item (reading

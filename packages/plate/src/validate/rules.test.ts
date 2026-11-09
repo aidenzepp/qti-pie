@@ -3332,7 +3332,7 @@ describe("checkRules", () => {
         ]);
       });
 
-      it("[I-1] a record value names its field: one with no field-identifier is refused missing-attribute at its @field-identifier (pantry's RecordFieldIdentifier)", () => {
+      it("[I-1] a record value names its field: one with no field-identifier is refused missing-attribute at its @field-identifier (pantry's value-cardinality)", () => {
         assert.deepStrictEqual(
           recordDefault([field([named, integer], "5"), field([integer], "6")]),
           [

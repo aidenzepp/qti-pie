@@ -1591,7 +1591,7 @@ describe("checkTestRules", () => {
     const named = ["field-identifier", "n"] as const;
     const integerBase = ["base-type", "integer"] as const;
 
-    it("[I-1] refuses a record field in a test declaration with no field-identifier, as missing-attribute at its @field-identifier (pantry's RecordFieldIdentifier)", () => {
+    it("[I-1] refuses a record field in a test declaration with no field-identifier, as missing-attribute at its @field-identifier (pantry's value-cardinality)", () => {
       assert.deepStrictEqual(judged(recordOutcome([field([integerBase], "1")])), [
         missingField("field-identifier"),
       ]);

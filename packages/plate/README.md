@@ -474,7 +474,7 @@ its processing runs, and the operator's value is NULL. A `qti-multiple`, `qti-or
 `qti-container-size` of one is 0. To collect a field's value, set a variable from the field and
 build the container from that variable.
 
-`open` refuses the following, each as pantry does:
+`open` refuses the following, each as pantry does where the last column names its rule:
 
 | Refused | Rule | pantry's rule |
 | --- | --- | --- |
@@ -482,15 +482,15 @@ build the container from that variable.
 | An operand of a type its expression does not take | `expression-type` | P23 |
 | A reference attribute, such as `qti-index`'s `n`, that names a variable other than a single template or outcome variable of the attribute's base type | `expression-type` | P24 |
 | A reference attribute that names no declared variable | `undeclared-variable` | P8 |
-| A `qti-variable` with a `weight-identifier`, which only a test's outcome processing may hold | `expression-placement` | P12 |
+| A `qti-variable` with a `weight-identifier`, which only a test's outcome processing may hold | `expression-placement` | none: pantry once refused it as P12, and no law of pantry's names it now |
 | A literal `figures` below 1, or below 0 in `decimalPlaces` mode | `attribute-type` | P10 |
-| A literal `n` of `qti-index` below 1 | `attribute-type` | P11 |
+| A literal `n` of `qti-index` below 1 | `attribute-type` | `attribute-lexical` |
 | An item's declaration named `completionStatus`, `numAttempts` or `duration`, the names of an item's built-in variables, or a test's named `duration` | `attribute-type` | `declaration-reserved` |
 | An item's outcome declaration named `SCORE` or `MAXSCORE` whose base type is not `float`, or an item's or a test's named `PASSED` whose base type is not `boolean`, a `record` one among them | `attribute-type` | `reserved-type` |
 | A `qti-equal` whose `tolerance` is not one or two values, each a number above 0 or a variable's name, such as `0`, `-1`, an empty value or three values. `+INF` is accepted, and so is `1,5`, as a name read at run time | `attribute-type` | P36 |
 | A `qti-equal` in `absolute` or `relative` mode that has no `tolerance` | `missing-attribute` | P36 |
-| A `qti-mapping` in a response declaration of base type `file` or `duration`, or of cardinality `record`, or a `qti-area-mapping` in one whose base type is not `point` | `misplaced-element` | `mapping-base-type`, `area-mapping-point` |
-| A `qti-value` without `field-identifier` or `base-type` in the `qti-correct-response` or `qti-default-value` of a `record` declaration | `missing-attribute` | `RecordFieldIdentifier`, and pantry's import for `base-type` |
+| A `qti-mapping` in a response declaration of base type `file` or `duration`, or of cardinality `record`, or a `qti-area-mapping` in one whose base type is not `point` | `misplaced-element` | `mapping-base-type` |
+| A `qti-value` without `field-identifier` or `base-type` in the `qti-correct-response` or `qti-default-value` of a `record` declaration | `missing-attribute` | `value-cardinality` |
 
 The refusals with `expression-type` and `undeclared-variable` judge inline response processing and
 template processing. [Template processing](#template-processing) lists the refusals that only
@@ -816,7 +816,7 @@ and can change.
 | A `qti-lookup-outcome-value` of a dotted name whose value is not a single `integer`, `float` or `duration` | `expression-type` | P22 |
 | A `qti-lookup-outcome-value` whose outcome holds no lookup table | `template-requirements` | P22 |
 | A `qti-outcome-if` or `qti-outcome-else-if` whose condition is not a single `boolean` | `expression-type` | P21 |
-| A `qti-base-value` whose text is not of its base type | `value-type` | P7 |
+| A `qti-base-value` whose text is not of its base type | `value-type` | `attribute-lexical` |
 | A `qti-test-variables` with a `weight-identifier` and a `base-type` other than `float` | `expression-type` | P29 |
 
 `open` refuses a test's `record` outcome declaration as it refuses an item's. It refuses with
