@@ -56,6 +56,11 @@ import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 import { comparedPath, oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
 
 /**
+ * An element's attributes, as (name, lexical) pairs in order.
+ */
+type Attributes = readonly (readonly [ClosedName<Composed>, string])[];
+
+/**
  * An element of a kind, with its attributes as (name, lexical) pairs and its children.
  *
  * @param kind - The kind.
@@ -65,7 +70,7 @@ import { comparedPath, oracleValueOf, resolveAttribute } from "#pantry/test/reso
  */
 const el = (
   kind: ElementKind<Composed>,
-  attributes: readonly (readonly [ClosedName<Composed>, string])[] = [],
+  attributes: Attributes = [],
   children: readonly XdmChild<Composed>[] = [],
 ): XdmClosedElement<Composed> => ({
   _tag: "element",
@@ -394,6 +399,104 @@ const partsByWalk = (
  * What the parts search must reach: a selection, a required part, an include and a nested section.
  */
 type PartsFeature = "selection" | "required" | "include" | "nested";
+
+/**
+ * An item whose body holds one `xi:include` with the attributes given.
+ *
+ * @param attributes - The include's attributes.
+ * @returns The item.
+ */
+const itemWithInclude = (attributes: Attributes): XdmDocument<Composed> =>
+  documentOf(
+    el(
+      "qti-assessment-item",
+      [["identifier", "I"]],
+      [el("qti-item-body", [], [el("xi:include", attributes)])],
+    ),
+  );
+
+/**
+ * Read the rows of an item holding one include beside a listed section document, `s.xml`.
+ *
+ * @param include - The item.
+ * @returns The item's rows.
+ */
+const includeRowsOf = (include: XdmDocument<Composed>): TestRows | undefined =>
+  rowsOfPackage([
+    ["t.xml", include],
+    ["s.xml", documentOf(el("qti-assessment-section", [["identifier", "S"]]))],
+  ])[0];
+
+describe("import/overlays/tests.ts, includes", () => {
+  it("writes an include whose href resolves outside the package a site marked external, with no target and no Inclusion, so nothing fetches it", () => {
+    // Oracle: reading 115 and the href scopes of readings 35 and 102: a scheme, a leading `/` and
+    // a path that climbs above the package root are outside the package; such an include is
+    // stored as written and never resolved, so it names no document of the package.
+    for (const href of ["https://example.org/f.xml", "/s.xml", "../s.xml"]) {
+      const rows = includeRowsOf(itemWithInclude([["href", href]]));
+      const sites = [...(rows?.Site.values() ?? [])];
+
+      assert.deepStrictEqual(
+        sites.map(({ external, kind }) => [kind, external]),
+        [["xi:include", true]],
+        href,
+      );
+      assert.strictEqual(rows?.SiteTarget.size, 0, href);
+      assert.strictEqual(rows?.Inclusion.size, 0, href);
+    }
+  });
+
+  it("marks an include whose href stays in the package not external: a listed document is its target, and a missing entry and an absent href leave it none, which Include target refuses", () => {
+    // Oracle: reading 115: an in-package include names a document the manifest lists, or the
+    // package is refused under "Include target"; an include with no href names none.
+    const cases: readonly (readonly [string, Attributes, number])[] = [
+      ["listed document", [["href", "s.xml"]], 1],
+      ["missing entry", [["href", "gone/s.xml"]], 0],
+      ["absent href", [], 0],
+    ];
+
+    for (const [label, attributes, targets] of cases) {
+      const rows = includeRowsOf(itemWithInclude(attributes));
+      const sites = [...(rows?.Site.values() ?? [])];
+
+      assert.deepStrictEqual(
+        sites.map(({ external, kind }) => [kind, external]),
+        [["xi:include", false]],
+        label,
+      );
+      assert.strictEqual(rows?.SiteTarget.size, targets, label);
+      assert.strictEqual(rows?.Inclusion.size, targets, label);
+    }
+  });
+
+  it("writes no site for an include under a parent whose model gives no Include, as under qti-custom-operator", () => {
+    // Oracle: reading 114: only a parent whose content model holds an explicit include particle
+    // reads an include as Include; `qti-custom-operator`'s lax content (operator-foreign-content's
+    // shape) holds the include as written, so it is no site and needs no target.
+    for (const href of ["part.xml", "https://example.org/f.xml"]) {
+      const operator = el("qti-custom-operator", [], [el("xi:include", [["href", href]])]);
+      const rows = includeRowsOf(
+        documentOf(
+          el(
+            "qti-assessment-item",
+            [["identifier", "I"]],
+            [
+              el(
+                "qti-response-processing",
+                [],
+                [el("qti-response-condition", [], [el("qti-response-if", [], [operator])])],
+              ),
+            ],
+          ),
+        ),
+      );
+
+      assert.strictEqual(rows?.Site.size, 0, href);
+      assert.strictEqual(rows?.SiteTarget.size, 0, href);
+      assert.strictEqual(rows?.Inclusion.size, 0, href);
+    }
+  });
+});
 
 describe("import/overlays/tests.ts, parts", () => {
   it.effect(

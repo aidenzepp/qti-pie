@@ -1,0 +1,11 @@
+DROP VIEW "qti__author"."variable_ref";
+
+ALTER TABLE "qti"."variable_ref"
+  DROP CONSTRAINT "variable_declared",
+  ADD CONSTRAINT "variable_declared" CHECK ((NOT "root_kind" IN (299::smallint, 302::smallint) OR "identifier" ~ '\A[\u0001-\u0009\u000B\u000C\u000E-\u2027\u202A-\U0010FFFF]*\.[\u0001-\u0009\u000B\u000C\u000E-\u2027\u202A-\U0010FFFF]*\Z'::"pg_catalog"."text" AND "root_kind" = 302::smallint OR (NULLIF("pg_catalog"."substring"("qti"."__constant_npu4wt2fbp"(), ("kind" * 413 + "attribute") * 2 + 1, 2)::integer, 0) - 1)::smallint = 1::smallint OR "resolution" <> 2::smallint) IS TRUE) NOT VALID;
+
+CREATE VIEW "qti__author"."variable_ref" ("after", "attribute", "attribute_name", "base_type", "base_type_name", "before", "cardinality", "cardinality_name", "document", "element_base", "element_base_name", "element_cardinality", "element_cardinality_name", "identifier", "kind", "kind_name", "language", "language_name", "lexical", "node", "parent", "resolution", "resolution_name", "root_kind", "root_kind_name", "table", "table_name") AS
+SELECT "r1"."after", "r1"."attribute", ("qti"."__attribute_name_names_q6tmzcty4e"())["r1"."attribute" + 1]::"pg_catalog"."text", "r1"."base_type", ("qti"."__value_base_names_pjzlcpdwvv"())["r1"."base_type" + 1]::"pg_catalog"."text", "r1"."before", "r1"."cardinality", ("qti"."__value_cardinality_names_wzwznoycgf"())["r1"."cardinality" + 1]::"pg_catalog"."text", "r1"."document", "r1"."element_base", ("qti"."__value_base_names_pjzlcpdwvv"())["r1"."element_base" + 1]::"pg_catalog"."text", "r1"."element_cardinality", ("qti"."__value_cardinality_names_wzwznoycgf"())["r1"."element_cardinality" + 1]::"pg_catalog"."text", "r1"."identifier", "r1"."kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."kind" + 1]::"pg_catalog"."text", "r1"."language", ("qti"."__language_names_pvmtywwssv"())["r1"."language" + 1]::"pg_catalog"."text", "r1"."lexical", "r1"."node", "r1"."parent", "r1"."resolution", ("qti"."__reference_resolution_names_3knvypuotm"())["r1"."resolution" + 1]::"pg_catalog"."text", "r1"."root_kind", ("qti"."__node_kind_names_ulbko553n7"())["r1"."root_kind" + 1]::"pg_catalog"."text", "r1"."table", ("qti"."__referenced_table_names_ynujnwu6bv"())["r1"."table" + 1]::"pg_catalog"."text"
+FROM "qti"."variable_ref" AS "r1";
+
+GRANT SELECT ON TABLE "qti__author"."variable_ref" TO "qti__author";

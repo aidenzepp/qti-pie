@@ -165,9 +165,12 @@ export const sitePackage = (box: SiteBox): PackageEntries => {
 /**
  * The rule a site's case breaks, by reading 115 and information model §7.5, none for a listed
  * one: an href naming a file the package does not hold, "File exists", whatever its site; an
- * include naming no document of the package, by an entry it lists as none, a file outside it or
- * no href, "Include target"; a section ref naming no section document, "Document entry", and one
- * with no href, AL3's required attribute.
+ * include naming no document of the package, by an entry it lists as none or no href, "Include
+ * target", and none for one naming a file outside it, which is stored as written and never fetched
+ * (reading 115); a section ref naming no section document, "Document entry", one with no href,
+ * AL3's required attribute, and one naming a file outside the package, the stated limit "Remote
+ * section ref" (reading 170): pantry imports offline and never fetches a section it does not
+ * hold, and a section ref's section is the test's own content, so none can be assembled.
  *
  * @param name - The site.
  * @param href - Its case.
@@ -183,11 +186,31 @@ export const ruleOfCase = (name: SiteName, href: HrefCase): string | undefined =
   }
 
   if (sites[name].kind === "xi:include") {
-    return "include-target";
+    return href === "external" ? undefined : "include-target";
+  }
+
+  if (href === "external") {
+    return "remote-section";
   }
 
   return href === "missing" ? "required-attribute" : "entry-kind";
 };
+
+/**
+ * The rules a package of the box breaks outside the site laws: where no include places
+ * `fragment.xml` (the fragment's file is absent, listed as no document, outside the package, or its
+ * include writes no href), the fragment is judged as written, and its text entry's
+ * `response-identifier`, its context variable's `identifier` and its `data-catalog-idref` name
+ * declarations or catalogs only the item holds, none of its own document ("Idref target" and
+ * "Catalog reference"). PostgreSQL reports whichever deferred key it checks first; for an absent
+ * file it meets `File_exists` at INSERT before any of them. The other sites' documents hold no such
+ * reference.
+ *
+ * @param box - The package.
+ * @returns The rules.
+ */
+export const outsideRulesOfBox = (box: SiteBox): ReadonlySet<string> =>
+  new Set(box.fragment === "listed" ? [] : ["idref-target"]);
 
 /**
  * The rules a package of the box breaks, one per site whose case breaks one.

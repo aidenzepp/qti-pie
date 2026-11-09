@@ -212,6 +212,12 @@ const functionPattern =
   /(?<![\w"])CREATE (?:OR REPLACE )?FUNCTION "qti"\."(?<name>[^"]+)"\((?<parameters>[^)]*)\) RETURNS (?<returns>.+?)(?=\s+(?:AS|BEGIN|IMMUTABLE|LANGUAGE|PARALLEL|RETURN|SECURITY|SET|STABLE|STRICT|VOLATILE)\b|$)/gmu;
 
 /**
+ * A function a later migration drops, by name. Its name is a hash of its body, so a changed body is
+ * a new function and the old one is dropped; the chain holds the new one only.
+ */
+const droppedFunctionPattern = /^DROP FUNCTION "qti"\."(?<name>[^"]+)"/gmu;
+
+/**
  * A function's head, with its return type unqualified and unquoted (`"pg_catalog"."trigger"` reads
  * `trigger`).
  */
@@ -444,7 +450,11 @@ export const census = (files: readonly MigrationFile[]): Census => {
   const families = laws.map(
     (law) => lawFamilies.find(([, pattern]) => pattern.test(law))?.[0] ?? "other",
   );
+  const dropped = new Set(
+    [...sql.matchAll(droppedFunctionPattern)].map(({ groups }) => groups?.["name"] ?? ""),
+  );
   const kinds = [...sql.matchAll(functionPattern)]
+    .filter(({ groups }) => !dropped.has(groups?.["name"] ?? ""))
     .map(({ groups }) => ({
       name: groups?.["name"] ?? "",
       parameters: groups?.["parameters"] ?? "",

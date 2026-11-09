@@ -1,24 +1,29 @@
 /**
- * The census of the committed migration (plan-qti-pie Q6.02): the one `_init` folder the Qti
- * schema's migrations hold, taken by `#pantry/test/census.ts`, meets fin.md §13's zero targets and
- * holds the measured counts. It lands with the migration it reads, so it is a file of its own: the
- * census's parser and its targets are `census.test.ts`'s, which need no migration.
+ * The census of the committed migration chain (plan-qti-pie Q6.02): the migration folders the Qti
+ * schema holds, the `_init` first and a later migration on top for each phase that has landed,
+ * taken together by `#pantry/test/census.ts`, meet fin.md §13's zero targets and hold the measured
+ * counts. It lands with the migrations it reads, so it is a file of its own: the census's parser
+ * and its targets are `census.test.ts`'s, which need no migration.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
+import path from "node:path";
 import { Qti } from "#pantry/qti/schema.ts";
 import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
 
 /**
- * The committed migration's measured counts (the `_init` regenerated on grizzle `1c536b5`), as a
- * ratchet: a change that moves one fails here until the count is measured again. A regeneration
- * updates them here, and only here.
+ * The committed chain's measured counts (the chain regenerated over the align laws' migration by
+ * the N5 Follow and AL5 repairs' migration, GEN-S3, then extended by the test-root braced
+ * reference's migration, GEN-S4, which changes one check and moves no count, and by the order
+ * interaction's binding migration, GEN-S5, which replaces one closed constant with another and
+ * moves no count, on grizzle `1.0.0-beta.1`), as a ratchet: a change that moves one fails here
+ * until the count is measured again. A regeneration updates them here, and only here.
  *
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
  * - `live`: one live set per roster whose sets a field holds, each beside its bits domain;
- * - `constants`: the closed constants the laws, generated fields and queries read, of the 62 closed
+ * - `constants`: the closed constants the laws, generated fields and queries read, of the closed
  *   relations;
  * - `nodeAxes`: `Node`'s own foreign keys, its families' axes (the owner copy, the predecessor, the
  *   deferred last, and the attribute and namespace stand-ins);
@@ -26,12 +31,12 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  *   selections.
  */
 const measured = {
-  constants: 102,
+  constants: 117,
   live: 7,
-  names: 37,
+  names: 43,
   nodeAxes: 6,
-  nodeKeys: 39,
-  tables: 226,
+  nodeKeys: 47,
+  tables: 265,
 } as const;
 
 /**
@@ -43,45 +48,59 @@ const measured = {
 const membersOf = (kind: "closed" | "relation"): number =>
   Object.values(Qti.relations).filter((member) => member.kind === kind).length;
 
-describe("the committed migration", () => {
+describe("the committed migration chain", () => {
   it.effect(
-    "is one _init folder and its snapshot, meets every zero target, and holds the measured counts",
+    "is the _init, its later migrations and the snapshot, meets every zero target, and holds the measured counts",
     () =>
       // Oracle: the specification as a checker, fin.md §13's zero targets (the ones
       // `census.test.ts` states as predicates) and plan-qti-pie Q6.02's counts, over the committed
-      // migration's census; the schema's own members for the counts that follow from them (a table
-      // per stored relation, a names constant per roster).
-      // Bound: the one committed migration.
+      // chain's census; the schema's own members for the counts that follow from them (a table per
+      // stored relation, a names constant per roster). A validate file is a law's, so the zero
+      // target holds for every migration; a later migration's own `-validate.sql` validates
+      // constraints it added to tables that already exist, holds no law, and is the only one
+      // allowed. Likewise the one `INSERT INTO` is Stage N's data step (decision 437), moving the
+      // old `UsageValue` rows' `baseType` into `UsageValueBaseType`; it seeds no table.
+      // Bound: the committed chain, the `_init` first.
       Effect.gen(function* committedCensus() {
         const fs = yield* FileSystem.FileSystem;
         const entries = (yield* fs.readDirectory(qtiMigrations)).toSorted();
         const held = yield* censusOf(qtiMigrations);
+        const [init, ...later] = entries.slice(0, -1);
+        const validateFilesOf = (folder: string) =>
+          fs
+            .readDirectory(path.join(qtiMigrations, folder))
+            .pipe(Effect.map((files) => files.filter((file) => file.endsWith("-validate.sql"))));
+        const laterValidateFiles = (yield* Effect.all(later.map(validateFilesOf))).flat();
 
-        assert.lengthOf(entries, 2, entries.join(", "));
-        assert.match(entries[0] ?? "", /^\d{14}_init$/u);
-        assert.strictEqual(entries[1], "snapshot.json");
+        assert.isAtLeast(entries.length, 3, entries.join(", "));
+        assert.strictEqual(entries.at(-1), "snapshot.json");
+        assert.match(init ?? "", /^\d{14}_init$/u);
+        for (const migration of later) {
+          assert.match(migration, /^\d{14}_[a-z0-9-]+$/u);
+        }
+        assert.deepStrictEqual(yield* validateFilesOf(init ?? ""), [], "the _init holds no law");
+        assert.strictEqual(held.laws.validateFiles, laterValidateFiles.length);
+        assert.strictEqual(held.seed.inserts, 1, "the one data step, copying UsageValue.baseType");
         assert.deepStrictEqual(
           {
             constraintTriggers: held.laws.constraintTriggers,
             enums: held.enums,
-            inserts: held.seed.inserts,
             lawFunctions: held.functions.law,
+            laws: held.laws.total,
             policies: held.policies.total,
             repeatedDomains: held.domains.total - held.domains.distinct,
             seedFolders: held.seed.folders,
             seededRelations: Object.keys(held.seed.rows).length,
-            validateFiles: held.laws.validateFiles,
           },
           {
             constraintTriggers: 0,
             enums: 0,
-            inserts: 0,
             lawFunctions: 0,
+            laws: 0,
             policies: 0,
             repeatedDomains: 0,
             seedFolders: 0,
             seededRelations: 0,
-            validateFiles: 0,
           },
         );
         assert.deepStrictEqual(

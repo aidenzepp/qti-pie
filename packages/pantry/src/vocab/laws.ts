@@ -32,6 +32,8 @@ export const precedence = [
   "idref-target",
   "table-headers",
   "label-tool",
+  "card-support",
+  "card-default",
   "document-lang",
   // O2, declarations.
   "declaration-key",
@@ -53,6 +55,7 @@ export const precedence = [
   "template-ref",
   "printed-variable-ref",
   "context-variable-ref",
+  "pci-module-source",
   "slider-bounds",
   "max-strings-required",
   "aria-value-range",
@@ -131,6 +134,7 @@ export const precedence = [
   "key-text-bound",
   "href-form",
   "fragment-context",
+  "remote-section",
   "namespace-name",
   "well-formedness",
   "unmodeled-vocabulary",
@@ -188,6 +192,16 @@ export const lawTable = {
     source:
       "the XSDs' use=\"required\", and reading 123: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BDO (§5.11: 'Authors must specify the dir attribute on this tag'), where the XSD declares bdo's dir optional (attributes.ts readingUses): AttributeAdmission's use side (Required)",
   },
+  "AL4 data name": {
+    rule: "attribute-admission",
+    source:
+      "reading 13 of docs/spec-readings.md: https://www.imsglobal.org/spec/qti/v3p0/info#Derived_DataHTML5Extension (§7.11, DataHTML5Extension: its pattern 'Default = \"(data-)[a-zA-Z0-9_\\-\\.]+\"', and 'contains no uppercase ASCII letters'), the stricter of the two on each point (readings 16 and 17): a data-* attribute's name is data-[a-z0-9_.-]+, and a no-namespace name of an element that is not foreign never begins data- (vocab/open.ts dataName, attributes.ts AL4_data_name)",
+  },
+  "AL4 declared data name": {
+    rule: "attribute-admission",
+    source:
+      "goal part E: a data- name QTI declares is that attribute, never a custom one; reading 13",
+  },
   "AL4 open name key": {
     rule: "attribute-admission",
     source: "fin.md D2, an open-class attribute keeps its exact name; reading 13",
@@ -233,7 +247,7 @@ export const lawTable = {
   "Binding cardinality": {
     rule: "binding-fit",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_max-choices (§5.30.2: 'If max-choices is greater than 1 (or 0) then the interaction must be bound to a response with multiple cardinality'), and the same sentence of max-choices (§5.66.1, §5.68.2, §5.107.3, §5.128.2) and max-associations (§5.8.2, §5.57.3, §5.59.2, §5.60.2, §5.89.2), reading 92; the Schematron's RESPONSEDEC rule 2 is the choice interaction's case; a most left unwritten reads its XSD default",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_max-choices (§5.30.2: 'If max-choices is greater than 1 (or 0) then the interaction must be bound to a response with multiple cardinality'), and the same sentence of max-choices (§5.66.1, §5.68.2, §5.107.3, §5.128.2) and max-associations (§5.8.2, §5.57.3, §5.59.2, §5.60.2, §5.89.2), reading 92; the Schematron's RESPONSEDEC rule 2 is the choice interaction's case; a most left unwritten reads its XSD default; reading 169: https://www.imsglobal.org/spec/qti/v3p0/info#Data_GapMatchInteraction (§5.57: 'The GapMatchInteraction must be bound to a response variable with base-type directedPair and either single or multiple cardinality, depending on the number of gaps'): a gap match with two or more gaps, its own and an included fragment's, binds a response of multiple cardinality",
   },
   "Binding declared": {
     rule: "binding-declared",
@@ -248,7 +262,7 @@ export const lawTable = {
   BindingFit: {
     rule: "binding-fit",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4 (§2.4, each interaction's 'must be bound to a response variable with a base-type of … and … cardinality', as §2.4.1.1 https://www.imsglobal.org/spec/qti/v3p0/info#ChoiceInt) (expression.ts BindingFit)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4 (§2.4, each interaction's 'must be bound to a response variable with a base-type of … and … cardinality', as §2.4.1.1 https://www.imsglobal.org/spec/qti/v3p0/info#ChoiceInt), but the order interaction's, whose class description states none (spec reading 172), so it has no row (expression.ts BindingFit)",
   },
   "Branch forward": {
     rule: "branch-forward",
@@ -260,6 +274,21 @@ export const lawTable = {
     source:
       "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'In the case of an item or section, the target must refer to an item or section in the same test-part … For test-parts, the target must refer to another test-part'; §5.23.1, the reserved EXIT_SECTION, EXIT_TESTPART and EXIT_TEST), §7.5 ('branching rules should treat referred sections as leaf nodes') and §5.98 ('It is therefore an error to make such an item the target of a branch-rule', of an item a selection with replacement can repeat): a target is an exit, or a part of its source's kind in its source's test part, in an instance that holds its source's, never a replaceable item ref (tests.ts Branch_target)",
   },
+  "Card default entry": {
+    rule: "card-default",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_CardEntry (§5.27.2, CardEntry's default: 'Only one of the CardEntry instances can have a default designation'): a card holds at most one entry whose default, an xs:boolean collapsed, is true or 1 (catalog.ts DefaultEntry)",
+  },
+  "Card support": {
+    rule: "card-support",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Card (§5.26.1, Card's support: 'Use only one card for any particular named support in a catalog'): a catalog holds one card for each support, compared by its collapsed value (catalog.ts CardSupport)",
+  },
+  "Catalog reference": {
+    rule: "idref-target",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Catalog (§5.28.1, a catalog's id, which §5.15.9's data-catalog-idref names): a data-catalog-idref, an xs:IDREF collapsed, is the id of a qti-catalog of its assembly (reading 117: its document with every fragment spliced in and every document its assembly places whole), and no other ID of it (catalog.ts CatalogRef, CatalogId)",
+  },
   "Choice bounds": {
     rule: "choice-bounds",
     source:
@@ -268,7 +297,7 @@ export const lawTable = {
   "Choice identifier key": {
     rule: "choice-identifier-distinct",
     source:
-      'reading 104: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1, and §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and §5.131.1: \'This identifier must not be used by any other choice or item variable\', each class naming its own noun) and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Identifier (§7.16: an identifier is \'a logical reference to another object in the item, such as an itemVariable or choice\'): no two choices of one kind in a document share an identifier, whichever interactions hold them, nor two hottexts of a document, compared collapsed (interactions.ts key(on(Choice, "document", "kind", "identifier")) and key(on(Hottext, "document", "identifier")))',
+      'reading 104: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1, and §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and §5.131.1: \'This identifier must not be used by any other choice or item variable\', five classes naming their own noun) and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Identifier (§7.16: an identifier is \'a logical reference to another object in the item, such as an itemVariable or choice\'); reading 104 as amended: the four classes\' \'any other choice\' is read across classes, and the nine share one space of identifiers, the stricter normative reading: no two choices or hottexts of a document share an identifier, of one class or of two, a gap and a gap text included, whichever interactions hold them, nor two its assembly places, compared collapsed (interactions.ts key(on(Choice, "document", "kind", "identifier")), key(on(Hottext, "document", "identifier")) and their placed keys, and ChoiceVariableName, Choice_identifier_key)',
   },
   "Choice not variable": {
     rule: "choice-identifier-distinct",
@@ -285,6 +314,11 @@ export const lawTable = {
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_PortableCustomInteraction_qti-context-variable (§5.106.6: 'This allows an item author to bind a context variable to the PCI instance'), https://www.imsglobal.org/spec/qti/v3p0/info#Data_ContextDeclaration (§5.34: 'Context variables, variables declared by context declarations', and 'There is one built-in context variable named \"QTI_CONTEXT\" with record cardinality') and the Schematron's rule 20Ba (reading 9): a PCI's qti-context-variable names QTI_CONTEXT or a declared context variable (references.ts ContentReference)",
   },
+  "Custom interaction version": {
+    rule: "admission",
+    source:
+      "R10-b: https://www.imsglobal.org/spec/qti/v3p0/info#Data_PortableCustomInteraction (§5.106, 3.0.0: 'PCIs MUST be used instead of custom interactions (the latter have been deprecated)', a sentence the 3.0.1 text drops): a 3.0.0 document holds no qti-custom-interaction, and a 3.0.1 document may (interactions.ts Custom_interaction_version)",
+  },
   "Declaration base type": {
     rule: "declaration-type",
     source:
@@ -298,7 +332,7 @@ export const lawTable = {
   "Declaration not reserved": {
     rule: "declaration-reserved",
     source:
-      "reading 72: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, §5.115.1, §5.151.1: 'The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts and duration'), each spelled exactly, with no alias, the identifier compared collapsed (references.ts BuiltInVariable, its session variables); the context variable QTI_CONTEXT is Reserved type's",
+      "reading 72: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, §5.115.1, §5.151.1: 'The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts and duration'), each spelled exactly, with no alias, the identifier compared collapsed (references.ts BuiltInVariable, its session variables); reading 168: a test's processing holds duration and neither of the other two (§2.2.2, reading 29), so an item's declaration names none of the three and a test's declaration only duration, and a test's own numAttempts and completionStatus shadow no built-in and are accepted (declarations.ts itemSessionVariables and testSessionVariables, by the declaration's parent kind); the context variable QTI_CONTEXT is Reserved type's",
   },
   "Declaration overlay": {
     rule: "reachability",
@@ -323,7 +357,7 @@ export const lawTable = {
   "Document lang": {
     rule: "document-lang",
     source:
-      "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value and the LOM language as written, both as tags without regard to case (RFC 5646 §2.1.1)",
+      "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value and the LOM language as written, both as tags without regard to case (RFC 5646 §2.1.1); reading R9-c: a catalog is outside the content body (information model §5.28: 'outside the content body node'), so the xml:lang of a catalog's cards, entries and HTML content is not counted (identity.ts CatalogScope)",
   },
   "DocumentId key": {
     rule: "document-key",
@@ -368,7 +402,7 @@ export const lawTable = {
   "File exists": {
     rule: "file-exists",
     source:
-      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath)",
+      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath), and each card file and resource icon a document resolves in the package (reading R9-b, package.ts TextReferencePath)",
   },
   "File listed": {
     rule: "file-listed",
@@ -412,7 +446,7 @@ export const lawTable = {
   "Idref target": {
     rule: "idref-target",
     source:
-      "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): an IDREF names an ID of its document, an attribute's tokens and an IDREF- or IDREFS-typed element text's alike (§3.15.5; reading 101); reading 14",
+      "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): an IDREF names an ID of its document, an attribute's tokens and an IDREF- or IDREFS-typed element text's alike (§3.15.5; reading 101); reading 14; reading 2 and https://www.w3.org/TR/MathML3/chapter4.html#contm.share (MathML 3 §4.2.7: a share's src names 'the id attribute of the root node of the expression tree' it stands for): a same-document fragment of an m:share's src, a # and the characters after it, names an ID of its document as an IDREF token does, and a src that is no fragment is reading 103's file reference, which is not read here (operator decision 321)",
   },
   "Include fragment identifier": {
     rule: "include-href",
@@ -427,7 +461,7 @@ export const lawTable = {
   "Include target": {
     rule: "include-target",
     source:
-      "reading 115: https://www.imsglobal.org/spec/qti/v3p0/info#Imported_Include (§9.4.1: 'This denotes the use of the XInclude feature [XInclude, 16]'); https://www.w3.org/TR/xinclude-11/#include_element (XInclude 1.1 §3.1: 'If the href attribute is absent when XML processing is specified, the xpointer or fragid attribute must be present', and reading 85 refuses xpointer, and the pinned XInclude.xsd declares no fragid), https://www.w3.org/TR/xinclude-11/#xml-included-items (§4.2: 'Resources that are unavailable for any reason … result in a resource error') and https://www.w3.org/TR/xinclude-11/#fallback_element (§3.2: 'If the xi:fallback element is missing, a resource error results in a fatal error'): an include the information model reads names, by an href this representation resolves, a document its package lists; one that holds a fallback is refused alike, since the representation applies no fallback, a stated limit",
+      "reading 115: https://www.imsglobal.org/spec/qti/v3p0/info#Imported_Include (§9.4.1: 'This denotes the use of the XInclude feature [XInclude, 16]'); https://www.w3.org/TR/xinclude-11/#include_element (XInclude 1.1 §3.1: 'If the href attribute is absent when XML processing is specified, the xpointer or fragid attribute must be present', and reading 85 refuses xpointer, and the pinned XInclude.xsd declares no fragid), https://www.w3.org/TR/xinclude-11/#xml-included-items (§4.2: 'Resources that are unavailable for any reason … result in a resource error') and https://www.w3.org/TR/xinclude-11/#fallback_element (§3.2: 'If the xi:fallback element is missing, a resource error results in a fatal error'): an include the information model reads names, by an href this representation resolves, a document its package lists; one that holds a fallback is refused alike, since the representation applies no fallback, a stated limit; an include whose href is external (reading 102) names a resource the package does not hold, and is admitted, stored as written and never fetched",
   },
   "Inclusion cycle": {
     rule: "inclusion-cycle",
@@ -492,7 +526,7 @@ export const lawTable = {
   "Map key": {
     rule: "map-key-unique",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88.4 and §7.21: 'The map is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float'), so a mapping is a function of its source value: no two of its entries share a key, compared as values of its base type where the schema holds one (an integer's canonical form, a float of grizzle's double form as its double, mapping.ts MapKeyInteger and MapKeyFloat) and as written otherwise (readings 7, 34 and 45)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88.4 and §7.21: 'The map is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float'), so a mapping is a function of its source value: no two of its entries share a key, compared as values of its base type where the schema holds one (an integer's canonical form, a float of grizzle's double form as its double, mapping.ts MapKeyInteger and MapKeyFloat) and as written otherwise (readings 7, 34 and 45), a string key written twice repeating whatever its entries' case-sensitive says (reading 160), and keys written apart two keys whatever their matching (§7.21.3: case-sensitive 'Used to control whether or not a qti-map-entry string is matched case sensitively'; readings 98 and 165: `York` and `york` are two keys, the first listed matching entry giving the value, as AreaMapping's areas are 'those listed first taking priority')",
   },
   MappableBaseType: {
     rule: "mapping-base-type",
@@ -514,15 +548,45 @@ export const lawTable = {
     source:
       "reading 9: the Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1 (ASI 3.0.1 XSD, on qti-outcome-declaration: 'not(@mastery-value < @normal-minimum)', 'The mastery-value attribute value must not be less than the normal-minimum value'; 'not(@mastery-value > @normal-maximum)', 'The mastery-value attribute value must not be greater than the normal-maximum value'), read by its intent: each pair judged where both have a value, a normal-minimum a 3.0.1 outcome declaration does not write being its XSD default 0.0 and a 3.0.0 one's none (reading 149), as xs:double values (INF and -INF infinite), NaN ordered against nothing; a value outside grizzle's double lexical form (outer whitespace, over 15 significant digits, an exponent beyond 293) is not judged, a recorded limit",
   },
+  "MathML align first": {
+    rule: "ordering",
+    source:
+      "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.malign.group (MathML 3 §3.5.5.2: 'the first complete element must be an maligngroup element' in a table cell whose alignment groups are checked, a complete element being one with no element children); a cell is judged when it holds a group that stands where §3.5.5.2 lets it (the align placement law), and a group outside a cell or under an maction child that is not selected is not judged (§3.5.5.9)",
+  },
+  "MathML align placement": {
+    rule: "admission",
+    source:
+      "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.malign.group (MathML 3 §3.5.5.2: an maligngroup in a table cell stands in the cell directly or inside an mrow or mstyle that changes no direction, mphantom, mfenced, the selected sub-expression of an maction, or semantics) and #presm.malign.mtable (§3.5.5.9); a group with no cell above it is ignored, only an maction's selected sub-expression is checked, and a change of direction is a dir other than the one the element inherits, so mrow dir='ltr' in a formula that reads left to right changes none (operator decision 321); m:math inherits none, since 'the dir attribute defaults to \"ltr\" on the math element' (MathML 3 §2.2.1, reading 164)",
+  },
   "MathML arity": {
     rule: "math-arity",
     source:
       "reading 2 (expression.ts mathArities): https://www.w3.org/TR/MathML3/chapter4.html#contm.unary (MathML 3 §4.3.4.6: 'Unary operators take a single argument') and #contm.binary (§4.3.4.5: 'Binary operators take two arguments'), each operator's class from its syntax table in §4.4 (§4.1.5: the Class row 'indicate[s] how many arguments the operator represented by this element takes'); an apply with a qualifier or an interval beside its operator is not judged, and moment is left out, since §4.4.8.6's own example applies it to five arguments",
   },
+  "MathML cn form": {
+    rule: "attribute-lexical",
+    source:
+      "spec readings 2 and R6-hexdouble: https://www.w3.org/TR/MathML3/chapter4.html#contm.cn (MathML 3 §4.2.1: the content of a cn has the form its type implies, integer, real, double, hexdouble, e-notation, rational, complex-cartesian and complex-polar, split at m:sep; every other type is text), digits read in its base from 2 to 36; a part holding an element or an entity reference has its digits unjudged, and counts among the parts, and a base beyond the alphabet leaves the digits application specific (expression.ts cnForms and cnPatternOf)",
+  },
   "MathML foreign element": {
     rule: "unmodeled-vocabulary",
     source:
       "MathML 3 RelaxNG mathml3-common.rnc: start = math (line 15) and anyElement = element (* - m:*) (line 61); MathML 3 §2.2, 'All other MathML content must be contained in a math element'; reading 2",
+  },
+  "MathML head qualifier": {
+    rule: "admission",
+    source:
+      "spec reading R6-head-qualifiers (expression.ts mathHeadQualifiers) and MathML 3's §4.4 syntax tables: https://www.w3.org/TR/MathML3/chapter4.html#contm.root (§4.4.2.11), #contm.log (§4.4.7.7) and #contm.moment (§4.4.8.6) list degree, logbase and momentabout beside their operators; an apply whose first child is no built-in operator is not judged",
+  },
+  "MathML maction selection": {
+    rule: "union-count",
+    source:
+      "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.maction (MathML 3 §3.7.1.1: 'If the value specified is out of range, it is an error' and 'If no selected sub-expression exists, it is a MathML error'): an maction has at least one element child and its selection, 1 when absent, is at most their number",
+  },
+  "MathML share cycle": {
+    rule: "document-key",
+    source:
+      "reading 2: https://www.w3.org/TR/MathML3/chapter4.html#contm.share (MathML 3 §4.2.7, c4#contm.acyclicity: 'An element may not dominate itself'): an element dominates its children and, where it is an m:share whose src is a same-document fragment, the element that fragment names in its assembly (reading 117), per placement, so an m:share on a cycle of those edges is refused",
   },
   "Max strings required": {
     rule: "max-strings-required",
@@ -646,6 +710,11 @@ export const lawTable = {
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-number-correct (§6.9.58 to §6.9.64 and §6.9.41, normative: qti-number-correct, qti-number-incorrect, qti-number-presented, qti-number-responded, qti-number-selected, qti-outcome-minimum, qti-outcome-maximum and qti-test-variables, each 'which can only be used in outcomes processing') (expressions.ts Outcome_only, its language Processing's; the old checker's P25)",
   },
+  "PCI module source": {
+    rule: "pci-module-source",
+    source:
+      "R10-a: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_PortableCustomInteraction.Attr_module (§5.106.2: 'If this characteristic is provided the qti-interaction-modules child attribute is not required, if omitted then the modules child element is mandatory'): a portable custom interaction names its module by a module attribute, by a qti-interaction-modules child, or by both (interactions.ts PCI_module_source)",
+  },
   "Package key": {
     rule: "reachability",
     source:
@@ -659,7 +728,7 @@ export const lawTable = {
   "Prefixed reference": {
     rule: "prefixed-ref",
     source:
-      "readings 48 and 88: https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Variable (§7.47: 'values taken from an individual item session can be looked up by prefixing the name of the item variable with the identifier assigned to the item in the qti-assessment-item-ref, separated by a period character'; for an item 'allowed to be replaced (i.e. that have the with-replacement attribute set to \"true\")', 'a number that denotes the instance's place in the sequence of the item's instantiation is inserted between the item variable identifier and the item variable'), https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1: 'Identifiers containing the period character are reserved for use in prefixing') and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_TimeLimits (§7.40: 'For qti-assessment-sections, qti-test-parts and whole qti-assessment-tests the time limits relate to the durations of all the item sessions plus any other time spent navigating that part of the test'), a part's or section's duration read by its identifier's prefix as an item's variables are (reading 48), over the assembled test (readings 4, 5 and 86): a test-level reference is accepted when exactly one of its readings, unsplit, split at a dot, or numbered at two dots, names a scope of the test and a variable of that scope, a numbered one only under a selection with replacement and only from 1, and none through a name two placements give (expressions.ts Reading: the key and the containment over its resolving readings, M3, and Prefixed_reference)",
+      "readings 48 and 88: https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Variable (§7.47: 'values taken from an individual item session can be looked up by prefixing the name of the item variable with the identifier assigned to the item in the qti-assessment-item-ref, separated by a period character'; for an item 'allowed to be replaced (i.e. that have the with-replacement attribute set to \"true\")', 'a number that denotes the instance's place in the sequence of the item's instantiation is inserted between the item variable identifier and the item variable'), https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1: 'Identifiers containing the period character are reserved for use in prefixing') and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_TimeLimits (§7.40: 'For qti-assessment-sections, qti-test-parts and whole qti-assessment-tests the time limits relate to the durations of all the item sessions plus any other time spent navigating that part of the test'), a part's or section's duration read by its identifier's prefix as an item's variables are (reading 48), over the assembled test (readings 4, 5 and 86): a test-level reference is accepted when exactly one of its readings, unsplit, split at a dot, or numbered at two dots, names a scope of the test and a variable of that scope, a numbered one only under a selection with replacement and only from 1, and none through a name two placements give; a name read through an item ref that names an LTI link resolves unchecked, an LTI link having no declarations (reading 110, expressions.ts linkHeld); and a braced reference, a string attribute's, that resolves nowhere is a string value, refused only for two resolving readings (reading R15-k) (expressions.ts Reading: the key and the containment over its resolving readings, M3, and Prefixed_reference)",
   },
   "Printed variable reference": {
     rule: "printed-variable-ref",
@@ -690,6 +759,11 @@ export const lawTable = {
     rule: "P24",
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#Union_IntegerOrVariableRef (§9.3.3, §9.3.1 and §9.3.4: an integerOrVariableRef, floatOrVariableRef or stringOrVariableRef names a template or outcome variable of that base type, single) (expression.ts ReferenceBase; the old checker's P24)",
+  },
+  "Remote section ref": {
+    rule: "remote-section",
+    source:
+      "reading 170: https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentSectionRef (§7.5: a section ref 'functions as a facade for the qti-assessment-section to which it refers', and bans no remote one): a section ref whose href resolves outside the package (a scheme, a leading /, a climb above the root, reading 102) is refused, since pantry imports a package offline, never fetches a resource (reading 115) and assembles every test from its package's documents (readings 86 and 117), and a section ref's section is the test's own content, which an external include's fragment is not; a stated limit of the representation, not a law of the specification, which a fetch of the section at import would lift",
   },
   "Reserved type": {
     rule: "reserved-type",
@@ -797,7 +871,7 @@ export const lawTable = {
   "Template default target": {
     rule: "template-default-target",
     source:
-      "the UP audit's A37: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateDefault.Attr_template-identifier (§5.152.1: 'The identifier of the template variable affected'; §5.152: 'The default value of a template variable in an item can be overridden based on the test context'): a template default names a template declaration of the item its item ref names, compared collapsed (expressions.ts TemplateDefaultTarget, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no template of it (reading 110)",
+      "the UP audit's A37: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateDefault.Attr_template-identifier (§5.152.1: 'The identifier of the template variable affected'; §5.152: 'The default value of a template variable in an item can be overridden based on the test context'): a template default names a template declaration of the item its item ref names, compared collapsed (expressions.ts TemplateDefaultTarget, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no template of it: a template default under it still breaks this law (reading 110)",
   },
   "Template default type": {
     rule: "P20",
@@ -813,6 +887,11 @@ export const lawTable = {
     rule: "template-ref",
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateBlock.Attr_template-identifier (§5.145.1, and §5.155.1, §5.122.1, §5.124.1 and each choice's, as §5.132.3: 'The identifier of a template variable'), a template variable being one a template declaration declares (https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateDeclaration, §5.151: 'Template declarations declare item variables that are to be used specifically for the purposes of cloning items') (references.ts ContentReference)",
+  },
+  "Template variable type": {
+    rule: "template-ref",
+    source:
+      "reading R15-l: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateBlock.Attr_template-identifier (§5.145.1, and §5.7.2, §5.67.2, §5.122.1, §5.124.1, §5.155.1: 'The identifier of a template variable that must have a base-type of identifier and be of either single or multiple cardinality') and #DataCharacteristic_SimpleChoice.Attr_template-identifier (§5.132.3, and §5.55.2, §5.56.2, §5.58.2, §5.65.2, §5.73.3, §5.131.3: the same rule, written 'be either single of multiple cardinality'); a portable custom interaction's template variable (§7.38.1) states no type (interactions.ts Template_variable_type)",
   },
   "Test name key": {
     rule: "test-name-key",
@@ -847,7 +926,7 @@ export const lawTable = {
   "Usage typed value": {
     rule: "typed-copy",
     source:
-      "reading 105: https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html (QTI 3.0 Usage Data binding §2.6.5, Value: 'A class that can represent a single value of any baseType'; §2.7.1, BaseTypeEnum) and https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, BaseTypeEnum, each base type's value set): a ud:value that writes baseType holds a lexical form of that base type, read as a qti-value's text is (readings 7, 34, 45 and 71), and one that writes none is xs:normalizedString text (metadata.ts UsageValue over expression-types.ts BaseTypePattern)",
+      "reading 105: https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html (QTI 3.0 Usage Data binding §2.6.5, Value: 'A class that can represent a single value of any baseType'; §2.7.1, BaseTypeEnum) and https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, BaseTypeEnum, each base type's value set): a ud:value that forms part of a record (it writes a fieldIdentifier) and writes baseType holds a lexical form of that base type, read as a qti-value's text is (readings 7, 34, 45 and 71), and any other ud:value, outside a record or writing no baseType, is xs:normalizedString text, accepted untyped (metadata.ts UsageValueBaseType over expression-types.ts BaseTypePattern)",
   },
   "Value cardinality": {
     rule: "value-cardinality",
@@ -857,7 +936,7 @@ export const lawTable = {
   "Variable declared": {
     rule: "P8",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-variable (§6.9.40, qti-variable, normative: 'This expression looks up the value of an itemVariable that has been declared in a corresponding variableDeclaration or is one of the built-in variables'), https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_Variable.Attr_identifier (§7.47.1, Variable's identifier: 'The identifier of the item variable that has been declared in a corresponding variable declaration or of the built-in variables') and https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SetValue.Attr_identifier (§5.130.1, a setter's: 'The identifier of the variable to be set') (references.ts); readings 4, 29 and 48",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-variable (§6.9.40, qti-variable, normative: 'This expression looks up the value of an itemVariable that has been declared in a corresponding variableDeclaration or is one of the built-in variables'), https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_Variable.Attr_identifier (§7.47.1, Variable's identifier: 'The identifier of the item variable that has been declared in a corresponding variable declaration or of the built-in variables') and https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SetValue.Attr_identifier (§5.130.1, a setter's: 'The identifier of the variable to be set') (references.ts); readings 4, 29 and 48; and reading R15-k, https://www.imsglobal.org/spec/qti/v3p0/info#Union_StringOrVariableRef (§9.3.4, StringOrVariableRef: 'if a string appears to be a reference to a template or outcome variable but there is no variable with the given name it should be treated simply as string value'): a braced qti-pattern-match pattern that names no variable is a string value, not an undeclared reference",
   },
   "Variable kind": {
     rule: "variable-kind",
@@ -867,7 +946,7 @@ export const lawTable = {
   "Variable mapping source": {
     rule: "variable-mapping-source",
     source:
-      "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71657): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSourceDeclaration, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it (reading 110)",
+      "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71657): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSourceDeclaration, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it, and a mapping under it is accepted unchecked (reading 110, expressions.ts heldMappings leaves out a mapping whose MappingItemRefType names an LTI link)",
   },
   "Variable mapping target": {
     rule: "variable-mapping-target",
@@ -877,7 +956,7 @@ export const lawTable = {
   "Weighted base": {
     rule: "P29",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_TestVariables.Attr_weight-identifier (§7.39.5, TestVariables: 'The behaviour of this characterisic is only defined if the base-type attribute is float or omitted . When a weighting is specified the result of the expression always has base-type float'): with a weight-identifier, a base-type, where written, is float (expressions.ts Weighted_base; the old checker's P29)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_TestVariables.Attr_weight-identifier (§7.39.5, TestVariables: 'The behaviour of this characterisic is only defined if the base-type attribute is float or omitted . When a weighting is specified the result of the expression always has base-type float'): with a weight-identifier, a base-type, where written, is float, so a weighted test variables with another base-type, whose behaviour the section leaves undefined, is refused (expressions.ts Weighted_base; the old checker's P29); with none written, the weighted test variables is float, which the law E1 derived states over its unwritten base-type (expressions.ts ExpressionAttribute; spec reading 167)",
   },
   "XML production": {
     rule: "well-formedness",

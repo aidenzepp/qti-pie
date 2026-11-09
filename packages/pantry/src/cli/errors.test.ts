@@ -20,7 +20,7 @@ import {
 import type { ExportDefectTag, ImportDefectTag } from "#pantry/cli/errors.ts";
 import { refusalFieldsOf } from "#pantry/cli/refused.ts";
 import { ClusterConfigError } from "#pantry/db/connection.ts";
-import { SnapshotLoadError } from "#pantry/db/layer.ts";
+import { SnapshotLoadError } from "#pantry/db/snapshot.ts";
 import { PackageNotFound } from "#pantry/export/package.ts";
 import { DocumentRowCount, XmlVersionUnread } from "#pantry/export/pages.ts";
 import { RootMissing, RowMissing, RowsOutsideImage } from "#pantry/model/assemble.ts";

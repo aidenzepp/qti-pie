@@ -379,12 +379,20 @@ const oracleLaws = lawsOf(grammar);
  * @param target - The match table entry's target value.
  * @returns The item's text.
  */
-const mappedItem = (baseType: string, keys: readonly string[], target: string): string =>
+const mappedItem = (
+  baseType: string,
+  keys: readonly string[],
+  target: string,
+  caseSensitive: readonly string[] = [],
+): string =>
   [
     '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="item" title="Item" time-dependent="false">',
     `<qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="${baseType}">`,
     '<qti-mapping default-value="0">',
-    ...keys.map((key) => `<qti-map-entry map-key="${key}" mapped-value="1"/>`),
+    ...keys.map(
+      (key, at) =>
+        `<qti-map-entry map-key="${key}"${caseSensitive[at] === undefined ? "" : ` case-sensitive="${caseSensitive[at]}"`} mapped-value="1"/>`,
+    ),
     "</qti-mapping>",
     "</qti-response-declaration>",
     '<qti-outcome-declaration identifier="GRADE" cardinality="single" base-type="integer">',
@@ -451,7 +459,18 @@ describe("qti/mapping.ts, the oracle's mapping laws", { timeout: searchTimeout }
             name: "XML Schema 1.1's +INF",
             type: "float",
           },
-          { breaks: [], keys: ["York", "york"], name: "string by code point", type: "string" },
+          {
+            breaks: [],
+            keys: ["York", "york"],
+            name: "string keys differing only by case, both matched by the default (reading 165)",
+            type: "string",
+          },
+          {
+            breaks: ["Map key"],
+            keys: ["york", "york"],
+            name: "one string key written twice",
+            type: "string",
+          },
           { breaks: ["Map key"], keys: ["A B", "B A"], name: "pair undirected", type: "pair" },
           { breaks: [], keys: ["A B", "B A"], name: "directed pair", type: "directedPair" },
           { breaks: ["Map key"], keys: ["A B", "A\tB"], name: "tab", type: "directedPair" },
@@ -477,6 +496,29 @@ describe("qti/mapping.ts, the oracle's mapping laws", { timeout: searchTimeout }
             `${name}: ${found.join("; ")}`,
           );
         }
+
+        const kinds = yield* mappingBreachesOf(
+          mappedItem("string", ["York", "york"], "7", ["true"]),
+        );
+        assert.deepStrictEqual(kinds, [], "a case-sensitive York beside a default york");
+
+        const sameWay = yield* mappingBreachesOf(
+          mappedItem("string", ["york", "york"], "7", ["true", "true"]),
+        );
+        assert.deepStrictEqual(
+          sameWay.map((breach) => breach.split(" {")[0]),
+          ["Map key"],
+          "one case-sensitive key written twice",
+        );
+
+        const apart = yield* mappingBreachesOf(
+          mappedItem("string", ["york", "york"], "7", ["true"]),
+        );
+        assert.deepStrictEqual(
+          apart.map((breach) => breach.split(" {")[0]),
+          ["Map key"],
+          "one key written twice, once case-sensitive and once by the default (reading 160, decision 433)",
+        );
 
         const target = yield* mappingBreachesOf(mappedItem("string", ["a"], "x"));
         assert.deepStrictEqual(

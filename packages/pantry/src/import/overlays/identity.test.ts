@@ -78,8 +78,13 @@ type CaseKind =
   | "lom:general"
   | "lom:language"
   | "lom:lom"
+  | "m:share"
   | "qti-assessment-item"
   | "qti-assessment-stimulus"
+  | "qti-card"
+  | "qti-card-entry"
+  | "qti-catalog"
+  | "qti-catalog-info"
   | "qti-description"
   | "ssml:lexicon"
   | "ssml:lookup"
@@ -113,6 +118,7 @@ const attribute = (
     | "label"
     | "name"
     | "ref"
+    | "src"
     | "startmark"
     | "type"
     | "xml:id"
@@ -1397,4 +1403,147 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
         ),
       ),
   );
+});
+
+/**
+ * An item whose catalog holds a card entry that writes `es`, beside a body `div` that writes
+ * `en`. Document order numbers the nodes: the root 1, its `qti-catalog-info` 2, its catalog 3,
+ * the card 4, the entry 5 and the `div` 6.
+ */
+const catalogued = () =>
+  rowsOf(
+    documentOf(
+      elementOf(
+        "qti-assessment-item",
+        [],
+        [
+          elementOf(
+            "qti-catalog-info",
+            [],
+            [
+              elementOf(
+                "qti-catalog",
+                [attribute("id", "C")],
+                [
+                  elementOf(
+                    "qti-card",
+                    [],
+                    [elementOf("qti-card-entry", [attribute("xml:lang", "es")], [])],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          elementOf("div", [attribute("xml:lang", "en")], []),
+        ],
+      ),
+    ),
+    ids,
+  );
+
+describe("import/overlays/identity.ts, a catalog's scope rows (R9-c)", () => {
+  it("gives each element on the way from an xml:lang carrier to its scope root a CatalogScope, a catalog's reaching its qti-catalog-info and stopping there, a body's reaching the document", () => {
+    // Oracle: the information model's catalog (§5.28: "outside the content body node") as a
+    // checker, over the nodes numbered in document order; R9-c.
+    const rows = catalogued();
+
+    assert.deepStrictEqual(
+      asSet([...rows.CatalogScope.values()].map(({ node, scope }) => `${node} ${scope}`)),
+      [
+        `${idOf(5)} ${idOf(2)}`,
+        `${idOf(4)} ${idOf(2)}`,
+        `${idOf(3)} ${idOf(2)}`,
+        `${idOf(2)} ${idOf(2)}`,
+        `${idOf(6)} ${documentNode}`,
+        `${idOf(1)} ${documentNode}`,
+      ].toSorted(),
+    );
+  });
+
+  it("keeps every xml:lang its XmlLang row and gives it the scope its element is read in", () => {
+    // Oracle: the same model; the copy laws hold both ways, so no carrier loses its row.
+    const rows = catalogued();
+
+    assert.deepStrictEqual(
+      asSet([...rows.XmlLang.values()].map(({ lang, node, scope }) => `${node} ${lang} ${scope}`)),
+      [`${idOf(5)} es ${idOf(2)}`, `${idOf(6)} en ${documentNode}`].toSorted(),
+    );
+  });
+
+  it("gives an item with no catalog the document as every scope", () => {
+    const rows = rowsOf(
+      documentOf(elementOf("qti-assessment-item", [attribute("xml:lang", "en")], [])),
+      ids,
+    );
+
+    assert.deepStrictEqual(
+      [...rows.CatalogScope.values()].map(({ node, scope }) => `${node} ${scope}`),
+      [`${idOf(1)} ${documentNode}`],
+    );
+  });
+});
+
+/**
+ * Write the rows of an item whose body holds one `m:share` of each `src`.
+ *
+ * @param srcs - Each share's `src`.
+ * @param assembled - Whether the document is in an assembly.
+ * @returns The document's identity rows.
+ */
+const sharedRows = (srcs: readonly string[], assembled?: boolean) => {
+  const shares = srcs.map((src) => elementOf("m:share", [attribute("src", src)], []));
+  const root = elementOf("qti-assessment-item", [], shares);
+
+  return rowsOf(documentOf(root), assembled === undefined ? ids : { ...ids, assembled });
+};
+
+describe("import/overlays/identity.ts, a share's same-document fragment (P7)", () => {
+  // Oracle: MathML 3 §4.2.7, a `share`'s `src` of the form `#id` names an element of its own
+  // document, read as the case's model: the shares written, and which of them name a fragment.
+  it("gives a share whose src is # and a name one ShareFragment and its id one IdrefTarget", () => {
+    const rows = sharedRows(["#a"]);
+
+    assert.deepStrictEqual(
+      [...rows.ShareFragment.values()],
+      [{ assembled: false, document: documentNode, id: "a", node: idOf(2), src: "#a" }],
+    );
+    assert.deepStrictEqual(
+      [...rows.IdrefTarget.values()].map(({ assembled, id }) => [assembled, id]),
+      [[false, "a"]],
+    );
+  });
+
+  it("gives a share the assembled of its document, none read as no", () => {
+    for (const assembled of [true, false, undefined]) {
+      const rows = sharedRows(["#a"], assembled);
+
+      assert.deepStrictEqual(
+        [...rows.ShareFragment.values()].map((row) => row.assembled),
+        [assembled ?? false],
+      );
+      assert.deepStrictEqual(
+        [...rows.IdrefTarget.values()].map((row) => row.assembled),
+        [assembled ?? false],
+      );
+    }
+  });
+
+  it("gives a share whose src names another document, or only a #, no row", () => {
+    for (const src of ["other.xml#a", "#", "a", ""]) {
+      const rows = sharedRows([src]);
+
+      assert.strictEqual(rows.ShareFragment.size, 0, src);
+      assert.strictEqual(rows.IdrefTarget.size, 0, src);
+    }
+  });
+
+  it("gives two shares of one fragment two ShareFragments and one IdrefTarget", () => {
+    const rows = sharedRows(["#a", "#a", "#b"]);
+
+    assert.strictEqual(rows.ShareFragment.size, 3);
+    assert.deepStrictEqual([...rows.IdrefTarget.values()].map(({ id }) => id).toSorted(), [
+      "a",
+      "b",
+    ]);
+  });
 });

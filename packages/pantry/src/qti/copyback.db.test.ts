@@ -39,7 +39,6 @@ import {
   qtiSchema,
   writtenColumnsOf,
 } from "#pantry/test/direct-sql.ts";
-import type { SqlRow } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
@@ -177,7 +176,7 @@ const copies = {
 const overridesOf = (
   copy: Copy,
   variant: Variant,
-  row: SqlRow,
+  row: StoredRow,
 ): ReadonlyMap<string, string | number> => {
   if (variant === "control") {
     return new Map();
@@ -199,12 +198,16 @@ const overridesOf = (
 };
 
 /**
- * A stored copy as node-postgres decodes it, by column: a text, a number or a boolean each.
+ * A stored copy as node-postgres decodes it, by column: a text, a number or a boolean each, or
+ * NULL. The copy is the table's whole row (`SELECT c.*`), so it holds the generated column of a
+ * selected foreign key, which is NULL wherever its selection fails.
  */
 const StoredSchema = Schema.Record(
   Schema.String,
-  Schema.Union([Schema.String, Schema.Number, Schema.Boolean]),
+  Schema.NullOr(Schema.Union([Schema.String, Schema.Number, Schema.Boolean])),
 );
+
+type StoredRow = typeof StoredSchema.Type;
 
 /**
  * How a foreign key's comment is recognized, as the `LIKE` pattern `constraintDescribed` matches:
@@ -222,7 +225,7 @@ const patternOf = (comment: Commented): string => `${comment.starts}%${comment.h
  * @param name - The column.
  * @returns Its value.
  */
-const columnOf = (stored: SqlRow, name: string) =>
+const columnOf = (stored: StoredRow, name: string) =>
   stored[name] ?? assert.fail(`the stored copy holds no ${name}`);
 
 describe.skipIf(!hasLease)(

@@ -37,12 +37,13 @@ import {
   sectionPartsIn,
   spellings,
   ssmlCensus,
+  textReferenceKinds,
   xiCensus,
 } from "#pantry/grammar/references.ts";
 import type { Spelling } from "#pantry/grammar/references.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
-import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import { attributeDeclarations, textTypes } from "#pantry/vocab/inventory/attributes.ts";
 import { asiNamespace } from "#pantry/vocab/namespaces.ts";
 import {
   elementsOf,
@@ -756,4 +757,31 @@ describe("ReferenceAttribute, spec reading 103's census", () => {
       }),
     composeTimeout,
   );
+});
+
+describe("textReferenceKinds, spec reading R9-b's element-text form", () => {
+  it("lists the card file and the resource icon, each with the whitespace class its text's type states, and not a calculator's or a digital material's file", () => {
+    // Oracle: the information model's statement (§6.6, §5.80.4: a card's file and a resource icon
+    // name files the package must hold; §5.80.3: a calculator's or digital material's file does
+    // not), the whitespace classes restated from the types it names (`xs:anyURI` collapses,
+    // `URLDType` is an `xs:normalizedString`, which replaces), and the inventory's text types,
+    // read by a second walk, for each listed kind's declaration.
+    // Bound: the whole list, and the one kind the information model leaves out.
+    assert.deepStrictEqual(
+      textReferenceKinds.map(({ kind, whiteSpace }) => [kind, whiteSpace]),
+      [
+        ["qti-file-href.card", "collapse"],
+        ["qti-resource-icon", "replace"],
+      ],
+    );
+    for (const { kind, source } of textReferenceKinds) {
+      assert.isTrue(
+        textTypes.some((declared) => declared.kind === kind),
+        kind,
+      );
+      assert.match(source, /information model/u, kind);
+    }
+
+    assert.isFalse(textReferenceKinds.some(({ kind }) => kind === "qti-file-href"));
+  });
 });

@@ -93,12 +93,10 @@ export type OpenName =
 
 /**
  * The language of a `data-*` attribute's name, which is in no namespace: `data-`, then one or more
- * lower-case ASCII letters, digits, `_`, `.` or `-`.
- *
- * It follows the information model's prose, which bars upper-case letters, and sets aside the
- * looser pattern the information model gives beside it, the XSD's wildcard and the Schematron's
- * prefix test (reading 13 of `docs/spec-readings.md`). A no-namespace name that begins `data-` and
- * breaks it is refused, never read as `no-namespace`.
+ * lower-case ASCII letters, digits, `_`, `.` or `-`: the information model's pattern, which bars
+ * every other character, held with its prose, which bars upper case (reading 13 of
+ * `docs/spec-readings.md`). A no-namespace name that begins `data-` and breaks it is refused, never
+ * read as `no-namespace`.
  */
 export const dataName = /^data-[a-z0-9_.-]+$/u;
 

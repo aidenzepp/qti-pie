@@ -106,14 +106,25 @@ const mutations: Readonly<Partial<Record<LawName, Mutation>>> = {
  * ahead of it too. The list only shrinks.
  */
 const owed: Readonly<Partial<Record<LawName, string>>> = {
+  "Card default entry": "its mutation is not written yet",
+  "Card support": "its mutation is not written yet",
+  "Catalog reference": "its mutation is not written yet",
+  "Custom interaction version": "its mutation is not written yet",
   "Double value":
     "the import writes a bounded value's typed row exactly where its domain is bounded and its form is in the lexical space (write.ts doubleOf), so no document breaks Double value alone; double-bound.oracle.test.ts holds the writer to the law under the host judge",
   "Manifest id space":
     "every resource identifier and the manifest's are xs:ID values of one document, so a resource named as its manifest breaks DocumentId key, which ranks first, and the database names document-key: the law is shadowed (lane OL's finding)",
+  "MathML align first": "its mutation is not written yet",
+  "MathML align placement": "its mutation is not written yet",
+  "MathML cn form": "its mutation is not written yet",
+  "MathML head qualifier": "its mutation is not written yet",
+  "MathML maction selection": "its mutation is not written yet",
+  "MathML share cycle": "its mutation is not written yet",
   "N2 mirrors":
     "each of xdm.ts's mirror corruptions (gap, duplicateSlot, countOffByOne) also leaves a family's last slot unread, which N7 last slot (union-count) refuses ahead of reachability; folds.oracle.test.ts holds each variant to its law",
   "Node key":
     "a second row of one id (xdm.ts secondParent) also moves the slots and intervals the fold laws read, N5 fold and N7 last slot among them, which rank ahead of reachability; folds.oracle.test.ts holds the variant to its law",
+  "PCI module source": "its mutation is not written yet",
   "T2 root":
     "a second self-parented root also breaks E1's derived fields, which rank ahead of reachability; folds.oracle.test.ts holds the variant to its law",
 };

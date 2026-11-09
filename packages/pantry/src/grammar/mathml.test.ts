@@ -47,6 +47,7 @@ import { accepts } from "#pantry/grammar/content.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { breachesOf, judged as judgedPackage, shown, withItem } from "#pantry/test/probe.ts";
 import { xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
@@ -280,7 +281,16 @@ const boxClasses: MathClasses = {
     kind === foreignKinds.other || kind === foreignKinds.absent || kind === "div",
   content: new Set(["m:ci", "m:cn", "m:csymbol", "m:apply", "m:interval", semanticsContexp]),
   inMathml: (kind) => kind.startsWith("m:") || kind === foreignKinds.own,
-  math: new Set(["m:ci", "m:cn", "m:csymbol", "m:apply", "m:interval", "m:semantics", "m:mi"]),
+  math: new Set([
+    "m:ci",
+    "m:cn",
+    "m:csymbol",
+    "m:apply",
+    "m:interval",
+    "m:semantics",
+    "m:mi",
+    "m:mn",
+  ]),
 };
 
 /**
@@ -301,7 +311,9 @@ const boxes: readonly {
       "m:condition",
       "m:lowlimit",
       "m:uplimit",
+      "m:domainofapplication",
       "m:degree",
+      "m:logbase",
     ],
     length: 5,
     parents: [
@@ -354,6 +366,11 @@ const boxes: readonly {
     parents: ["m:bvar"],
   },
   { alphabet: ["m:piece", "m:otherwise", "m:ci"], length: 5, parents: ["m:piecewise"] },
+  {
+    alphabet: ["m:mn", "m:msrow", "m:mscarries", "m:msline", "m:bvar"],
+    length: 4,
+    parents: ["m:mstack", "m:mlongdiv"],
+  },
   {
     alphabet: [
       "m:mi",
@@ -1093,6 +1110,115 @@ const endedToy = (model: ContentModel, ending: readonly [string, ...string[]]) =
       models: [model],
     },
   ]);
+
+describe("MathML 3 §3.6.5.1: mscarries is never the last element of an mstack or mlongdiv", () => {
+  it.effect(
+    "refuses a package whose mstack ends in an mscarries, under N7 Last and child-set",
+    () =>
+      // Oracle: §3.6.5.1, "It is an error for mscarries to be the last element of an mstack or
+      // mlongdiv element", as the law oracle judges a whole package. Bound: one package, the base
+      // item with that `mstack` after its paragraph.
+      Effect.gen(function* endsInCarries() {
+        const breaches = breachesOf(
+          yield* judgedPackage(
+            withItem(
+              `<p id="intro">Pick one.</p>`,
+              `<p id="intro">Pick one.</p><p><m:math xmlns:m="http://www.w3.org/1998/Math/MathML"><m:mstack><m:mn>1</m:mn><m:mscarries/></m:mstack></m:math></p>`,
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          breaches.map(({ law }) => law),
+          ["N7 Last"],
+        );
+        assert.match(shown(breaches), /^N7 Last \(child-set\) at item\.xml/u);
+      }),
+  );
+});
+
+/**
+ * A package whose item holds one math formula after its paragraph.
+ *
+ * @param formula - The content markup, written in the `m:` prefix.
+ * @returns The package's files.
+ */
+const withFormula = (formula: string) =>
+  withItem(
+    `<p id="intro">Pick one.</p>`,
+    `<p id="intro">Pick one.</p><p><m:math xmlns:m="http://www.w3.org/1998/Math/MathML">${formula}</m:math></p>`,
+  );
+
+describe("MathML 3 §4.3.3 and §4.2.6.1: qualifiers in order, a condition after a bvar, a bind with a bvar", () => {
+  // Each case's laws in order. The oracle sets the child N5 refuses aside and judges the rest, so
+  // a bind left with its operator alone also ends where its model cannot (N7).
+  const refused: readonly (readonly [string, string, readonly string[]])[] = [
+    [
+      "a condition before a lowlimit",
+      "<m:apply><m:int/><m:bvar><m:ci>x</m:ci></m:bvar><m:condition><m:apply><m:gt/><m:ci>x</m:ci><m:cn>0</m:cn></m:apply></m:condition><m:lowlimit><m:cn>0</m:cn></m:lowlimit><m:ci>f</m:ci></m:apply>",
+      ["N5 Follow"],
+    ],
+    [
+      "a condition with no bvar before it",
+      "<m:apply><m:sum/><m:condition><m:apply><m:gt/><m:ci>x</m:ci><m:cn>0</m:cn></m:apply></m:condition><m:ci>f</m:ci></m:apply>",
+      ["N5 Follow"],
+    ],
+    ["a bind with no bvar", "<m:bind><m:forall/><m:ci>p</m:ci></m:bind>", ["N5 Follow", "N7 Last"]],
+  ];
+  const accepted: readonly (readonly [string, string])[] = [
+    [
+      "an interval, then a condition, after a bvar",
+      "<m:apply><m:int/><m:bvar><m:ci>x</m:ci></m:bvar><m:interval><m:cn>0</m:cn><m:cn>1</m:cn></m:interval><m:condition><m:apply><m:gt/><m:ci>x</m:ci><m:cn>0</m:cn></m:apply></m:condition><m:ci>f</m:ci></m:apply>",
+    ],
+    [
+      "a lambda with a bvar and an interval",
+      "<m:lambda><m:bvar><m:ci>x</m:ci></m:bvar><m:interval><m:cn>0</m:cn><m:cn>1</m:cn></m:interval><m:ci>f</m:ci></m:lambda>",
+    ],
+    [
+      "a degree before a momentabout",
+      "<m:apply><m:moment/><m:degree><m:cn>2</m:cn></m:degree><m:momentabout><m:cn>0</m:cn></m:momentabout><m:ci>x</m:ci></m:apply>",
+    ],
+    [
+      "a degree after an applied operator",
+      "<m:apply><m:apply><m:ci>f</m:ci></m:apply><m:degree><m:cn>2</m:cn></m:degree><m:ci>x</m:ci></m:apply>",
+    ],
+    [
+      "a list with a bvar, then a condition",
+      "<m:list><m:bvar><m:ci>x</m:ci></m:bvar><m:condition><m:apply><m:gt/><m:ci>x</m:ci><m:cn>0</m:cn></m:apply></m:condition><m:ci>x</m:ci></m:list>",
+    ],
+    [
+      "a bind with a bvar",
+      "<m:bind><m:forall/><m:bvar><m:ci>x</m:ci></m:bvar><m:ci>p</m:ci></m:bind>",
+    ],
+  ];
+
+  it.effect.each(refused)("refuses %s", ([, formula, laws]) =>
+    // Oracle: §4.3.3 ("they appear in the order bvar, lowlimit, uplimit, interval, condition,
+    // domainofapplication, degree, momentabout, logbase"), §4.3.3.1 ("condition qualifiers ...
+    // require a preceding bvar") and §4.2.6.1 ("followed by a non-empty list of bvar elements"),
+    // as the law oracle judges a whole package. Bound: the three inputs that failed.
+    Effect.gen(function* refusedFormula() {
+      const breaches = breachesOf(yield* judgedPackage(withFormula(formula)));
+
+      assert.deepStrictEqual(
+        breaches.map(({ law }) => law),
+        laws,
+        shown(breaches),
+      );
+      assert.match(shown(breaches), /^N5 Follow \(ordering\) at item\.xml/u);
+    }),
+  );
+
+  it.effect.each(accepted)("accepts %s", ([, formula]) =>
+    // Oracle: the same rules; the formula follows them, so no law breaches. Bound: the six
+    // inputs that must stay accepted, with a bind that holds a bvar.
+    Effect.gen(function* acceptedFormula() {
+      const breaches = breachesOf(yield* judgedPackage(withFormula(formula)));
+
+      assert.deepStrictEqual(breaches, [], shown(breaches));
+    }),
+  );
+});
 
 describe("the ending edit, which lambda's restatement reads (content.ts, endedBy)", () => {
   it.effect(

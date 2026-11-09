@@ -75,9 +75,9 @@ const closedNameOf = (name: Name): Option.Option<ClosedName<Composed>> =>
 /**
  * Read the composed grammar as shred reads a grammar: its kind resolution, the `AttributeName`
  * roster's closed handles, `Admission`'s key set as the children each kind admits,
- * `AttributeAdmission`, and each attribute's and each text's domain's `qualified`, `StrictlyHeld`
- * with `HeldRootsUnder`'s patterns, each compiled once, and the `TypeName` roster with each kind's
- * declared type.
+ * `AttributeAdmission`, and each attribute's and each text's domain's `qualified`, `ElementName`'s
+ * names, `StrictlyHeld` with `HeldRootsUnder`'s patterns, each compiled once, and the `TypeName`
+ * roster with each kind's declared type.
  *
  * @param grammar - The composed grammar.
  * @returns The grammar shred reads documents through.
@@ -95,6 +95,10 @@ export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed>
     ]),
   );
 
+  const named: ReadonlySet<string> = new Set(
+    grammar.kinds.elementName.rows.map(({ local, namespace }) => `${namespace} ${local}`),
+  );
+
   return {
     admitsChild: (version, parent, child) =>
       Option.isSome(grammar.admission.lookup({ child, parent, version })),
@@ -107,6 +111,7 @@ export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed>
       Option.exists(Option.fromUndefinedOr(heldRoots.get(`${version} ${parent}`)), (names) =>
         names.test(expandedText(name)),
       ),
+    named: (namespace, local) => named.has(`${namespace} ${local}`),
     qualified: (version, kind, governs, site) =>
       (site._tag === "text"
         ? textDomainOf(grammar.attributes, { governs, kind, version })

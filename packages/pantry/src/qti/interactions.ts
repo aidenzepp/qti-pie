@@ -16,11 +16,15 @@
  * overlays below read `InteractionAttribute` and never `Attribute`.
  *
  * - {@link Interaction}: every interaction element, in every document, owning its choices'
- *   {@link ChoiceInteraction} rows as a counted family (C15). A stimulus body holds interactions
- *   too (information model §5.137, StimulusBody: "The stimulus body contains the text, graphics,
- *   media objects and interactions"), so the item-only laws read {@link BoundVariable}.
+ *   {@link ChoiceInteraction} rows as a counted family (C15), and its gaps' {@link GapInteraction}
+ *   rows as another, which "Binding cardinality" reads (spec reading 169). A stimulus body holds
+ *   interactions too (information model §5.137, StimulusBody: "The stimulus body contains the text,
+ *   graphics, media objects and interactions"), so the item-only laws read {@link BoundVariable}.
  * - {@link Binding}: every interaction with a `response-identifier`, its optional part: an
  *   interaction that writes none has no row, and AL3 refuses it.
+ * - {@link PciModuleForm}: each form in which a portable custom interaction names its module, its
+ *   `module` attribute and its `qti-interaction-modules` child, counted by
+ *   `Interaction.moduleForms` so that "PCI module source" asks for at least one (§5.106.2, R10-a).
  * - {@link BoundVariable}: each attribute by which an item's interaction binds a response variable,
  *   its `response-identifier` and its `string-identifier` (§5.48.2, §5.162.3: "binding the
  *   interaction to a second response variable (of base-type string)"), and beside it, where a
@@ -37,13 +41,17 @@
  *   kind, and its {@link ChoiceInteraction}, its nearest interaction (N8) (§5.132.1 and the other
  *   choice classes': "This identifier must not be used by any other choice or item variable"; spec
  *   reading 104: the item is the scope, as §7.16 reads an identifier, "a logical reference to
- *   another object in the item, such as an itemVariable or choice").
+ *   another object in the item, such as an itemVariable or choice"). Across the classes,
+ *   {@link ChoiceVariableName} holds it distinct among every choice and hottext of its document.
  * - {@link Hottext}: every hottext, its nearest interaction's kind, so {@link HottextOwner} is the
  *   hottexts of a hottext interaction; elsewhere a hottext is valid and owned by none (reading 38).
- *   Its identifier is distinct among its document's hottexts (§5.65.1, reading 104).
+ *   Its identifier is distinct among its document's hottexts (§5.65.1, reading 104), and among its
+ *   document's choices by {@link ChoiceVariableName}.
  * - {@link ChoiceVariableName}: each identifier a document's choices, hottexts or declarations use,
- *   counting each, so a choice's identifier is no item variable's: no declaration's of its
- *   document, and in an item no built-in variable's (reading 104, "Choice not variable").
+ *   counting each, so the nine choice classes share one space of identifiers, a name borne by one
+ *   choice or hottext of a document or its assembly and by no other ("Choice identifier key"), and
+ *   a choice's identifier is no item variable's: no declaration's of its document, and in an item
+ *   no built-in variable's (reading 104, "Choice not variable").
  * - {@link Hotspot}: the hotspot choices and associable hotspots, their shape, and their element
  *   ranks beside their parent's element count, through `nodeCounts` (reading 80).
  * - {@link CountBound}: every element whose counts `ChoiceBound` pairs, and whether it writes each;
@@ -269,7 +277,8 @@ export const bindingAttributes = [
  * multiple cardinality", of the `max-choices` of the choice (§5.30.2), hottext (§5.66.1), hotspot
  * (§5.68.2), position object (§5.107.3) and select point (§5.128.2) interactions, and the same
  * sentence of `max-associations` on the associate (§5.8.2), gap match (§5.57.3), graphic associate
- * (§5.59.2), graphic gap match (§5.60.2) and match (§5.89.2) interactions.
+ * (§5.59.2), graphic gap match (§5.60.2) and match (§5.89.2) interactions. A gap match's gaps
+ * decide it too ({@link gapMatchKind}, spec reading 169).
  */
 export const cardinalityKinds = [
   "qti-choice-interaction",
@@ -285,9 +294,24 @@ export const cardinalityKinds = [
 ] as const satisfies readonly Kind[];
 
 /**
+ * The gap match interaction's kind, whose response cardinality its count of gaps decides beside its
+ * most, spec reading 169: "The GapMatchInteraction must be bound to a response variable with
+ * base-type directedPair and either single or multiple cardinality, depending on the number of
+ * gaps" (§5.57). Each gap takes a pair of its own and a single response holds one pair, so a gap
+ * match with two or more gaps binds a response of multiple cardinality.
+ */
+export const gapMatchKind = "qti-gap-match-interaction" satisfies Kind;
+
+/**
+ * The gap's kind: the {@link Choice} rows of this kind are the ones `Interaction.gaps` counts.
+ */
+export const gapKind = "qti-gap" satisfies Kind;
+
+/**
  * The interactions of any response type: those neither `BindingFit` nor `RecordBindingFit` names,
- * the custom and portable custom interactions, which bind a declared response variable of any base
- * type and cardinality (reading 75 binds them all).
+ * the custom, portable custom and order interactions, whose class descriptions (§5.36, §5.106 and
+ * §5.97) state no binding, so each binds a declared response variable of any base type and
+ * cardinality (reading 75 binds them all; spec reading 172 the order interaction).
  */
 export const anyTypeKinds: readonly Kind[] = interactionKinds.filter(
   (kind) =>
@@ -359,6 +383,12 @@ const printedVariable = "qti-printed-variable" satisfies Kind;
  * The context variable's kind, a PCI's binding of a context variable (§5.106.6).
  */
 const contextVariableKind = "qti-context-variable" satisfies Kind;
+
+/**
+ * The portable custom interaction's template variable kind (§7.38.1), the one element that names a
+ * template variable without stating its type: "Template variable type" leaves it free.
+ */
+const templateVariableKind = "qti-template-variable" satisfies Kind;
 
 /**
  * Each content reference relation's attributes and kinds, as `ContentReference` lists them. A
@@ -440,15 +470,20 @@ export const InteractionAttribute = relation(
 /**
  * An interaction element, in any document, keyed by its node: its {@link nodeRef} tuple and its
  * count of {@link ChoiceInteraction} rows, the choices whose nearest interaction it is, which the
- * family draws. Every interaction has one, whether or not it writes a `response-identifier`, so its
- * choices' family always has its owner and a missing response identifier is AL3's alone.
+ * family draws, and its count of {@link PciModuleForm} rows, the forms of a portable custom
+ * interaction's module, which the second family draws, and its count of {@link GapInteraction} rows,
+ * the gaps among its choices, which the third family draws. Every interaction has one, whether or
+ * not it writes a `response-identifier`, so its choices' family always has its owner and a missing
+ * response identifier is AL3's alone.
  */
 export const Interaction = relation(
   "Interaction",
   {
     choices: drawn(natural),
     document: uuid,
+    gaps: drawn(natural),
     kind: closedId(NodeKind),
+    moduleForms: drawn(natural),
     nearest: uuid,
     node: uuid,
     parent: uuid,
@@ -549,7 +584,9 @@ export const BindingDeclaration = relation(
  * - `cardinality`, the declaration's {@link DeclarationCardinality}'s;
  * - `mosts`, its interaction's count of most values, its {@link CountBound}'s `mosts` where
  *   `ChoiceBound` pairs the kind's counts, and 0 on any other kind, which has none: "Binding
- *   cardinality" judges a binding only where its interaction's most has a value.
+ *   cardinality" judges a binding only where its interaction's most has a value;
+ * - `gaps`, its interaction's count of gaps, its {@link Interaction}'s: "Binding cardinality" refuses
+ *   a gap match with two or more bound to a single response (spec reading 169).
  */
 export const BindingCardinality = relation(
   "BindingCardinality",
@@ -558,6 +595,7 @@ export const BindingCardinality = relation(
     baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
+    gaps: natural,
     kind: closedId(NodeKind),
     mosts: natural,
     node: uuid,
@@ -646,7 +684,7 @@ export const PlacedBindingDeclaration = relation(
  * {@link PlacedBindingDeclaration} is, where the declaration has one, as
  * {@link BindingCardinality} is an item's own binding's: `instance`, `node`, `attribute`, `kind`,
  * `declaration` and `baseTypes`, its declaration row's; `cardinality`, the declaration's
- * {@link DeclarationCardinality}'s; and `mosts`, as {@link BindingCardinality}'s.
+ * {@link DeclarationCardinality}'s; and `mosts` and `gaps`, as {@link BindingCardinality}'s.
  */
 export const PlacedBindingCardinality = relation(
   "PlacedBindingCardinality",
@@ -655,6 +693,7 @@ export const PlacedBindingCardinality = relation(
     baseTypes: natural,
     cardinality: closedId(Cardinality),
     declaration: uuid,
+    gaps: natural,
     instance: uuid,
     kind: closedId(NodeKind),
     mosts: natural,
@@ -707,7 +746,9 @@ export const PlacedBindingBaseType = relation(
  * instance and the choice's node: a {@link Choice} of the instance's document, under the
  * assembly, so an included fragment's choices count among its item's ("Choice identifier key" over
  * the assembly: "This identifier must not be used by any other choice", information model
- * §5.132.1), and a fragment placed twice in one item holds its choices twice.
+ * §5.132.1, read across the nine choice classes by spec reading 104, so `placedChoices` and
+ * `placedHottexts` of {@link ChoiceVariableName} hold a name to one of them), and a fragment placed
+ * twice in one item holds its choices twice.
  */
 export const PlacedChoice = relation(
   "PlacedChoice",
@@ -784,6 +825,92 @@ export const choiceFamily = counted(
 );
 
 /**
+ * A gap's interaction, keyed by the gap's node: a copy of its {@link ChoiceInteraction} row, held
+ * both ways to the {@link Choice} rows of kind `qti-gap`, so a gap an include places counts under
+ * the interaction that encloses it, as its choice does, and no gap text or other choice counts.
+ * `Interaction.choices` counts a gap match's gap texts beside its gaps; "Binding cardinality" reads
+ * the gaps alone (spec reading 169). It owns no sequence.
+ */
+export const GapInteraction = relation("GapInteraction", { interaction: uuid, node: uuid }, [
+  "node",
+]);
+
+/**
+ * Each interaction's gaps, counted by `Interaction.gaps`: a flat row whose group, `interaction`,
+ * names its owner.
+ */
+export const gapFamily = counted(on(GapInteraction, "interaction"), fin(Interaction, "gaps"));
+
+/**
+ * One form in which a portable custom interaction names its module, keyed by the interaction's node
+ * and the form: `element` is false for the `module` attribute and true for the
+ * `qti-interaction-modules` child (information model §5.106.2: "If this characteristic is provided
+ * the qti-interaction-modules child attribute is not required, if omitted then the modules child
+ * element is mandatory", R10-a). A form a PCI does not write has no row; "PCI module source" counts
+ * the rows.
+ *
+ * Its rows are copies of the tree, both ways: an attribute form of each `module` attribute of a
+ * portable custom interaction, an element form of each `qti-interaction-modules` child of one.
+ */
+export const PciModuleForm = relation("PciModuleForm", { element: pg.boolean, node: uuid }, [
+  "node",
+  "element",
+]);
+
+/**
+ * Each interaction's module forms, counted by `Interaction.moduleForms`: a flat row whose group,
+ * `node`, names its owner.
+ */
+export const pciModuleFamily = counted(on(PciModuleForm, "node"), fin(Interaction, "moduleForms"));
+
+/**
+ * The portable custom interaction's kind, the one element whose module a form names.
+ */
+export const pciKind = "qti-portable-custom-interaction" satisfies Kind;
+
+/**
+ * The kind of a portable custom interaction's `qti-interaction-modules` child, the element form of
+ * its module.
+ */
+export const modulesKind = "qti-interaction-modules" satisfies Kind;
+
+/**
+ * The custom interaction's kind, the deprecated element a 3.0.0 document holds none of ("Custom
+ * interaction version", R10-b).
+ */
+const customKind = "qti-custom-interaction" satisfies Kind;
+
+/**
+ * The `module` attribute of a portable custom interaction: the attribute form of its module.
+ */
+const moduleAttributes = select(Attribute, (a) =>
+  a.and(a.eq(a.kind, pciKind), a.eq(a.name, "module")),
+);
+
+/**
+ * The `qti-interaction-modules` children of a portable custom interaction, by their parent: the
+ * element form of its module.
+ */
+const moduleElements = select(Node, (n) =>
+  n.and(n.eq(n.kind, modulesKind), n.eq(n.parentKind, pciKind)),
+);
+
+/**
+ * The gaps among the {@link Choice} rows, each of which has its {@link GapInteraction}.
+ */
+const gapChoices = select(Choice, (c) => c.eq(c.kind, gapKind));
+
+/**
+ * The attribute forms among the {@link PciModuleForm} rows.
+ */
+const attributeForms = select(PciModuleForm, (f) => f.eq(f.element, false));
+
+/**
+ * The element forms among the {@link PciModuleForm} rows.
+ */
+const elementForms = select(PciModuleForm, (f) => f.eq(f.element, true));
+
+/**
  * A hottext, keyed by its node: its {@link nodeRef} tuple, its nearest interaction's kind
  * (`document` where it sits in none), and its identifier collapsed.
  */
@@ -843,12 +970,16 @@ export const placedHottextFamily = counted(
  *
  * Every choice class says of its identifier "This identifier must not be used by any other choice
  * or item variable" (§5.132.1; §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and
- * §5.131.1 alike), and the item variables are its declarations and its built-in variables
- * (§2.2.2), so "Choice not variable" holds a used identifier to its choices and hottexts or to its
- * variables, never both (spec reading 104). The comparison spans two relations, so it is a count
- * of each under one key: a containment cannot say that a name is absent. An included fragment's
- * choices are its item's (spec reading 117), and a fragment declares nothing, so an item's
- * assembly's placed choices and hottexts are held to the item's own variables.
+ * §5.131.1 alike), and the item variables are its declarations and its built-in variables (§2.2.2),
+ * so "Choice not variable" holds a used identifier to its choices and hottexts or to its variables,
+ * never both (spec reading 104). The four classes whose sentence says "any other choice" read
+ * across classes, and the nine share one space of identifiers (spec reading 104 as amended, the
+ * stricter normative reading), so "Choice identifier key" holds a used identifier to one choice or
+ * hottext, of whichever class, in the document and over its assembly. The comparison spans two
+ * relations, so it is a count of each under one key: a containment cannot say that a name is
+ * absent. An included fragment's choices are its item's (spec reading 117), and a fragment declares
+ * nothing, so an item's assembly's placed choices and hottexts are held to the item's own
+ * variables.
  */
 export const ChoiceVariableName = relation(
   "ChoiceVariableName",
@@ -1134,7 +1265,9 @@ export const FeedbackRef = relation("FeedbackRef", referenceFields, ["node", "at
 /**
  * A template element's or a choice's template variable, keyed by its node and
  * `template-identifier` (§2.7.2: "A references must match the identifier in a corresponding
- * template declaration").
+ * template declaration"). Of a template element or a choice the variable is of base type
+ * identifier and of single or multiple cardinality (reading R15-l, "Template variable type"); a
+ * portable custom interaction's `qti-template-variable` states no type.
  */
 export const TemplateRef = relation("TemplateRef", referenceFields, ["node", "attribute"]);
 
@@ -1190,6 +1323,27 @@ export const FeedbackRefCardinality = relation(
 export const TemplateRefDeclaration = relation(
   "TemplateRefDeclaration",
   referenceDeclarationFields,
+  ["node", "attribute"],
+);
+
+/**
+ * A {@link TemplateRefDeclaration}'s template beside its cardinality, keyed as it is, where the
+ * template has one (spec reading 159, decision 432): `declaration`, its declaration row's, `kind`,
+ * the reference's, and `cardinality`, the template's {@link DeclarationCardinality}'s, which
+ * "Template variable type" holds to single or multiple unless the reference is a portable custom
+ * interaction's `qti-template-variable`, which states no type. A template whose cardinality is
+ * unwritten or spells nothing leaves its reference none, so the law reads no cardinality the
+ * template does not have, and AL3 or its value domain refuses it alone (spec reading 158).
+ */
+export const TemplateRefCardinality = relation(
+  "TemplateRefCardinality",
+  {
+    attribute: closedId(AttributeName),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
+  },
   ["node", "attribute"],
 );
 
@@ -1461,6 +1615,23 @@ export const SectionTemplateRefDeclaration = relation(
 );
 
 /**
+ * A {@link SectionTemplateRefDeclaration}'s template beside its cardinality, keyed as it is, where
+ * the template has one, as {@link TemplateRefCardinality} is an own template reference's.
+ */
+export const SectionTemplateRefCardinality = relation(
+  "SectionTemplateRefCardinality",
+  {
+    attribute: closedId(AttributeName),
+    cardinality: closedId(Cardinality),
+    declaration: uuid,
+    instance: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
+  },
+  ["instance", "node", "attribute"],
+);
+
+/**
  * The context declaration a {@link SectionContextRef} names among its assembly's declarations,
  * keyed as it is, where the assembly declares one of its name.
  */
@@ -1526,6 +1697,7 @@ export const interactionRelations = {
   FeedbackRef,
   FeedbackRefCardinality,
   FeedbackRefDeclaration,
+  GapInteraction,
   Hotspot,
   Hottext,
   Interaction,
@@ -1533,6 +1705,7 @@ export const interactionRelations = {
   ItemMode,
   LeastCount,
   MostCount,
+  PciModuleForm,
   PlacedBinding,
   PlacedBindingBaseType,
   PlacedBindingCardinality,
@@ -1555,9 +1728,11 @@ export const interactionRelations = {
   SectionScope,
   SectionTemplateName,
   SectionTemplateRef,
+  SectionTemplateRefCardinality,
   SectionTemplateRefDeclaration,
   Slider,
   TemplateRef,
+  TemplateRefCardinality,
   TemplateRefDeclaration,
 };
 
@@ -1600,6 +1775,28 @@ const itemBuiltInNames: readonly string[] = [
     BuiltInVariable.rows.filter(({ root }) => root === itemKind).map(({ variable }) => variable),
   ),
 ];
+
+/**
+ * State the cross-class half of "Choice identifier key" over one used identifier (spec reading 104
+ * as amended): the nine choice classes share one space of identifiers, so at most one choice or
+ * hottext of the document bears it, and at most one its assembly places (spec reading 117). The
+ * per-class keys find two of one class; this finds a choice of one class beside one of another, a
+ * gap beside a gap text among them. It compares counts only, so every term is a plain comparison.
+ *
+ * @param n - The row.
+ * @returns The predicate.
+ */
+const choiceIdentifierUnique = (n: NameRow) =>
+  n.and(
+    n.or(
+      n.and(n.eq(n.choices, 0n), n.le(n.hottexts, 1n)),
+      n.and(n.le(n.choices, 1n), n.eq(n.hottexts, 0n)),
+    ),
+    n.or(
+      n.and(n.eq(n.placedChoices, 0n), n.le(n.placedHottexts, 1n)),
+      n.and(n.le(n.placedChoices, 1n), n.eq(n.placedHottexts, 0n)),
+    ),
+  );
 
 /**
  * State "Choice not variable" over one used identifier (spec reading 104): no choice or hottext
@@ -2243,6 +2440,43 @@ const contentReferenceLaws = ({
 ];
 
 /**
+ * The fields of a bound variable's cardinality row that the gap half of "Binding cardinality"
+ * reads, which {@link BindingCardinality} and {@link PlacedBindingCardinality} share.
+ */
+const gapCardinalityFields = {
+  attribute: closedId(AttributeName),
+  cardinality: closedId(Cardinality),
+  gaps: natural,
+  kind: closedId(NodeKind),
+};
+
+/**
+ * A bound variable's cardinality row, an item's own or one in place, as the gap half of "Binding
+ * cardinality" reads it.
+ */
+type GapCardinalityRow = RowScalars<{
+  readonly heading: typeof gapCardinalityFields;
+  readonly name: string;
+}>;
+
+/**
+ * Whether a binding holds to spec reading 169: a gap match's response is single only where it has
+ * at most one gap, its own and those an include places in it ("The GapMatchInteraction must be
+ * bound to a response variable with base-type directedPair and either single or multiple
+ * cardinality, depending on the number of gaps", §5.57).
+ *
+ * @param r - The binding's cardinality row.
+ * @returns The predicate.
+ */
+const singleGap = (r: GapCardinalityRow) =>
+  r.or(
+    r.ne(r.attribute, "response-identifier"),
+    r.ne(r.kind, gapMatchKind),
+    r.ne(r.cardinality, "single"),
+    r.le(r.gaps, 1n),
+  );
+
+/**
  * The bindings whose variable has a cardinality and a base type: each has its
  * {@link BindingBaseType}, and only these do.
  */
@@ -2264,7 +2498,8 @@ const feedbackCardinalities = ["single", "multiple"] as const;
 /**
  * The declarations whose base type is `identifier`, a feedback outcome's, where the declaration has
  * a base type: the target of `Feedback_outcome_type`'s containment over a feedback reference's
- * declaration.
+ * declaration, and of `Template_variable_type`'s over a template reference's that is no template
+ * variable's.
  */
 const identifierTyped = on(
   select(DeclarationBaseType, (b) => b.eq(b.baseType, "identifier")),
@@ -2292,21 +2527,25 @@ const identifierTyped = on(
  *   reading 75), a response declaration's whatever its cardinality spells (reading 159), whose
  *   fields are the binding's and back, and where the declaration has a cardinality its
  *   {@link BindingCardinality}, copied from `DeclarationCardinality`; each declaration of a type
- *   `BindingFit` or `RecordBindingFit` admits, the custom and portable custom interactions of any
- *   type, and a string binding's of base type string ("BindingFit"), each fit law over the
- *   cardinality and base type rows alone; "Binding unique" (`key(document, identifier)`); "Binding
- *   cardinality" (a single response takes a most of 1, where its interaction's most has a value);
- *   `max-strings-required`, which carries `kind` beside `node` so that its containment into
- *   `CountBound` is a statement of its own, not "Binding cardinality"'s: a refusal names a law by
- *   its relations and terms, never its selection (C22); and "AdaptiveFeedback", an interaction
- *   inside feedback is in an adaptive item.
+ *   `BindingFit` or `RecordBindingFit` admits, the custom, portable custom and order interactions
+ *   of any type (spec reading 172), and a string binding's of base type string ("BindingFit"), each
+ *   fit law over the cardinality and base type rows alone; "Binding unique" (`key(document,
+ *   identifier)`); "Binding cardinality" (a single response takes a most of 1, where its
+ *   interaction's most has a value, and a gap match of at most one gap, its cardinality row's
+ *   `gaps` copied from `Interaction`, spec reading 169); `max-strings-required`, which carries
+ *   `kind` beside `node` so that its containment into `CountBound` is a statement of its own, not
+ *   "Binding cardinality"'s: a refusal names a law by its relations and terms, never its selection
+ *   (C22); and "AdaptiveFeedback", an interaction inside feedback is in an adaptive item.
  * - **choices:** each choice's {@link ChoiceInteraction}, which every choice has ("N8 nearest"), its
- *   interaction the choice's nearest, the counted family under `Interaction`; its identifier
- *   distinct among its document's choices of its kind; each hottext's nearest kind, and its
- *   identifier distinct among its document's hottexts (reading 104); and in place (spec reading
+ *   interaction the choice's nearest, the counted family under `Interaction`; each gap's
+ *   {@link GapInteraction}, which every gap has ("N8 nearest" too, so a gap no interaction encloses
+ *   breaks that law alone), a copy of its choice interaction counted under `Interaction`; its
+ *   identifier distinct among its document's choices of its kind; each hottext's nearest kind, and
+ *   its identifier distinct among its document's hottexts (reading 104); and in place (spec reading
  *   117), under each instance of each assembly, as many {@link PlacedChoice} and
  *   {@link PlacedHottext} rows as its document has choices and hottexts, each its document's, their
- *   identifiers distinct over the assembly.
+ *   identifiers distinct over the assembly. Across the classes, `Choice_identifier_key` holds each
+ *   name to one choice or hottext, in the document and over its assembly.
  * - **choice names** (reading 104): each identifier a choice, a hottext or a declaration uses, or
  *   that an assembly places on a choice or a hottext (reading 117), has its
  *   {@link ChoiceVariableName} under its document or its assembly's root document, of that
@@ -2325,18 +2564,23 @@ const identifierTyped = on(
  *   class as its document has references; each resolution its placement's and its reference's,
  *   resolved in the assembly's declarations or to a built-in of its root, its kind
  *   `SectionScope.assemblyKind`, `Instance`'s, under "Feedback reference" and "Feedback outcome
- *   type", "Printed variable reference", "Template reference" or "Context variable reference".
+ *   type", "Printed variable reference", "Template reference" and "Template variable type" or
+ *   "Context variable reference".
  * - **content references:** each relation's rows are its source's, its `assemblyKind` its document's
  *   root kind; a name that is no built-in's of that root has its declaration row, the reference's,
  *   of a declaration kind `ContentReference` allows for its kind and attribute, a declaration
  *   through `declarationIdentifierRef` whatever its cardinality spells (spec reading 159); and a
  *   built-in's of that root is one its kind and attribute may name there, under its reference's law
  *   ("Feedback reference", "Template reference", "Printed variable reference", "Context variable
- *   reference"); and "Feedback outcome type" (reading 77: an outcome of base type identifier,
- *   single or multiple; the one built-in a feedback may name, `completionStatus`, is a single
- *   identifier, §2.2.2.3), its cardinality half over the feedback's cardinality rows
+ *   reference"); "Feedback outcome type" (reading 77: an outcome of base type identifier, single or
+ *   multiple; the one built-in a feedback may name, `completionStatus`, is a single identifier,
+ *   §2.2.2.3), its cardinality half over the feedback's cardinality rows
  *   ({@link FeedbackRefCardinality}, {@link SectionFeedbackRefCardinality}), each where the outcome
- *   has a cardinality, and its base type half over the declaration rows where it has a base type.
+ *   has a cardinality, and its base type half over the declaration rows where it has a base type;
+ *   and "Template variable type" (reading R15-l: a template element's or a choice's template
+ *   variable of base type identifier, single or multiple, a portable custom interaction's free),
+ *   its halves read the same way, the cardinality half over {@link TemplateRefCardinality} and
+ *   {@link SectionTemplateRefCardinality} (decision 432).
  */
 export const interactionLawsByName = {
   ...pipe(contentReferences, Rec.map(contentReferenceLaws)),
@@ -2411,6 +2655,8 @@ export const interactionLawsByName = {
         "node",
       ),
     ),
+    check("Binding_cardinality", BindingCardinality, singleGap),
+    check("Binding_cardinality", PlacedBindingCardinality, singleGap),
   ],
   "Binding declared": [
     contained(
@@ -2617,8 +2863,15 @@ export const interactionLawsByName = {
     key(on(Hottext, "document", "identifier")),
     key(on(PlacedChoice, "assembly", "kind", "identifier")),
     key(on(PlacedHottext, "assembly", "identifier")),
+    check("Choice_identifier_key", ChoiceVariableName, choiceIdentifierUnique),
   ],
   "Choice not variable": [check("Choice_not_variable", ChoiceVariableName, choiceNotVariable)],
+  "Custom interaction version": [
+    check("Custom_interaction_version", Interaction, (i) =>
+      i.or(i.ne(i.kind, customKind), i.ne(i.version, "3.0.0")),
+    ),
+  ],
+  "DocumentId key": [key(on(moduleAttributes, "node"))],
   "E1 derived": [
     key(on(read, "node", "name")),
     contained(
@@ -2637,6 +2890,20 @@ export const interactionLawsByName = {
       on(Binding, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
+    key(on(attributeForms, "node")),
+    key(on(elementForms, "node")),
+    key(on(moduleElements, "parent")),
+    contained(on(moduleAttributes, "node"), on(attributeForms, "node")),
+    contained(on(attributeForms, "node"), on(moduleAttributes, "node")),
+    contained(on(moduleElements, "parent"), on(elementForms, "node")),
+    contained(on(elementForms, "node"), on(moduleElements, "parent")),
+    pciModuleFamily,
+    contained(on(GapInteraction, "node"), on(gapChoices, "node")),
+    contained(
+      on(GapInteraction, "node", "interaction"),
+      on(ChoiceInteraction, "node", "interaction"),
+    ),
+    gapFamily,
     contained(on(Binding, "node"), on(Interaction, "node")),
     key(on(responseIdentifiers, "node")),
     mirrors(on(responseIdentifiers, "node"), on(Binding, "node")),
@@ -2914,6 +3181,8 @@ export const interactionLawsByName = {
     check("E1_derived", PlacedBindingCardinality, (r) =>
       r.or(r.in(r.kind, boundKinds), r.eq(r.mosts, 0n)),
     ),
+    contained(on(BindingCardinality, "node", "gaps"), on(Interaction, "node", "gaps")),
+    contained(on(PlacedBindingCardinality, "node", "gaps"), on(Interaction, "node", "gaps")),
     contained(
       on(readOf(["lower-bound"], [sliderKind]), "node", "value"),
       on(Slider, "node", "lower"),
@@ -3151,6 +3420,7 @@ export const interactionLawsByName = {
     contained(on(Choice, "node"), on(ChoiceInteraction, "node")),
     contained(on(ChoiceInteraction, "node", "interaction"), on(Choice, "node", "nearest")),
     choiceFamily,
+    contained(on(gapChoices, "node"), on(GapInteraction, "node")),
     contained(
       on(
         select(Hottext, (h) => h.in(h.nearestKind, interactionKinds)),
@@ -3158,6 +3428,11 @@ export const interactionLawsByName = {
         "nearestKind",
       ),
       on(Interaction, "node", "kind"),
+    ),
+  ],
+  "PCI module source": [
+    check("PCI_module_source", Interaction, (i) =>
+      i.or(i.ne(i.kind, pciKind), i.gt(i.moduleForms, 0n)),
     ),
   ],
   RecordBindingFit: [
@@ -3206,6 +3481,70 @@ export const interactionLawsByName = {
           ),
         ),
       ),
+    ),
+  ],
+  "Template variable type": [
+    // Each half judges the template where what it reads spells something (spec readings 158 and
+    // 159, decision 432), as "Feedback outcome type" judges an outcome: its cardinality, where it
+    // has one, its reference's cardinality row's, copied from its declaration row and
+    // `DeclarationCardinality`; its base type, where it has one, its `DeclarationBaseType`'s. A
+    // portable custom interaction's template variable is free.
+    contained(
+      on(
+        select(TemplateRefDeclaration, (r) => r.eq(r.cardinalities, 1n)),
+        "node",
+        "attribute",
+      ),
+      on(TemplateRefCardinality, "node", "attribute"),
+    ),
+    contained(
+      on(TemplateRefCardinality, "node", "attribute", "declaration", "kind"),
+      on(TemplateRefDeclaration, "node", "attribute", "declaration", "kind"),
+    ),
+    contained(
+      on(TemplateRefCardinality, "declaration", "cardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
+    ),
+    check("Template_variable_type", TemplateRefCardinality, (r) =>
+      r.or(r.eq(r.kind, templateVariableKind), r.in(r.cardinality, feedbackCardinalities)),
+    ),
+    contained(
+      on(
+        select(TemplateRefDeclaration, (r) =>
+          r.and(r.ne(r.kind, templateVariableKind), r.eq(r.baseTypes, 1n)),
+        ),
+        "declaration",
+      ),
+      identifierTyped,
+    ),
+    contained(
+      on(
+        select(SectionTemplateRefDeclaration, (r) => r.eq(r.cardinalities, 1n)),
+        "instance",
+        "node",
+        "attribute",
+      ),
+      on(SectionTemplateRefCardinality, "instance", "node", "attribute"),
+    ),
+    contained(
+      on(SectionTemplateRefCardinality, "instance", "node", "attribute", "declaration", "kind"),
+      on(SectionTemplateRefDeclaration, "instance", "node", "attribute", "declaration", "kind"),
+    ),
+    contained(
+      on(SectionTemplateRefCardinality, "declaration", "cardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
+    ),
+    check("Template_variable_type", SectionTemplateRefCardinality, (r) =>
+      r.or(r.eq(r.kind, templateVariableKind), r.in(r.cardinality, feedbackCardinalities)),
+    ),
+    contained(
+      on(
+        select(SectionTemplateRefDeclaration, (r) =>
+          r.and(r.ne(r.kind, templateVariableKind), r.eq(r.baseTypes, 1n)),
+        ),
+        "declaration",
+      ),
+      identifierTyped,
     ),
   ],
   "default hotspot last slot": [check("default_hotspot_last_slot", Hotspot, lastWhere)],
