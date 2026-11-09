@@ -130,7 +130,14 @@
  */
 import { Brand, Effect, Option, Result } from "effect";
 import type { Array as Arr } from "effect";
-import { resolveInside, schemePrefix, withoutQuery } from "#plate/document/href.ts";
+import {
+  directoryOf,
+  pathOf,
+  resolveIn,
+  schemePrefix,
+  withoutQuery,
+} from "#plate/document/href.ts";
+import type { Directory, Resolved } from "#plate/document/href.ts";
 import { readSource } from "#plate/document/read.ts";
 import {
   attributePath,
@@ -841,29 +848,38 @@ const withheldFiles = (resource: ManifestResource): readonly string[] =>
   });
 
 /**
- * A base a document's references resolve against: the segments of its path from the package's
- * root, the last the one a reference replaces, or none for a base outside the package, against
- * which every relative reference stays outside it.
+ * A base a document's references resolve against: the directory a reference's path is relative to,
+ * shared by reference with every element in the base's scope, or none for a base outside the
+ * package, against which every relative reference stays outside it.
  */
-type Base = Option.Option<readonly string[]>;
+type Base = Option.Option<Directory>;
 
 /**
- * Resolve a reference a document makes against its base through {@link resolveInside}, by the
- * rule the manifest resolves an `href` by and `startTest` an item ref's (reading 102).
+ * Resolve a reference a document makes against its base through {@link resolveIn}, by the rule the
+ * manifest resolves an `href` by and `startTest` an item ref's (reading 102), with work that grows
+ * with the reference's length, not the base's depth.
  *
  * @param base The base in scope where the reference is written ({@link basesOf}).
  * @param reference The reference, read by its attribute's whitespace class.
- * @returns The path it names from the package's root; none for an absolute URI, a path from a
- *   host's root, one whose `..` climbs above the package's root, and any reference under a base
- *   outside the package.
+ * @returns The path it names inside the package; none for an absolute URI, a path from a host's
+ *   root, one whose `..` climbs above the package's root, and any reference under a base outside
+ *   the package.
  */
-const resolveReference = (base: Base, reference: string): Option.Option<string> =>
+const locate = (base: Base, reference: string): Option.Option<Resolved> =>
   schemePrefix.test(reference)
     ? Option.none()
-    : base.pipe(
-        Option.flatMap((segments) => resolveInside(segments, reference)),
-        Option.map((segments) => segments.join("/")),
-      );
+    : base.pipe(Option.flatMap((directory) => resolveIn(directory, reference)));
+
+/**
+ * Resolve a reference a document makes against its base ({@link locate}) to the text of the path it
+ * names.
+ *
+ * @param base The base in scope where the reference is written ({@link basesOf}).
+ * @param reference The reference, read by its attribute's whitespace class.
+ * @returns The path it names from the package's root, none where {@link locate} gives none.
+ */
+const resolveReference = (base: Base, reference: string): Option.Option<string> =>
+  Option.map(locate(base, reference), pathOf);
 
 /**
  * Give an element's `xml:base`, as written.
@@ -887,7 +903,10 @@ const xmlBaseOf = (element: SourceElement): Option.Option<string> =>
  * An `xml:base` is an `xs:anyURI`, read collapsed. One whose path is empty, a query or a fragment
  * alone among them, resolves to the base above it (RFC 3986, section 5.2.2). One that is an
  * absolute URI, starts with `/` or climbs above the package's root leaves the package, so every
- * relative reference in its scope does too (reading 102).
+ * relative reference in its scope does too (reading 102). Each `xml:base` is resolved once, against
+ * the directory above it, with work that grows with its own length, and its directory is shared by
+ * reference with every element in its scope, so a deep base costs its depth once, not once for
+ * each element or reference under it.
  *
  * @param visits The visits of the document's elements, in document order, each parent before its
  *   children.
@@ -896,7 +915,7 @@ const xmlBaseOf = (element: SourceElement): Option.Option<string> =>
  * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.1
  */
 const basesOf = (visits: readonly Visit[], path: string): ReadonlyMap<SourceElement, Base> => {
-  const own: Base = Option.some(path.split("/"));
+  const own: Base = Option.some(directoryOf(path));
   const bases = new Map<SourceElement, Base>();
   for (const { element, parent } of visits) {
     const above = Option.match(parent, {
@@ -911,7 +930,7 @@ const basesOf = (visits: readonly Visit[], path: string): ReadonlyMap<SourceElem
         onSome: (value) =>
           withoutQuery(value) === ""
             ? above
-            : Option.map(resolveReference(above, value), (resolved) => resolved.split("/")),
+            : Option.map(locate(above, value), (resolved) => resolved.directory),
       }),
     );
   }
@@ -1155,6 +1174,174 @@ const referencesIn = (reference: FileReference, value: string): readonly string[
 };
 
 /**
+ * The most characters a fact of a refusal's detail carries ({@link boundedFact}).
+ */
+const factLimit = 1024;
+
+/**
+ * How many of its first characters a fact longer than {@link factLimit} keeps.
+ */
+const factHead = 512;
+
+/**
+ * How many of its last characters a fact longer than {@link factLimit} keeps, so with the `…`
+ * between them it is {@link factLimit} long.
+ */
+const factTail = 511;
+
+/**
+ * Bound a fact a refusal's detail carries: one longer than {@link factLimit} characters keeps its
+ * first {@link factHead} and its last {@link factTail} characters around one `…` (U+2026), and a
+ * shorter one is unchanged.
+ *
+ * A hostile package can make a fact as long as one of its documents for each of thousands of
+ * refusals, a path resolved through a deep `xml:base` for every reference under it, so the details
+ * would total more characters than a host can serialise into one string. No official package's
+ * refusal carries a fact that long, so no wording any of them is given changes.
+ *
+ * @param fact The fact.
+ * @returns The fact, bounded.
+ */
+const boundedFact = (fact: string): string =>
+  fact.length <= factLimit ? fact : `${fact.slice(0, factHead)}…${fact.slice(-factTail)}`;
+
+/**
+ * A directory of the files a package holds or lists, the names of its files and of the
+ * directories in it by name, each a folder of its own.
+ */
+interface Folder {
+  readonly files: Set<string>;
+  readonly folders: Map<string, Folder>;
+}
+
+/**
+ * Give the folders of a set of paths inside a package, each path split at `/` into the folders that
+ * hold it and its file's name. A resolved path's segments never hold a `/` (an escaped one stays
+ * escaped, by `decodeSegment` in `src/document/href.ts`), so a path is in the set exactly when its
+ * directory's folder holds its name.
+ *
+ * @param paths The paths, `/` separating each one's segments.
+ * @returns The package root's folder.
+ */
+const foldersOf = (paths: Iterable<string>): Folder => {
+  const root: Folder = { files: new Set(), folders: new Map() };
+  for (const path of paths) {
+    const segments = path.split("/");
+    let folder = root;
+    for (const name of segments.slice(0, -1)) {
+      const known = folder.folders.get(name);
+      const next = known ?? { files: new Set<string>(), folders: new Map<string, Folder>() };
+      if (known === undefined) {
+        folder.folders.set(name, next);
+      }
+
+      folder = next;
+    }
+
+    folder.files.add(segments.at(-1) ?? "");
+  }
+
+  return root;
+};
+
+/**
+ * What a file reference's check needs of the directory its path resolves into, each fact found
+ * from its parent's: the folder of the package's files under it, and the start and length of the
+ * text a name in it follows, its path and a `/`.
+ */
+interface DirectoryFacts {
+  /**
+   * The folder of the files the package holds or lists under the directory, none when it holds
+   * none.
+   */
+  readonly folder: Option.Option<Folder>;
+  /**
+   * The first {@link factHead} characters of the directory's path and a `/`, all of them when they
+   * are fewer; empty at the package's root.
+   */
+  readonly head: string;
+  /**
+   * The length of the directory's path and a `/`, 0 at the package's root.
+   */
+  readonly length: number;
+}
+
+/**
+ * Give each directory's facts ({@link DirectoryFacts}), found from its parent's on the first call
+ * for it and kept by the directory for every later one. A directory many references resolve into,
+ * a deep `xml:base`'s, is climbed once, so whether a held file lies under it is decided once, not
+ * once for each reference.
+ *
+ * @param files The package root's folder ({@link foldersOf}).
+ * @returns The facts of a directory.
+ */
+const directoryFacts = (files: Folder): ((directory: Directory) => DirectoryFacts) => {
+  const kept = new Map<Directory, DirectoryFacts>();
+  const atRoot: DirectoryFacts = { folder: Option.some(files), head: "", length: 0 };
+
+  return (directory) => {
+    const unknown: Directory[] = [];
+    let place = directory;
+    while (Option.isSome(place.parent) && !kept.has(place)) {
+      unknown.push(place);
+      place = place.parent.value;
+    }
+
+    let facts = kept.get(place) ?? atRoot;
+    for (const child of unknown.toReversed()) {
+      facts = {
+        folder: facts.folder.pipe(
+          Option.flatMap((folder) => Option.fromUndefinedOr(folder.folders.get(child.name))),
+        ),
+        head:
+          facts.head.length >= factHead
+            ? facts.head
+            : `${facts.head}${child.name.slice(0, factHead)}/`.slice(0, factHead),
+        length: facts.length + child.name.length + 1,
+      };
+      kept.set(child, facts);
+    }
+
+    return facts;
+  };
+};
+
+/**
+ * Give the text of a path a file reference names, bounded as {@link boundedFact} bounds a fact,
+ * without writing out a longer path: its first characters come from its directory's facts and its
+ * last from the names nearest its end, so a path under a deep `xml:base` costs the bound, not its
+ * depth.
+ *
+ * @param resolved The path inside the package.
+ * @param facts Its directory's facts ({@link directoryFacts}).
+ * @returns `boundedFact(pathOf(resolved))`.
+ */
+const boundedPath = (resolved: Resolved, facts: DirectoryFacts): string => {
+  if (facts.length + resolved.name.length <= factLimit) {
+    return boundedFact(pathOf(resolved));
+  }
+
+  const head =
+    facts.head.length >= factHead
+      ? facts.head
+      : `${facts.head}${resolved.name.slice(0, factHead - facts.head.length)}`;
+  const last = resolved.name.slice(-factTail);
+  const pieces = [last];
+  let { length } = last;
+  for (
+    let place = resolved.directory;
+    length < factTail && Option.isSome(place.parent);
+    place = place.parent.value
+  ) {
+    const piece = place.name.slice(-factTail);
+    pieces.push(piece);
+    length += piece.length + 1;
+  }
+
+  return `${head}…${pieces.toReversed().join("/").slice(-factTail)}`;
+};
+
+/**
  * Check each file reference of each document the package judges (E18, reading 103, "a document's
  * file references are the attributes its vocabularies define as the location of a file, and each
  * one that resolves within the package names a file the manifest describes; an xml:base is a
@@ -1167,6 +1354,13 @@ const referencesIn = (reference: FileReference, value: string): readonly string[
  * with `check: "reference"` at the attribute, its detail the referring `document`'s path, the
  * `attribute`, the `path` and the `reading`. A path the manifest lists that the package does not
  * hold is `package-file-missing` at its listing already (`checkFiles`), so it is not given again.
+ * The `path` is bounded ({@link boundedPath}): one longer than 1,024 characters keeps its first 512
+ * and its last 511 around a `…`.
+ *
+ * Each reference resolves against its base's directory, shared by reference ({@link basesOf}), and
+ * is looked for in the folders of the files the package holds or lists ({@link foldersOf}) from its
+ * directory's folder, which is found once for each directory ({@link directoryFacts}). So the work
+ * grows with the references' own lengths and the bases' depths, not with their product.
  *
  * The text of each element {@link textCensusOf} names, a card's or card entry's `qti-file-href`
  * and a `qti-resource-icon`, is one reference too (R9-b, "Card files and resource icons are file
@@ -1190,8 +1384,10 @@ const checkReferences = (
   documents: ReadonlyMap<string, Document>,
   held: ReadonlySet<string>,
   listed: ReadonlySet<string>,
-): readonly Refusal[] =>
-  [...documents].flatMap(([path, { source, type }]) => {
+): readonly Refusal[] => {
+  const factsOf = directoryFacts(foldersOf([...held, ...listed]));
+
+  return [...documents].flatMap(([path, { source, type }]) => {
     if (!judgedTypes.has(type) || Result.isFailure(source)) {
       return [];
     }
@@ -1205,14 +1401,21 @@ const checkReferences = (
        * lists it.
        *
        * @param written The reference, as read.
-       * @returns The path; none for one that names its own document, an external file, or a file
-       *   the package holds or lists.
+       * @returns The path, bounded ({@link boundedPath}); none for one that names its own
+       *   document, an external file, or a file the package holds or lists.
        */
       const missing = (written: string): Option.Option<string> =>
-        (withoutQuery(written) === ""
+        withoutQuery(written) === ""
           ? Option.none()
-          : resolveReference(bases.get(element) ?? Option.none(), written)
-        ).pipe(Option.filter((named) => !held.has(named) && !listed.has(named)));
+          : locate(bases.get(element) ?? Option.none(), written).pipe(
+              Option.flatMap((resolved) => {
+                const facts = factsOf(resolved.directory);
+
+                return Option.exists(facts.folder, (folder) => folder.files.has(resolved.name))
+                  ? Option.none()
+                  : Option.some(boundedPath(resolved, facts));
+              }),
+            );
 
       return [
         ...censusOf(element).flatMap((reference) =>
@@ -1251,6 +1454,7 @@ const checkReferences = (
       ];
     });
   });
+};
 
 /**
  * Give the verdict on a document of the package from its reading: the reader's refusal as a
@@ -1601,6 +1805,18 @@ const languageForms = (source: SourceDocument): readonly string[] => {
 };
 
 /**
+ * What an item's or test's document gives the LOM records that describe it: the languages its
+ * elements state ({@link languageForms}), and its root's `identifier` and `title`, as written, and
+ * the language its root states for that title ({@link titleLanguage}).
+ */
+interface Described {
+  readonly forms: readonly string[];
+  readonly identifier: Option.Option<string>;
+  readonly stated: Option.Option<string>;
+  readonly title: Option.Option<string>;
+}
+
+/**
  * Compare each item and test resource's own LOM metadata with its document (reading 62, "an item's
  * or test's identifier and title are those its package's LOM metadata gives it", with readings 134
  * and 148), every item and test resource that names a path, whatever type its document is read as
@@ -1642,11 +1858,12 @@ const languageForms = (source: SourceDocument): readonly string[] => {
  * one whose root is no item's or test's ({@link lomBoundRoots}; `checkRoots` refuses a resource
  * whose type it does not bear out).
  *
- * A document's language forms are read once, when the first `general` of a resource naming it is
- * judged, and kept by its path for every other resource that names it; a resource with no `general`
- * reads none. So a package of many resources naming one large document walks that document's
- * elements once, not once for each resource, and its cost grows with the resources plus the
- * elements rather than with their product.
+ * What a `general` is compared with is read of a document once ({@link Described}), when the first
+ * `general` of a resource naming it is judged, and kept by its path for every other resource that
+ * names it; a resource with no `general` reads none. So a package of many resources naming one
+ * large document walks that document's elements once and reads its root's attributes once, not once
+ * for each resource, and its cost grows with the resources plus the elements and attributes rather
+ * than with their product.
  *
  * @param manifest The manifest.
  * @param lom Each resource's LOM generals, keyed by its location.
@@ -1661,26 +1878,32 @@ const checkLom = (
   documents: ReadonlyMap<string, Document>,
   manifestLocation: string,
 ): readonly Refusal[] => {
-  const formsByPath = new Map<string, readonly string[]>();
+  const describedByPath = new Map<string, Described>();
 
   /**
-   * Give a document's language forms ({@link languageForms}), read on the first call for its path
-   * and kept for every later one.
+   * Give what a document's LOM records are compared with ({@link Described}), read on the first
+   * call for its path and kept for every later one.
    *
    * @param path The document's path, which keys what is kept.
    * @param document The document at that path.
-   * @returns The forms.
+   * @returns What it gives.
    */
-  const formsAt = (path: string, document: SourceDocument): readonly string[] => {
-    const kept = formsByPath.get(path);
+  const describedAt = (path: string, document: SourceDocument): Described => {
+    const kept = describedByPath.get(path);
     if (kept !== undefined) {
       return kept;
     }
 
-    const forms = languageForms(document);
-    formsByPath.set(path, forms);
+    const { root } = document;
+    const described: Described = {
+      forms: languageForms(document),
+      identifier: attributeOf(root, "identifier"),
+      stated: titleLanguage(root),
+      title: attributeOf(root, "title"),
+    };
+    describedByPath.set(path, described);
 
-    return forms;
+    return described;
   };
 
   return manifest.resources.flatMap((resource) => {
@@ -1702,7 +1925,8 @@ const checkLom = (
       return [];
     }
 
-    const stated = titleLanguage(root);
+    const described = describedAt(path, source.success);
+    const { stated } = described;
 
     /**
      * Refuse the values one LOM `general` gives for an attribute when none equals the document's.
@@ -1726,7 +1950,7 @@ const checkLom = (
         return [];
       }
 
-      const written = Option.getOrUndefined(attributeOf(root, attribute));
+      const written = Option.getOrUndefined(described[attribute]);
       if (written === undefined) {
         return [
           refuse(source.success.location, rule, root.local, {
@@ -1780,7 +2004,7 @@ const checkLom = (
             inDocumentLanguage(values.languages[index] ?? Option.none(), stated),
           ),
         ),
-        ...formsAt(path, source.success)
+        ...described.forms
           .filter((form) => !listed.has(foldedTag(form)))
           .map((form) =>
             refuse(manifestLocation, "document-lang", general.location, {
