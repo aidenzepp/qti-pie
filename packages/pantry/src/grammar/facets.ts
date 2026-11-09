@@ -340,6 +340,8 @@ export const asi: Facets = {
   expression: {
     arities: aritiesOf(contentModels, expressionsIn(contentModels)),
     recordFits: ["qti-extended-text-interaction", "qti-text-entry-interaction"],
+    // Each interaction's binding sentence (BindingFit's law source). Spec reading 172: the order
+    // interaction's class description (§5.97) states none, so it has no row and binds any type.
     typedFits: [
       {
         baseTypes: ["pair"],
@@ -399,7 +401,6 @@ export const asi: Facets = {
         kind: "qti-match-interaction",
       },
       { baseTypes: ["integer"], cardinalities: ["single"], kind: "qti-media-interaction" },
-      { baseTypes: ["identifier"], cardinalities: ["ordered"], kind: "qti-order-interaction" },
       {
         baseTypes: ["point"],
         cardinalities: ["single", "multiple"],

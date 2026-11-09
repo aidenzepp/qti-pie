@@ -4563,22 +4563,15 @@ const overlayBreaches = (
       .filter(({ token }) => !catalogIds.has(token)),
   );
   // Reading 92: "Each response variable declared may be bound to one and only one interaction",
-  // so in an item no two of the interactions Binding declared reads name one response.
+  // so in an item no two of the interactions Binding declared reads, every interaction whatever
+  // the types it binds (readings 75 and 172), name one response.
   const bindings = overlay.isItem
     ? Map.groupBy(
         view.members.flatMap((node) =>
-          (Option.isSome(laws.grammar.recordBindingFit.lookup({ kind: node.kind })) ||
-            laws.grammar.bindingFit.rows.some(({ kind }) => kind === node.kind)) &&
-          Option.isSome(typedValueOf(view, node.id, "response-identifier"))
-            ? [
-                {
-                  identifier: Option.getOrElse(
-                    typedValueOf(view, node.id, "response-identifier"),
-                    () => "",
-                  ),
-                  node,
-                },
-              ]
+          Option.isSome(laws.grammar.kinds.interaction.lookup({ kind: node.kind }))
+            ? Option.toArray(typedValueOf(view, node.id, "response-identifier")).map(
+                (identifier) => ({ identifier, node }),
+              )
             : [],
         ),
         ({ identifier }) => identifier,
