@@ -109,13 +109,18 @@ describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
       "E1 derived",
       "MathML cn form",
     ]);
+    // The containments are a set: the law model lists them in an order of its own, which a grizzle
+    // repin moves.
     assert.deepStrictEqual(
-      own.filter(([, name]) => name === "MathML cn form").map(([law]) => identityOf(law)),
+      own
+        .filter(([, name]) => name === "MathML cn form")
+        .map(([law]) => identityOf(law))
+        .toSorted(),
       [
-        "contained MathCn(type, parts) in CnParts(type, parts)",
-        "contained CnPartText(type, part, form) in CnForm(type, part, form)",
         "contained CnCount(type, parts) in CnParts(type, parts)",
+        "contained CnPartText(type, part, form) in CnForm(type, part, form)",
         "contained CnSlot(type, part, form) in CnForm(type, part, form)",
+        "contained MathCn(type, parts) in CnParts(type, parts)",
       ],
     );
     assert.strictEqual(
