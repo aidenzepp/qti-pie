@@ -10,9 +10,11 @@ import {
   entity,
   mathmlNamespace,
   qtiNamespace,
+  ssmlNamespace,
   text,
   walk as walkDocument,
   xmlNamespace,
+  xincludeNamespace,
   xmlnsNamespace,
   xsdNamespace,
   xsiNamespace,
@@ -1757,6 +1759,175 @@ const titledManifest = (language: string): SourceDocument =>
  */
 const walkedManifest = (source: SourceDocument) =>
   checkStructure(source, { elements: {}, types: {} }, packageTables.get("3.0.0"));
+
+/**
+ * The namespace of the AfA DRD that a content package's schema set imports, through the content
+ * packaging extension.
+ */
+const drdNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0";
+
+/**
+ * The namespace of the AfA DRD 2.0, which no schema set of QTI 3.0 imports: an item's ASI XSD
+ * imports no DRD (reading 81).
+ */
+const drdV2Namespace = "http://www.imsglobal.org/xsd/accessibility/drdv2p0";
+
+/**
+ * Name an element of a namespace other than QTI's as its path step does.
+ *
+ * @param namespace The element's namespace.
+ * @param local The element's local name.
+ * @returns Its step.
+ */
+const stepIn = (namespace: string, local: string): string => `{${namespace}}${local}`;
+
+/**
+ * Construct an item, valid by the committed tables, whose `qti-companion-materials-info` holds the
+ * given children. Its content model ends in `grpStrict.any`, a `strict` `##other` element wildcard
+ * that may repeat, after the particles that name the materials.
+ *
+ * @param children The companion materials' children.
+ * @returns The item as a source document.
+ */
+const companioned = (...children: readonly SourceChild[]): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "item"), attr("time-dependent", "false"), attr("title", "Strict")],
+      [el("qti-companion-materials-info", [], children)],
+    ),
+  );
+
+/**
+ * The path of the companion materials {@link companioned} builds.
+ */
+const companion = "qti-assessment-item/qti-companion-materials-info";
+
+/**
+ * Construct a `widget` of {@link otherNamespace}, which no table declares, with `o` bound to that
+ * namespace and {@link declarations} bound too.
+ *
+ * @param attributes The widget's other attributes, its `xsi:type` among them where it has one.
+ * @param children The widget's children.
+ * @returns The widget.
+ */
+const foreignWidget = (
+  attributes: readonly SourceAttribute[],
+  ...children: readonly SourceChild[]
+): SourceElement =>
+  el(
+    "widget",
+    [attr("o", otherNamespace, xmlnsNamespace), ...declarations, ...attributes],
+    children,
+    otherNamespace,
+  );
+
+/**
+ * The path step of a {@link foreignWidget}.
+ */
+const widgetStep = stepIn(otherNamespace, "widget");
+
+/**
+ * Construct an `xsi:type`.
+ *
+ * @param written The type as written.
+ * @returns The attribute.
+ */
+const instanceType = (written: string): SourceAttribute => attr("type", written, xsiNamespace);
+
+/**
+ * Construct a 3.0.0 manifest whose own LOM record's `general` holds some children, and whose one
+ * resource's one file has metadata that holds others. LOM's `general` ends in a `lax` `##other`
+ * element wildcard, and a file's metadata, `FileMetadataDType`, is `grpStrict.any` alone, a
+ * `strict` `##other` element wildcard.
+ *
+ * @param general The children of the LOM record's `general`.
+ * @param file The children of the file's metadata.
+ * @returns The manifest as a source document.
+ */
+const packaged = (general: readonly SourceChild[], file: readonly SourceChild[]): SourceDocument =>
+  doc(
+    "imsmanifest.xml",
+    el(
+      "manifest",
+      [attr("identifier", "M")],
+      [
+        el(
+          "metadata",
+          [],
+          [
+            el("schema", [], [text("QTI Package")], manifestNamespace),
+            el("schemaversion", [], [text("3.0.0")], manifestNamespace),
+            el("lom", [], [el("general", [], general, lomNamespace)], lomNamespace),
+          ],
+          manifestNamespace,
+        ),
+        el("organizations", [], [], manifestNamespace),
+        el(
+          "resources",
+          [],
+          [
+            el(
+              "resource",
+              [attr("identifier", "R"), attr("type", "imsqti_item_xmlv3p0")],
+              [
+                el(
+                  "file",
+                  [attr("href", "item.xml")],
+                  [el("metadata", [], file, manifestNamespace)],
+                  manifestNamespace,
+                ),
+              ],
+              manifestNamespace,
+            ),
+          ],
+          manifestNamespace,
+        ),
+      ],
+      manifestNamespace,
+    ),
+  );
+
+/**
+ * The path of the LOM record's `general` {@link packaged} builds.
+ */
+const packagedGeneral = [
+  stepIn(manifestNamespace, "manifest"),
+  stepIn(manifestNamespace, "metadata"),
+  stepIn(lomNamespace, "lom"),
+  stepIn(lomNamespace, "general"),
+].join("/");
+
+/**
+ * The path of the file's metadata {@link packaged} builds.
+ */
+const packagedFile = ["manifest", "resources", "resource", "file", "metadata"]
+  .map((local) => stepIn(manifestNamespace, local))
+  .join("/");
+
+/**
+ * Construct a `qti-physical-material`, a fresh element on each call.
+ *
+ * @returns The element.
+ */
+const physicalMaterial = (): SourceElement => el("qti-physical-material", [], [text("A ruler")]);
+
+/**
+ * Construct the DRD's `accessForAllResource`, whose content model ends in `grpStrict.any`, a
+ * `strict` `##other` element wildcard that may repeat, after the particles that name its
+ * properties.
+ *
+ * @param children Its children.
+ * @returns The element.
+ */
+const accessForAll = (...children: readonly SourceChild[]): SourceElement =>
+  el("accessForAllResource", [], children, drdNamespace);
+
+/**
+ * The path step of an {@link accessForAll}.
+ */
+const accessForAllStep = stepIn(drdNamespace, "accessForAllResource");
 
 describe("checkStructure", () => {
   describe("the six rules", () => {
@@ -4673,7 +4844,12 @@ describe("checkStructure", () => {
       // WeightDType requires `identifier` and `value` and admits no child, so it would refuse this.
       assert.deepStrictEqual(found(customized(widget("q:WeightDType")), generatedTables), []);
       assert.deepStrictEqual(found(customized(widget("xs:anyType")), generatedTables), [fault]);
-      assert.deepStrictEqual(found(customized(widget("z:WeightDType")), generatedTables), [fault]);
+      assert.deepStrictEqual(found(customized(widget("q:NoSuchDType")), generatedTables), [fault]);
+      // A prefix nothing binds is refused itself (reading 83), and the content stays lax.
+      assert.deepStrictEqual(found(customized(widget("z:WeightDType")), generatedTables), [
+        ["attribute-type", at(`${custom}/{${otherNamespace}}widget/@{${xsiNamespace}}type`)],
+        fault,
+      ]);
     });
 
     it('relies on the committed tables: the simple and complex types the cases of reading 60 ("a simple type it names governs its text and is checked") name', () => {
@@ -4818,7 +4994,7 @@ describe("checkStructure", () => {
     });
   });
 
-  describe("reading 61: QTI's own elements in qti-ordering's extension slot", () => {
+  describe("reading 61 (\"an element in QTI's own namespace inside `qti-ordering`'s extension slot is valid\"): the slot read as ##any, laxly", () => {
     it("relies on the committed tables: qti-weight is declared only locally, and qti-selection's slot is ##other lax too", () => {
       assert.isFalse(generatedTables.elements["qti-weight"]?.global ?? true);
       assert.deepStrictEqual(generatedTables.elements["qti-selection"]?.anyElement, {
@@ -4827,23 +5003,309 @@ describe("checkStructure", () => {
       });
     });
 
-    it("accepts a QTI element in qti-ordering's slot as extension content, walking nothing below it", () => {
+    it("passes over a QTI element declared only locally in qti-ordering's slot as foreign content, and admits its children laxly", () => {
       const weight = el("qti-weight", [attr("identifier", "W"), attr("value", "2")]);
       const holding = ordered(el("qti-weight", [attr("identifier", "W")], [badDiv, looseChoice]));
       const governing = governingTables(holding, generatedTables);
 
       assert.deepStrictEqual(found(ordered(weight), generatedTables), []);
-      assert.deepStrictEqual(found(holding, generatedTables), []);
+      assert.deepStrictEqual(found(holding, generatedTables), [
+        ["attribute-type", at(`${ordering}/qti-weight/div/@id`)],
+      ]);
       assert.isFalse(governing.has(elementAt(holding, `${ordering}/qti-weight`)));
-      assert.isFalse(governing.has(elementAt(holding, `${ordering}/qti-weight/div`)));
+      assert.isTrue(governing.has(elementAt(holding, `${ordering}/qti-weight/div`)));
     });
 
-    it("still refuses a QTI element in qti-selection's slot, which reading 61 does not cover", () => {
+    it("still refuses a QTI element in qti-selection's slot, which reading 61 (\"an element in QTI's own namespace inside `qti-ordering`'s extension slot is valid\") does not cover", () => {
       const weight = el("qti-weight", [attr("identifier", "W"), attr("value", "2")]);
 
       assert.deepStrictEqual(found(selected(weight), generatedTables), [
         ["unknown-element", at(`${selection}/qti-weight`)],
       ]);
+    });
+  });
+
+  describe("align-54 wildcards: qti-ordering's slot read laxly, strict wildcards and xsi:type, and the order after a repeated wildcard (readings 61, 81, 83, 96 and 113)", () => {
+    it("relies on the committed tables: the strict wildcards of the companion materials, a file's metadata and accessForAllResource, and the global names the cases read", () => {
+      const strict: Wildcard = { namespace: "##other", process: "strict" };
+      const profile = packageTables.get("3.0.0");
+      const drd = profile?.get(drdNamespace);
+      const packaging = profile?.get(manifestNamespace);
+
+      assert.deepStrictEqual(
+        generatedTables.elements["qti-companion-materials-info"]?.anyElement,
+        strict,
+      );
+      assert.deepStrictEqual(packaging?.elements["metadata"]?.anyElement, strict);
+      assert.deepStrictEqual(drd?.elements["accessForAllResource"]?.anyElement, strict);
+      assert.isTrue(drd?.elements["accessForAllResource"]?.global);
+      assert.isTrue(packaging?.elements["manifest"]?.global);
+      assert.isFalse(profile?.has(otherNamespace) ?? true);
+      assert.isFalse(profile?.has(qtiNamespace) ?? true);
+      assert.isTrue(generatedTables.elements["p"]?.extensionCovered);
+    });
+
+    it("align-54 wildcards D9: checks a global QTI element in qti-ordering's slot by its table, as lax assessment reads it (reading 61)", () => {
+      const checkedDiv = ordered(badDiv);
+
+      assert.deepStrictEqual(found(ordered(el("p", [attr("onclick", "go()")])), generatedTables), [
+        ["unknown-attribute", at(`${ordering}/p/@onclick`)],
+      ]);
+      assert.deepStrictEqual(found(checkedDiv, generatedTables), [
+        ["attribute-type", at(`${ordering}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(ordered(el("div", [], [looseChoice])), generatedTables), [
+        ["unknown-element", at(`${ordering}/div/qti-simple-choice`)],
+      ]);
+      assert.strictEqual(
+        governingTables(checkedDiv, generatedTables).get(elementAt(checkedDiv, `${ordering}/div`)),
+        generatedTables.elements["div"],
+      );
+    });
+
+    it("align-54 wildcards D9: keeps a QTI element no global declaration names in qti-ordering's slot as foreign content, its attributes unchecked and its children admitted laxly, and a nested QTI root unchecked (readings 61 and 6)", () => {
+      const choice = el("qti-simple-choice", [attr("unknown", "x")], [badDiv]);
+      const nested = el(
+        "qti-assessment-item",
+        [attr("identifier", "1x"), attr("time-dependent", "false"), attr("title", "Nested")],
+        [badDiv],
+      );
+
+      assert.deepStrictEqual(found(ordered(choice), generatedTables), [
+        ["attribute-type", at(`${ordering}/qti-simple-choice/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(ordered(nested), generatedTables), []);
+    });
+
+    it("align-54 wildcards D9: admits an element of no namespace in qti-ordering's slot laxly, as the slot is read as ##any (reading 61)", () => {
+      assert.deepStrictEqual(found(ordered(el("loose", [], [badDiv], "")), generatedTables), [
+        ["attribute-type", at(`${ordering}/{}loose/div/@id`)],
+      ]);
+    });
+
+    it("align-54 wildcards E6: refuses an element a strict wildcard holds that no table declares and no xsi:type types, as unknown-element: the research probes a81_strict_foreign and a81_strict_drd (reading 81)", () => {
+      const drd = el("educationalComplexityOfAdaptation", [], [text("x")], drdV2Namespace);
+
+      assert.deepStrictEqual(
+        checkStructure(companioned(foreignWidget([], text("a"))), generatedTables).map(
+          (refusal) => [refusal.rule, refusal.location, refusal.detail],
+        ),
+        [
+          [
+            "unknown-element",
+            at(`${companion}/${widgetStep}`),
+            { element: widgetStep, parent: "qti-companion-materials-info", reading: "81" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(found(companioned(drd), generatedTables), [
+        [
+          "unknown-element",
+          at(`${companion}/${stepIn(drdV2Namespace, "educationalComplexityOfAdaptation")}`),
+        ],
+      ]);
+    });
+
+    it("align-54 wildcards E6: refuses an element under a strict wildcard whose xsi:type names no type, bound or not, or is no QName, as unknown-element: the research probe a81_strict_xsitype_unknown (reading 81)", () => {
+      for (const written of ["o:Nope", "zz:Nope", "xs:Nope", "1x"]) {
+        assert.deepStrictEqual(
+          found(companioned(foreignWidget([instanceType(written)], text("abc"))), generatedTables),
+          [["unknown-element", at(`${companion}/${widgetStep}`)]],
+          written,
+        );
+      }
+    });
+
+    it('align-54 wildcards E6: admits an element under a strict wildcard that an xsi:type types, as lax assessment reads it: the research probes a81_strict_xsitype and a81_strict_xsitype_int_bad, whose text stays unchecked, plate\'s open limit that reading 60 ("a simple type it names governs its text and is checked") records (reading 81)', () => {
+      const typedWidget = `${companion}/${widgetStep}`;
+
+      assert.deepStrictEqual(
+        found(companioned(foreignWidget([instanceType("xs:string")], text("a"))), generatedTables),
+        [],
+      );
+      assert.deepStrictEqual(
+        found(
+          companioned(foreignWidget([instanceType("xs:integer")], text("abc"))),
+          generatedTables,
+        ),
+        [],
+      );
+      assert.deepStrictEqual(
+        found(
+          companioned(foreignWidget([instanceType("xs:string"), attr("size", "3")])),
+          generatedTables,
+        ),
+        [["unknown-attribute", at(`${typedWidget}/@size`)]],
+      );
+      assert.deepStrictEqual(
+        found(companioned(foreignWidget([instanceType("q:WeightDType")], badDiv)), generatedTables),
+        [],
+      );
+      assert.deepStrictEqual(
+        found(companioned(foreignWidget([instanceType("xs:anyType")], badDiv)), generatedTables),
+        [["attribute-type", at(`${typedWidget}/div/@id`)]],
+      );
+    });
+
+    it("align-54 wildcards E6: keeps MathML, SSML and XInclude under a strict wildcard unwalked, which the item's schema set declares and plate holds no tables for: the research probes a81_strict_math_bad and a81_strict_ssml_ok (reading 81)", () => {
+      const math = el("math", [], [el("bogus", [], [], mathmlNamespace)], mathmlNamespace);
+      const speak = el("speak", [attr("version", "1.1")], [text("a")], ssmlNamespace);
+      const include = el("include", [attr("href", "a.xml")], [], xincludeNamespace);
+
+      assert.deepStrictEqual(found(companioned(math, speak, include), generatedTables), []);
+    });
+
+    it("align-54 wildcards E6: checks a global of the manifest's schema set under a file's strict metadata wildcard by its table, keeps a nested manifest under accessForAllResource's foreign, and refuses a QTI root, which that set does not declare (readings 81 and 113)", () => {
+      const nestedManifest = el(
+        "manifest",
+        [],
+        [el("stray", [], [], manifestNamespace)],
+        manifestNamespace,
+      );
+      const root = el("qti-assessment-item", [attr("identifier", "I")]);
+
+      assert.deepStrictEqual(
+        walkedManifest(packaged([], [accessForAll(foreignWidget([], text("a")))])).map(
+          (refusal) => [refusal.rule, refusal.location],
+        ),
+        [["unknown-element", at(`${packagedFile}/${accessForAllStep}/${widgetStep}`)]],
+      );
+      assert.deepStrictEqual(walkedManifest(packaged([], [accessForAll(nestedManifest)])), []);
+      assert.deepStrictEqual(
+        walkedManifest(packaged([], [root])).map((refusal) => [refusal.rule, refusal.location]),
+        [["unknown-element", at(`${packagedFile}/qti-assessment-item`)]],
+      );
+      // A manifest in the file metadata's own namespace is no element its `##other` admits.
+      assert.deepStrictEqual(
+        walkedManifest(packaged([], [nestedManifest])).map((refusal) => [
+          refusal.rule,
+          refusal.location,
+        ]),
+        [["unknown-element", at(`${packagedFile}/${stepIn(manifestNamespace, "manifest")}`)]],
+      );
+    });
+
+    it("align-54 wildcards E6: reads a global of the manifest's schema set in a LOM element's lax wildcard by its declaration, where it was kept foreign, and keeps a nested manifest there foreign (readings 81 and 6)", () => {
+      const nestedManifest = el(
+        "manifest",
+        [],
+        [el("stray", [], [], manifestNamespace)],
+        manifestNamespace,
+      );
+
+      assert.deepStrictEqual(
+        walkedManifest(packaged([accessForAll(foreignWidget([], text("a")))], [])).map(
+          (refusal) => [refusal.rule, refusal.location],
+        ),
+        [["unknown-element", at(`${packagedGeneral}/${accessForAllStep}/${widgetStep}`)]],
+      );
+      assert.deepStrictEqual(walkedManifest(packaged([nestedManifest], [])), []);
+    });
+
+    it("align-54 wildcards E6: checks a global of another namespace's tables in lax wildcard content by its table, where it was kept foreign, and leaves a local one to lax assessment (reading 81)", () => {
+      const nested = customized(el("box", [], [badDiv], xNamespace));
+      const local = customized(el("part", [], [badDiv], xNamespace));
+      const box = `${custom}/${xStep("box")}`;
+
+      assert.deepStrictEqual(foundWith(nested, generatedTables), [
+        ["missing-attribute", at(box)],
+        ["attribute-type", at(`${box}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(nested, generatedTables), [
+        ["attribute-type", at(`${box}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(foundWith(local, generatedTables), [
+        ["attribute-type", at(`${custom}/${xStep("part")}/div/@id`)],
+      ]);
+      assert.strictEqual(
+        governingTables(nested, generatedTables, others).get(elementAt(nested, box)),
+        xTables.elements["box"],
+      );
+    });
+
+    it("align-54 wildcards E6: refuses an xsi:type on foreign content under a lax wildcard whose prefix no declaration in scope binds, or that is no QName, as attribute-type, and admits its children laxly: the research probe a83_xsitype_unbound_foreign (readings 83 and 47)", () => {
+      const unbound = el("widget", [instanceType("zz:Foo")], [badDiv], otherNamespace);
+      const instancePath = `${custom}/${widgetStep}/@{${xsiNamespace}}type`;
+
+      assert.deepStrictEqual(found(customized(unbound), generatedTables), [
+        ["attribute-type", at(instancePath)],
+        ["attribute-type", at(`${custom}/${widgetStep}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(checkStructure(customized(unbound), generatedTables)[0]?.detail, {
+        attribute: `{${xsiNamespace}}type`,
+        element: widgetStep,
+        expected: "a QName whose prefix a namespace declaration in scope binds",
+        reading: "83",
+        value: "zz:Foo",
+      });
+      assert.deepStrictEqual(
+        checkStructure(customized(foreignWidget([instanceType("1x")])), generatedTables).map(
+          (refusal) => [refusal.rule, refusal.location, refusal.detail["reading"]],
+        ),
+        [["attribute-type", at(instancePath), "47"]],
+      );
+      assert.deepStrictEqual(
+        found(customized(foreignWidget([instanceType("o:Nope")], text("a"))), generatedTables),
+        [],
+      );
+    });
+
+    it("align-54 wildcards E13: refuses a companion material after a child the repeated strict wildcard holds as misplaced-element, check order, and admits one before it (reading 96)", () => {
+      const speak = el("speak", [attr("version", "1.1")], [text("a")], ssmlNamespace);
+      const math = el("math", [], [], mathmlNamespace);
+
+      assert.deepStrictEqual(
+        checkStructure(
+          companioned(physicalMaterial(), speak, physicalMaterial()),
+          generatedTables,
+        ).map((refusal) => [refusal.rule, refusal.location, refusal.detail]),
+        [
+          [
+            "misplaced-element",
+            at(`${companion}/qti-physical-material[2]`),
+            {
+              check: "order",
+              context: "qti-companion-materials-info",
+              element: "qti-physical-material",
+              reading: "96",
+            },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(found(companioned(math, physicalMaterial()), generatedTables), [
+        ["misplaced-element", at(`${companion}/qti-physical-material`)],
+      ]);
+      assert.deepStrictEqual(
+        found(companioned(physicalMaterial(), physicalMaterial(), speak, math), generatedTables),
+        [],
+      );
+    });
+
+    it("align-54 wildcards E13: refuses a manifest accessForAllResource's isPartialAdaptationOf after a child its repeated strict wildcard holds as misplaced-element, check order, and admits one before it (reading 96)", () => {
+      const partial = el("isPartialAdaptationOf", [], [text("urn:example:item")], drdNamespace);
+      const held = foreignWidget([instanceType("xs:string")], text("a"));
+      const partialStep = stepIn(drdNamespace, "isPartialAdaptationOf");
+
+      assert.deepStrictEqual(
+        walkedManifest(packaged([], [accessForAll(held, partial)])).map((refusal) => [
+          refusal.rule,
+          refusal.location,
+          refusal.detail,
+        ]),
+        [
+          [
+            "misplaced-element",
+            at(`${packagedFile}/${accessForAllStep}/${partialStep}`),
+            {
+              check: "order",
+              context: accessForAllStep,
+              element: partialStep,
+              reading: "96",
+            },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(walkedManifest(packaged([], [accessForAll(partial, held)])), []);
     });
   });
 
@@ -4944,24 +5406,6 @@ describe("checkStructure", () => {
         ["unknown-element", at(`${box}/${xStep("stray")}`)],
         ["attribute-type", at(`${box}/{${otherNamespace}}widget/div/@id`)],
       ]);
-    });
-
-    it("passes over a global element of another namespace nested in lax wildcard content, as reading 6 passes over QTI's roots", () => {
-      const nested = customized(el("box", [], [badDiv], xNamespace));
-      const local = customized(el("part", [], [badDiv], xNamespace));
-
-      assert.deepStrictEqual(foundWith(nested, generatedTables), []);
-      assert.deepStrictEqual(found(nested, generatedTables), [
-        ["attribute-type", at(`${custom}/${xStep("box")}/div/@id`)],
-      ]);
-      assert.deepStrictEqual(foundWith(local, generatedTables), [
-        ["attribute-type", at(`${custom}/${xStep("part")}/div/@id`)],
-      ]);
-      assert.isFalse(
-        governingTables(nested, generatedTables, others).has(
-          elementAt(nested, `${custom}/${xStep("box")}`),
-        ),
-      );
     });
 
     it("judges xsi:type and xsi:nil on another namespace's element, and lets a type its tables derive govern it", () => {
