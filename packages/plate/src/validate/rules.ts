@@ -454,7 +454,7 @@ const pooledChoices: ReadonlySet<string> = new Set([
  * The identifiers an item's choices have given so far, each with the class of the first element
  * that gave it: one pool for every class of {@link pooledChoices}, gaps included.
  */
-interface ChoicePools {
+export interface ChoicePools {
   readonly choices: Map<string, string>;
 }
 
@@ -495,7 +495,7 @@ const choicePool = (
  *   for a first occurrence that names no variable, and for an identifier that names nothing
  *   ({@link nameOf}).
  */
-const choiceIdentifier = (
+export const choiceIdentifier = (
   source: SourceDocument,
   visit: Visit,
   variables: ReadonlySet<string>,
@@ -1210,7 +1210,7 @@ const contextVariableReference = (
  * @returns The refusal at the PCI, or none when it names its module by either form, or when it is
  *   no `qti-portable-custom-interaction`.
  */
-const pciModuleSource = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
+export const pciModuleSource = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
   if (!isQti(visit.element, (local) => local === "qti-portable-custom-interaction")) {
     return [];
   }
@@ -4602,7 +4602,7 @@ const labelTool = (
  * Where each element of a document sits, as the body content rules read it: whether a template
  * block holds it, the table it takes part in, and its place among its parent's children.
  */
-interface Placing {
+export interface Placing {
   /**
    * The ids of the `th`s that take part in each table, each collapsed.
    */
@@ -4632,7 +4632,7 @@ interface Placing {
  * @param source The document.
  * @returns Its placing.
  */
-const placingOf = (source: SourceDocument): Placing => {
+export const placingOf = (source: SourceDocument): Placing => {
   const headerIds = new Map<SourceElement, Set<string>>();
   const positions = new Map<SourceElement, number>();
   const tableOf = new Map<SourceElement, SourceElement>();
@@ -4707,7 +4707,7 @@ const templateBlockInteraction = (
  * @returns One refusal at the `headers` attribute's path, naming the first token at fault; none
  *   when every token names a header of the cell's table once, and for any other element.
  */
-const tableHeaders = (
+export const tableHeaders = (
   source: SourceDocument,
   visit: Visit,
   placing: Placing,
@@ -4801,7 +4801,11 @@ const edgeCharacter = (
  * @returns One refusal at the `q`, naming the first mark found and the `side` it stands on, in the
  *   order before, after, start and end; none for any other element.
  */
-const quotation = (source: SourceDocument, visit: Visit, placing: Placing): readonly Refusal[] => {
+export const quotation = (
+  source: SourceDocument,
+  visit: Visit,
+  placing: Placing,
+): readonly Refusal[] => {
   const at = placing.positions.get(visit.element);
   if (
     !isQti(visit.element, (local) => local === "q") ||

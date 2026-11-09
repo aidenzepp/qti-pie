@@ -50,7 +50,18 @@ import { durationForm, trimXmlSpace } from "#plate/model/values.ts";
 import { checkCatalogs } from "#plate/validate/catalog.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
-import { checkRules, dataSsml, holdsUnexpanded, judgedVisits } from "#plate/validate/rules.ts";
+import {
+  checkRules,
+  choiceIdentifier,
+  dataSsml,
+  holdsUnexpanded,
+  judgedVisits,
+  pciModuleSource,
+  placingOf,
+  quotation,
+  tableHeaders,
+} from "#plate/validate/rules.ts";
+import type { ChoicePools } from "#plate/validate/rules.ts";
 import {
   attributeName,
   checkStructure,
@@ -1020,15 +1031,28 @@ const checkUndelivered = (source: SourceDocument, kind: "section" | "stimulus"):
 };
 
 /**
- * Check a stimulus document against the prose rules that judge it: a `data-ssml` value that is not
- * Data-SSML JSON is `attribute-type`, `check: "data-ssml"` (`dataSsml`, the operator's P3), as an
- * item's, a test's and a section's are. Neither `checkRules` nor `checkTestRules` judges a
- * stimulus, and nothing else here does.
+ * Check a stimulus document against the prose rules that judge it, as they judge an item's body.
+ * Neither `checkRules` nor `checkTestRules` judges a stimulus, and nothing else here does. Five
+ * rules hold in a stimulus, each by the function `checkRules` runs for it, in `checkRules`' order:
  *
- * It judges as they do: only the elements the structural walk checks, the keys of
- * `governingTables` (reading 57), and nothing in a document whose judged elements hold an
- * unexpanded entity reference, which the verdict leaves unchecked unless the structural walk
- * refuses it.
+ * - `duplicate-identifier` (`choiceIdentifier`, reading 104, E19): no two choices of any class share
+ *   an `identifier`, pooled across the whole document. "So the scope is the document [...] A
+ *   document that is no item, such as a stimulus, has no built-in variables, and its choices are
+ *   judged against its declarations, of which it has none", so no choice names a variable here and
+ *   `check: "choice-variable"` never fires.
+ * - `missing-attribute` with `check: "pci-module-source"` (`pciModuleSource`, R10-a, F6): a PCI names
+ *   its module by `module`, by `qti-interaction-modules`, or by both.
+ * - `attribute-type` with `check: "headers"` (`tableHeaders`, reading 126, E29) and
+ *   `text-not-allowed` with `check: "quotation"` (`quotation`, reading 127, E30), which name no
+ *   document kind, each read through the document's own placing (`placingOf`).
+ * - `attribute-type` with `check: "data-ssml"` (`dataSsml`, the operator's P3): a `data-ssml` value
+ *   is Data-SSML JSON, as in an item, a test and a section.
+ *
+ * The item's other rules read its declarations, its bindings or its processing, which a stimulus
+ * has none of, so they do not run. It judges as `checkRules` does: only the elements the structural
+ * walk checks, the keys of `governingTables` (reading 57), and nothing in a document whose judged
+ * elements hold an unexpanded entity reference, which the verdict leaves unchecked unless the
+ * structural walk refuses it.
  *
  * @param source The document.
  * @param tables The tables generated from the QTI XSD.
@@ -1040,10 +1064,21 @@ const checkStimulusRules = (source: SourceDocument, tables: Tables): readonly Re
   }
 
   const visits = judgedVisits(source, tables);
+  if (visits.some((visit) => holdsUnexpanded(visit.element))) {
+    return [];
+  }
 
-  return visits.some((visit) => holdsUnexpanded(visit.element))
-    ? []
-    : visits.flatMap((visit) => dataSsml(source, visit, tables));
+  const declared: ReadonlySet<string> = new Set();
+  const pools: ChoicePools = { choices: new Map() };
+  const placing = placingOf(source);
+
+  return visits.flatMap((visit) => [
+    ...choiceIdentifier(source, visit, declared, pools),
+    ...pciModuleSource(source, visit),
+    ...tableHeaders(source, visit, placing),
+    ...quotation(source, visit, placing),
+    ...dataSsml(source, visit, tables),
+  ]);
 };
 
 /**
@@ -1051,11 +1086,12 @@ const checkStimulusRules = (source: SourceDocument, tables: Tables): readonly Re
  *
  * 1. A root outside QTI's namespace is `refused`, of kind `none`, with `not-qti-root` alone.
  * 2. The structural validator's refusals, the item prose rules', the test prose rules', a stimulus's
- *    ({@link checkStimulusRules}) and the catalog rules' (`checkCatalogs`, R9-a's cards in a
- *    document of any kind), then those the document's version decides
- *    (`#plate/validate/versions.ts`, which reads the others), together and in that order, with no
- *    short-circuit: any one makes the document `refused`, with all of them. Each rule set judges
- *    only its own roots, and a document of no stated version earns none of the version's.
+ *    (its choices, PCIs, table headers, quotations and `data-ssml`; {@link checkStimulusRules}) and
+ *    the catalog rules' (`checkCatalogs`, R9-a's cards in a document of any kind), then those the
+ *    document's version decides (`#plate/validate/versions.ts`, which reads the others), together
+ *    and in that order, with no short-circuit: any one makes the document `refused`, with all of
+ *    them. Each rule set judges only its own roots, and a document of no stated version earns none
+ *    of the version's.
  * 3. A document holding MathML, SSML, an unexpanded entity reference, an XInclude `include` (E23,
  *    whatever its form), or a root other than an item, a test, a section or a stimulus, is
  *    `unchecked`, with every reason. It is never rendered.
@@ -2094,6 +2130,26 @@ const undeclaredVariable = (refusal: Refusal): string => {
 };
 
 /**
+ * Report whether a refusal points into a test's or a section document's processing, by the root
+ * its path starts with: there only an item declares responses, which the processing reads through
+ * that item's ref ({@link itemRefResponse}).
+ *
+ * @param refusal The refusal.
+ * @returns Whether its path starts at a test's or a section's root; false for a refusal located by
+ *   position or at the whole document.
+ */
+const readsThroughItemRefs = (refusal: Refusal): boolean => {
+  if (refusal.location.kind !== "path") {
+    return false;
+  }
+
+  const [rootName = ""] = refusal.location.path.split("/");
+  const kind = rootKinds.get(rootName);
+
+  return kind === "test" || kind === "section";
+};
+
+/**
  * Word the `template-requirements` refusal: the declaration a standard template, an inline
  * `qti-map-response` or a `qti-lookup-outcome-value` needs. The sentence names the template when
  * the detail has one, and otherwise the element that needs the declaration, so it never blames a
@@ -2111,6 +2167,11 @@ const undeclaredVariable = (refusal: Refusal): string => {
  * as a `qti-map-response` of `numAttempts`: a built-in stands as a response (reading 111, "a
  * processing element's `identifier` names a variable of the kind the element reads or sets") and
  * no declaration may take its name, so it has no mapping, and the fix names a declared response.
+ * In an item that is a response the item declares. In a test's or a section's processing
+ * ({@link readsThroughItemRefs}), whose built-in response is a test's `duration` or the
+ * `numAttempts` plate keeps for a test that declares none (reading 166, "a test's `duration`"),
+ * only an item declares responses, so the fix is a response an item declares, read through its
+ * item ref, as {@link itemRefResponse} words it.
  *
  * @param refusal The refusal.
  * @returns The sentence.
@@ -2148,7 +2209,9 @@ const templateRequirements = (refusal: Refusal): string => {
         return sentence(
           refusal,
           `${needer} needs ${declaration}, and names the built-in ${identifier}, which has no declaration.`,
-          `name a response the item declares in ${declaration}`,
+          readsThroughItemRefs(refusal)
+            ? `name a response an item declares in ${declaration}, through its item ref, written ${code("ITEMREF.RESPONSE")}`
+            : `name a response the item declares in ${declaration}`,
         );
       }
 
