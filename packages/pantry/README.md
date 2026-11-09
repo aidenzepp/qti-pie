@@ -52,6 +52,14 @@ item-prefixed names that pass through it, because the package declares nothing t
 
 `scripts/db.sh reset` drops the database and this package's roles, then creates and migrates again.
 
+## Optional settings
+
+Each is the local cluster's when unset or empty. `scripts/db.sh` reads them as `src/db/connection.ts` does.
+
+- `GR8DES_PG_CA` names the PEM file a connection verifies the server against, in place of `tls/ca.crt` in grizzle's
+  state folder (`GRIZZLE_PG_STATE`).
+- `GR8DES_PG_MIGRATION_ROLE` names the role `grizzle migrate` connects as, in place of `grizzle_dev`.
+
 ## Development
 
 [`docs/qti-intent.md`](../../docs/qti-intent.md) records what was settled before the model was planned. Read it before

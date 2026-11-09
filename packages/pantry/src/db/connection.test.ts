@@ -174,6 +174,7 @@ type Reached = "built" | "malformed" | "no CA";
  * database name the script keeps, and the folders `GRIZZLE_PG_STATE` and `GR8DES_PG_SECRETS` name.
  */
 interface Scratch {
+  readonly caFile: string;
   readonly home: string;
   readonly secrets: string;
   readonly stateWith: string;
@@ -189,6 +190,11 @@ const homeCa = "the CA under HOME";
  * The CA text in the state folder `GRIZZLE_PG_STATE` names.
  */
 const stateCa = "the CA in GRIZZLE_PG_STATE";
+
+/**
+ * The CA text in the file `GR8DES_PG_CA` names.
+ */
+const namedCa = "the CA GR8DES_PG_CA names";
 
 /**
  * The password in the folder `GR8DES_PG_SECRETS` names, written with the surrounding whitespace the
@@ -213,6 +219,7 @@ const scratchFolders = Effect.gen(function* scratchFolders() {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({ directory: work, prefix: "db-connection-" });
   const scratch: Scratch = {
+    caFile: `${root}/server-ca.pem`,
     home: `${root}/home`,
     secrets: `${root}/secrets`,
     stateWith: `${root}/state-with`,
@@ -224,6 +231,7 @@ const scratchFolders = Effect.gen(function* scratchFolders() {
   yield* fs.makeDirectory(`${scratch.stateWith}/tls`, { recursive: true });
   yield* fs.writeFileString(`${scratch.stateWith}/tls/ca.crt`, stateCa);
   yield* fs.makeDirectory(scratch.stateWithout, { recursive: true });
+  yield* fs.writeFileString(scratch.caFile, namedCa);
   yield* fs.makeDirectory(scratch.secrets, { recursive: true });
   yield* fs.writeFileString(`${scratch.secrets}/${login}.password`, `  ${secretsPassword}  \n`);
 
@@ -246,9 +254,11 @@ const scratchFolders = Effect.gen(function* scratchFolders() {
  * The variables a case's environment holds: `HOME` always, and each other where the case sets it.
  */
 interface Environment {
+  GR8DES_PG_CA?: string;
   GR8DES_PG_DATABASE?: string;
   GR8DES_PG_HOST?: string;
   GR8DES_PG_MIGRATION_PASSWORD?: string;
+  GR8DES_PG_MIGRATION_ROLE?: string;
   GR8DES_PG_PORT?: string;
   GR8DES_PG_SECRETS?: string;
   GRIZZLE_PG_STATE?: string;
@@ -505,6 +515,109 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
                   assert.strictEqual(failure?._tag, "CredentialError");
                   assert.include(String(failure?.cause), "GR8DES_PG_MIGRATION_PASSWORD");
                 }
+              }),
+          ),
+        );
+      }),
+  );
+
+  it.effect(
+    "verify against the file GR8DES_PG_CA names and migrate as GR8DES_PG_MIGRATION_ROLE, each the local cluster's where unset or empty, and name an unreadable CA file by its setting: every CA and role variant, exhausted",
+    (ctx) =>
+      Effect.gen(function* serverSettings() {
+        const scratch = yield* scratchFolders;
+        const cas = [
+          unset<Option.Option<string>>(Option.none()),
+          kept("empty", "", Option.none<string>()),
+          kept("a file", scratch.caFile, Option.some(namedCa)),
+          refused<Option.Option<string>>("a missing file", `${scratch.caFile}.missing`),
+        ] as const;
+        const roles = [
+          unset("grizzle_dev"),
+          kept("empty", "", "grizzle_dev"),
+          kept("another role", "qti_migrator", "qti_migrator"),
+        ] as const;
+
+        return yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: "every combination of 4 CA and 3 migration role variants",
+              caseHang: Duration.seconds(10),
+              coverage: requiredInSpace<"built" | "named" | "unreadable">([
+                "built",
+                "named",
+                "unreadable",
+              ]),
+              generator: (source) => ({
+                ca: source.draw(element(cas)),
+                role: source.draw(element(roles)),
+              }),
+              limit: 12,
+              literal: Formatter.format,
+              oracle: { kind: "specification", name: "scripts/db.sh's GR8DES_PG_* block" },
+              suite: "db/connection/server",
+            },
+            ({ ca, role }, c) =>
+              Effect.gen(function* oneCase() {
+                const environment: Environment = {
+                  GR8DES_PG_MIGRATION_PASSWORD: migrationPassword,
+                  HOME: scratch.home,
+                };
+
+                if (Option.isSome(ca.text)) {
+                  environment.GR8DES_PG_CA = ca.text.value;
+                }
+
+                if (Option.isSome(role.text)) {
+                  environment.GR8DES_PG_MIGRATION_ROLE = role.text.value;
+                }
+
+                const built = yield* Effect.all({
+                  login: loginConnection(login),
+                  migration: migrationConnection,
+                }).pipe(
+                  Effect.result,
+                  Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(environment))),
+                );
+
+                if (Option.isNone(ca.value)) {
+                  c.note("unreadable");
+
+                  const failure = Result.isFailure(built) ? built.failure : undefined;
+
+                  assert.instanceOf(failure, ClusterConfigError);
+                  assert.deepStrictEqual(
+                    failure instanceof ClusterConfigError
+                      ? { path: failure.path, setting: failure.setting }
+                      : undefined,
+                    { path: `${scratch.caFile}.missing`, setting: "GR8DES_PG_CA" },
+                  );
+                  assert.include(failure.message, "GR8DES_PG_CA");
+
+                  return;
+                }
+
+                c.note("built");
+                if (Option.isSome(ca.value.value)) {
+                  c.note("named");
+                }
+
+                assert.isTrue(Result.isSuccess(built));
+
+                if (Result.isFailure(built)) {
+                  return;
+                }
+
+                for (const connection of [built.success.login, built.success.migration]) {
+                  assert.strictEqual(
+                    connection.transport.ca,
+                    Option.getOrElse(ca.value.value, () => homeCa),
+                  );
+                }
+
+                assert.strictEqual(built.success.migration.role, Option.getOrThrow(role.value));
+                assert.notProperty(built.success.login, "role");
               }),
           ),
         );
