@@ -5,6 +5,7 @@ import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Predicate, Schema } from "effect";
 import { int8Max } from "#pantry/grammar/closed.ts";
+import { vocabularies } from "#pantry/grammar/compose.ts";
 import {
   cnForms,
   cnPatternOf,
@@ -12,6 +13,7 @@ import {
   mathHeadOperators,
   mathHeadQualifiers,
 } from "#pantry/grammar/expression.ts";
+import { includeAlternativesOf } from "#pantry/grammar/include.ts";
 import * as install from "#pantry/grammar/install.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
 import { admittedOf, includeRowsOf, symbolRowsOf } from "#pantry/test/indexes.ts";
@@ -643,18 +645,34 @@ describe("the installed relations", () => {
     assert.isBelow(install.SymbolMember.rows.length, grammar.content.symbol.rows.length);
   });
 
-  it("state IncludeRoot as each (version, include parent)'s include set and each set's kinds: every (version, parent, kind), and no other", () => {
-    // Oracle: the include grammar's `IncludeRoot` rows, against the installed `IncludeSetOf` and
-    // `IncludeMember` spelled out (`includeRowsOf`). "Include root" reads
-    // `IncludeMember.row(IncludeSetOf.at("set", v, p))` guarded by `IncludeSetOf.has(v, p)` where it
-    // read `IncludeRoot`, so the two agree exactly when these sets do.
+  it("state each (version, include parent)'s include alternatives as its include set and each set's kinds, in the grammar and as installed: every (version, parent, kind), and no other", () => {
+    // Oracle: the include alternatives of the vocabularies' models (`includeAlternativesOf`), the
+    // (version, include parent, kind) rows an include stands for, against the include grammar's
+    // `IncludeSetOf` and `IncludeMember` and the installed ones, each spelled out
+    // (`includeRowsOf`). "Include root" and `placesAt` read the kinds as the set's members, so they
+    // read the alternatives exactly when these sets do.
     const key = ["version", "parent", "kind"];
+    const alternatives = keyedSet(
+      "the include alternatives",
+      key,
+      includeAlternativesOf(vocabularies.flatMap((entry) => entry.models)).map(
+        ({ kind, parent, version }) => ({ kind, parent, version }),
+      ),
+    );
 
     assert.deepStrictEqual(
-      keyedSet("the include sets", key, includeRowsOf(install.IncludeSetOf, install.IncludeMember)),
-      keyedSet("IncludeRoot", key, grammar.include.includeRoot.rows),
+      keyedSet(
+        "the grammar's include sets",
+        key,
+        includeRowsOf(grammar.include.includeSetOf, grammar.include.includeMember),
+      ),
+      alternatives,
     );
-    assert.isBelow(install.IncludeMember.rows.length, grammar.include.includeRoot.rows.length);
+    assert.deepStrictEqual(
+      keyedSet("the include sets", key, includeRowsOf(install.IncludeSetOf, install.IncludeMember)),
+      alternatives,
+    );
+    assert.isBelow(install.IncludeMember.rows.length, alternatives.size);
   });
 
   it("state AttributeSlotOf and AttributeGrammar once, keyed (model, name): each name at its slot with its domain and use, and each (model, slot) one attribute's", () => {

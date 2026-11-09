@@ -254,11 +254,10 @@ const placesAt = (
 ): boolean =>
   site.kind === sectionRefKind ||
   Option.isSome(
-    grammar.include.includeRoot.lookup({
-      kind: root,
-      parent: site.parentKind,
-      version: site.version,
-    }),
+    Option.flatMap(
+      grammar.include.includeSetOf.lookup({ parent: site.parentKind, version: site.version }),
+      ({ set }) => grammar.include.includeMember.lookup({ kind: root, set }),
+    ),
   );
 
 /**

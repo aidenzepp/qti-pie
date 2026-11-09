@@ -221,13 +221,13 @@ export const symbolRowsOf = <Kind extends string, Model extends string>(
 };
 
 /**
- * Spell the include sets `install.ts` declares out as the (version, include parent, kind) rows they
- * state, the include grammar's `IncludeRoot`: each family's set (`IncludeSetOf`) with each of its
- * kinds (`IncludeMember`).
+ * Spell include sets out as the (version, include parent, kind) rows they state, the kinds an
+ * include under each family stands for: each family's set (`IncludeSetOf`) with each of its kinds
+ * (`IncludeMember`), as the include grammar or `install.ts` states them.
  *
- * @param includeSetOf - `IncludeSetOf`, as installed.
+ * @param includeSetOf - `IncludeSetOf`.
  * @param includeSetOf.rows - Its rows.
- * @param includeMember - `IncludeMember`, as installed.
+ * @param includeMember - `IncludeMember`.
  * @param includeMember.rows - Its rows.
  * @returns The rows, by family in `IncludeSetOf`'s order.
  */

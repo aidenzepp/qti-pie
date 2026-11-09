@@ -194,14 +194,24 @@ export interface IncludeGrammar {
     readonly [IdField<"kind", string>]
   >;
   /**
-   * `IncludeRoot`, the set of (version, include parent, kind) an include stands for.
+   * The `IncludeSet` roster: every distinct set of kinds an include stands for, numbered from 0 in
+   * the order of the first family that holds it (rule 0: identical facts are one fact).
    */
-  readonly includeRoot: Indexed<
-    readonly [
-      IdField<"version", SchemaVersion>,
-      IdField<"parent", string>,
-      IdField<"kind", string>,
-    ],
+  readonly includeSet: Roster<string>;
+  /**
+   * `IncludeSetOf`: (version, include parent) → set, the kinds an include under the parent stands
+   * for, for each family that holds one.
+   */
+  readonly includeSetOf: Indexed<
+    readonly [IdField<"version", SchemaVersion>, IdField<"parent", string>],
+    readonly [IdField<"set", string>]
+  >;
+  /**
+   * `IncludeMember`: the set of (set, kind) where an include set holds the kind, each set's kinds
+   * in handle order.
+   */
+  readonly includeMember: Indexed<
+    readonly [IdField<"set", string>, IdField<"kind", string>],
     readonly []
   >;
 }
@@ -224,8 +234,43 @@ export const includeGrammar = (input: {
   const parents = [...new Set(input.alternatives.map(({ parent }) => parent))];
   const includeParent = roster("IncludeParent", parents);
   const parent = idField("parent", includeParent);
+  // Each (version, include parent)'s kinds, in the order of its first alternative; then each
+  // distinct sorted set of them numbered once, in the order of the first family that holds it.
+  const families = new Map<
+    string,
+    { readonly kinds: string[]; readonly parent: string; readonly version: SchemaVersion }
+  >();
+  for (const { kind, parent: held, version } of input.alternatives) {
+    families
+      .getOrInsertComputed(`${version} ${held}`, () => ({ kinds: [], parent: held, version }))
+      .kinds.push(kind);
+  }
+
+  const setOf = new Map<string, string>();
+  const members: { readonly kind: string; readonly set: string }[] = [];
+  const setRows = [...families.values()].map(({ kinds, parent: held, version }) => {
+    const sorted = kinds.toSorted((left, right) => (left < right ? -1 : 1));
+    const set = setOf.getOrInsertComputed(sorted.join(" "), () => {
+      const fresh = String(setOf.size);
+      members.push(...sorted.map((kind) => ({ kind, set: fresh })));
+
+      return fresh;
+    });
+
+    return { parent: held, set, version };
+  });
+  const includeSet = roster("IncludeSet", [...setOf.values()]);
+  const set = idField("set", includeSet);
 
   return {
+    includeMember: indexed(
+      closed({
+        key: [set, idField("kind", input.kinds)],
+        name: "IncludeMember",
+        payload: [],
+        rows: members,
+      }),
+    ),
     includeParent,
     includeParentKind: closed({
       key: [parent],
@@ -233,12 +278,13 @@ export const includeGrammar = (input: {
       payload: [idField("kind", input.kinds)],
       rows: parents.map((handle) => ({ kind: handle, parent: handle })),
     }),
-    includeRoot: indexed(
+    includeSet,
+    includeSetOf: indexed(
       closed({
-        key: [idField("version", input.versions), parent, idField("kind", input.kinds)],
-        name: "IncludeRoot",
-        payload: [],
-        rows: input.alternatives,
+        key: [idField("version", input.versions), parent],
+        name: "IncludeSetOf",
+        payload: [set],
+        rows: setRows,
       }),
     ),
   };
