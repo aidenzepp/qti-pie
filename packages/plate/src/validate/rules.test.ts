@@ -7,7 +7,13 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
-import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
+import {
+  cpuMillis,
+  growthFactor,
+  growthLimit,
+  growthRatio,
+  growthRuns,
+} from "#plate/test/growth.ts";
 import { singleOf } from "#plate/model/expression.ts";
 import type { ExpressionType, ReferenceEntry } from "#plate/model/expression.ts";
 import { checkRules, processingRefusals, referenceRefusals } from "#plate/validate/rules.ts";
@@ -6850,6 +6856,137 @@ describe("reading an identifier", () => {
           growth,
           growthLimit,
           `8 times the spaces took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+});
+
+/**
+ * The `q`s of the shorter paragraph the quotation growth case reads, before it reads one with
+ * {@link growthFactor} times as many. Each element costs the rules about 2 µs whatever its
+ * neighbours, so a search of the parent's children per `q` outgrows that only past some thousands
+ * of siblings: a search per `q` grew 17 times on 2,000 against 16,000 and 40 times on 16,000
+ * against 128,000, so only the larger pair fails it.
+ */
+const fewerQuotes = 16_000;
+
+/**
+ * The `q`s of the paragraph the hostile-size case reads, about 640 KB as markup: the size the gate
+ * review measured at 6.7 s over a `span` control while each `q` searched its parent's children.
+ */
+const hostileQuotes = 80_000;
+
+/**
+ * Construct an item whose paragraph holds a run of sibling inline elements, each holding `a`, the
+ * next apart from it by a space.
+ *
+ * @param local The siblings' local name: `q`, which E30 reads the neighbours of, or `span`, the
+ *   control, which no rule reads them for.
+ * @param count How many siblings the paragraph holds.
+ * @returns The item.
+ */
+const siblingRun = (local: "q" | "span", count: number) =>
+  item(
+    [],
+    [
+      el(
+        "p",
+        [],
+        Array.from({ length: count * 2 - 1 }, (_, index) =>
+          index % 2 === 0 ? el(local, [], [text("a")]) : text(" "),
+        ),
+      ),
+    ],
+  );
+
+describe("align-54 r11 quotation position: E30 reads a q's neighbours by its position", () => {
+  it("align-54 r11 quotation position E30: refuses a mark beside the q it stands against among same-named siblings, and none beside the others (reading 127)", () => {
+    const body = "qti-assessment-item/qti-item-body/p";
+    const quoted = (at: number, mark: string, side: string) => ({
+      detail: { check: "quotation", element: "q", mark, reading: "127", side },
+      path: `${body}/q[${at}]`,
+      rule: "text-not-allowed" as const,
+    });
+
+    assert.deepStrictEqual(
+      judged(
+        item(
+          [],
+          [
+            el(
+              "p",
+              [],
+              [
+                text("“"),
+                el("q", [], [text("a")]),
+                text(" "),
+                el("q", [], [text("b")]),
+                text("” "),
+                el("q", [], [text("c")]),
+                el("span", [], [text("»")]),
+                el("q", [], [text("d")]),
+              ],
+            ),
+          ],
+        ),
+      ),
+      [quoted(1, "“", "before"), quoted(2, "”", "after")],
+    );
+  });
+
+  it.effect(
+    "align-54 r11 quotation position E30: reads 8 times the sibling qs in under 32 times the time",
+    () =>
+      Effect.gen(function* readsQuotesInLinearTime() {
+        const fewer = siblingRun("q", fewerQuotes);
+        const more = siblingRun("q", fewerQuotes * growthFactor);
+        assert.deepStrictEqual(judged(more), []);
+
+        const growth = yield* growthRatio(
+          () => {
+            checkRules(fewer, tables);
+          },
+          () => {
+            checkRules(more, tables);
+          },
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the qs took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "align-54 r11 quotation position E30: checks 80,000 sibling qs in under twice the time of as many spans",
+    () =>
+      Effect.gen(function* checksHostileQuotes() {
+        const quotes = siblingRun("q", hostileQuotes);
+        const spans = siblingRun("span", hostileQuotes);
+        let refused = -1;
+        const checkQuotes = () => {
+          refused = checkRules(quotes, tables).length;
+        };
+        const checkSpans = () => {
+          checkRules(spans, tables);
+        };
+        let quotesMs = Number.POSITIVE_INFINITY;
+        let spansMs = Number.POSITIVE_INFINITY;
+        for (let run = 0; run < growthRuns; run += 1) {
+          const quotesRun = yield* cpuMillis(checkQuotes);
+          const spansRun = yield* cpuMillis(checkSpans);
+          quotesMs = Math.min(quotesMs, quotesRun);
+          spansMs = Math.min(spansMs, spansRun);
+        }
+
+        assert.strictEqual(refused, 0);
+        assert.isBelow(
+          quotesMs,
+          spansMs * 2,
+          `80,000 qs took ${quotesMs.toFixed(0)} ms and as many spans ${spansMs.toFixed(0)} ms`,
         );
       }),
     growthTimeoutMs,
