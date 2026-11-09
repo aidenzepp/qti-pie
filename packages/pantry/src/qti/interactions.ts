@@ -307,8 +307,9 @@ export const gapKind = "qti-gap" satisfies Kind;
 
 /**
  * The interactions of any response type: those neither `BindingFit` nor `RecordBindingFit` names,
- * the custom and portable custom interactions, which bind a declared response variable of any base
- * type and cardinality (reading 75 binds them all).
+ * the custom, portable custom and order interactions, whose class descriptions (§5.36, §5.106 and
+ * §5.97) state no binding, so each binds a declared response variable of any base type and
+ * cardinality (reading 75 binds them all; spec reading 172 the order interaction).
  */
 export const anyTypeKinds: readonly Kind[] = interactionKinds.filter(
   (kind) =>
@@ -2524,15 +2525,15 @@ const identifierTyped = on(
  *   reading 75), a response declaration's whatever its cardinality spells (reading 159), whose
  *   fields are the binding's and back, and where the declaration has a cardinality its
  *   {@link BindingCardinality}, copied from `DeclarationCardinality`; each declaration of a type
- *   `BindingFit` or `RecordBindingFit` admits, the custom and portable custom interactions of any
- *   type, and a string binding's of base type string ("BindingFit"), each fit law over the
- *   cardinality and base type rows alone; "Binding unique" (`key(document, identifier)`); "Binding
- *   cardinality" (a single response takes a most of 1, where its interaction's most has a value,
- *   and a gap match of at most one gap, its cardinality row's `gaps` copied from `Interaction`,
- *   spec reading 169); `max-strings-required`, which carries `kind` beside `node` so that its
- *   containment into `CountBound` is a statement of its own, not "Binding cardinality"'s: a refusal
- *   names a law by its relations and terms, never its selection (C22); and "AdaptiveFeedback", an
- *   interaction inside feedback is in an adaptive item.
+ *   `BindingFit` or `RecordBindingFit` admits, the custom, portable custom and order interactions
+ *   of any type (spec reading 172), and a string binding's of base type string ("BindingFit"), each
+ *   fit law over the cardinality and base type rows alone; "Binding unique" (`key(document,
+ *   identifier)`); "Binding cardinality" (a single response takes a most of 1, where its
+ *   interaction's most has a value, and a gap match of at most one gap, its cardinality row's
+ *   `gaps` copied from `Interaction`, spec reading 169); `max-strings-required`, which carries
+ *   `kind` beside `node` so that its containment into `CountBound` is a statement of its own, not
+ *   "Binding cardinality"'s: a refusal names a law by its relations and terms, never its selection
+ *   (C22); and "AdaptiveFeedback", an interaction inside feedback is in an adaptive item.
  * - **choices:** each choice's {@link ChoiceInteraction}, which every choice has ("N8 nearest"), its
  *   interaction the choice's nearest, the counted family under `Interaction`; each gap's
  *   {@link GapInteraction}, which every gap has ("N8 nearest" too, so a gap no interaction encloses

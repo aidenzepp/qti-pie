@@ -3411,3 +3411,25 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      This adds `d` to the codes of readings 132 and 161. In the corpus, the only `format` is `%.1f`, so no verdict
      moves. This binds pantry and plate alike. (Decided 2026-11-08 by the overseer under the operator's
      delegation, mail 7a7e6287, ruling 8, on the operator's ruling in his comment on PR #46, 6722164084: admit `d`.)
+
+172. **An order interaction may be bound to a response variable of any base type and cardinality: its class description
+     states no binding.** The one sentence that binds it, "The qti-order-interaction must be bound to a response
+     variable with a base-type of identifier and ordered cardinality only" (section 2.4.1.2, `info.txt` line 8766,
+     `info-v3p0p1.txt` line 8854), stands in section 2, Key Data Model Features, which both versions of the information
+     model mark "This Section is NOT NORMATIVE" (`info.txt` line 8352, `info-v3p0p1.txt` line 8436). So it states no
+     requirement. The normative sources state none: the OrderInteraction class description (section 5.97, `info.txt`
+     line 36046) gives the candidate's task and nothing of the variable it is bound to, where the GraphicOrderInteraction
+     class description states its own: "The order hotspot interaction must be bound to a response variable with a
+     base-type of identifier and ordered cardinality" (section 5.61, `info.txt` line 29186). Under the operator's rule
+     that what the standard does not ban is not refused, an order interaction binds a declared response variable of any
+     base type and cardinality, as the custom and portable custom interactions do (reading 75), and the graphic order
+     interaction keeps its (identifier, ordered) row. Neither `BindingFit` nor `RecordBindingFit` holds a row of the
+     order interaction, which makes it one of `anyTypeKinds` (`typedFits`, `src/grammar/facets.ts`;
+     `src/qti/interactions.ts`), and "Binding declared" and "Binding unique" judge it as any other interaction
+     (readings 75 and 92); the law oracle's "Binding unique" reads every interaction, as the schema's key over
+     `BoundVariable` does (`src/test/oracle.ts`). This sets aside the (identifier, ordered, `qti-order-interaction`) row,
+     under which an order interaction bound to a variable of another type was refused under "BindingFit", and one bound
+     to a record under "RecordBindingFit". In the corpus, each of the 9 order interactions, in 5 zips, binds an
+     identifier response of ordered cardinality, so no verdict moves. This binds pantry and plate alike. It matches
+     reading 165 of PR #55. (Decided 2026-11-09 by the overseer under the operator's delegation, decision 448, overseer
+     mail f74ee547.)

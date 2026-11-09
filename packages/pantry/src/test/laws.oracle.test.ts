@@ -2937,6 +2937,50 @@ const boundItem = ({ choices, kind, max, min }: BoundCase) => {
 };
 
 /**
+ * The interaction kinds the Binding unique box binds: one `BindingFit` names, the order
+ * interaction, whose class description states no binding (spec reading 172), and the custom
+ * interaction, which binds any type (reading 75).
+ */
+const uniqueKinds = [
+  "qti-choice-interaction",
+  "qti-order-interaction",
+  "qti-custom-interaction",
+] as const;
+
+/**
+ * Write one interaction of the Binding unique box, bound to `R0` or `R1`.
+ *
+ * @param kind - Its kind.
+ * @param at - The number of the response it binds.
+ * @returns The interaction, as written.
+ */
+const uniqueInteraction = (kind: (typeof uniqueKinds)[number], at: number): string => {
+  const binds = `response-identifier="R${String(at)}"`;
+
+  return {
+    "qti-choice-interaction": `<qti-choice-interaction ${binds} max-choices="1"><qti-simple-choice identifier="A">A</qti-simple-choice></qti-choice-interaction>`,
+    "qti-custom-interaction": `<qti-custom-interaction ${binds}><w:widget xmlns:w="urn:example:widget">W</w:widget></qti-custom-interaction>`,
+    "qti-order-interaction": `<qti-order-interaction ${binds}><qti-simple-choice identifier="A">A</qti-simple-choice></qti-order-interaction>`,
+  }[kind];
+};
+
+/**
+ * Judge an item of one response declaration and one interaction, and select its fit breaches.
+ *
+ * @param declaration - The response declaration, as written.
+ * @param interaction - The interaction, as written.
+ * @returns Its "BindingFit" and "RecordBindingFit" breaches.
+ */
+const fitBreaches = (declaration: string, interaction: string) =>
+  judged(itemWith(declaration, interaction)).pipe(
+    Effect.map((judgment) =>
+      breachesOf(judgment).filter(
+        (breach) => breach.law === "BindingFit" || breach.law === "RecordBindingFit",
+      ),
+    ),
+  );
+
+/**
  * Reading 18's and 67's bounds, restated from the information model: an order interaction's
  * counts bind only where `min-choices` is written, and then `min-choices` is at most the choices
  * and a written `max-choices` from `min-choices` to the choices, 0 a count like any other
@@ -3037,45 +3081,56 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
   );
 
   it.effect(
-    "Binding unique: an item breaks it exactly once for each interaction past the first that binds a response",
+    "Binding unique: an item breaks it exactly once for each interaction past the first that binds a response, of any kind",
     (ctx) =>
       searched(
         ctx,
         exhaust(
           {
-            box: "every list of 1 to 3 interactions, each binding R0, declared, or R1, not",
+            box: "every list of 1 to 3 interactions, each a choice, an order or a custom interaction binding R0, declared, or R1, not",
             caseHang: lawCaseHang,
-            coverage: requiredInSpace<"unique" | "shared" | "undeclared shared">([
-              "unique",
-              "shared",
-              "undeclared shared",
-            ]),
-            // Each of up to three interactions binds one of two responses, R0 declared and R1 not.
+            coverage: requiredInSpace<
+              "unique" | "shared" | "undeclared shared" | "shared across kinds"
+            >(["unique", "shared", "undeclared shared", "shared across kinds"]),
+            // Each of up to three interactions binds one of two responses, R0 declared and R1 not,
+            // and is of one of three kinds: one `BindingFit` names, the order interaction, whose
+            // class description states no binding (spec reading 172), and the custom interaction,
+            // which binds any type (reading 75). 6 + 36 + 216 = 258 cases.
             generator: (source) =>
-              Array.from({ length: source.draw(int(1, 3)) }, () => source.draw(int(0, 1))),
-            limit: 20,
+              Array.from({ length: source.draw(int(1, 3)) }, () => ({
+                at: source.draw(int(0, 1)),
+                kind: source.draw(element(uniqueKinds)),
+              })),
+            limit: 258,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
-              name: "reading 92, §2.2.2.2: a response n interactions bind breaks it n − 1 times",
+              name: "reading 92, §2.2.2.2: a response n interactions of any kind bind breaks it n − 1 times",
             },
             suite: "oracle/binding-unique",
           },
           (bound, c) =>
             Effect.gen(function* unique() {
-              const counts = [0, 1].map((at) => bound.filter((held) => held === at).length);
+              const counts = [0, 1].map(
+                (response) => bound.filter(({ at }) => at === response).length,
+              );
               const expected = counts.reduce((sum, count) => sum + Math.max(0, count - 1), 0);
               c.note(expected === 0 ? "unique" : "shared");
               if ((counts[1] ?? 0) > 1) {
                 c.note("undeclared shared");
               }
 
-              const body = bound
-                .map(
-                  (at) =>
-                    `<qti-choice-interaction response-identifier="R${String(at)}" max-choices="1"><qti-simple-choice identifier="A">A</qti-simple-choice></qti-choice-interaction>`,
+              if (
+                [0, 1].some(
+                  (response) =>
+                    new Set(bound.filter(({ at }) => at === response).map(({ kind }) => kind))
+                      .size > 1,
                 )
-                .join("");
+              ) {
+                c.note("shared across kinds");
+              }
+
+              const body = bound.map(({ at, kind }) => uniqueInteraction(kind, at)).join("");
               const breaches = ofLaw(
                 breachesOf(
                   yield* judged(
@@ -3090,12 +3145,37 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
 
               // Oracle: reading 92, "Each response variable declared may be bound to one and only
               // one interaction" (§2.2.2.2): a response named by n interactions breaks it n − 1
-              // times, declared or not.
+              // times, declared or not, whatever the interactions' kinds.
               assert.strictEqual(breaches.length, expected, shown(breaches));
             }),
         ),
       ),
     testTimeoutMs,
+  );
+
+  it.effect(
+    "BindingFit: an order interaction binds a response of any type, a graphic order interaction an ordered identifier",
+    () =>
+      Effect.gen(function* orderBinding() {
+        const order = `<qti-order-interaction response-identifier="R"><qti-simple-choice identifier="A">A</qti-simple-choice><qti-simple-choice identifier="B">B</qti-simple-choice></qti-order-interaction>`;
+        const graphicOrder = `<qti-graphic-order-interaction response-identifier="R"><object data="a.png" type="image/png"/><qti-hotspot-choice identifier="A" shape="rect" coords="0,0,1,1"/><qti-hotspot-choice identifier="B" shape="rect" coords="0,0,1,1"/></qti-graphic-order-interaction>`;
+        const single = `<qti-response-declaration identifier="R" cardinality="single" base-type="string"/>`;
+        const record = `<qti-response-declaration identifier="R" cardinality="record"/>`;
+
+        // Oracle: spec reading 172: the order interaction's class description states no binding
+        // (§5.97), so it binds a single string response and a record alike; the graphic order
+        // interaction's does (§5.61: "a base-type of identifier and ordered cardinality only").
+        assert.deepStrictEqual(yield* fitBreaches(single, order), []);
+        assert.deepStrictEqual(yield* fitBreaches(record, order), []);
+        assert.deepStrictEqual(
+          (yield* fitBreaches(single, graphicOrder)).map(({ law }) => law),
+          ["BindingFit"],
+        );
+        assert.deepStrictEqual(
+          (yield* fitBreaches(record, graphicOrder)).map(({ law }) => law),
+          ["RecordBindingFit"],
+        );
+      }),
   );
 
   it.effect(

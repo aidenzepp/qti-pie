@@ -262,7 +262,7 @@ export const lawTable = {
   BindingFit: {
     rule: "binding-fit",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4 (§2.4, each interaction's 'must be bound to a response variable with a base-type of … and … cardinality', as §2.4.1.1 https://www.imsglobal.org/spec/qti/v3p0/info#ChoiceInt) (expression.ts BindingFit)",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4 (§2.4, each interaction's 'must be bound to a response variable with a base-type of … and … cardinality', as §2.4.1.1 https://www.imsglobal.org/spec/qti/v3p0/info#ChoiceInt), but the order interaction's, whose class description states none (spec reading 172), so it has no row (expression.ts BindingFit)",
   },
   "Branch forward": {
     rule: "branch-forward",
