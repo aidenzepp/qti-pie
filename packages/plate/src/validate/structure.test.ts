@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import { readCorpusFile } from "#plate/document/corpus.ts";
+import { readSource } from "#plate/document/read.ts";
 import {
   attr,
   doc,
@@ -21,6 +23,7 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
+import { packageTables } from "#plate/package/tables.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { checkStructure, governingTables } from "#plate/validate/structure.ts";
@@ -35,6 +38,7 @@ import type {
   TypeEntry,
   Wildcard,
 } from "#plate/validate/xsd.ts";
+import { manifestNamespace } from "#plate/vocabulary.ts";
 
 /**
  * The location every hand-built document in these tests carries.
@@ -1607,6 +1611,120 @@ const lookupCardinality = (local: string, identifier: string) => ({
  */
 const ruled = (source: SourceDocument) =>
   judgedMapping(source).map(({ location: where, rule }) => [rule, where]);
+
+/**
+ * An image, as a `picture` holds one after its sources.
+ */
+const pictureImage = el("img", [attr("alt", "A map"), attr("src", "map.png")]);
+
+/**
+ * Construct a whole item whose body holds the given content.
+ *
+ * @param content The body's children.
+ * @returns The item as a source document.
+ */
+const bodied = (...content: readonly SourceChild[]): SourceDocument =>
+  wholeItem([el("qti-item-body", [], content)]);
+
+/**
+ * The location of an element or attribute in a {@link bodied} item's body.
+ *
+ * @param step The path below the body.
+ * @returns Its location.
+ */
+const inBody = (step: string): Location => at(`qti-assessment-item/qti-item-body/${step}`);
+
+/**
+ * Check a document against the generated tables, and keep each refusal's rule and location and
+ * the reading its detail cites.
+ *
+ * @param source The document.
+ * @returns Its refusals' rules, locations and readings, in the order found.
+ */
+const cited = (source: SourceDocument) =>
+  judged(source).map(([rule, where, detail]) => [rule, where, detail["reading"]] as const);
+
+/**
+ * Construct a whole item whose body holds a video with one track.
+ *
+ * @param attributes The track's attributes beside its `src`.
+ * @returns The item as a source document.
+ */
+const trackedVideo = (...attributes: readonly SourceAttribute[]): SourceDocument =>
+  bodied(
+    el("video", [attr("src", "clip.mp4")], [el("track", [attr("src", "en.vtt"), ...attributes])]),
+  );
+
+/**
+ * LOM's namespace, whose elements a manifest's metadata holds.
+ */
+const lomNamespace = "http://ltsc.ieee.org/xsd/LOM";
+
+/**
+ * Construct a 3.0.0 manifest whose own LOM record holds one title string.
+ *
+ * @param language The string's `xml:lang`, as written.
+ * @returns The manifest as a source document.
+ */
+const titledManifest = (language: string): SourceDocument =>
+  doc(
+    "imsmanifest.xml",
+    el(
+      "manifest",
+      [attr("identifier", "M")],
+      [
+        el(
+          "metadata",
+          [],
+          [
+            el("schema", [], [text("QTI Package")], manifestNamespace),
+            el("schemaversion", [], [text("3.0.0")], manifestNamespace),
+            el(
+              "lom",
+              [],
+              [
+                el(
+                  "general",
+                  [],
+                  [
+                    el(
+                      "title",
+                      [],
+                      [
+                        el(
+                          "string",
+                          [attr("lang", language, xmlNamespace)],
+                          [text("A test")],
+                          lomNamespace,
+                        ),
+                      ],
+                      lomNamespace,
+                    ),
+                  ],
+                  lomNamespace,
+                ),
+              ],
+              lomNamespace,
+            ),
+          ],
+          manifestNamespace,
+        ),
+        el("organizations", [], [], manifestNamespace),
+        el("resources", [], [], manifestNamespace),
+      ],
+      manifestNamespace,
+    ),
+  );
+
+/**
+ * Check a manifest as the manifest walk does: no QTI tables, and the 3.0.0 profile's tables of
+ * every namespace it reaches.
+ *
+ * @param source The manifest.
+ * @returns Its refusals.
+ */
+const walkedManifest = (source: SourceDocument) =>
+  checkStructure(source, { elements: {}, types: {} }, packageTables.get("3.0.0"));
 
 describe("checkStructure", () => {
   describe("the six rules", () => {
@@ -3448,6 +3566,374 @@ describe("checkStructure", () => {
       assert.deepStrictEqual(
         found(carded(el("qti-card-entry"), el("qti-html-content", [], [text("A word.")]))),
         [],
+      );
+    });
+  });
+
+  describe("align-54 HTML rows: ARIA roles, a bdo's direction, media sources and URLs, a subtitles track, MIME types and language tags (readings 9, 123, 124, 125, 129 and 135)", () => {
+    it("align-54 HTML rows D5: refuses a role on a source as unknown-attribute, and an h1's role other than heading, tab or presentation as attribute-type, and leaves an h2 every role the XSD lists (reading 9)", () => {
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el(
+              "video",
+              [],
+              [el("source", [attr("src", "clip.mp4"), attr("role", "presentation")])],
+            ),
+          ),
+        ),
+        [
+          [
+            "unknown-attribute",
+            inBody("video/source/@role"),
+            { attribute: "role", element: "source", reading: "9" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(cited(bodied(el("h1", [attr("role", "banner")], [text("Maps")]))), [
+        ["attribute-type", inBody("h1/@role"), "9"],
+      ]);
+      for (const role of ["heading", "tab", "presentation"]) {
+        assert.deepStrictEqual(
+          judged(bodied(el("h1", [attr("role", role)], [text("Maps")]))),
+          [],
+          role,
+        );
+      }
+      assert.deepStrictEqual(
+        judged(bodied(el("h2", [attr("role", "banner")], [text("Maps")]))),
+        [],
+      );
+    });
+
+    it('align-54 HTML rows E26: refuses a bdo with no dir as missing-attribute, and dir="auto" on it as attribute-type, and admits ltr and rtl, and auto on another element (reading 123)', () => {
+      const overridden = (...attributes: readonly SourceAttribute[]) =>
+        bodied(el("p", [], [el("bdo", attributes, [text("abc")])]));
+
+      assert.deepStrictEqual(judged(overridden()), [
+        [
+          "missing-attribute",
+          inBody("p/bdo"),
+          { attribute: "dir", element: "bdo", reading: "123" },
+        ],
+      ]);
+      assert.deepStrictEqual(cited(overridden(attr("dir", "auto"))), [
+        ["attribute-type", inBody("p/bdo/@dir"), "123"],
+      ]);
+      for (const dir of ["ltr", "rtl"]) {
+        assert.deepStrictEqual(judged(overridden(attr("dir", dir))), [], dir);
+      }
+      assert.deepStrictEqual(judged(bodied(el("p", [attr("dir", "auto")], [text("abc")]))), []);
+    });
+
+    it("align-54 HTML rows E27: refuses a picture's source with no srcset, and an audio's or a video's source with no src, as missing-attribute, and admits each with it (reading 124)", () => {
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el(
+              "div",
+              [],
+              [el("picture", [], [el("source", [attr("type", "image/webp")]), pictureImage])],
+            ),
+          ),
+        ),
+        [
+          [
+            "missing-attribute",
+            inBody("div/picture/source"),
+            { attribute: "srcset", element: "source", reading: "124" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el(
+              "div",
+              [],
+              [el("picture", [], [el("source", [attr("srcset", "map.webp")]), pictureImage])],
+            ),
+          ),
+        ),
+        [],
+      );
+      for (const media of ["audio", "video"]) {
+        assert.deepStrictEqual(
+          judged(bodied(el(media, [], [el("source", [attr("type", `${media}/ogg`)])]))),
+          [
+            [
+              "missing-attribute",
+              inBody(`${media}/source`),
+              { attribute: "src", element: "source", reading: "124" },
+            ],
+          ],
+          media,
+        );
+        assert.deepStrictEqual(
+          judged(bodied(el(media, [], [el("source", [attr("src", "clip.ogg")])]))),
+          [],
+          `${media}, with src`,
+        );
+      }
+    });
+
+    it('align-54 HTML rows E27: refuses a blank media URL, src=" " among them, as attribute-type, and admits one padded with spaces (reading 124, and reading 125 for a track\'s src)', () => {
+      const blanks = [
+        [el("audio", [attr("src", " ")]), "audio/@src", "124"],
+        [el("video", [attr("src", "")]), "video/@src", "124"],
+        [el("video", [attr("poster", "\t")]), "video/@poster", "124"],
+        [el("video", [], [el("source", [attr("src", " ")])]), "video/source/@src", "124"],
+        [
+          el(
+            "div",
+            [],
+            [el("picture", [], [el("source", [attr("srcset", " \n ")]), pictureImage])],
+          ),
+          "div/picture/source/@srcset",
+          "124",
+        ],
+        [
+          el("video", [], [el("track", [attr("kind", "captions"), attr("src", " ")])]),
+          "video/track/@src",
+          "125",
+        ],
+      ] as const;
+
+      for (const [content, step, reading] of blanks) {
+        assert.deepStrictEqual(
+          cited(bodied(content)),
+          [["attribute-type", inBody(step), reading]],
+          step,
+        );
+      }
+      assert.deepStrictEqual(
+        judged(bodied(el("video", [attr("src", " clip.mp4 "), attr("poster", "\tstill.png")]))),
+        [],
+      );
+    });
+
+    it('align-54 HTML rows E28: refuses a track with no kind, or kind="subtitles", and no srclang as missing-attribute, and admits a track of another kind without one (reading 125)', () => {
+      for (const kind of [[], [attr("kind", "subtitles")]]) {
+        assert.deepStrictEqual(
+          judged(trackedVideo(...kind)),
+          [
+            [
+              "missing-attribute",
+              inBody("video/track"),
+              { attribute: "srclang", element: "track", reading: "125" },
+            ],
+          ],
+          kind.length === 0 ? "no kind" : "subtitles",
+        );
+      }
+      assert.deepStrictEqual(judged(trackedVideo(attr("srclang", "en"))), []);
+      for (const kind of ["captions", "chapters", "descriptions", "metadata"]) {
+        assert.deepStrictEqual(judged(trackedVideo(attr("kind", kind))), [], kind);
+      }
+    });
+
+    it('align-54 HTML rows E35: refuses a MIME type that is not two tokens joined by a slash, type="image /png" among them, as attribute-type, and admits image/svg+xml, */* and a padded upload list (reading 135)', () => {
+      const typedAt = (mime: string) =>
+        [
+          [
+            bodied(
+              el("p", [], [el("a", [attr("href", "x.html"), attr("type", mime)], [text("x")])]),
+            ),
+            "p/a/@type",
+          ],
+          [
+            bodied(el("div", [], [el("object", [attr("data", "x.svg"), attr("type", mime)])])),
+            "div/object/@type",
+          ],
+          [
+            bodied(
+              el(
+                "div",
+                [],
+                [
+                  el(
+                    "object",
+                    [attr("data", "x.svg"), attr("type", "image/svg+xml")],
+                    [
+                      el("param", [
+                        attr("name", "n"),
+                        attr("value", "v"),
+                        attr("valuetype", "DATA"),
+                        attr("type", mime),
+                      ]),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            "div/object/param/@type",
+          ],
+          [
+            bodied(el("video", [], [el("source", [attr("src", "clip.mp4"), attr("type", mime)])])),
+            "video/source/@type",
+          ],
+          [
+            bodied(
+              el("qti-upload-interaction", [
+                attr("response-identifier", "RESPONSE"),
+                attr("type", `text/plain ${mime}`),
+              ]),
+            ),
+            "qti-upload-interaction/@type",
+          ],
+        ] as const;
+
+      for (const mime of ["image /png", " image/png", "image/png ", "a b/c", "image/png\u007F"]) {
+        for (const [source, step] of typedAt(mime)) {
+          const where = inBody(step);
+          const listed = step.startsWith("qti-upload-interaction");
+          if (listed && mime !== "image/png\u007F") {
+            continue;
+          }
+
+          assert.deepStrictEqual(
+            cited(source),
+            [["attribute-type", where, "135"]],
+            `${step}: ${JSON.stringify(mime)}`,
+          );
+        }
+      }
+      for (const mime of ["image/svg+xml", "*/*", "IMAGE/PNG", "application/vnd.ms-excel"]) {
+        for (const [source, step] of typedAt(mime)) {
+          assert.deepStrictEqual(judged(source), [], `${step}: ${mime}`);
+        }
+      }
+      assert.deepStrictEqual(
+        cited(
+          wholeItem([
+            el("qti-stylesheet", [attr("href", "style.css"), attr("type", "text /css")]),
+            el("qti-item-body"),
+          ]),
+        ),
+        [["attribute-type", at("qti-assessment-item/qti-stylesheet/@type"), "135"]],
+      );
+      assert.deepStrictEqual(
+        judged(
+          bodied(
+            el("qti-upload-interaction", [
+              attr("response-identifier", "RESPONSE"),
+              attr("type", " image/png  text/plain "),
+            ]),
+          ),
+        ),
+        [],
+      );
+    });
+
+    it('align-54 HTML rows E32b: refuses xml:lang="en_US", lang="1en", lang="en " and srclang="" as attribute-type, and an empty xml:lang on an item or a stimulus, and admits x-none, an empty xml:lang and lang on body content, and a padded xml:lang (reading 129)', () => {
+      const paragraph = (attribute: SourceAttribute) =>
+        bodied(el("p", [attribute], [text("Colour")]));
+
+      assert.deepStrictEqual(cited(paragraph(attr("lang", "en_US", xmlNamespace))), [
+        ["attribute-type", inBody("p/@xml:lang"), "129"],
+      ]);
+      for (const tag of ["1en", "en "]) {
+        assert.deepStrictEqual(
+          cited(paragraph(attr("lang", tag))),
+          [["attribute-type", inBody("p/@lang"), "129"]],
+          JSON.stringify(tag),
+        );
+      }
+      assert.deepStrictEqual(
+        cited(
+          bodied(
+            el(
+              "video",
+              [attr("src", "clip.mp4")],
+              [el("track", [attr("src", "en.vtt"), attr("srclang", "")])],
+            ),
+          ),
+        ),
+        [["attribute-type", inBody("video/track/@srclang"), "129"]],
+      );
+      assert.deepStrictEqual(
+        cited(
+          item(
+            [el("qti-item-body")],
+            [
+              attr("identifier", "item"),
+              attr("title", "Item"),
+              attr("time-dependent", "false"),
+              attr("lang", "", xmlNamespace),
+            ],
+          ),
+        ),
+        [["attribute-type", at("qti-assessment-item/@xml:lang"), "129"]],
+      );
+      assert.deepStrictEqual(
+        cited(
+          doc(
+            location,
+            el(
+              "qti-assessment-stimulus",
+              [attr("identifier", "S"), attr("title", "Stimulus"), attr("lang", " ", xmlNamespace)],
+              [el("qti-stimulus-body", [], [el("p", [], [text("Colour")])])],
+            ),
+          ),
+        ),
+        [["attribute-type", at("qti-assessment-stimulus/@xml:lang"), "129"]],
+      );
+      for (const attribute of [
+        attr("lang", "x-none", xmlNamespace),
+        attr("lang", "", xmlNamespace),
+        attr("lang", " en-GB ", xmlNamespace),
+        attr("lang", ""),
+        attr("lang", "zh-Hant-TW"),
+      ]) {
+        assert.deepStrictEqual(
+          judged(paragraph(attribute)),
+          [],
+          `${attribute.namespace === "" ? "" : "xml:"}${attribute.local}=${JSON.stringify(attribute.value)}`,
+        );
+      }
+    });
+
+    it('align-54 HTML rows E32b: the manifest walk reads the same row, so it refuses xml:lang="en_US" on a LOM string its attribute wildcard admits, and admits x-none (reading 129)', () => {
+      const string = `{${manifestNamespace}}manifest/{${manifestNamespace}}metadata/{${lomNamespace}}lom/{${lomNamespace}}general/{${lomNamespace}}title/{${lomNamespace}}string`;
+
+      assert.deepStrictEqual(
+        walkedManifest(titledManifest("en_US")).map((refusal) => [
+          refusal.rule,
+          refusal.location,
+          refusal.detail["reading"],
+        ]),
+        [["attribute-type", at(`${string}/@xml:lang`), "129"]],
+      );
+      assert.deepStrictEqual(walkedManifest(titledManifest("x-none")), []);
+    });
+
+    describe("the manifest walk's corpus control", { tags: ["corpus"] }, () => {
+      it.effect(
+        'align-54 HTML rows E32b: admits the languages of BBQsTest.zip\'s manifest, whose LOM strings write xml:lang="x-none" (reading 129)',
+        () =>
+          Effect.gen(function* manifestLanguages() {
+            const path = "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip.d/imsmanifest.xml";
+            const source = yield* readCorpusFile(path).pipe(
+              Effect.flatMap((bytes) => readSource(path, bytes)),
+            );
+            const languages = [...walkDocument(source)].flatMap(({ element: walked }) =>
+              walked.attributes.filter(
+                (attribute) => attribute.namespace === xmlNamespace && attribute.local === "lang",
+              ),
+            );
+
+            assert.include(
+              languages.map((attribute) => attribute.value),
+              "x-none",
+            );
+            assert.deepStrictEqual(
+              walkedManifest(source).filter(
+                (refusal) =>
+                  refusal.location.kind === "path" && refusal.location.path.endsWith("/@xml:lang"),
+              ),
+              [],
+            );
+          }),
       );
     });
   });
