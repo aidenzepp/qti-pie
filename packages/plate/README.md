@@ -726,15 +726,18 @@ holds no value for in a test *(pending)*: the test's own `numAttempts` or `compl
 the test declares none, `QTI_CONTEXT` or a context variable, the `duration` of a part, a section or
 an item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`, or a
 `qti-test-variables` of `duration`. In a test that holds a `qti-assessment-section-ref`, it also
-marks a dotted name that does not start with a part, section or item ref of the test document
-itself, such as `I1.SCORE` where `I1` is an item ref in a section document. It also marks such a
-test's outcome processing when the processing holds one of the eight expressions above, because they
-would look up only the test document's own items: a session delivers none of a section document's
-items. `openPackage` also marks a test's outcome processing, and leaves out a template default, that
-reads an item's context variable through its item ref, such as `ITEM1.CTX` where the item declares
-`CTX` in a `qti-context-declaration`: the item marks that declaration, and plate holds no value of
-it. A test checked apart from its items cannot see this, so there its processing runs and fails at
-that read with `UnknownIdentifierError`. `open` accepts these, as pantry does.
+marks a dotted name unless the name is a part, section or item ref of the test document itself, a
+dot, and a variable name that holds no dot. After an item ref that a selection with replacement can
+repeat, an occurrence number may come before the variable name, as in `a.2.SCORE`. So it marks
+`I1.SCORE` where `I1` is an item ref in a section document, and `a.b.SCORE` where `a` is the test's
+own item ref and `a.b` a section document's, even when `a`'s item declares `b.SCORE`. It also marks
+such a test's outcome processing when the processing holds one of the eight expressions above,
+because they would look up only the test document's own items: a session delivers none of a section
+document's items. `openPackage` also marks a test's outcome processing, and leaves out a template
+default, that reads an item's context variable through its item ref, such as `ITEM1.CTX` where the
+item declares `CTX` in a `qti-context-declaration`: the item marks that declaration, and plate holds
+no value of it. A test checked apart from its items cannot see this, so there its processing runs
+and fails at that read with `UnknownIdentifierError`. `open` accepts these, as pantry does.
 
 `openPackage` accepts a test that sets a variable from `qti-field-value` of an item's `record`
 response, whatever the field, in its outcome processing or in an item ref's template default.
@@ -866,8 +869,8 @@ as if it were inline in that test ([reading 5](../../docs/spec-readings.md)). Th
 names resolve through the section document's item refs. `openPackage` refuses the item refs,
 section refs, variable mappings and template defaults of every section document the manifest lists
 as it refuses the test's, whether or not a test reaches it, and judges its expressions under each
-test that reaches it. A session delivers only the items of the test document's own item refs, so the
-verdict marks a dotted name that reads through a section document.
+test that reaches it. A session delivers only the items of the test document's own item refs, which
+is why the verdict marks the dotted names listed earlier in this section.
 
 A section ref whose `href`, through the `xml:base` in scope, leads outside the package is refused
 `package-path-outside` with the check `remote-section`, in the test and in each section document it

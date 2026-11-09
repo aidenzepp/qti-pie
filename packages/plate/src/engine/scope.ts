@@ -607,10 +607,16 @@ const resolve = (scope: TestScope, prefix: string, rest: string): Option.Option<
  * reading. On a checked package no other reading resolves it, since the package counts the
  * unsplit reading beside the split and numbered ones (reading 48, "the unsplit reading counts
  * among them") and refuses the name as `ambiguous-reference` where another resolves too. A name
- * no reading resolves, or two readings resolve (Admission A4), reads nothing: on a checked package
- * the first is refused `undeclared-variable` and the second `ambiguous-reference`, so only a test
- * and items checked apart reach either. The engine holds no part's or section's `duration`, and
- * the test model marks a processing that reads one, so that reading reads nothing too.
+ * no reading resolves, or two readings resolve (Admission A4), reads nothing. On a checked package
+ * the second is refused `ambiguous-reference`. The first is refused `undeclared-variable`, unless
+ * its one resolving reading is a section document's item ref, whose item the scope does not hold:
+ * in a test that references a section document, the test model marks a processing that reads a
+ * dotted name unless the test's own part, section or item ref reads a variable name holding no dot
+ * through it (`isPrefixedHeld` in `#plate/model/test.ts`). So a checked package reaches the first
+ * only where that own item declares no such variable and a section document's item ref resolves
+ * the name, a limit the test model records; otherwise only a test and items checked apart reach
+ * either. The engine holds no part's or section's `duration`, and the test model marks a
+ * processing that reads one, so that reading reads nothing too.
  *
  * @param scope The test scope.
  * @param name The name, as the test's processing writes it.

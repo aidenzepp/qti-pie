@@ -856,7 +856,7 @@ describe("README.md", () => {
 
     for (const fragment of [
       "the `duration` of a part, a section or an item ref, such as `ITEM1.duration` or the occurrence form `ITEM1.1.duration`",
-      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that does not start with a part, section or item ref of the test document itself",
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
       "So do a `qti-variable`, `qti-correct` or `qti-default` of a `file` variable, of a `record` outcome or template variable, or of a `record` response with a `file` field",
       "A test's `qti-default` of its own `duration` gives NULL of a single duration",
       "A test reads an item's `numAttempts` as the number of attempts started, the count `results` writes",
@@ -901,7 +901,7 @@ describe("README.md", () => {
     assert.include(outcomes, "when the processing holds one of the eight expressions above");
     assert.include(
       outcomes,
-      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name that does not start with a part, section or item ref of the test document itself",
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
     );
   });
 
@@ -1142,6 +1142,27 @@ describe("README.md", () => {
       assert.include(documents, fragment);
     }
     assert.notInclude(documents, "No rule judges a variable mapping under the ref.");
+  });
+
+  it("align-54 r12 own prefix through a section document N1: Outcome processing says which dotted names a test that holds a section ref marks, a dotted variable name through the test's own item ref among them", () => {
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "In a test that holds a `qti-assessment-section-ref`, it also marks a dotted name unless the name is a part, section or item ref of the test document itself, a dot, and a variable name that holds no dot.",
+      "After an item ref that a selection with replacement can repeat, an occurrence number may come before the variable name, as in `a.2.SCORE`.",
+      "So it marks `I1.SCORE` where `I1` is an item ref in a section document, and `a.b.SCORE` where `a` is the test's own item ref and `a.b` a section document's, even when `a`'s item declares `b.SCORE`.",
+      "A session delivers only the items of the test document's own item refs, which is why the verdict marks the dotted names listed earlier in this section.",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
+    assert.notInclude(
+      outcomes,
+      "a dotted name that does not start with a part, section or item ref",
+    );
+    assert.notInclude(
+      outcomes,
+      "the verdict marks a dotted name that reads through a section document",
+    );
   });
 
   it("align-54 r11 docs 4, 6 and 9: Outcome processing names a test's map response of a built-in, a mapping's target under an LTI link and every section document the manifest lists", () => {
