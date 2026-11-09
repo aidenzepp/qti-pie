@@ -19,16 +19,18 @@
  *   of its body, a body with a label (its root naming its tool), an open `data-*` attribute, an
  *   ARIA range and an IDREFS, an SSML fragment with a mark, a MathML formula that applies `log` to
  *   a `logbase` and an argument, a table whose cell's `headers` names its header, a printed
- *   variable whose base names a variable, a `q` with no quotation mark beside or inside it,
- *   template and feedback content, choice, hottext, hotspot, slider, gap match (one gap text and
- *   one gap, bound to a multiple directed pair response, so a gap writes its `GapInteraction`) and
- *   portable custom interactions (the item's holds a foreign element in its markup's `template` and
- *   names its module by the `module` attribute, the included fragment's by both forms, so the
- *   package writes each form of "PCI module source"; it holds no custom interaction, which a 3.0.0
- *   package may not), a catalog whose keyword-translation card holds two entries (the first its
- *   default, in `es`, the second in `de`, languages the item's LOM does not list, since a catalog
- *   sits outside the body) and whose sign-language card names the image as its file, a span in the
- *   body whose `data-catalog-idref` names the catalog, and response processing that holds a
+ *   variable whose base names a variable, a `q` with no quotation mark beside or inside it, a
+ *   paragraph whose closed `data-ssml` holds one member with its required property (so the package
+ *   writes `DataSsml`, `DataSsmlMember` and `DataSsmlProperty`, spec reading 177), template and
+ *   feedback content, choice, hottext, hotspot, slider, gap match (one gap text and one gap, bound
+ *   to a multiple directed pair response, so a gap writes its `GapInteraction`) and portable custom
+ *   interactions (the item's holds a foreign element in its markup's `template` and names its
+ *   module by the `module` attribute, the included fragment's by both forms, so the package writes
+ *   each form of "PCI module source"; it holds no custom interaction, which a 3.0.0 package may
+ *   not), a catalog whose keyword-translation card holds two entries (the first its default, in
+ *   `es`, the second in `de`, languages the item's LOM does not list, since a catalog sits outside
+ *   the body) and whose sign-language card names the image as its file, a span in the body whose
+ *   `data-catalog-idref` names the catalog, and response processing that holds a
  *   `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a `tolerance`;
  * - **a second item** whose response processing is a published template, which the test places three
  *   times, and which holds a catalog `cat2` that the included fragment's `data-catalog-idref`
@@ -253,6 +255,7 @@ const itemOf = (members: MemberCounts): string =>
     '    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>',
     '    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="SHOWN" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>',
     "    <p>It says <q>read this</q> and stops.</p>",
+    '    <p data-ssml=\'{"say-as":{"interpret-as":"date"}}\'>On 2026-11-09.</p>',
     '    <p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="RIGHT" show-hide="show">Right.</qti-feedback-inline></p>',
     '    <p>See <span data-catalog-idref="cat1">the glossary</span>.</p>',
     '    <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1" min-choices="0">',
