@@ -1148,6 +1148,15 @@ const otherOutcomeOnly: readonly (readonly [string, readonly SourceAttribute[], 
   ["qti-outcome-maximum", [attr("outcome-identifier", "SCORE")], "F"],
 ];
 
+/**
+ * Construct a `qti-selection` of one child with a `with-replacement`.
+ *
+ * @param replacement Its `with-replacement`, as written.
+ * @returns The element.
+ */
+const replacingSelection = (replacement: string): SourceElement =>
+  el("qti-selection", [attr("select", "1"), attr("with-replacement", replacement)]);
+
 describe("buildTest's template defaults", () => {
   it.effect(
     "[T-9] reads the template default of each qti-template-default on an item ref, in document order with its expression",
@@ -1297,6 +1306,80 @@ describe("buildTest's template defaults", () => {
         ]);
         assert.strictEqual(unreferred.outcomeProcessing.kind, "runs");
         assert.deepStrictEqual(unreferred.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "align-54 r11 numbered reading counted once P1-1: in a test that holds a section ref, a.2.SCORE through an own a that no selection with replacement can repeat is marked by name at the processing, and runs through a repeatable a",
+    () =>
+      Effect.gen(function* marksUncountedNumbered() {
+        const rules = [setting("qti-set-outcome-value", "SCORE", variable("a.2.SCORE"))];
+        const once = referring("a", rules);
+        const replacing = test([
+          outcome("SCORE", "float", [defaultValue("0")]),
+          outcome("TIME", "duration"),
+          part("P1", "linear", "individual", [
+            section("S1", [
+              el("qti-selection", [attr("select", "2"), attr("with-replacement", "1")]),
+              itemRef("a", "items/one.xml"),
+            ]),
+            el("qti-assessment-section-ref", [
+              attr("href", "sections/more.xml"),
+              attr("identifier", "R1"),
+            ]),
+          ]),
+          el("qti-outcome-processing", [], rules),
+        ]);
+        const built = yield* buildTest(once);
+        const repeated = yield* buildTest(replacing);
+
+        assert.deepStrictEqual(checkStructure(once, tables), []);
+        assert.deepStrictEqual(checkStructure(replacing, tables), []);
+        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-assessment-section-ref", sectionRefPath),
+          mark("variable:a.2.SCORE", processingPath),
+        ]);
+        assert.deepStrictEqual(built.repeatable, new Set());
+        assert.strictEqual(repeated.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(repeated.unsupported, [
+          mark("qti-selection", `${firstPart}/qti-assessment-section/qti-selection`),
+          mark("qti-assessment-section-ref", sectionRefPath),
+        ]);
+        assert.deepStrictEqual(repeated.repeatable, new Set(["a"]));
+      }),
+  );
+
+  it.effect(
+    "align-54 r11 numbered reading counted once P1-1: buildTest gives as repeatable exactly the item refs under a section whose qti-selection has with-replacement true, a nested section's included",
+    () =>
+      Effect.gen(function* collectsRepeatable() {
+        const document = test([
+          outcome("SCORE", "float"),
+          part("P1", "linear", "individual", [
+            section("S1", [
+              replacingSelection(" true "),
+              itemRef("a", "items/a.xml"),
+              section("S2", [itemRef("b", "items/b.xml")]),
+            ]),
+            section("S3", [replacingSelection("false"), itemRef("c", "items/c.xml")]),
+            section("S4", [
+              el("qti-selection", [attr("select", "1")]),
+              itemRef("d", "items/d.xml"),
+            ]),
+            section("S5", [itemRef("e", "items/e.xml")]),
+          ]),
+          part("P2", "linear", "individual", [
+            section("S6", [
+              replacingSelection("1"),
+              section("S7", [section("S8", [itemRef("f", "items/f.xml")])]),
+            ]),
+          ]),
+        ]);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.repeatable, new Set(["a", "b", "f"]));
       }),
   );
 

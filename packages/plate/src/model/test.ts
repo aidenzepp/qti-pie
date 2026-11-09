@@ -198,6 +198,15 @@ export interface Test {
   readonly outcomeProcessing: OutcomeProcessing;
   readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
   readonly parts: readonly TestPart[];
+  /**
+   * The identifiers of the test's own item refs that a selection with replacement can repeat: those
+   * under a `qti-assessment-section` whose `qti-selection` has `with-replacement` true, anywhere
+   * above them in the test document. Only through one of them does a numbered reading such as
+   * `a.2.SCORE` count (reading 88, "a numbered reference such as `Q01.2.SCORE` names an instance of
+   * an item ref that a selection with replacement can repeat, and nothing else"). `buildTest`
+   * always gives it; a test built by hand may leave it out, and then no item ref is repeatable.
+   */
+  readonly repeatable?: ReadonlySet<string>;
   readonly title: string;
   readonly unsupported: readonly MarkedFeature[];
 }
@@ -764,6 +773,12 @@ interface ProcessingNames {
    */
   readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
   /**
+   * The identifiers of the test's own item references that a selection with replacement can
+   * repeat (`Test.repeatable`), through which alone a numbered reading counts
+   * ({@link isPrefixedHeld}).
+   */
+  readonly repeatable: ReadonlySet<string>;
+  /**
    * Whether the test holds a `qti-assessment-section-ref` under one of its parts or sections. A
    * section document it references holds parts of the test the engine does not deliver, so a dotted
    * name that resolves only through it is not held ({@link isPrefixedHeld}), and an outcome-only
@@ -784,48 +799,76 @@ interface ProcessingNames {
 interface Structure {
   readonly identifiers: ReadonlySet<string>;
   readonly referencesSection: boolean;
+  readonly repeatable: ReadonlySet<string>;
 }
+
+/**
+ * Report whether a section's `qti-selection` has `with-replacement` true, as `xs:boolean` reads it,
+ * which lets each item reference beneath the section, at any depth, be instantiated more than once
+ * (reading 88), as the package judges it (`replacesItems` in `#plate/package/open.ts`).
+ *
+ * @param element The section.
+ * @returns Whether it does.
+ */
+const replacesItems = (element: SourceElement): boolean =>
+  childrenNamed(element, "qti-selection").some((selection) =>
+    Option.exists(Option.flatMap(valueOf(selection, "with-replacement"), xsBooleanOf), Boolean),
+  );
+
+/**
+ * Add the identifier an element writes to a set, when it writes one.
+ *
+ * @param element The element.
+ * @param into The set.
+ */
+const addIdentifier = (element: SourceElement, into: Set<string>): void => {
+  for (const identifier of Option.toArray(
+    Option.map(valueOf(element, "identifier"), identifierOf),
+  )) {
+    into.add(identifier);
+  }
+};
 
 /**
  * Give the identifiers of a test's parts, sections and item references, nested sections included,
  * read from the elements the tree holds as {@link testPart} and {@link section} walk them, so the
- * names are known before the item references, whose template defaults read them, are built; and
- * whether the walk meets a `qti-assessment-section-ref`, which the tree leaves out.
+ * names are known before the item references, whose template defaults read them, are built;
+ * whether the walk meets a `qti-assessment-section-ref`, which the tree leaves out; and the item
+ * references a selection with replacement can repeat, those under a section whose `qti-selection`
+ * has `with-replacement` true ({@link replacesItems}), anywhere above them.
  *
  * @param root The test's root.
- * @returns Their identifiers, and whether the test references a section document.
+ * @returns Their identifiers, whether the test references a section document, and its repeatable
+ *   item references.
  */
 const structureOf = (root: SourceElement): Structure => {
   const identifiers = new Set<string>();
+  const repeatable = new Set<string>();
   let referencesSection = false;
-  const add = (element: SourceElement): void => {
-    for (const identifier of Option.toArray(
-      Option.map(valueOf(element, "identifier"), identifierOf),
-    )) {
-      identifiers.add(identifier);
-    }
-  };
-  const addChildren = (element: SourceElement): void => {
+  const addChildren = (element: SourceElement, replacing: boolean): void => {
     for (const child of elementsOf(element)) {
       if (isQti(child, "qti-assessment-section-ref")) {
         referencesSection = true;
       } else if (isQti(child, "qti-assessment-section")) {
-        add(child);
-        addChildren(child);
+        addIdentifier(child, identifiers);
+        addChildren(child, replacing || replacesItems(child));
       } else if (
         isQti(child, "qti-assessment-item-ref") &&
         isQti(element, "qti-assessment-section")
       ) {
-        add(child);
+        addIdentifier(child, identifiers);
+        if (replacing) {
+          addIdentifier(child, repeatable);
+        }
       }
     }
   };
   for (const part of childrenNamed(root, "qti-test-part")) {
-    add(part);
-    addChildren(part);
+    addIdentifier(part, identifiers);
+    addChildren(part, false);
   }
 
-  return { identifiers, referencesSection };
+  return { identifiers, referencesSection, repeatable };
 };
 
 /**
@@ -848,13 +891,14 @@ const processingNamesOf = (
     ),
   );
 
-  const { identifiers, referencesSection } = structureOf(root);
+  const { identifiers, referencesSection, repeatable } = structureOf(root);
 
   return {
     declared,
     named: new Set([...declared, ...processingBuiltIns]),
     outcomes,
     referencesSection,
+    repeatable,
     structure: identifiers,
   };
 };
@@ -874,17 +918,40 @@ const readsStructureDuration = (names: ProcessingNames, prefix: string, rest: st
   names.structure.has(prefix) && occurrenceOf(rest).variable === "duration";
 
 /**
+ * Report whether a reading of a dotted name, split at one of its dots, counts as a read of the
+ * test's own structure: its prefix is an identifier of it, and its rest is not in the numbered form
+ * `N.VAR` ({@link occurrenceOf}) or its prefix is an item reference a selection with replacement
+ * can repeat. A numbered reading counts only through such an item reference (reading 88, "a
+ * numbered reference such as `Q01.2.SCORE` names an instance of an item ref that a selection with
+ * replacement can repeat, and nothing else"), as the package counts it (`isCounted` in
+ * `#plate/package/open.ts`) and the test scope resolves it (`prefixedVariable` in
+ * `#plate/engine/scope.ts`).
+ *
+ * @param names What the processing resolves a name against.
+ * @param prefix The part before the dot.
+ * @param rest The part after it.
+ * @returns Whether it counts as a read of the test's own structure.
+ */
+const readsOwnStructure = (names: ProcessingNames, prefix: string, rest: string): boolean =>
+  names.structure.has(prefix) &&
+  (occurrenceOf(rest).variable === rest || names.repeatable.has(prefix));
+
+/**
  * Report whether the engine holds what a dotted name the test does not declare whole reads, judged
  * on each of its readings, one for each dot it may split at, from the first.
  *
- * It is not held when a reading reads a `duration` of the test's structure
- * ({@link readsStructureDuration}; G-R3, pending: the engine holds no part's, section's or item
- * reference's `duration`, the occurrence form included). In a test that references a section
- * document, it is not held when no reading's prefix is an identifier of the test's own structure:
- * it can resolve only through the section document, whose items the engine does not deliver. A
- * read whose prefix names the test's own structure stays held there; an outcome-only expression in
- * such a test is marked on its own ({@link outcomeOnlyMarks}). Otherwise it is held, the test
- * scope's to resolve.
+ * It is not held when a reading reads a `duration` of the test's structure ({@link
+ * readsStructureDuration}; G-R3, pending: the engine holds no part's, section's or item reference's
+ * `duration`, the occurrence form included). In a test that references a section document, it is
+ * not held when no reading counts as a read of the test's own structure ({@link
+ * readsOwnStructure}): it can resolve only through the section document, whose items the engine
+ * does not deliver. A rest in the numbered form after an own item reference no selection with
+ * replacement can repeat does not count: its numbered reading names nothing, and read whole it
+ * names a variable whose identifier starts with a digit, which nothing declares. So `a.2.SCORE`,
+ * with an own `a` that is not repeatable, reads only a section document's `a.2` and is not held, as
+ * `b.SCORE` through one is not; with an own `a.2` it stays held. A read that counts as one of the
+ * test's own structure stays held there; an outcome-only expression in such a test is marked on its
+ * own ({@link outcomeOnlyMarks}). Otherwise it is held, the test scope's to resolve.
  *
  * @param names What the processing resolves a name against.
  * @param name The dotted name.
@@ -894,11 +961,12 @@ const isPrefixedHeld = (names: ProcessingNames, name: string): boolean => {
   let ownPrefix = false;
   for (let dot = name.indexOf("."); dot !== -1; dot = name.indexOf(".", dot + 1)) {
     const prefix = name.slice(0, dot);
-    if (readsStructureDuration(names, prefix, name.slice(dot + 1))) {
+    const rest = name.slice(dot + 1);
+    if (readsStructureDuration(names, prefix, rest)) {
       return false;
     }
 
-    ownPrefix ||= names.structure.has(prefix);
+    ownPrefix ||= readsOwnStructure(names, prefix, rest);
   }
 
   return ownPrefix || !names.referencesSection;
@@ -910,8 +978,9 @@ const isPrefixedHeld = (names: ProcessingNames, name: string): boolean => {
  * outcome the model does not hold are not. A dotted name the test does not declare whole is a
  * prefixed read, which the test scope resolves, held as {@link isPrefixedHeld} judges it: not when
  * it reads a part's, a section's or an item reference's `duration`, directly or in the occurrence
- * form, nor, in a test that references a section document, when it names none of the test's own
- * structure. Any other name is held only when it is the test's own `duration`: `numAttempts`,
+ * form, nor, in a test that references a section document, when no reading of it counts as a read
+ * of the test's own structure, a numbered one counting only through a repeatable item reference.
+ * Any other name is held only when it is the test's own `duration`: `numAttempts`,
  * `completionStatus` and `QTI_CONTEXT` are not.
  *
  * @param names What the processing resolves a name against.
@@ -1485,7 +1554,8 @@ const templateDefaultOf = (
  * references a section document (the engine delivers no section document's item, so the
  * expression would count the test document's own items alone), and `runs` with its rules
  * otherwise; nothing in it or in a template default is refused but an attribute outside its type.
- * `declared` holds every identifier the test's outcome and context declarations declare.
+ * `declared` holds every identifier the test's outcome and context declarations declare, and
+ * `repeatable` the item references a selection with replacement can repeat.
  *
  * A test holding an XInclude `include` is never built: `check` leaves it unchecked (E23) before it
  * reaches here, so no include is read or marked.
@@ -1538,6 +1608,7 @@ export const buildTest = (source: SourceDocument): Effect.Effect<Test, Refusal> 
       outcomeProcessing: read.outcomeProcessing,
       outcomes,
       parts,
+      repeatable: names.repeatable,
       title,
       unsupported: marksOf(source, placed),
     };

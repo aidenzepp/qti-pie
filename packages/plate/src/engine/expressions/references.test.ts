@@ -1025,13 +1025,15 @@ const testHolder: Declarations = {
 };
 
 /**
- * The test scope of `ITEM1` and `ITEM2`, in one part `P1`.
+ * The test scope of `ITEM1` and `ITEM2`, in one part `P1`. A selection with replacement can repeat
+ * `ITEM1`, so a numbered name reads through it.
  */
 const testScope: TestScope = {
   declared: new Set(["TOTAL"]),
   duration: Option.some(60),
   items: [firstItem, secondItem],
   parts: new Map([["P1", ["ITEM1", "ITEM2"]]]),
+  repeatable: new Set(["ITEM1"]),
   sections: new Map(),
 };
 
@@ -1347,7 +1349,7 @@ const choiceItem: ScopeItem = {
 
 /**
  * The variables of a test's run over `choice` and `ITEM2`, whose record sets nothing of
- * `numAttempts`.
+ * `numAttempts`. A selection with replacement can repeat `choice`.
  */
 const choiceRun: Variables = {
   outcomes: {},
@@ -1356,6 +1358,7 @@ const choiceRun: Variables = {
     ...testScope,
     items: [choiceItem, secondItem],
     parts: new Map([["P1", ["choice", "ITEM2"]]]),
+    repeatable: new Set(["choice"]),
   },
 };
 

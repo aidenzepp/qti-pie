@@ -90,8 +90,10 @@ interface HeldResponse {
   readonly declaration: ResponseDeclaration;
   /**
    * Whether the name reads the one occurrence of its item: always for a response the holder
-   * declares, and for a prefixed name but `ITEMREF.N.VAR` with `N` other than 1, an occurrence that
-   * does not exist (`PrefixedName.first` in `#plate/engine/refs.ts`).
+   * declares, and for a prefixed name but `ITEMREF.N.VAR` with `N` other than 1 through an item ref
+   * a selection with replacement can repeat, an occurrence that does not exist
+   * (`PrefixedName.first` in `#plate/engine/refs.ts`); through any other item ref a numbered name
+   * reads no occurrence (reading 88).
    */
   readonly first: boolean;
   readonly kind: "held";
@@ -582,8 +584,10 @@ const evaluateVariable: Evaluator<"variable"> = (expression, scope) =>
  * (reading 111; OD-A54-15), and never the attempt count. In a
  * test's run a prefixed name reads the item's correct response through its item ref
  * ({@link namedResponse}; 0.14 decision 7): the one its record's template processing set, else
- * its declaration's, else NULL of its declared type; `ITEMREF.N.VAR` with `N` other than 1 names
- * an occurrence that does not exist and reads NULL of the response's type (G-R3, pending). A
+ * its declaration's, else NULL of its declared type; through an item ref a selection with
+ * replacement can repeat, the only one through which a numbered name reads an occurrence (reading
+ * 88), `ITEMREF.N.VAR` with `N` other than 1 names an occurrence that does not exist and reads NULL
+ * of the response's type (G-R3, pending). A
  * prefixed name of a response of base type `file`, or of a record response with a field of it,
  * which the value model holds no value of, reads the NULL `qti-variable` reads of it (G-R3,
  * pending: such a variable reads NULL). A prefixed name of an item's record response reads a
@@ -687,8 +691,10 @@ const prefixedDeclaration = (
  *
  * An item-session built-in (`numAttempts`, `completionStatus`) has no declaration and so no
  * declared default: it gives the default its record's template processing set (reading 111), else
- * NULL of its own type. `ITEMREF.N.VAR` with `N` other than 1 names an
- * occurrence that does not exist and gives NULL of the variable's type (G-R3, pending). A variable
+ * NULL of its own type. Through an item ref a selection with replacement can repeat, the only one
+ * through which a numbered name reads an occurrence (reading 88), `ITEMREF.N.VAR` with `N` other
+ * than 1 names an occurrence that does not exist and gives NULL of the variable's type (G-R3,
+ * pending). A variable
  * of base type `file`, or a record outcome or template variable, whose default the item model does
  * not hold, gives the NULL `qti-variable` reads of it (G-R3, pending: such a variable reads NULL).
  * An item's record response never reaches here: `prefixedRead` fails its value read first, and

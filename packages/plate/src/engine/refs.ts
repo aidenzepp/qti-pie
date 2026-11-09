@@ -181,10 +181,12 @@ const readValue = (read: PrefixedRead, name: string): Result.Result<Value, Recor
  */
 export interface PrefixedName {
   /**
-   * Whether the name reads the item's one occurrence: `ITEMREF.VAR` or `ITEMREF.1.VAR`. A name
-   * `ITEMREF.N.VAR` with `N` other than 1 names an occurrence that does not exist, since selection
-   * with replacement is marked (reading 4; G-R3, pending), and its value is NULL of the variable's
-   * type.
+   * Whether the name reads the item's one occurrence: `ITEMREF.VAR`, or `ITEMREF.1.VAR` through an
+   * item ref a selection with replacement can repeat, the only one through which a numbered name
+   * reads an occurrence (reading 88; `TestScope.repeatable` in `#plate/engine/scope.ts`). A name
+   * `ITEMREF.N.VAR` with `N` other than 1 through such an item ref names an occurrence that does
+   * not exist, since selection with replacement is marked (reading 4; G-R3, pending), and its value
+   * is NULL of the variable's type.
    */
   readonly first: boolean;
   readonly item: ScopeItem;
@@ -375,9 +377,10 @@ const declaredRecord = (kind: "correct" | "default", declared: RecordDeclaration
  * do not hold may name an item's record response through its item ref (`prefixedVariable` in
  * `#plate/engine/scope.ts`), and reads it there: a `qti-variable` the record the item's record
  * holds, the NULL record when it holds none; a `qti-correct` or a `qti-default` the item's
- * declared correct response or default, the NULL record when it declares none. `ITEMREF.N.VAR`
- * with `N` other than 1 names an occurrence that does not exist and reads the NULL record (G-R3,
- * pending).
+ * declared correct response or default, the NULL record when it declares none. Through an item ref
+ * a selection with replacement can repeat, the only one through which a numbered name reads an
+ * occurrence (reading 88), `ITEMREF.N.VAR` with `N` other than 1 names an occurrence that does not
+ * exist and reads the NULL record (G-R3, pending).
  *
  * @param operand The operand.
  * @param scope The holder and the variables of the run.

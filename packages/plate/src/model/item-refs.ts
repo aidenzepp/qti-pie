@@ -54,12 +54,14 @@ export interface Occurrence {
  * the variable: `N.VAR` in the numbered form names occurrence `N`, and any other rest names
  * occurrence 1 and is the variable whole.
  *
- * The split reads the form alone. Whether a numbered reading counts is the package's to judge: by
- * reading 88 it counts only where a selection with replacement can repeat its item ref, and a name
- * whose only resolving reading is numbered elsewhere is refused (`openPackage` in
- * `#plate/package/open.ts`, `undeclared-variable` with `check: "numbered"`), as the qti package
- * resolves a numbered reading only when its item ref is `replaced` (the relation `Reading` in
- * `packages/pantry/src/qti/expressions.ts`). The test model and the engine split every rest so.
+ * The split reads the form alone; whether a numbered reading counts is judged apart. By reading 88
+ * it counts only where a selection with replacement can repeat its item ref, and a name whose only
+ * resolving reading is numbered elsewhere is refused (`openPackage` in `#plate/package/open.ts`,
+ * `undeclared-variable` with `check: "numbered"`), as the qti package resolves a numbered reading
+ * only when its item ref is `replaced` (the relation `Reading` in
+ * `packages/pantry/src/qti/expressions.ts`). The test model (`Test.repeatable` in
+ * `#plate/model/test.ts`) and the engine (`TestScope.repeatable` in `#plate/engine/scope.ts`) count
+ * it as the package does: through any other item ref the rest is the variable whole.
  *
  * @param rest The part of the name after the item ref and its dot.
  * @returns The occurrence and the variable's name.
