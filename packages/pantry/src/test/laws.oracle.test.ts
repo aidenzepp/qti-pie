@@ -1193,7 +1193,13 @@ describe("the content references", () => {
  */
 const bounded = (facet: "minExclusive" | "minInclusive") => ({
   bound: Option.some({ facet, value: 1 }),
-  enumeration: [],
+  definition: {
+    _tag: "atomic",
+    builtin: "double",
+    facets: [{ facet, value: "1" }],
+    patterns: [],
+    primitive: "double",
+  } as const,
   handle: facet,
   identity: Option.none(),
   pattern: "^.*$",

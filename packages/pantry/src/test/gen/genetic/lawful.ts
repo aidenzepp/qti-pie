@@ -37,6 +37,7 @@ import { Option } from "effect";
 import { admits, step } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
+import { enumerationKept } from "#pantry/grammar/domains.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { ForeignKind, SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -396,7 +397,9 @@ const plainValues: readonly string[] = [
 const valueIn = (reading: Reading, handle: string): Option.Option<string> =>
   Option.flatMap(Option.fromNullishOr(reading.domains.get(handle)), (domain) =>
     Option.fromNullishOr(
-      [...domain.enumeration, ...plainValues].find((value) => accepts(domain, value)),
+      [...enumerationKept(domain.definition, domain.pattern), ...plainValues].find((value) =>
+        accepts(domain, value),
+      ),
     ),
   );
 

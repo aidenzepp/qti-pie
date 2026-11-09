@@ -1956,20 +1956,15 @@ export const unboundPrefixesOf = (
 
 /**
  * A compiled value domain: the pattern its lexical forms match as written, the primitive its typed
- * value is derived in, the bound its typed value's law reads, the identity type it is, if any, the
- * values its enumeration keeps, and whether its values are QNames read with their bindings.
+ * value is derived in, the bound its typed value's law reads, the identity type it is, if any, and
+ * whether its values are QNames read with their bindings. The values its enumeration keeps are its
+ * definition's and its pattern's ({@link enumerationKept}), which no load reads.
  */
 export interface CompiledDomain {
-  /**
-   * The values an atomic definition's enumeration keeps, in the order it states them, each one its
-   * pattern matches: what an explanation lists of a value outside them. Empty for a definition
-   * that states no enumeration, and for a list or a union.
-   */
   /**
    * A double's or a float's lower bound, none for any other domain and for an unbounded one.
    */
   readonly bound: Option.Option<DoubleBound>;
-  readonly enumeration: readonly string[];
   readonly identity: Option.Option<Identity>;
   readonly pattern: string;
   readonly primitive: DomainPrimitive;
@@ -4046,17 +4041,10 @@ export const compile = (
       );
     }
 
-    const pattern = emitWhole(tree);
-    const matches = new RegExp(pattern, patternFlags);
-
     return {
       bound,
-      enumeration:
-        domain._tag === "atomic"
-          ? valuesOf(domain.facets, "enumeration").filter((value) => matches.test(value))
-          : [],
       identity: identityOf(domain),
-      pattern,
+      pattern: emitWhole(tree),
       primitive: domain._tag === "atomic" ? domain.primitive : domain._tag,
       qualified: qualifiedOf(domain),
     };
@@ -4068,11 +4056,30 @@ export const compile = (
  */
 export const openCompiled: CompiledDomain = {
   bound: Option.none(),
-  enumeration: [],
   identity: Option.none(),
   pattern: emitWhole(anything),
   primitive: "anySimpleType",
   qualified: Option.none(),
+};
+
+/**
+ * Read the values an atomic definition's enumeration keeps, in the order it states them, each one
+ * its compiled pattern matches: what an explanation lists of a value outside them, and what a
+ * search draws a domain's edges from. Empty for a definition that states no enumeration, and for a
+ * list or a union. Only the tests read it; a load compiles the pattern and no list of values.
+ *
+ * @param definition - The definition, as the attribute grammar read it (`ValueDomain.definition`).
+ * @param pattern - Its compiled pattern.
+ * @returns The values.
+ */
+export const enumerationKept = (definition: Domain, pattern: string): readonly string[] => {
+  if (definition._tag !== "atomic") {
+    return [];
+  }
+
+  const matches = new RegExp(pattern, patternFlags);
+
+  return valuesOf(definition.facets, "enumeration").filter((value) => matches.test(value));
 };
 
 /**

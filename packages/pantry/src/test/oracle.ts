@@ -88,7 +88,7 @@ import {
   mathHeadQualifiers,
   mathQualifiers,
 } from "#pantry/grammar/expression.ts";
-import { booleanOf, compile, patternFlags } from "#pantry/grammar/domains.ts";
+import { booleanOf, compile, enumerationKept, patternFlags } from "#pantry/grammar/domains.ts";
 import type { DoubleBound } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
@@ -6855,8 +6855,10 @@ const domainExplained = (
           )}`;
         }
 
-        return domain.enumeration.length > 0
-          ? `${JSON.stringify(form)} is not among the ${String(domain.enumeration.length)} values of ${where}: ${domain.enumeration.join(", ")}`
+        const kept = enumerationKept(domain.definition, domain.pattern);
+
+        return kept.length > 0
+          ? `${JSON.stringify(form)} is not among the ${String(kept.length)} values of ${where}: ${kept.join(", ")}`
           : `${JSON.stringify(form)} is outside ${domain.handle}, whose pattern is ${domain.pattern}`;
       },
     },

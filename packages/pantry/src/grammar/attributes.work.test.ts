@@ -287,7 +287,6 @@ const holdToOracle = (
       assert.deepStrictEqual(
         {
           bound: actual.bound,
-          enumeration: actual.enumeration,
           identity: actual.identity,
           pattern: actual.pattern,
           primitive: actual.primitive,

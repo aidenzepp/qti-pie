@@ -77,6 +77,11 @@ export const uses = ["optional", "required"] as const satisfies readonly Use[];
  * definition.
  */
 export interface ValueDomain extends CompiledDomain {
+  /**
+   * The definition, as the attribute grammar read it, that the domain was first compiled from:
+   * what the tests read its enumeration by (`enumerationKept`), held, never read, by a load.
+   */
+  readonly definition: Domain;
   readonly handle: string;
 }
 
@@ -85,7 +90,11 @@ export interface ValueDomain extends CompiledDomain {
  * value, whitespace preserved. No declaration governs an open name, so its value is kept as
  * written and no typed value is derived from it.
  */
-export const openDomain: ValueDomain = { ...openCompiled, handle: openAttribute.type.type };
+export const openDomain: ValueDomain = {
+  ...openCompiled,
+  definition: openAttribute.domain,
+  handle: openAttribute.type.type,
+};
 
 /**
  * The `BaseType` roster in code order: the code space of every base-type field, `BindingFit`'s and
@@ -1426,10 +1435,12 @@ export interface ReadDefinition {
 }
 
 /**
- * A compiled domain with its definition key ({@link definitionKey}), computed once with it.
+ * A compiled domain with its definition key ({@link definitionKey}), computed once with it, and
+ * the read definition it compiled from.
  */
 export interface KeyedDomain {
   readonly compiled: CompiledDomain;
+  readonly definition: Domain;
   readonly key: string;
 }
 
@@ -1536,6 +1547,7 @@ export const domainReader = (): DomainReader => {
             compile(read.definition, read.whiteSpace).pipe(
               Result.map((domain): KeyedDomain => ({
                 compiled: domain,
+                definition: read.definition,
                 key: definitionKey(domain),
               })),
             ),
@@ -1617,7 +1629,7 @@ const internEmpty = (domains: DomainRoster, name: string): DomainRef => {
  */
 const intern = (
   domains: DomainRoster,
-  { compiled, key }: KeyedDomain,
+  { compiled, definition, key }: KeyedDomain,
   name: string,
 ): ValueDomain => {
   const known = domains.byDefinition.get(key);
@@ -1626,7 +1638,7 @@ const intern = (
   }
 
   const handle = freeHandle(domains, name);
-  const domain = { ...compiled, handle };
+  const domain = { ...compiled, definition, handle };
   domains.byDefinition.set(key, domain);
   domains.handles.add(handle);
   domains.ordered.push(domain);

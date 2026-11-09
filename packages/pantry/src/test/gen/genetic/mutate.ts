@@ -38,6 +38,7 @@ import type { Source } from "@grizzle/testing/source";
 import { Option } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { admittedOf } from "#pantry/grammar/attributes.ts";
+import { enumerationKept } from "#pantry/grammar/domains.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -295,7 +296,11 @@ const lexicalFaults = (held: string): readonly string[] => [
  */
 const boundaryForms = (domain: ValueDomain, held: string): readonly string[] => [
   ...Option.toArray(domain.bound).flatMap(({ value }) => [String(value), `-${String(value)}`]),
-  ...domain.enumeration.flatMap((member) => [member.toUpperCase(), ` ${member}`, `${member} `]),
+  ...enumerationKept(domain.definition, domain.pattern).flatMap((member) => [
+    member.toUpperCase(),
+    ` ${member}`,
+    `${member} `,
+  ]),
   "-1",
   "-0",
   "+0",
@@ -1207,7 +1212,9 @@ const operations: Readonly<
       return domain === undefined ? [] : [{ domain, site }];
     });
     const faceted = typed.filter(
-      ({ domain }) => Option.isSome(domain.bound) || domain.enumeration.length > 0,
+      ({ domain }) =>
+        Option.isSome(domain.bound) ||
+        enumerationKept(domain.definition, domain.pattern).length > 0,
     );
     const chosen = source.draw(
       oneOf(faceted.length > 0 && source.pick(0, 2) > 0 ? faceted : typed),

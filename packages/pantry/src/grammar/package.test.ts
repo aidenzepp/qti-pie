@@ -6,7 +6,7 @@ import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import { roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
-import { patternFlags } from "#pantry/grammar/domains.ts";
+import { enumerationKept, patternFlags } from "#pantry/grammar/domains.ts";
 import {
   cp,
   documentRoots,
@@ -166,7 +166,12 @@ describe.skipIf(!cached)("cp:resource's type against the content-packaging XSDs"
 
           assert.isAbove(enumerated.length, 0, root);
           assert.deepStrictEqual(
-            new Set(resourceTypeDomain(version).enumeration),
+            new Set(
+              enumerationKept(
+                resourceTypeDomain(version).definition,
+                resourceTypeDomain(version).pattern,
+              ),
+            ),
             new Set(enumerated),
             version,
           );
