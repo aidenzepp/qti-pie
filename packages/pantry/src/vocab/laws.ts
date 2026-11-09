@@ -342,7 +342,7 @@ export const lawTable = {
   "Dependency target": {
     rule: "idref-target",
     source:
-      'IMS Content Packaging 1.2: a dependency\'s identifierref names a resource of its manifest, contained(on(Dependency, "package", "ref"), on(Resource, "package", "identifier")) (Q5.06)',
+      'IMS Content Packaging 1.2: a dependency\'s identifierref names a resource of its manifest, contained(on(Dependency, "node"), on(DependencyTarget, "node")): every dependency has its DependencyTarget row, the resource whose collapsed identifier its collapsed identifierref is (package.ts DependencyTarget) (Q5.06)',
   },
   Document: {
     rule: "reachability",
@@ -807,7 +807,7 @@ export const lawTable = {
   "Self dependency": {
     rule: "self-dependency",
     source:
-      "imscp_infov1p2pd2.txt:1105 (IMS Content Packaging 1.2, §6.11.5, the IdentifierRef class, rule B ii: an IdentifierRef child of a Dependency object 'Shall not reference the Dependency's parent Resource'): a cp:dependency's identifierref is not its own resource's identifier, compared as written (package.ts Self_dependency)",
+      "imscp_infov1p2pd2.txt:1105 (IMS Content Packaging 1.2, §6.11.5, the IdentifierRef class, rule B ii: an IdentifierRef child of a Dependency object 'Shall not reference the Dependency's parent Resource'): a cp:dependency's identifierref is not its own resource's identifier, compared as collapsed values (xs:IDREF and xs:ID are whiteSpace collapse types; decision 457 (3)) (package.ts Self_dependency)",
   },
   "Set type": {
     rule: "P20",
