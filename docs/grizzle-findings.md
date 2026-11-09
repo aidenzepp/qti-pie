@@ -2582,7 +2582,7 @@ Found at grizzle `4b0d45e`, the vendored commit, and unchanged on trunk `76c2763
 - **Status.** Sent to grizzle-c5 with the full role's finding above. pantry holds no workaround: R1 waits for the
   repin.
 
-## A check over a query takes its check's name on every table the query reads, so it collides with a CHECK there (grizzle limit, by design at `4b0d45e`; lanes G and E)
+## A check over a query takes its check's name on every table the query reads, so it collides with a CHECK there (grizzle defect, being fixed as QTIFIX item 5; lanes G and E)
 
 Found by lane G at grizzle `4b0d45e`, the vendored commit, stating a check over a query in `Qti`'s level of queries;
 the cause is unchanged on trunk `76c27633` (2026-11-08).
@@ -2595,8 +2595,11 @@ the cause is unchanged on trunk `76c27633` (2026-11-08).
   triggers take the check's own name (`#ruleTrigger`, `packages/engine/src/laws/model/model.ts:1096-1103`: `d.rule.kind
   === "check" ? d.rule.named : identity.lawTrigger(law.named)`). So `#derivedCheck` (`packages/engine/src/schema/own.ts:
   1707-1741`) declares the name in the check namespace of the derived relation and of every stored table below it,
-  since PostgreSQL holds a table's constraint triggers and CHECKs in one namespace. The refusal is deliberate, and the
-  README says nothing of it: its "Rules over queries" names only the SQLSTATE a rule raises.
+  since PostgreSQL holds a table's constraint triggers and CHECKs in one namespace. The README says nothing of it: its
+  "Rules over queries" names only the SQLSTATE a rule raises.
+- **Class.** A grizzle defect, as grizzle-c5 classes it: grizzle's own naming rule gives a rule's per-table triggers
+  the digest form, as a containment's are named, and the check's name is no exception to it. Being fixed as QTIFIX
+  item 5.
 - **Reproduction.** `~/.cache/gr8des/integration/grizzle-repros/rule-check-name/`, run from any directory that resolves
   `@bjornpagen/grizzle`: `Base` holds `Item { id, n }` with `check("Small", Item, n < 10)`; `Top` extends it with
   `Items`, a live derived relation over `Item`, and `check("Small", Items, n < 5)`. `grizzle generate defect.config.ts`
@@ -2610,4 +2613,4 @@ the cause is unchanged on trunk `76c27633` (2026-11-08).
   digest names.
 - **Fix direction.** Name a check's triggers by a digest of its law, as every other rule's are, and let the outcome
   name the check by its law (`constraintToLaw`) and `constraintNameOf` name the trigger, so a check over a query takes no
-  name in the tables below it. Sent to grizzle-c5 by the coordinator.
+  name in the tables below it.
