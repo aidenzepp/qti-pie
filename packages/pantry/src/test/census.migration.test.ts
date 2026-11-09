@@ -11,8 +11,8 @@ import { Qti } from "#pantry/qti/own.ts";
 import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
 
 /**
- * The committed migration's measured counts (the `_init` drafted from zero on grizzle `a50b31f`,
- * after lane J's P2 restatements), as a ratchet: a change that moves one fails here until
+ * The committed migration's measured counts (the `_init` drafted from zero on grizzle `450d098`,
+ * after the merge of Sterling's genetic repair rounds 1 to 3), as a ratchet: a change that moves one fails here until
  * the count is measured again. A regeneration updates them here, and only here.
  *
  * - `tables`: one per stored relation;
@@ -30,18 +30,14 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * - `validateFiles`: the one `-validate.sql` file those rules are validated in.
  */
 const measured = {
-  // MERGE-OPEN: recount after the re-drafted _init, and name its grizzle pin and provenance in the
-  // doc above. Every count below; his GEN-S6 adds `ItemRefHref`, `UnreadTypeHref` and
-  // `UnreadTypePath`, and his GEN-S8 moves one generated column and foreign key from `Site` to
-  // `Reference`.
-  constants: 119, // MERGE-OPEN: recount after the re-drafted _init (ours 119, his 117)
-  constraintTriggers: 88, // MERGE-OPEN: recount after the re-drafted _init (ours 88)
-  live: 7, // MERGE-OPEN: recount after the re-drafted _init (ours and his 7)
-  names: 48, // MERGE-OPEN: recount after the re-drafted _init (ours 48, his 43, base 43)
-  nodeAxes: 5, // MERGE-OPEN: recount after the re-drafted _init (ours 5, his 6, base 6)
-  nodeKeys: 48, // MERGE-OPEN: recount after the re-drafted _init (ours 48, his 47, base 47)
-  tables: 250, // MERGE-OPEN: recount after the re-drafted _init (ours 250, his 268, base 265)
-  validateFiles: 1, // MERGE-OPEN: recount after the re-drafted _init (ours 1)
+  constants: 119,
+  constraintTriggers: 92,
+  live: 7,
+  names: 48,
+  nodeAxes: 5,
+  nodeKeys: 48,
+  tables: 251,
+  validateFiles: 1,
 } as const;
 
 /**

@@ -726,6 +726,7 @@ CREATE TABLE "qti"."default_entry" (
 CREATE TABLE "qti"."dependency" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
@@ -734,7 +735,8 @@ CREATE TABLE "qti"."dependency" (
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__dependency_pk_d6a6ko4xiy" PRIMARY KEY ("node"),
-  CONSTRAINT "__dependency_key_node_ref_ay5q747eoc" UNIQUE NULLS DISTINCT ("node", "ref"),
+  CONSTRAINT "e_1_derived" CHECK (("pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lexical", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) = "ref") IS TRUE),
+  CONSTRAINT "__dependency_key_node_lexical_4z3dmo5v37" UNIQUE NULLS DISTINCT ("node", "lexical"),
   CONSTRAINT "__dependency_key_node_package_ref_resource_dcrp3htu3k" UNIQUE NULLS DISTINCT ("node", "package", "ref", "resource")
 );
 
@@ -805,6 +807,7 @@ CREATE TABLE "qti"."document" (
 );
 
 CREATE TABLE "qti"."document_id" (
+  "admitted" boolean NOT NULL,
   "after" "qti"."__text_7dfilirtp3" NOT NULL,
   "before" "qti"."__text_7dfilirtp3" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
@@ -1059,14 +1062,14 @@ CREATE TABLE "qti"."hottext" (
 );
 
 CREATE TABLE "qti"."id_binding" (
+  "admitted" boolean NOT NULL,
   "carriers" "qti"."__domain_gfw43vigph" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
   "id" "qti"."__text_pwaizaq6lx" NOT NULL,
   "owner" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__id_binding_pk_mvuwkhlnz4" PRIMARY KEY ("document", "id", "owner"),
-  CONSTRAINT "__id_binding_key_document_id_eia52xosro" UNIQUE NULLS DISTINCT ("document", "id"),
   CONSTRAINT "e_1_derived" CHECK (("carriers" > 0::bigint) IS TRUE),
-  CONSTRAINT "__id_binding_key_document_id_owner_carriers_p4dswlbb47" UNIQUE NULLS DISTINCT ("document", "id", "owner", "carriers")
+  CONSTRAINT "__id_binding_key_document_id_owner_carriers_admitted_inddtnd2mu" UNIQUE NULLS DISTINCT ("document", "id", "owner", "carriers", "admitted")
 );
 
 CREATE TABLE "qti"."identity_text" (
@@ -1114,11 +1117,12 @@ CREATE TABLE "qti"."inclusion" (
   "include_parent" "qti"."include_parent" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent_kind" "qti"."node_kind" NOT NULL,
+  "places" boolean NOT NULL,
   "root" "qti"."node_kind" NOT NULL,
   "splices" boolean NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__inclusion_pk_niaddoqk3f" PRIMARY KEY ("node"),
-  CONSTRAINT "e_1_derived" CHECK ((("parent_kind" IN (223::smallint, 224::smallint, 225::smallint, 226::smallint, 227::smallint, 228::smallint, 230::smallint, 233::smallint, 236::smallint, 237::smallint, 238::smallint, 241::smallint, 243::smallint, 244::smallint, 246::smallint, 247::smallint, 248::smallint, 250::smallint, 251::smallint, 252::smallint, 253::smallint, 254::smallint, 255::smallint, 256::smallint, 257::smallint, 259::smallint, 261::smallint, 262::smallint, 263::smallint, 264::smallint, 265::smallint, 267::smallint, 269::smallint, 270::smallint, 152::smallint, 171::smallint, 199::smallint, 202::smallint, 208::smallint, 219::smallint, 220::smallint, 14::smallint, 119::smallint, 153::smallint, 11::smallint, 129::smallint, 162::smallint, 184::smallint, 95::smallint, 161::smallint, 175::smallint, 174::smallint, 173::smallint, 271::smallint, 179::smallint, 134::smallint, 192::smallint, 191::smallint, 190::smallint, 304::smallint, 197::smallint, 114::smallint, 143::smallint, 111::smallint, 15::smallint, 201::smallint, 277::smallint, 278::smallint, 279::smallint, 281::smallint, 282::smallint, 283::smallint, 285::smallint, 288::smallint, 291::smallint, 295::smallint, 297::smallint) AND ("pg_catalog"."substring"("qti"."__constant_r4cjds4gua"(), "version" * 78 + "include_parent" + 1, 1)::integer = 1 AND ("pg_catalog"."bit_count"("pg_catalog"."set_bit"(X'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'::"qti"."__node_kind_bits_644_kcdmigfwqm", "root"::integer, 1) & (~ "pg_catalog"."substring"("qti"."__constant_3zq77hs2za"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_7zvmsz3k33"(), ("version" * 78 + "include_parent") * 5 + 1, 5)::integer, 0) - 1)::smallint * 644 + 1, 644)::"qti"."__node_kind_bits_644_kcdmigfwqm")) = 0::bigint) = true) AND "splices" = true OR (NOT "parent_kind" IN (223::smallint, 224::smallint, 225::smallint, 226::smallint, 227::smallint, 228::smallint, 230::smallint, 233::smallint, 236::smallint, 237::smallint, 238::smallint, 241::smallint, 243::smallint, 244::smallint, 246::smallint, 247::smallint, 248::smallint, 250::smallint, 251::smallint, 252::smallint, 253::smallint, 254::smallint, 255::smallint, 256::smallint, 257::smallint, 259::smallint, 261::smallint, 262::smallint, 263::smallint, 264::smallint, 265::smallint, 267::smallint, 269::smallint, 270::smallint, 152::smallint, 171::smallint, 199::smallint, 202::smallint, 208::smallint, 219::smallint, 220::smallint, 14::smallint, 119::smallint, 153::smallint, 11::smallint, 129::smallint, 162::smallint, 184::smallint, 95::smallint, 161::smallint, 175::smallint, 174::smallint, 173::smallint, 271::smallint, 179::smallint, 134::smallint, 192::smallint, 191::smallint, 190::smallint, 304::smallint, 197::smallint, 114::smallint, 143::smallint, 111::smallint, 15::smallint, 201::smallint, 277::smallint, 278::smallint, 279::smallint, 281::smallint, 282::smallint, 283::smallint, 285::smallint, 288::smallint, 291::smallint, 295::smallint, 297::smallint) OR NOT ("pg_catalog"."substring"("qti"."__constant_r4cjds4gua"(), "version" * 78 + "include_parent" + 1, 1)::integer = 1 AND ("pg_catalog"."bit_count"("pg_catalog"."set_bit"(X'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'::"qti"."__node_kind_bits_644_kcdmigfwqm", "root"::integer, 1) & (~ "pg_catalog"."substring"("qti"."__constant_3zq77hs2za"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_7zvmsz3k33"(), ("version" * 78 + "include_parent") * 5 + 1, 5)::integer, 0) - 1)::smallint * 644 + 1, 644)::"qti"."__node_kind_bits_644_kcdmigfwqm")) = 0::bigint) = true)) AND "splices" = false) AND (NULLIF("pg_catalog"."substring"("qti"."__constant_eo4djco6b4"(), "include_parent" * 10 + 1, 10)::integer, 0) - 1)::smallint = "parent_kind") IS TRUE),
+  CONSTRAINT "e_1_derived" CHECK (((NOT ("pg_catalog"."substring"("qti"."__constant_r4cjds4gua"(), "version" * 78 + "include_parent" + 1, 1)::integer = 1 AND ("pg_catalog"."bit_count"("pg_catalog"."set_bit"(X'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'::"qti"."__node_kind_bits_644_kcdmigfwqm", "root"::integer, 1) & (~ "pg_catalog"."substring"("qti"."__constant_3zq77hs2za"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_7zvmsz3k33"(), ("version" * 78 + "include_parent") * 5 + 1, 5)::integer, 0) - 1)::smallint * 644 + 1, 644)::"qti"."__node_kind_bits_644_kcdmigfwqm")) = 0::bigint) = true) AND "places" = false OR ("pg_catalog"."substring"("qti"."__constant_r4cjds4gua"(), "version" * 78 + "include_parent" + 1, 1)::integer = 1 AND ("pg_catalog"."bit_count"("pg_catalog"."set_bit"(X'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'::"qti"."__node_kind_bits_644_kcdmigfwqm", "root"::integer, 1) & (~ "pg_catalog"."substring"("qti"."__constant_3zq77hs2za"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_7zvmsz3k33"(), ("version" * 78 + "include_parent") * 5 + 1, 5)::integer, 0) - 1)::smallint * 644 + 1, 644)::"qti"."__node_kind_bits_644_kcdmigfwqm")) = 0::bigint) = true) AND "places" = true) AND ("parent_kind" IN (223::smallint, 224::smallint, 225::smallint, 226::smallint, 227::smallint, 228::smallint, 230::smallint, 233::smallint, 236::smallint, 237::smallint, 238::smallint, 241::smallint, 243::smallint, 244::smallint, 246::smallint, 247::smallint, 248::smallint, 250::smallint, 251::smallint, 252::smallint, 253::smallint, 254::smallint, 255::smallint, 256::smallint, 257::smallint, 259::smallint, 261::smallint, 262::smallint, 263::smallint, 264::smallint, 265::smallint, 267::smallint, 269::smallint, 270::smallint, 152::smallint, 171::smallint, 199::smallint, 202::smallint, 208::smallint, 219::smallint, 220::smallint, 14::smallint, 119::smallint, 153::smallint, 11::smallint, 129::smallint, 162::smallint, 184::smallint, 95::smallint, 161::smallint, 175::smallint, 174::smallint, 173::smallint, 271::smallint, 179::smallint, 134::smallint, 192::smallint, 191::smallint, 190::smallint, 304::smallint, 197::smallint, 114::smallint, 143::smallint, 111::smallint, 15::smallint, 201::smallint, 277::smallint, 278::smallint, 279::smallint, 281::smallint, 282::smallint, 283::smallint, 285::smallint, 288::smallint, 291::smallint, 295::smallint, 297::smallint) AND ("pg_catalog"."substring"("qti"."__constant_r4cjds4gua"(), "version" * 78 + "include_parent" + 1, 1)::integer = 1 AND ("pg_catalog"."bit_count"("pg_catalog"."set_bit"(X'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'::"qti"."__node_kind_bits_644_kcdmigfwqm", "root"::integer, 1) & (~ "pg_catalog"."substring"("qti"."__constant_3zq77hs2za"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_7zvmsz3k33"(), ("version" * 78 + "include_parent") * 5 + 1, 5)::integer, 0) - 1)::smallint * 644 + 1, 644)::"qti"."__node_kind_bits_644_kcdmigfwqm")) = 0::bigint) = true) AND "splices" = true OR (NOT "parent_kind" IN (223::smallint, 224::smallint, 225::smallint, 226::smallint, 227::smallint, 228::smallint, 230::smallint, 233::smallint, 236::smallint, 237::smallint, 238::smallint, 241::smallint, 243::smallint, 244::smallint, 246::smallint, 247::smallint, 248::smallint, 250::smallint, 251::smallint, 252::smallint, 253::smallint, 254::smallint, 255::smallint, 256::smallint, 257::smallint, 259::smallint, 261::smallint, 262::smallint, 263::smallint, 264::smallint, 265::smallint, 267::smallint, 269::smallint, 270::smallint, 152::smallint, 171::smallint, 199::smallint, 202::smallint, 208::smallint, 219::smallint, 220::smallint, 14::smallint, 119::smallint, 153::smallint, 11::smallint, 129::smallint, 162::smallint, 184::smallint, 95::smallint, 161::smallint, 175::smallint, 174::smallint, 173::smallint, 271::smallint, 179::smallint, 134::smallint, 192::smallint, 191::smallint, 190::smallint, 304::smallint, 197::smallint, 114::smallint, 143::smallint, 111::smallint, 15::smallint, 201::smallint, 277::smallint, 278::smallint, 279::smallint, 281::smallint, 282::smallint, 283::smallint, 285::smallint, 288::smallint, 291::smallint, 295::smallint, 297::smallint) OR NOT ("pg_catalog"."substring"("qti"."__constant_r4cjds4gua"(), "version" * 78 + "include_parent" + 1, 1)::integer = 1 AND ("pg_catalog"."bit_count"("pg_catalog"."set_bit"(X'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'::"qti"."__node_kind_bits_644_kcdmigfwqm", "root"::integer, 1) & (~ "pg_catalog"."substring"("qti"."__constant_3zq77hs2za"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_7zvmsz3k33"(), ("version" * 78 + "include_parent") * 5 + 1, 5)::integer, 0) - 1)::smallint * 644 + 1, 644)::"qti"."__node_kind_bits_644_kcdmigfwqm")) = 0::bigint) = true)) AND "splices" = false) AND (NULLIF("pg_catalog"."substring"("qti"."__constant_eo4djco6b4"(), "include_parent" * 10 + 1, 10)::integer, 0) - 1)::smallint = "parent_kind") IS TRUE),
   CONSTRAINT "include_root" CHECK (("pg_catalog"."substring"("qti"."__constant_r4cjds4gua"(), "version" * 78 + "include_parent" + 1, 1)::integer = 1 AND ("pg_catalog"."bit_count"("pg_catalog"."set_bit"(X'00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'::"qti"."__node_kind_bits_644_kcdmigfwqm", "root"::integer, 1) & (~ "pg_catalog"."substring"("qti"."__constant_3zq77hs2za"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_7zvmsz3k33"(), ("version" * 78 + "include_parent") * 5 + 1, 5)::integer, 0) - 1)::smallint * 644 + 1, 644)::"qti"."__node_kind_bits_644_kcdmigfwqm")) = 0::bigint) = true) IS TRUE)
 );
 
@@ -1252,6 +1256,15 @@ CREATE TABLE "qti"."item_ref_document" (
   CONSTRAINT "__item_ref_document_pk_ylsc7bhhax" PRIMARY KEY ("node"),
   CONSTRAINT "__item_ref_document_key_node_package_path_l66gnify5f" UNIQUE NULLS DISTINCT ("node", "package", "path"),
   CONSTRAINT "__item_ref_document_key_node_document_4q4k6bmhov" UNIQUE NULLS DISTINCT ("node", "document")
+);
+
+CREATE TABLE "qti"."item_ref_href" (
+  "node" "pg_catalog"."uuid" NOT NULL,
+  "package" "pg_catalog"."uuid" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "targets" "qti"."__domain_gfw43vigph" NOT NULL,
+  CONSTRAINT "__item_ref_href_pk_gic6tz4yai" PRIMARY KEY ("node"),
+  CONSTRAINT "__item_ref_href_key_node_targets_zb4ttsu4vy" UNIQUE NULLS DISTINCT ("node", "targets")
 );
 
 CREATE TABLE "qti"."item_ref_target" (
@@ -1489,6 +1502,7 @@ CREATE TABLE "qti"."manifest_id" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
@@ -1497,7 +1511,8 @@ CREATE TABLE "qti"."manifest_id" (
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__manifest_id_pk_qzrdp24pyf" PRIMARY KEY ("node"),
   CONSTRAINT "__manifest_id_key_package_qhfusyezz5" UNIQUE NULLS DISTINCT ("package"),
-  CONSTRAINT "__manifest_id_key_node_identifier_cttws4pdxs" UNIQUE NULLS DISTINCT ("node", "identifier"),
+  CONSTRAINT "e_1_derived" CHECK (("pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lexical", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) = "identifier") IS TRUE),
+  CONSTRAINT "__manifest_id_key_node_lexical_f6fcfc24vi" UNIQUE NULLS DISTINCT ("node", "lexical"),
   CONSTRAINT "__manifest_id_key_package_identifier_adiahiwxkt" UNIQUE NULLS DISTINCT ("package", "identifier")
 );
 
@@ -2564,11 +2579,13 @@ CREATE TABLE "qti"."resource_href" (
 
 CREATE TABLE "qti"."resource_id" (
   "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "package" "pg_catalog"."uuid" NOT NULL,
   CONSTRAINT "__resource_id_pk_fb7hb5dq52" PRIMARY KEY ("node"),
   CONSTRAINT "__resource_id_key_package_identifier_jieobnpe65" UNIQUE NULLS DISTINCT ("package", "identifier"),
-  CONSTRAINT "__resource_id_key_node_identifier_bz2hm5t5nm" UNIQUE NULLS DISTINCT ("node", "identifier"),
+  CONSTRAINT "e_1_derived" CHECK (("pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lexical", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) = "identifier") IS TRUE),
+  CONSTRAINT "__resource_id_key_node_lexical_hd5iwhn37m" UNIQUE NULLS DISTINCT ("node", "lexical"),
   CONSTRAINT "__resource_id_key_package_identifier_node_5mbnlqvsjq" UNIQUE NULLS DISTINCT ("package", "identifier", "node")
 );
 
@@ -3029,6 +3046,7 @@ CREATE TABLE "qti"."site_target" (
   "package" "pg_catalog"."uuid" NOT NULL,
   "parent_kind" "qti"."node_kind" NOT NULL,
   "path" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "places" boolean NOT NULL,
   "splices" boolean NOT NULL,
   "target" "pg_catalog"."uuid" NOT NULL,
   "target_nearest" "pg_catalog"."uuid" NOT NULL,
@@ -3036,10 +3054,10 @@ CREATE TABLE "qti"."site_target" (
   "target_root" "qti"."node_kind" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__site_target_pk_oj7kjo67zv" PRIMARY KEY ("node"),
-  CONSTRAINT "e_1_derived" CHECK (("kind" = 642::smallint OR "splices" = false) IS TRUE),
+  CONSTRAINT "e_1_derived" CHECK (("places" = true AND "splices" = false OR "kind" = 642::smallint) IS TRUE),
   CONSTRAINT "fragment_context" CHECK (("nearest" = "target_nearest" AND "nearest_kind" = "target_nearest_kind" OR "nearest_kind" = 0::smallint AND "target_nearest_kind" = 0::smallint) IS TRUE),
-  CONSTRAINT "__site_target_key_node_parent_kind_target_root_kjlmvs6thn" UNIQUE NULLS DISTINCT ("node", "parent_kind", "target_root", "splices", "version"),
-  CONSTRAINT "__site_target_key_node_target_7ydrccmq3v" UNIQUE NULLS DISTINCT ("node", "target")
+  CONSTRAINT "__site_target_key_node_parent_kind_places_target_o2sl5j6mjr" UNIQUE NULLS DISTINCT ("node", "parent_kind", "places", "target_root", "splices", "version"),
+  CONSTRAINT "__site_target_key_node_target_places_3fxneelujg" UNIQUE NULLS DISTINCT ("node", "target", "places")
 );
 
 CREATE TABLE "qti"."slider" (
@@ -3216,14 +3234,16 @@ CREATE TABLE "qti"."test_document" (
   "root_kind" "qti"."node_kind" NOT NULL,
   "rules" "qti"."__domain_gfw43vigph" NOT NULL,
   "sites" "qti"."__domain_gfw43vigph" NOT NULL,
+  "targets" "qti"."__domain_gfw43vigph" NOT NULL,
   CONSTRAINT "__test_document_pk_vo4n4a7gyn" PRIMARY KEY ("node"),
+  CONSTRAINT "__test_document_check_test_document_targets_count_axud4pinz2" CHECK (("targets" > 0::bigint OR "sites" = 0::bigint) IS TRUE),
   CONSTRAINT "inclusion_cycle" CHECK (("instances" > 0::bigint) IS TRUE),
   CONSTRAINT "__test_document_key_node_instances_k4obic4tsn" UNIQUE NULLS DISTINCT ("node", "instances"),
   CONSTRAINT "__test_document_key_node_instances_root_kind_sites_mjm4pyxb4m" UNIQUE NULLS DISTINCT ("node", "instances", "root_kind", "sites"),
   CONSTRAINT "__test_document_key_node_names_uqjcpigbyw" UNIQUE NULLS DISTINCT ("node", "names"),
   CONSTRAINT "__test_document_key_node_rules_j6ypojiizm" UNIQUE NULLS DISTINCT ("node", "rules"),
   CONSTRAINT "__test_document_key_package_path_node_root_kind_664ygyzzc7" UNIQUE NULLS DISTINCT ("package", "path", "node", "root_kind"),
-  CONSTRAINT "__test_document_key_node_sites_kb2re7yywi" UNIQUE NULLS DISTINCT ("node", "sites")
+  CONSTRAINT "__test_document_key_node_targets_qmxh2nyfxk" UNIQUE NULLS DISTINCT ("node", "targets")
 );
 
 CREATE TABLE "qti"."test_flag" (
@@ -3713,9 +3733,9 @@ ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_lktkxizjfc" "pg_catalog"."te
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_cunus2zs73" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "lexical" ~ '\A\#[\u0001-\u0009\u000B\u000C\u000E-\u2027\u202A-\U0010FFFF]+\Z'::"pg_catalog"."text" AND "kind" = 553::smallint AND "name" = 200::smallint THEN "lexical" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_lhmbaka5ng" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN ("pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lexical", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) = '1'::"pg_catalog"."text" OR "pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lexical", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) = 'true'::"pg_catalog"."text") AND "kind" = 140::smallint AND "name" = 181::smallint THEN "lexical" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_xzr3nwawbz" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "lexical" ~ '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0641-\u064A\u0671-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5\u06E5\u06E6\u0905-\u0939\u093D\u0958-\u0961\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AE0\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3D\u0B5C\u0B5D\u0B5F-\u0B61\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CDE\u0CE0\u0CE1\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D60\u0D61\u0E01-\u0E2E\u0E30\u0E32\u0E33\u0E40-\u0E45\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0F40-\u0F47\u0F49-\u0F69\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2126\u212A\u212B\u212E\u2180-\u2182\u3007\u3021-\u3029\u3041-\u3094\u30A1-\u30FA\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u02D0\u02D1\u0300-\u0345\u0360\u0361\u0386-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0483-\u0486\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u0591-\u05A1\u05A3-\u05B9\u05BB-\u05BD\u05BF\u05C1\u05C2\u05C4\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0640-\u0652\u0660-\u0669\u0670-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5-\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0901-\u0903\u0905-\u0939\u093C-\u094D\u0951-\u0954\u0958-\u0963\u0966-\u096F\u0981-\u0983\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09DC\u09DD\u09DF-\u09E3\u09E6-\u09F1\u0A02\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A59-\u0A5C\u0A5E\u0A66-\u0A74\u0A81-\u0A83\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABC-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE0\u0AE6-\u0AEF\u0B01-\u0B03\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3C-\u0B43\u0B47\u0B48\u0B4B-\u0B4D\u0B56\u0B57\u0B5C\u0B5D\u0B5F-\u0B61\u0B66-\u0B6F\u0B82\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE7-\u0BEF\u0C01-\u0C03\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C60\u0C61\u0C66-\u0C6F\u0C82\u0C83\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CDE\u0CE0\u0CE1\u0CE6-\u0CEF\u0D02\u0D03\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D3E-\u0D43\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D60\u0D61\u0D66-\u0D6F\u0E01-\u0E2E\u0E30-\u0E3A\u0E40-\u0E4E\u0E50-\u0E59\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0-\u0EB9\u0EBB-\u0EBD\u0EC0-\u0EC4\u0EC6\u0EC8-\u0ECD\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E-\u0F47\u0F49-\u0F69\u0F71-\u0F84\u0F86-\u0F8B\u0F90-\u0F95\u0F97\u0F99-\u0FAD\u0FB1-\u0FB7\u0FB9\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u20D0-\u20DC\u20E1\u2126\u212A\u212B\u212E\u2180-\u2182\u3005\u3007\u3021-\u302F\u3031-\u3035\u3041-\u3094\u3099\u309A\u309D\u309E\u30A1-\u30FA\u30FC-\u30FE\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "document_type" = 0::smallint AND "kind" = 313::smallint AND "name" = 243::smallint THEN "lexical" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_wwe6z22mea" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 313::smallint AND "name" = 243::smallint THEN "lexical" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_lhmbaka5ng" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN ("pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lexical", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) = '1'::"pg_catalog"."text" OR "pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lexical", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) = 'true'::"pg_catalog"."text") AND "kind" = 140::smallint AND "name" = 181::smallint THEN "lexical" END) STORED;
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__lexical_2wfeqkwfqn" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 312::smallint AND "name" = 103::smallint THEN "lexical" END) STORED;
 
@@ -3793,7 +3813,7 @@ ALTER TABLE "qti"."attribute" ADD COLUMN "__node_lv6ndxfese" "pg_catalog"."uuid"
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__node_zuvdigwypi" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (109::smallint, 300::smallint, 110::smallint, 92::smallint, 112::smallint) AND "name" = 86::smallint THEN "node" END) STORED;
 
-ALTER TABLE "qti"."attribute" ADD COLUMN "__node_iz4wh6p7bb" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (109::smallint, 300::smallint, 110::smallint, 112::smallint) AND "name" = 86::smallint THEN "node" END) STORED;
+ALTER TABLE "qti"."attribute" ADD COLUMN "__node_qfrusbccpg" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (109::smallint, 300::smallint, 110::smallint, 112::smallint) AND "lexical" ~ '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0641-\u064A\u0671-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5\u06E5\u06E6\u0905-\u0939\u093D\u0958-\u0961\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AE0\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3D\u0B5C\u0B5D\u0B5F-\u0B61\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CDE\u0CE0\u0CE1\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D60\u0D61\u0E01-\u0E2E\u0E30\u0E32\u0E33\u0E40-\u0E45\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0F40-\u0F47\u0F49-\u0F69\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2126\u212A\u212B\u212E\u2180-\u2182\u3007\u3021-\u3029\u3041-\u3094\u30A1-\u30FA\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u02D0\u02D1\u0300-\u0345\u0360\u0361\u0386-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0483-\u0486\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u0591-\u05A1\u05A3-\u05B9\u05BB-\u05BD\u05BF\u05C1\u05C2\u05C4\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0640-\u0652\u0660-\u0669\u0670-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5-\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0901-\u0903\u0905-\u0939\u093C-\u094D\u0951-\u0954\u0958-\u0963\u0966-\u096F\u0981-\u0983\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09DC\u09DD\u09DF-\u09E3\u09E6-\u09F1\u0A02\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A59-\u0A5C\u0A5E\u0A66-\u0A74\u0A81-\u0A83\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABC-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE0\u0AE6-\u0AEF\u0B01-\u0B03\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3C-\u0B43\u0B47\u0B48\u0B4B-\u0B4D\u0B56\u0B57\u0B5C\u0B5D\u0B5F-\u0B61\u0B66-\u0B6F\u0B82\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE7-\u0BEF\u0C01-\u0C03\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C60\u0C61\u0C66-\u0C6F\u0C82\u0C83\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CDE\u0CE0\u0CE1\u0CE6-\u0CEF\u0D02\u0D03\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D3E-\u0D43\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D60\u0D61\u0D66-\u0D6F\u0E01-\u0E2E\u0E30-\u0E3A\u0E40-\u0E4E\u0E50-\u0E59\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0-\u0EB9\u0EBB-\u0EBD\u0EC0-\u0EC4\u0EC6\u0EC8-\u0ECD\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E-\u0F47\u0F49-\u0F69\u0F71-\u0F84\u0F86-\u0F8B\u0F90-\u0F95\u0F97\u0F99-\u0FAD\u0FB1-\u0FB7\u0FB9\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u20D0-\u20DC\u20E1\u2126\u212A\u212B\u212E\u2180-\u2182\u3005\u3007\u3021-\u302F\u3031-\u3035\u3041-\u3094\u3099\u309A\u309D\u309E\u30A1-\u30FA\u30FC-\u30FE\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "name" = 86::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__node_gucjs2ezyo" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (109::smallint, 300::smallint) AND "name" = 95::smallint THEN "node" END) STORED;
 
@@ -3871,13 +3891,13 @@ ALTER TABLE "qti"."attribute" ADD COLUMN "__node_pwgw7uhuqi" "pg_catalog"."uuid"
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__node_tblig6omlm" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "lexical" ~ '\A\#[\u0001-\u0009\u000B\u000C\u000E-\u2027\u202A-\U0010FFFF]+\Z'::"pg_catalog"."text" AND "kind" = 553::smallint AND "name" = 200::smallint THEN "node" END) STORED;
 
+ALTER TABLE "qti"."attribute" ADD COLUMN "__node_eddcgu2sqo" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "lexical" ~ '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0641-\u064A\u0671-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5\u06E5\u06E6\u0905-\u0939\u093D\u0958-\u0961\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AE0\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3D\u0B5C\u0B5D\u0B5F-\u0B61\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CDE\u0CE0\u0CE1\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D60\u0D61\u0E01-\u0E2E\u0E30\u0E32\u0E33\u0E40-\u0E45\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0F40-\u0F47\u0F49-\u0F69\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2126\u212A\u212B\u212E\u2180-\u2182\u3007\u3021-\u3029\u3041-\u3094\u30A1-\u30FA\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u02D0\u02D1\u0300-\u0345\u0360\u0361\u0386-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0483-\u0486\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u0591-\u05A1\u05A3-\u05B9\u05BB-\u05BD\u05BF\u05C1\u05C2\u05C4\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0640-\u0652\u0660-\u0669\u0670-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5-\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0901-\u0903\u0905-\u0939\u093C-\u094D\u0951-\u0954\u0958-\u0963\u0966-\u096F\u0981-\u0983\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09DC\u09DD\u09DF-\u09E3\u09E6-\u09F1\u0A02\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A59-\u0A5C\u0A5E\u0A66-\u0A74\u0A81-\u0A83\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABC-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE0\u0AE6-\u0AEF\u0B01-\u0B03\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3C-\u0B43\u0B47\u0B48\u0B4B-\u0B4D\u0B56\u0B57\u0B5C\u0B5D\u0B5F-\u0B61\u0B66-\u0B6F\u0B82\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE7-\u0BEF\u0C01-\u0C03\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C60\u0C61\u0C66-\u0C6F\u0C82\u0C83\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CDE\u0CE0\u0CE1\u0CE6-\u0CEF\u0D02\u0D03\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D3E-\u0D43\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D60\u0D61\u0D66-\u0D6F\u0E01-\u0E2E\u0E30-\u0E3A\u0E40-\u0E4E\u0E50-\u0E59\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0-\u0EB9\u0EBB-\u0EBD\u0EC0-\u0EC4\u0EC6\u0EC8-\u0ECD\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E-\u0F47\u0F49-\u0F69\u0F71-\u0F84\u0F86-\u0F8B\u0F90-\u0F95\u0F97\u0F99-\u0FAD\u0FB1-\u0FB7\u0FB9\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u20D0-\u20DC\u20E1\u2126\u212A\u212B\u212E\u2180-\u2182\u3005\u3007\u3021-\u302F\u3031-\u3035\u3041-\u3094\u3099\u309A\u309D\u309E\u30A1-\u30FA\u30FC-\u30FE\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "document_type" = 0::smallint AND "kind" = 313::smallint AND "name" = 243::smallint THEN "node" END) STORED;
+
 ALTER TABLE "qti"."attribute" ADD COLUMN "__node_tsiudobb4f" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "lexical" ~ '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0641-\u064A\u0671-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5\u06E5\u06E6\u0905-\u0939\u093D\u0958-\u0961\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AE0\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3D\u0B5C\u0B5D\u0B5F-\u0B61\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CDE\u0CE0\u0CE1\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D60\u0D61\u0E01-\u0E2E\u0E30\u0E32\u0E33\u0E40-\u0E45\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0F40-\u0F47\u0F49-\u0F69\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2126\u212A\u212B\u212E\u2180-\u2182\u3007\u3021-\u3029\u3041-\u3094\u30A1-\u30FA\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u02D0\u02D1\u0300-\u0345\u0360\u0361\u0386-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0483-\u0486\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u0591-\u05A1\u05A3-\u05B9\u05BB-\u05BD\u05BF\u05C1\u05C2\u05C4\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0640-\u0652\u0660-\u0669\u0670-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5-\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0901-\u0903\u0905-\u0939\u093C-\u094D\u0951-\u0954\u0958-\u0963\u0966-\u096F\u0981-\u0983\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09DC\u09DD\u09DF-\u09E3\u09E6-\u09F1\u0A02\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A59-\u0A5C\u0A5E\u0A66-\u0A74\u0A81-\u0A83\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABC-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE0\u0AE6-\u0AEF\u0B01-\u0B03\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3C-\u0B43\u0B47\u0B48\u0B4B-\u0B4D\u0B56\u0B57\u0B5C\u0B5D\u0B5F-\u0B61\u0B66-\u0B6F\u0B82\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE7-\u0BEF\u0C01-\u0C03\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C60\u0C61\u0C66-\u0C6F\u0C82\u0C83\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CDE\u0CE0\u0CE1\u0CE6-\u0CEF\u0D02\u0D03\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D3E-\u0D43\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D60\u0D61\u0D66-\u0D6F\u0E01-\u0E2E\u0E30-\u0E3A\u0E40-\u0E4E\u0E50-\u0E59\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0-\u0EB9\u0EBB-\u0EBD\u0EC0-\u0EC4\u0EC6\u0EC8-\u0ECD\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E-\u0F47\u0F49-\u0F69\u0F71-\u0F84\u0F86-\u0F8B\u0F90-\u0F95\u0F97\u0F99-\u0FAD\u0FB1-\u0FB7\u0FB9\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u20D0-\u20DC\u20E1\u2126\u212A\u212B\u212E\u2180-\u2182\u3005\u3007\u3021-\u302F\u3031-\u3035\u3041-\u3094\u3099\u309A\u309D\u309E\u30A1-\u30FA\u30FC-\u30FE\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "kind" = 142::smallint AND "name" = 69::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__node_aqtwqbqjlb" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "lexical" ~ '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0641-\u064A\u0671-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5\u06E5\u06E6\u0905-\u0939\u093D\u0958-\u0961\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AE0\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3D\u0B5C\u0B5D\u0B5F-\u0B61\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CDE\u0CE0\u0CE1\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D60\u0D61\u0E01-\u0E2E\u0E30\u0E32\u0E33\u0E40-\u0E45\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0F40-\u0F47\u0F49-\u0F69\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2126\u212A\u212B\u212E\u2180-\u2182\u3007\u3021-\u3029\u3041-\u3094\u30A1-\u30FA\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u02D0\u02D1\u0300-\u0345\u0360\u0361\u0386-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0483-\u0486\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u0591-\u05A1\u05A3-\u05B9\u05BB-\u05BD\u05BF\u05C1\u05C2\u05C4\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0640-\u0652\u0660-\u0669\u0670-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5-\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0901-\u0903\u0905-\u0939\u093C-\u094D\u0951-\u0954\u0958-\u0963\u0966-\u096F\u0981-\u0983\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09DC\u09DD\u09DF-\u09E3\u09E6-\u09F1\u0A02\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A59-\u0A5C\u0A5E\u0A66-\u0A74\u0A81-\u0A83\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABC-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE0\u0AE6-\u0AEF\u0B01-\u0B03\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3C-\u0B43\u0B47\u0B48\u0B4B-\u0B4D\u0B56\u0B57\u0B5C\u0B5D\u0B5F-\u0B61\u0B66-\u0B6F\u0B82\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE7-\u0BEF\u0C01-\u0C03\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C60\u0C61\u0C66-\u0C6F\u0C82\u0C83\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CDE\u0CE0\u0CE1\u0CE6-\u0CEF\u0D02\u0D03\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D3E-\u0D43\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D60\u0D61\u0D66-\u0D6F\u0E01-\u0E2E\u0E30-\u0E3A\u0E40-\u0E4E\u0E50-\u0E59\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0-\u0EB9\u0EBB-\u0EBD\u0EC0-\u0EC4\u0EC6\u0EC8-\u0ECD\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E-\u0F47\u0F49-\u0F69\u0F71-\u0F84\u0F86-\u0F8B\u0F90-\u0F95\u0F97\u0F99-\u0FAD\u0FB1-\u0FB7\u0FB9\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u20D0-\u20DC\u20E1\u2126\u212A\u212B\u212E\u2180-\u2182\u3005\u3007\u3021-\u302F\u3031-\u3035\u3041-\u3094\u3099\u309A\u309D\u309E\u30A1-\u30FA\u30FC-\u30FE\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "kind" = 291::smallint AND "name" = 69::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__node_yp7qmbepyb" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN ("pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lexical", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) = '1'::"pg_catalog"."text" OR "pg_catalog"."btrim"("pg_catalog"."regexp_replace"("lexical", '[\u0009\u000A\u000D ]+'::"pg_catalog"."text", ' '::"pg_catalog"."text", 'g'::"pg_catalog"."text")) = 'true'::"pg_catalog"."text") AND "kind" = 140::smallint AND "name" = 181::smallint THEN "node" END) STORED;
-
-ALTER TABLE "qti"."attribute" ADD COLUMN "__node_l5s3wrv3zh" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 313::smallint AND "name" = 243::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."attribute" ADD COLUMN "__node_5cbiu5becx" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" = 0::smallint AND "kind" = 312::smallint AND "name" = 103::smallint THEN "node" END) STORED;
 
@@ -4203,6 +4223,12 @@ ALTER TABLE "qti"."document_id" ADD COLUMN "__predecessor_ids_2idjwytstu" bigint
 
 ALTER TABLE "qti"."document_id" ADD COLUMN "__predecessor_carriers_izd455lwvu" bigint GENERATED ALWAYS AS (CASE WHEN "__index_carriers_qpgguqzjyv" > 0::bigint THEN "__index_carriers_qpgguqzjyv"::numeric - (1::bigint)::numeric END) STORED;
 
+ALTER TABLE "qti"."document_id" ADD COLUMN "__document_7pfajdbgba" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "admitted" = true THEN "document" END) STORED;
+
+ALTER TABLE "qti"."document_id" ADD COLUMN "__node_4ck2w6ow6d" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "admitted" = false THEN "node" END) STORED;
+
+ALTER TABLE "qti"."document_id" ADD COLUMN "__node_3olzulnuu3" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "admitted" = true THEN "node" END) STORED;
+
 ALTER TABLE "qti"."document_id" ADD COLUMN "__node_tpei2g34n6" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "node" = "owner" THEN "node" END) STORED;
 
 ALTER TABLE "qti"."document_id" ADD COLUMN "__node_5h62ntbykp" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "node" <> "owner" THEN "node" END) STORED;
@@ -4327,6 +4353,10 @@ ALTER TABLE "qti"."hottext" ADD COLUMN "__nearest_hwydxjcozk" "pg_catalog"."uuid
 
 ALTER TABLE "qti"."hottext" ADD COLUMN "__nearest_kind_lghm4fk3hv" smallint GENERATED ALWAYS AS (CASE WHEN "nearest_kind" IN (133::smallint, 127::smallint, 18::smallint, 118::smallint, 17::smallint, 131::smallint, 119::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 16::smallint, 120::smallint, 128::smallint, 130::smallint, 117::smallint, 187::smallint, 124::smallint, 126::smallint, 10::smallint, 132::smallint) THEN "nearest_kind" END) STORED;
 
+ALTER TABLE "qti"."id_binding" ADD COLUMN "__document_7pfajdbgba" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "admitted" = true THEN "document" END) STORED;
+
+ALTER TABLE "qti"."id_binding" ADD COLUMN "__id_phjuaybmt3" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "admitted" = true THEN "id" END) STORED;
+
 ALTER TABLE "qti"."id_binding" ADD COLUMN "__pred_carriers_5eaxdkd6g3" bigint GENERATED ALWAYS AS (CASE WHEN "carriers" > 0::bigint THEN "carriers"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."identity_text" ADD COLUMN "__document_3efmifhwcn" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN (NULLIF("pg_catalog"."substring"("qti"."__constant_3bgu23uy42"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_hltmkmsrwk"(), ("version" * 1319 + "governor") * 8 + 1, 8)::integer, 0) - 1)::smallint * 2 + 1, 2)::integer, 0) - 1)::smallint IN (0::smallint) AND "pg_catalog"."substring"("qti"."__constant_p4pvfhuaqm"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_hltmkmsrwk"(), ("version" * 1319 + "governor") * 8 + 1, 8)::integer, 0) - 1)::smallint + 1, 1)::integer = 1 AND "lexical" ~ '\A[\u0009\u000A\u000D ]*[A-Z\_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u0386\u0388-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0641-\u064A\u0671-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5\u06E5\u06E6\u0905-\u0939\u093D\u0958-\u0961\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09DC\u09DD\u09DF-\u09E1\u09F0\u09F1\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A59-\u0A5C\u0A5E\u0A72-\u0A74\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABD\u0AE0\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3D\u0B5C\u0B5D\u0B5F-\u0B61\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C60\u0C61\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CDE\u0CE0\u0CE1\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D60\u0D61\u0E01-\u0E2E\u0E30\u0E32\u0E33\u0E40-\u0E45\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0\u0EB2\u0EB3\u0EBD\u0EC0-\u0EC4\u0F40-\u0F47\u0F49-\u0F69\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u2126\u212A\u212B\u212E\u2180-\u2182\u3007\u3021-\u3029\u3041-\u3094\u30A1-\u30FA\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3][\-\.0-9A-Z\_a-z\u00B7\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u0131\u0134-\u013E\u0141-\u0148\u014A-\u017E\u0180-\u01C3\u01CD-\u01F0\u01F4\u01F5\u01FA-\u0217\u0250-\u02A8\u02BB-\u02C1\u02D0\u02D1\u0300-\u0345\u0360\u0361\u0386-\u038A\u038C\u038E-\u03A1\u03A3-\u03CE\u03D0-\u03D6\u03DA\u03DC\u03DE\u03E0\u03E2-\u03F3\u0401-\u040C\u040E-\u044F\u0451-\u045C\u045E-\u0481\u0483-\u0486\u0490-\u04C4\u04C7\u04C8\u04CB\u04CC\u04D0-\u04EB\u04EE-\u04F5\u04F8\u04F9\u0531-\u0556\u0559\u0561-\u0586\u0591-\u05A1\u05A3-\u05B9\u05BB-\u05BD\u05BF\u05C1\u05C2\u05C4\u05D0-\u05EA\u05F0-\u05F2\u0621-\u063A\u0640-\u0652\u0660-\u0669\u0670-\u06B7\u06BA-\u06BE\u06C0-\u06CE\u06D0-\u06D3\u06D5-\u06E8\u06EA-\u06ED\u06F0-\u06F9\u0901-\u0903\u0905-\u0939\u093C-\u094D\u0951-\u0954\u0958-\u0963\u0966-\u096F\u0981-\u0983\u0985-\u098C\u098F\u0990\u0993-\u09A8\u09AA-\u09B0\u09B2\u09B6-\u09B9\u09BC\u09BE-\u09C4\u09C7\u09C8\u09CB-\u09CD\u09D7\u09DC\u09DD\u09DF-\u09E3\u09E6-\u09F1\u0A02\u0A05-\u0A0A\u0A0F\u0A10\u0A13-\u0A28\u0A2A-\u0A30\u0A32\u0A33\u0A35\u0A36\u0A38\u0A39\u0A3C\u0A3E-\u0A42\u0A47\u0A48\u0A4B-\u0A4D\u0A59-\u0A5C\u0A5E\u0A66-\u0A74\u0A81-\u0A83\u0A85-\u0A8B\u0A8D\u0A8F-\u0A91\u0A93-\u0AA8\u0AAA-\u0AB0\u0AB2\u0AB3\u0AB5-\u0AB9\u0ABC-\u0AC5\u0AC7-\u0AC9\u0ACB-\u0ACD\u0AE0\u0AE6-\u0AEF\u0B01-\u0B03\u0B05-\u0B0C\u0B0F\u0B10\u0B13-\u0B28\u0B2A-\u0B30\u0B32\u0B33\u0B36-\u0B39\u0B3C-\u0B43\u0B47\u0B48\u0B4B-\u0B4D\u0B56\u0B57\u0B5C\u0B5D\u0B5F-\u0B61\u0B66-\u0B6F\u0B82\u0B83\u0B85-\u0B8A\u0B8E-\u0B90\u0B92-\u0B95\u0B99\u0B9A\u0B9C\u0B9E\u0B9F\u0BA3\u0BA4\u0BA8-\u0BAA\u0BAE-\u0BB5\u0BB7-\u0BB9\u0BBE-\u0BC2\u0BC6-\u0BC8\u0BCA-\u0BCD\u0BD7\u0BE7-\u0BEF\u0C01-\u0C03\u0C05-\u0C0C\u0C0E-\u0C10\u0C12-\u0C28\u0C2A-\u0C33\u0C35-\u0C39\u0C3E-\u0C44\u0C46-\u0C48\u0C4A-\u0C4D\u0C55\u0C56\u0C60\u0C61\u0C66-\u0C6F\u0C82\u0C83\u0C85-\u0C8C\u0C8E-\u0C90\u0C92-\u0CA8\u0CAA-\u0CB3\u0CB5-\u0CB9\u0CBE-\u0CC4\u0CC6-\u0CC8\u0CCA-\u0CCD\u0CD5\u0CD6\u0CDE\u0CE0\u0CE1\u0CE6-\u0CEF\u0D02\u0D03\u0D05-\u0D0C\u0D0E-\u0D10\u0D12-\u0D28\u0D2A-\u0D39\u0D3E-\u0D43\u0D46-\u0D48\u0D4A-\u0D4D\u0D57\u0D60\u0D61\u0D66-\u0D6F\u0E01-\u0E2E\u0E30-\u0E3A\u0E40-\u0E4E\u0E50-\u0E59\u0E81\u0E82\u0E84\u0E87\u0E88\u0E8A\u0E8D\u0E94-\u0E97\u0E99-\u0E9F\u0EA1-\u0EA3\u0EA5\u0EA7\u0EAA\u0EAB\u0EAD\u0EAE\u0EB0-\u0EB9\u0EBB-\u0EBD\u0EC0-\u0EC4\u0EC6\u0EC8-\u0ECD\u0ED0-\u0ED9\u0F18\u0F19\u0F20-\u0F29\u0F35\u0F37\u0F39\u0F3E-\u0F47\u0F49-\u0F69\u0F71-\u0F84\u0F86-\u0F8B\u0F90-\u0F95\u0F97\u0F99-\u0FAD\u0FB1-\u0FB7\u0FB9\u10A0-\u10C5\u10D0-\u10F6\u1100\u1102\u1103\u1105-\u1107\u1109\u110B\u110C\u110E-\u1112\u113C\u113E\u1140\u114C\u114E\u1150\u1154\u1155\u1159\u115F-\u1161\u1163\u1165\u1167\u1169\u116D\u116E\u1172\u1173\u1175\u119E\u11A8\u11AB\u11AE\u11AF\u11B7\u11B8\u11BA\u11BC-\u11C2\u11EB\u11F0\u11F9\u1E00-\u1E9B\u1EA0-\u1EF9\u1F00-\u1F15\u1F18-\u1F1D\u1F20-\u1F45\u1F48-\u1F4D\u1F50-\u1F57\u1F59\u1F5B\u1F5D\u1F5F-\u1F7D\u1F80-\u1FB4\u1FB6-\u1FBC\u1FBE\u1FC2-\u1FC4\u1FC6-\u1FCC\u1FD0-\u1FD3\u1FD6-\u1FDB\u1FE0-\u1FEC\u1FF2-\u1FF4\u1FF6-\u1FFC\u20D0-\u20DC\u20E1\u2126\u212A\u212B\u212E\u2180-\u2182\u3005\u3007\u3021-\u302F\u3031-\u3035\u3041-\u3094\u3099\u309A\u309D\u309E\u30A1-\u30FA\u30FC-\u30FE\u3105-\u312C\u4E00-\u9FA5\uAC00-\uD7A3]*[\u0009\u000A\u000D ]*\Z'::"pg_catalog"."text" AND "pg_catalog"."substring"("qti"."__constant_jgtq6vvihi"(), "version" * 1319 + "governor" + 1, 1)::integer = 1 THEN "document" END) STORED;
@@ -4356,6 +4386,8 @@ ALTER TABLE "qti"."idref_target" ADD COLUMN "__id_chqpn6jlrw" "pg_catalog"."text
 ALTER TABLE "qti"."instance" ADD COLUMN "__tag_assembled_true_gg7wow7ogq" boolean GENERATED ALWAYS AS (true) STORED NOT NULL;
 
 ALTER TABLE "qti"."instance" ADD COLUMN "__tag_spliced_0_f6cte5phah" bigint GENERATED ALWAYS AS (0::bigint) STORED NOT NULL;
+
+ALTER TABLE "qti"."instance" ADD COLUMN "__tag_places_true_fsuzemt64t" boolean GENERATED ALWAYS AS (true) STORED NOT NULL;
 
 ALTER TABLE "qti"."instance" ADD COLUMN "__copy_instances_rcu7onbbxc" bigint NOT NULL;
 
@@ -4633,9 +4665,21 @@ ALTER TABLE "qti"."item_ref_document" ADD COLUMN "__tag_root_kind_qti_assessment
 
 ALTER TABLE "qti"."item_ref_document" ADD COLUMN "__tag_type_imsqti_item_xmlv_3_p_0_xbm3afyphu" smallint GENERATED ALWAYS AS (2::smallint) STORED NOT NULL;
 
+ALTER TABLE "qti"."item_ref_href" ADD COLUMN "__tag_kind_qti_assessment_item_ref_7dgpuznkbf" smallint GENERATED ALWAYS AS (109::smallint) STORED NOT NULL;
+
+ALTER TABLE "qti"."item_ref_href" ADD COLUMN "__tag_name_href_uly3pfxknv" smallint GENERATED ALWAYS AS (103::smallint) STORED NOT NULL;
+
+ALTER TABLE "qti"."item_ref_href" ADD COLUMN "__pred_targets_c5nt4iqzuc" bigint GENERATED ALWAYS AS (CASE WHEN "targets" > 0::bigint THEN "targets"::numeric - (1::bigint)::numeric END) STORED;
+
 ALTER TABLE "qti"."item_ref_target" ADD COLUMN "__tag_kind_qti_assessment_item_ref_7dgpuznkbf" smallint GENERATED ALWAYS AS (109::smallint) STORED NOT NULL;
 
 ALTER TABLE "qti"."item_ref_target" ADD COLUMN "__tag_name_href_uly3pfxknv" smallint GENERATED ALWAYS AS (103::smallint) STORED NOT NULL;
+
+ALTER TABLE "qti"."item_ref_target" ADD COLUMN "__copy_targets_asbcxayfal" bigint NOT NULL;
+
+ALTER TABLE "qti"."item_ref_target" ADD COLUMN "__index_targets_rlmcoes4yz" bigint NOT NULL;
+
+ALTER TABLE "qti"."item_ref_target" ADD COLUMN "__predecessor_targets_zxbe37lwsw" bigint GENERATED ALWAYS AS (CASE WHEN "__index_targets_rlmcoes4yz" > 0::bigint THEN "__index_targets_rlmcoes4yz"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."item_ref_target" ADD COLUMN "__node_thuesrvpoz" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "type" = 2::smallint THEN "node" END) STORED;
 
@@ -4931,6 +4975,8 @@ ALTER TABLE "qti"."node" ADD COLUMN "__document_pbft2kftgd" "pg_catalog"."uuid" 
 
 ALTER TABLE "qti"."node" ADD COLUMN "__document_o4t6y5btiu" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (139::smallint, 167::smallint) THEN "document" END) STORED;
 
+ALTER TABLE "qti"."node" ADD COLUMN "__document_hqtc2yacte" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "pg_catalog"."substring"("qti"."__constant_r7m6yukmzl"(), ((NULLIF("pg_catalog"."substring"("qti"."__constant_3fgeygq5w3"(), ("version" * 644 + "parent_kind") * 15 + 1, 15)::integer, 0) - 1) / 117)::smallint * 644 + "kind" + 1, 1)::integer = 1 THEN "document" END) STORED;
+
 ALTER TABLE "qti"."node" ADD COLUMN "__first_c2z2qcicj5" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "start" > 0::bigint THEN "first" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_rpd3elauv4" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN NOT "kind" IN (7::smallint, 1::smallint, 0::smallint, 9::smallint, 8::smallint, 5::smallint, 6::smallint) AND NOT "kind" IN (2::smallint, 3::smallint, 4::smallint) AND NOT "pg_catalog"."substring"("qti"."__constant_7s64uc2x4z"(), "version" * 644 + "kind" + 1, 1)::integer = 1 THEN "id" END) STORED;
@@ -4942,6 +4988,8 @@ ALTER TABLE "qti"."node" ADD COLUMN "__id_33kgwoi4ec" "pg_catalog"."uuid" GENERA
 ALTER TABLE "qti"."node" ADD COLUMN "__id_d2goefw6wb" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN NOT "kind" IN (7::smallint, 1::smallint, 0::smallint, 9::smallint, 8::smallint, 5::smallint, 6::smallint) AND "kind" IN (412::smallint, 414::smallint, 413::smallint) AND "elements" > 1::bigint THEN "id" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_j5nn7krqpg" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN (NULLIF("pg_catalog"."substring"("qti"."__constant_3bgu23uy42"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_hltmkmsrwk"(), ("version" * 1319 + "governor") * 8 + 1, 8)::integer, 0) - 1)::smallint * 2 + 1, 2)::integer, 0) - 1)::smallint IN (0::smallint, 1::smallint, 2::smallint) AND "pg_catalog"."substring"("qti"."__constant_p4pvfhuaqm"(), (NULLIF("pg_catalog"."substring"("qti"."__constant_hltmkmsrwk"(), ("version" * 1319 + "governor") * 8 + 1, 8)::integer, 0) - 1)::smallint + 1, 1)::integer = 1 AND "pg_catalog"."substring"("qti"."__constant_jgtq6vvihi"(), "version" * 1319 + "governor" + 1, 1)::integer = 1 THEN "id" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__id_bvzvtol7yn" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN NOT "pg_catalog"."substring"("qti"."__constant_r7m6yukmzl"(), ((NULLIF("pg_catalog"."substring"("qti"."__constant_3fgeygq5w3"(), ("version" * 644 + "parent_kind") * 15 + 1, 15)::integer, 0) - 1) / 117)::smallint * 644 + "kind" + 1, 1)::integer = 1 THEN "id" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_ztgrncxr25" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "document_type" IN (0::smallint, 13::smallint) THEN "id" END) STORED;
 
@@ -4988,6 +5036,8 @@ ALTER TABLE "qti"."node" ADD COLUMN "__id_ga3jua4wvx" "pg_catalog"."uuid" GENERA
 ALTER TABLE "qti"."node" ADD COLUMN "__id_2ecax7r3ho" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "parent_kind" IN (223::smallint, 224::smallint, 225::smallint, 226::smallint, 227::smallint, 228::smallint, 230::smallint, 233::smallint, 236::smallint, 237::smallint, 238::smallint, 241::smallint, 243::smallint, 244::smallint, 246::smallint, 247::smallint, 248::smallint, 250::smallint, 251::smallint, 252::smallint, 253::smallint, 254::smallint, 255::smallint, 256::smallint, 257::smallint, 259::smallint, 261::smallint, 262::smallint, 263::smallint, 264::smallint, 265::smallint, 267::smallint, 269::smallint, 270::smallint, 300::smallint, 152::smallint, 171::smallint, 199::smallint, 202::smallint, 208::smallint, 219::smallint, 220::smallint, 14::smallint, 119::smallint, 153::smallint, 11::smallint, 129::smallint, 162::smallint, 184::smallint, 95::smallint, 161::smallint, 175::smallint, 174::smallint, 173::smallint, 271::smallint, 179::smallint, 134::smallint, 192::smallint, 191::smallint, 190::smallint, 304::smallint, 197::smallint, 114::smallint, 143::smallint, 111::smallint, 15::smallint, 201::smallint, 277::smallint, 278::smallint, 279::smallint, 281::smallint, 282::smallint, 283::smallint, 285::smallint, 288::smallint, 291::smallint, 295::smallint, 297::smallint) AND "kind" = 642::smallint THEN "id" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_fh4h2bqbbf" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "parent_kind" IN (193::smallint, 149::smallint) AND "kind" = 150::smallint THEN "id" END) STORED;
+
+ALTER TABLE "qti"."node" ADD COLUMN "__id_k52urhgrax" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "pg_catalog"."substring"("qti"."__constant_r7m6yukmzl"(), ((NULLIF("pg_catalog"."substring"("qti"."__constant_3fgeygq5w3"(), ("version" * 644 + "parent_kind") * 15 + 1, 15)::integer, 0) - 1) / 117)::smallint * 644 + "kind" + 1, 1)::integer = 1 THEN "id" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_7fv35js5jl" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN ("pg_catalog"."bit_count"("pg_catalog"."set_bit"(X'0000000000000000000000000000'::"qti"."__attribute_slot_bits_112_aecznthxg5", (((NULLIF("pg_catalog"."substring"("qti"."__constant_ydkoqmm5ih"(), ((NULLIF("pg_catalog"."substring"("qti"."__constant_uav4xy4p5a"(), ("version" * 1319 + "governor") * 8 + 1, 8)::integer, 0) - 1)::smallint * 413 + 402::smallint) * 16 + 1, 16)::integer, 0) - 1) / 2 % 110)::smallint)::integer, 1) & (~ "attrs")) = 0::bigint) = true AND ("pg_catalog"."bit_count"("pg_catalog"."set_bit"(X'0000000000000000000000000000'::"qti"."__attribute_slot_bits_112_aecznthxg5", (((NULLIF("pg_catalog"."substring"("qti"."__constant_ydkoqmm5ih"(), ((NULLIF("pg_catalog"."substring"("qti"."__constant_uav4xy4p5a"(), ("version" * 1319 + "governor") * 8 + 1, 8)::integer, 0) - 1)::smallint * 413 + 401::smallint) * 16 + 1, 16)::integer, 0) - 1) / 2 % 110)::smallint)::integer, 1) & (~ "attrs")) = 0::bigint) = true THEN "id" END) STORED;
 
@@ -5437,6 +5487,8 @@ ALTER TABLE "qti"."reference" ADD COLUMN "__kind_3plysbbxy5" smallint GENERATED 
 
 ALTER TABLE "qti"."reference" ADD COLUMN "__name_55zdbs4rpu" smallint GENERATED ALWAYS AS (CASE WHEN "scope" = 0::smallint THEN "name" END) STORED;
 
+ALTER TABLE "qti"."reference" ADD COLUMN "__node_6rmfntt35j" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 110::smallint AND "name" = 103::smallint AND "scope" <> 1::smallint THEN "node" END) STORED;
+
 ALTER TABLE "qti"."reference" ADD COLUMN "__node_scx2hiwvjr" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "name" = 103::smallint AND "scope" = 1::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."reference" ADD COLUMN "__node_rx3smqszrv" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "scope" = 0::smallint THEN "node" END) STORED;
@@ -5671,8 +5723,6 @@ ALTER TABLE "qti"."site" ADD COLUMN "__tag_scope_external_4ewa3hwoox" smallint G
 
 ALTER TABLE "qti"."site" ADD COLUMN "__kind_xumnxfryga" smallint GENERATED ALWAYS AS (CASE WHEN "external" = false AND "kind" = 642::smallint THEN "kind" END) STORED;
 
-ALTER TABLE "qti"."site" ADD COLUMN "__node_ivjo2r5kcj" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "external" = false AND "kind" = 110::smallint THEN "node" END) STORED;
-
 ALTER TABLE "qti"."site" ADD COLUMN "__node_4btbiqcyve" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "external" = false AND "kind" = 642::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."site" ADD COLUMN "__node_hy2rqw4ikb" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "external" = true THEN "node" END) STORED;
@@ -5703,23 +5753,27 @@ ALTER TABLE "qti"."site_target" ADD COLUMN "__after_targeted_by_0_ewx4pvaau7" bi
 
 ALTER TABLE "qti"."site_target" ADD COLUMN "__after_targeted_by_0_nsll3bu4kk" "qti"."__flag_bits_12_i4uhexylc4" NOT NULL;
 
+ALTER TABLE "qti"."site_target" ADD COLUMN "__after_targets_0_py6ituirmm" bigint NOT NULL;
+
 ALTER TABLE "qti"."site_target" ADD COLUMN "__before_targeted_by_0_73bcd4qah6" bigint NOT NULL;
 
 ALTER TABLE "qti"."site_target" ADD COLUMN "__before_targeted_by_0_d6tyxe5pt3" "qti"."__flag_bits_12_i4uhexylc4" NOT NULL;
+
+ALTER TABLE "qti"."site_target" ADD COLUMN "__before_targets_0_soacumzj4x" bigint NOT NULL;
 
 ALTER TABLE "qti"."site_target" ADD COLUMN "__tag_root_kind_qti_assessment_section_lireml4bk3" smallint GENERATED ALWAYS AS (300::smallint) STORED NOT NULL;
 
 ALTER TABLE "qti"."site_target" ADD COLUMN "__copy_targeted_by_onhlzhg3xy" bigint NOT NULL;
 
-ALTER TABLE "qti"."site_target" ADD COLUMN "__copy_sites_xpayqcoikw" bigint NOT NULL;
+ALTER TABLE "qti"."site_target" ADD COLUMN "__copy_targets_6ogdagenxw" bigint NOT NULL;
 
 ALTER TABLE "qti"."site_target" ADD COLUMN "__index_targeted_by_tbykrdudak" bigint NOT NULL;
 
-ALTER TABLE "qti"."site_target" ADD COLUMN "__index_sites_ivugsthnfb" bigint NOT NULL;
+ALTER TABLE "qti"."site_target" ADD COLUMN "__index_targets_afouzbizhs" bigint NOT NULL;
 
 ALTER TABLE "qti"."site_target" ADD COLUMN "__predecessor_targeted_by_wc4cpdfxps" bigint GENERATED ALWAYS AS (CASE WHEN "__index_targeted_by_tbykrdudak" > 0::bigint THEN "__index_targeted_by_tbykrdudak"::numeric - (1::bigint)::numeric END) STORED;
 
-ALTER TABLE "qti"."site_target" ADD COLUMN "__predecessor_sites_kxwcigb3m3" bigint GENERATED ALWAYS AS (CASE WHEN "__index_sites_ivugsthnfb" > 0::bigint THEN "__index_sites_ivugsthnfb"::numeric - (1::bigint)::numeric END) STORED;
+ALTER TABLE "qti"."site_target" ADD COLUMN "__predecessor_targets_k3yzo72hhm" bigint GENERATED ALWAYS AS (CASE WHEN "__index_targets_afouzbizhs" > 0::bigint THEN "__index_targets_afouzbizhs"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."site_target" ADD COLUMN "__node_b42646p2al" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 642::smallint THEN "node" END) STORED;
 
@@ -5799,7 +5853,7 @@ ALTER TABLE "qti"."test_document" ADD COLUMN "__pred_names_bbnnt7wrn7" bigint GE
 
 ALTER TABLE "qti"."test_document" ADD COLUMN "__pred_rules_vfbblnhiag" bigint GENERATED ALWAYS AS (CASE WHEN "rules" > 0::bigint THEN "rules"::numeric - (1::bigint)::numeric END) STORED;
 
-ALTER TABLE "qti"."test_document" ADD COLUMN "__pred_sites_62entkrpk5" bigint GENERATED ALWAYS AS (CASE WHEN "sites" > 0::bigint THEN "sites"::numeric - (1::bigint)::numeric END) STORED;
+ALTER TABLE "qti"."test_document" ADD COLUMN "__pred_targets_c5nt4iqzuc" bigint GENERATED ALWAYS AS (CASE WHEN "targets" > 0::bigint THEN "targets"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."test_flag" ADD COLUMN "__tag_required_true_ocdlu4jowj" boolean GENERATED ALWAYS AS (true) STORED NOT NULL;
 
@@ -6145,6 +6199,8 @@ ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_key_document_identifier_in
 
 ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_key_document_index_hottexts_ytvlcdran7" UNIQUE NULLS DISTINCT ("document", "__index_hottexts_ghsfyaknik");
 
+ALTER TABLE "qti"."id_binding" ADD CONSTRAINT "__id_binding_key_document_id_llzafs6ajp" UNIQUE NULLS DISTINCT ("__document_7pfajdbgba", "__id_phjuaybmt3");
+
 ALTER TABLE "qti"."identity_text" ADD CONSTRAINT "__identity_text_key_node_fbpbjpzxem" UNIQUE NULLS DISTINCT ("__node_gm5dy5nr5s");
 
 ALTER TABLE "qti"."idref_target" ADD CONSTRAINT "__idref_target_key_document_index_idref_targets_p3jzpb36sv" UNIQUE NULLS DISTINCT ("document", "__index_idref_targets_l4x7hkawkh");
@@ -6174,6 +6230,8 @@ ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribut
 ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribute_key_node_name_value_7ornt3zlhr" UNIQUE NULLS DISTINCT ("__node_rkrh6ahjsq", "__name_64wvduu5ig", "__value_cgxyakb3me");
 
 ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribute_key_node_s2a23mqgqv" UNIQUE NULLS DISTINCT ("__node_qbnexppy63");
+
+ALTER TABLE "qti"."item_ref_target" ADD CONSTRAINT "__item_ref_target_key_node_index_targets_mzjkyz7o2d" UNIQUE NULLS DISTINCT ("node", "__index_targets_rlmcoes4yz");
 
 ALTER TABLE "qti"."least_count" ADD CONSTRAINT "__least_count_key_node_index_leasts_74vfmcveog" UNIQUE NULLS DISTINCT ("node", "__index_leasts_aqxa6y2gue");
 
@@ -6207,6 +6265,8 @@ ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_parent_kind_bcix5a5ymv" U
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_parent_kind_cy4qhoyaol" UNIQUE NULLS DISTINCT ("__id_d2goefw6wb", "parent_kind");
 
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_rak7qkaqu6" UNIQUE NULLS DISTINCT ("__id_bvzvtol7yn");
+
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_kind_djfim5msj4" UNIQUE NULLS DISTINCT ("__id_ztgrncxr25", "kind");
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_kind_parent_kind_ivdf2kq3sc" UNIQUE NULLS DISTINCT ("__id_ztgrncxr25", "kind", "parent_kind");
@@ -6216,6 +6276,8 @@ ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_zlofbnqy7x" UNIQUE NULLS 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_vuxeuhz6wl" UNIQUE NULLS DISTINCT ("__id_gzljvgjbwk");
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_wbykfyb2sm" UNIQUE NULLS DISTINCT ("__id_ga3jua4wvx");
+
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_document_ewjvjo4va3" UNIQUE NULLS DISTINCT ("__id_k52urhgrax", "__document_hqtc2yacte");
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_kind_pu5nvolwj5" UNIQUE NULLS DISTINCT ("__id_7fv35js5jl", "kind");
 
@@ -6323,7 +6385,9 @@ ALTER TABLE "qti"."section_template_name" ADD CONSTRAINT "__section_template_nam
 
 ALTER TABLE "qti"."section_template_ref" ADD CONSTRAINT "__section_template_ref_key_instance_index_templates_wbk2d2hjfe" UNIQUE NULLS DISTINCT ("instance", "__index_templates_5yrdfomm2n");
 
-ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_key_document_index_sites_daexskakp2" UNIQUE NULLS DISTINCT ("document", "__index_sites_ivugsthnfb");
+ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_key_document_index_targets_5tzyeleor3" UNIQUE NULLS DISTINCT ("document", "__index_targets_afouzbizhs");
+
+ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_key_document_index_targets_after_c7xbdgm6ki" UNIQUE NULLS DISTINCT ("document", "__index_targets_afouzbizhs", "__after_targets_0_py6ituirmm");
 
 ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_key_target_index_targeted_by_gsjiy4nmfd" UNIQUE NULLS DISTINCT ("target", "__index_targeted_by_tbykrdudak");
 
@@ -6412,6 +6476,8 @@ ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_check_instance_tree_chil
 ALTER TABLE "qti"."instance_name" ADD CONSTRAINT "__instance_name_check_instance_name_counted_dtdobjhnxy" CHECK (("__index_placements_wtq4ltz5v2" >= 0::bigint AND "__index_placements_wtq4ltz5v2" < "__copy_placements_6m4jqdrpbh") IS TRUE);
 
 ALTER TABLE "qti"."instance_name" ADD CONSTRAINT "__instance_name_check_instance_name_counted_instance_3ucndsyntb" CHECK (("__index_names_cxxiuf3ve3" >= 0::bigint AND "__index_names_cxxiuf3ve3" < "__copy_names_ieoa3wllm6") IS TRUE);
+
+ALTER TABLE "qti"."item_ref_target" ADD CONSTRAINT "__item_ref_target_check_item_ref_target_counted_item_sn7sol4uot" CHECK (("__index_targets_rlmcoes4yz" >= 0::bigint AND "__index_targets_rlmcoes4yz" < "__copy_targets_asbcxayfal") IS TRUE);
 
 ALTER TABLE "qti"."least_count" ADD CONSTRAINT "__least_count_check_least_count_counted_count_bound_jqrhgylkgh" CHECK (("__index_leasts_aqxa6y2gue" >= 0::bigint AND "__index_leasts_aqxa6y2gue" < "__copy_leasts_yslquz7zrk") IS TRUE);
 
@@ -6521,11 +6587,13 @@ ALTER TABLE "qti"."section_template_ref" ADD CONSTRAINT "__section_template_ref_
 
 ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_check_site_target_counted_document_6rqy4kke2f" CHECK (("__index_targeted_by_tbykrdudak" >= 0::bigint AND "__index_targeted_by_tbykrdudak" < "__copy_targeted_by_onhlzhg3xy") IS TRUE);
 
-ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_check_site_target_counted_test_7flxxq2yrf" CHECK (("__index_sites_ivugsthnfb" >= 0::bigint AND "__index_sites_ivugsthnfb" < "__copy_sites_xpayqcoikw") IS TRUE);
+ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_check_site_target_counted_test_lcmbcunhdj" CHECK (("__index_targets_afouzbizhs" >= 0::bigint AND "__index_targets_afouzbizhs" < "__copy_targets_6ogdagenxw") IS TRUE);
 
 ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_check_document_targeted_by_count_fold_2mo6gdanxt" CHECK ((("__index_targeted_by_tbykrdudak" > 0::bigint OR "__before_targeted_by_0_73bcd4qah6" = 0::bigint) AND CASE WHEN "splices" = true THEN "__after_targeted_by_0_ewx4pvaau7"::numeric = "__before_targeted_by_0_73bcd4qah6"::numeric + (1::bigint)::numeric ELSE "__after_targeted_by_0_ewx4pvaau7" = "__before_targeted_by_0_73bcd4qah6" END) IS TRUE);
 
 ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_check_document_targeted_by_or_fold_h5kd2udvxg" CHECK ((("__index_targeted_by_tbykrdudak" > 0::bigint OR "__before_targeted_by_0_d6tyxe5pt3" = X'000'::"qti"."__flag_bits_12_i4uhexylc4") AND "__after_targeted_by_0_nsll3bu4kk" = "__before_targeted_by_0_d6tyxe5pt3" | "ancestry") IS TRUE);
+
+ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_check_test_document_targets_count_fold_kq7fihbeoj" CHECK ((("__index_targets_afouzbizhs" > 0::bigint OR "__before_targets_0_soacumzj4x" = 0::bigint) AND CASE WHEN "places" = true THEN "__after_targets_0_py6ituirmm"::numeric = "__before_targets_0_soacumzj4x"::numeric + (1::bigint)::numeric ELSE "__after_targets_0_py6ituirmm" = "__before_targets_0_soacumzj4x" END) IS TRUE);
 
 ALTER TABLE "qti"."ssml_attribute" ADD CONSTRAINT "__ssml_attribute_check_ssml_attribute_counted_tlu5jl2px3" CHECK (("__index_carriers_ux5sk4jntw" >= 0::bigint AND "__index_carriers_ux5sk4jntw" < "__copy_carriers_7xoxllfz4t") IS TRUE);
 
@@ -6877,6 +6945,10 @@ CREATE TRIGGER "__isolation"
 
 CREATE TRIGGER "__isolation"
   BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."item_ref_document"
+  FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
+
+CREATE TRIGGER "__isolation"
+  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."item_ref_href"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
@@ -7617,11 +7689,11 @@ ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_aljnmx
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_name_lexical_32pyhid2jr" FOREIGN KEY ("__node_zuvdigwypi", "__name_3xv6zipade", "__lexical_l2zzgxpvuk") REFERENCES "qti"."test_token" ("node", "name", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_k6cmdugvob" FOREIGN KEY ("__node_iz4wh6p7bb") REFERENCES "qti"."named" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_26vuh4u2kk" FOREIGN KEY ("__node_qfrusbccpg") REFERENCES "qti"."named" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_name_lexical_7xsjqkozkv" FOREIGN KEY ("__node_gucjs2ezyo", "__name_nwp4lvripb", "__lexical_ck7uxfycmz") REFERENCES "qti"."test_flag" ("node", "name", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_4ctvltlsph" FOREIGN KEY ("__node_z57wfvavlb") REFERENCES "qti"."item_ref_target" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_nu2sz322f5" FOREIGN KEY ("__node_z57wfvavlb") REFERENCES "qti"."item_ref_href" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_name_lexical_ow5bljygwl" FOREIGN KEY ("__node_kmcvlhvytf", "__name_am5fdsiuqu", "__lexical_jeuipyutsv") REFERENCES "qti"."test_flag" ("node", "name", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -7691,21 +7763,21 @@ ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_name_kind_lexi
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_document_lexical_n3fq766zy6" FOREIGN KEY ("__node_tblig6omlm", "__document_lbcvi7754s", "__lexical_cunus2zs73") REFERENCES "qti"."share_fragment" ("node", "document", "src") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_arqk2s4arb" FOREIGN KEY ("__node_eddcgu2sqo", "__lexical_xzr3nwawbz") REFERENCES "qti"."dependency" ("node", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_document_ug3se24mbh" FOREIGN KEY ("__node_tsiudobb4f", "__document_wqjsyg4ltz") REFERENCES "qti"."catalog_id" ("node", "document") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_document_6ip6sqjl35" FOREIGN KEY ("__node_aqtwqbqjlb", "__document_ge3mktvjzq") REFERENCES "qti"."table_header" ("node", "document") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_zedikqrucf" FOREIGN KEY ("__node_yp7qmbepyb", "__lexical_lhmbaka5ng") REFERENCES "qti"."default_entry" ("node", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_b5ky77ovsz" FOREIGN KEY ("__node_l5s3wrv3zh", "__lexical_wwe6z22mea") REFERENCES "qti"."dependency" ("node", "ref") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_4s7da3gklk" FOREIGN KEY ("__node_5cbiu5becx", "__lexical_2wfeqkwfqn") REFERENCES "qti"."file" ("node", "href") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_jgzcwuwjsp" FOREIGN KEY ("__node_xqtdk6xram", "__lexical_zlwkkmd2va") REFERENCES "qti"."manifest_id" ("node", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_4stuz5uzd4" FOREIGN KEY ("__node_xqtdk6xram", "__lexical_zlwkkmd2va") REFERENCES "qti"."manifest_id" ("node", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_w3gp43iei6" FOREIGN KEY ("__node_h5p5d42sky", "__lexical_fnbgf2cryx") REFERENCES "qti"."resource_href" ("node", "href") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_nn45edduyz" FOREIGN KEY ("__node_pqt5dq44gn", "__lexical_hqdjvryd6b") REFERENCES "qti"."resource_id" ("node", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_ftnkgwpfay" FOREIGN KEY ("__node_pqt5dq44gn", "__lexical_hqdjvryd6b") REFERENCES "qti"."resource_id" ("node", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_tag_selection_written_oopputu4ww" FOREIGN KEY ("__node_zxxp2534g5", "__lexical_xdw2o32cnm", "__tag_selection_written_true_3nkngi2qwy") REFERENCES "qti"."math_action" ("node", "selection_lexical", "selection_written") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -8069,13 +8141,17 @@ ALTER TABLE "qti"."document" ADD CONSTRAINT "__document_fk_node_6kueb3pejs" FORE
 
 ALTER TABLE "qti"."document" ADD CONSTRAINT "__document_fk_node_v6eqdd67u2" FOREIGN KEY ("__node_a2cp5ppi33") REFERENCES "qti"."reference_document" ("document") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_document_id_owner_copy_carriers_7nshzjlhzl" FOREIGN KEY ("document", "id", "owner", "__copy_carriers_76voijddw4") REFERENCES "qti"."id_binding" ("document", "id", "owner", "carriers") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_document_id_owner_copy_carriers_hruwphv7cq" FOREIGN KEY ("document", "id", "owner", "__copy_carriers_76voijddw4", "admitted") REFERENCES "qti"."id_binding" ("document", "id", "owner", "carriers", "admitted") MATCH SIMPLE ON UPDATE CASCADE;
 
 ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_document_id_owner_predecessor_mgjrol3yqr" FOREIGN KEY ("document", "id", "owner", "__predecessor_carriers_izd455lwvu") REFERENCES "qti"."document_id" ("document", "id", "owner", "__index_carriers_qpgguqzjyv") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_document_copy_ids_azhhynhvmc" FOREIGN KEY ("document", "__copy_ids_o3bov7odyc") REFERENCES "qti"."document" ("node", "ids") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_document_predecessor_ids_ll5lqywfrt" FOREIGN KEY ("document", "__predecessor_ids_2idjwytstu") REFERENCES "qti"."document_id" ("document", "__index_ids_h25v27m2yu") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_node_oebizpoomi" FOREIGN KEY ("__node_4ck2w6ow6d") REFERENCES "qti"."node" ("__id_bvzvtol7yn") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_node_document_auw3socchk" FOREIGN KEY ("__node_3olzulnuu3", "__document_7pfajdbgba") REFERENCES "qti"."node" ("__id_k52urhgrax", "__document_hqtc2yacte") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_node_gbpiinkipf" FOREIGN KEY ("__node_tpei2g34n6") REFERENCES "qti"."attribute" ("__node_bxkt3vhspy") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -8211,9 +8287,9 @@ ALTER TABLE "qti"."idref_target" ADD CONSTRAINT "__idref_target_fk_document_copy
 
 ALTER TABLE "qti"."idref_target" ADD CONSTRAINT "__idref_target_fk_document_predecessor_idref_targets_7cdhmm6o6h" FOREIGN KEY ("document", "__predecessor_idref_targets_krpg64y35b") REFERENCES "qti"."idref_target" ("document", "__index_idref_targets_l4x7hkawkh") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."idref_target" ADD CONSTRAINT "__idref_target_fk_document_id_zv4jnaerat" FOREIGN KEY ("__document_jwyigkitch", "__id_chqpn6jlrw") REFERENCES "qti"."id_binding" ("document", "id") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."idref_target" ADD CONSTRAINT "__idref_target_fk_document_id_eirp6y4xx3" FOREIGN KEY ("__document_jwyigkitch", "__id_chqpn6jlrw") REFERENCES "qti"."id_binding" ("__document_7pfajdbgba", "__id_phjuaybmt3") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."inclusion" ADD CONSTRAINT "__inclusion_fk_node_parent_kind_root_splices_version_4kznlatgit" FOREIGN KEY ("node", "parent_kind", "root", "splices", "version") REFERENCES "qti"."site_target" ("node", "parent_kind", "target_root", "splices", "version") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."inclusion" ADD CONSTRAINT "__inclusion_fk_node_parent_kind_places_root_splices_io4c4fmo5z" FOREIGN KEY ("node", "parent_kind", "places", "root", "splices", "version") REFERENCES "qti"."site_target" ("node", "parent_kind", "places", "target_root", "splices", "version") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_document_ids_idref_targets_choices_yp2mji2l4i" FOREIGN KEY ("document", "ids", "idref_targets", "choices", "hottexts") REFERENCES "qti"."document" ("node", "ids", "idref_targets", "choices", "hottexts") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -8259,7 +8335,7 @@ ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_parent_pred_at_start_
 
 ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_parent_document_site_site_loose_chain_5n56akwlfa" FOREIGN KEY ("__parent_document_rwupqx3wr4", "__site_hdx6niaggk", "__site_loose_chain_auzbyxsd6l", "__site_mixes_3a6cfv2jw2", "__site_part_robpllbu4o", "__site_replaced_wek36iyig7", "__site_start_xdxepuvnp7") REFERENCES "qti"."site" ("document", "node", "parent_loose_chain", "parent_mixes", "part", "replaced", "start") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_site_document_io5u5bpp6h" FOREIGN KEY ("__site_hdx6niaggk", "__document_iu7n6ahln3") REFERENCES "qti"."site_target" ("node", "target") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_site_document_tag_places_true_4c4r57c3bc" FOREIGN KEY ("__site_hdx6niaggk", "__document_iu7n6ahln3", "__tag_places_true_fsuzemt64t") REFERENCES "qti"."site_target" ("node", "target", "places") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."instance_name" ADD CONSTRAINT "__instance_name_fk_assembly_node_copy_placements_xe2k2issg6" FOREIGN KEY ("assembly", "node", "__copy_placements_6m4jqdrpbh", "identifier") REFERENCES "qti"."assembled_name" ("assembly", "node", "placements", "identifier") MATCH SIMPLE ON UPDATE CASCADE;
 
@@ -8339,9 +8415,19 @@ ALTER TABLE "qti"."item_ref_document" ADD CONSTRAINT "__item_ref_document_fk_doc
 
 ALTER TABLE "qti"."item_ref_document" ADD CONSTRAINT "__item_ref_document_fk_node_package_path_tag_type_urulmvpfcb" FOREIGN KEY ("node", "package", "path", "__tag_type_imsqti_item_xmlv_3_p_0_xbm3afyphu") REFERENCES "qti"."item_ref_target" ("node", "package", "path", "type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE "qti"."item_ref_href" ADD CONSTRAINT "__item_ref_href_fk_node_package_path_tag_name_href_2kw3eaprte" FOREIGN KEY ("node", "package", "path", "__tag_name_href_uly3pfxknv") REFERENCES "qti"."reference_path" ("node", "package", "path", "name") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."item_ref_href" ADD CONSTRAINT "__item_ref_href_fk_node_tag_kind_qti_assessment_item_ifa6ig36c2" FOREIGN KEY ("node", "__tag_kind_qti_assessment_item_ref_7dgpuznkbf") REFERENCES "qti"."node" ("id", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."item_ref_href" ADD CONSTRAINT "__item_ref_href_fk_node_pred_targets_gh4t655wgw" FOREIGN KEY ("node", "__pred_targets_c5nt4iqzuc") REFERENCES "qti"."item_ref_target" ("node", "__index_targets_rlmcoes4yz") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
 ALTER TABLE "qti"."item_ref_target" ADD CONSTRAINT "__item_ref_target_fk_node_package_path_tag_name_href_tjasyy6d3f" FOREIGN KEY ("node", "package", "path", "__tag_name_href_uly3pfxknv") REFERENCES "qti"."reference_path" ("node", "package", "path", "name") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."item_ref_target" ADD CONSTRAINT "__item_ref_target_fk_node_tag_kind_qti_assessment_diyeuojzam" FOREIGN KEY ("node", "__tag_kind_qti_assessment_item_ref_7dgpuznkbf") REFERENCES "qti"."node" ("id", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."item_ref_target" ADD CONSTRAINT "__item_ref_target_fk_node_copy_targets_um3r4i3kf4" FOREIGN KEY ("node", "__copy_targets_asbcxayfal") REFERENCES "qti"."item_ref_href" ("node", "targets") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."item_ref_target" ADD CONSTRAINT "__item_ref_target_fk_node_predecessor_targets_si6qn4iwtf" FOREIGN KEY ("node", "__predecessor_targets_zxbe37lwsw") REFERENCES "qti"."item_ref_target" ("node", "__index_targets_rlmcoes4yz") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."item_ref_target" ADD CONSTRAINT "__item_ref_target_fk_node_package_path_rk2wplt7jt" FOREIGN KEY ("__node_thuesrvpoz", "__package_7yrgppd6sa", "__path_s25m4iaxsn") REFERENCES "qti"."item_ref_document" ("node", "package", "path") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -9009,6 +9095,8 @@ ALTER TABLE "qti"."record_field_name" ADD CONSTRAINT "__record_field_name_fk_nod
 
 ALTER TABLE "qti"."reference" ADD CONSTRAINT "__reference_fk_node_name_mfmij6556r" FOREIGN KEY ("node", "name") REFERENCES "qti"."attribute" ("__node_r33uye6ksm", "__name_bjcimgcvll") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE "qti"."reference" ADD CONSTRAINT "__reference_fk_node_gpi5levv2r" FOREIGN KEY ("__node_6rmfntt35j") REFERENCES "qti"."site_path" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
 ALTER TABLE "qti"."reference" ADD CONSTRAINT "__reference_fk_node_name_document_kind_lbw7m2bjjj" FOREIGN KEY ("__node_rx3smqszrv", "__name_55zdbs4rpu", "__document_5cau2dspow", "__kind_3plysbbxy5") REFERENCES "qti"."reference_path" ("node", "name", "document", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."reference_document" ADD CONSTRAINT "__reference_document_fk_document_4guy6xeiat" FOREIGN KEY ("document") REFERENCES "qti"."document" ("__node_a2cp5ppi33") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
@@ -9255,8 +9343,6 @@ ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_children_start_document_
 
 ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_parent_hjpmqzvjk4" FOREIGN KEY ("node", "parent") REFERENCES "qti"."node" ("id", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_onholp6yx7" FOREIGN KEY ("__node_ivjo2r5kcj") REFERENCES "qti"."site_path" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
 ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_kind_fbxz4p6yn5" FOREIGN KEY ("__node_4btbiqcyve", "__kind_xumnxfryga") REFERENCES "qti"."site_path" ("node", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_tag_name_href_tag_scope_external_uffcwup4ja" FOREIGN KEY ("__node_hy2rqw4ikb", "__tag_name_href_rc6np66dc4", "__tag_scope_external_4ewa3hwoox") REFERENCES "qti"."reference" ("node", "name", "scope") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
@@ -9273,9 +9359,9 @@ ALTER TABLE "qti"."site_path" ADD CONSTRAINT "__site_path_fk_package_path_yfbyle
 
 ALTER TABLE "qti"."site_path" ADD CONSTRAINT "__site_path_fk_package_path_ex4zefqeyp" FOREIGN KEY ("__package_4u77hcfcfr", "__path_hvkgesn5nq") REFERENCES "qti"."test_document" ("__package_wmb66a5rru", "__path_3zs6iyyad2") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_document_copy_sites_63inxc3u27" FOREIGN KEY ("document", "__copy_sites_xpayqcoikw") REFERENCES "qti"."test_document" ("node", "sites") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_document_copy_targets_i75vea6qw4" FOREIGN KEY ("document", "__copy_targets_6ogdagenxw") REFERENCES "qti"."test_document" ("node", "targets") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_document_predecessor_sites_2mwllaatl4" FOREIGN KEY ("document", "__predecessor_sites_kxwcigb3m3") REFERENCES "qti"."site_target" ("document", "__index_sites_ivugsthnfb") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_document_predecessor_targets_before_sltghtvbkf" FOREIGN KEY ("document", "__predecessor_targets_k3yzo72hhm", "__before_targets_0_soacumzj4x") REFERENCES "qti"."site_target" ("document", "__index_targets_afouzbizhs", "__after_targets_0_py6ituirmm") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_node_ancestry_document_kind_nearest_d2oaj65kci" FOREIGN KEY ("node", "ancestry", "document", "kind", "nearest", "nearest_kind", "parent_kind", "version") REFERENCES "qti"."site" ("node", "ancestry", "document", "kind", "nearest", "nearest_kind", "parent_kind", "version") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -9373,7 +9459,7 @@ ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_pred_n
 
 ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_pred_rules_t7unaekryq" FOREIGN KEY ("node", "__pred_rules_vfbblnhiag") REFERENCES "qti"."branch_rule" ("document", "__index_rules_ipm5ml6trm") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_pred_sites_cly5ttuur3" FOREIGN KEY ("node", "__pred_sites_62entkrpk5") REFERENCES "qti"."site_target" ("document", "__index_sites_ivugsthnfb") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_fk_node_pred_targets_sites_xjsxustzt6" FOREIGN KEY ("node", "__pred_targets_c5nt4iqzuc", "sites") REFERENCES "qti"."site_target" ("document", "__index_targets_afouzbizhs", "__after_targets_0_py6ituirmm") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."test_flag" ADD CONSTRAINT "__test_flag_fk_node_kind_parent_kind_r2rp7c7vuw" FOREIGN KEY ("node", "kind", "parent_kind") REFERENCES "qti"."node" ("id", "kind", "parent_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 

@@ -55,6 +55,25 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION "qti"."__rule_assembled_name_reading_in_found_name_fbbr5wm3eh"() FROM PUBLIC;
 
+CREATE OR REPLACE FUNCTION "qti"."__rule_attribute_item_ref_href_in_unread_type_href_5p67b6tn6q"() RETURNS "pg_catalog"."trigger"
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
+AS $$
+BEGIN
+  IF TG_OP <> 'INSERT'::"pg_catalog"."text" THEN
+    IF EXISTS (SELECT "r20"."c64", "r20"."c65" FROM (SELECT DISTINCT "r7"."c18", "r7"."c19" FROM (SELECT "r6"."c15", "r6"."c16" FROM (SELECT "r5"."c10", "r5"."c11", "r5"."c12", "r5"."c13" FROM (SELECT "r2"."c2", "r2"."c3", "r2"."c4", "r4"."c9" FROM (SELECT "r1"."href", "r1"."node", "r1"."package", "r1"."path", "r1"."scope" FROM "qti"."resource_href" AS "r1") AS "r2"("c1", "c2", "c3", "c4", "c5"), (SELECT "r3"."node", "r3"."package", "r3"."path", "r3"."targets" FROM "qti"."item_ref_href" AS "r3") AS "r4"("c6", "c7", "c8", "c9") WHERE "r2"."c3" = "r4"."c7" AND "r2"."c4" = "r4"."c8") AS "r5"("c10", "c11", "c12", "c13") WHERE "r5"."c13" = 0::bigint AND OLD."lexical"::"pg_catalog"."text" <> ''::"pg_catalog"."text" AND OLD."document_type"::smallint = 0::smallint AND OLD."kind"::smallint = 314::smallint AND OLD."name"::smallint = 133::smallint AND "r5"."c10" = OLD."node"::"pg_catalog"."uuid") AS "r6"("c14", "c15", "c16", "c17")) AS "r7"("c18", "c19") WHERE NOT EXISTS (SELECT 1 FROM (SELECT "r18"."c60", "r18"."c61" FROM (SELECT "r17"."c57", "r17"."c58" FROM (SELECT "r13"."c47", "r13"."c48", "r13"."c49", "r13"."c50" FROM (SELECT "r12"."c43", "r12"."c44", "r12"."c45", "r12"."c46" FROM (SELECT "r9"."c21", "r9"."c22", "r9"."c23", "r11"."c36" FROM (SELECT "r8"."href", "r8"."node", "r8"."package", "r8"."path", "r8"."scope" FROM "qti"."resource_href" AS "r8") AS "r9"("c20", "c21", "c22", "c23", "c24"), (SELECT "r10"."at", "r10"."attrs_after", "r10"."attrs_was", "r10"."document", "r10"."document_type", "r10"."entities", "r10"."governor", "r10"."id", "r10"."idref_text", "r10"."idrefs", "r10"."kind", "r10"."lexical", "r10"."name", "r10"."node", "r10"."open_name", "r10"."prefix", "r10"."slot", "r10"."version" FROM "qti"."attribute" AS "r10") AS "r11"("c25", "c26", "c27", "c28", "c29", "c30", "c31", "c32", "c33", "c34", "c35", "c36", "c37", "c38", "c39", "c40", "c41", "c42") WHERE "r9"."c21" = "r11"."c38" AND "r11"."c29" = 0::smallint AND "r11"."c35" = 314::smallint AND "r11"."c37" = 133::smallint) AS "r12"("c43", "c44", "c45", "c46") WHERE "r12"."c46" <> ''::"pg_catalog"."text") AS "r13"("c47", "c48", "c49", "c50") WHERE NOT EXISTS (SELECT 1 FROM (SELECT "r15"."c51" FROM (SELECT "r14"."node", "r14"."package", "r14"."type", "r14"."type_lexical" FROM "qti"."resource_typed" AS "r14") AS "r15"("c51", "c52", "c53", "c54")) AS "r16"("c55") WHERE "r16"."c55" = "r13"."c47")) AS "r17"("c56", "c57", "c58", "c59")) AS "r18"("c60", "c61")) AS "r19"("c62", "c63") WHERE "r19"."c62" = "r7"."c18" AND "r19"."c63" = "r7"."c19")) AS "r20"("c64", "c65")) THEN
+      RAISE EXCEPTION 'a write breaks a rule over a query'
+        USING ERRCODE = 'foreign_key_violation'::"pg_catalog"."text",
+              CONSTRAINT = '__rule_item_ref_href_in_unread_type_href_jvwqeo6zct'::"pg_catalog"."text",
+              SCHEMA = TG_TABLE_SCHEMA,
+              TABLE = TG_TABLE_NAME;
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE EXECUTE ON FUNCTION "qti"."__rule_attribute_item_ref_href_in_unread_type_href_5p67b6tn6q"() FROM PUBLIC;
+
 CREATE OR REPLACE FUNCTION "qti"."__rule_data_ssml_member_required_ssml_property_in_eergqouddg"() RETURNS "pg_catalog"."trigger"
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
 AS $$
@@ -393,6 +412,25 @@ END
 $$;
 
 REVOKE EXECUTE ON FUNCTION "qti"."__rule_item_ref_document_reading_declaration_in_fz6ujttujw"() FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION "qti"."__rule_item_ref_href_item_ref_href_in_unread_type_x4cgd366nd"() RETURNS "pg_catalog"."trigger"
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
+AS $$
+BEGIN
+  IF TG_OP <> 'DELETE'::"pg_catalog"."text" THEN
+    IF EXISTS (SELECT "r18"."c57", "r18"."c58" FROM (SELECT "r5"."c11", "r5"."c12" FROM (SELECT "r4"."c8", "r4"."c9" FROM (SELECT "r3"."c5", "r3"."c6", "r3"."c7" FROM (SELECT "r2"."c2", "r2"."c3", "r2"."c4" FROM (SELECT "r1"."node", "r1"."package", "r1"."path", "r1"."targets" FROM "qti"."item_ref_href" AS "r1") AS "r2"("c1", "c2", "c3", "c4") WHERE "r2"."c1" = NEW."node"::"pg_catalog"."uuid") AS "r3"("c5", "c6", "c7") WHERE "r3"."c7" = 0::bigint) AS "r4"("c8", "c9", "c10")) AS "r5"("c11", "c12") WHERE NOT EXISTS (SELECT 1 FROM (SELECT "r16"."c53", "r16"."c54" FROM (SELECT "r15"."c50", "r15"."c51" FROM (SELECT "r11"."c40", "r11"."c41", "r11"."c42", "r11"."c43" FROM (SELECT "r10"."c36", "r10"."c37", "r10"."c38", "r10"."c39" FROM (SELECT "r7"."c14", "r7"."c15", "r7"."c16", "r9"."c29" FROM (SELECT "r6"."href", "r6"."node", "r6"."package", "r6"."path", "r6"."scope" FROM "qti"."resource_href" AS "r6") AS "r7"("c13", "c14", "c15", "c16", "c17"), (SELECT "r8"."at", "r8"."attrs_after", "r8"."attrs_was", "r8"."document", "r8"."document_type", "r8"."entities", "r8"."governor", "r8"."id", "r8"."idref_text", "r8"."idrefs", "r8"."kind", "r8"."lexical", "r8"."name", "r8"."node", "r8"."open_name", "r8"."prefix", "r8"."slot", "r8"."version" FROM "qti"."attribute" AS "r8") AS "r9"("c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27", "c28", "c29", "c30", "c31", "c32", "c33", "c34", "c35") WHERE "r7"."c14" = "r9"."c31" AND "r9"."c22" = 0::smallint AND "r9"."c28" = 314::smallint AND "r9"."c30" = 133::smallint) AS "r10"("c36", "c37", "c38", "c39") WHERE "r10"."c39" <> ''::"pg_catalog"."text") AS "r11"("c40", "c41", "c42", "c43") WHERE NOT EXISTS (SELECT 1 FROM (SELECT "r13"."c44" FROM (SELECT "r12"."node", "r12"."package", "r12"."type", "r12"."type_lexical" FROM "qti"."resource_typed" AS "r12") AS "r13"("c44", "c45", "c46", "c47")) AS "r14"("c48") WHERE "r14"."c48" = "r11"."c40")) AS "r15"("c49", "c50", "c51", "c52")) AS "r16"("c53", "c54")) AS "r17"("c55", "c56") WHERE "r17"."c55" = "r5"."c11" AND "r17"."c56" = "r5"."c12")) AS "r18"("c57", "c58")) THEN
+      RAISE EXCEPTION 'a write breaks a rule over a query'
+        USING ERRCODE = 'foreign_key_violation'::"pg_catalog"."text",
+              CONSTRAINT = '__rule_item_ref_href_in_unread_type_href_jvwqeo6zct'::"pg_catalog"."text",
+              SCHEMA = TG_TABLE_SCHEMA,
+              TABLE = TG_TABLE_NAME;
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE EXECUTE ON FUNCTION "qti"."__rule_item_ref_href_item_ref_href_in_unread_type_x4cgd366nd"() FROM PUBLIC;
 
 CREATE OR REPLACE FUNCTION "qti"."__rule_item_ref_target_link_reading_check_e_1_tta5vo6xfq"() RETURNS "pg_catalog"."trigger"
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
@@ -1467,6 +1505,25 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION "qti"."__rule_resource_href_described_lang_in_resource_lom_eiixq44tpc"() FROM PUBLIC;
 
+CREATE OR REPLACE FUNCTION "qti"."__rule_resource_href_item_ref_href_in_unread_type_xgochmrs2s"() RETURNS "pg_catalog"."trigger"
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
+AS $$
+BEGIN
+  IF TG_OP <> 'INSERT'::"pg_catalog"."text" THEN
+    IF EXISTS (SELECT "r20"."c56", "r20"."c57" FROM (SELECT DISTINCT "r5"."c9", "r5"."c10" FROM (SELECT OLD."package"::"pg_catalog"."uuid", OLD."path"::"pg_catalog"."text" FROM (SELECT "r3"."c5", "r3"."c6" FROM (SELECT "r2"."c3", "r2"."c4" FROM (SELECT "r1"."node", "r1"."package", "r1"."path", "r1"."targets" FROM "qti"."item_ref_href" AS "r1") AS "r2"("c1", "c2", "c3", "c4") WHERE "r2"."c2" = OLD."package"::"pg_catalog"."uuid") AS "r3"("c5", "c6") WHERE "r3"."c6" = 0::bigint AND "r3"."c5" = OLD."path"::"pg_catalog"."text") AS "r4"("c7", "c8")) AS "r5"("c9", "c10") WHERE NOT EXISTS (SELECT 1 FROM (SELECT true FROM (SELECT "r17"."c53" FROM (SELECT "r16"."c52" FROM (SELECT "r15"."c48", "r15"."c49" FROM (SELECT "r11"."c38", "r11"."c39", "r11"."c40", "r11"."c41" FROM (SELECT "r10"."c34", "r10"."c35", "r10"."c36", "r10"."c37" FROM (SELECT "r7"."c12", "r7"."c13", "r7"."c14", "r9"."c27" FROM (SELECT "r6"."href", "r6"."node", "r6"."package", "r6"."path", "r6"."scope" FROM "qti"."resource_href" AS "r6") AS "r7"("c11", "c12", "c13", "c14", "c15"), (SELECT "r8"."at", "r8"."attrs_after", "r8"."attrs_was", "r8"."document", "r8"."document_type", "r8"."entities", "r8"."governor", "r8"."id", "r8"."idref_text", "r8"."idrefs", "r8"."kind", "r8"."lexical", "r8"."name", "r8"."node", "r8"."open_name", "r8"."prefix", "r8"."slot", "r8"."version" FROM "qti"."attribute" AS "r8") AS "r9"("c16", "c17", "c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27", "c28", "c29", "c30", "c31", "c32", "c33") WHERE "r7"."c12" = "r9"."c29" AND "r9"."c20" = 0::smallint AND "r9"."c26" = 314::smallint AND "r9"."c28" = 133::smallint) AS "r10"("c34", "c35", "c36", "c37") WHERE "r10"."c37" <> ''::"pg_catalog"."text") AS "r11"("c38", "c39", "c40", "c41") WHERE NOT EXISTS (SELECT 1 FROM (SELECT "r13"."c42" FROM (SELECT "r12"."node", "r12"."package", "r12"."type", "r12"."type_lexical" FROM "qti"."resource_typed" AS "r12") AS "r13"("c42", "c43", "c44", "c45")) AS "r14"("c46") WHERE "r14"."c46" = "r11"."c38")) AS "r15"("c47", "c48", "c49", "c50")) AS "r16"("c51", "c52") WHERE "r16"."c51" = OLD."package"::"pg_catalog"."uuid") AS "r17"("c53") WHERE "r17"."c53" = OLD."path"::"pg_catalog"."text") AS "r18"("c54")) AS "r19"("c55"))) AS "r20"("c56", "c57")) THEN
+      RAISE EXCEPTION 'a write breaks a rule over a query'
+        USING ERRCODE = 'foreign_key_violation'::"pg_catalog"."text",
+              CONSTRAINT = '__rule_item_ref_href_in_unread_type_href_jvwqeo6zct'::"pg_catalog"."text",
+              SCHEMA = TG_TABLE_SCHEMA,
+              TABLE = TG_TABLE_NAME;
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE EXECUTE ON FUNCTION "qti"."__rule_resource_href_item_ref_href_in_unread_type_xgochmrs2s"() FROM PUBLIC;
+
 CREATE OR REPLACE FUNCTION "qti"."__rule_resource_href_item_ref_target_in_typed_href_lqnrsl4qwl"() RETURNS "pg_catalog"."trigger"
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
 AS $$
@@ -1681,6 +1738,25 @@ END
 $$;
 
 REVOKE EXECUTE ON FUNCTION "qti"."__rule_resource_typed_described_lang_in_resource_lom_iwqvfr4nqb"() FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION "qti"."__rule_resource_typed_item_ref_href_in_unread_type_sfprsalhpx"() RETURNS "pg_catalog"."trigger"
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
+AS $$
+BEGIN
+  IF TG_OP <> 'DELETE'::"pg_catalog"."text" THEN
+    IF EXISTS (SELECT "r22"."c84", "r22"."c85" FROM (SELECT DISTINCT "r9"."c38", "r9"."c39" FROM (SELECT "r8"."c34", "r8"."c35" FROM (SELECT "r7"."c28", "r7"."c29", "r7"."c30", "r7"."c31", "r7"."c32" FROM (SELECT "r2"."c2", "r2"."c3", "r2"."c4", "r4"."c17", "r6"."c27" FROM (SELECT "r1"."href", "r1"."node", "r1"."package", "r1"."path", "r1"."scope" FROM "qti"."resource_href" AS "r1") AS "r2"("c1", "c2", "c3", "c4", "c5"), (SELECT "r3"."at", "r3"."attrs_after", "r3"."attrs_was", "r3"."document", "r3"."document_type", "r3"."entities", "r3"."governor", "r3"."id", "r3"."idref_text", "r3"."idrefs", "r3"."kind", "r3"."lexical", "r3"."name", "r3"."node", "r3"."open_name", "r3"."prefix", "r3"."slot", "r3"."version" FROM "qti"."attribute" AS "r3") AS "r4"("c6", "c7", "c8", "c9", "c10", "c11", "c12", "c13", "c14", "c15", "c16", "c17", "c18", "c19", "c20", "c21", "c22", "c23"), (SELECT "r5"."node", "r5"."package", "r5"."path", "r5"."targets" FROM "qti"."item_ref_href" AS "r5") AS "r6"("c24", "c25", "c26", "c27") WHERE "r2"."c2" = "r4"."c19" AND "r2"."c3" = "r6"."c25" AND "r2"."c4" = "r6"."c26" AND "r4"."c10" = 0::smallint AND "r4"."c16" = 314::smallint AND "r4"."c18" = 133::smallint) AS "r7"("c28", "c29", "c30", "c31", "c32") WHERE "r7"."c32" = 0::bigint AND "r7"."c31" <> ''::"pg_catalog"."text" AND "r7"."c28" = NEW."node"::"pg_catalog"."uuid") AS "r8"("c33", "c34", "c35", "c36", "c37")) AS "r9"("c38", "c39") WHERE NOT EXISTS (SELECT 1 FROM (SELECT "r20"."c80", "r20"."c81" FROM (SELECT "r19"."c77", "r19"."c78" FROM (SELECT "r15"."c67", "r15"."c68", "r15"."c69", "r15"."c70" FROM (SELECT "r14"."c63", "r14"."c64", "r14"."c65", "r14"."c66" FROM (SELECT "r11"."c41", "r11"."c42", "r11"."c43", "r13"."c56" FROM (SELECT "r10"."href", "r10"."node", "r10"."package", "r10"."path", "r10"."scope" FROM "qti"."resource_href" AS "r10") AS "r11"("c40", "c41", "c42", "c43", "c44"), (SELECT "r12"."at", "r12"."attrs_after", "r12"."attrs_was", "r12"."document", "r12"."document_type", "r12"."entities", "r12"."governor", "r12"."id", "r12"."idref_text", "r12"."idrefs", "r12"."kind", "r12"."lexical", "r12"."name", "r12"."node", "r12"."open_name", "r12"."prefix", "r12"."slot", "r12"."version" FROM "qti"."attribute" AS "r12") AS "r13"("c45", "c46", "c47", "c48", "c49", "c50", "c51", "c52", "c53", "c54", "c55", "c56", "c57", "c58", "c59", "c60", "c61", "c62") WHERE "r11"."c41" = "r13"."c58" AND "r13"."c49" = 0::smallint AND "r13"."c55" = 314::smallint AND "r13"."c57" = 133::smallint) AS "r14"("c63", "c64", "c65", "c66") WHERE "r14"."c66" <> ''::"pg_catalog"."text") AS "r15"("c67", "c68", "c69", "c70") WHERE NOT EXISTS (SELECT 1 FROM (SELECT "r17"."c71" FROM (SELECT "r16"."node", "r16"."package", "r16"."type", "r16"."type_lexical" FROM "qti"."resource_typed" AS "r16") AS "r17"("c71", "c72", "c73", "c74")) AS "r18"("c75") WHERE "r18"."c75" = "r15"."c67")) AS "r19"("c76", "c77", "c78", "c79")) AS "r20"("c80", "c81")) AS "r21"("c82", "c83") WHERE "r21"."c82" = "r9"."c38" AND "r21"."c83" = "r9"."c39")) AS "r22"("c84", "c85")) THEN
+      RAISE EXCEPTION 'a write breaks a rule over a query'
+        USING ERRCODE = 'foreign_key_violation'::"pg_catalog"."text",
+              CONSTRAINT = '__rule_item_ref_href_in_unread_type_href_jvwqeo6zct'::"pg_catalog"."text",
+              SCHEMA = TG_TABLE_SCHEMA,
+              TABLE = TG_TABLE_NAME;
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE EXECUTE ON FUNCTION "qti"."__rule_resource_typed_item_ref_href_in_unread_type_sfprsalhpx"() FROM PUBLIC;
 
 CREATE OR REPLACE FUNCTION "qti"."__rule_resource_typed_item_ref_target_in_typed_href_gkrht6ed6c"() RETURNS "pg_catalog"."trigger"
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
@@ -1950,6 +2026,11 @@ CREATE CONSTRAINT TRIGGER "__rule_reading_in_found_name_tav444v4qg"
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_assembled_name_reading_in_found_name_fbbr5wm3eh"();
 
+CREATE CONSTRAINT TRIGGER "__rule_item_ref_href_in_unread_type_href_jvwqeo6zct"
+  AFTER DELETE OR UPDATE OF "document_type", "kind", "lexical", "name", "node" ON "qti"."attribute"
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_attribute_item_ref_href_in_unread_type_href_5p67b6tn6q"();
+
 CREATE CONSTRAINT TRIGGER "__rule_required_ssml_property_in_data_ssml_property_rbvm655642"
   AFTER INSERT OR UPDATE OF "at", "member", "node" ON "qti"."data_ssml_member"
   DEFERRABLE INITIALLY DEFERRED
@@ -2029,6 +2110,11 @@ CREATE CONSTRAINT TRIGGER "__rule_reading_declaration_in_declared_reading_jziwkf
   AFTER DELETE OR UPDATE OF "document", "node" ON "qti"."item_ref_document"
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_item_ref_document_reading_declaration_in_fz6ujttujw"();
+
+CREATE CONSTRAINT TRIGGER "__rule_item_ref_href_in_unread_type_href_jvwqeo6zct"
+  AFTER INSERT OR UPDATE OF "package", "path", "targets" ON "qti"."item_ref_href"
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_item_ref_href_item_ref_href_in_unread_type_x4cgd366nd"();
 
 CREATE CONSTRAINT TRIGGER "__rule_link_reading_check_e_1_derived_j2456witxl"
   AFTER INSERT OR UPDATE OF "node", "type" ON "qti"."item_ref_target"
@@ -2265,6 +2351,11 @@ CREATE CONSTRAINT TRIGGER "__rule_described_lang_in_resource_lom_language_set_ad
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_resource_href_described_lang_in_resource_lom_eiixq44tpc"();
 
+CREATE CONSTRAINT TRIGGER "__rule_item_ref_href_in_unread_type_href_jvwqeo6zct"
+  AFTER DELETE OR UPDATE OF "node", "package", "path" ON "qti"."resource_href"
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_resource_href_item_ref_href_in_unread_type_xgochmrs2s"();
+
 CREATE CONSTRAINT TRIGGER "__rule_item_ref_target_in_typed_href_x3bbrw4fae"
   AFTER DELETE OR UPDATE OF "node", "package", "path", "scope" ON "qti"."resource_href"
   DEFERRABLE INITIALLY DEFERRED
@@ -2314,6 +2405,11 @@ CREATE CONSTRAINT TRIGGER "__rule_described_lang_in_resource_lom_language_set_ad
   AFTER INSERT OR UPDATE OF "node", "package", "type" ON "qti"."resource_typed"
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_resource_typed_described_lang_in_resource_lom_iwqvfr4nqb"();
+
+CREATE CONSTRAINT TRIGGER "__rule_item_ref_href_in_unread_type_href_jvwqeo6zct"
+  AFTER INSERT OR UPDATE OF "node" ON "qti"."resource_typed"
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_resource_typed_item_ref_href_in_unread_type_sfprsalhpx"();
 
 CREATE CONSTRAINT TRIGGER "__rule_item_ref_target_in_typed_href_x3bbrw4fae"
   AFTER DELETE OR UPDATE OF "node", "type" ON "qti"."resource_typed"
@@ -2514,6 +2610,17 @@ BEGIN
     RAISE EXCEPTION 'law __held_type_in_variable_ref_table_yv5wigff2b is violated by existing rows'
       USING ERRCODE = 'integrity_constraint_violation'::"pg_catalog"."text",
             CONSTRAINT = '__held_type_in_variable_ref_table_yv5wigff2b'::"pg_catalog"."text";
+  END IF;
+END
+$$;
+
+-- The full violation query of law __item_ref_href_in_unread_type_href_6ch72pgwxj.
+DO $$
+BEGIN
+  IF EXISTS (SELECT "r20"."c60" AS "t0", "r20"."c61" AS "t1" FROM (SELECT DISTINCT "r5"."c11", "r5"."c12" FROM (SELECT DISTINCT "r4"."c8", "r4"."c9" FROM (SELECT DISTINCT "r3"."c5", "r3"."c6", "r3"."c7" FROM (SELECT DISTINCT "r2"."c2", "r2"."c3", "r2"."c4" FROM (SELECT DISTINCT "r1"."node", "r1"."package", "r1"."path", "r1"."targets" FROM "qti"."item_ref_href" AS "r1") AS "r2"("c1", "c2", "c3", "c4")) AS "r3"("c5", "c6", "c7") WHERE "r3"."c7" = 0::bigint) AS "r4"("c8", "c9", "c10")) AS "r5"("c11", "c12") WHERE NOT EXISTS (SELECT 1 FROM (SELECT DISTINCT "r18"."c56", "r18"."c57" FROM (SELECT DISTINCT "r17"."c54", "r17"."c55" FROM (SELECT DISTINCT "r16"."c51", "r16"."c52" FROM (SELECT DISTINCT "r11"."c40", "r11"."c41", "r11"."c42", "r11"."c43" FROM (SELECT DISTINCT "r10"."c36", "r10"."c37", "r10"."c38", "r10"."c39" FROM (SELECT DISTINCT "r7"."c14", "r7"."c15", "r7"."c16", "r9"."c29" FROM (SELECT DISTINCT "r6"."href", "r6"."node", "r6"."package", "r6"."path", "r6"."scope" FROM "qti"."resource_href" AS "r6") AS "r7"("c13", "c14", "c15", "c16", "c17"), (SELECT DISTINCT "r8"."at", "r8"."attrs_after", "r8"."attrs_was", "r8"."document", "r8"."document_type", "r8"."entities", "r8"."governor", "r8"."id", "r8"."idref_text", "r8"."idrefs", "r8"."kind", "r8"."lexical", "r8"."name", "r8"."node", "r8"."open_name", "r8"."prefix", "r8"."slot", "r8"."version" FROM "qti"."attribute" AS "r8") AS "r9"("c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27", "c28", "c29", "c30", "c31", "c32", "c33", "c34", "c35") WHERE "r7"."c14" = "r9"."c31" AND "r9"."c22" = 0::smallint AND "r9"."c28" = 314::smallint AND "r9"."c30" = 133::smallint) AS "r10"("c36", "c37", "c38", "c39") WHERE "r10"."c39" <> ''::"pg_catalog"."text") AS "r11"("c40", "c41", "c42", "c43") WHERE NOT EXISTS (SELECT 1 FROM (SELECT DISTINCT "r14"."c48" FROM (SELECT DISTINCT "r13"."c44" FROM (SELECT DISTINCT "r12"."node", "r12"."package", "r12"."type", "r12"."type_lexical" FROM "qti"."resource_typed" AS "r12") AS "r13"("c44", "c45", "c46", "c47")) AS "r14"("c48")) AS "r15"("c49") WHERE "r15"."c49" = "r11"."c40")) AS "r16"("c50", "c51", "c52", "c53")) AS "r17"("c54", "c55")) AS "r18"("c56", "c57")) AS "r19"("c58", "c59") WHERE "r19"."c58" = "r5"."c11" AND "r19"."c59" = "r5"."c12")) AS "r20"("c60", "c61")) THEN
+    RAISE EXCEPTION 'law __item_ref_href_in_unread_type_href_6ch72pgwxj is violated by existing rows'
+      USING ERRCODE = 'integrity_constraint_violation'::"pg_catalog"."text",
+            CONSTRAINT = '__item_ref_href_in_unread_type_href_6ch72pgwxj'::"pg_catalog"."text";
   END IF;
 END
 $$;
