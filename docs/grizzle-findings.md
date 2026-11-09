@@ -2581,3 +2581,33 @@ Found at grizzle `4b0d45e`, the vendored commit, and unchanged on trunk `76c2763
   defect, which pantry does not make.
 - **Status.** Sent to grizzle-c5 with the full role's finding above. pantry holds no workaround: R1 waits for the
   repin.
+
+## A check over a query takes its check's name on every table the query reads, so it collides with a CHECK there (grizzle limit, by design at `4b0d45e`; lanes G and E)
+
+Found by lane G at grizzle `4b0d45e`, the vendored commit, stating a check over a query in `Qti`'s level of queries;
+the cause is unchanged on trunk `76c27633` (2026-11-08).
+
+- **What happens.** A `check(name, D, …)` over a derived relation `D` whose query reads a table that holds a row check
+  of the same name is refused when the schema is built: `check("E1_derived", DeclaredReference, …)` over `VariableRef`
+  fails with `IdentifierCollision … both convert to e_1_derived (colliding with check E1_derived at
+  VariableRef.check.E1_derived)`. A containment over a query is named by a digest of its law and never collides.
+- **Cause.** A rule over a query is held by a deferred constraint trigger on each table its query reads, and a check's
+  triggers take the check's own name (`#ruleTrigger`, `packages/engine/src/laws/model/model.ts:1096-1103`: `d.rule.kind
+  === "check" ? d.rule.named : identity.lawTrigger(law.named)`). So `#derivedCheck` (`packages/engine/src/schema/own.ts:
+  1707-1741`) declares the name in the check namespace of the derived relation and of every stored table below it,
+  since PostgreSQL holds a table's constraint triggers and CHECKs in one namespace. The refusal is deliberate, and the
+  README says nothing of it: its "Rules over queries" names only the SQLSTATE a rule raises.
+- **Reproduction.** `~/.cache/gr8des/integration/grizzle-repros/rule-check-name/`, run from any directory that resolves
+  `@bjornpagen/grizzle`: `Base` holds `Item { id, n }` with `check("Small", Item, n < 10)`; `Top` extends it with
+  `Items`, a live derived relation over `Item`, and `check("Small", Items, n < 5)`. `grizzle generate defect.config.ts`
+  is refused at stage config with the collision; the control, the same check over the query named `Smaller`,
+  generates. Verbatim output in `output.txt`.
+- **Why it costs pantry.** Every check is named by its oracle law with spaces written as underscores
+  (`#pantry/import/refusal.ts` `checkNameOf`), and "E1 derived" names a check on most tables, so a check over a query
+  under that law collides wherever its query reads one of them. "Document entry"'s check over `TypedHref` does not:
+  neither `ResourceHref` nor `ResourceTyped` holds a `Document_entry` CHECK.
+- **Workaround.** State such a rule as a containment into a selection of the stored relation (lane G's R7), which a
+  digest names.
+- **Fix direction.** Name a check's triggers by a digest of its law, as every other rule's are, and let the outcome
+  name the check by its law (`constraintToLaw`) and `constraintNameOf` name the trigger, so a check over a query takes no
+  name in the tables below it. Sent to grizzle-c5 by the coordinator.
