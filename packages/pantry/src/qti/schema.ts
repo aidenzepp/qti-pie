@@ -18,6 +18,19 @@ import { cdnLawsByName } from "#pantry/qti/cdn.ts";
 import { queryLaws, queryRelations } from "#pantry/qti/queries.ts";
 
 /**
+ * A type, or `never` where it is `any`: only `any` meets `1 & S` at `0`.
+ */
+type Typed<S> = 0 extends 1 & S ? never : S;
+
+/**
+ * A list of statements, or `never` where the list or its statement type is `any`. A list of rules
+ * typed `any` would type every statement of `Qti` `any`, and with them every nested member's count
+ * (`#pantry/qti/queries.ts` `QueryStatement`), so the rules over queries are held to it, and an
+ * `any` there fails the typecheck here.
+ */
+type TypedStatements<L extends readonly unknown[]> = Typed<L> & readonly Typed<L[number]>[];
+
+/**
  * Build the QTI 3.0 schema over a stored level: the level `QtiQueries`, holding every query and
  * every rule over one.
  *
@@ -29,7 +42,12 @@ import { queryLaws, queryRelations } from "#pantry/qti/queries.ts";
  * @returns The schema.
  */
 const qtiOf = (base: typeof QtiBase) =>
-  schema.extend(base, "QtiQueries", queryRelations, queryLaws);
+  schema.extend(
+    base,
+    "QtiQueries",
+    queryRelations,
+    queryLaws satisfies TypedStatements<typeof queryLaws>,
+  );
 
 /**
  * The QTI 3.0 schema of this package's own install: no policy, so its statements are exactly the

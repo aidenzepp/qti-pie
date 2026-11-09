@@ -24,6 +24,15 @@ export const queryRelations = {};
 export const queryLawsByName = [] as const;
 
 /**
- * Every rule over a query, each domain's in {@link queryLawsByName}'s order.
+ * One rule over a query, as its domain states it: the union of each domain's statement types, each
+ * read from that domain's one record (`Object.values(record).flat()`), never from the list of
+ * records. `Object.values` over a union of records falls back to lib's `values(o: {}): any[]`, and
+ * a statement typed `any` types every statement of `Qti` `any` with it, so that grizzle can tell no
+ * nested member's count apart (`#pantry/qti/schema.ts` holds this type to no `any`). None yet.
  */
-export const queryLaws: readonly never[] = [];
+type QueryStatement = never;
+
+/**
+ * Every rule over a query, each domain's list spread in {@link queryLawsByName}'s order.
+ */
+export const queryLaws: readonly QueryStatement[] = [];
