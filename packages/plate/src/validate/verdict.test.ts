@@ -2678,6 +2678,7 @@ const align54Wordings: readonly {
   },
   {
     detail: {
+      cardinality: "single",
       check: "gap-match-single",
       gaps: "3",
       interaction: "qti-gap-match-interaction",
@@ -3532,6 +3533,39 @@ describe("describeRefusal", () => {
       "To make it valid: name in `string-identifier` a `string` response of the cardinality of the response `response-identifier` binds, or change the declaration of `NOTES`.",
     );
     assert.notInclude(sentence, "a single `string` response");
+  });
+
+  it("align-54 r11 gaps bind multiple P7: words a Gap Match of several gaps bound ordered as naming an ordered response (reading 169)", () => {
+    const sentence = describeRefusal(
+      refusalOf("binding", {
+        cardinality: "ordered",
+        check: "gap-match-single",
+        gaps: "2",
+        interaction: "qti-gap-match-interaction",
+        response: "RESPONSE",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-gap-match-interaction` holds 2 gaps and is bound to `RESPONSE`, an ordered response, and an interaction of several gaps needs a `multiple` response.",
+    );
+    assert.notInclude(sentence, "a single response");
+  });
+
+  it("align-54 r11 gaps bind multiple P7: keeps a Gap Match of several gaps bound single worded as before (reading 169)", () => {
+    assert.strictEqual(
+      describeRefusal(
+        refusalOf("binding", {
+          cardinality: "single",
+          check: "gap-match-single",
+          gaps: "3",
+          interaction: "qti-gap-match-interaction",
+          response: "RESPONSE",
+        }),
+      ),
+      '**`item.xml`, at `qti-assessment-item`: refused.** `qti-gap-match-interaction` holds 3 gaps and is bound to `RESPONSE`, a single response, and an interaction of several gaps needs a `multiple` response. Rule `binding`. To make it valid: declare `RESPONSE` with `cardinality="multiple"`.',
+    );
   });
 
   it("keeps a value holding backticks inside one code span, whole", () => {

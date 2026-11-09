@@ -804,10 +804,17 @@ const countRules = (source: SourceDocument, visit: Visit): readonly Refusal[] =>
  * or more gaps binds a response of multiple cardinality"), beside reading 92's sentence on
  * `max-associations`: the gap match "must be bound to a response variable with base-type
  * 'directedPair' and either single or multiple cardinality, depending on the number of gaps"
- * (info.txt:8792), so one of two or more `qti-gap`s bound to a `single` response is `binding` with
- * `check: "gap-match-single"`; main and pantry refuse it too (pantry's `Binding cardinality` law,
- * `packages/pantry/src/qti/interactions.ts`). It is judged only where the count gives no refusal,
- * so a gap match bound single gets one refusal, whose remedy, a `multiple` response, is the same.
+ * (info.txt:8792), and "with one gap either cardinality may bind, and with two or more only
+ * `multiple` may". So a gap match of two or more `qti-gap`s bound to a response that is not
+ * `multiple` (`single`, `ordered` or `record`) is `binding` with `check: "gap-match-single"`, whose
+ * `cardinality` is the response's. Main and pantry refuse each of them too: pantry's `Binding
+ * cardinality` law refuses a `single` one (`packages/pantry/src/qti/interactions.ts`), and its fit
+ * laws an `ordered` one (`BindingFit`, which admits a gap match bound `single` or `multiple`) and a
+ * `record` one (`RecordBindingFit`, which admits no gap match), both in
+ * `packages/pantry/src/grammar/facets.ts`. A gap match of one gap is not judged here: binding it
+ * `ordered` or `record` is outside E11's reach. The gaps are judged only where the count gives no
+ * refusal, so a gap match bound otherwise than `multiple` gets one refusal, whose remedy, a
+ * `multiple` response, is the same.
  *
  * @param source The document.
  * @param visit The interaction's visit.
@@ -843,15 +850,14 @@ const cardinalityRules = (
           ],
   });
   const gaps =
-    counted.length === 0 &&
-    cardinality === "single" &&
-    visit.element.local === "qti-gap-match-interaction"
+    counted.length === 0 && visit.element.local === "qti-gap-match-interaction"
       ? gapsIn(visit.element).length
       : 0;
 
   return gaps > 1
     ? [
         refusal(source, "binding", visit.path, {
+          cardinality,
           check: "gap-match-single",
           gaps: gaps.toString(),
           interaction: visit.element.local,
