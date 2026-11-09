@@ -700,15 +700,41 @@ const isSingleDeclaration = (parent: Option.Option<SourceElement>): boolean =>
 
 /**
  * The identifiers of the built-in session variables, which "are reserved" (info.txt:12006), so no
- * declaration may take one: the qti package refuses a declaration of any kind that does by its
- * `Declaration not reserved` law (`packages/pantry/src/qti/declarations.ts`). An identifier is an
- * NCName, compared exactly after collapse, so `Duration` is another name.
+ * declaration in an item, or in a document whose root is a declaration, may take one: the qti
+ * package refuses such a declaration of any kind by its `Declaration not reserved` law
+ * (`packages/pantry/src/qti/declarations.ts`). A test reserves fewer,
+ * {@link testReservedIdentifiers} (reading 168). An identifier is an NCName, compared exactly after
+ * collapse, so `Duration` is another name.
  */
 const reservedIdentifiers: ReadonlySet<string> = new Set([
   "completionStatus",
   "duration",
   "numAttempts",
 ]);
+
+/**
+ * The identifiers a declaration in a test may not take. Reading 168 ("A test may declare a variable
+ * named `numAttempts` or `completionStatus`; in a test only `duration` is reserved"): a test's
+ * processing holds `duration` as a built-in and neither of the other two, so a test's declaration
+ * of either shadows no built-in of the test. The qti package's `Declaration not reserved` law is
+ * narrowed alike.
+ */
+const testReservedIdentifiers: ReadonlySet<string> = new Set(["duration"]);
+
+/**
+ * The identifiers each kind of document reserves, with the values its declarations may take, for
+ * the wording: whether the row judges a declaration in a test ({@link inTest}), the identifiers it
+ * reserves there, and `expected`. Every declaration sits in a test or not, so exactly one row
+ * judges it.
+ */
+const reservedIdentifierRows = [
+  [
+    false,
+    reservedIdentifiers,
+    "an identifier other than the built-in variables' completionStatus, numAttempts and duration",
+  ],
+  [true, testReservedIdentifiers, "an identifier other than the built-in variable duration"],
+] as const;
 
 /**
  * Each declaration, with the line of the information model that keeps the built-in variables'
@@ -833,6 +859,20 @@ const valuedAs =
   (identifier: string, inTests: boolean) =>
   (lexical: string, element: SourceElement, path: string): boolean =>
     lexical !== "record" || !typedHere(identifier, inTests, element, path);
+
+/**
+ * Report whether a row of {@link reservedIdentifierRows} leaves a declaration its `identifier`: the
+ * row judges only a declaration in the kind of document it is for, a test or any other
+ * ({@link inTest}), and holds for every other.
+ *
+ * @param inTests Whether the row is for a declaration in a test.
+ * @param reserved The identifiers the row reserves.
+ * @returns Whether a collapsed `identifier` meets the row on its declaration at its path.
+ */
+const unreservedIn =
+  (inTests: boolean, reserved: ReadonlySet<string>) =>
+  (lexical: string, _element: SourceElement, path: string): boolean =>
+    inTest(path) !== inTests || !reserved.has(lexical);
 
 /**
  * A number in `xs:double`'s lexical space that is above 0 but for `INF`, read off the number as
@@ -1277,18 +1317,22 @@ const readingRows: readonly ReadingRow[] = [
   },
   // The information model reserves the built-in session variables' identifiers, `completionStatus`,
   // `numAttempts` and `duration`, from every declaration (info.txt:12006, :22603, :39226, :45843),
-  // as pantry's `DeclarationNotReserved` refuses a declaration of any kind that takes one, in an
-  // item or a test. Admitted, such a declaration would shadow the built-in it names.
-  ...reservingDeclarations.map(([element, source]): NarrowedAttribute => ({
-    attribute: "identifier",
-    elements: [element],
-    expected:
-      "an identifier other than the built-in variables' completionStatus, numAttempts and duration",
-    holds: (lexical) => !reservedIdentifiers.has(lexical),
-    kind: "narrowed-attribute",
-    settled: { check: "reserved-identifier", pantry: "DeclarationNotReserved", source },
-    whiteSpace: "collapse",
-  })),
+  // as pantry's `DeclarationNotReserved` refuses a declaration of any kind that takes one.
+  // Admitted, such a declaration would shadow the built-in it names. Reading 168 ("A test may
+  // declare a variable named `numAttempts` or `completionStatus`; in a test only `duration` is
+  // reserved") narrows it in a test, whose processing holds neither of the other two: an item, and
+  // a document whose root is a declaration, keep all three reserved.
+  ...reservingDeclarations.flatMap(([element, source]): readonly NarrowedAttribute[] =>
+    reservedIdentifierRows.map(([inTests, reserved, expected]): NarrowedAttribute => ({
+      attribute: "identifier",
+      elements: [element],
+      expected,
+      holds: unreservedIn(inTests, reserved),
+      kind: "narrowed-attribute",
+      settled: { check: "reserved-identifier", pantry: "DeclarationNotReserved", source },
+      whiteSpace: "collapse",
+    })),
+  ),
   // The information model fixes the base types of three outcomes: an item's SCORE and MAXSCORE are
   // floats, and an item's or a test's PASSED a boolean (§4.5, info.txt:11979); a test's SCORE and
   // MAXSCORE may be of any base type, a record included (P8). A record has no base type (reading
