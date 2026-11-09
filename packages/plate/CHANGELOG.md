@@ -41,6 +41,11 @@ and each of its entry points is unstable until M3.
   is hidden as inside hidden template content: `postings` lists none for its response,
   `checkResponses` ignores it, and `score` keeps the record's value. `Redacted`'s `responses` and
   `notices` leave out what only hidden feedback holds.
+- Each modal feedback section carries `data-credit`, `full`, `partial` or `none`, from the
+  attempt's own `SCORE` against its own `MAXSCORE`, or none where those cannot say, as the README's
+  [Feedback](README.md#feedback) section lists. `Redacted`, and its JSON form, gains `credit`, an
+  optional key absent when no modal feedback shows. The model reads an outcome declaration's
+  `external-scored`.
 - `Redacted`, and its JSON form, gains `modalFeedback`, each modal feedback shown with its content
   and its `title`. `decodeRedacted` refuses JSON whose body holds a feedback block or inline, or
   whose modal feedback holds an interaction.

@@ -67,11 +67,13 @@ const themeLine = "/* == theme: plate's default theme, on the part markers == */
  * The only attribute names a selector may test: `data-slot`, the part marker; `data-mode` and
  * `data-disabled`, the Root's state; `aria-invalid` and `type` on a Control; `data-orientation`,
  * the authored orientation on the Choice Root; `aria-current`, which the current item's button
- * carries; and `readonly`, which a text Control carries in review and solution.
+ * carries; `readonly`, which a text Control carries in review and solution; and `data-credit`, the
+ * credit a modal feedback carries.
  */
 const attributeNames: ReadonlySet<string> = new Set([
   "aria-current",
   "aria-invalid",
+  "data-credit",
   "data-disabled",
   "data-mode",
   "data-orientation",

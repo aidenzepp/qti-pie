@@ -10,6 +10,10 @@
  * https://github.com/shadcn-ui/ui/blob/4aaea19d9cff3e0908e12a8c1d504b8c5ec34610/apps/v4/content/docs/(root)/theming.mdx
  * (lines 204-223). It declares no token: the host's theme sets them, at :root and .dark.
  *
+ * Colours that are not tokens: the credit marks' green, oklch(0.6 0.16 150), for full credit, and
+ * amber, oklch(0.62 0.16 60), for partial credit, since shadcn has no success or warning token.
+ * Each holds the 3:1 a graphical object needs (WCAG 1.4.11) on the card in light and in .dark.
+ *
  * Every rule sits inside :where(), so it weighs nothing and any host rule wins by order; only the
  * authored qti-* classes count. Every combinator is the descendant one, so a part swapped for the
  * host's own markup, with wrappers between, still matches.
@@ -907,7 +911,11 @@
  * inline start in the credit's colour, the other sides keeping the card's 1px border, and a mark
  * level with its first line, in the space the wider start padding leaves. The mark's alternative
  * text is empty: the feedback's own words say how the answer did, and the mark and colour repeat it
- * for the eye. Each colour holds 3:1 on the card in light and in .dark, as a graphical object needs.
+ * for the eye; its shape carries the result where colour does not (WCAG 1.4.1), forced colours
+ * included. Each colour holds 3:1 on the card in light and in .dark, as a graphical object needs.
+ * The plain content written first is the fallback of a browser without the alternative-text form,
+ * which then announces the glyph. The mark sits level with the first line when the content's first
+ * block has no top margin, as under a reset that zeroes a p's margins.
  */
 :where([data-slot="item-modal-feedback"][data-credit]) {
   position: relative;
@@ -927,6 +935,7 @@
 }
 
 :where([data-slot="item-modal-feedback"][data-credit="full"])::before {
+  content: "\2713";
   content: "\2713" / "";
   color: oklch(0.6 0.16 150);
 }
@@ -936,6 +945,7 @@
 }
 
 :where([data-slot="item-modal-feedback"][data-credit="partial"])::before {
+  content: "\25D0";
   content: "\25D0" / "";
   color: oklch(0.62 0.16 60);
 }
@@ -945,6 +955,7 @@
 }
 
 :where([data-slot="item-modal-feedback"][data-credit="none"])::before {
+  content: "\2717";
   content: "\2717" / "";
   color: var(--destructive, oklch(0.577 0.245 27.325));
 }

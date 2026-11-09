@@ -598,6 +598,14 @@ What the page gets:
   its `title` as its `aria-label`. A record that holds no value of its outcome shows the section
   with only a notice in it. Swap the part through `parts: { item: { modalFeedback } }` for your own
   flow container, such as an `aside`, or a custom element that opens it as a dialog.
+- Each modal feedback section carries `data-credit`, the credit the attempt earned by its own
+  `SCORE` (s) against its own `MAXSCORE` (m): `full` when s >= m, `none` when s <= 0, and `partial`
+  between. It carries none, and the card stays neutral, when the item declares no `MAXSCORE`, when
+  either outcome is not a single float or holds NULL or a value that is not finite, when m <= 0,
+  when `SCORE` carries `external-scored`, and when either outcome's `view` leaves out `candidate`.
+  A swapped part keeps it, as it keeps `aria-label`. The default theme draws it as a 4px edge and a
+  mark, a green ✓, an amber ◐ or a red ✗, with no words; the feedback's own text says how the answer
+  did.
 - An interaction inside hidden feedback, which only an adaptive item may hold, is hidden too, as
   inside hidden template content: `postings` lists none for its response, `checkResponses` ignores
   it, and `score` keeps the record's value whatever is posted. A notice inside hidden feedback is
