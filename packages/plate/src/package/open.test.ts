@@ -3465,23 +3465,35 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "files leaves out every file a QTI resource with an absolute href lists, a local document and an image among them, while a QTI resource with a package href keeps the files it lists besides its document",
+      "align-54 hrefs and keys E17: a QTI document resource with an absolute href is refused package-path-outside, check document-entry, while a webcontent resource with one keeps every local file it lists",
       () =>
         Effect.gen(function* absoluteHref() {
           const remote = "https://example.org/items/r.xml";
-          const verdict = yield* openPackage(
-            location,
-            packageOf({
-              "items/a.png": "PNG",
-              "items/a.xml": itemXml("a", "SCORE"),
-              "items/r.png": "PNG",
-              "items/r.xml": itemXml("r", "SCORE"),
-              [manifestFile]: manifestXml(
-                `<resource identifier="R" type="imsqti_item_xmlv3p0" href="${remote}"><file href="${remote}"/><file href="items/r.xml"/><file href="items/r.png"/></resource>`,
-                '<resource identifier="A" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/><file href="items/a.png"/></resource>',
-              ),
-            }),
-          );
+          const packageTyped = (type: string) =>
+            openPackage(
+              location,
+              packageOf({
+                "items/a.png": "PNG",
+                "items/a.xml": itemXml("a", "SCORE"),
+                "items/r.png": "PNG",
+                "items/r.xml": itemXml("r", "SCORE"),
+                [manifestFile]: manifestXml(
+                  `<resource identifier="R" type="${type}" href="${remote}"><file href="${remote}"/><file href="items/r.xml"/><file href="items/r.png"/></resource>`,
+                  '<resource identifier="A" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/><file href="items/a.png"/></resource>',
+                ),
+              }),
+            );
+
+          assert.deepStrictEqual(refusalsOf(yield* packageTyped("imsqti_item_xmlv3p0")), [
+            {
+              detail: { check: "document-entry", path: remote, reading: "102" },
+              document: fileLocation(location, manifestFile),
+              location: { kind: "path", path: `${resourceAt(1)}/@href` },
+              rule: "package-path-outside",
+            },
+          ]);
+
+          const verdict = yield* packageTyped("webcontent");
           const accepted = acceptedOf(verdict);
 
           assert.isTrue(Option.isNone(resourceOf(verdict, "R").path));
@@ -3489,7 +3501,11 @@ describe("package/open.ts", () => {
             [...accepted.items.keys()],
             [fileLocation(location, "items/a.xml")],
           );
-          assert.deepStrictEqual([...accepted.files], ["items/a.png"]);
+          assert.deepStrictEqual([...accepted.files].toSorted(), [
+            "items/a.png",
+            "items/r.png",
+            "items/r.xml",
+          ]);
         }),
     );
 
