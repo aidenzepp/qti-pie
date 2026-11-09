@@ -179,7 +179,8 @@ export type OutcomeProcessing =
  * states. `unsupported` lists every feature not delivered, in document order, each once per feature
  * and path: the keys of `testMarks`, the marks the item model gives an outcome declaration it does
  * not hold, and the marks of outcome processing the engine cannot run. A package's test may follow
- * them with the marks only its items show ({@link withUnheldReads}).
+ * them with the marks only its items show ({@link withUnheldReads}) and those of its item refs that
+ * name an LTI link ({@link withLtiLinks}).
  */
 export interface Test {
   /**
@@ -1668,6 +1669,80 @@ export const withUnheldReads = (test: Test, reads: readonly UnheldRead[]): Test 
         ? { kind: "marked" }
         : test.outcomeProcessing,
     parts: test.parts.map((part) => ({ ...part, children: part.children.map(sectionWith) })),
+    unsupported: [...test.unsupported, ...added],
+  };
+};
+
+/**
+ * An item ref of a test document that names an LTI link in place of an item (reading 110, "a
+ * variable mapping and a template default name variables an item declares, so under an item ref
+ * that names an LTI link both are refused"), which the test model cannot see from the test
+ * document alone: its identifier, and its path in the test document. A package, which reads the
+ * resource an item ref names, finds each one.
+ */
+export interface LtiLink {
+  readonly identifier: string;
+  readonly path: string;
+}
+
+/**
+ * The mark of an item ref that names an LTI link, at the item ref's path.
+ */
+const ltiLinkMark: TestMark = "lti-link";
+
+/**
+ * Give a test whose item refs that name an LTI link are marked and left out of the tree, as every
+ * other `testMarks` feature is, so a session walked from it never meets them: plate launches no LTI
+ * link, and an LTI link holds no item a session could deliver.
+ *
+ * Each item ref of an identifier a link names is left out of its section, a nested section's
+ * included, and each link is the mark `lti-link` at its path, the marks following the test's own in
+ * `unsupported`, each once per path. The item ref's identifier stays a name of the test's
+ * structure, so the test's own reads through it stay as the test model read them; a package marks
+ * each read through it that the engine holds no value of ({@link withUnheldReads}). A test with no
+ * links is returned unchanged.
+ *
+ * @param test The test model, as {@link buildTest} gives it.
+ * @param links The test document's item refs that name an LTI link, in document order.
+ * @returns The test without them, each marked.
+ */
+export const withLtiLinks = (test: Test, links: readonly LtiLink[]): Test => {
+  if (links.length === 0) {
+    return test;
+  }
+
+  const linked = new Set(links.map(({ identifier }) => identifier));
+
+  /**
+   * Give a section without the item refs, its nested sections' included, that name an LTI link.
+   *
+   * @param held The section.
+   * @returns The section.
+   */
+  const unlinked = (held: Section): Section => ({
+    ...held,
+    children: held.children.flatMap((child): readonly SectionChild[] => {
+      if (child.kind === "section") {
+        return [unlinked(child)];
+      }
+
+      return linked.has(child.identifier) ? [] : [child];
+    }),
+  });
+
+  const marked = new Set(test.unsupported.map(markKey));
+  const added: MarkedFeature[] = [];
+  for (const { path } of links) {
+    const mark: MarkedFeature = { feature: ltiLinkMark, path, shown: "mark" };
+    if (!marked.has(markKey(mark))) {
+      marked.add(markKey(mark));
+      added.push(mark);
+    }
+  }
+
+  return {
+    ...test,
+    parts: test.parts.map((part) => ({ ...part, children: part.children.map(unlinked) })),
     unsupported: [...test.unsupported, ...added],
   };
 };

@@ -735,6 +735,21 @@ export const resourceTypes = {
 export type ResourceType = (typeof resourceTypes)[CpVersion][number];
 
 /**
+ * The resource types of an LTI link, which an item ref may name in place of an item (reading 110,
+ * "a variable mapping and a template default name variables an item declares, so under an item ref
+ * that names an LTI link both are refused"; the implementation guide's section 6.2.9,
+ * informative): the LTI types of both profiles, 3.0.0's `imsbasiclti_xmlv1p3` and 3.0.1's
+ * `imslti_xmlv1p1` and `imsltia_xmlv1p0`, as pantry's `linkResourceTypes` reads them from its
+ * roster (`packages/pantry/src/qti/tests.ts`). Whether a manifest's profile admits the type is the
+ * manifest's own rule.
+ */
+export const ltiLinkTypes = [
+  "imsbasiclti_xmlv1p3",
+  "imslti_xmlv1p1",
+  "imsltia_xmlv1p0",
+] as const satisfies readonly ResourceType[];
+
+/**
  * The QTI resource types whose document has a fixed root, each paired with that root's QTI name:
  * a resource of one of these types whose document has another root is the refusal
  * `resource-type-mismatch`.
@@ -814,7 +829,10 @@ export type AnsweredStatus = (typeof answeredStatuses)[number];
  * names is missing from the delivered sequence. `allow-comment="true"` is a session control that
  * asks for a comment box; `max-attempts:negative` is a negative `max-attempts`, delivered as no
  * limit; `root:<name>` is a section or a stimulus given as a document's root, which is not
- * delivered alone. A test's outcome processing, an item reference's `qti-weight`, its
+ * delivered alone; `lti-link` is an item ref that names an LTI link in place of an item (reading
+ * 110), which plate does not launch: only a package sees what an item ref names, so `openPackage`
+ * marks it and leaves it out of the test it delivers (`withLtiLinks` in `#plate/model/test.ts`).
+ * A test's outcome processing, an item reference's `qti-weight`, its
  * `qti-variable-mapping` and its `qti-template-default` are read into the test model, so none of
  * them is a mark here: outcome processing or a template default the engine cannot run is marked by
  * what it cannot run (`buildTest` in `#plate/model/test.ts`).
@@ -836,6 +854,7 @@ export const testMarks = [
   "max-attempts:negative",
   "root:qti-assessment-section",
   "root:qti-assessment-stimulus",
+  "lti-link",
 ] as const;
 
 /**

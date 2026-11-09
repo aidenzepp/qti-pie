@@ -1733,6 +1733,74 @@ const openBasedTest = (
     }),
   );
 
+/**
+ * A hand-built LTI link, a Common Cartridge basic LTI link, which an item ref may name in place of
+ * an item (reading 110) and which plate never reads.
+ */
+const ltiLinkXml =
+  '<cartridge_basiclti_link xmlns="http://www.imsglobal.org/xsd/imslticc_v1p0" xmlns:blti="http://www.imsglobal.org/xsd/imsbasiclti_v1p0"><blti:title>Tool</blti:title><blti:launch_url>https://tool.example/launch</blti:launch_url></cartridge_basiclti_link>';
+
+/**
+ * A profile version and a resource type of it, the LTI resource a package {@link ltiPackage}
+ * builds lists its link under.
+ */
+type LinkProfile = readonly [version: string, type: string];
+
+/**
+ * The LTI resource types of the two profile versions, each under its version: 3.0.0's
+ * `imsbasiclti_xmlv1p3`, and 3.0.1's `imslti_xmlv1p1` and `imsltia_xmlv1p0`.
+ */
+const linkProfiles: readonly LinkProfile[] = [
+  ["3.0.0", "imsbasiclti_xmlv1p3"],
+  ["3.0.1", "imslti_xmlv1p1"],
+  ["3.0.1", "imsltia_xmlv1p0"],
+];
+
+/**
+ * A package whose test, with a float outcome `TOTAL`, holds the item ref `ITEM1`, to
+ * {@link reachedItemXml}, then the item ref `lti`, holding what is given, to an LTI link listed
+ * under a resource of a profile's type, with the given outcome processing.
+ *
+ * @param processing What the test's outcome processing holds, as written.
+ * @param ltiRef What the item ref `lti` holds, as written.
+ * @param profile The manifest's profile version and the link resource's type.
+ * @returns The package's files.
+ */
+const ltiPackage = (
+  processing: string,
+  ltiRef = "",
+  [version, type]: LinkProfile = ["3.0.1", "imslti_xmlv1p1"],
+): ReadonlyMap<string, Uint8Array> =>
+  packageOf({
+    "items/a.xml": reachedItemXml,
+    "links/lti.xml": ltiLinkXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+      resourceXml("L", type, "links/lti.xml"),
+    ).replace("<schemaversion>3.0.0</schemaversion>", `<schemaversion>${version}</schemaversion>`),
+    "test.xml": processingTestXml(
+      processing,
+      itemRefXml("ITEM1", "items/a.xml"),
+      itemRefXml("lti", "links/lti.xml", ltiRef),
+    ),
+  });
+
+/**
+ * The path of {@link ltiPackage}'s item ref `lti`, the test's second.
+ */
+const ltiRefPath =
+  "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[2]";
+
+/**
+ * Give the `lti-link` marks of a test, each its path.
+ *
+ * @param test The test.
+ * @returns The marks' paths, in order.
+ */
+const linkMarks = (test: AcceptedTest): readonly string[] =>
+  test.unsupported.flatMap(({ feature, path: at }) => (feature === "lti-link" ? [at] : []));
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -4406,6 +4474,159 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(variableMarks(context.alone), []);
           assert.strictEqual(collected.delivered, collected.alone);
           assert.strictEqual(collected.delivered.test.outcomeProcessing.kind, "runs");
+        }),
+    );
+  });
+
+  describe("openPackage, an item ref that names an LTI link", () => {
+    it.effect(
+      "align-54 LTI item ref E21: a test whose item ref lti names an LTI link, a resource of type imsbasiclti_xmlv1p3 under 3.0.0 or of type imslti_xmlv1p1 or imsltia_xmlv1p0 under 3.0.1, is accepted with the ref marked lti-link and left out of the delivered test, whose items are ITEM1's alone, while the test document's own verdict keeps the ref unmarked (reading 110 (\"a variable mapping and a template default name variables an item declares, so under an item ref that names an LTI link both are refused\"))",
+      () =>
+        Effect.gen(function* linkedItemRef() {
+          for (const profile of linkProfiles) {
+            const label = profile.join(" ");
+            const verdict = yield* openPackage(
+              location,
+              ltiPackage(settingTotal(variableXml("ITEM1.SCORE")), "", profile),
+            );
+            const { alone, delivered } = deliveredAndAlone(verdict);
+
+            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", label);
+            assert.deepStrictEqual(linkMarks(delivered), [ltiRefPath], label);
+            assert.deepStrictEqual(delivered.unsupported, delivered.test.unsupported, label);
+            assert.deepStrictEqual(
+              itemRefs(delivered),
+              [{ href: "items/a.xml", identifier: "ITEM1" }],
+              label,
+            );
+            assert.deepStrictEqual(
+              [...testOf(acceptedOf(verdict), fileLocation(location, "test.xml")).items.keys()],
+              ["ITEM1"],
+              label,
+            );
+            assert.strictEqual(delivered.test.outcomeProcessing.kind, "runs", label);
+            assert.deepStrictEqual(
+              itemRefs(alone).map((ref) => ref.identifier),
+              ["ITEM1", "lti"],
+              label,
+            );
+            assert.deepStrictEqual(linkMarks(alone), [], label);
+          }
+        }),
+    );
+
+    it.effect(
+      "align-54 LTI item ref E21, control: an item ref that names a webcontent resource at the same path is still refused item-ref-unresolved, as one that names no item resource is",
+      () =>
+        Effect.gen(function* webcontentItemRef() {
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                ltiPackage(settingTotal(oneFloat), "", ["3.0.1", "webcontent"]),
+              ),
+            ).map((refusal) => [refusal.rule, refusal.location]),
+            [["item-ref-unresolved", { kind: "path", path: ltiRefPath }]],
+          );
+        }),
+    );
+
+    it.effect(
+      "align-54 LTI item ref E21: a read through it of the built-in lti.numAttempts or lti.completionStatus is accepted with the processing marked variable:<name> at the processing, as a read of a variable the engine holds no value of is, while the document's own verdict runs it (reading 106 (\"a prefixed reference reaches every built-in variable its item ref's item holds, `QTI_CONTEXT` among them\"))",
+      () =>
+        Effect.gen(function* linkedBuiltIns() {
+          for (const name of ["lti.numAttempts", "lti.completionStatus"]) {
+            const verdict = yield* openPackage(
+              location,
+              ltiPackage(
+                `<qti-outcome-condition><qti-outcome-if><qti-is-null>${variableXml(name)}</qti-is-null>${settingTotal(oneFloat)}</qti-outcome-if></qti-outcome-condition>`,
+              ),
+            );
+            const { alone, delivered } = deliveredAndAlone(verdict);
+
+            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", name);
+            assert.deepStrictEqual(delivered.test.outcomeProcessing, { kind: "marked" }, name);
+            assert.deepStrictEqual(
+              variableMarks(delivered),
+              [[`variable:${name}`, processingPath]],
+              name,
+            );
+            assert.deepStrictEqual(linkMarks(delivered), [ltiRefPath], name);
+            assert.strictEqual(alone.test.outcomeProcessing.kind, "runs", name);
+          }
+        }),
+    );
+
+    it.effect(
+      'align-54 LTI item ref E21: lti.SCORE, which no link declares, is refused undeclared-variable, as a read through it reaches only the item built-ins (reading 106 ("a prefixed reference reaches every built-in variable its item ref\'s item holds, `QTI_CONTEXT` among them"))',
+      () =>
+        Effect.gen(function* linkedDeclaration() {
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(location, ltiPackage(settingTotal(variableXml("lti.SCORE")))),
+            ),
+            [
+              {
+                detail: {
+                  check: "reading",
+                  element: "qti-variable",
+                  identifier: "lti.SCORE",
+                  reading: "48",
+                },
+                document: fileLocation(location, "test.xml"),
+                location: { kind: "path", path: `${expressionAt("qti-variable")}/@identifier` },
+                rule: "undeclared-variable",
+              },
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 LTI item ref E21: a variable mapping of SCORE and a template default of T under it are each refused undeclared-variable, as a source and a template its item does not declare are (reading 110 ("a variable mapping and a template default name variables an item declares, so under an item ref that names an LTI link both are refused"))',
+      () =>
+        Effect.gen(function* linkedMappingAndDefault() {
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                ltiPackage(
+                  settingTotal(oneFloat),
+                  '<qti-variable-mapping source-identifier="SCORE" target-identifier="S2"/><qti-template-default template-identifier="T"><qti-base-value base-type="integer">1</qti-base-value></qti-template-default>',
+                ),
+              ),
+            ),
+            [
+              {
+                detail: {
+                  attribute: "source-identifier",
+                  element: "qti-variable-mapping",
+                  expected: "outcome",
+                  identifier: "SCORE",
+                },
+                document: fileLocation(location, "test.xml"),
+                location: {
+                  kind: "path",
+                  path: `${ltiRefPath}/qti-variable-mapping/@source-identifier`,
+                },
+                rule: "undeclared-variable",
+              },
+              {
+                detail: {
+                  attribute: "template-identifier",
+                  element: "qti-template-default",
+                  expected: "template",
+                  identifier: "T",
+                },
+                document: fileLocation(location, "test.xml"),
+                location: {
+                  kind: "path",
+                  path: `${ltiRefPath}/qti-template-default/@template-identifier`,
+                },
+                rule: "undeclared-variable",
+              },
+            ],
+          );
         }),
     );
   });
