@@ -448,7 +448,7 @@ const pairKey = new RegExp(pairKeyPattern, "u");
  * `Item`'s pattern, the type of a pair's and a directed pair's items, as JavaScript's engine reads
  * it.
  */
-const item = new RegExp(Item.pattern.source, "u");
+const item = new RegExp(Item.patterns[0].source, "u");
 
 /**
  * The characters a typed key's parse and its pattern are drawn over: the signs, two digits, a

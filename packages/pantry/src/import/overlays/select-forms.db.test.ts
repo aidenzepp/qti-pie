@@ -13,7 +13,7 @@
  * (`select-not-integer`), which breaks both, and PostgreSQL reports whichever its statements reach
  * first.
  */
-import { Db, patternLawsOf, sameLaw } from "@bjornpagen/grizzle";
+import { Db, lawsOf, sameLaw } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
@@ -32,12 +32,15 @@ import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-rela
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
- * `SectionSelection.selectForm`'s pattern law, as grizzle's installation lists it beside the
- * domain's CHECK.
+ * `SectionSelection.selectForm`'s pattern law, as grizzle's `lawsOf` lists it and its installation
+ * lists it beside the domain's CHECK.
  */
 const selectFormLaw = Arr.findFirst(
-  patternLawsOf(Qti),
-  (stated) => stated.relation === "SectionSelection" && stated.field === "selectForm",
+  lawsOf(Qti),
+  (stated) =>
+    stated.kind === "pattern" &&
+    stated.relation === "SectionSelection" &&
+    stated.field === "selectForm",
 ).pipe(Option.getOrThrowWith(() => new Error("SectionSelection.selectForm states no pattern law")));
 
 /**
