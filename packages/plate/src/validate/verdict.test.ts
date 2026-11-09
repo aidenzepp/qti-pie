@@ -2620,11 +2620,11 @@ const align54Wordings: readonly {
       response: "NOTES",
     },
     item: "D3a",
-    name: "a string-identifier binds a single string response",
+    name: "a string-identifier binds a string response that is not a record",
     rule: "binding",
     says: [
-      "`qti-text-entry-interaction`'s attribute `string-identifier` names `NOTES`, a multiple response of base type `integer`, and a `string-identifier` binds a single `string` response (reading 14).",
-      "To make it valid: name a single `string` response in `string-identifier`, or change the declaration of `NOTES`.",
+      "`qti-text-entry-interaction`'s attribute `string-identifier` names `NOTES`, a multiple response of base type `integer`, and a `string-identifier` binds a `string` response that is not a `record` (reading 14).",
+      "To make it valid: name such a response in `string-identifier`, or change the declaration of `NOTES`.",
     ],
   },
   {
@@ -3504,35 +3504,58 @@ describe("describeRefusal", () => {
     );
   });
 
-  it("align-54 default minimum D3a: words a Text Entry's string-identifier as naming a single string response (reading 14)", () => {
+  // Rewritten under the Mind's ruling 5 (rule bb28660b): a `string-identifier` names "a second
+  // response variable (of base-type string)" (info.txt:48078), of any cardinality but `record`, so
+  // a Text Entry and an Extended Text are worded by one sentence, which demands no cardinality.
+  it("align-54 r11 string response fit D3a: words a Text Entry's string-identifier as naming a string response that is not a record, demanding no cardinality (reading 14)", () => {
     const sentence = describeRefusal(
       refusalOf("binding", stringBound("qti-text-entry-interaction", "multiple")),
     );
 
     assert.include(
       sentence,
-      "`qti-text-entry-interaction`'s attribute `string-identifier` names `NOTES`, a multiple response of base type `integer`, and a `string-identifier` binds a single `string` response (reading 14).",
+      "`qti-text-entry-interaction`'s attribute `string-identifier` names `NOTES`, a multiple response of base type `integer`, and a `string-identifier` binds a `string` response that is not a `record` (reading 14).",
     );
     assert.include(
       sentence,
-      "To make it valid: name a single `string` response in `string-identifier`, or change the declaration of `NOTES`.",
+      "To make it valid: name such a response in `string-identifier`, or change the declaration of `NOTES`.",
+    );
+    assert.notInclude(sentence, "a single `string` response");
+  });
+
+  it("align-54 r11 string response fit D3a: words an Extended Text's string-identifier naming a record as naming a string response that is not a record, demanding no cardinality (reading 14)", () => {
+    const sentence = describeRefusal(
+      refusalOf("binding", {
+        baseType: "",
+        cardinality: "record",
+        check: "string-binding",
+        interaction: "qti-extended-text-interaction",
+        reading: "14",
+        response: "NOTES",
+      }),
+    );
+
+    assert.strictEqual(
+      sentence,
+      "**`item.xml`, at `qti-assessment-item`: refused.** `qti-extended-text-interaction`'s attribute `string-identifier` names `NOTES`, a record response, and a `string-identifier` binds a `string` response that is not a `record` (reading 14). Rule `binding`. To make it valid: name such a response in `string-identifier`, or change the declaration of `NOTES`.",
     );
   });
 
-  it("align-54 default minimum D3a: words an Extended Text's string-identifier as naming a string response of the cardinality its own response binds, never a single one (reading 14)", () => {
-    const sentence = describeRefusal(
-      refusalOf("binding", stringBound("qti-extended-text-interaction", "single")),
+  it("words a Gap Match of several gaps bound record with a remedy that writes the base type a multiple declaration needs (reading 169, E39a)", () => {
+    // A record declaration writes no base type, and a multiple one with none is refused under
+    // E39a, so a remedy for a response that is not single names `base-type="directedPair"` too.
+    assert.strictEqual(
+      describeRefusal(
+        refusalOf("binding", {
+          cardinality: "record",
+          check: "gap-match-single",
+          gaps: "2",
+          interaction: "qti-gap-match-interaction",
+          response: "RESPONSE",
+        }),
+      ),
+      '**`item.xml`, at `qti-assessment-item`: refused.** `qti-gap-match-interaction` holds 2 gaps and is bound to `RESPONSE`, a record response, and an interaction of several gaps needs a `multiple` response. Rule `binding`. To make it valid: declare `RESPONSE` with `cardinality="multiple"` and `base-type="directedPair"`.',
     );
-
-    assert.include(
-      sentence,
-      "`qti-extended-text-interaction`'s attribute `string-identifier` names `NOTES`, a single response of base type `integer`, and its `string-identifier` binds a `string` response of the cardinality of the response its `response-identifier` binds (reading 14).",
-    );
-    assert.include(
-      sentence,
-      "To make it valid: name in `string-identifier` a `string` response of the cardinality of the response `response-identifier` binds, or change the declaration of `NOTES`.",
-    );
-    assert.notInclude(sentence, "a single `string` response");
   });
 
   it("align-54 r11 gaps bind multiple P7: words a Gap Match of several gaps bound ordered as naming an ordered response (reading 169)", () => {

@@ -1597,19 +1597,23 @@ describe("checkRules", () => {
       );
     });
 
-    it("align-54 bindings D3a: refuses a string-identifier naming a single float, and an Extended Text's naming a multiple string, as binding string-binding (reading 14)", () => {
+    it("align-54 r11 string response fit D3a: refuses a Text Entry's string-identifier naming a single float, and an Extended Text's naming a multiple float, as binding string-binding (info.txt:48078; reading 14)", () => {
+      // Rewritten under the Mind's ruling 5 (rule bb28660b): the response a `string-identifier`
+      // names is "a second response variable (of base-type string)" (info.txt:48078), so its base
+      // type decides and its cardinality does not. The Extended Text's multiple string, refused
+      // here before, is accepted below.
       assert.deepStrictEqual(
         judged(
           item(
             [
               response("RESPONSE", "single", "float"),
               response("NOTES", "single", "float"),
-              response("LINES", "multiple", "string"),
+              response("FLOATS", "multiple", "float"),
               response("ESSAY", "single", "string"),
             ],
             [
               el("p", [], [capturing("RESPONSE", "NOTES")]),
-              capturing("ESSAY", "LINES", "qti-extended-text-interaction"),
+              capturing("ESSAY", "FLOATS", "qti-extended-text-interaction"),
             ],
           ),
         ),
@@ -1628,12 +1632,74 @@ describe("checkRules", () => {
           },
           {
             detail: {
-              baseType: "string",
+              baseType: "float",
               cardinality: "multiple",
               check: "string-binding",
               interaction: "qti-extended-text-interaction",
               reading: "14",
-              response: "LINES",
+              response: "FLOATS",
+            },
+            path: `${body}/qti-extended-text-interaction`,
+            rule: "binding",
+          },
+        ],
+      );
+    });
+
+    it("align-54 r11 string response fit D3a: accepts a Text Entry's string-identifier naming a single, a multiple or an ordered string, since no cardinality is demanded (info.txt:48078; rule 5b8ee08b)", () => {
+      for (const cardinality of ["single", "multiple", "ordered"]) {
+        assert.deepStrictEqual(
+          judged(
+            item(
+              [response("RESPONSE", "single", "float"), response("TEXT", cardinality, "string")],
+              [el("p", [], [capturing("RESPONSE", "TEXT")])],
+            ),
+          ),
+          [],
+          cardinality,
+        );
+      }
+    });
+
+    it("align-54 r11 string response fit D3a: refuses a Text Entry's and an Extended Text's string-identifier naming a record declaration, as binding string-binding with cardinality record (info.txt:48078; reading 14)", () => {
+      // A record holds fields and has no base type (B1c), so it is no "response variable (of
+      // base-type string)" (info.txt:48078), whatever the interaction's own response is.
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "float"),
+              response("NOTES", "record"),
+              response("FIELDS", "record"),
+              response("ESSAY", "record"),
+            ],
+            [
+              el("p", [], [capturing("RESPONSE", "NOTES")]),
+              capturing("ESSAY", "FIELDS", "qti-extended-text-interaction"),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              baseType: "",
+              cardinality: "record",
+              check: "string-binding",
+              interaction: "qti-text-entry-interaction",
+              reading: "14",
+              response: "NOTES",
+            },
+            path: `${body}/p/qti-text-entry-interaction`,
+            rule: "binding",
+          },
+          {
+            detail: {
+              baseType: "",
+              cardinality: "record",
+              check: "string-binding",
+              interaction: "qti-extended-text-interaction",
+              reading: "14",
+              response: "FIELDS",
             },
             path: `${body}/qti-extended-text-interaction`,
             rule: "binding",
@@ -2309,7 +2375,10 @@ describe("checkRules", () => {
       );
     });
 
-    it("align-54 counts D3a: refuses a multiple string beside a single binding, and a single string beside a multiple one, as binding string-binding (reading 14)", () => {
+    it("align-54 r11 string response fit D3a: accepts an Extended Text bound single naming a multiple string, and one bound multiple naming a single string, since no cardinality is demanded (info.txt:48078; rule 5b8ee08b)", () => {
+      // Rewritten under the Mind's ruling 5 (rule bb28660b): both were refused string-binding for a
+      // cardinality other than their own response's, which the information model never asks of "a
+      // second response variable (of base-type string)" (info.txt:48078).
       assert.deepStrictEqual(
         judged(
           item(
@@ -2328,32 +2397,7 @@ describe("checkRules", () => {
             ],
           ),
         ),
-        [
-          {
-            detail: {
-              baseType: "string",
-              cardinality: "multiple",
-              check: "string-binding",
-              interaction: "qti-extended-text-interaction",
-              reading: "14",
-              response: "LINES",
-            },
-            path: `${body}/qti-extended-text-interaction[1]`,
-            rule: "binding",
-          },
-          {
-            detail: {
-              baseType: "string",
-              cardinality: "single",
-              check: "string-binding",
-              interaction: "qti-extended-text-interaction",
-              reading: "14",
-              response: "TEXT",
-            },
-            path: `${body}/qti-extended-text-interaction[2]`,
-            rule: "binding",
-          },
-        ],
+        [],
       );
     });
   });

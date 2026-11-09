@@ -2196,11 +2196,13 @@ const multipleCardinality = code('cardinality="multiple"');
  *   as its XSD default, which the detail's `count` holds.
  * - `gap-match-single` (the operator's P7, reading 169): a gap match interaction of several `gaps`
  *   bound to a response that is not `multiple`, of the `cardinality` the detail names; a detail
- *   that names none is worded as a `single` response's.
- * - `string-binding` (reading 14, D3a): an `interaction`'s `string-identifier` names a response of a
- *   type it cannot bind, worded by the `interaction`: a text entry's binds a single `string`
- *   response, and an extended text's a `string` response of the cardinality of the response its
- *   `response-identifier` binds, a cardinality the detail does not carry.
+ *   that names none is worded as a `single` response's. The remedy for a response that is not
+ *   `single` names `base-type="directedPair"` beside `cardinality="multiple"`, since a record
+ *   writes no base type and a `multiple` declaration with none is refused (E39a).
+ * - `string-binding` (reading 14, D3a): an `interaction`'s `string-identifier` names a `record` or a
+ *   response whose base type is not `string`, and it binds "a second response variable (of
+ *   base-type string)" (info.txt:48078) of any other cardinality; one sentence words a text entry's
+ *   and an extended text's alike.
  * - None: an interaction bound to a response of a base type or cardinality it does not accept.
  *
  * @param refusal The refusal.
@@ -2233,35 +2235,27 @@ const interactionBinding = (refusal: Refusal): string => {
       );
     }
     case "gap-match-single": {
-      const bound = withArticle(`${fact(refusal, "cardinality", "single")} response`);
+      const cardinality = fact(refusal, "cardinality", "single");
+      const bound = withArticle(`${cardinality} response`);
+      const baseType = cardinality === "single" ? "" : ` and ${code('base-type="directedPair"')}`;
 
       return sentence(
         refusal,
         `${interaction} holds ${fact(refusal, "gaps", "several")} gaps and is bound to ${response}, ${bound}, and an interaction of several gaps needs a ${code("multiple")} response${settled(refusal)}.`,
-        `declare ${response} with ${multipleCardinality}`,
+        `declare ${response} with ${multipleCardinality}${baseType}`,
       );
     }
     case "string-binding": {
       const stringIdentifier = code("string-identifier");
-      const naming = `${interaction}'s attribute ${stringIdentifier} names ${response}, ${responseType}`;
-      const remedy = `or change the declaration of ${response}`;
-
-      if (fact(refusal, "interaction", "") === "qti-extended-text-interaction") {
-        const own = `a ${code("string")} response of the cardinality of the response`;
-
-        return sentence(
-          refusal,
-          `${naming}, and its ${stringIdentifier} binds ${own} its ${code("response-identifier")} binds${settled(refusal)}.`,
-          `name in ${stringIdentifier} ${own} ${code("response-identifier")} binds, ${remedy}`,
-        );
-      }
-
-      const single = `a single ${code("string")} response`;
+      const declared =
+        fact(refusal, "cardinality", "") === "record" && fact(refusal, "baseType", "") === ""
+          ? "a record response"
+          : responseType;
 
       return sentence(
         refusal,
-        `${naming}, and a ${stringIdentifier} binds ${single}${settled(refusal)}.`,
-        `name ${single} in ${stringIdentifier}, ${remedy}`,
+        `${interaction}'s attribute ${stringIdentifier} names ${response}, ${declared}, and a ${stringIdentifier} binds a ${code("string")} response that is not a ${code("record")}${settled(refusal)}.`,
+        `name such a response in ${stringIdentifier}, or change the declaration of ${response}`,
       );
     }
     default: {
