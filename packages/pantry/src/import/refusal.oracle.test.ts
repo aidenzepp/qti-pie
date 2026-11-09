@@ -6,6 +6,7 @@ import {
   closed,
   closedId,
   Compute,
+  constraintNameOf,
   contained,
   counted,
   drawn,
@@ -62,6 +63,7 @@ import {
   textLaws,
 } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { beginsWith, mergedAxes } from "#pantry/test/merged-axes.ts";
 import type { Axis } from "#pantry/test/merged-axes.ts";
@@ -771,6 +773,48 @@ describe("the merged axes and the laws no row states", () => {
     );
     assert.isTrue(Option.isNone(ruleOfLaw(law)));
   });
+
+  it(
+    "gives a check its installed name only where Qti states it, so a refusal by a CDN install's check prints with its name and rule and no installed name",
+    () => {
+      // Oracle: grizzle's `constraintNameOf(Qti, law)` for the check Qti states, AL1's admission on
+      // Attribute, and the law table's name and rule for both. A CDN install's stored level states
+      // `CDN_origin` (`#pantry/qti/cdn.ts`), which the default Qti does not, so a refusal read
+      // against Qti names a check it lacks: the refusal still carries its text, its name and its
+      // rule, and no installed name, where grizzle would throw for it.
+      const stated = {
+        kind: "check",
+        name: checkNameOf("AL1 admission"),
+        relation: "Attribute",
+      } as const;
+      const cdn = {
+        kind: "check",
+        name: checkNameOf("CDN origin"),
+        relation: "Attribute",
+      } as const;
+      const refused = refusalOf(
+        { kind: "every", laws: [stated, cdn] },
+        { kind: "unreported" },
+        grammar,
+      );
+
+      assert.strictEqual(refused.origin._tag, "Database");
+      assert.deepStrictEqual(refused.origin._tag === "Database" ? refused.origin.laws : [], [
+        {
+          installed: constraintNameOf(Qti, stated),
+          name: "AL1 admission",
+          rule: lawTable["AL1 admission"].rule,
+          text: Formatter.format(stated),
+        },
+        {
+          name: "CDN origin",
+          rule: lawTable["CDN origin"].rule,
+          text: Formatter.format(cdn),
+        },
+      ]);
+    },
+    testTimeoutMs,
+  );
 });
 
 /**
@@ -1547,14 +1591,6 @@ const repeatedIn = (rows: readonly (readonly [string, LawName])[]): readonly str
   return Arr.dedupe(keys.filter((named, at) => keys.indexOf(named) !== at));
 };
 
-/**
- * The composed `Qti` schema, loaded by the census alone: it composes every `src/qti/` module that
- * has landed, and reading it runs `install.ts`'s generators.
- */
-const composedQti = Effect.promise(() => import("#pantry/qti/schema.ts")).pipe(
-  Effect.map(({ Qti }) => Qti),
-);
-
 describe("the pattern laws, one per field", () => {
   it("names each law grizzle states by its field's own type's row, a generated field's included, and none whose field's type no row holds", () => {
     // Oracle: grizzle's pattern laws (`lawsOf`), one pattern law per stored field whose pattern states
@@ -1625,7 +1661,6 @@ describe("the census of the composed Qti schema", () => {
       // Oracle: grizzle's laws (`lawsOf`), every law an outcome over Qti can name: each primary
       // key, each statement's laws, each contract, each pattern law and each generated field's law.
       Effect.gen(function* census() {
-        const Qti = yield* composedQti;
         const laws = schemaLawsOf(Qti);
         const unowned = laws
           .filter((law) => Option.isNone(lawNameOf(law)))
@@ -1648,59 +1683,55 @@ describe("the census of the composed Qti schema", () => {
     testTimeoutMs,
   );
 
-  it.effect(
+  it(
     "names in each table only what Qti states, each once: a stored relation, a generated field, a contract, a pattern law's field's type",
-    () =>
+    () => {
       // Oracle: grizzle's laws (`lawsOf`): each primary key's relation, each generated field's
       // relation and field, each contract's name, and each pattern law's field's type, read from
       // the schema's own descriptor. A row the schema no longer states, a key named twice, and a
       // text type that types no field with a pattern law each fail here.
-      Effect.gen(function* rows() {
-        const Qti = yield* composedQti;
-        const laws = schemaLawsOf(Qti);
-        const held = {
-          contract: new Set(laws.flatMap((law) => (law.kind === "contract" ? [law.contract] : []))),
-          generated: new Set(
-            laws.flatMap((law) =>
-              law.kind === "generated" ? [`${law.relation}.${law.field}`] : [],
-            ),
-          ),
-          primaryKey: new Set(
-            laws.flatMap((law) => (law.kind === "primaryKey" ? [law.relation] : [])),
-          ),
-        };
-        const typed: ReadonlySet<unknown> = new Set(
-          laws.flatMap((law) =>
-            law.kind === "pattern" ? Option.toArray(patternTypeOf(Qti.relations, law)) : [],
-          ),
-        );
+      const laws = schemaLawsOf(Qti);
+      const held = {
+        contract: new Set(laws.flatMap((law) => (law.kind === "contract" ? [law.contract] : []))),
+        generated: new Set(
+          laws.flatMap((law) => (law.kind === "generated" ? [`${law.relation}.${law.field}`] : [])),
+        ),
+        primaryKey: new Set(
+          laws.flatMap((law) => (law.kind === "primaryKey" ? [law.relation] : [])),
+        ),
+      };
+      const typed: ReadonlySet<unknown> = new Set(
+        laws.flatMap((law) =>
+          law.kind === "pattern" ? Option.toArray(patternTypeOf(Qti.relations, law)) : [],
+        ),
+      );
 
-        for (const [table, named, stated] of [
-          ["keyNames", keyNames, held.primaryKey],
-          ["generatedNames", generatedNames, held.generated],
-          ["contractNames", contractNames, held.contract],
-        ] as const) {
-          assert.deepStrictEqual(repeatedIn(named), [], `${table}: keys named twice`);
-          assert.deepStrictEqual(
-            named.flatMap(([row]) => (stated.has(row) ? [] : [row])),
-            [],
-            `${table}: rows that name no law Qti states`,
-          );
-        }
+      for (const [table, named, stated] of [
+        ["keyNames", keyNames, held.primaryKey],
+        ["generatedNames", generatedNames, held.generated],
+        ["contractNames", contractNames, held.contract],
+      ] as const) {
+        assert.deepStrictEqual(repeatedIn(named), [], `${table}: keys named twice`);
         assert.deepStrictEqual(
-          [...textLaws.keys()]
-            .filter((type) => !typed.has(type))
-            .map((type) => Formatter.format(type.patterns)),
+          named.flatMap(([row]) => (stated.has(row) ? [] : [row])),
           [],
-          "rows of textLaws that type no field with a pattern law",
+          `${table}: rows that name no law Qti states`,
         );
-      }),
+      }
+      assert.deepStrictEqual(
+        [...textLaws.keys()]
+          .filter((type) => !typed.has(type))
+          .map((type) => Formatter.format(type.patterns)),
+        [],
+        "rows of textLaws that type no field with a pattern law",
+      );
+    },
     testTimeoutMs,
   );
 
-  it.effect(
+  it(
     "refuses a site that names no document by its kind's law: an include under include-target, a section ref under entry-kind",
-    () =>
+    () => {
       // Oracle: the specification as a checker, reading 115 and information model §7.5: an
       // include whose path an entry holds but that names no document the manifest lists, or that
       // writes no href that names a path of the package, breaks "Include target", the oracle's law
@@ -1708,37 +1739,31 @@ describe("the census of the composed Qti schema", () => {
       // entry" on its path, its SitePath, which every section ref has; and a site whose path no
       // entry holds breaks "File exists", its SitePath's check, which gates both. Each is a law Qti
       // states, under its own rule, so a dangling site of either kind is refused under one rule.
-      Effect.gen(function* siteKinds() {
-        const Qti = yield* composedQti;
-        const stated = schemaLawsOf(Qti);
-        const kinds: readonly (readonly [LawSide, LawSide, Rule])[] = [
-          [sideOf("SitePath", "node"), sideOf("SiteTarget", "node"), "include-target"],
-          [sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind"), "include-target"],
-          [
-            sideOf("SitePath", "package", "path"),
-            sideOf("Entry", "package", "path"),
-            "file-exists",
-          ],
-          [
-            sideOf("SitePath", "package", "path"),
-            sideOf("TestDocument", "package", "path"),
-            "entry-kind",
-          ],
-          [sideOf("Site", "node"), sideOf("SitePath", "node"), "entry-kind"],
-        ];
+      const stated = schemaLawsOf(Qti);
+      const kinds: readonly (readonly [LawSide, LawSide, Rule])[] = [
+        [sideOf("SitePath", "node"), sideOf("SiteTarget", "node"), "include-target"],
+        [sideOf("Site", "node", "kind"), sideOf("SitePath", "node", "kind"), "include-target"],
+        [sideOf("SitePath", "package", "path"), sideOf("Entry", "package", "path"), "file-exists"],
+        [
+          sideOf("SitePath", "package", "path"),
+          sideOf("TestDocument", "package", "path"),
+          "entry-kind",
+        ],
+        [sideOf("Site", "node"), sideOf("SitePath", "node"), "entry-kind"],
+      ];
 
-        for (const [from, to, rule] of kinds) {
-          const shown = Formatter.format({ from, to });
-          const laws = stated.filter(
-            (law) => law.kind === "contained" && readsAs(law.from, from) && readsAs(law.to, to),
-          );
+      for (const [from, to, rule] of kinds) {
+        const shown = Formatter.format({ from, to });
+        const laws = stated.filter(
+          (law) => law.kind === "contained" && readsAs(law.from, from) && readsAs(law.to, to),
+        );
 
-          assert.isNotEmpty(laws, `${shown}: no containment Qti states`);
-          for (const law of laws) {
-            assert.deepStrictEqual(ruleOfLaw(law), Option.some(rule), shown);
-          }
+        assert.isNotEmpty(laws, `${shown}: no containment Qti states`);
+        for (const law of laws) {
+          assert.deepStrictEqual(ruleOfLaw(law), Option.some(rule), shown);
         }
-      }),
+      }
+    },
     testTimeoutMs,
   );
 

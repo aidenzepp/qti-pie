@@ -212,7 +212,16 @@ layer(NodeServices.layer, { excludeTestServices: true })("the JSON error shape",
 const matchesCommittedError = matchesCommitted("error");
 
 /**
- * A law the table does not hold: a check of no law.
+ * The timeout, in milliseconds, of this file's tests that read a check's installed name: grizzle's
+ * `constraintNameOf` compiles `Qti`'s law model on every call, once for the refusal
+ * (`#pantry/import/refusal.ts` `installedNamesOf`, kept for the process) and once for the oracle. A
+ * hang guard, never a budget. Measured 2026-11-08: 18.1 s, its slowest such test.
+ */
+const lawModelTestTimeoutMs = 300_000;
+
+/**
+ * A law the table does not hold: a check of no law, which `Qti` does not state, so it has no
+ * installed name.
  */
 const unownedLaw = { kind: "check", name: "not_a_law", relation: "Node" } as const satisfies Law;
 
@@ -271,75 +280,82 @@ const ending = <F>(name: string, failure: () => Promise<F>, dies: boolean) =>
   ).pipe(Command.withGlobalFlags(outputGlobalFlags));
 
 layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database gave", (it) => {
-  it.effect("prints its rule, its explanation and each law's source, and where to look", () =>
-    // Oracle: the refusal as `refusalOf` builds it; the printed lines carry its message, grizzle's
-    // `some` in words, each of its sources once, and the help `describeFailure` gives a refusal
-    // that carries laws.
-    Effect.gen(function* text() {
-      const { exit, stderr, stdout } = yield* captureCli([], { command: refusing });
-      const { source } = lawTable["AL1 admission"];
+  it.effect(
+    "prints its rule, its explanation and each law's source, and where to look",
+    () =>
+      // Oracle: the refusal as `refusalOf` builds it; the printed lines carry its message, grizzle's
+      // `some` in words, each of its sources once, and the help `describeFailure` gives a refusal
+      // that carries laws.
+      Effect.gen(function* text() {
+        const { exit, stderr, stdout } = yield* captureCli([], { command: refusing });
+        const { source } = lawTable["AL1 admission"];
 
-      assert.strictEqual(stdout, "");
-      assert.strictEqual(exitCodeOf(exit), 1);
-      assert.isTrue(
-        stderr.startsWith(
-          "error[import-refused]: The package was refused under the attribute-admission rule: ",
-        ),
-        stderr,
-      );
-      assert.include(stderr, "the database names no row");
-      assert.include(
-        stderr,
-        `${Formatter.format(unownedLaw)}, which no rule of the law table owns`,
-      );
-      assert.include(
-        stderr,
-        "\n  refused: some, at least one law named is broken, and the database does not say which\n",
-      );
-      assert.strictEqual(
-        stderr.split("\n").filter((line) => line === `  source: ${source}`).length,
-        1,
-      );
-      assert.match(
-        stderr,
-        /\n {2}= help: The database names no row for this law, so find what the law describes in the package by the law's source, .*Nothing was written\.$/u,
-      );
-    }),
+        assert.strictEqual(stdout, "");
+        assert.strictEqual(exitCodeOf(exit), 1);
+        assert.isTrue(
+          stderr.startsWith(
+            "error[import-refused]: The package was refused under the attribute-admission rule: ",
+          ),
+          stderr,
+        );
+        assert.include(stderr, "the database names no row");
+        assert.include(
+          stderr,
+          `${Formatter.format(unownedLaw)}, which no rule of the law table owns`,
+        );
+        assert.include(
+          stderr,
+          "\n  refused: some, at least one law named is broken, and the database does not say which\n",
+        );
+        assert.strictEqual(
+          stderr.split("\n").filter((line) => line === `  source: ${source}`).length,
+          1,
+        );
+        assert.match(
+          stderr,
+          /\n {2}= help: The database names no row for this law, so find what the law describes in the package by the law's source, .*Nothing was written\.$/u,
+        );
+      }),
+    lawModelTestTimeoutMs,
   );
 
-  it.effect("under --json prints one error object with the rules, each law and its sources", () =>
-    // Oracle: the law table, read directly by the name each law was built from: its text, the law
-    // as grizzle names a check, written by Effect's Formatter, its installed name as grizzle's
-    // `constraintNameOf` names a check's CHECK, and the name and rule the table gives it; a check
-    // of no law has its text and installed name alone, and carries no rule. The outcome's `some`
-    // and the witness kind the refusal was built under, and the committed schema of the error
-    // object.
-    Effect.gen(function* json() {
-      const { checkNameOf } = yield* Effect.promise(() => import("#pantry/import/refusal.ts"));
-      const [first] = refusedLaws(checkNameOf("AL1 admission"));
-      const { stderr, stdout } = yield* captureCli(["--json"], { command: refusing });
-      const error = errorLine(stderr);
+  it.effect(
+    "under --json prints one error object with the rules, each law and its sources",
+    () =>
+      // Oracle: the law table, read directly by the name each law was built from: its text, the law
+      // as grizzle names a check, written by Effect's Formatter, its installed name as grizzle's
+      // `constraintNameOf` names the check `Qti` states, and the name and rule the table gives it; a
+      // check of no law, which `Qti` does not state, has its text alone, and carries no rule. The
+      // outcome's `some` and the witness kind the refusal was built under, and the committed schema
+      // of the error object.
+      Effect.gen(function* json() {
+        const { checkNameOf } = yield* Effect.promise(() => import("#pantry/import/refusal.ts"));
+        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/schema.ts"));
+        const [first] = refusedLaws(checkNameOf("AL1 admission"));
+        const { stderr, stdout } = yield* captureCli(["--json"], { command: refusing });
+        const error = errorLine(stderr);
 
-      assert.strictEqual(stdout, "");
-      assert.strictEqual(stderr.split("\n").length, 1);
-      assert.isTrue(matchesCommittedError(stderr), stderr);
-      assert.strictEqual(error.kind, "import-refused");
-      assert.strictEqual(error.command, "import");
-      assert.deepStrictEqual(error.rules, ["attribute-admission"]);
-      assert.strictEqual(error.refused_kind, "some");
-      assert.deepStrictEqual(error.laws, [
-        {
-          installed: constraintNameOf(first),
-          name: "AL1 admission",
-          rule: "attribute-admission",
-          text: Formatter.format(first),
-        },
-        { installed: constraintNameOf(unownedLaw), text: Formatter.format(unownedLaw) },
-      ]);
-      assert.deepStrictEqual(error.sources, [lawTable["AL1 admission"].source]);
-      assert.strictEqual(error.witness, "unreported");
-      assert.notProperty(error, "failure");
-    }),
+        assert.strictEqual(stdout, "");
+        assert.strictEqual(stderr.split("\n").length, 1);
+        assert.isTrue(matchesCommittedError(stderr), stderr);
+        assert.strictEqual(error.kind, "import-refused");
+        assert.strictEqual(error.command, "import");
+        assert.deepStrictEqual(error.rules, ["attribute-admission"]);
+        assert.strictEqual(error.refused_kind, "some");
+        assert.deepStrictEqual(error.laws, [
+          {
+            installed: constraintNameOf(Qti, first),
+            name: "AL1 admission",
+            rule: "attribute-admission",
+            text: Formatter.format(first),
+          },
+          { text: Formatter.format(unownedLaw) },
+        ]);
+        assert.deepStrictEqual(error.sources, [lawTable["AL1 admission"].source]);
+        assert.strictEqual(error.witness, "unreported");
+        assert.notProperty(error, "failure");
+      }),
+    lawModelTestTimeoutMs,
   );
 
   it.effect(
@@ -348,7 +364,8 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
       // Oracle: the law table, read directly by the name the refusal's one check was built from:
       // the rule and the source the table gives that name. And the committed schema of the error
       // object. Bound: every law of the table (`lawNames`), each the one law of a refusal under an
-      // unreported witness, exhausted; residual none.
+      // unreported witness, exhausted; residual none. Each is a check on a relation `Qti` does not
+      // hold, so it states none of them and none has an installed name: the name is the law's.
       Effect.gen(function* everyLaw() {
         const { checkNameOf, lawNames, refusalOf } = yield* Effect.promise(
           () => import("#pantry/import/refusal.ts"),
@@ -357,7 +374,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
 
         assert.isAbove(lawNames.length, 0);
         for (const name of lawNames) {
-          const law = { kind: "check", name: checkNameOf(name), relation: "Node" } as const;
+          const law = { kind: "check", name: checkNameOf(name), relation: "Unstated" } as const;
           const refusal = refusalOf(
             { kind: "every", laws: [law] },
             { kind: "unreported" },
@@ -381,7 +398,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a refusal the database
             },
             {
               kind: "import-refused",
-              laws: [{ installed: constraintNameOf(law), name, rule, text: Formatter.format(law) }],
+              laws: [{ name, rule, text: Formatter.format(law) }],
               refused: "every",
               rules: [rule],
               sources: [source],
@@ -423,9 +440,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
       // Oracle: the origin each refusal is built from, and the law table read directly by the name
       // its one check was built from: a refusal the reader made prints its one rule and no
       // decision, law, source or witness in either mode; one the database made prints how grizzle
-      // decided its laws, its laws with the table's name and rule and grizzle's installed name, the
-      // table's source once, and the kind of the witness it was built under. A `some` outcome names
-      // two laws, AL1's check and a check of no law, as grizzle's `Refused` requires. The help is
+      // decided its laws, its laws with the table's name and rule and, for the check `Qti` states,
+      // grizzle's installed name, the table's source once, and the kind of the witness it was built
+      // under. A `some` outcome names two laws, AL1's check and a check of no law, which `Qti` does
+      // not state and which has its text alone, as grizzle's `Refused` requires. The help is
       // the origin's, by its own words. Bound: the reader's origin and the database's under each
       // kind of `RefusedKind` and of `WitnessKind`, exhausted, each in text and JSON; residual
       // none.
@@ -434,22 +452,20 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
           () => import("#pantry/import/refusal.ts"),
         );
         const { grammar } = yield* Effect.promise(() => import("#pantry/grammar/install.ts"));
+        const { Qti } = yield* Effect.promise(() => import("#pantry/qti/schema.ts"));
         const { rule, source } = lawTable["AL1 admission"];
         const law = {
           kind: "check",
           name: checkNameOf("AL1 admission"),
-          relation: "Node",
+          relation: "Attribute",
         } as const;
         const lawFact = {
-          installed: constraintNameOf(law),
+          installed: constraintNameOf(Qti, law),
           name: "AL1 admission",
           rule,
           text: Formatter.format(law),
         };
-        const unownedFact = {
-          installed: constraintNameOf(unownedLaw),
-          text: Formatter.format(unownedLaw),
-        };
+        const unownedFact = { text: Formatter.format(unownedLaw) };
         const reader = new ImportRefused({
           detail: "The zip entry a.xml was refused",
           origin: readerOrigin,
@@ -523,6 +539,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("every origin of a refu
           );
         }
       }),
+    lawModelTestTimeoutMs,
   );
 });
 

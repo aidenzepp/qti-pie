@@ -305,7 +305,7 @@ export const queryLawsByName = [
  * read from that domain's one record (`Object.values(record).flat()`), never from the list of
  * records. `Object.values` over a union of records falls back to lib's `values(o: {}): any[]`, and
  * a statement typed `any` types every statement of `Qti` `any` with it, so that grizzle can tell no
- * nested member's count apart (`#pantry/qti/schema.ts` holds this type to no `any`).
+ * nested member's count apart; grizzle's `schema.extend` refuses such a list (`1387c79d`).
  */
 type QueryStatement =
   | (typeof packageQueryLaws)[number]

@@ -1325,20 +1325,83 @@ export class ImportRefused extends Schema.TaggedError<ImportRefused>()("ImportRe
 }
 
 /**
- * One law of a refusal as the refusal carries it: its display text, the installed name of a
- * check's CHECK constraint, and the name and rule the law table gives it.
+ * A check statement as a schema holds it, read for the law it states: its declared name and its
+ * relation's name, which are a check law's fields.
+ */
+const CheckStatement = Schema.Struct({
+  kind: Schema.Literal("check"),
+  name: Schema.String,
+  relation: Schema.Struct({ name: Schema.String }),
+});
+
+/**
+ * Key a check by its relation and its declared name, the fields of its law.
  *
- * `constraintNameOf` names a check by its declared name, which every check law an outcome names
- * carries, and throws for a name no check could be declared under: a defect of grizzle's outcome,
- * never a verdict on the package.
+ * @param relation - The relation the check is stated on.
+ * @param name - The check's declared name.
+ * @returns The key.
+ */
+const checkKey = (relation: string, name: string): string => JSON.stringify([relation, name]);
+
+/**
+ * Read the installed name of each check a schema states: grizzle's `constraintNameOf(schema,
+ * law)`, the one constraint or trigger that discharges it, a row check's CHECK by its declared
+ * name and a check over a derived relation's triggers by a digest (grizzle `b34dfbf9`).
+ *
+ * `constraintNameOf` throws for a law that is no check of the schema, and a refusal may name one:
+ * a CDN install's stored level states checks the default `Qti` does not (`#pantry/qti/cdn.ts`),
+ * so a refusal read against another schema than the one the database installed names a check this
+ * one lacks. Such a check has no installed name here, so the refusal still prints, with its text
+ * and the name and rule the table gives it. Only a check the schema states is asked for.
+ * `constraintNameOf` compiles the schema's law model on every call, so each check's name is read
+ * once per process, on the first refusal by it, and kept.
+ *
+ * @param schema - The schema the import ran against, `Qti`.
+ * @returns The check's installed name, none for a check the schema does not state.
+ */
+const installedNamesOf = Fn.memoize((schema: typeof Qti) => {
+  const stated: ReadonlySet<string> = new Set(
+    schema.statements.flatMap((statement) =>
+      Option.toArray(
+        Option.map(Schema.decodeUnknownOption(CheckStatement)(statement), ({ name, relation }) =>
+          checkKey(relation.name, name),
+        ),
+      ),
+    ),
+  );
+  const read = new Map<string, string>();
+
+  return (law: LawOf<"check">): Option.Option<string> => {
+    const key = checkKey(law.relation, law.name);
+    if (!stated.has(key)) {
+      return Option.none();
+    }
+
+    const known = read.get(key);
+    if (known !== undefined) {
+      return Option.some(known);
+    }
+
+    const installed = constraintNameOf(schema, law);
+    read.set(key, installed);
+
+    return Option.some(installed);
+  };
+});
+
+/**
+ * One law of a refusal as the refusal carries it: its display text, the installed name of a check
+ * the import's schema states ({@link installedNamesOf}), and the name and rule the law table
+ * gives it.
  *
  * @param law - A law of an `invariant-rejected` outcome.
  * @returns Its facts.
  */
 const lawFactOf = (law: Law): typeof RefusedLaw.Type => {
   const fact: Types.Mutable<typeof RefusedLaw.Type> = { text: Formatter.format(law) };
-  if (law.kind === "check") {
-    fact.installed = constraintNameOf(law);
+  const installed = law.kind === "check" ? installedNamesOf(Qti)(law) : Option.none();
+  if (Option.isSome(installed)) {
+    fact.installed = installed.value;
   }
 
   const name = lawNameOf(law);

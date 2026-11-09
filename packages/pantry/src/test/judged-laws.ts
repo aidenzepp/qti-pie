@@ -50,14 +50,16 @@ const checksOf = Fn.memoize(
 );
 
 /**
- * The name PostgreSQL holds a row check's CHECK constraint under, which a direct SQL writer's
- * refusal by it names (SQLSTATE 23514): grizzle's `constraintNameOf` of the check the schema
- * states on a relation under a declared name, as `lawsOf` names it, so a test takes the name from
- * the installation's own naming and never spells it.
+ * The name PostgreSQL holds a check under, which a direct SQL writer's refusal by it names
+ * (SQLSTATE 23514): grizzle's `constraintNameOf(schema, law)` of the check the schema states on a
+ * relation under a declared name, as `lawsOf` names it, a row check's CHECK constraint or a check
+ * over a derived relation's triggers, so a test takes the name from the installation's own naming
+ * and never spells it.
  *
- * The first call compiles the schema's law model (`schemaLawsOf` of `#pantry/import/refusal.ts`),
- * so a test calls this in its body, under its own timeout, never where a run without the lease
- * loads the file.
+ * Each call compiles the schema's law model, and the first another (`schemaLawsOf` of
+ * `#pantry/import/refusal.ts`, then grizzle's `constraintNameOf`, which compiles on every call), so
+ * a test calls this in its body, under its own timeout, never where a run without the lease loads
+ * the file.
  *
  * @param schema - The schema, `Qti`.
  * @param relation - The relation the check is declared on, by name.
@@ -74,5 +76,5 @@ export const checkConstraintOf = (schema: typeof Qti, relation: string, name: st
     );
   }
 
-  return constraintNameOf(law);
+  return constraintNameOf(schema, law);
 };
