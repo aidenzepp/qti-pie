@@ -21,8 +21,7 @@ import {
   leafStartFold,
 } from "#pantry/qti/mathml-align.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { QtiBase } from "#pantry/qti/base.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti, QtiBase } from "#pantry/qti/own.ts";
 
 /**
  * How long building a schema over every relation of `Qti` may take: its statements are planned

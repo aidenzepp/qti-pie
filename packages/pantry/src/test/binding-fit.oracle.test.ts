@@ -47,7 +47,7 @@ import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import type { Addition } from "@bjornpagen/grizzle";
 import { Duration, Effect, Option } from "effect";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { BindingFit, grammar, RecordBindingFit } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";

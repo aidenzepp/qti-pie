@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { committedRosters } from "#pantry/db/codes.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { qtiRelations } from "#pantry/qti/base.ts";
 
 /**
  * Find the first declared handle that grizzle would refuse: one the committed snapshot holds
@@ -37,7 +37,7 @@ const firstMisorder = (
 
 describe("the declared rosters", () => {
   it("are in the committed snapshot's code order, handles new since the snapshot last", () => {
-    const closedRosters = Object.entries(Qti.relations).flatMap(([name, member]) =>
+    const closedRosters = Object.entries(qtiRelations).flatMap(([name, member]) =>
       member.kind === "closed" ? [{ handles: member.handles, name }] : [],
     );
 

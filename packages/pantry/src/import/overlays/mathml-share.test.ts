@@ -166,7 +166,6 @@ const ids = {
   context: ownContext(idOf(0)),
   documentType: "imsqti_item_xmlv3p0",
   idOf,
-  targetAt: () => Option.none(),
 } as const satisfies IdentityIds;
 
 /**
@@ -511,7 +510,6 @@ const assembledIds = ({ base }: Written): IdentityIds => ({
   context: ownContext(idOf(base)),
   documentType: ids.documentType,
   idOf: (index: number) => idOf(base + index),
-  targetAt: () => Option.none(),
 });
 
 /**

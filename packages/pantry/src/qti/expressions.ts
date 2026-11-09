@@ -101,6 +101,7 @@ import {
   DeclarationKind,
   NodeKind,
   OperatorArity,
+  ResourceType,
   SchemaVersion,
   VariableReference,
 } from "#pantry/grammar/install.ts";
@@ -162,8 +163,10 @@ import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import {
   Instance,
   ItemRefDocument,
+  ItemRefTarget,
   itemKind,
   itemRefKind,
+  linkResourceTypes,
   partKind,
   sectionKind,
   sectionRefKind,
@@ -1545,10 +1548,10 @@ const builtInOfScope = (r: ReadingRow) =>
 
 /**
  * State that a reading resolves (spec reading 48): its variable is named, declared, mapped or built
- * in, or read through an LTI item ref unchecked (source `link`, spec reading 110), and, numbered, its item ref can
- * repeat under a selection with replacement and its number is at least 1 (reading 88). A name
- * reading, a `section-identifier`'s, is no variable's, and a setter's prefixed reading resolves
- * nothing: a setter sets its own document's variable (reading 112).
+ * in, or read through an LTI item ref unchecked (source `link`, spec reading 110), and, numbered,
+ * its item ref can repeat under a selection with replacement and its number is at least 1 (reading
+ * 88). A name reading, a `section-identifier`'s, is no variable's, and a setter's prefixed reading
+ * resolves nothing: a setter sets its own document's variable (reading 112).
  *
  * @param r - The row.
  * @returns The predicate.

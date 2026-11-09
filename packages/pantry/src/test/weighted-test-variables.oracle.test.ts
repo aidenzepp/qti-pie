@@ -18,7 +18,7 @@ import { Array as Arr, ConfigProvider, Effect, FileSystem, Option } from "effect
 import { rulesOf } from "#pantry/import/refusal.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { materialize, weightedNames } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";

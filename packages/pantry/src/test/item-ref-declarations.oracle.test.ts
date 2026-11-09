@@ -41,7 +41,7 @@ import { readProgram } from "#pantry/import/program.ts";
 import { lawOfCheck, ruleOfLaw, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { itemRefKind, itemResourceType, linkResourceTypes } from "#pantry/qti/tests.ts";
+import { itemResourceType, linkResourceTypes } from "#pantry/qti/tests.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
 import type {
   DeclarationBaseType,
@@ -699,19 +699,6 @@ const readingResolves = (reading: Addition<typeof Reading>): boolean =>
     (reading.replaced && /^[0-9]*[1-9][0-9]*$/u.test(reading.number)));
 
 /**
- * Whether a reading reads through an LTI item ref, whose mapping has no source declaration and is
- * accepted unchecked, with the reading (spec reading 110).
- *
- * @param reading - The reading.
- * @returns Whether it is read through an LTI link.
- */
-const throughLink = (reading: Addition<typeof Reading>): boolean =>
-  (reading.form === "split" || reading.form === "numbered") &&
-  reading.found &&
-  reading.namedKind === itemRefKind &&
-  linkTypes.has(reading.resourceType);
-
-/**
  * The key a reading's declaration row copies of its reading: the reading's key and the item ref it
  * reads through.
  *
@@ -736,10 +723,9 @@ const readingBreaches = (rows: HostRows): readonly HostBreach[] => {
 
   return [
     ...[...rows.inputs.Reading.values()]
-      .filter(
-        (reading) =>
-          reading.source === "mapped" && readingResolves(reading) && !throughLink(reading),
-      )
+      // A reading through an LTI item ref is `link`, never `mapped` (spec reading 110), so it asks
+      // for no declaration.
+      .filter((reading) => reading.source === "mapped" && readingResolves(reading))
       .flatMap((reading) => {
         const mapping = rows.mappings.find(
           ({ parent, target }) => parent === reading.named && target === reading.variable,

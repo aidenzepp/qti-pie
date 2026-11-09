@@ -1373,6 +1373,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               identifierLexical: mapping.target,
               identifierTrail: "",
               node: nodeOf(82),
+              parentKind: "qti-assessment-item",
             };
             const target = checkConstraintOf(Qti, DeclaredTarget.name, "Variable_mapping_target");
             const targetCases: readonly {

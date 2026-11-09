@@ -13,8 +13,7 @@ import { lawNameOf, lawNames, lawOfCheck, statedLaws } from "#pantry/import/refu
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { shareLaws, shareRelations } from "#pantry/qti/mathml-share.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
-import { QtiBase } from "#pantry/qti/base.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti, QtiBase } from "#pantry/qti/own.ts";
 
 /**
  * How long building a schema over every relation of `Qti` may take: its statements are planned

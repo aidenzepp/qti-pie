@@ -14,7 +14,7 @@ import { assert, layer } from "@effect/vitest";
 import { Array as Arr, Effect, Formatter, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
 import { rulesOf } from "#pantry/import/refusal.ts";
-import { Qti } from "#pantry/qti/schema.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
