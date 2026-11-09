@@ -26,9 +26,13 @@ const packageDirectory = path.resolve(import.meta.dirname, "..", "..");
  * How long the check may take. Measured wall time of `pnpm exec grizzle check`: 8.2 s at load 11,
  * 14.7 s at load 47 (refused at the schema), 22.1 s at load 50 (a full compile to drift).
  * Measured 2026-11-07: 33.9 s at a load average of 68 to 116; the same day, 48.3 s while the load
- * rose from 35 to 123.
+ * rose from 35 to 123. At nice 19, as lanes run the free suite beside the database tier, the check
+ * gets a fraction of a core: Measured 2026-11-09: 475.1 s at a load average of 47.6 to 82.9, the
+ * check alone at nice 19 (the same day 337 s alone, and the test 255.4 s at 38 to 47), so the
+ * constant is over twice the slowest. A measurement at nice 19 whose least load is 60 or more for
+ * the whole run is owed.
  */
-const checkTimeoutMs = 300_000;
+const checkTimeoutMs = 1_000_000;
 
 /**
  * Run `pnpm exec grizzle check grizzle.config.ts` in the package directory and collect how it
