@@ -2724,8 +2724,10 @@ const unownedCodec: readonly {
 
 /**
  * R7-a's refused values: a closed `data-ssml` that Data-SSML 1.0 does not admit (an unknown name, a
- * value of the wrong type, a value outside an enumeration, text that is not JSON). The importer
- * refuses them under `attribute-lexical` and the oracle must agree, the oracle with its own reader
+ * value of the wrong type, a value outside an enumeration, text that is not JSON). The database
+ * refuses them under the law "Data SSML" (spec reading 177, rule `attribute-lexical`), over the
+ * rows the importer reads the value into, and the oracle must agree: each package shreds and breaks
+ * that law, no codec refusal before any row, the oracle with its own reader
  * (`src/test/oracle-laws/data-ssml.ts`), written from the schema apart from the importer's
  * (`src/vocab/data-ssml.ts`), which the purity guard keeps it from reading;
  * `src/vocab/data-ssml.test.ts` pins the same values.
@@ -2769,11 +2771,15 @@ describe("the unowned readings 2, 3, 9, 39, 41, 42, 43, 47, 83 and R7-a", () => 
   }
 
   for (const { files, name } of unownedDataSsml) {
-    it.effect(`the codec refuses ${name} under attribute-lexical`, () =>
+    it.effect(`the law Data SSML refuses ${name} under attribute-lexical`, () =>
       Effect.gen(function* dataSsml() {
         const judgment = yield* judged(files);
+        const breaches = breachesOf(judgment);
 
-        assert.strictEqual(judgment._tag, "CodecRefusal");
+        assert.isTrue(
+          breaches.some(({ law }) => law === "Data SSML" && ruleOf(law) === "attribute-lexical"),
+          shown(breaches),
+        );
         assert.deepStrictEqual(verdictOf(judgment), {
           rule: "attribute-lexical",
           verdict: "refused",
