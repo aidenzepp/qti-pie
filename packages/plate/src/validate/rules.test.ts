@@ -877,6 +877,127 @@ const gapping = (texts: readonly string[], gaps: readonly string[]): SourceEleme
     ],
   );
 
+/**
+ * Give a hand-built item's root further attributes, such as reading 128's tool attributes.
+ *
+ * @param source The item.
+ * @param attributes The attributes its root gains, after its own.
+ * @returns The same item, its root carrying them.
+ */
+const rooted = (source: SourceDocument, attributes: readonly SourceAttribute[]): SourceDocument =>
+  doc(source.location, { ...source.root, attributes: [...source.root.attributes, ...attributes] });
+
+/**
+ * An `audio` whose caption `track` carries a `label`, a kind whose label asks for its tool
+ * (reading 128).
+ */
+const captioned = el(
+  "audio",
+  [attr("src", "media/sound.mp3")],
+  [
+    el("track", [
+      attr("src", "media/en.vtt"),
+      attr("kind", "captions"),
+      attr("srclang", "en"),
+      attr("label", "English"),
+    ]),
+  ],
+);
+
+/**
+ * Construct the `label-tool` refusal at an item root (reading 128, E31a).
+ *
+ * @param attribute The tool attributes the root lacks, space-separated.
+ * @param labelled The path of the first labelled element.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const labelTool = (attribute: string, labelled: string) => ({
+  detail: {
+    attribute,
+    check: "label-tool",
+    element: "qti-assessment-item",
+    labelled,
+    reading: "128",
+  },
+  path: "qti-assessment-item",
+  rule: "missing-attribute" as const,
+});
+
+/**
+ * Construct a `qti-template-block` shown by the template variable `T`, its content body holding
+ * the given children.
+ *
+ * @param children The children of its `qti-content-body`.
+ * @returns The template block.
+ */
+const templateBlock = (children: readonly SourceElement[]): SourceElement =>
+  el(
+    "qti-template-block",
+    [attr("identifier", "SHOWN"), ...shownBy("T")],
+    [el("qti-content-body", [], children)],
+  );
+
+/**
+ * Construct a table of one row: a `th` whose `id` is `H` and a `td` with the given `headers`.
+ *
+ * @param headers The `td`'s `headers`, as written.
+ * @param nested The children of the `td` after its text, such as a nested table.
+ * @returns The table.
+ */
+const headed = (headers: string, nested: readonly SourceElement[] = []): SourceElement =>
+  el(
+    "table",
+    [],
+    [
+      el(
+        "tbody",
+        [],
+        [
+          el(
+            "tr",
+            [],
+            [
+              el("th", [attr("id", "H")], [text("Head")]),
+              el("td", [attr("headers", headers)], [text("Cell"), ...nested]),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
+
+/**
+ * Construct the `headers` refusal of a `td` (reading 126, E29).
+ *
+ * @param path The `td`'s path.
+ * @param value Its `headers`, as written.
+ * @param token The token at fault.
+ * @returns The refusal, as {@link judged} reduces it.
+ */
+const badHeaders = (path: string, value: string, token: string) => ({
+  detail: {
+    attribute: "headers",
+    check: "headers",
+    element: "td",
+    reading: "126",
+    token,
+    value,
+  },
+  path: `${path}/@headers`,
+  rule: "attribute-type" as const,
+});
+
+/**
+ * Construct a paragraph that holds a `q` between two texts.
+ *
+ * @param before The text before the `q`.
+ * @param inside The `q`'s text.
+ * @param after The text after it.
+ * @returns The paragraph.
+ */
+const quoting = (before: string, inside: string, after: string): SourceElement =>
+  el("p", [], [text(before), el("q", [], [text(inside)]), text(after)]);
+
 describe("checkRules", () => {
   describe("undeclared-response", () => {
     it("[I-1] refuses an interaction naming RESP2 when only RESPONSE is declared", () => {
@@ -2051,6 +2172,202 @@ describe("checkRules", () => {
       assert.deepStrictEqual(judged(item([pairs], [gapping(["W"], ["G", "G"])])), [
         repeated(`${body}/qti-gap-match-interaction/p/qti-gap[2]/@identifier`, "qti-gap", "G"),
       ]);
+    });
+  });
+
+  describe("align-54 body content: a label names its tool, no interaction in a template block, headers, q", () => {
+    const body = "qti-assessment-item/qti-item-body";
+
+    it("align-54 body content E31a: refuses a track's label in an item whose root lacks tool-name, as missing-attribute label-tool at the root (reading 128)", () => {
+      assert.deepStrictEqual(judged(rooted(item([], [captioned]), [attr("tool-version", "1.0")])), [
+        labelTool("tool-name", `${body}/audio/track`),
+      ]);
+    });
+
+    it("align-54 body content E31a: gives one refusal for an item that labels two elements, naming the first and both tools (reading 128)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier")],
+            [
+              el("p", [attr("label", "stem")], [text("Listen.")]),
+              captioned,
+              el(
+                "qti-choice-interaction",
+                [attr("response-identifier", "RESPONSE"), attr("label", "choices")],
+                [el("qti-simple-choice", [attr("identifier", "A")], [text("A")])],
+              ),
+            ],
+          ),
+        ),
+        [labelTool("tool-name tool-version", `${body}/p`)],
+      );
+    });
+
+    it("align-54 body content E31a: accepts a labelled track beside both tools on the root, and a printed variable's label, which asks for none (reading 128)", () => {
+      const tools = [attr("tool-name", "Authoring"), attr("tool-version", "1.0")];
+
+      assert.deepStrictEqual(judged(rooted(item([], [captioned]), tools)), []);
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [
+              el(
+                "p",
+                [],
+                [el("qti-printed-variable", [attr("identifier", "SCORE"), attr("label", "Score")])],
+              ),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    const templated = declaration("qti-template-declaration", "T", "single", "identifier");
+
+    it("align-54 body content E37: refuses an interaction at depth two of a qti-template-block, and one deeper, as misplaced-element (reading 143)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              response("TYPED", "single", "string"),
+              templated,
+            ],
+            [
+              templateBlock([
+                choice("RESPONSE"),
+                el(
+                  "p",
+                  [],
+                  [el("qti-text-entry-interaction", [attr("response-identifier", "TYPED")])],
+                ),
+              ]),
+            ],
+          ),
+        ),
+        [
+          {
+            detail: {
+              element: "qti-choice-interaction",
+              reading: "143",
+              requires: "outside a qti-template-block",
+            },
+            path: `${body}/qti-template-block/qti-content-body/qti-choice-interaction`,
+            rule: "misplaced-element",
+          },
+          {
+            detail: {
+              element: "qti-text-entry-interaction",
+              reading: "143",
+              requires: "outside a qti-template-block",
+            },
+            path: `${body}/qti-template-block/qti-content-body/p/qti-text-entry-interaction`,
+            rule: "misplaced-element",
+          },
+        ],
+      );
+    });
+
+    it("align-54 body content E37: accepts an inline interaction in a template inline's span (reading 143)", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("TYPED", "single", "string"), templated],
+            [
+              el(
+                "p",
+                [],
+                [
+                  el(
+                    "qti-template-inline",
+                    [attr("identifier", "SHOWN"), ...shownBy("T")],
+                    [
+                      el(
+                        "span",
+                        [],
+                        [el("qti-text-entry-interaction", [attr("response-identifier", "TYPED")])],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    const cell = `${body}/table/tbody/tr/td`;
+
+    it("align-54 body content E29: refuses a headers token naming no th, and one written twice, as attribute-type headers (reading 126)", () => {
+      assert.deepStrictEqual(judged(item([], [headed("H NONE")])), [
+        badHeaders(cell, "H NONE", "NONE"),
+      ]);
+      assert.deepStrictEqual(judged(item([], [headed("H  H")])), [badHeaders(cell, "H  H", "H")]);
+    });
+
+    it("align-54 body content E29: refuses a nested table's cell naming the enclosing table's th, and accepts a cell naming its own (reading 126)", () => {
+      assert.deepStrictEqual(judged(item([], [headed("H", [headed("H")])])), []);
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [],
+            [
+              headed("H", [
+                el(
+                  "table",
+                  [],
+                  [
+                    el(
+                      "tbody",
+                      [],
+                      [el("tr", [], [el("td", [attr("headers", "H")], [text("Inner")])])],
+                    ),
+                  ],
+                ),
+              ]),
+            ],
+          ),
+        ),
+        [badHeaders(`${cell}/table/tbody/tr/td`, "H", "H")],
+      );
+    });
+
+    /**
+     * Construct the `quotation` refusal of the paragraph's `q` (reading 127, E30).
+     *
+     * @param mark The quotation mark.
+     * @param side Where it stands against the `q`.
+     * @returns The refusal, as {@link judged} reduces it.
+     */
+    const quoted = (mark: string, side: string) => ({
+      detail: { check: "quotation", element: "q", mark, reading: "127", side },
+      path: `${body}/p/q`,
+      rule: "text-not-allowed" as const,
+    });
+
+    it("align-54 body content E30: refuses quotation marks around a q, once, at the first side (reading 127)", () => {
+      assert.deepStrictEqual(judged(item([], [quoting("He said “", "x", "”.")])), [
+        quoted("“", "before"),
+      ]);
+      assert.deepStrictEqual(judged(item([], [quoting("He said ", "x", "» then")])), [
+        quoted("»", "after"),
+      ]);
+      assert.deepStrictEqual(judged(item([], [quoting("He said ", '"x', " then")])), [
+        quoted('"', "start"),
+      ]);
+      assert.deepStrictEqual(judged(item([], [quoting("He said ", "x‘", " then")])), [
+        quoted("‘", "end"),
+      ]);
+    });
+
+    it("align-54 body content E30: accepts an apostrophe beside a q, a space between a mark and a q, and a mark inside it (reading 127)", () => {
+      assert.deepStrictEqual(judged(item([], [quoting("the students’", "x", "' then")])), []);
+      assert.deepStrictEqual(judged(item([], [quoting("He said “ ", "a “b” c", " ”")])), []);
     });
   });
 
@@ -5521,4 +5838,49 @@ describe("reading an identifier", () => {
       }),
     growthTimeoutMs,
   );
+});
+
+describe("align-54 body content: a name that is no NCName gets its value refusal alone", () => {
+  it("align-54 body content E40a: gives a declaration identifier that spells no NCName only its value refusal, and the bindings and reads that name it theirs (reading 152)", () => {
+    const refused = verdictRefusals(
+      item(
+        [
+          response("1a", "single", "identifier"),
+          response("1a", "single", "identifier"),
+          outcome("SCORE"),
+        ],
+        [choice("1a")],
+        [processing(undefined, [setScore(variable("2b"))])],
+      ),
+    );
+
+    assert.deepStrictEqual(
+      refused.map(({ path, rule }) => [rule, path]),
+      [
+        ["attribute-type", "qti-assessment-item/qti-response-declaration[1]/@identifier"],
+        ["attribute-type", "qti-assessment-item/qti-response-declaration[2]/@identifier"],
+        [
+          "attribute-type",
+          "qti-assessment-item/qti-item-body/qti-choice-interaction/@response-identifier",
+        ],
+        [
+          "attribute-type",
+          "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-variable/@identifier",
+        ],
+      ],
+    );
+  });
+
+  it("align-54 body content E40a: does not judge a value's type under a declaration whose cardinality spells nothing (reading 158)", () => {
+    const counted = el(
+      "qti-outcome-declaration",
+      [attr("identifier", "N"), attr("cardinality", "many"), attr("base-type", "integer")],
+      [values("qti-default-value", "x")],
+    );
+
+    assert.deepStrictEqual(
+      verdictRefusals(item([counted], [])).map(({ path, rule }) => [rule, path]),
+      [["attribute-type", "qti-assessment-item/qti-outcome-declaration/@cardinality"]],
+    );
+  });
 });

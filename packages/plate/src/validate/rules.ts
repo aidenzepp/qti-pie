@@ -15,6 +15,7 @@ import { Array as Arr, Option, Result } from "effect";
 import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
+  SourceChild,
   SourceDocument,
   SourceElement,
   Visit,
@@ -48,7 +49,7 @@ import type { InvalidValue, ModelledBaseType } from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { governingTables } from "#plate/validate/structure.ts";
-import type { Tables } from "#plate/validate/xsd.ts";
+import type { ChildName, Tables } from "#plate/validate/xsd.ts";
 import { baseTypes, cardinalities, interactionNames, templateName } from "#plate/vocabulary.ts";
 import type { BaseType, Cardinality, InteractionName, TemplateName } from "#plate/vocabulary.ts";
 
@@ -270,6 +271,24 @@ const orderedChoices: ReadonlyMap<string, string> = new Map([
 const identifierOf = (attribute: SourceAttribute): string => trimXmlSpace(attribute.value);
 
 /**
+ * Read the name an identifier attribute gives, where it gives one: its value collapsed
+ * ({@link identifierOf}), when that is an NCName.
+ *
+ * Reading 152 ("a value names something only where it is an NCName"): a declaration's
+ * `identifier`, an interaction's binding and a variable reference name something only as an
+ * `xs:NCName`, and a value outside that lexical space names nothing. It shares no name with
+ * another, no reference resolves to it, and the law a reference, a binding or a name is held to
+ * does not judge it: the attribute's value domain, the structural validator's `attribute-type`,
+ * refuses it alone (readings 157 and 159, E40a). So every law here that resolves or compares a name
+ * reads it through this.
+ *
+ * @param attribute The identifier attribute.
+ * @returns The name it gives, none when its collapsed value is no NCName.
+ */
+const nameOf = (attribute: SourceAttribute): Option.Option<string> =>
+  Option.filter(Option.some(identifierOf(attribute)), isNcName);
+
+/**
  * Find an element's attribute in no namespace by its local name.
  *
  * @param element The element.
@@ -479,7 +498,8 @@ const choicePool = (
  * @param pools The identifiers each pool has given so far, which this adds the element's to.
  * @returns The refusal at the `identifier` attribute's path, with the element's `class` and, for a
  *   repeat of a choice of another class, its `otherClass`; none for an element that is no choice or
- *   gap, and for a first occurrence that names no variable.
+ *   gap, for a first occurrence that names no variable, and for an identifier that names nothing
+ *   ({@link nameOf}).
  */
 const choiceIdentifier = (
   source: SourceDocument,
@@ -489,11 +509,12 @@ const choiceIdentifier = (
 ): readonly Refusal[] => {
   const pool = choicePool(visit.element, pools);
   const attribute = attributeOf(visit.element, "identifier");
-  if (Option.isNone(pool) || Option.isNone(attribute)) {
+  const name = attribute.pipe(Option.flatMap(nameOf));
+  if (Option.isNone(pool) || Option.isNone(attribute) || Option.isNone(name)) {
     return [];
   }
 
-  const identifier = identifierOf(attribute.value);
+  const identifier = name.value;
   const path = attributePath(visit.path, attribute.value);
   const choiceClass = visit.element.local;
   const earlier = Option.fromUndefinedOr(pool.value.get(identifier));
@@ -540,7 +561,8 @@ const choiceIdentifier = (
  * @param declared The identifiers the item's declarations have given so far, which this adds the
  *   element's to.
  * @returns The refusal at the repeated `identifier` attribute's path, or none for the first
- *   occurrence and for an element that is no declaration of the root.
+ *   occurrence, for an element that is no declaration of the root, and for an identifier that names
+ *   nothing ({@link nameOf}).
  */
 const duplicateDeclaration = (
   source: SourceDocument,
@@ -548,13 +570,14 @@ const duplicateDeclaration = (
   declared: Set<string>,
 ): readonly Refusal[] => {
   const attribute = attributeOf(visit.element, "identifier");
+  const name = attribute.pipe(Option.flatMap(nameOf));
   const declaration =
     Option.exists(visit.parent, (parent) => parent === source.root) && isDeclaration(visit.element);
-  if (!declaration || Option.isNone(attribute)) {
+  if (!declaration || Option.isNone(attribute) || Option.isNone(name)) {
     return [];
   }
 
-  const identifier = identifierOf(attribute.value);
+  const identifier = name.value;
   if (!declared.has(identifier)) {
     declared.add(identifier);
 
@@ -972,7 +995,7 @@ const boundOnce = (
  * @param bound The responses earlier bindings bind.
  * @param attribute The interaction's `response-identifier`.
  * @returns The refusal at the attribute's path when it names no declaration, otherwise the
- *   refusals of its binding.
+ *   refusals of its binding; none when its value names nothing ({@link nameOf}).
  */
 const responseBinding = (
   source: SourceDocument,
@@ -981,7 +1004,12 @@ const responseBinding = (
   bound: Set<string>,
   attribute: SourceAttribute,
 ): readonly Refusal[] => {
-  const response = identifierOf(attribute);
+  const name = nameOf(attribute);
+  if (Option.isNone(name)) {
+    return [];
+  }
+
+  const response = name.value;
   const declaration = declarations.get(response);
   if (declaration === undefined) {
     return [
@@ -1042,9 +1070,10 @@ const capturedCardinality = (
  * @param declarations The item's response declarations by identifier.
  * @param bound The responses earlier bindings bind.
  * @param attribute The interaction's `string-identifier`.
- * @param own The response its `response-identifier` names, none when it writes none.
+ * @param own The response its `response-identifier` names, none when it writes none or names
+ *   nothing.
  * @returns The refusals of its binding, empty when it binds a string response of the captured
- *   cardinality that no other binding binds.
+ *   cardinality that no other binding binds, and when its value names nothing ({@link nameOf}).
  */
 const stringBinding = (
   source: SourceDocument,
@@ -1054,7 +1083,12 @@ const stringBinding = (
   attribute: SourceAttribute,
   own: Option.Option<string>,
 ): readonly Refusal[] => {
-  const response = identifierOf(attribute);
+  const name = nameOf(attribute);
+  if (Option.isNone(name)) {
+    return [];
+  }
+
+  const response = name.value;
   const declaration = declarations.get(response);
   if (declaration === undefined) {
     return [
@@ -1142,7 +1176,7 @@ const responseRules = (
           declarations,
           bound,
           attribute,
-          own.pipe(Option.map(identifierOf)),
+          own.pipe(Option.flatMap(nameOf)),
         ),
     }),
   ];
@@ -1161,23 +1195,20 @@ const responseRules = (
  * @param source The document.
  * @param visit The element's visit.
  * @param contexts The item's context declarations by identifier.
- * @returns The refusal at the element, or none when it names a context variable or is no
- *   `qti-context-variable`.
+ * @returns The refusal at the element, or none when it names a context variable, when its
+ *   `identifier` names nothing ({@link nameOf}), or when it is no `qti-context-variable`.
  */
 const contextVariableReference = (
   source: SourceDocument,
   visit: Visit,
   contexts: ReadonlyMap<string, SourceElement>,
 ): readonly Refusal[] => {
-  const attribute = attributeOf(visit.element, "identifier");
-  if (
-    !isQti(visit.element, (local) => local === "qti-context-variable") ||
-    Option.isNone(attribute)
-  ) {
+  const name = Option.flatMap(attributeOf(visit.element, "identifier"), nameOf);
+  if (!isQti(visit.element, (local) => local === "qti-context-variable") || Option.isNone(name)) {
     return [];
   }
 
-  const identifier = identifierOf(attribute.value);
+  const identifier = name.value;
 
   return identifier === "QTI_CONTEXT" || contexts.has(identifier)
     ? []
@@ -1600,16 +1631,16 @@ const mapResponseRequirements = (
   visit: Visit,
   context: Context,
 ): readonly Refusal[] => {
-  const attribute = attributeOf(visit.element, "identifier");
+  const name = Option.flatMap(attributeOf(visit.element, "identifier"), nameOf);
   if (
     visit.element.namespace !== qtiNamespace ||
-    Option.isNone(attribute) ||
+    Option.isNone(name) ||
     !liesIn(context, visit.element, "response")
   ) {
     return [];
   }
 
-  const identifier = identifierOf(attribute.value);
+  const identifier = name.value;
   const declaration = context.responses.get(identifier);
 
   return declaration === undefined
@@ -1814,6 +1845,11 @@ const isRecordField = (visit: Visit, parents: ReadonlyMap<SourceElement, SourceE
  * `qti-correct-response` or `qti-default-value`, the declaration's, or, when the declaration is a
  * record, the field's own `base-type` ({@link isRecordField}).
  *
+ * A declaration's values are typed only where its `cardinality` spells one (reading 158, "each law
+ * over it judges what it does spell", E40a): the law over a typed value reads the cardinality and
+ * the base type both, so a value of a declaration whose `cardinality` is unwritten or spells
+ * nothing is not judged, and the structural validator refuses the cardinality alone.
+ *
  * @param visit The element's visit.
  * @param context The parents the walk has met.
  * @returns The base type, none for any other element and for a value this rule does not judge.
@@ -1828,7 +1864,9 @@ const textBaseType = (visit: Visit, context: Context): Option.Option<ModelledBas
   }
 
   return Option.flatMap(
-    enclosing(context.parents, visit.element, valueToDeclaration),
+    Option.filter(enclosing(context.parents, visit.element, valueToDeclaration), (declaration) =>
+      Option.isSome(cardinalityOf(declaration)),
+    ),
     (declaration) =>
       modelledBaseType(isRecordDeclaration(declaration) ? visit.element : declaration),
   );
@@ -2232,14 +2270,15 @@ const namingOf = (
  * Read the variable reference of an element that names one.
  *
  * @param element The element.
- * @returns Its reference, none for an element that names no variable and for one with no
- *   `identifier`, which is the structural validator's `missing-attribute`.
+ * @returns Its reference, none for an element that names no variable, for one with no
+ *   `identifier`, which is the structural validator's `missing-attribute`, and for one whose
+ *   `identifier` names nothing ({@link nameOf}), which no law here judges and nothing types.
  */
 const referenceOf = (element: SourceElement): Option.Option<Reference> =>
   Option.flatMap(namingOf(element), ({ attribute, expected }) =>
-    Option.map(attributeOf(element, attribute), (written) => ({
+    Option.map(Option.flatMap(attributeOf(element, attribute), nameOf), (identifier) => ({
       expected,
-      identifier: identifierOf(written),
+      identifier,
     })),
   );
 
@@ -2730,17 +2769,20 @@ interface TemplateTarget {
  *
  * @param element The element.
  * @param context The item's declarations.
- * @returns The target; none for an element that is not such a rule and for one with no
- *   `identifier`, which is the structural validator's `missing-attribute`.
+ * @returns The target; none for an element that is not such a rule, for one with no
+ *   `identifier`, which is the structural validator's `missing-attribute`, and for one whose
+ *   `identifier` names nothing ({@link nameOf}).
  */
 const templateTargetOf = (
   element: SourceElement,
   context: Context,
 ): Option.Option<TemplateTarget> =>
   Option.map(
-    Option.all([qtiEntry(templateSetters, element), attributeOf(element, "identifier")]),
-    ([kinds, written]) => {
-      const identifier = identifierOf(written);
+    Option.all([
+      qtiEntry(templateSetters, element),
+      Option.flatMap(attributeOf(element, "identifier"), nameOf),
+    ]),
+    ([kinds, identifier]) => {
       const declaration = context.variables.get(identifier);
 
       return {
@@ -3035,16 +3077,16 @@ const lookupTableRequirements = (
   visit: Visit,
   context: Context,
 ): readonly Refusal[] => {
-  const attribute = attributeOf(visit.element, "identifier");
+  const name = Option.flatMap(attributeOf(visit.element, "identifier"), nameOf);
   if (
     !isQti(visit.element, (local) => local === "qti-lookup-outcome-value") ||
-    Option.isNone(attribute) ||
+    Option.isNone(name) ||
     !inProcessing(context, visit.element)
   ) {
     return [];
   }
 
-  const identifier = identifierOf(attribute.value);
+  const identifier = name.value;
   const declaration = context.outcomes.get(identifier);
 
   return declaration === undefined || Option.isSome(lookupTableOf(declaration))
@@ -3092,16 +3134,16 @@ const lookupOperandType = (
   visit: Visit,
   context: Context,
 ): readonly Refusal[] => {
-  const attribute = attributeOf(visit.element, "identifier");
+  const name = Option.flatMap(attributeOf(visit.element, "identifier"), nameOf);
   if (
     !isQti(visit.element, (local) => local === "qti-lookup-outcome-value") ||
-    Option.isNone(attribute) ||
+    Option.isNone(name) ||
     !inProcessing(context, visit.element)
   ) {
     return [];
   }
 
-  const identifier = identifierOf(attribute.value);
+  const identifier = name.value;
   const declaration = context.outcomes.get(identifier);
   const table =
     declaration === undefined
@@ -3975,12 +4017,346 @@ const setCorrectResponses = (
 };
 
 /**
+ * The ASI types whose `label` characteristic states the sentence "If an item uses labels then
+ * values for the associated toolName and toolVersion characteristics must also be provided", in
+ * both information models (reading 128): BasePromptInteraction's (section 5.15.5), the six of the
+ * BaseSequence family's (sections 5.16.5 to 5.21.5) and ItemBody's (section 5.79.4). The other
+ * types that declare a `label` describe it as text for a reader and ask for nothing: the item's
+ * and the stimulus's own, ItemFileInfo's (a `qti-digital-material`'s or a `qti-calculator-info`'s)
+ * and PrintedVariable's. A QTI 3.0.1 item root's own `label` is `checkVersion`'s (E31b).
+ */
+const toolLabelTypes: ReadonlySet<string> = new Set([
+  "BasePromptInteractionDType",
+  "BaseSequenceDType",
+  "BaseSequenceEmptyDType",
+  "BaseSequenceFullDType",
+  "BaseSequenceRIdentDType",
+  "BaseSequenceXBaseDType",
+  "BaseSequenceXBaseEmptyDType",
+  "ItemBodyDType",
+]);
+
+/**
+ * The tool attributes an item root carries when it uses labels, in the order a refusal lists them.
+ */
+const toolAttributes = ["tool-name", "tool-version"] as const;
+
+/**
+ * Report whether a named type is one of {@link toolLabelTypes} or derives from one, by extension or
+ * restriction, through the tables' named types.
+ *
+ * @param tables The tables generated from the QTI XSD.
+ * @param type The type, as an element's table names it.
+ * @returns Whether its derivation chain reaches a type whose `label` asks for its tool.
+ */
+const derivesToolLabel = (tables: Tables, type: ChildName): boolean => {
+  const climbed = new Set<string>();
+  let current = Option.some(type);
+  while (
+    Option.isSome(current) &&
+    current.value.namespace === qtiNamespace &&
+    !climbed.has(current.value.local)
+  ) {
+    const { local } = current.value;
+    if (toolLabelTypes.has(local)) {
+      return true;
+    }
+
+    climbed.add(local);
+    current = Option.flatMap(Option.fromUndefinedOr(tables.types[local]), (entry) =>
+      entry.derivation === "union" ? Option.none() : Option.some(entry.base),
+    );
+  }
+
+  return false;
+};
+
+/**
+ * Report whether an element's `label` asks for the tool that labelled it (reading 128): its kind's
+ * declared type is one of {@link toolLabelTypes} or derives from one. A type an `xsi:type` names is
+ * validly derived from the declared type, so it asks for the same. The kinds this gives are exactly
+ * those whose `label` the XSD declares inside one of those types: the body's HTML elements, the
+ * interactions, their choices and prompts, the feedback, template and rubric blocks and the item
+ * body itself.
+ *
+ * @param tables The tables generated from the QTI XSD.
+ * @param element The element.
+ * @returns Whether it is a QTI element of such a kind.
+ */
+const asksForTool = (tables: Tables, element: SourceElement): boolean =>
+  element.namespace === qtiNamespace &&
+  Option.exists(Option.fromUndefinedOr(tables.elements[element.local]), (table) =>
+    table.types.some((type) => derivesToolLabel(tables, type)),
+  );
+
+/**
+ * Apply `missing-attribute` with `check: "label-tool"` to an item that labels a body element
+ * (reading 128, E31a): an item one of whose elements carries a `label` its kind's characteristic
+ * asks a tool for ({@link asksForTool}) carries both `tool-name` and `tool-version` on its root, in
+ * either version. One refusal per item, at its root, naming the first such element in document
+ * order; `checkVersion`'s E31b adds none beside it for a QTI 3.0.1 root's own `label`.
+ *
+ * @param source The document, an item.
+ * @param visits The elements the rules judge, in document order.
+ * @param tables The tables generated from the QTI XSD.
+ * @returns The one refusal at the root, listing the missing tool attributes space-separated and the
+ *   labelled element's path as `labelled`; none when the root carries both or nothing is labelled.
+ */
+const labelTool = (
+  source: SourceDocument,
+  visits: readonly Visit[],
+  tables: Tables,
+): readonly Refusal[] => {
+  const { root } = source;
+  const missing = toolAttributes.filter((name) => Option.isNone(attributeOf(root, name)));
+  if (missing.length === 0) {
+    return [];
+  }
+
+  return Option.toArray(
+    Option.map(
+      Arr.findFirst(
+        visits,
+        ({ element }) =>
+          Option.isSome(attributeOf(element, "label")) && asksForTool(tables, element),
+      ),
+      ({ path }) =>
+        refusal(source, "missing-attribute", root.local, {
+          attribute: missing.join(" "),
+          check: "label-tool",
+          element: root.local,
+          labelled: path,
+          reading: "128",
+        }),
+    ),
+  );
+};
+
+/**
+ * Where each element of a document sits, as the body content rules read it: whether a template
+ * block holds it, and the table it takes part in.
+ */
+interface Placing {
+  /**
+   * The ids of the `th`s that take part in each table, each collapsed.
+   */
+  readonly headerIds: ReadonlyMap<SourceElement, ReadonlySet<string>>;
+  /**
+   * The nearest `table` each element lies in, for those a table holds.
+   */
+  readonly tableOf: ReadonlyMap<SourceElement, SourceElement>;
+  /**
+   * The elements a `qti-template-block` holds at any depth.
+   */
+  readonly templated: ReadonlySet<SourceElement>;
+}
+
+/**
+ * Find where each element of a document sits ({@link Placing}), over every element the document
+ * holds, so an ancestor the rules do not judge still places what it holds.
+ *
+ * @param source The document.
+ * @returns Its placing.
+ */
+const placingOf = (source: SourceDocument): Placing => {
+  const headerIds = new Map<SourceElement, Set<string>>();
+  const tableOf = new Map<SourceElement, SourceElement>();
+  const templated = new Set<SourceElement>();
+  for (const { element, parent } of walk(source)) {
+    if (Option.isSome(parent)) {
+      const holder = parent.value;
+      if (templated.has(holder) || isQti(holder, (local) => local === "qti-template-block")) {
+        templated.add(element);
+      }
+
+      const table = isQti(holder, (local) => local === "table") ? holder : tableOf.get(holder);
+      if (table !== undefined) {
+        tableOf.set(element, table);
+
+        const id = attributeOf(element, "id");
+        if (isQti(element, (local) => local === "th") && Option.isSome(id)) {
+          const ids = headerIds.get(table) ?? new Set<string>();
+          ids.add(identifierOf(id.value));
+          headerIds.set(table, ids);
+        }
+      }
+    }
+  }
+
+  return { headerIds, tableOf, templated };
+};
+
+/**
+ * Apply `misplaced-element` to an interaction a `qti-template-block` holds at any depth (reading
+ * 143, E37): "A qti-template-block must not contain any interactions, either directly or
+ * indirectly" (section 5.145), which is stricter than the XSD, whose content body reaches the
+ * interactions. A template inline's HTML may hold the four inline interactions, which this does not
+ * judge.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param placing Where the document's elements sit.
+ * @returns The refusal at the interaction's path; none for any other element.
+ */
+const templateBlockInteraction = (
+  source: SourceDocument,
+  visit: Visit,
+  placing: Placing,
+): readonly Refusal[] =>
+  isInteraction(visit.element) && placing.templated.has(visit.element)
+    ? [
+        refusal(source, "misplaced-element", visit.path, {
+          element: visit.element.local,
+          reading: "143",
+          requires: "outside a qti-template-block",
+        }),
+      ]
+    : [];
+
+/**
+ * Apply `attribute-type` with `check: "headers"` to a `td`'s or a `th`'s `headers` (reading 126,
+ * E29): each token is the `id` of a `th` of the cell's own table, its nearest, compared
+ * case-sensitively with the `id` collapsed, and no token is written twice. A cell no table holds
+ * takes part in none, so every token it writes is refused. A token outside the NCName's lexical
+ * space names nothing and is its value domain's alone (reading 152).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param placing Where the document's elements sit.
+ * @returns One refusal at the `headers` attribute's path, naming the first token at fault; none
+ *   when every token names a header of the cell's table once, and for any other element.
+ */
+const tableHeaders = (
+  source: SourceDocument,
+  visit: Visit,
+  placing: Placing,
+): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "headers");
+  if (
+    !isQti(visit.element, (local) => local === "td" || local === "th") ||
+    Option.isNone(attribute)
+  ) {
+    return [];
+  }
+
+  const table = placing.tableOf.get(visit.element);
+  const held = table === undefined ? undefined : placing.headerIds.get(table);
+  const written = new Set<string>();
+  for (const token of attribute.value.value.split(/[\t\n\r ]+/u).filter(isNcName)) {
+    if (written.has(token) || held?.has(token) !== true) {
+      return [
+        refusal(source, "attribute-type", attributePath(visit.path, attribute.value), {
+          attribute: attribute.value.local,
+          check: "headers",
+          element: visit.element.local,
+          reading: "126",
+          token,
+          value: attribute.value.value,
+        }),
+      ];
+    }
+
+    written.add(token);
+  }
+
+  return [];
+};
+
+/**
+ * The quotation punctuation of reading 127: the double quote, the curly and low quotes but the
+ * right single quotation mark `’`, and the guillemets. The ASCII apostrophe and `’` are left out,
+ * each an apostrophe as often as a quote, so a `’` that does close a quote around a `q` is not
+ * refused, the reading's known under-refusal.
+ */
+const quotationMarks: ReadonlySet<string> = new Set([
+  '"',
+  "«",
+  "»",
+  "‘",
+  "‚",
+  "‛",
+  "“",
+  "”",
+  "„",
+  "‟",
+  "‹",
+  "›",
+]);
+
+/**
+ * Read the character at one edge of a neighbour of a `q`, where the neighbour holds characters: a
+ * text. An element or an absent neighbour holds none.
+ *
+ * @param child The neighbour, or none at the edge of its parent.
+ * @param edge Which edge: the first character, or the last.
+ * @returns The character, none for a neighbour that is no text or holds none.
+ */
+const edgeCharacter = (
+  child: SourceChild | undefined,
+  edge: "first" | "last",
+): Option.Option<string> =>
+  child?.kind === "text"
+    ? Option.fromUndefinedOr(edge === "first" ? child.text.at(0) : child.text.at(-1))
+    : Option.none();
+
+/**
+ * Apply `text-not-allowed` with `check: "quotation"` to a `q` (reading 127, E30): "Quotation
+ * punctuation (such as quotation marks) that is quoting the contents of the tag must not appear
+ * immediately before, after, or inside q tags" (section 5.111). Four characters are read, each
+ * alone: the last of the text before the `q`, the first of the text after it, and the first and
+ * the last of its own content; a mark inside its content but at neither end quotes nothing. A
+ * neighbour that is no text, an element or the parent's edge, holds no character, and a space keeps
+ * a mark from standing immediately beside the `q`. The reader substitutes a predefined entity, so
+ * `&quot;` is read as `"`.
+ *
+ * Plate's limit (rule `db2ef322`): the reader drops comments and processing instructions from the
+ * source view (`#plate/document/read.ts`), so one between a mark and a `q`, which the reading says
+ * keeps the mark from standing beside it, is not seen, and that mark is refused.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @returns One refusal at the `q`, naming the first mark found and the `side` it stands on, in the
+ *   order before, after, start and end; none for any other element.
+ */
+const quotation = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
+  if (!isQti(visit.element, (local) => local === "q") || Option.isNone(visit.parent)) {
+    return [];
+  }
+
+  const siblings = visit.parent.value.children;
+  const at = siblings.indexOf(visit.element);
+  const own = visit.element.children;
+  const sides = [
+    ["before", at > 0 ? edgeCharacter(siblings[at - 1], "last") : Option.none()],
+    ["after", edgeCharacter(siblings[at + 1], "first")],
+    ["start", edgeCharacter(own.at(0), "first")],
+    ["end", edgeCharacter(own.at(-1), "last")],
+  ] as const;
+
+  return sides
+    .flatMap(([side, character]) =>
+      Option.toArray(character.pipe(Option.filter((mark) => quotationMarks.has(mark)))).map(
+        (mark) =>
+          refusal(source, "text-not-allowed", visit.path, {
+            check: "quotation",
+            element: visit.element.local,
+            mark,
+            reading: "127",
+            side,
+          }),
+      ),
+    )
+    .slice(0, 1);
+};
+
+/**
  * Check a document against the prose rules: `undeclared-response`, `duplicate-identifier`,
- * `binding`, `count-range`, `template-requirements`, `value-type`, `undeclared-variable` and
- * `expression-type`, reading 19's `max-strings` on an Extended Text bound to a container, and
- * reading 23's
- * `expression-placement` on a `qti-variable` that carries `weight-identifier`, which only a test's
- * outcome processing may hold ({@link weightPlacement}, pantry's P12). `undeclared-response` and
+ * `binding`, `count-range`, `template-requirements`, `value-type`, `undeclared-variable`,
+ * `expression-type`, and the body content's `missing-attribute`, `misplaced-element`,
+ * `attribute-type` and `text-not-allowed`, reading 19's `max-strings` on an Extended Text bound
+ * to a container, and reading 23's `expression-placement` on a `qti-variable` that carries
+ * `weight-identifier`, which only a test's outcome processing may hold ({@link weightPlacement},
+ * pantry's P12). `undeclared-response` and
  * `binding` judge each binding an interaction makes, its `response-identifier` and a Text Entry's
  * or an Extended Text's `string-identifier` ({@link responseRules}): the declaration each names,
  * its fit, reading 92's counts and single binding, and a gap match's gaps. `count-range` judges a
@@ -3988,7 +4364,15 @@ const setCorrectResponses = (
  * (reading 18, {@link countRules}). `duplicate-identifier` judges the item's declarations among
  * themselves ({@link duplicateDeclaration}), and each choice of the eight pooled classes and each
  * gap against its pool and the item's variables (reading 104, as extended, E19,
- * {@link choiceIdentifier}). `template-requirements`
+ * {@link choiceIdentifier}). Every law over a name reads it only where it is an NCName
+ * ({@link nameOf}, reading 152, E40a), and a declaration's values are typed only where its
+ * cardinality spells one (reading 158). The body content rules judge an item that labels a body
+ * element without naming its tool, `missing-attribute` once at the root ({@link labelTool},
+ * reading 128, E31a); an interaction a `qti-template-block` holds, `misplaced-element`
+ * ({@link templateBlockInteraction}, reading 143, E37); a cell's `headers` that names no header of
+ * its table, or one twice, `attribute-type` ({@link tableHeaders}, reading 126, E29); and a
+ * quotation mark against a `q`, `text-not-allowed` ({@link quotation}, reading 127, E30).
+ * `template-requirements`
  * judges the declarations a standard template, an inline `qti-map-response` or
  * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `undeclared-variable` judges the
  * variable a rule or an expression names, through its kind's declaration facet in the registry, and
@@ -4061,7 +4445,8 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
   const variables = new Set([...context.variables.keys(), ...itemBuiltIns.keys()]);
   const bound = new Set<string>();
   const contexts = declarationsOf(source, "qti-context-declaration");
-  const refusals: Refusal[] = [];
+  const placing = placingOf(source);
+  const refusals: Refusal[] = [...labelTool(source, visits, tables)];
   for (const visit of visits) {
     if (Option.isSome(visit.parent)) {
       context.parents.set(visit.element, visit.parent.value);
@@ -4090,6 +4475,9 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...lookupTableRequirements(source, visit, context),
       ...lookupOperandType(source, visit, context),
       ...operandTypes(source, visit, context),
+      ...templateBlockInteraction(source, visit, placing),
+      ...tableHeaders(source, visit, placing),
+      ...quotation(source, visit),
     );
   }
 
