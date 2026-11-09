@@ -269,6 +269,68 @@ const itemXml = (identifier: string, ...outcomes: readonly string[]): string =>
   `<qti-assessment-item xmlns="${qti}" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">${outcomes.map((outcome) => `<qti-outcome-declaration identifier="${outcome}" cardinality="single" base-type="float"/>`).join("")}<qti-item-body><p>${identifier}</p></qti-item-body></qti-assessment-item>`;
 
 /**
+ * Write an item whose identifier is `a` with a given title and further root attributes.
+ *
+ * @param title The item's title, as written in the attribute.
+ * @param attributes Further attributes of its root, as written, each after a space.
+ * @returns The item's text.
+ */
+const titledItemXml = (title: string, attributes = ""): string =>
+  `<qti-assessment-item xmlns="${qti}" identifier="a" title="${title}" adaptive="false" time-dependent="false"${attributes}><qti-item-body><p>a</p></qti-item-body></qti-assessment-item>`;
+
+/**
+ * Write a LOM `general`'s title, one `string` for each language and value, each writing its
+ * `language`.
+ *
+ * @param strings Each string's `language` and value.
+ * @returns The title's text.
+ */
+const languageStrings = (...strings: readonly (readonly [language: string, value: string])[]) =>
+  `<title>${strings.map(([language, value]) => `<string language="${language}">${value}</string>`).join("")}</title>`;
+
+/**
+ * Open a package of one item resource `A`, whose document `items/a.xml` is the given item and whose
+ * own LOM record's `general` holds what is given.
+ *
+ * @param item The item's text.
+ * @param general What the LOM record's `general` holds.
+ * @returns The package's verdict.
+ */
+const openDescribed = (item: string, general: string) =>
+  openPackage(
+    location,
+    packageOf({
+      "items/a.xml": item,
+      [manifestFile]: manifestXml(describedXml("A", "imsqti_item_xmlv3p0", "items/a.xml", general)),
+    }),
+  );
+
+/**
+ * Take the refusals of a package verdict under some rules, as these tests compare them.
+ *
+ * @param verdict The package verdict.
+ * @param rules The rules.
+ * @returns The refusals under one of them, in order.
+ */
+const refusedUnder = (verdict: PackageVerdict, ...rules: readonly string[]): Seen[] =>
+  refusalsOf(verdict).filter((refusal) => rules.includes(refusal.rule));
+
+/**
+ * The refusal of the root of {@link openDescribed}'s item that writes no `identifier` or no
+ * `title` beside a LOM record that gives one (reading 148).
+ *
+ * @param rule `lom-identifier` or `lom-title`.
+ * @param attribute The attribute the root does not write.
+ * @returns The refusal, as these tests compare it.
+ */
+const unwrittenAt = (rule: string, attribute: string): Seen => ({
+  detail: { attribute, check: "unwritten", path: "items/a.xml", reading: "148", resource: "A" },
+  document: fileLocation(location, "items/a.xml"),
+  location: { kind: "path", path: "qti-assessment-item" },
+  rule,
+});
+
+/**
  * Write a test of one part and one section holding the given item refs, whose outcome processing
  * sets its float outcome `TOTAL` to the variable a reference names.
  *
@@ -3893,7 +3955,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "refuses an item none of whose LOM identifier entries is its identifier as lom-identifier, at the LOM identifier (reading 62)",
+      "refuses an item none of whose LOM identifier entries is its identifier as lom-identifier, at the LOM identifier (reading 62, \"an item's or test's identifier and title are those its package's LOM metadata gives it\")",
       () =>
         Effect.gen(function* lomIdentifier() {
           const open = (general: string) =>
@@ -3935,7 +3997,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "refuses an item's and a test's LOM title that is not their title as lom-title (reading 62)",
+      "refuses an item's and a test's LOM title that is not their title as lom-title (reading 62, \"an item's or test's identifier and title are those its package's LOM metadata gives it\")",
       () =>
         Effect.gen(function* lomTitles() {
           const verdict = yield* openPackage(
@@ -3980,7 +4042,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "opens a package whose LOM gives a matching entry and string, or no identifier or title, and passes over a stimulus's LOM (reading 62)",
+      "opens a package whose LOM gives a matching entry and string, or no identifier or title, and passes over a stimulus's LOM (reading 62, \"an item's or test's identifier and title are those its package's LOM metadata gives it\")",
       () =>
         Effect.gen(function* lomOutside() {
           const verdict = yield* openPackage(
@@ -3994,7 +4056,7 @@ describe("package/open.ts", () => {
                   "A",
                   "imsqti_item_xmlv3p0",
                   "items/a.xml",
-                  `${lomIdentifiers("x", " a\t")}${lomTitle("x", "  a ")}`,
+                  `${lomIdentifiers("x", " a\t")}${lomTitle("x", "a")}`,
                 ),
                 describedXml(
                   "B",
@@ -4019,7 +4081,7 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "refuses metaData by both rules and CASEWithOutcome by lom-title at its one item (reading 62)",
+      "refuses metaData by both rules and CASEWithOutcome by lom-title at its one item (reading 62, \"an item's or test's identifier and title are those its package's LOM metadata gives it\")",
       () =>
         Effect.gen(function* lomCorpus() {
           const { metaData } = corpusPackages;
@@ -4057,6 +4119,238 @@ describe("package/open.ts", () => {
           ]);
         }),
       { tags: ["corpus"] },
+    );
+
+    it.effect(
+      "align-54 LOM languages D2: a title that matches only once its spaces collapse is refused lom-title, and one that matches once a tab reads as a space is not",
+      () =>
+        Effect.gen(function* lomTitleSpaces() {
+          const open = (title: string, string: string) =>
+            openPackage(
+              location,
+              packageOf({
+                "items/a.xml": titledItemXml(title),
+                [manifestFile]: manifestXml(
+                  describedXml("A", "imsqti_item_xmlv3p0", "items/a.xml", lomTitle(string)),
+                ),
+              }),
+            );
+
+          assert.deepStrictEqual(refusalsOf(yield* open("Item A", " Item  A ")), [
+            {
+              detail: {
+                metadata: "Item A",
+                path: "items/a.xml",
+                reading: "62",
+                resource: "A",
+                title: "Item A",
+              },
+              document: fileLocation(location, manifestFile),
+              location: { kind: "path", path: `${generalAt(soleResource)}/${lomStep}title` },
+              rule: "lom-title",
+            },
+          ]);
+          assert.lengthOf(acceptedOf(yield* open("Item&#9;A", "Item A")).items, 1);
+          assert.lengthOf(acceptedOf(yield* open("Item A", "Item&#10;A")).items, 1);
+        }),
+    );
+
+    it.effect(
+      "align-54 LOM languages D2: a title that matches only a string of another language is refused lom-title, naming the document's language and its first string in it",
+      () =>
+        Effect.gen(function* lomTitleLanguage() {
+          const verdict = yield* openPackage(
+            location,
+            packageOf({
+              "items/a.xml": titledItemXml("Item A", ' xml:lang="en-GB"'),
+              [manifestFile]: manifestXml(
+                describedXml(
+                  "A",
+                  "imsqti_item_xmlv3p0",
+                  "items/a.xml",
+                  `${languageStrings(["de", "Item A"], ["EN-gb", "Aufgabe A"], ["en", "Item A "])}<language>en-gb</language>`,
+                ),
+              ),
+            }),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                language: "en-GB",
+                metadata: "Aufgabe A",
+                others: "2",
+                path: "items/a.xml",
+                reading: "62",
+                resource: "A",
+                title: "Item A",
+              },
+              document: fileLocation(location, manifestFile),
+              location: { kind: "path", path: `${generalAt(soleResource)}/${lomStep}title` },
+              rule: "lom-title",
+            },
+          ]);
+        }),
+    );
+
+    it.effect(
+      "align-54 LOM languages D2: a string with no language, or an empty one, matches whatever the document's language, and one whose language differs only in case matches",
+      () =>
+        Effect.gen(function* lomTitleUnstated() {
+          const open = (string: readonly [string, string]) =>
+            openPackage(
+              location,
+              packageOf({
+                "items/a.xml": titledItemXml("Item A", ' xml:lang="en"'),
+                [manifestFile]: manifestXml(
+                  describedXml(
+                    "A",
+                    "imsqti_item_xmlv3p0",
+                    "items/a.xml",
+                    `${languageStrings(["de", "Aufgabe A"], string)}<language>en</language>`,
+                  ),
+                ),
+              }),
+            );
+
+          assert.lengthOf(acceptedOf(yield* open(["", "Item A"])).items, 1);
+          assert.lengthOf(acceptedOf(yield* open(["EN", "Item A"])).items, 1);
+
+          const unstated = yield* openPackage(
+            location,
+            packageOf({
+              "items/a.xml": titledItemXml("Item A", ' xml:lang="en"'),
+              [manifestFile]: manifestXml(
+                describedXml(
+                  "A",
+                  "imsqti_item_xmlv3p0",
+                  "items/a.xml",
+                  `${lomTitle("Aufgabe A", "Item A")}<language>en</language>`,
+                ),
+              ),
+            }),
+          );
+
+          assert.lengthOf(acceptedOf(unstated).items, 1);
+        }),
+    );
+
+    it.effect(
+      "align-54 LOM languages D2: a root whose xml:lang lies outside its domain states no language, so a string of any language matches its title, while en refuses the same record",
+      () =>
+        Effect.gen(function* lomTitleOutOfDomain() {
+          for (const [lang, rules] of [
+            ["en_GB", []],
+            ["en", ["lom-title"]],
+          ] as const) {
+            const verdict = yield* openDescribed(
+              titledItemXml("Item A", ` xml:lang="${lang}"`),
+              `${languageStrings(["de", "Item A"])}<language>${lang}</language>`,
+            );
+
+            assert.deepStrictEqual(
+              refusedUnder(verdict, "lom-title").map((refusal) => refusal.rule),
+              [...rules],
+              lang,
+            );
+          }
+        }),
+    );
+
+    it.effect(
+      "align-54 LOM languages E34: an item writing xml:lang en whose record lists no language is refused document-lang at the general, and one listed only padded, or a body element's language not listed, is refused once for each language",
+      () =>
+        Effect.gen(function* documentLang() {
+          const refusal = (language: string, listed: string): Seen => ({
+            detail: { document: "items/a.xml", language, listed, reading: "134" },
+            document: fileLocation(location, manifestFile),
+            location: { kind: "path", path: generalAt(soleResource) },
+            rule: "document-lang",
+          });
+          const cases = [
+            [' xml:lang="en"', lomTitle("a"), [refusal("en", "")]],
+            [
+              ' xml:lang=" en "',
+              `${lomTitle("a")}<language> en </language><language>EN</language>`,
+              [],
+            ],
+            [
+              ' xml:lang="en"',
+              `${lomTitle("a")}<language> en </language><language>de</language>`,
+              [refusal("en", " en  de")],
+            ],
+            [' xml:lang=""', lomTitle("a"), []],
+            ["", lomTitle("a"), []],
+          ] as const;
+          for (const [lang, general, refusals] of cases) {
+            const verdict = yield* openDescribed(titledItemXml("a", lang), general);
+
+            assert.deepStrictEqual(refusedUnder(verdict, "document-lang"), [...refusals], lang);
+          }
+
+          const bodyLanguages = yield* openPackage(
+            location,
+            packageOf({
+              "items/a.xml": `<qti-assessment-item xmlns="${qti}" identifier="a" title="a" adaptive="false" time-dependent="false" xml:lang="en"><qti-item-body><p xml:lang="fr">a</p><p xml:lang="FR">b</p><p xml:lang="en">c</p></qti-item-body></qti-assessment-item>`,
+              [manifestFile]: manifestXml(
+                describedXml("A", "imsqti_item_xmlv3p0", "items/a.xml", "<language>EN</language>"),
+              ),
+            }),
+          );
+
+          assert.deepStrictEqual(refusalsOf(bodyLanguages), [refusal("fr", "EN")]);
+        }),
+    );
+
+    it.effect(
+      "align-54 LOM languages E34: a test is judged as an item is, and a resource with no LOM general is not judged",
+      () =>
+        Effect.gen(function* documentLangTest() {
+          const verdict = yield* openPackage(
+            location,
+            packageOf({
+              "items/a.xml": titledItemXml("a", ' xml:lang="de"'),
+              [manifestFile]: manifestXml(
+                describedXml("T", "imsqti_test_xmlv3p0", "test.xml", "<language>de</language>"),
+                resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
+              ),
+              "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="S" visible="true"><qti-rubric-block use="instructions" view="candidate"><qti-content-body><p xml:lang="en">Read</p><p xml:lang="de">Lies</p></qti-content-body></qti-rubric-block><qti-assessment-item-ref identifier="a" href="items/a.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+            }),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: { document: "test.xml", language: "en", listed: "de", reading: "134" },
+              document: fileLocation(location, manifestFile),
+              location: { kind: "path", path: generalAt(resourceAt(1)) },
+              rule: "document-lang",
+            },
+          ]);
+        }),
+    );
+
+    it.effect(
+      "align-54 LOM languages E41a: a root with no title beside a LOM title, or no identifier beside a LOM identifier, even an empty one, is refused at the root",
+      () =>
+        Effect.gen(function* lomUnwritten() {
+          const cases = [
+            [' identifier="a"', lomTitle(""), [unwrittenAt("lom-title", "title")]],
+            [' title="a"', lomIdentifiers(""), [unwrittenAt("lom-identifier", "identifier")]],
+            [' identifier="a"', "", []],
+          ] as const;
+          for (const [attributes, general, refusals] of cases) {
+            const verdict = yield* openDescribed(
+              `<qti-assessment-item xmlns="${qti}"${attributes} adaptive="false" time-dependent="false"><qti-item-body><p>a</p></qti-item-body></qti-assessment-item>`,
+              general,
+            );
+
+            assert.deepStrictEqual(
+              refusedUnder(verdict, "lom-identifier", "lom-title"),
+              [...refusals],
+              attributes,
+            );
+          }
+        }),
     );
 
     it.effect(
