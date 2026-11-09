@@ -2825,52 +2825,73 @@ describe("buildItem", () => {
       }),
   );
 
-  it.effect("[I-0] [I-8] marks what it does not render outside the body and on body elements", () =>
-    Effect.gen(function* marksUnread() {
-      const built = yield* buildItem(
-        item({
-          after: [el("qti-modal-feedback", [attr("identifier", "fb")], [text("Well done")])],
-          attributes: [attr("adaptive", "true")],
-          body: [
-            el(
-              "p",
-              [
-                attr("base", "images/", xmlNamespace),
-                attr("lang", "fr", xmlNamespace),
-                attr("class", "lead"),
-              ],
-              [text("Bonjour")],
-            ),
-          ],
-          declarations: [
-            declaration("qti-response-declaration", "POINT", "point", "single"),
-            el("qti-template-declaration", [
-              attr("base-type", "integer"),
-              attr("cardinality", "single"),
-              attr("identifier", "T"),
-            ]),
-          ],
-        }),
-      );
+  it.effect(
+    "[I-0] [I-8] [I-10] marks what it does not render outside the body and on body elements, and holds a modal feedback beside the body with no mark",
+    () =>
+      Effect.gen(function* marksUnread() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              el(
+                "qti-modal-feedback",
+                [
+                  attr("identifier", "fb"),
+                  attr("outcome-identifier", "FEEDBACK"),
+                  attr("show-hide", "show"),
+                ],
+                [el("qti-content-body", [], [text("Well done")])],
+              ),
+            ],
+            attributes: [attr("adaptive", "true")],
+            body: [
+              el(
+                "p",
+                [
+                  attr("base", "images/", xmlNamespace),
+                  attr("lang", "fr", xmlNamespace),
+                  attr("class", "lead"),
+                ],
+                [text("Bonjour")],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "POINT", "point", "single"),
+              declaration("qti-outcome-declaration", "FEEDBACK", "identifier", "single"),
+              el("qti-template-declaration", [
+                attr("base-type", "integer"),
+                attr("cardinality", "single"),
+                attr("identifier", "T"),
+              ]),
+            ],
+          }),
+        );
 
-      assert.deepStrictEqual(built.body[0], {
-        attributes: [
-          { name: "xml:lang", value: "fr" },
-          { name: "class", value: "lead" },
-        ],
-        children: [{ kind: "text", text: "Bonjour" }],
-        kind: "element",
-        path: `${body}/p`,
-        tag: "p",
-      });
-      assert.deepStrictEqual(built.lang, Option.none());
-      assert.deepStrictEqual([...built.responses.keys()], ["POINT"]);
-      assert.deepStrictEqual(built.unsupported, [
-        { feature: 'adaptive="true"', path: root, shown: "mark" },
-        { feature: "xml:base", path: `${body}/p`, shown: "mark" },
-        { feature: "qti-modal-feedback", path: `${root}/qti-modal-feedback`, shown: "mark" },
-      ]);
-    }),
+        assert.deepStrictEqual(built.body[0], {
+          attributes: [
+            { name: "xml:lang", value: "fr" },
+            { name: "class", value: "lead" },
+          ],
+          children: [{ kind: "text", text: "Bonjour" }],
+          kind: "element",
+          path: `${body}/p`,
+          tag: "p",
+        });
+        assert.deepStrictEqual(built.lang, Option.none());
+        assert.deepStrictEqual([...built.responses.keys()], ["POINT"]);
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: 'adaptive="true"', path: root, shown: "mark" },
+          { feature: "xml:base", path: `${body}/p`, shown: "mark" },
+        ]);
+        assert.deepStrictEqual(built.modalFeedback, [
+          {
+            content: [{ kind: "text", text: "Well done" }],
+            feedbackVisibility: { outcomeIdentifier: "FEEDBACK", showHide: "show" },
+            identifier: "fb",
+            path: `${root}/qti-modal-feedback`,
+            title: Option.none(),
+          },
+        ]);
+      }),
   );
 
   it.effect(
@@ -4303,29 +4324,39 @@ describe("buildItem", () => {
     }),
   );
 
-  it.effect("runs a point RESPONSE's match_correct and marks only what it does not render", () =>
-    Effect.gen(function* runsPointMatchCorrect() {
-      const built = yield* buildItem(
-        item({
-          after: [
-            template("match_correct"),
-            el("qti-modal-feedback", [attr("identifier", "fb")], [text("Well done")]),
-          ],
-          body: [],
-          declarations: [
-            declaration("qti-response-declaration", "RESPONSE", "point", "single", [
-              values("qti-correct-response", "10 10"),
-            ]),
-            declaration("qti-outcome-declaration", "SCORE", "float", "single"),
-          ],
-        }),
-      );
+  it.effect(
+    "[I-10] runs a point RESPONSE's match_correct and marks nothing, its modal feedback held beside the body",
+    () =>
+      Effect.gen(function* runsPointMatchCorrect() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              template("match_correct"),
+              el(
+                "qti-modal-feedback",
+                [
+                  attr("identifier", "fb"),
+                  attr("outcome-identifier", "FEEDBACK"),
+                  attr("show-hide", "show"),
+                ],
+                [el("qti-content-body", [], [text("Well done")])],
+              ),
+            ],
+            body: [],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "point", "single", [
+                values("qti-correct-response", "10 10"),
+              ]),
+              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+              declaration("qti-outcome-declaration", "FEEDBACK", "identifier", "single"),
+            ],
+          }),
+        );
 
-      assert.isTrue(Option.isSome(built.processing));
-      assert.deepStrictEqual(built.unsupported, [
-        { feature: "qti-modal-feedback", path: `${root}/qti-modal-feedback`, shown: "mark" },
-      ]);
-    }),
+        assert.isTrue(Option.isSome(built.processing));
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.lengthOf(built.modalFeedback ?? [], 1);
+      }),
   );
 
   it.effect("marks inline rules that read the built-in duration as variable:duration", () =>

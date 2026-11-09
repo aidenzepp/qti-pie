@@ -100,7 +100,7 @@ describe("a feedback element's outcome-identifier (reading 77; pantry's Feedback
               identifier: "NOPE",
             },
             path: `qti-assessment-item/${path}/@outcome-identifier`,
-            rule: "undeclared-variable",
+            rule: "undeclared-variable" as const,
           })),
         );
         assert.include(refused[0]?.message ?? "", "declares no outcome `NOPE`");
@@ -145,7 +145,7 @@ describe("a feedback element's outcome-identifier (reading 77; pantry's Feedback
                         source: line,
                       },
                       path: `qti-assessment-item/${path}/@outcome-identifier`,
-                      rule: "expression-type",
+                      rule: "expression-type" as const,
                     })),
                 case_,
               );
