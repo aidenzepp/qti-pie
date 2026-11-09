@@ -97,31 +97,15 @@ export const known: readonly Known[] = [
       },
     },
   },
-  {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourcemetadata/xml" href="test.xml"/></resources></manifest>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><resources><resource><metadata><lom xmlns="http://ltsc.ieee.org/xsd/LOM"/></metadata></resource></resources></manifest>`,
-      ],
-    ],
-    fix: "a stated limit (spec reading 1): a record file whose root is a cp:manifest has no LomResource, which is written for the package manifest's resources alone, while its resource-owned record is still read, so E1 derived breaks beside RootOfType, which refuses the file on both sides; lifted by reading no record a record file's cp:resource owns",
-    owner: "decision 449",
-    // MERGE-OPEN: his key, E1 derived's contained LomRecord(ownerParent, named) in LomResource(node,
-    // named), names LomResource and LomRecord.named, which 660a9d64 deleted, so no law of Qti states
-    // it; this signature is a placeholder until the replay shows what the package shows now.
-    signature: {
-      kind: "import-only-law",
-      law: { kind: "check", name: "E1_derived", relation: "LomRecord" },
-    },
-  },
+  // MERGE-OPEN: the known entry for decision 449's stated limit keyed "E1 derived,
+  // contained LomRecord(ownerParent, named) in LomResource(node, named)", can't be stated on Qti:
+  // 660a9d64 deleted LomResource and LomRecord.named, so no law of Qti states the containment, and
+  // its package (a resourcemetadata/xml resource href="test.xml" whose test.xml is
+  // `<manifest><resources><resource><metadata><lom xmlns="http://ltsc.ieee.org/xsd/LOM"/></metadata>
+  // </resource></resources></manifest>`) shows no disagreement here. That record names no document,
+  // since the query that names one (namingRecords) reads its resource's href, and the host leaves
+  // rules over queries to the database. The limit's other class, the record's learning resource
+  // type, still shows, as the next entry.
   {
     files: [
       [
@@ -1529,7 +1513,7 @@ export const fixed: readonly Known[] = [
           selection: { conjuncts: [] },
           terms: [
             { field: "node", kind: "field" },
-            { field: "identifier", kind: "field" },
+            { field: "lexical", kind: "field" },
           ],
         },
       },
