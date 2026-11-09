@@ -219,3 +219,31 @@ export const symbolRowsOf = <Kind extends string, Model extends string>(
     rowsAt(members, set).map(({ position }) => ({ kind, model, position })),
   );
 };
+
+/**
+ * Spell the include sets `install.ts` declares out as the (version, include parent, kind) rows they
+ * state, the include grammar's `IncludeRoot`: each family's set (`IncludeSetOf`) with each of its
+ * kinds (`IncludeMember`).
+ *
+ * @param includeSetOf - `IncludeSetOf`, as installed.
+ * @param includeSetOf.rows - Its rows.
+ * @param includeMember - `IncludeMember`, as installed.
+ * @param includeMember.rows - Its rows.
+ * @returns The rows, by family in `IncludeSetOf`'s order.
+ */
+export const includeRowsOf = <Kind extends string, Parent extends string, Version extends string>(
+  includeSetOf: {
+    readonly rows: readonly {
+      readonly parent: Parent;
+      readonly set: string;
+      readonly version: Version;
+    }[];
+  },
+  includeMember: { readonly rows: readonly { readonly kind: Kind; readonly set: string }[] },
+): readonly { readonly kind: Kind; readonly parent: Parent; readonly version: Version }[] => {
+  const members = Map.groupBy(includeMember.rows, ({ set }) => set);
+
+  return includeSetOf.rows.flatMap(({ parent, set, version }) =>
+    rowsAt(members, set).map(({ kind }) => ({ kind, parent, version })),
+  );
+};

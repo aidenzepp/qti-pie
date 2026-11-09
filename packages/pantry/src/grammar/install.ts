@@ -1752,7 +1752,7 @@ export const RootOfType = closed.relation(
 
 /**
  * The `IncludeParent` roster: every kind whose content model holds an explicit `xi:include`, the
- * parents an include of the information model's Table 9.4.1 stands under. Keying `IncludeRoot` by
+ * parents an include of the information model's Table 9.4.1 stands under. Keying `IncludeSetOf` by
  * it rather than by `NodeKind` keeps the constant at the parents that hold one.
  */
 export const IncludeParent = closed(
@@ -1775,22 +1775,73 @@ export const IncludeParentKind = closed.relation(
 );
 
 /**
- * `IncludeRoot`: the set of (version, include parent, kind), each kind an include under the parent
- * stands for: the alternatives of its particle's choice group (`#pantry/grammar/include.ts`).
+ * The kinds an include under each (version, include parent) stands for, the alternatives of its
+ * particle's choice group (`#pantry/grammar/include.ts`), each distinct set of kinds stated once
+ * (rule 0: identical facts are one fact), numbered from 0 in the order of the first family that
+ * holds it: 155 families hold 21 sets. `IncludeSetOf` names each family's set and `IncludeMember`
+ * each set's kinds, so a law reads the kinds as `IncludeMember.row(IncludeSetOf.at("set", version,
+ * parent))`.
  */
-export const IncludeRoot = closed.relation(
-  "IncludeRoot",
+const includeSets = (() => {
+  const families = new Map<
+    string,
+    {
+      readonly kinds: Kind[];
+      readonly parent: (typeof grammar.include.includeRoot.rows)[number]["parent"];
+      readonly version: Version;
+    }
+  >();
+  for (const { kind, parent, version } of grammar.include.includeRoot.rows) {
+    families
+      .getOrInsertComputed(`${version} ${parent}`, () => ({ kinds: [], parent, version }))
+      .kinds.push(memberOf(grammar.kinds.nodeKind, kind));
+  }
+
+  const setOf = new Map<string, string>();
+  const members: { readonly kind: Kind; readonly set: string }[] = [];
+  const rows = [...families.values()].map(({ kinds, parent, version }) => {
+    const held = kinds.toSorted((left, right) => (left < right ? -1 : 1));
+    const set = setOf.getOrInsertComputed(held.join(" "), () => {
+      const fresh = String(setOf.size);
+      members.push(...held.map((kind) => ({ kind, set: fresh })));
+
+      return fresh;
+    });
+
+    return { parent, set, version };
+  });
+
+  return { handles: [...setOf.values()], members, rows };
+})();
+
+/**
+ * The `IncludeSet` roster: every distinct set of kinds an include stands for ({@link includeSets}).
+ */
+export const IncludeSet = closed("IncludeSet", nonEmpty("IncludeSet", includeSets.handles));
+
+/**
+ * `IncludeSetOf`: (version, include parent) → set, the kinds an include under the parent stands
+ * for, for each family that holds one; a law reads a family of none through `IncludeSetOf.has`.
+ */
+export const IncludeSetOf = closed.relation(
+  "IncludeSetOf",
   {
-    kind: closedId(NodeKind),
     parent: closedId(IncludeParent),
+    set: closedId(IncludeSet),
     version: closedId(SchemaVersion),
   },
-  ["version", "parent", "kind"],
-  grammar.include.includeRoot.rows.map(({ kind, parent, version }) => ({
-    kind: memberOf(grammar.kinds.nodeKind, kind),
-    parent,
-    version,
-  })),
+  ["version", "parent"],
+  includeSets.rows,
+);
+
+/**
+ * `IncludeMember`: the set of (set, kind) where an include set holds the kind.
+ */
+export const IncludeMember = closed.relation(
+  "IncludeMember",
+  { kind: closedId(NodeKind), set: closedId(IncludeSet) },
+  ["set", "kind"],
+  includeSets.members,
 );
 
 /**

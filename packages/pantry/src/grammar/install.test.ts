@@ -14,7 +14,7 @@ import {
 } from "#pantry/grammar/expression.ts";
 import * as install from "#pantry/grammar/install.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
-import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
+import { admittedOf, includeRowsOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 
 /**
  * The composed grammar, the generators' rows every declaration is compared with.
@@ -356,7 +356,6 @@ const comparisons: readonly Comparison[] = [
   { expected: () => grammar.recordBindingFit.rows, name: "RecordBindingFit" },
   { expected: () => grammar.mappableBaseType.rows, name: "MappableBaseType" },
   { expected: () => grammar.package.rootOfType.rows, name: "RootOfType" },
-  { expected: () => grammar.include.includeRoot.rows, name: "IncludeRoot" },
   { expected: () => grammar.include.includeParentKind.rows, name: "IncludeParentKind" },
   { expected: () => grammar.references.declares.rows, name: "Declares" },
   { expected: () => grammar.references.builtIn.rows, name: "BuiltInVariable" },
@@ -642,6 +641,20 @@ describe("the installed relations", () => {
       keyedSet("Symbol", key, grammar.content.symbol.rows),
     );
     assert.isBelow(install.SymbolMember.rows.length, grammar.content.symbol.rows.length);
+  });
+
+  it("state IncludeRoot as each (version, include parent)'s include set and each set's kinds: every (version, parent, kind), and no other", () => {
+    // Oracle: the include grammar's `IncludeRoot` rows, against the installed `IncludeSetOf` and
+    // `IncludeMember` spelled out (`includeRowsOf`). "Include root" reads
+    // `IncludeMember.row(IncludeSetOf.at("set", v, p))` guarded by `IncludeSetOf.has(v, p)` where it
+    // read `IncludeRoot`, so the two agree exactly when these sets do.
+    const key = ["version", "parent", "kind"];
+
+    assert.deepStrictEqual(
+      keyedSet("the include sets", key, includeRowsOf(install.IncludeSetOf, install.IncludeMember)),
+      keyedSet("IncludeRoot", key, grammar.include.includeRoot.rows),
+    );
+    assert.isBelow(install.IncludeMember.rows.length, grammar.include.includeRoot.rows.length);
   });
 
   it("make ContentModelOf total, CountedOf and BarredOf exactly today's Counted but its caps and ChildBarredBy, SharedModelOf exactly the shared families, and Capped exactly Counted's caps", () => {

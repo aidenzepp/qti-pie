@@ -80,10 +80,11 @@ import {
   Flag,
   Governor,
   grammar,
+  IncludeMember,
   IncludeParent,
   IncludeParentKind,
-  IncludeRoot,
   includeParentKinds,
+  IncludeSetOf,
   NodeKind,
   ResourceType,
   SchemaVersion,
@@ -1191,15 +1192,22 @@ type InclusionRow = RowScalars<typeof Inclusion>;
 
 /**
  * State that an include may stand for its target's root (spec reading 114): the root is among the
- * kinds `IncludeRoot` gives the include's parent, `{root} ⊆ IncludeRoot.row(version, parent)`.
+ * kinds its parent's family's include set holds, `{root} ⊆ IncludeMember.row(IncludeSetOf.at("set",
+ * version, parent))`, and a family of no set holds none.
  *
  * @param i - The include's row.
  * @returns The predicate.
  */
 const standsFor = (i: InclusionRow) =>
-  i.eq(
-    Compute.subset(Compute.singleton(i.root), IncludeRoot.row(i.version, i.includeParent)),
-    true,
+  i.and(
+    IncludeSetOf.has(i.version, i.includeParent),
+    i.eq(
+      Compute.subset(
+        Compute.singleton(i.root),
+        IncludeMember.row(IncludeSetOf.at("set", i.version, i.includeParent)),
+      ),
+      true,
+    ),
   );
 
 /**
@@ -2034,12 +2042,7 @@ export const testLawsByName = {
       ),
     ),
   ],
-  "Include root": [
-    contained(
-      on(Inclusion, "version", "includeParent", "root"),
-      on(IncludeRoot, "version", "parent", "kind"),
-    ),
-  ],
+  "Include root": [check("Include_root", Inclusion, standsFor)],
   "Include target": [
     contained(on(includeSites, "node", "kind"), on(SitePath, "node", "kind")),
     contained(on(includePaths, "node"), on(SiteTarget, "node")),

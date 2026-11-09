@@ -14,12 +14,13 @@ import {
   FollowSetOf,
   grammar,
   IncludeParentKind,
-  IncludeRoot,
+  IncludeMember,
+  IncludeSetOf,
   SharedModelOf,
   SymbolMember,
   SymbolSetOf,
 } from "#pantry/grammar/install.ts";
-import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
+import { admittedOf, includeRowsOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -80,11 +81,17 @@ const admitted = Map.groupBy(
 );
 
 /**
+ * The include sets as installed, spelled out as `IncludeRoot`'s (version, include parent, kind)
+ * rows.
+ */
+const includeRows = includeRowsOf(IncludeSetOf, IncludeMember);
+
+/**
  * The (version, include parent) families `IncludeRoot` holds, each with its parent's kind.
  */
 const includeFamilies = [
   ...new Map(
-    IncludeRoot.rows.map((row) => {
+    includeRows.map((row) => {
       const kind = IncludeParentKind.rows.find(({ parent }) => parent === row.parent)?.kind ?? "";
 
       return [
@@ -159,7 +166,7 @@ const classOf = (kind: string): "content" | "processing" | "section" => {
  */
 const rootsUnder = (version: string, kind: string): ReadonlySet<string> =>
   new Set(
-    IncludeRoot.rows
+    includeRows
       .filter(
         (row) =>
           row.version === version &&
@@ -207,7 +214,7 @@ describe("IncludeRoot", () => {
               assert.lengthOf(own, 1, `${family}: the include's positions`);
 
               const signature = signatureOf(model, Arr.getUnsafe(own, 0));
-              for (const row of IncludeRoot.rows) {
+              for (const row of includeRows) {
                 if (row.version === version && row.parent === parent) {
                   assert.isTrue(
                     positionsOf(family, row.kind).some(
@@ -281,7 +288,7 @@ describe("IncludeRoot", () => {
     // Oracle: the kinds' names, read off the roster by hand: three handles share their element's
     // name with another kind, so a document's root, read by its name, is never one of them (spec
     // reading 116). Bound: every kind IncludeRoot holds.
-    const standing: ReadonlySet<string> = new Set(IncludeRoot.rows.map(({ kind }) => kind));
+    const standing: ReadonlySet<string> = new Set(includeRows.map(({ kind }) => kind));
     const roots = new Set(fragmentRoots.map(({ root }) => root));
 
     assert.deepStrictEqual(
