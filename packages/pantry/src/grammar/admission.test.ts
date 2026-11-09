@@ -9,6 +9,7 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { domainReader } from "#pantry/grammar/attributes.ts";
+import { faultOf } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { documentRoots } from "#pantry/grammar/facets.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -688,9 +689,18 @@ describe("Admission through compose", () => {
                 toyDomains,
               );
 
+              // A triple stated twice is no generator's refusal: `faultOf` finds it in
+              // `Admission`'s rows, and grizzle refuses it when it declares `ChildGrammar`.
               if (second.length > 0) {
                 assert.strictEqual(
-                  Result.isFailure(result) ? result.failure._tag : "composed",
+                  Result.match(result, {
+                    onFailure: ({ _tag }) => _tag,
+                    onSuccess: ({ admission }) =>
+                      Option.match(faultOf(admission), {
+                        onNone: () => "composed",
+                        onSome: ({ _tag }) => _tag,
+                      }),
+                  }),
                   "KeyCollision",
                 );
               } else {

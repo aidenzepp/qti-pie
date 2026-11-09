@@ -13,7 +13,7 @@
  */
 import { Option, Result } from "effect";
 import { closed, idField, roster } from "#pantry/grammar/closed.ts";
-import type { Closed, ClosedRelationError, IdField, Roster } from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, RepeatedValue, Roster } from "#pantry/grammar/closed.ts";
 
 /**
  * The ancestry flags in code order. A flag's code is its bit's position in the `bit(10)`, the first
@@ -133,14 +133,14 @@ const rowsOf = (
  * @param vocabulary.kinds - The `NodeKind` roster, the sets' first key field.
  * @param vocabulary.interactions - The interaction kinds.
  * @param vocabulary.facets - Each vocabulary's blocks.
- * @returns The three sets, or the first reason one has no constant, as for a kind a block names
- *   that the roster lacks.
+ * @returns The three sets, or a `RepeatedValue` from the `Flag` roster. A kind a block names that
+ *   the roster lacks is a fault of the rows (`faultOf`), which the tests find and grizzle refuses.
  */
 export const generate = (vocabulary: {
   readonly facets: readonly AncestryFacet[];
   readonly interactions: readonly string[];
   readonly kinds: Roster<string>;
-}): Result.Result<AncestrySets, ClosedRelationError> =>
+}): Result.Result<AncestrySets, RepeatedValue> =>
   Result.gen(function* generateAncestry() {
     const { facets, interactions } = vocabulary;
     const key: KindFlag = [
@@ -150,15 +150,15 @@ export const generate = (vocabulary: {
     const set = (name: string, blocks: readonly Block[]) =>
       closed({ key, name, payload: [], rows: rowsOf(blocks) });
 
-    const enters = yield* set("Enters", [
+    const enters = set("Enters", [
       { flags: ["int"], kinds: interactions },
       ...facets.flatMap((facet) => facet.entering),
     ]);
-    const banned = yield* set("Banned", [
+    const banned = set("Banned", [
       { flags: interactionBans, kinds: interactions },
       ...facets.flatMap((facet) => facet.banning),
     ]);
-    const needs = yield* set(
+    const needs = set(
       "Needs",
       facets.flatMap((facet) => facet.needing),
     );

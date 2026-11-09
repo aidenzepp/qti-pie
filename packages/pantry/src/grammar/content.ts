@@ -50,9 +50,9 @@ import {
 } from "#pantry/grammar/closed.ts";
 import type {
   Closed,
-  ClosedRelationError,
   DependentField,
   IdField,
+  RepeatedValue,
   Roster,
   Sourced,
   ValueField,
@@ -333,7 +333,7 @@ export class UncountedCap extends Schema.TaggedError<UncountedCap>()("UncountedC
 /**
  * The ways the content models have no content grammar.
  */
-export type ContentError = ClosedRelationError | MixedEnding | UncountedCap | UnreadEdit;
+export type ContentError = MixedEnding | RepeatedValue | UncountedCap | UnreadEdit;
 
 /**
  * The kinds of character data, comments, instructions and entity references: the XDM's nodes
@@ -1235,7 +1235,7 @@ export const contentOf = (input: {
               Option.map(({ source }) => source),
             );
       });
-    const symbol = yield* closed({
+    const symbol = closed({
       key: [
         sharedModel,
         idField("kind", input.kinds),
@@ -1251,7 +1251,7 @@ export const contentOf = (input: {
         ),
       ),
     });
-    const sharedModelOf = yield* closed({
+    const sharedModelOf = closed({
       key: [version, parent],
       name: "SharedModelOf",
       payload: [sharedModel],
@@ -1263,13 +1263,13 @@ export const contentOf = (input: {
     return {
       admitted,
       content: {
-        contentModelOf: yield* closed({
+        contentModelOf: closed({
           key: [version, parent],
           name: "ContentModelOf",
           payload: [model],
           rows: contentModels.families,
         }),
-        counted: yield* sourced({
+        counted: sourced({
           key: [version, parent, position],
           name: "Counted",
           payload: [
@@ -1284,7 +1284,7 @@ export const contentOf = (input: {
           ],
           rows: countedRows,
         }),
-        follow: yield* closed({
+        follow: closed({
           key: [model, modelPosition("from"), modelPosition("to")],
           name: "Follow",
           payload: [],
@@ -1294,7 +1294,7 @@ export const contentOf = (input: {
             ),
           ),
         }),
-        last: yield* closed({
+        last: closed({
           key: [model, modelPosition("position")],
           name: "Last",
           payload: [],
@@ -1302,7 +1302,7 @@ export const contentOf = (input: {
             [...value.ends].map((state) => ({ model: handle, position: String(state) })),
           ),
         }),
-        modelPositions: yield* closed({
+        modelPositions: closed({
           key: [model],
           name: "ModelPositions",
           payload: [valueField("positions", modelSizes.values())],
@@ -1311,7 +1311,7 @@ export const contentOf = (input: {
         models: model.roster,
         positions,
         sharedModelOf,
-        sharedModelPositions: yield* closed({
+        sharedModelPositions: closed({
           key: [sharedModel],
           name: "SharedPositions",
           payload: [valueField("positions", sharedSizes.values())],
@@ -1325,7 +1325,7 @@ export const contentOf = (input: {
               rowsAt(sharedAt, `${shared} ${kind}`).map((row) => Number(row.position)),
           }),
         sourceOf,
-        strictlyHeld: yield* sourced({
+        strictlyHeld: sourced({
           key: [version, parent, idField("child", input.kinds)],
           name: "StrictlyHeld",
           payload: [],

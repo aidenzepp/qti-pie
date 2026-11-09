@@ -42,13 +42,7 @@ import {
   roster,
   valueField,
 } from "#pantry/grammar/closed.ts";
-import type {
-  Closed,
-  ClosedRelationError,
-  IdField,
-  Roster,
-  ValueField,
-} from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, RepeatedValue, Roster, ValueField } from "#pantry/grammar/closed.ts";
 import {
   compile,
   boundFacets,
@@ -1171,10 +1165,11 @@ export class UncompiledDomain extends Schema.TaggedError<UncompiledDomain>()("Un
 
 /**
  * The ways a composition's declarations have no attribute grammar: a domain that does not
- * compile, or a relation that has no constant (a kind or name outside its roster, a kind that
- * declares a name twice in a version).
+ * compile, a roster that lists a handle twice, or an attribute name outside `AttributeName`, which
+ * an attribute's position is read from. A kind outside its roster, or a kind that declares a name
+ * twice in a version, is a fault of the rows (`faultOf`), which the tests find and grizzle refuses.
  */
-export type AttributeGrammarError = ClosedRelationError | UncompiledDomain;
+export type AttributeGrammarError = OutsideCodeSpace | RepeatedValue | UncompiledDomain;
 
 /**
  * The key of `AttributeGrammar`: version, kind, then attribute name, each over its roster.
@@ -1713,7 +1708,7 @@ const positioned = <R extends Admitted>(
  *   ({@link domainReader}): the composition's own, or one its caller shares among compositions.
  * @returns `AttributeGrammar`, `ValueDomain`, `ValueIdentity`, `TextDomain`, `Governor`,
  *   `GovernedAttribute` and `TypeText`, with the domain and position rosters; or the first
- *   declaration whose domain does not compile, or the first relation that has no constant.
+ *   declaration whose domain does not compile, or the first roster or position that has no code.
  */
 export const generate = (
   input: AttributeGrammarInput,
@@ -1848,7 +1843,7 @@ export const generate = (
       ...new Set(input.governors.map(governorHandle)),
     ]);
     const governorField = idField("governor", governorRoster);
-    const admission = yield* closed({
+    const admission = closed({
       key: [version, kind, name],
       name: "AttributeGrammar",
       payload: [domain, use, position],
@@ -1861,7 +1856,7 @@ export const generate = (
         version: row.version,
       })),
     });
-    const valueDomain = yield* closed({
+    const valueDomain = closed({
       key: [domain],
       name: "ValueDomain",
       payload: [
@@ -1880,7 +1875,7 @@ export const generate = (
     const bounded = domains.ordered.flatMap((held) =>
       Option.toArray(held.bound).map(({ facet, value }) => ({ domain: held.handle, facet, value })),
     );
-    const doubleBound = yield* closed({
+    const doubleBound = closed({
       key: [domain],
       name: "DoubleBound",
       payload: [
@@ -1892,7 +1887,7 @@ export const generate = (
       ],
       rows: bounded,
     });
-    const identity = yield* closed({
+    const identity = closed({
       key: [domain],
       name: "ValueIdentity",
       payload: [idField("identity", yield* roster("Identity", identities))],
@@ -1900,7 +1895,7 @@ export const generate = (
         Option.toArray(held.identity).map((value) => ({ domain: held.handle, identity: value })),
       ),
     });
-    const text = yield* closed({
+    const text = closed({
       key: [version, kind],
       name: "TextDomain",
       payload: [domain],
@@ -1910,7 +1905,7 @@ export const generate = (
         version: row.version,
       })),
     });
-    const governor = yield* closed({
+    const governor = closed({
       key: [version, kind, governs],
       name: "Governor",
       payload: [governorField],
@@ -1921,7 +1916,7 @@ export const generate = (
         version: held.version,
       })),
     });
-    const governedRelation = yield* closed({
+    const governedRelation = closed({
       key: [version, governorField, name],
       name: "GovernedAttribute",
       payload: [domain, use, position],
@@ -1934,7 +1929,7 @@ export const generate = (
         version: row.version,
       })),
     });
-    const typeText = yield* closed({
+    const typeText = closed({
       key: [version, governs],
       name: "TypeText",
       payload: [domain],

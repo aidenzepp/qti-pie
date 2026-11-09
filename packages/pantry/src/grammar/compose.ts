@@ -31,7 +31,8 @@
  *   `data-*` on the foreign kinds (fin.md, D2). On a kind the Schematron's extension rules cover,
  *   only `data-*` is, and no `xml:` name the kind does not declare (spec reading 90, `coveredBy`).
  *
- * Every admitted triple is stated once: a triple two sources state is a `KeyCollision`.
+ * Every admitted triple is stated once: a triple two sources state is a `KeyCollision` of
+ * `Admission`'s rows (`faultOf`, which the tests read).
  */
 import { Function as Fn, Option, Result } from "effect";
 import type { Admission, AdmittedChild } from "#pantry/grammar/admission.ts";
@@ -53,7 +54,7 @@ import type {
 import { barredByOf } from "#pantry/grammar/children.ts";
 import type { BarredBy, ChildError, LastWhere } from "#pantry/grammar/children.ts";
 import { idField, roster, rowsAt, sourced } from "#pantry/grammar/closed.ts";
-import type { ClosedRelationError, Roster } from "#pantry/grammar/closed.ts";
+import type { RepeatedValue, Roster } from "#pantry/grammar/closed.ts";
 import { compositions } from "#pantry/grammar/compositions.ts";
 import {
   bindingFit,
@@ -663,8 +664,8 @@ export type ComposedGrammar = Grammar<Kind, Name>;
 export type ComposeError =
   | AttributeGrammarError
   | ChildError
-  | ClosedRelationError
   | ContentError
+  | RepeatedValue
   | XsiTypeError;
 
 /**
@@ -733,7 +734,7 @@ export const compose = <const V extends readonly Vocabulary[]>(
     const kinds = yield* resolution(base, [...installed.admitted, ...stating]);
     // A child the models admit carries its position's particle, or its model's at 0; a triple a
     // vocabulary states beside them carries its own source.
-    const admission = yield* sourced({
+    const admission = sourced({
       key: [
         idField("version", kinds.versions),
         idField("parent", kinds.nodeKind),
@@ -815,9 +816,9 @@ export const compose = <const V extends readonly Vocabulary[]>(
         versions: kinds.versions,
       }),
       baseTypes: baseTypeRoster,
-      bindingFit: yield* bindingFit({ facets: expression, rosters: fitRosters }),
+      bindingFit: bindingFit({ facets: expression, rosters: fitRosters }),
       content: installed.content,
-      heldRootsUnder: yield* heldRootsUnder({
+      heldRootsUnder: heldRootsUnder({
         classOf: (namespace, parent) => foreignKinds[namespaceClassOf(namespace, parent)],
         held: installed.content.strictlyHeld.rows,
         kinds: kinds.nodeKind,
@@ -840,7 +841,7 @@ export const compose = <const V extends readonly Vocabulary[]>(
         kinds: kinds.nodeKind,
         versions: kinds.versions,
       }),
-      kindByNameUnder: yield* namesUnder({
+      kindByNameUnder: namesUnder({
         admitted: admission.rows,
         kinds: kinds.nodeKind,
         nameOf: (kind) => kinds.elementName.lookup({ kind }),
@@ -848,20 +849,20 @@ export const compose = <const V extends readonly Vocabulary[]>(
       }),
       kinds,
       lastWhere: stated.flatMap((facet) => facet.children.lastWhere),
-      mappableBaseType: yield* mappableBaseType(baseTypeRoster),
-      operatorArity: yield* operatorArity({ facets: expression, kinds: kinds.nodeKind }),
+      mappableBaseType: mappableBaseType(baseTypeRoster),
+      operatorArity: operatorArity({ facets: expression, kinds: kinds.nodeKind }),
       package: yield* packageGrammar({
         facets: stated.map((facet) => facet.package),
         kinds: kinds.nodeKind,
       }),
-      recordBindingFit: yield* recordBindingFit({ facets: expression, kinds: kinds.nodeKind }),
+      recordBindingFit: recordBindingFit({ facets: expression, kinds: kinds.nodeKind }),
       references: yield* references({
         facets: stated.map((facet) => facet.references),
         kinds: kinds.nodeKind,
         names: kinds.attributeName,
         versions: kinds.versions,
       }),
-      typeAvailable: yield* typesAvailable({
+      typeAvailable: typesAvailable({
         available: open.typeAvailable,
         everywhere: isXsNamespace,
         namespaceOf: typeNamespaceOf,

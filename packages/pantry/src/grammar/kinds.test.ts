@@ -6,8 +6,8 @@ import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Option, Result } from "effect";
-import { closed, idField, roster as rosterOf } from "#pantry/grammar/closed.ts";
+import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
+import { closed, faultOf, idField, roster as rosterOf } from "#pantry/grammar/closed.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
 import {
   fixedKinds,
@@ -227,16 +227,20 @@ describe("the kinds generator against a naive model", () => {
                     ),
                   ),
               );
+              // A roster's refusal is the generator's; a row outside its code space or a key stated
+              // twice is a fault of the rows, which the generator states and `faultOf` finds.
+              const outcome = Result.match(result, {
+                onFailure: ({ _tag }) => _tag,
+                onSuccess: (kinds) =>
+                  Option.match(Arr.findFirst([kinds.interaction, kinds.byName], faultOf), {
+                    onNone: () => "generated",
+                    onSome: ({ _tag }) => _tag,
+                  }),
+              });
               if (reasons.size > 0) {
-                assert.include(
-                  [...reasons],
-                  Result.isFailure(result) ? result.failure._tag : "generated",
-                );
+                assert.include([...reasons], outcome);
               } else {
-                assert.isTrue(
-                  Result.isSuccess(result),
-                  Result.isFailure(result) ? result.failure.message : "",
-                );
+                assert.strictEqual(outcome, "generated");
                 if (Result.isSuccess(result)) {
                   const kinds = result.success;
                   assert.deepStrictEqual(kinds.nodeKind.handles, [...fixedKinds, ...handles]);
@@ -277,18 +281,16 @@ describe("KindByNameUnder's kind payload", () => {
     const rosters = Result.getOrThrow(generate({ interactions: [], layer: [], vocabularies }));
     const anyKind: Roster<string> = rosters.nodeKind;
     const relationOver = <K extends string>(kinds: Roster<K>, kind: K) =>
-      Result.getOrThrow(
-        closed({
-          key: [
-            idField("namespace", Result.getOrThrow(rosterOf("Namespace", ["urn:toy"]))),
-            idField("local", Result.getOrThrow(rosterOf("LocalName", ["a"]))),
-            idField("parent", anyKind),
-          ],
-          name: "KindByNameUnder",
-          payload: [idField("kind", kinds)],
-          rows: [{ kind, local: "a", namespace: "urn:toy", parent: "document" }],
-        }),
-      );
+      closed({
+        key: [
+          idField("namespace", Result.getOrThrow(rosterOf("Namespace", ["urn:toy"]))),
+          idField("local", Result.getOrThrow(rosterOf("LocalName", ["a"]))),
+          idField("parent", anyKind),
+        ],
+        name: "KindByNameUnder",
+        payload: [idField("kind", kinds)],
+        rows: [{ kind, local: "a", namespace: "urn:toy", parent: "document" }],
+      });
     const narrow: KindByNameUnder<KindOf<typeof vocabularies>> = relationOver(
       rosters.nodeKind,
       "k1",

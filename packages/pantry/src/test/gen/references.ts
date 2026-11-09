@@ -267,7 +267,8 @@ export const faults = [
 export type Fault = (typeof faults)[number];
 
 /**
- * The refusal each fault must meet: the tag of the generator's failure, or `succeeded`.
+ * The refusal each fault must meet: the tag of the generator's failure, or of the first fault of
+ * its relations' rows (`faultOf`), or `succeeded`.
  */
 export const refusalOf = {
   "attribute-outside": "OutsideCodeSpace",

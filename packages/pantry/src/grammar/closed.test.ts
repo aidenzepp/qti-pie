@@ -10,6 +10,7 @@ import { Duration, Effect, Formatter, Option, Result } from "effect";
 import {
   closed,
   dependentField,
+  faultOf,
   fin,
   idField,
   roster,
@@ -79,12 +80,12 @@ const variants = [
 ] as const satisfies readonly Variant[];
 
 /**
- * The layouts of key a relation's layout branches on, each a situation the search must reach: a
+ * The layouts of key a relation's code spaces branch on, each a situation the search must reach: a
  * dependent field that is not the key's last, an id field after a dependent one, two dependent
  * fields, two prefix fields before the first dependent one, rows in two prefix blocks, uneven
  * blocks (rows in two blocks of different sizes under prefix fields of different sizes, where a
- * prefix read back in the wrong digit order sizes the wrong block), a value payload field, and a
- * lookup of a key that leaves a field out.
+ * prefix read in the wrong field sizes the wrong block), a value payload field, and a lookup of a
+ * key that leaves a field out.
  */
 const layouts = [
   "dependent inner",
@@ -481,10 +482,11 @@ const built = (drawnCase: Drawn) => {
 
 describe("closed relations against a naive tuple-set model", () => {
   it.effect(
-    "refuse exactly the rows the model refuses, by the first reason it finds, and look every point up as it does",
+    "fault exactly the rows the model refuses, by the first reason it finds, and look every point of a faultless relation up as it does",
     (ctx) =>
       // Bound: up to 4 key fields of up to 3 handles, dependent ones anywhere after the first, 3
-      // payload fields, 5 rows and one variant a case.
+      // payload fields, 5 rows and one variant a case. `closed` checks no row on a load; `faultOf`
+      // is the check the tests read, so the model is held against it.
       searched(
         ctx,
         explore(
@@ -505,7 +507,7 @@ describe("closed relations against a naive tuple-set model", () => {
           (drawnCase, c) =>
             Effect.sync(() => {
               const model = built(drawnCase);
-              const result = closed({
+              const relation = closed({
                 key: model.key,
                 name: "Toy",
                 payload: model.payload,
@@ -514,73 +516,63 @@ describe("closed relations against a naive tuple-set model", () => {
               c.note(drawnCase.variant);
               c.noteAll(model.layoutsHeld);
 
-              if (Option.isSome(model.reason)) {
-                assert.strictEqual(
-                  Result.isFailure(result) ? result.failure._tag : "constructed",
-                  model.reason.value,
-                );
-              } else {
-                assert.isTrue(
-                  Result.isSuccess(result),
-                  Result.isFailure(result) ? result.failure.message : "",
-                );
-                if (Result.isSuccess(result)) {
-                  const relation = result.success;
-                  // Every key point of the code spaces, held or not, each row, each row with its
-                  // most significant field one past its roster, and each row with one key field
-                  // left out, which no key holds.
-                  const probes = [
-                    ...model.pointRows,
-                    ...model.rows,
-                    ...model.rows.map((row) => ({
-                      ...row,
-                      k0: String(
-                        drawnCase.key[0]?._tag === "id" ? drawnCase.key[0].size : dependentWidth,
-                      ),
-                    })),
-                    ...model.rows.flatMap((row) =>
-                      drawnCase.key.map((_, place) =>
-                        Object.fromEntries(
-                          Object.entries(row).filter(([name]) => name !== `k${String(place)}`),
-                        ),
+              assert.deepStrictEqual(
+                Option.map(faultOf(relation), ({ _tag }) => _tag),
+                model.reason,
+              );
+              if (Option.isNone(model.reason)) {
+                // Every key point of the code spaces, held or not, each row, each row with its
+                // most significant field one past its roster, and each row with one key field
+                // left out, which no key holds.
+                const probes = [
+                  ...model.pointRows,
+                  ...model.rows,
+                  ...model.rows.map((row) => ({
+                    ...row,
+                    k0: String(
+                      drawnCase.key[0]?._tag === "id" ? drawnCase.key[0].size : dependentWidth,
+                    ),
+                  })),
+                  ...model.rows.flatMap((row) =>
+                    drawnCase.key.map((_, place) =>
+                      Object.fromEntries(
+                        Object.entries(row).filter(([name]) => name !== `k${String(place)}`),
                       ),
                     ),
-                  ];
-                  if (model.rows.length > 0) {
-                    c.note("lookup missing a field");
-                  }
+                  ),
+                ];
+                if (model.rows.length > 0) {
+                  c.note("lookup missing a field");
+                }
 
-                  // Each row's source is its own stated index, so a key that answers another
-                  // row's source names the wrong row.
-                  const indexOf = new Map(model.rows.map((row, index) => [row, index]));
-                  const withSources = Result.getOrThrow(
-                    sourced({
-                      key: model.key,
-                      name: "Toy",
-                      payload: model.payload,
-                      rows: model.rows.map((row, index) => ({
-                        row,
-                        source: { _tag: "spec", cite: String(index) } as const,
-                      })),
-                    }),
+                // Each row's source is its own stated index, so a key that answers another row's
+                // source names the wrong row.
+                const indexOf = new Map(model.rows.map((row, index) => [row, index]));
+                const withSources = sourced({
+                  key: model.key,
+                  name: "Toy",
+                  payload: model.payload,
+                  rows: model.rows.map((row, index) => ({
+                    row,
+                    source: { _tag: "spec", cite: String(index) } as const,
+                  })),
+                });
+                assert.deepStrictEqual(withSources.rows, relation.rows);
+                for (const probe of probes) {
+                  const expected = Option.flatMap(model.keyOf(probe), (point) =>
+                    Option.fromNullishOr(model.seen.get(point)),
                   );
-                  assert.deepStrictEqual(withSources.rows, relation.rows);
-                  for (const probe of probes) {
-                    const expected = Option.flatMap(model.keyOf(probe), (point) =>
-                      Option.fromNullishOr(model.seen.get(point)),
-                    );
-                    assert.deepStrictEqual(relation.lookup(model.keyRowOf(probe)), expected);
-                    assert.deepStrictEqual(withSources.lookup(model.keyRowOf(probe)), expected);
-                    assert.deepStrictEqual(
-                      withSources.sourceOf(model.keyRowOf(probe)),
-                      expected.pipe(
-                        Option.map((row) => ({
-                          _tag: "spec",
-                          cite: String(indexOf.get(row) ?? -1),
-                        })),
-                      ),
-                    );
-                  }
+                  assert.deepStrictEqual(relation.lookup(model.keyRowOf(probe)), expected);
+                  assert.deepStrictEqual(withSources.lookup(model.keyRowOf(probe)), expected);
+                  assert.deepStrictEqual(
+                    withSources.sourceOf(model.keyRowOf(probe)),
+                    expected.pipe(
+                      Option.map((row) => ({
+                        _tag: "spec",
+                        cite: String(indexOf.get(row) ?? -1),
+                      })),
+                    ),
+                  );
                 }
               }
             }),

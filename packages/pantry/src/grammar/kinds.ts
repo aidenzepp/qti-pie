@@ -12,13 +12,7 @@ import { Option, Result } from "effect";
 import { closed, idField, roster, valueField } from "#pantry/grammar/closed.ts";
 import { spelledNamespace } from "#pantry/vocab/namespaces.ts";
 import type { Nameless, NamespaceClass, NamespaceName } from "#pantry/vocab/namespaces.ts";
-import type {
-  Closed,
-  ClosedRelationError,
-  IdField,
-  Roster,
-  ValueField,
-} from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, RepeatedValue, Roster, ValueField } from "#pantry/grammar/closed.ts";
 
 /**
  * The QTI schema versions the model admits, in code order: the `SchemaVersion` roster's handles,
@@ -168,6 +162,12 @@ export interface Kinds<Kind extends string, Name extends string> {
    */
   readonly attributeName: Roster<Name>;
   /**
+   * `KindByNameUnder`: (namespace, local, parent) → kind, each element kind a parent admits by its
+   * name, which {@link Kinds.resolve} reads. It is the host's alone: no law reads it, so grizzle
+   * never declares it, and the tests over a composition check its rows (`faultOf`).
+   */
+  readonly byName: KindByNameUnder<Kind>;
+  /**
    * `ElementName`: the namespace name and local name each element kind is written with, as crust's
    * tree spells them (`spelledNamespace`), since the codec reads and writes names against them.
    */
@@ -244,15 +244,15 @@ const namesIn = <V extends readonly Vocabulary[]>(
  *   declares them for, XML Schema's `xsi:` names and `xml.xsd`'s `xml:` names: every roster holds
  *   them, after the open classes, at the same codes.
  * @param source.vocabularies - The vocabularies, in composition order.
- * @returns The relations, or the first reason one has no constant: a kind two vocabularies declare,
- *   or an attribute name a vocabulary shares with an open class (`RepeatedValue`); an interaction
- *   listed twice (`KeyCollision`); or an interaction outside `NodeKind` (`OutsideCodeSpace`).
+ * @returns The relations, or a kind two vocabularies declare, or an attribute name a vocabulary
+ *   shares with an open class (`RepeatedValue`). An interaction listed twice or outside `NodeKind`
+ *   is a fault of `Interaction`'s rows (`faultOf`), which the tests find and grizzle refuses.
  */
 export const generate = <const V extends readonly Vocabulary[]>(source: {
   readonly interactions: readonly KindOf<V>[];
   readonly layer: readonly NameOf<V>[];
   readonly vocabularies: V;
-}): Result.Result<KindRosters<KindOf<V>, NameOf<V>>, ClosedRelationError> =>
+}): Result.Result<KindRosters<KindOf<V>, NameOf<V>>, RepeatedValue> =>
   Result.gen(function* generateKinds() {
     const { vocabularies } = source;
     const versions = yield* roster("SchemaVersion", schemaVersions);
@@ -276,7 +276,7 @@ export const generate = <const V extends readonly Vocabulary[]>(source: {
             })),
     );
     const kind = idField("kind", nodeKind);
-    const elementName = yield* closed({
+    const elementName = closed({
       key: [kind],
       name: "ElementName",
       payload: [
@@ -295,7 +295,7 @@ export const generate = <const V extends readonly Vocabulary[]>(source: {
         namespace: row.namespace,
       })),
     });
-    const isElement = yield* closed({
+    const isElement = closed({
       key: [kind],
       name: "IsElement",
       payload: [],
@@ -308,7 +308,7 @@ export const generate = <const V extends readonly Vocabulary[]>(source: {
         kind: handle,
       })),
     });
-    const interaction = yield* closed({
+    const interaction = closed({
       key: [kind],
       name: "Interaction",
       payload: [],
@@ -326,12 +326,12 @@ export const generate = <const V extends readonly Vocabulary[]>(source: {
   });
 
 /**
- * The kind relations of a vocabulary list before the content grammar: every one but `resolve`,
- * which reads what each parent admits ({@link resolution}).
+ * The kind relations of a vocabulary list before the content grammar: every one but `byName` and
+ * the `resolve` that reads it, which read what each parent admits ({@link resolution}).
  */
 export type KindRosters<Kind extends string, Name extends string> = Omit<
   Kinds<Kind, Name>,
-  "resolve"
+  "byName" | "resolve"
 >;
 
 /**
@@ -357,13 +357,15 @@ export type KindByNameUnder<Kind extends string> = Closed<
  *
  * @param kinds - The composition's kinds.
  * @param admitted - Each parent and a kind it admits, in any version.
- * @returns The kinds with `resolve`, or a `KeyCollision` naming two kinds of one name that one
- *   parent admits, or an `OutsideCodeSpace` naming a parent the roster lacks.
+ * @returns The kinds with `resolve`, and the relation it reads, or a `RepeatedValue` from a roster.
+ *   Two kinds of one name that one parent admits, and a parent the roster lacks, are faults of
+ *   `KindByNameUnder`'s rows (`faultOf`), which the tests find: grizzle never sees the relation,
+ *   which is the host's alone.
  */
 export const resolution = <Kind extends string, Name extends string>(
   kinds: KindRosters<Kind, Name>,
   admitted: readonly { readonly child: string; readonly parent: string }[],
-): Result.Result<Kinds<Kind, Name>, ClosedRelationError> =>
+): Result.Result<Kinds<Kind, Name>, RepeatedValue> =>
   Result.gen(function* generateResolution() {
     const anyKind: Roster<string> = kinds.nodeKind;
     // The child is read back from its `ElementName` row, whose key is a `NodeKind` handle, so each
@@ -384,7 +386,7 @@ export const resolution = <Kind extends string, Name extends string>(
     // The payload ranges over the `NodeKind` roster itself, so a resolved kind is a `Kind` by
     // construction and `resolve` needs no test of it. The annotation is the guard: a payload over
     // a wider roster (`anyKind`) is no `KindByNameUnder<Kind>`, and `tsc` refuses it.
-    const under: KindByNameUnder<Kind> = yield* closed({
+    const under: KindByNameUnder<Kind> = closed({
       key: [
         idField(
           "namespace",
@@ -400,6 +402,7 @@ export const resolution = <Kind extends string, Name extends string>(
 
     return {
       ...kinds,
+      byName: under,
       resolve: (namespaceName: string, localName: string, parentKind: Kind) =>
         under
           .lookup({ local: localName, namespace: namespaceName, parent: parentKind })

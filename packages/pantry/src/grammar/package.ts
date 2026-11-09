@@ -10,7 +10,7 @@
  */
 import { Result } from "effect";
 import { closed, idField, roster } from "#pantry/grammar/closed.ts";
-import type { Closed, ClosedRelationError, IdField, Roster } from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, RepeatedValue, Roster } from "#pantry/grammar/closed.ts";
 
 /**
  * The root element kind of the documents one resource type lists.
@@ -57,13 +57,14 @@ export interface PackageGrammar {
  * @param input - The rosters and each vocabulary's facet.
  * @param input.kinds - The `NodeKind` roster, which `RootOfType`'s roots range over.
  * @param input.facets - The vocabularies' facets.
- * @returns The relations, or an `OutsideCodeSpace` naming a root kind the roster does not hold, or
- *   a `RepeatedValue` naming a type two facets list.
+ * @returns The relations, or a `RepeatedValue` naming a type two facets list. A root kind the
+ *   roster does not hold is a fault of the rows (`faultOf`), which the tests find and grizzle
+ *   refuses.
  */
 export const packageGrammar = (input: {
   readonly facets: readonly PackageFacet[];
   readonly kinds: Roster<string>;
-}): Result.Result<PackageGrammar, ClosedRelationError> =>
+}): Result.Result<PackageGrammar, RepeatedValue> =>
   Result.gen(function* generatePackage() {
     const resourceType = yield* roster(
       "ResourceType",
@@ -73,7 +74,7 @@ export const packageGrammar = (input: {
 
     return {
       resourceType,
-      rootOfType: yield* closed({
+      rootOfType: closed({
         key: [type, idField("root", input.kinds)],
         name: "RootOfType",
         payload: [],

@@ -5,6 +5,7 @@ import { array, element as choice, int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
+import { faultOf } from "#pantry/grammar/closed.ts";
 import { composed, layerAttributeNames, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
 import { foreignKinds, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -40,6 +41,45 @@ const grammar = Effect.fromResult(composed());
  */
 type Literal<Handle extends string> = string extends Handle ? false : true;
 
+/**
+ * A closed relation as {@link faultOf} reads it.
+ */
+type Relation = Parameters<typeof faultOf>[0];
+
+/**
+ * Whether a value of a grammar is a closed relation: its key, payload and rows, and its lookup.
+ *
+ * @param value - A value the grammar holds.
+ * @returns Whether it is one.
+ */
+const isRelation = (value: unknown): value is Relation =>
+  typeof value === "object" &&
+  value !== null &&
+  "key" in value &&
+  "payload" in value &&
+  "rows" in value &&
+  "lookup" in value;
+
+/**
+ * Collect every closed relation a grammar holds, at any depth of its records: a roster's handles
+ * and a relation's rows are lists, which hold none.
+ *
+ * @param value - The grammar, or a value it holds.
+ * @param seen - The records walked already.
+ * @returns The relations, each once.
+ */
+const relationsIn = (value: unknown, seen: Set<object> = new Set()): readonly Relation[] => {
+  if (typeof value !== "object" || value === null || Array.isArray(value) || seen.has(value)) {
+    return [];
+  }
+
+  seen.add(value);
+
+  return isRelation(value)
+    ? [value]
+    : Object.values(value).flatMap((held: unknown) => relationsIn(held, seen));
+};
+
 describe("the composition", () => {
   it("keeps the vocabularies' handles as literal unions, so the XDM's compile-time contracts hold", () => {
     const kindsAreLiteral: Literal<Kind> = true;
@@ -47,6 +87,27 @@ describe("the composition", () => {
 
     assert.isTrue(kindsAreLiteral && namesAreLiteral);
   });
+
+  it.effect(
+    "states every closed relation's rows within their fields' code spaces, one row per key, the relations grizzle never declares among them",
+    () =>
+      // Oracle: `faultOf`, each row's values against its fields' code spaces and its key against
+      // the rows before it. No load checks a row (`closed.ts`): grizzle refuses both faults in the
+      // relations `install.ts` declares, a closed id outside its roster and a second row of a key
+      // when it declares one and a slot past its owner's count when it packs one, so this test is
+      // where a generator or a facet that states a fault fails, in a relation only the host reads
+      // (`Kinds.byName`, `resolve`'s) as in any other.
+      Effect.gen(function* faultless() {
+        const relations = relationsIn(yield* grammar);
+        const faults = relations.flatMap((relation) =>
+          Option.toArray(faultOf(relation)).map(({ message }) => message),
+        );
+
+        assert.isAtLeast(relations.length, 45);
+        assert.deepStrictEqual(faults, []);
+      }),
+    testTimeoutMs,
+  );
 
   it.effect(
     "composes production's list once per process: every composed() returns the first's result, beside a toy list composed at each of its calls, on every sequence of up to three calls",

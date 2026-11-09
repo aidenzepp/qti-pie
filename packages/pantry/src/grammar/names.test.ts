@@ -373,21 +373,19 @@ describe("HeldRootsUnder", () => {
           { kind: "a:r", local: "r", namespace: "urn:a", versions: first },
           { kind: "b:s", local: "s", namespace: "urn:b", versions: second },
         ];
-        const relation = Result.getOrThrow(
-          heldRootsUnder({
-            classOf: () => "foreign-element",
-            held: schemaVersions.map((version) => ({
-              child: "foreign-element",
-              parent: "host",
-              version,
-            })),
-            kinds,
-            namespaceOf: () => namespaceNameOf("urn:host"),
-            reads: () => true,
-            roots,
-            versions,
-          }),
-        );
+        const relation = heldRootsUnder({
+          classOf: () => "foreign-element",
+          held: schemaVersions.map((version) => ({
+            child: "foreign-element",
+            parent: "host",
+            version,
+          })),
+          kinds,
+          namespaceOf: () => namespaceNameOf("urn:host"),
+          reads: () => true,
+          roots,
+          versions,
+        });
         for (const version of schemaVersions) {
           const names = Option.getOrElse(
             Option.map(relation.lookup({ parent: "host", version }), (row) => row.names),

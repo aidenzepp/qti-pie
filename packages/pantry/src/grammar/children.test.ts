@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { faultOf } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { vocabularyFacets } from "#pantry/grammar/facets.ts";
 import { toyFacets, toyGrammar, toySources, toyVocabulary } from "#pantry/test/gen/grammar.ts";
@@ -117,9 +118,15 @@ describe("ChildBarredBy", () => {
     }),
   );
 
-  it("refuses each named invalid barring: an unadmitted kind, kinds at two positions, a second attribute", () => {
+  it("refuses each named invalid barring, an unadmitted kind and kinds at two positions, and states a second attribute as a fault of its rows", () => {
+    // A key stated twice is no generator's refusal: `faultOf` finds it in the rows, and grizzle
+    // refuses it when it declares `ChildBarredBy`.
     const tagOf = (result: ReturnType<typeof barredToy>) =>
-      Result.isFailure(result) ? result.failure._tag : "composed";
+      Result.match(result, {
+        onFailure: ({ _tag }) => _tag,
+        onSuccess: ({ barredBy }) =>
+          Option.match(faultOf(barredBy), { onNone: () => "composed", onSome: ({ _tag }) => _tag }),
+      });
 
     assert.deepStrictEqual(
       [
