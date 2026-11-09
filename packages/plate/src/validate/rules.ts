@@ -4600,13 +4600,19 @@ const labelTool = (
 
 /**
  * Where each element of a document sits, as the body content rules read it: whether a template
- * block holds it, and the table it takes part in.
+ * block holds it, the table it takes part in, and its place among its parent's children.
  */
 interface Placing {
   /**
    * The ids of the `th`s that take part in each table, each collapsed.
    */
   readonly headerIds: ReadonlyMap<SourceElement, ReadonlySet<string>>;
+  /**
+   * Each element's index among its parent's children, every child node counted: a text, an entity
+   * reference or an element, as {@link edgeCharacter} reads a neighbour. Every element but the root
+   * has one.
+   */
+  readonly positions: ReadonlyMap<SourceElement, number>;
   /**
    * The nearest `table` each element lies in, for those a table holds.
    */
@@ -4619,16 +4625,25 @@ interface Placing {
 
 /**
  * Find where each element of a document sits ({@link Placing}), over every element the document
- * holds, so an ancestor the rules do not judge still places what it holds.
+ * holds, so an ancestor the rules do not judge still places what it holds. Each element's children
+ * are read once, as the walk reaches it, so a rule that reads an element's neighbour takes it by
+ * position: a search of the parent's children per element grows as the square of its siblings.
  *
  * @param source The document.
  * @returns Its placing.
  */
 const placingOf = (source: SourceDocument): Placing => {
   const headerIds = new Map<SourceElement, Set<string>>();
+  const positions = new Map<SourceElement, number>();
   const tableOf = new Map<SourceElement, SourceElement>();
   const templated = new Set<SourceElement>();
   for (const { element, parent } of walk(source)) {
+    for (const [index, child] of element.children.entries()) {
+      if (child.kind === "element") {
+        positions.set(child, index);
+      }
+    }
+
     if (Option.isSome(parent)) {
       const holder = parent.value;
       if (templated.has(holder) || isQti(holder, (local) => local === "qti-template-block")) {
@@ -4649,7 +4664,7 @@ const placingOf = (source: SourceDocument): Placing => {
     }
   }
 
-  return { headerIds, tableOf, templated };
+  return { headerIds, positions, tableOf, templated };
 };
 
 /**
@@ -4781,16 +4796,22 @@ const edgeCharacter = (
  *
  * @param source The document.
  * @param visit The element's visit.
+ * @param placing Where the document's elements sit, the `q`'s position among its siblings read
+ *   from it.
  * @returns One refusal at the `q`, naming the first mark found and the `side` it stands on, in the
  *   order before, after, start and end; none for any other element.
  */
-const quotation = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
-  if (!isQti(visit.element, (local) => local === "q") || Option.isNone(visit.parent)) {
+const quotation = (source: SourceDocument, visit: Visit, placing: Placing): readonly Refusal[] => {
+  const at = placing.positions.get(visit.element);
+  if (
+    !isQti(visit.element, (local) => local === "q") ||
+    Option.isNone(visit.parent) ||
+    at === undefined
+  ) {
     return [];
   }
 
   const siblings = visit.parent.value.children;
-  const at = siblings.indexOf(visit.element);
   const own = visit.element.children;
   const sides = [
     ["before", at > 0 ? edgeCharacter(siblings[at - 1], "last") : Option.none()],
@@ -5018,7 +5039,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...operandTypes(source, visit, context),
       ...templateBlockInteraction(source, visit, placing),
       ...tableHeaders(source, visit, placing),
-      ...quotation(source, visit),
+      ...quotation(source, visit, placing),
       ...dataSsml(source, visit, tables),
     );
   }
