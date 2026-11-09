@@ -1140,6 +1140,19 @@ const readEscape = (cursor: Cursor): Result.Result<Escaped, UnreadPattern> => {
 };
 
 /**
+ * Read one end of a class item: an escape where the character is a backslash, else the character
+ * itself, which the cursor has already passed.
+ *
+ * @param cursor - The cursor, after the character.
+ * @param character - The character the end starts with.
+ * @returns What the end stands for, or why the escape is unread.
+ */
+const readItemEnd = (cursor: Cursor, character: string): Result.Result<Escaped, UnreadPattern> =>
+  character === "\\"
+    ? readEscape(cursor)
+    : Result.succeed({ _tag: "point", point: codePointOf(character) });
+
+/**
  * Read one item of a class's group: a character or a single-character escape, alone or as the
  * start of a range to another, or a multi-character, category or block escape.
  *
@@ -1147,37 +1160,38 @@ const readEscape = (cursor: Cursor): Result.Result<Escaped, UnreadPattern> => {
  * @param character - The character it stands on.
  * @returns The item's set.
  */
-const readClassItem = (cursor: Cursor, character: string): Result.Result<CodeSet, UnreadPattern> =>
-  Result.gen(function* readClassItemBody() {
-    cursor.at += 1;
-    const start: Escaped =
-      character === "\\"
-        ? yield* readEscape(cursor)
-        : { _tag: "point", point: codePointOf(character) };
-    const dash = peek(cursor) === "-" && peek(cursor, 1) !== "]" && peek(cursor, 1) !== "[";
-    if (start._tag !== "point" || !dash) {
-      return setOfEscaped(start);
-    }
+const readClassItem = (cursor: Cursor, character: string): Result.Result<CodeSet, UnreadPattern> => {
+  cursor.at += 1;
+  const start = readItemEnd(cursor, character);
+  if (Result.isFailure(start)) {
+    return Result.fail(start.failure);
+  }
 
-    cursor.at += 1;
-    const endCharacter = peek(cursor);
-    if (endCharacter === undefined) {
-      return yield* unread(cursor, "a range without its end");
-    }
+  const dash = peek(cursor) === "-" && peek(cursor, 1) !== "]" && peek(cursor, 1) !== "[";
+  if (start.success._tag !== "point" || !dash) {
+    return Result.succeed(setOfEscaped(start.success));
+  }
 
-    cursor.at += 1;
-    const end: Escaped =
-      endCharacter === "\\"
-        ? yield* readEscape(cursor)
-        : { _tag: "point", point: codePointOf(endCharacter) };
-    if (end._tag !== "point" || end.point < start.point) {
-      return yield* unread(cursor, "a range whose end is not one character after its start");
-    }
+  cursor.at += 1;
+  const endCharacter = peek(cursor);
+  if (endCharacter === undefined) {
+    return unread(cursor, "a range without its end");
+  }
 
-    const range: CodeSet = [[start.point, end.point]];
+  cursor.at += 1;
+  const end = readItemEnd(cursor, endCharacter);
+  if (Result.isFailure(end)) {
+    return Result.fail(end.failure);
+  }
 
-    return range;
-  });
+  if (end.success._tag !== "point" || end.success.point < start.success.point) {
+    return unread(cursor, "a range whose end is not one character after its start");
+  }
+
+  const range: CodeSet = [[start.success.point, end.success.point]];
+
+  return Result.succeed(range);
+};
 
 /**
  * Read a character class after its `[`: a positive or negated group, then an optional subtraction
@@ -1186,52 +1200,61 @@ const readClassItem = (cursor: Cursor, character: string): Result.Result<CodeSet
  * @param cursor - The cursor, past the `[`.
  * @returns The class's set within XML's `Char`.
  */
-const readClass = (cursor: Cursor): Result.Result<CodeSet, UnreadPattern> =>
-  Result.gen(function* readClassBody() {
-    const negated = peek(cursor) === "^";
-    if (negated) {
+const readClass = (cursor: Cursor): Result.Result<CodeSet, UnreadPattern> => {
+  const negated = peek(cursor) === "^";
+  if (negated) {
+    cursor.at += 1;
+  }
+
+  const runs: CodeRange[] = [];
+  let subtracted: CodeSet = [];
+  for (;;) {
+    const character = peek(cursor);
+    if (character === undefined) {
+      return unread(cursor, "a class without its closing bracket");
+    }
+
+    if (character === "]") {
+      if (runs.length === 0) {
+        return unread(cursor, "an empty class");
+      }
+
       cursor.at += 1;
+      break;
     }
 
-    const runs: CodeRange[] = [];
-    let subtracted: CodeSet = [];
-    for (;;) {
-      const character = peek(cursor);
-      if (character === undefined) {
-        return yield* unread(cursor, "a class without its closing bracket");
+    if (character === "-" && peek(cursor, 1) === "[") {
+      cursor.at += 2;
+      const inner = readClass(cursor);
+      if (Result.isFailure(inner)) {
+        return inner;
       }
 
-      if (character === "]") {
-        if (runs.length === 0) {
-          return yield* unread(cursor, "an empty class");
-        }
-
-        cursor.at += 1;
-        break;
+      subtracted = inner.success;
+      if (peek(cursor) !== "]") {
+        return unread(cursor, "a subtraction that is not the class's last part");
       }
 
-      if (character === "-" && peek(cursor, 1) === "[") {
-        cursor.at += 2;
-        subtracted = yield* readClass(cursor);
-        if (peek(cursor) !== "]") {
-          return yield* unread(cursor, "a subtraction that is not the class's last part");
-        }
-
-        cursor.at += 1;
-        break;
-      }
-
-      if (character === "[") {
-        return yield* unread(cursor, "an unescaped [ inside a class");
-      }
-
-      runs.push(...(yield* readClassItem(cursor, character)));
+      cursor.at += 1;
+      break;
     }
 
-    const group = intersect(setOf(runs), xmlChar);
+    if (character === "[") {
+      return unread(cursor, "an unescaped [ inside a class");
+    }
 
-    return subtract(negated ? subtract(xmlChar, group) : group, subtracted);
-  });
+    const item = readClassItem(cursor, character);
+    if (Result.isFailure(item)) {
+      return item;
+    }
+
+    runs.push(...item.success);
+  }
+
+  const group = intersect(setOf(runs), xmlChar);
+
+  return Result.succeed(subtract(negated ? subtract(xmlChar, group) : group, subtracted));
+};
 
 /**
  * Read a quantifier's braces after `{`: `{n}`, `{n,}` or `{n,m}`.
@@ -1269,72 +1292,95 @@ const readBraces = (
 const dot = chars(subtract(xmlChar, charactersOf("\n\r")));
 
 /**
+ * Read one atom of a branch other than a group, its quantifier aside: a class, an escape, `.`, or
+ * one character, which the cursor has already passed.
+ *
+ * @param cursor - The cursor, after the atom's first character.
+ * @param character - That character.
+ * @returns The atom's tree, or why the pattern is unread.
+ */
+const readAtom = (cursor: Cursor, character: string): Result.Result<Regex, UnreadPattern> => {
+  if (character === "[") {
+    return Result.map(readClass(cursor), chars);
+  }
+
+  if (character === "\\") {
+    return Result.map(readEscape(cursor), (escaped) => chars(setOfEscaped(escaped)));
+  }
+
+  if (character === ".") {
+    return Result.succeed(dot);
+  }
+
+  return "?*+{}]".includes(character)
+    ? unread(cursor, `a ${character} with nothing to quantify`)
+    : Result.succeed(chars(charactersOf(character)));
+};
+
+/**
  * Read an alternation of branches up to a `)` or the end.
  *
  * @param cursor - The cursor.
  * @returns The tree.
  */
-const readAlternation = (cursor: Cursor): Result.Result<Regex, UnreadPattern> =>
-  Result.gen(function* readAlternationBody() {
-    const arms: Regex[] = [];
+const readAlternation = (cursor: Cursor): Result.Result<Regex, UnreadPattern> => {
+  const arms: Regex[] = [];
+  for (;;) {
+    const parts: Regex[] = [];
     for (;;) {
-      const parts: Regex[] = [];
-      for (;;) {
-        const character = peek(cursor);
-        if (character === undefined || character === "|" || character === ")") {
-          break;
-        }
-
-        cursor.at += 1;
-        let atom: Regex;
-        if (character === "(") {
-          atom = yield* readAlternation(cursor);
-          if (peek(cursor) !== ")") {
-            return yield* unread(cursor, "a group without its closing parenthesis");
-          }
-
-          cursor.at += 1;
-        } else if (character === "[") {
-          atom = chars(yield* readClass(cursor));
-        } else if (character === "\\") {
-          atom = chars(setOfEscaped(yield* readEscape(cursor)));
-        } else if (character === ".") {
-          atom = dot;
-        } else if ("?*+{}]".includes(character)) {
-          return yield* unread(cursor, `a ${character} with nothing to quantify`);
-        } else {
-          atom = chars(charactersOf(character));
-        }
-
-        const quantifier = peek(cursor);
-        if (quantifier === "?") {
-          cursor.at += 1;
-          atom = opt(atom);
-        } else if (quantifier === "*") {
-          cursor.at += 1;
-          atom = star(atom);
-        } else if (quantifier === "+") {
-          cursor.at += 1;
-          atom = plus(atom);
-        } else if (quantifier === "{") {
-          cursor.at += 1;
-          const { max, min } = yield* readBraces(cursor);
-          atom = repeat(atom, min, max);
-        }
-
-        parts.push(atom);
-      }
-
-      arms.push(seq(...parts));
-      if (peek(cursor) !== "|") {
+      const character = peek(cursor);
+      if (character === undefined || character === "|" || character === ")") {
         break;
       }
 
       cursor.at += 1;
+      const read = character === "(" ? readAlternation(cursor) : readAtom(cursor, character);
+      if (Result.isFailure(read)) {
+        return read;
+      }
+
+      if (character === "(") {
+        if (peek(cursor) !== ")") {
+          return unread(cursor, "a group without its closing parenthesis");
+        }
+
+        cursor.at += 1;
+      }
+
+      let atom = read.success;
+      const quantifier = peek(cursor);
+      if (quantifier === "?") {
+        cursor.at += 1;
+        atom = opt(atom);
+      } else if (quantifier === "*") {
+        cursor.at += 1;
+        atom = star(atom);
+      } else if (quantifier === "+") {
+        cursor.at += 1;
+        atom = plus(atom);
+      } else if (quantifier === "{") {
+        cursor.at += 1;
+        const braces = readBraces(cursor);
+        if (Result.isFailure(braces)) {
+          return Result.fail(braces.failure);
+        }
+
+        atom = repeat(atom, braces.success.min, braces.success.max);
+      }
+
+      parts.push(atom);
     }
 
-    return alt(...arms);
-  });
+    arms.push(seq(...parts));
+    if (peek(cursor) !== "|") {
+      break;
+    }
+
+    cursor.at += 1;
+  }
+
+  return Result.succeed(alt(...arms));
+};
 
 /**
  * Translate an XSD `pattern` facet into a tree. XSD's regexes match the whole value, so the tree is
@@ -1344,16 +1390,14 @@ const readAlternation = (cursor: Cursor): Result.Result<Regex, UnreadPattern> =>
  * @returns The tree, or an {@link UnreadPattern}.
  * @see {@link https://www.w3.org/TR/xmlschema-2/#regexs | XML Schema Part 2, Appendix F}
  */
-const readPattern = (source: string): Result.Result<Regex, UnreadPattern> =>
-  Result.gen(function* readPatternBody() {
-    const cursor: Cursor = { at: 0, points: Array.from(source, String), source };
-    const tree = yield* readAlternation(cursor);
-    if (cursor.at < cursor.points.length) {
-      return yield* unread(cursor, "a ) that closes no group");
-    }
+const readPattern = (source: string): Result.Result<Regex, UnreadPattern> => {
+  const cursor: Cursor = { at: 0, points: Array.from(source, String), source };
+  const tree = readAlternation(cursor);
 
-    return tree;
-  });
+  return Result.isSuccess(tree) && cursor.at < cursor.points.length
+    ? unread(cursor, "a ) that closes no group")
+    : tree;
+};
 
 /**
  * One decimal digit.
@@ -3282,15 +3326,19 @@ const intersectTwo = (left: Regex, right: Regex): Result.Result<Regex, UnreadDef
 const intersection = (arms: readonly Regex[]): Result.Result<Regex, UnreadDefinition> =>
   Arr.matchLeft(arms, {
     onEmpty: () => Result.succeed(anything),
-    onNonEmpty: (first, rest) =>
-      Result.gen(function* intersectionBody() {
-        let held = first;
-        for (const arm of rest) {
-          held = yield* intersectTwo(held, arm);
+    onNonEmpty: (first, rest) => {
+      let held = first;
+      for (const arm of rest) {
+        const next = intersectTwo(held, arm);
+        if (Result.isFailure(next)) {
+          return next;
         }
 
-        return held;
-      }),
+        held = next.success;
+      }
+
+      return Result.succeed(held);
+    },
   });
 
 /**
@@ -3310,39 +3358,48 @@ const atomicCore = (
 ): Result.Result<
   { readonly bound: Option.Option<DoubleBound>; readonly tree: Regex },
   CompileError
-> =>
-  Result.gen(function* atomicCoreBody() {
-    const { facets } = domain;
-    const lexical = yield* lexicalOf(domain);
-    const integer = Option.isSome(valueOf(facets, "fractionDigits"));
-    const sets: Regex[] = [];
-    for (const set of domain.patterns.filter((held) => !(integer && isIntegerPattern(held)))) {
-      const arms: Regex[] = [];
-      for (const source of set) {
-        arms.push(yield* readPattern(source));
+> => {
+  const { facets } = domain;
+  const read = lexicalOf(domain);
+  if (Result.isFailure(read)) {
+    return Result.fail(read.failure);
+  }
+
+  const lexical = read.success;
+  const integer = Option.isSome(valueOf(facets, "fractionDigits"));
+  const sets: Regex[] = [];
+  for (const set of domain.patterns.filter((held) => !(integer && isIntegerPattern(held)))) {
+    const arms: Regex[] = [];
+    for (const source of set) {
+      const arm = readPattern(source);
+      if (Result.isFailure(arm)) {
+        return Result.fail(arm.failure);
       }
 
-      sets.push(alt(...arms));
+      arms.push(arm.success);
     }
 
-    const kept = sets.filter(
-      (set, index) =>
-        !sets.some(
-          (other, at) =>
-            at !== index && includes(set, other) && (!includes(other, set) || at < index),
-        ),
-    );
-    const implied = isAnything(lexical.tree) && kept.length > 0;
-    const constraints = [...(implied ? [] : [lexical.tree]), ...kept];
-    const { max, min, stated } = lengthBounds(facets);
-    const lengths = stated ? [repeat(chars(xmlChar), min, max)] : [];
-    const arms = [
-      ...constraints.filter((tree) => !(lengths.length > 0 && isAnything(tree))),
-      ...lengths,
-    ];
+    sets.push(alt(...arms));
+  }
 
-    return { bound: lexical.bound, tree: yield* intersection(arms) };
-  });
+  const kept = sets.filter(
+    (set, index) =>
+      !sets.some(
+        (other, at) =>
+          at !== index && includes(set, other) && (!includes(other, set) || at < index),
+      ),
+  );
+  const implied = isAnything(lexical.tree) && kept.length > 0;
+  const constraints = [...(implied ? [] : [lexical.tree]), ...kept];
+  const { max, min, stated } = lengthBounds(facets);
+  const lengths = stated ? [repeat(chars(xmlChar), min, max)] : [];
+  const arms = [
+    ...constraints.filter((tree) => !(lengths.length > 0 && isAnything(tree))),
+    ...lengths,
+  ];
+
+  return Result.map(intersection(arms), (tree) => ({ bound: lexical.bound, tree }));
+};
 
 /**
  * Fold `replace` into a tree: a set that holds the space also holds tab, line feed and carriage

@@ -1785,26 +1785,27 @@ const positioned = <R extends Admitted>(
   familyOf: (row: R) => string,
   names: Roster<string>,
   relation: string,
-): Result.Result<readonly { readonly position: number; readonly row: R }[], OutsideCodeSpace> =>
-  Result.map(
-    Result.all(
-      rows.map((row, at) =>
-        Option.match(names.codeOf(row.name), {
-          onNone: () =>
-            Result.fail(new OutsideCodeSpace({ field: "name", relation, value: row.name })),
-          onSome: (code) => Result.succeed({ at, code, row }),
-        }),
-      ),
-    ),
-    (coded) =>
-      [...Map.groupBy(coded, ({ row }) => familyOf(row)).values()]
-        .flatMap((family) =>
-          family
-            .toSorted((left, right) => left.code - right.code)
-            .map(({ at, row }, position) => ({ at, position, row })),
-        )
-        .toSorted((left, right) => left.at - right.at),
+): Result.Result<readonly { readonly position: number; readonly row: R }[], OutsideCodeSpace> => {
+  const coded: { readonly at: number; readonly code: number; readonly row: R }[] = [];
+  for (const [at, row] of rows.entries()) {
+    const code = Option.getOrUndefined(names.codeOf(row.name));
+    if (code === undefined) {
+      return Result.fail(new OutsideCodeSpace({ field: "name", relation, value: row.name }));
+    }
+
+    coded.push({ at, code, row });
+  }
+
+  return Result.succeed(
+    [...Map.groupBy(coded, ({ row }) => familyOf(row)).values()]
+      .flatMap((family) =>
+        family
+          .toSorted((left, right) => left.code - right.code)
+          .map(({ at, row }, position) => ({ at, position, row })),
+      )
+      .toSorted((left, right) => left.at - right.at),
   );
+};
 
 /**
  * Generate the attribute grammar of a composition.
@@ -1859,14 +1860,13 @@ export const generate = (
     for (const version of input.versions.handles) {
       for (const { declared, read } of declarations) {
         if (declared.versions.includes(version)) {
-          const domain = yield* domainOf(
-            domains,
-            declared,
-            read,
-            `${declared.kind}@${declared.name}`,
-          );
+          const domain = domainOf(domains, declared, read, `${declared.kind}@${declared.name}`);
+          if (Result.isFailure(domain)) {
+            return yield* Result.fail(domain.failure);
+          }
+
           admitted.push({
-            domain,
+            domain: domain.success,
             kind: declared.kind,
             name: declared.name,
             use: declared.use,
@@ -1877,8 +1877,12 @@ export const generate = (
 
       for (const { declared, read, text } of textsRead) {
         if (text.versions.includes(version)) {
-          const domain = yield* domainOf(domains, declared, read, `${text.kind} text`);
-          texts.push({ domain, kind: text.kind, version });
+          const domain = domainOf(domains, declared, read, `${text.kind} text`);
+          if (Result.isFailure(domain)) {
+            return yield* Result.fail(domain.failure);
+          }
+
+          texts.push({ domain: domain.success, kind: text.kind, version });
         }
       }
     }
@@ -1894,14 +1898,13 @@ export const generate = (
     for (const version of input.versions.handles) {
       for (const { declared, read } of governedRead) {
         if (declared.versions.includes(version)) {
-          const domain = yield* domainOf(
-            domains,
-            declared,
-            read,
-            `${declared.governs}@${declared.name}`,
-          );
+          const domain = domainOf(domains, declared, read, `${declared.governs}@${declared.name}`);
+          if (Result.isFailure(domain)) {
+            return yield* Result.fail(domain.failure);
+          }
+
           governed.push({
-            domain,
+            domain: domain.success,
             governor: governorHandle(declared),
             kind: declared.kind,
             name: declared.name,
@@ -1913,8 +1916,12 @@ export const generate = (
 
       for (const { declared, read, typeText } of typeTextsRead) {
         if (typeText.versions.includes(version)) {
-          const domain = yield* domainOf(domains, declared, read, `${typeText.owner} text`);
-          typeTexts.push({ domain, governs: typeText.owner, version });
+          const domain = domainOf(domains, declared, read, `${typeText.owner} text`);
+          if (Result.isFailure(domain)) {
+            return yield* Result.fail(domain.failure);
+          }
+
+          typeTexts.push({ domain: domain.success, governs: typeText.owner, version });
         }
       }
     }
