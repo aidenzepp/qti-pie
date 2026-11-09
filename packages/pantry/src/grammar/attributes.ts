@@ -1071,14 +1071,74 @@ const appliesTo = (reading: SpecReading, kind: string, name: string): boolean =>
   Option.match(reading.kinds, { onNone: () => true, onSome: (kinds) => kinds.includes(kind) });
 
 /**
- * The spec readings of one kind's attribute, in the order {@link specReadings} lists them.
+ * The spec readings that apply to one kind's attribute, in the order {@link specReadings} lists
+ * them, with the text of their indices there, which tells two such lists apart.
+ */
+interface Applicable {
+  readonly key: string;
+  readonly readings: readonly SpecReading[];
+}
+
+/**
+ * The readings of an attribute no spec reading reads.
+ */
+const noReadings: Applicable = { key: "", readings: [] };
+
+/**
+ * The spec readings by attribute name, then by kind: for each name some reading reads, the readings
+ * on every kind that declares it (`anyKind`), and for each kind a reading lists, that kind's own,
+ * each list in {@link specReadings} order. Built once from the readings, so a declaration's
+ * readings are two map reads, not a scan of every reading.
+ */
+const readingTable: ReadonlyMap<
+  string,
+  { readonly anyKind: Applicable; readonly byKind: ReadonlyMap<string, Applicable> }
+> = new Map(
+  [...Map.groupBy(specReadings.entries(), ([, reading]) => reading.name)].map(([name, named]) => {
+    const applicable = (kind: string): Applicable => {
+      const applied = named.filter(([, reading]) => appliesTo(reading, kind, name));
+
+      return {
+        key: applied.map(([index]) => index).join(" "),
+        readings: applied.map(([, reading]) => reading),
+      };
+    };
+    const listed = new Set(named.flatMap(([, { kinds }]) => Option.getOrElse(kinds, () => [])));
+
+    return [
+      name,
+      {
+        anyKind: applicable(""),
+        byKind: new Map([...listed].map((kind) => [kind, applicable(kind)])),
+      },
+    ] as const;
+  }),
+);
+
+/**
+ * The spec readings of one kind's attribute, in the order {@link specReadings} lists them
+ * ({@link readingTable}).
+ *
+ * @param kind - The kind.
+ * @param name - The attribute.
+ * @returns The readings that apply, and the text that tells their list apart.
+ */
+const applicableTo = (kind: string, name: string): Applicable => {
+  const named = readingTable.get(name);
+
+  return named === undefined ? noReadings : (named.byKind.get(kind) ?? named.anyKind);
+};
+
+/**
+ * The spec readings of one kind's attribute, in the order {@link specReadings} lists them
+ * ({@link applicableTo}).
  *
  * @param kind - The kind.
  * @param name - The attribute.
  * @returns The readings that apply.
  */
 export const readingsOf = (kind: string, name: string): readonly SpecReading[] =>
-  specReadings.filter((reading) => appliesTo(reading, kind, name));
+  applicableTo(kind, name).readings;
 
 /**
  * A second spelling a spec reading admits beside a declared attribute: the declared name, the
@@ -1533,14 +1593,11 @@ export const domainReader = (): DomainReader => {
   const byText = new Map<string, Result.Result<KeyedDomain, CompileError>>();
 
   return (declared) => {
-    const applied = specReadings.flatMap((reading, index) =>
-      appliesTo(reading, declared.kind, declared.name) ? [{ index, reading }] : [],
-    );
-    const readings = applied.map(({ reading }) => reading);
+    const { key, readings } = applicableTo(declared.kind, declared.name);
 
     return groups
       .getOrInsertComputed(declared.domain, () => new Map())
-      .getOrInsertComputed(applied.map(({ index }) => index).join(" "), () => {
+      .getOrInsertComputed(key, () => {
         const read = readDefinitionOf(declared, readings);
 
         return {
