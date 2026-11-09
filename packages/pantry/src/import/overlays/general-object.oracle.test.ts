@@ -4,16 +4,19 @@
  * `lom-identifier`, `lom-title` and `document-lang`), and a record whose `href` names no document
  * of the package names none: there is nothing to read it against, and "Document entry" refuses the
  * `href` (IMS Content Packaging 1.2 §6.6.2: "A value declared by a Resource{ Href } object is a
- * launchable URI"; reading 93). The import holds it so: its records' `LomResource.named` is `none`
- * where the `href` names no document (`targetAt`), so no `LomObject`, `GeneralObject`,
- * `LomObjectIdentifier` or `LomObjectTitle` row stands for it. The genetic differential found the
- * import giving such a record the manifest as its document (NS6), which broke "E1 derived" and the
- * record's laws where the law oracle raises "Document entry" alone.
+ * launchable URI"; reading 93). The import holds it so: a record names the document a resource
+ * lists at its `href`'s path (`namingRecords`, `#pantry/qti/queries.ts`), never the manifest, so
+ * no `GeneralObject` row stands for a record whose `href` names none. The genetic differential
+ * found the import giving such a record the manifest as its document (NS6), which broke "E1
+ * derived" and the record's laws where the law oracle raises "Document entry" alone.
  *
  * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`), and
  * both against §2.7.1 and readings 93 and 146 as stated above: the two agree on every case, and
  * each raises "Document entry" exactly where the `href` names no document a resource names.
+ * `lom-identifier` and `lom-title` are rules over queries, which only the database judges (the
+ * host judge leaves them unjudged), so the oracle's side alone is held to them here, and
+ * `#pantry/qti/metadata.db.test.ts` holds the database to them through the importer.
  *
  * Bound: a package of one resource, of the item type or the test type, whose `href` names each of
  * the listed document of its type, a path no entry holds, a path outside the package, the
@@ -215,10 +218,15 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   const read = of.href === "the listed document" && of.record === "identified";
                   for (const side of [judged.summary.oracle, judged.summary.import]) {
                     assert.strictEqual(/\bDocument entry\b/u.test(side), unnamed, said);
-                    assert.strictEqual(/\bLomObjectIdentifier\b/u.test(side), read, said);
-                    assert.strictEqual(/\bLomObjectTitle\b/u.test(side), read, said);
                     assert.notMatch(side, /\bE1 derived\b/u, said);
                   }
+
+                  assert.strictEqual(
+                    /\bLomObjectIdentifier\b/u.test(judged.summary.oracle),
+                    read,
+                    said,
+                  );
+                  assert.strictEqual(/\bLomObjectTitle\b/u.test(judged.summary.oracle), read, said);
                 }),
             );
           }).pipe(Effect.scoped),

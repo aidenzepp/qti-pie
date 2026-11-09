@@ -1,13 +1,13 @@
 /**
  * The metadata builder's free tests: over generated packages and the `metaData` fixture, the rows
- * hold one row per element of each overlay's kind (rules file, rule 7), each resource's code agrees
- * with `ResourceTypeLexical` (C17), each entry's pieces restate its text, and the `lom-identifier`
- * and `lom-title` laws over the rows refuse exactly the records reading 62 refuses: the identifier
- * as the law oracle (`#pantry/test/oracle.ts`) judges it and as the spec reads the package's own
- * sketch, the title as the spec reads the sketch, in `xs:normalizedString`'s value space with tags
- * compared without regard to case; a usage value has its typed row exactly where it writes a
- * `baseType` (reading 105); and each LOM learning resource type has its value's row and its
- * source's row exactly where it holds them, each its first term's string value (reading 122).
+ * hold one row per element of each overlay's kind (rules file, rule 7), each entry's pieces restate
+ * its text, and the `lom-identifier` and `lom-title` laws, the rules over queries the database
+ * holds them by, restated over the rows, refuse exactly the records reading 62 refuses: the
+ * identifier as the law oracle (`#pantry/test/oracle.ts`) judges it and as the spec reads the
+ * package's own sketch, the title as the spec reads the sketch, in `xs:normalizedString`'s value
+ * space with tags compared without regard to case; a usage value has its typed row exactly where it
+ * writes a `baseType` (reading 105); and each LOM learning resource type has its value's row and
+ * its source's row exactly where it holds them, each its first term's string value (reading 122).
  */
 import { NodeServices } from "@effect/platform-node";
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
@@ -23,21 +23,11 @@ import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { inject } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { XmlDocument } from "@qti-pie/crust/tree.ts";
-import { grammar, ResourceTypeLexical } from "#pantry/grammar/install.ts";
+import { grammar } from "#pantry/grammar/install.ts";
 import { ownContext } from "#pantry/import/fold.ts";
-import {
-  namedDocumentOf,
-  namesNoDocument,
-  objectRowsOfPackage,
-  piecesOf,
-  rowsOf,
-} from "#pantry/import/overlays/metadata.ts";
-import type {
-  MetadataIds,
-  MetadataRows,
-  NamedDocument,
-  ObjectRows,
-} from "#pantry/import/overlays/metadata.ts";
+import { piecesOf, rowsOf, statesLanguage } from "#pantry/import/overlays/metadata.ts";
+import type { MetadataIds, MetadataRows } from "#pantry/import/overlays/metadata.ts";
+import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
@@ -45,7 +35,7 @@ import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { noLanguage } from "#pantry/qti/metadata.ts";
+import { noLanguage, objectTypes, resourceMetadata } from "#pantry/qti/metadata.ts";
 import type {
   AssessmentObject,
   ObjectIdentifier,
@@ -96,8 +86,7 @@ const namespaces = {
 
 /**
  * Draw the ids of one document's rows: a uuid whose groups spell the document's number and the
- * row's, so two documents' rows never share an id, in a package where a resource names no
- * document, which the manifest's ids replace by {@link targetsOf}.
+ * row's, so two documents' rows never share an id.
  *
  * @param document - The document's number in its package, the manifest 0.
  * @param documentType - The type it is listed under, `none` for the manifest.
@@ -112,21 +101,8 @@ const idsFor = (document: number, documentType: MetadataIds["documentType"]): Me
     documentType,
     idOf,
     package: packageId,
-    targetAt: () => Option.none(),
   };
 };
-
-/**
- * Read the document a resource names at each path, as the importer's `targetAt` does: the listed
- * document there, none at any other path.
- *
- * @param documents - The package's listed documents, by path.
- * @returns The lookup.
- */
-const targetsOf =
-  (documents: ReadonlyMap<string, NamedDocument>): MetadataIds["targetAt"] =>
-  (path) =>
-    Option.map(Option.fromNullishOr(documents.get(path)), ({ document }) => ({ node: document }));
 
 /**
  * Read the schema version a manifest declares: its root's `metadata` child's `schemaversion` text.
@@ -197,18 +173,63 @@ const shredded = Effect.fn("test.metadata.shredded")(function* shreddedPackage(
 });
 
 /**
- * A package's metadata rows as the importer will build them: the manifest's {@link rowsOf}; each
+ * A package's metadata rows as the importer builds them: the manifest's {@link rowsOf}; each
  * document's assessment object, its identifier and its title, each by its document, and its
- * `xml:lang`, by its root; and the records' {@link objectRowsOfPackage}.
+ * `xml:lang`, by its root; and `named`, each record that names a document, with that document, as
+ * the database derives it from the package's rows (`namingRecords`, `#pantry/qti/queries.ts`).
  */
 interface Built {
   readonly identifiers: ReadonlyMap<string, Addition<typeof ObjectIdentifier>>;
   readonly langs: ReadonlyMap<string, Addition<typeof ObjectLang>>;
   readonly manifest: MetadataRows;
+  readonly named: ReadonlyMap<NodeId, NodeId>;
   readonly objects: ReadonlyMap<string, Addition<typeof AssessmentObject>>;
-  readonly rows: ObjectRows;
   readonly titles: ReadonlyMap<string, Addition<typeof ObjectTitle>>;
 }
+
+/**
+ * The resource types whose records name their document, as a set.
+ */
+const namingTypes: ReadonlySet<string> = new Set(objectTypes);
+
+/**
+ * Read the records of a manifest that name a document, as `namingRecords` derives them: a record of
+ * a resource's `cp:metadata`, its resource of an item's or a test's `type`, and the document listed
+ * at the path its `href` is compared by (`resourcePathsOf`).
+ *
+ * @param manifest - The manifest's tree.
+ * @param ids - The ids its rows are written under.
+ * @param records - Its {@link rowsOf}'s records.
+ * @param documents - Each listed document's node, by its path.
+ * @returns Each naming record's document, by the record.
+ */
+const namedOf = (
+  manifest: XdmDocument<Composed>,
+  ids: MetadataIds,
+  records: MetadataRows["LomRecord"],
+  documents: ReadonlyMap<string, NodeId>,
+): ReadonlyMap<NodeId, NodeId> => {
+  const flat = flatten(manifest, ids.idOf);
+  const paths = resourcePathsOf(flat);
+  const types = new Map(
+    flat.attributes.flatMap(({ lexical, name, node }) =>
+      name === "type" ? [[node, lexical] as const] : [],
+    ),
+  );
+
+  return new Map(
+    [...records.values()].flatMap(({ node, owner, ownerParent }) =>
+      Option.toArray(
+        Option.fromUndefinedOr(types.get(ownerParent)).pipe(
+          Option.filter((type) => owner === resourceMetadata && namingTypes.has(type)),
+          Option.flatMap(() => Option.fromUndefinedOr(paths.get(ownerParent))),
+          Option.flatMap((path) => Option.fromUndefinedOr(documents.get(path))),
+          Option.map((document) => [node, document] as const),
+        ),
+      ),
+    ),
+  );
+};
 
 /**
  * Build a package's metadata rows as the importer will.
@@ -217,7 +238,7 @@ interface Built {
  * @returns Its rows.
  */
 const builtOf = (input: Shredded): Built => {
-  const documents = new Map<string, NamedDocument>();
+  const documents = new Map<string, NodeId>();
   const objects = new Map<string, Addition<typeof AssessmentObject>>();
   const identifiers = new Map<string, Addition<typeof ObjectIdentifier>>();
   const titles = new Map<string, Addition<typeof ObjectTitle>>();
@@ -231,7 +252,7 @@ const builtOf = (input: Shredded): Built => {
 
     const ids = idsFor(number, listed.type);
     const rows = rowsOf(tree, ids);
-    documents.set(path, namedDocumentOf(ids.idOf(0), rows));
+    documents.set(path, ids.idOf(0));
     for (const object of rows.AssessmentObject.values()) {
       objects.set(object.document, object);
     }
@@ -249,80 +270,76 @@ const builtOf = (input: Shredded): Built => {
     }
   }
 
-  const manifestIds = { ...idsFor(0, "manifest"), targetAt: targetsOf(documents) };
+  const manifestIds = idsFor(0, "manifest");
+  const manifest = rowsOf(input.manifest, manifestIds);
 
   return {
     identifiers,
     langs,
-    manifest: rowsOf(input.manifest, manifestIds),
+    manifest,
+    named: namedOf(input.manifest, manifestIds, manifest.LomRecord, documents),
     objects,
-    rows: objectRowsOfPackage(input.manifest, manifestIds, documents),
     titles,
   };
 };
 
 /**
- * Judge the `lom-identifier` law over a package's rows as PostgreSQL will: a naming record that
- * lists a general entry has its row, and the row holds when its document is its record's object's
- * and has its identifier, and its witness is a general entry of the record whose token is that
- * identifier.
+ * Judge the `lom-identifier` law over a package's rows as PostgreSQL does: every naming record
+ * that lists a general entry (`ListedIdentifier`) has one whose token is its document's identifier
+ * (`MatchedIdentifier`, `#pantry/qti/queries.ts`).
  *
  * @param built - The package's rows.
  * @returns The records that break the law, by id.
  */
-const identifierRefusals = (built: Built): ReadonlySet<string> =>
-  new Set([
-    ...[...built.manifest.LomEntry.values()].flatMap(({ holderKind, holderParent, named }) =>
-      holderKind === "lom:general" &&
-      named !== namesNoDocument &&
-      !built.rows.LomObjectIdentifier.has(holderParent)
-        ? [holderParent]
-        : [],
-    ),
-    ...[...built.rows.LomObjectIdentifier.values()].flatMap((row) => {
-      const entry = built.manifest.LomEntry.get(row.entry);
-      const holds =
-        built.rows.LomObject.get(row.record)?.document === row.document &&
-        built.identifiers.get(row.document)?.identifier === row.identifier &&
-        entry?.holderKind === "lom:general" &&
-        entry.holderParent === row.record &&
-        entry.holder === row.general &&
-        entry.token === row.identifier;
+const identifierRefusals = (built: Built): ReadonlySet<string> => {
+  const entries = [...built.manifest.LomEntry.values()].filter(
+    ({ holderKind }) => holderKind === "lom:general",
+  );
 
-      return holds ? [] : [row.record];
+  return new Set(
+    [...built.named].flatMap(([record, document]) => {
+      const listed = entries.filter(({ holderParent }) => holderParent === record);
+      const identifier = Option.fromUndefinedOr(built.identifiers.get(document));
+      const matched = listed.some(({ token }) =>
+        Option.exists(identifier, (named) => named.identifier === token),
+      );
+
+      return listed.length > 0 && !matched ? [record] : [];
     }),
-  ]);
+  );
+};
 
 /**
- * Judge the `lom-title` law over a package's rows as PostgreSQL will: a naming record with a
- * general title has its row, and the row holds when its document is its record's object's and has
- * its title's value and its language, its witness is a title string of the record with that value
- * and its own language, and the `LomObjectTitle` check holds.
+ * Judge the `lom-title` law over a package's rows as PostgreSQL does: every naming record with a
+ * general title (`ListedTitle`) has a title string whose value is its document's title's, in its
+ * document's language (`MatchedTitle`, `#pantry/qti/queries.ts`): the document states no language,
+ * the string has none, or the two are one tag.
  *
  * @param built - The package's rows.
  * @returns The records that break the law, by id.
  */
 const titleRefusals = (built: Built): ReadonlySet<string> =>
-  new Set([
-    ...[...built.manifest.LomTitle.values()].flatMap(({ named, record }) =>
-      named !== namesNoDocument && !built.rows.LomObjectTitle.has(record) ? [record] : [],
-    ),
-    ...[...built.rows.LomObjectTitle.values()].flatMap((row) => {
-      const string = built.manifest.LomTitleString.get(row.string);
-      const holds =
-        built.rows.LomObject.get(row.record)?.document === row.document &&
-        built.titles.get(row.document)?.titleValue === row.title &&
-        built.objects.get(row.document)?.langTag === row.objectLang &&
-        string?.record === row.record &&
-        string.textValue === row.title &&
-        string.languageTag === row.stringLanguage &&
-        (row.objectLang === noLanguage ||
-          row.stringLanguage === noLanguage ||
-          row.stringLanguage === row.objectLang);
+  new Set(
+    [...built.named].flatMap(([record, document]) => {
+      const listed = [...built.manifest.LomTitle.values()].some((title) => title.record === record);
+      const title = Option.fromUndefinedOr(built.titles.get(document));
+      const object = Option.fromUndefinedOr(built.objects.get(document));
+      const matched = [...built.manifest.LomTitleString.values()].some(
+        (string) =>
+          string.record === record &&
+          Option.exists(title, ({ titleValue }) => titleValue === string.textValue) &&
+          Option.exists(
+            object,
+            ({ langTag }) =>
+              !statesLanguage(langTag) ||
+              string.languageTag === noLanguage ||
+              string.languageTag === langTag,
+          ),
+      );
 
-      return holds ? [] : [row.record];
+      return listed && !matched ? [record] : [];
     }),
-  ]);
+  );
 
 /**
  * Count the breaches of `LomObjectIdentifier` the law oracle finds in a package.
@@ -878,12 +895,12 @@ const reached = required<SketchSituation>(
 
 describe("import/overlays/metadata.ts, generated packages", { timeout: searchTimeout }, () => {
   it.effect(
-    "gives one row per element of each overlay's kind, codes as ResourceTypeLexical spells them, and pieces that restate each entry's text",
+    "gives one row per element of each overlay's kind and pieces that restate each entry's text, and names a document by exactly the records reading 62 reads",
     (ctx) =>
       // Oracle: the specification as a checker, the sketch each package is written from: its
       // `lom:lom`, `lom:general`, `lom:entry`, `lom:title` and `lom:string` elements, resources and
-      // objects, each entry's and string's text, and `ResourceTypeLexical`'s rows for each
-      // resource's code (C17).
+      // objects, each entry's and string's text, and its records of an item's or a test's resource
+      // with an `href`, the records reading 62 reads against the document there.
       // Bound: up to 2 resources of 3 kinds, each with up to 2 records of up to 2 general and 1
       // meta-metadata identifiers of up to 2 entries over 4 values and 3 paddings, and up to 1
       // title of up to 2 strings over 5 texts and 5 languages; 300 cases.
@@ -897,7 +914,7 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
             draw: drawn(sketches),
             kept: [],
             literal: Formatter.format,
-            oracle: { kind: "specification", name: "the package's sketch and ResourceTypeLexical" },
+            oracle: { kind: "specification", name: "the package's sketch and reading 62" },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,
@@ -908,7 +925,7 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
               c.noteAll(situationsOf(sketch));
 
               const input = yield* shredded(filesOf(sketch));
-              const { manifest } = builtOf(input);
+              const { manifest, named } = builtOf(input);
               const listed = [
                 ...sketch.manifestRecords,
                 ...sketch.resources.flatMap(({ records: of }) => of),
@@ -920,7 +937,7 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
 
               assert.strictEqual(recordsByStart.length, listed.length, "one LomRecord a lom:lom");
               assert.strictEqual(manifest.LomGeneral.size, listed.length, "one LomGeneral each");
-              assert.strictEqual(manifest.LomResource.size, sketch.resources.length);
+              assert.strictEqual(named.size, namingOf(sketch).length, "the naming records");
               assert.strictEqual(
                 manifest.LomTitle.size,
                 listed.flatMap(({ titles }) => titles).length,
@@ -967,20 +984,6 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
               for (const entry of manifest.LomEntry.values()) {
                 assert.strictEqual(`${entry.lead}${entry.token}${entry.trail}`, entry.text);
                 assert.deepStrictEqual(piecesOf(entry.text).token, entry.token);
-              }
-
-              for (const resource of manifest.LomResource.values()) {
-                const lexical = ResourceTypeLexical.rows.find(
-                  ({ code }) => code === resource.named,
-                );
-                assert.isTrue(
-                  resource.named === "none" ||
-                    (lexical !== undefined &&
-                      [resourceTypes.item, resourceTypes.test].some(
-                        (type) => type === lexical.lexical,
-                      )),
-                  `${resource.named} is none or an assessment object's type`,
-                );
               }
             }),
         ),
@@ -1081,14 +1084,9 @@ describe("import/overlays/metadata.ts, the metaData fixture", () => {
         ] as const) {
           const built = builtOf(yield* shredded(edited));
 
-          assert.strictEqual(
-            built.rows.LomObjectIdentifier.size,
-            1 - expected,
-            `${label}: a witness exactly where the record names its item`,
-          );
+          assert.strictEqual(built.named.size, 1, `${label}: its record names its item`);
           assert.strictEqual(identifierRefusals(built).size, expected, label);
           assert.strictEqual(yield* oracleBreaches(edited), expected, `${label}, by the oracle`);
-          assert.strictEqual(built.rows.LomObjectTitle.size, 0, `${label}: no title names it`);
           assert.strictEqual(titleRefusals(built).size, 1, `${label}: titled otherwise`);
         }
       }).pipe(Effect.provide(NodeServices.layer)),

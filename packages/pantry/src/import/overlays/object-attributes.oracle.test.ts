@@ -5,9 +5,10 @@
  * §2.7.1.2: "The title must have a value that matches the value of the title attribute of the
  * associated item, test or object bank"). A root that writes neither still is the record's
  * document, and its absent attribute is a value no entry or string matches: the import writes each
- * attribute as a row of its own (`ObjectIdentifier`, `ObjectTitle`), and a record none of whose
- * entries or strings names its document has no witness row, so AL3 refuses the root, and
- * `lom-identifier` or `lom-title` the record, each under its own name. A usage value's `baseType`
+ * attribute as a row of its own (`ObjectIdentifier`, `ObjectTitle`), and the database's rules over
+ * queries match a record's entries and strings against those rows alone (`MatchedIdentifier`,
+ * `MatchedTitle`, `#pantry/qti/queries.ts`), so AL3 refuses the root, and `lom-identifier` or
+ * `lom-title` the record, each under its own name. A usage value's `baseType`
  * types its text only where it spells a code (spec reading 105, C17), so one that spells none has
  * no `UsageValue` row, and its value domain refuses it alone (lane NIL's audit, B11).
  *
@@ -20,7 +21,9 @@
  * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`), and
  * both against §2.7.1.1, §2.7.1.2 and reading 105 as stated above: the two agree on every case,
  * and each raises AL3, `LomObjectIdentifier`, `LomObjectTitle` and the value domain exactly where
- * the case says.
+ * the case says. `lom-identifier` and `lom-title` are rules over queries, which the host judge
+ * leaves to the database, so the oracle's side alone is held to them here, and
+ * `#pantry/qti/metadata.db.test.ts` holds the database to them through the importer.
  *
  * Bound: an item resource whose root writes or omits its `identifier` and its `title`, its record
  * listing no entry, an empty one, the root's or another, and no title string, an empty one, the
@@ -275,9 +278,9 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                     !of.identifier || !of.title,
                     said,
                   );
+                  assert.strictEqual(/\bLomObjectIdentifier\b/u.test(oracle), identified, said);
+                  assert.strictEqual(/\bLomObjectTitle\b/u.test(oracle), titled, said);
                   for (const side of sides) {
-                    assert.strictEqual(/\bLomObjectIdentifier\b/u.test(side), identified, said);
-                    assert.strictEqual(/\bLomObjectTitle\b/u.test(side), titled, said);
                     assert.notMatch(side, /\bE1 derived\b/u, said);
                   }
                 }),

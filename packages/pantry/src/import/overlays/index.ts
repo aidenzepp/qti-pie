@@ -56,12 +56,8 @@ import type {
 } from "#pantry/import/overlays/interactions.ts";
 import { rowsOf as mappingRowsOf } from "#pantry/import/overlays/mapping.ts";
 import type { MappingRows } from "#pantry/import/overlays/mapping.ts";
-import {
-  rowsOf as metadataRowsOf,
-  namedDocumentOf,
-  objectRowsOfPackage,
-} from "#pantry/import/overlays/metadata.ts";
-import type { MetadataRows, NamedDocument, ObjectRows } from "#pantry/import/overlays/metadata.ts";
+import { rowsOf as metadataRowsOf } from "#pantry/import/overlays/metadata.ts";
+import type { MetadataRows } from "#pantry/import/overlays/metadata.ts";
 import { rowsOf as operatorRowsOf } from "#pantry/import/overlays/operators.ts";
 import type { OperatorRows } from "#pantry/import/overlays/operators.ts";
 import {
@@ -94,7 +90,6 @@ export type OverlayRows = AssembledExpressionRows &
   LanguageRows &
   MappingRows &
   MetadataRows &
-  ObjectRows &
   OperatorRows &
   PackageRows &
   PlacedBindingRows &
@@ -258,7 +253,6 @@ export const unionsOf = <Rows>(
  *   them, the one of type `manifest`.
  * @param mint - Draws a fresh uuid for each assembled instance but a root.
  * @returns The parts, in the order {@link overlayRowsOf} merges them.
- * @throws {Error} When no document is the manifest: every package lists its own (`readProgram`).
  */
 export const overlayPartsOf = (
   documents: readonly PlacedDocument[],
@@ -286,19 +280,6 @@ export const overlayPartsOf = (
     assembled,
     built.flatMap(({ rows }) => [...rows.package.TypedHref.values()]),
   );
-  const named = new Map<string, NamedDocument>();
-  for (const { document, rows } of built) {
-    if (document.listed.documentType !== "manifest" && !named.has(document.listed.path)) {
-      named.set(document.listed.path, namedDocumentOf(document.ids.idOf(0), rows.metadata));
-    }
-  }
-
-  const manifest = built.find(({ document }) => document.listed.documentType === "manifest");
-  if (manifest === undefined) {
-    throw new Error(
-      "overlayPartsOf was given no manifest, the one document of type manifest. Pass every document of the package, as readProgram lists them, its manifest first.",
-    );
-  }
 
   return [
     ...built.flatMap(({ rows }) => [
@@ -329,7 +310,6 @@ export const overlayPartsOf = (
       instances: assembled.Instance.values(),
       references: built.flatMap(({ rows }) => [...rows.expressions.VariableRef.values()]),
     }),
-    objectRowsOfPackage(manifest.document.listed.tree, manifest.document.ids, named),
     placedBindingRowsOf({
       adaptive: built.flatMap(({ rows }) => [...rows.interactions.ItemMode.values()]),
       baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
@@ -369,14 +349,13 @@ export const overlayPartsOf = (
 
 /**
  * Build every overlay's rows of one package: each document builder over each document, under its
- * ids, then the four that read the whole package: the assemblies from every document's test rows
+ * ids, then those that read the whole package: the assemblies from every document's test rows
  * (`assembledRowsOf`), the sections' placements under each test from the declarations, the
- * assemblies and the sections' and fragments' references (`sectionRowsOf`), the LOM records'
- * objects from the manifest and each document's assessment object (`objectRowsOfPackage`), and the
- * LOM languages' witnesses from every document's identity rows (`languageRowsOf`), and in place
- * under each item's assembly (`placedLanguageRowsOf`). The results are merged into one keyed set
- * per relation by {@link unionsOf}, over the overlay relations `#pantry/import/roster.ts` reads from
- * the schema (`overlayRelations`).
+ * assemblies and the sections' and fragments' references (`sectionRowsOf`), and the LOM languages'
+ * witnesses from every document's identity rows (`languageRowsOf`), and in place under each item's
+ * assembly (`placedLanguageRowsOf`). The results are merged into one keyed set per relation by
+ * {@link unionsOf}, over the overlay relations `#pantry/import/roster.ts` reads from the schema
+ * (`overlayRelations`).
  *
  * @param documents - The package's documents, each listed and under its ids; the manifest is the
  *   one no resource names (type `manifest`).

@@ -285,7 +285,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     62,
     {
       owner:
-        "LomObjectIdentifier, LomObjectTitle, over the resource's own records, each a `lom:lom` of its `cp:metadata` (`resourceRecords` and `resourceGenerals`, `src/qti/metadata.ts`); the oracle's lom-identifier and lom-title over the same records, held by the cases `src/test/lom-records.ts` builds, a file's record naming another",
+        "LomObjectIdentifier, LomObjectTitle, over the resource's own records, each a `lom:lom` of its `cp:metadata` (`namingRecords`, `src/qti/queries.ts`); the oracle's lom-identifier and lom-title over the same records, held by the cases `src/test/lom-records.ts` builds, a file's record naming another",
       status: "G",
     },
   ],
@@ -881,7 +881,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     148,
     {
       owner:
-        "the import's `ObjectIdentifier` and `ObjectTitle`, each copied from its attribute and none without it, beside the `AssessmentObject` every item and test root has, and `LomObjectIdentifier` and `LomObjectTitle` written only for a witness that names the document (`objectRowsOf`, `identifierRowOf`, `titleRowOf`, `src/import/overlays/metadata.ts`; `src/qti/metadata.ts`); the oracle's lom-identifier over the root's identifier, none where unwritten (`packageBreaches`, `src/test/oracle.ts`), and lom-title over its title, none where unwritten (`lomTitleLawsOf`, `src/test/oracle-laws/documents.ts`); held by `src/import/overlays/object-attributes.oracle.test.ts`",
+        "the import's `ObjectIdentifier` and `ObjectTitle`, each copied from its attribute and none without it, beside the `AssessmentObject` every item and test root has, the rows the database's `MatchedIdentifier` and `MatchedTitle` match a record's entries and strings against (`objectRowsOf`, `src/import/overlays/metadata.ts`; `src/qti/metadata.ts`; `src/qti/queries.ts`); the oracle's lom-identifier over the root's identifier, none where unwritten (`packageBreaches`, `src/test/oracle.ts`), and lom-title over its title, none where unwritten (`lomTitleLawsOf`, `src/test/oracle-laws/documents.ts`); held by `src/import/overlays/object-attributes.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -905,7 +905,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     151,
     {
       owner:
-        "the import's `LomObjectTitle` check, under which an object's `xml:lang` compared form that is no language tag (`languageTagPattern`, `src/qti/metadata.ts`, over the grammar's `languageTag`) states no language, and its witness search (`inLanguage`, `src/import/overlays/metadata.ts`); the oracle's lom-title over the root's `xml:lang` as its own AL1 reading reads it, none where it states none (`statedLanguage`, `lomTitleLawsOf`, `src/test/oracle-laws/documents.ts`); held by `src/import/overlays/object-lang.oracle.test.ts`",
+        "the database's `MatchedTitle` (`src/qti/queries.ts`), under which an object's `xml:lang` compared form that is no language tag (`languageTagPattern`, `src/qti/metadata.ts`, over the grammar's `languageTag`) states no language; the oracle's lom-title over the root's `xml:lang` as its own AL1 reading reads it, none where it states none (`statedLanguage`, `lomTitleLawsOf`, `src/test/oracle-laws/documents.ts`); held by `src/import/overlays/object-lang.oracle.test.ts`",
       status: "G",
     },
   ],

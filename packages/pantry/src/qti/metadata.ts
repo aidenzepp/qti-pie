@@ -7,20 +7,22 @@
  *
  * A record names its document when it is a `lom:lom` child of the `cp:metadata` of a resource of
  * type `imsqti_item_xmlv3p0` or `imsqti_test_xmlv3p0` whose `href` names a document (reading 93):
- * its {@link LomRecord}'s `named` is the resource's type, and its {@link LomObject} the document at
- * the `href`. A file's record describes the file, and an external record ({@link LomRecord}'s owner
- * is the document node) may describe many items, so neither names one. A record whose resource's
- * `href` names no document names none, so no law here reads it: there is no "associated item, test
- * or object bank" (§2.7.1) to read it against, and "Document entry" refuses the `href`. Spec
- * reading 62, as UP's audit merges it (§2.2), reads the information model's "MUST be the same"
- * (sections 4.1.1, 4.1.2, 4.4.1 and 4.4.2) through the metadata binding's LOM profile (QTI 3.0
- * Metadata §2.7.1, normative by its §1.2):
+ * the document a resource lists at the `href`'s path, whatever type it is read as (reading 162),
+ * never the manifest (reading 146). No row stores that a record names it: the database reads it
+ * from the record, its resource's `href` and `type` and the listed document at that path
+ * (`namingRecords`, `#pantry/qti/queries.ts`). A file's record describes the file, and an external
+ * record ({@link LomRecord}'s owner is the document node) may describe many items, so neither names
+ * one. A record whose resource's `href` names no document names none, so no law reads it: there is
+ * no "associated item, test or object bank" (§2.7.1) to read it against, and "Document entry"
+ * refuses the `href`. Spec reading 62, as UP's audit merges it (§2.2), reads the information
+ * model's "MUST be the same" (sections 4.1.1, 4.1.2, 4.4.1 and 4.4.2) through the metadata
+ * binding's LOM profile (QTI 3.0 Metadata §2.7.1, normative by its §1.2):
  *
  * - **`lom-identifier`** (law "LomObjectIdentifier", §2.7.1.1: "One of the values given for the
  *   identifier must have an entry that matches the identifier of the associated item, test or
  *   object bank"): when the record's general category lists `identifier` entries, one of them is
  *   the document's identifier, compared collapsed. A meta-metadata or a relation's identifier is no
- *   general one, and is not read.
+ *   general one, and is not read. A rule over the queries of `#pantry/qti/queries.ts` states it.
  * - **`lom-title`** (law "LomObjectTitle", §2.7.1.2: "The title must have a value that matches the
  *   value of the title attribute of the associated item, test or object bank. The language used to
  *   interpret the title is taken from the language attribute of the associated item, test or object
@@ -30,7 +32,7 @@
  *   it writes no `xml:lang`, or one whose collapsed form is no language tag (spec reading 151): an
  *   empty one, "just as if xml:lang had not been specified" (XML 1.0 §2.12), one of whitespace
  *   alone, or an ill-formed one, which AL1 refuses under its own rule. An empty `language` is read
- *   as none alike.
+ *   as none alike. A rule over the queries of `#pantry/qti/queries.ts` states it.
  * - **`lom-learning-resource-type`** (law "LOM learning resource type", spec reading 122, §2.7.5.1:
  *   "QTI objects are designed to be reusable in a variety of assessment scenarios. Therefore, the
  *   LOM-defined values self assessment and exam are forbidden"): a `learningResourceType` of the
@@ -84,7 +86,8 @@
  * (`#pantry/qti/limits.ts`), and a value past its bound is refused under the schema's one limit
  * law, never under a QTI law's name. No containment pairs two such texts: each `keyText` bound is
  * derived for one text in a key, and two would pass PostgreSQL's B-tree entry limit
- * (`UnrepresentableKey`), so a title and its language are compared by two containments.
+ * (`UnrepresentableKey`). `lom-identifier` and `lom-title` compare their texts inside a query,
+ * which a rule reads with no key over them.
  *
  * @see {@link https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html | QTI 3.0 Metadata, §2.7.1 The General Category}
  * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, whiteSpace}
@@ -109,21 +112,13 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
-import type { DocumentType } from "#pantry/grammar/install.ts";
-import {
-  BaseType,
-  BaseTypeLexical,
-  NodeKind,
-  ResourceType,
-  SchemaVersion,
-} from "#pantry/grammar/install.ts";
+import type { DocumentType, ResourceType } from "#pantry/grammar/install.ts";
+import { BaseType, BaseTypeLexical, NodeKind, SchemaVersion } from "#pantry/grammar/install.ts";
 import { baseTypes, languageTag } from "#pantry/grammar/attributes.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
-import { Document } from "#pantry/qti/chardata.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
-import { Resource, TypedHref } from "#pantry/qti/package.ts";
 
 /**
  * The resource types whose LOM record names its document (reading 62): an item's and a test's.
@@ -161,7 +156,7 @@ export const usageValueKind = "ud:value" satisfies (typeof NodeKind.handles)[num
  * The owner whose records name a resource: a resource's `cp:metadata`, whose parent is the
  * `cp:resource`.
  */
-const resourceMetadata = "cp:metadata.resource";
+export const resourceMetadata = "cp:metadata.resource" satisfies (typeof NodeKind.handles)[number];
 
 /**
  * XML 1.0's `Char` as the body of a class.
@@ -197,37 +192,8 @@ export const identifierPattern = `^[${xmlNonSpace}]+$`;
 export const languageTagPattern = `^(?:${languageTag})$`;
 
 /**
- * A resource as the LOM laws read it, keyed by its `cp:resource` node: `named`, the type of the
- * assessment object document its `href` names: its type where it has a {@link TypedHref} of an item
- * or a test whose path a resource names a document at, else `none`. A resource whose `type` spells
- * nothing names no document, and neither does one whose `href` names none: an item's or a test's
- * {@link TypedHref} is its resource's `named` exactly where the `href` names a document, so the
- * containment that holds it breaks only where "Document entry" does, and is stated under that law.
- */
-export const LomResource = relation(
-  "LomResource",
-  {
-    named: closedId(ResourceType),
-    node: uuid,
-  },
-  ["node"],
-);
-
-/**
- * The typed hrefs of an assessment object's resources, an item's or a test's: each is its
- * resource's `named`.
- */
-const objectHrefs = select(TypedHref, (h) => h.in(h.type, objectTypes));
-
-/**
- * The resources that name an assessment object: each has its {@link objectHrefs} row.
- */
-const namingResources = select(LomResource, (r) => r.ne(r.named, "none"));
-
-/**
- * A LOM record, keyed by its `lom:lom` node: its {@link nodeRef} tuple, its owner's kind, start and
- * parent, from the owner's own tuple, and `named`, the type of the document it names: its
- * resource's `named` where its owner is a resource's `cp:metadata`, else `none`.
+ * A LOM record, keyed by its `lom:lom` node: its {@link nodeRef} tuple, and its owner's kind, start
+ * and parent, from the owner's own tuple.
  *
  * Every copy shares `nearest` with the record's own: no interaction kind admits a `lom:lom`, so the
  * record's nearest interaction is its owner's (N8).
@@ -237,7 +203,6 @@ export const LomRecord = relation(
   {
     document: uuid,
     kind: closedId(NodeKind),
-    named: closedId(ResourceType),
     nearest: uuid,
     node: uuid,
     owner: closedId(NodeKind),
@@ -248,25 +213,6 @@ export const LomRecord = relation(
     version: closedId(SchemaVersion),
   },
   ["node"],
-);
-
-/**
- * The document a naming record names, keyed by the record: the record's resource and type, the
- * resource's package and the `path` its `href` names (`TypedHref`'s, the href less its query or
- * fragment, reading 102), and the document at that path. Every record whose `named` is not `none`
- * has one, so each law over a record reads its document here.
- */
-export const LomObject = relation(
-  "LomObject",
-  {
-    document: uuid,
-    package: uuid,
-    path: keyText,
-    record: uuid,
-    resource: uuid,
-    type: closedId(ResourceType),
-  },
-  ["record"],
 );
 
 /**
@@ -291,8 +237,8 @@ export const LomGeneral = relation(
  * A LOM identifier's entry, keyed by its `lom:entry` node (a `CharacterString`, whose parent is
  * always a `lom:identifier`): its {@link nodeRef} tuple, its identifier's kind, start and parent
  * (the holder: a general category, the meta-metadata or a related resource), the holder's kind,
- * start and parent (the record, for a general or meta-metadata identifier), `named`, its record's
- * where its holder is a general category, else `none`, and its string value in pieces.
+ * start and parent (the record, for a general or meta-metadata identifier), and its string value
+ * in pieces.
  *
  * - `text` is the entry's string value, `Node.stringValue`, which `copiedTextKinds` folds
  *   (`#pantry/qti/node.ts`);
@@ -311,7 +257,6 @@ export const LomEntry = relation(
     identifierStart: natural,
     kind: closedId(NodeKind),
     lead: Space,
-    named: closedId(ResourceType),
     nearest: uuid,
     node: uuid,
     parent: uuid,
@@ -326,8 +271,8 @@ export const LomEntry = relation(
 
 /**
  * A LOM title, keyed by its `lom:title` node (a `LangString`, whose parent is always a general
- * category): its {@link nodeRef} tuple, its general category's kind, start and parent (the
- * record), and its record's `named`.
+ * category): its {@link nodeRef} tuple, and its general category's kind, start and parent (the
+ * record).
  */
 export const LomTitle = relation(
   "LomTitle",
@@ -336,7 +281,6 @@ export const LomTitle = relation(
     generalKind: closedId(NodeKind),
     generalStart: natural,
     kind: closedId(NodeKind),
-    named: closedId(ResourceType),
     nearest: uuid,
     node: uuid,
     parent: uuid,
@@ -476,45 +420,6 @@ export const ObjectLang = relation("ObjectLang", { lang: keyText, langTag: keyTe
 export const objectLangs = counted(on(ObjectLang, "node"), fin(AssessmentObject, "langs"));
 
 /**
- * The entry by which a record names its document (`lom-identifier`), keyed by the record: the
- * document, its identifier ({@link ObjectIdentifier}'s), and an entry of one of the record's
- * general categories whose token is that identifier, with its category.
- *
- * A row exists for every naming record that lists a general entry; its entry is the existential's
- * witness, so a record none of whose entries names its document, or whose document writes no
- * identifier, has no row, and the existence refuses it.
- */
-export const LomObjectIdentifier = relation(
-  "LomObjectIdentifier",
-  { document: uuid, entry: uuid, general: uuid, identifier: keyText, record: uuid },
-  ["record"],
-);
-
-/**
- * The title string by which a record names its document (`lom-title`), keyed by the record: the
- * document, its title's value ({@link ObjectTitle}'s `titleValue`) and its `xml:lang`'s compared
- * form ({@link AssessmentObject}'s `langTag`, which states no language where it is no tag), and a
- * string of one of the record's titles whose text has that value (`textValue`), with the string's
- * language (`languageTag`, {@link noLanguage} where it has none).
- *
- * A row exists for every naming record that has a general title; its string is the existential's
- * witness, so a record none of whose title strings names its document, or whose document writes no
- * title, has no row, and the existence refuses it.
- */
-export const LomObjectTitle = relation(
-  "LomObjectTitle",
-  {
-    document: uuid,
-    objectLang: keyText,
-    record: uuid,
-    string: uuid,
-    stringLanguage: keyText,
-    title: keyText,
-  },
-  ["record"],
-);
-
-/**
  * The text type of a usage statistic's day, `lexical(date)`: the language `DateDType` states,
  * which {@link StatisticDate} casts total. Exported for `src/import/refusal.ts`, which names its
  * pattern law.
@@ -617,11 +522,7 @@ export const metadataRelations = {
   AssessmentObject,
   LomEntry,
   LomGeneral,
-  LomObject,
-  LomObjectIdentifier,
-  LomObjectTitle,
   LomRecord,
-  LomResource,
   LomResourceType,
   LomResourceTypeSource,
   LomString,
@@ -725,35 +626,6 @@ const otherVocabularySources = select(LomResourceTypeSource, (s) =>
 );
 
 /**
- * The records whose owner is a resource's metadata.
- */
-const resourceRecords = select(LomRecord, (r) => r.eq(r.owner, resourceMetadata));
-
-/**
- * The records that name a document: each has its {@link LomObject}.
- */
-const namingRecords = select(LomRecord, (r) => r.ne(r.named, "none"));
-
-/**
- * The entries of general categories, among which a record names its document.
- */
-const generalEntries = select(LomEntry, (e) => e.eq(e.holderKind, "lom:general"));
-
-/**
- * The general entries of the records that name a document: each makes its record's
- * {@link LomObjectIdentifier} row exist.
- */
-const namingEntries = select(LomEntry, (e) =>
-  e.and(e.eq(e.holderKind, "lom:general"), e.ne(e.named, "none")),
-);
-
-/**
- * The titles of the records that name a document: each makes its record's {@link LomObjectTitle}
- * row exist.
- */
-const namingTitles = select(LomTitle, (t) => t.ne(t.named, "none"));
-
-/**
  * Select the attributes of one name on the elements of some kinds: the source of an overlay's copy
  * (C18). The copy's reverse probe reads an index over the selection's node alone, since grizzle
  * indexes the longest leading run of a containment's source columns whose entry is bounded
@@ -823,38 +695,25 @@ const spelledUsageBaseTypes = select(Attribute, (a) =>
 /**
  * Every statement over the metadata overlays, each `check` named by its oracle law:
  *
- * - **the resources:** each `Resource` has its {@link LomResource}, both ways; and its `named` is
- *   `none` or its {@link TypedHref}'s type, an item's or a test's ("E1 derived"), and that type
- *   wherever its `href` is of an item's or a test's type, which holds exactly where the `href`
- *   names a document ("Document entry").
- * - **the records:** each `lom:lom` has its {@link LomRecord}; its tuple and its owner's are its
- *   nodes'; its `named` is its resource's where its owner is a resource's metadata, else `none`;
- *   and each naming record has its {@link LomObject}, the document at its resource's `href`'s
- *   path.
+ * - **the records:** each `lom:lom` has its {@link LomRecord}, whose tuple and its owner's are its
+ *   nodes'.
  * - **the general categories:** each `lom:general` has its {@link LomGeneral}, whose tuple is its
  *   node's.
  * - **the entries:** each `lom:entry` has its {@link LomEntry}, whose `text` is its string value,
- *   whose three tuples are its nodes', whose pieces concatenate to its text, and whose `named` is
- *   its record's for a general category's entry, else `none`.
- * - **the titles and strings:** each `lom:title` has its {@link LomTitle} with its record's `named`;
- *   each `lom:string` its {@link LomString}, whose `languages` counts its `language`, copied both
- *   ways, so no {@link LomStringLanguage} stands without its attribute; and each title's string its
- *   {@link LomTitleString}, whose `text` is its string value, whose `language` is its
- *   {@link LomString}'s, and whose compared forms are those two's ("E1 derived").
+ *   whose three tuples are its nodes', and whose pieces concatenate to its text.
+ * - **the titles and strings:** each `lom:title` has its {@link LomTitle}, whose tuples are its
+ *   nodes'; each `lom:string` its {@link LomString}, whose `languages` counts its `language`,
+ *   copied both ways, so no {@link LomStringLanguage} stands without its attribute; and each
+ *   title's string its {@link LomTitleString}, whose `text` is its string value, whose `language`
+ *   is its {@link LomString}'s, and whose compared forms are those two's ("E1 derived").
  * - **the objects:** each item's and test's root has its {@link AssessmentObject}, one per document,
  *   with `langs` counting its `xml:lang` and its language's compared form; and each of its
  *   `identifier` (in pieces), `title` and `xml:lang` is copied into its own row,
  *   {@link ObjectIdentifier}, {@link ObjectTitle} or {@link ObjectLang}, with its compared form,
  *   and no such row stands without its attribute, an {@link ObjectLang} by the way back
  *   `#pantry/qti/identity.ts` states ("E1 derived", spec reading 148).
- * - **`lom-identifier`:** a general entry of a naming record makes its record's
- *   {@link LomObjectIdentifier} exist, whose document is its record's object's, whose identifier is
- *   that document's, and whose entry is a general entry of the record with that token.
- * - **`lom-title`:** a title of a naming record makes its record's {@link LomObjectTitle} exist,
- *   whose document, title value and language tag are its record's object's, and whose string is a
- *   title string of the record with that value, in the document's language: the object's tag is no
- *   language tag, which states none (spec reading 151), the string has no language, or the two are
- *   one ("LomObjectTitle").
+ * - **`lom-identifier` and `lom-title`** read the document a record names, which no row here holds,
+ *   so each is a rule over a query (`metadataQueryLawsByName`, `#pantry/qti/queries.ts`).
  * - **the learning resource types:** each `lom:value` and each `lom:source` of a
  *   `lom:learningResourceType` is copied, with its string value, into its type's
  *   {@link LomResourceType} or {@link LomResourceTypeSource}, and every such row names one, by a
@@ -870,7 +729,6 @@ const spelledUsageBaseTypes = select(Attribute, (a) =>
  *   form of that base type ("Usage typed value").
  */
 export const metadataLawsByName = {
-  "Document entry": [contained(on(objectHrefs, "node", "type"), on(LomResource, "node", "named"))],
   "DocumentId key": [
     key(on(stringLanguageAttributes, "node")),
     key(on(objectIdentifiers, "node")),
@@ -879,8 +737,6 @@ export const metadataLawsByName = {
     key(on(usageBaseTypes, "node")),
   ],
   "E1 derived": [
-    mirrors(on(LomResource, "node"), on(Resource, "node")),
-    contained(on(namingResources, "node", "named"), on(objectHrefs, "node", "type")),
     contained(
       on(LomRecord, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
@@ -899,26 +755,7 @@ export const metadataLawsByName = {
       nodeRef,
     ),
     contained(on(recordNodes, "id"), on(LomRecord, "node")),
-    check("E1_derived", LomRecord, (r) =>
-      r.and(r.eq(r.kind, "lom:lom"), r.or(r.eq(r.owner, resourceMetadata), r.eq(r.named, "none"))),
-    ),
-    contained(on(resourceRecords, "ownerParent", "named"), on(LomResource, "node", "named")),
-    contained(
-      on(namingRecords, "node", "named", "ownerParent"),
-      on(LomObject, "record", "type", "resource"),
-    ),
-    contained(
-      on(LomObject, "record", "type", "resource"),
-      on(LomRecord, "node", "named", "ownerParent"),
-    ),
-    contained(
-      on(LomObject, "resource", "package", "path", "type"),
-      on(TypedHref, "node", "package", "path", "type"),
-    ),
-    contained(
-      on(LomObject, "package", "path", "document"),
-      on(Document, "package", "path", "node"),
-    ),
+    check("E1_derived", LomRecord, (r) => r.eq(r.kind, "lom:lom")),
     contained(
       on(LomGeneral, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
@@ -963,10 +800,8 @@ export const metadataLawsByName = {
         e.eq(e.text, Compute.concat(Compute.concat(e.lead, e.token), e.trail)),
         Compute.matches(e.token, trimmedPattern),
         e.or(e.ne(e.token, ""), e.eq(e.trail, "")),
-        e.or(e.eq(e.holderKind, "lom:general"), e.eq(e.named, "none")),
       ),
     ),
-    contained(on(generalEntries, "holderParent", "named"), on(LomRecord, "node", "named")),
     contained(
       on(LomTitle, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
@@ -988,7 +823,6 @@ export const metadataLawsByName = {
     check("E1_derived", LomTitle, (t) =>
       t.and(t.eq(t.kind, "lom:title"), t.eq(t.generalKind, "lom:general")),
     ),
-    contained(on(LomTitle, "record", "named"), on(LomRecord, "node", "named")),
     mirrors(on(LomString, "node"), on(stringNodes, "id")),
     lomStringLanguages,
     contained(
@@ -1060,17 +894,6 @@ export const metadataLawsByName = {
       ),
       on(ObjectLang, "node", "langTag"),
     ),
-    contained(on(LomObjectIdentifier, "record", "document"), on(LomObject, "record", "document")),
-    contained(
-      on(LomObjectIdentifier, "document", "identifier"),
-      on(ObjectIdentifier, "document", "identifier"),
-    ),
-    contained(on(LomObjectTitle, "record", "document"), on(LomObject, "record", "document")),
-    contained(on(LomObjectTitle, "document", "title"), on(ObjectTitle, "document", "titleValue")),
-    contained(
-      on(LomObjectTitle, "document", "objectLang"),
-      on(AssessmentObject, "document", "langTag"),
-    ),
     contained(
       on(resourceTypeValues, "id", "parent", "stringValue"),
       on(LomResourceType, "term", "node", "text"),
@@ -1100,31 +923,6 @@ export const metadataLawsByName = {
   ],
   "LOM learning resource type": [
     contained(on(forbiddenResourceTypeValues, "node"), on(otherVocabularySources, "node")),
-  ],
-  LomObjectIdentifier: [
-    contained(on(namingEntries, "holderParent"), on(LomObjectIdentifier, "record")),
-    contained(
-      on(LomObjectIdentifier, "entry", "general", "record", "identifier"),
-      on(generalEntries, "node", "holder", "holderParent", "token"),
-    ),
-  ],
-  LomObjectTitle: [
-    contained(on(namingTitles, "record"), on(LomObjectTitle, "record")),
-    contained(
-      on(LomObjectTitle, "string", "record", "title"),
-      on(LomTitleString, "node", "record", "textValue"),
-    ),
-    contained(
-      on(LomObjectTitle, "string", "stringLanguage"),
-      on(LomTitleString, "node", "languageTag"),
-    ),
-    check("LomObjectTitle", LomObjectTitle, (l) =>
-      l.or(
-        l.not(Compute.matches(l.objectLang, languageTagPattern)),
-        l.eq(l.stringLanguage, noLanguage),
-        l.eq(l.stringLanguage, l.objectLang),
-      ),
-    ),
   ],
   "Usage typed value": [
     check("Usage_typed_value", UsageValue, (u) =>

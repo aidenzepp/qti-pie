@@ -1,25 +1,22 @@
 /**
  * The metadata overlays' rows (plan §1.7 O6, §C's `rowsOf`): from one document's XDM tree and the
  * ids its nodes are written under, the rows of every per-document relation
- * `#pantry/qti/metadata.ts` declares, each relation's rows a keyed set; and, from a package's
- * manifest and its documents' assessment objects, each naming record's {@link LomObject},
- * {@link LomObjectIdentifier} and {@link LomObjectTitle} rows.
+ * `#pantry/qti/metadata.ts` declares, each relation's rows a keyed set. Which document a record
+ * names is no row's: the database reads it (`#pantry/qti/queries.ts` `namingRecords`).
  *
  * The rows restate what the tree says and nothing else: each overlay copies its nodes' tuples as
- * the tree's rows give them (`flatten` of `#pantry/model/xdm.ts`), each copied text as written and
- * split around its collapsed value, and each resource's type as the `ResourceType` handle its
- * lexical form spells (C17). The database proves every one of them (`metadataLaws`), so a row this
+ * the tree's rows give them (`flatten` of `#pantry/model/xdm.ts`), and each copied text as written
+ * and split around its collapsed value. The database proves every one of them (`metadataLaws`), so
+ * a row this
  * builder gets wrong is refused, never accepted. A copied text past `keyText`'s bound is written as
  * it is, and its field's pattern refuses it under the schema's limit law.
  */
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
-import { Array as Arr, Option, pipe } from "effect";
+import { Option } from "effect";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import { collapse, patternFlags } from "#pantry/grammar/domains.ts";
 import type { DocumentType } from "#pantry/grammar/install.ts";
-import { ResourceType } from "#pantry/grammar/install.ts";
-import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
-import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
+import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -28,7 +25,6 @@ import {
   languageTagPattern,
   noLanguage,
   objectKinds,
-  objectTypes,
   recordDocumentTypes,
   statisticKinds,
   usageValueKind,
@@ -37,11 +33,7 @@ import type {
   AssessmentObject,
   LomEntry,
   LomGeneral,
-  LomObject,
-  LomObjectIdentifier,
-  LomObjectTitle,
   LomRecord,
-  LomResource,
   LomResourceType,
   LomResourceTypeSource,
   LomString,
@@ -56,9 +48,8 @@ import type {
 } from "#pantry/qti/metadata.ts";
 
 /**
- * The ids a document's rows are written under: its package's, each of its tree's nodes', drawn by
- * the number `flatten` gives the node, in document order from the document node's 0, and the
- * document a resource names at each path of its package.
+ * The ids a document's rows are written under: its package's, and each of its tree's nodes',
+ * drawn by the number `flatten` gives the node, in document order from the document node's 0.
  *
  * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
  * the tree's rows name each node by one id.
@@ -76,15 +67,6 @@ export interface MetadataIds {
   readonly documentType: (typeof DocumentType.handles)[number];
   readonly idOf: (index: number) => NodeId;
   readonly package: Uuid;
-  /**
-   * The document a resource names at a path of the package, none where no resource names one
-   * there, the manifest's included: a resource names a document only where its `href` names one
-   * ({@link LomResource}'s `named`).
-   *
-   * @param path - A path in the package, as `ResourceHref` compares it.
-   * @returns The document's node.
-   */
-  readonly targetAt: (path: string) => Option.Option<Pick<ListedTarget, "node">>;
 }
 
 /**
@@ -96,7 +78,6 @@ export interface MetadataRows {
   readonly LomEntry: ReadonlyMap<string, Addition<typeof LomEntry>>;
   readonly LomGeneral: ReadonlyMap<string, Addition<typeof LomGeneral>>;
   readonly LomRecord: ReadonlyMap<string, Addition<typeof LomRecord>>;
-  readonly LomResource: ReadonlyMap<string, Addition<typeof LomResource>>;
   readonly LomResourceType: ReadonlyMap<string, Addition<typeof LomResourceType>>;
   readonly LomResourceTypeSource: ReadonlyMap<string, Addition<typeof LomResourceTypeSource>>;
   readonly LomString: ReadonlyMap<string, Addition<typeof LomString>>;
@@ -109,41 +90,6 @@ export interface MetadataRows {
   readonly StatisticDate: ReadonlyMap<string, Addition<typeof StatisticDate>>;
   readonly UsageValue: ReadonlyMap<string, Addition<typeof UsageValue>>;
 }
-
-/**
- * A package's object rows, one keyed set per relation, each by its record's id: the document each
- * naming record names, and the witnesses by which it names it.
- */
-export interface ObjectRows {
-  readonly LomObject: ReadonlyMap<string, Addition<typeof LomObject>>;
-  readonly LomObjectIdentifier: ReadonlyMap<string, Addition<typeof LomObjectIdentifier>>;
-  readonly LomObjectTitle: ReadonlyMap<string, Addition<typeof LomObjectTitle>>;
-}
-
-/**
- * The `ResourceType` handle a `cp:resource`'s `type` names.
- */
-type ResourceTypeHandle = Addition<typeof LomResource>["named"];
-
-/**
- * The `ResourceType` handles a lexical form can spell: every one but the null object `none`, which
- * `ResourceTypeLexical` holds no row for (C17).
- */
-const spelledTypes: ReadonlyMap<string, ResourceTypeHandle> = new Map(
-  ResourceType.handles.flatMap((handle) => (handle === "none" ? [] : [[handle, handle] as const])),
-);
-
-/**
- * The resource types whose LOM record names its document, as a set.
- */
-const naming: ReadonlySet<string> = new Set(objectTypes);
-
-/**
- * The `named` of a resource, a record and a general category that name no document: `none`,
- * `ResourceType`'s null object (`#pantry/grammar/install.ts`), which no lexical form spells and no
- * `TypedHref` carries.
- */
-export const namesNoDocument = "none" satisfies ResourceTypeHandle;
 
 /**
  * The kinds of an assessment object's root, as a set.
@@ -171,11 +117,6 @@ export const statesLanguage = (compared: string): boolean => languageTagForm.tes
  * The usage statistics, as a set.
  */
 const statistics: ReadonlySet<string> = new Set(statisticKinds);
-
-/**
- * The owner whose records name a resource.
- */
-const resourceMetadata = "cp:metadata.resource";
 
 /**
  * XML whitespace `S`, possibly none, as the overlays' `lead` and `trail` fields type it.
@@ -289,16 +230,6 @@ export const lowerAscii = (text: string): string =>
   text.replaceAll(/[A-Z]/gu, (capital) => capital.toLowerCase());
 
 /**
- * Read the code of a resource's `type` from its lexical form, as written: an `xs:string`
- * enumeration, whose whitespace is preserved (XSD 1.1 Part 2, §4.3.6).
- *
- * @param lexical - The `type` attribute's lexical form, as written.
- * @returns The handle it spells; none for a form no handle spells.
- */
-const typeOf = (lexical: string): Option.Option<ResourceTypeHandle> =>
-  Option.fromUndefinedOr(spelledTypes.get(lexical));
-
-/**
  * The string value of a node with no character child: the empty text, the concatenation of no
  * characters (`Node.stringValue`, "the empty string when it holds none", `#pantry/model/folds.ts`;
  * XDM 3.1 gives an element with no text descendants "the zero-length string").
@@ -406,67 +337,13 @@ const treeOf = (doc: XdmDocument<Composed>, ids: MetadataIds): Tree => {
 };
 
 /**
- * Read the type of the document a `cp:resource` names: the handle its `type` spells where that
- * handle is an item's or a test's, its `TypedHref`'s, and its `href` names a document a resource
- * names (`targetAt` at the path its `ResourceHref` compares it by, readings 93 and 102); else
- * {@link namesNoDocument}, a resource that names no assessment object, a type spelling nothing, a
- * resource with no `href` and one whose `href` names no document among them. An item's or a
- * test's `href` that names no document is refused under "Document entry", and its records name
- * nothing for a law to read.
- *
- * @param tree - The document's tree.
- * @param paths - Each resource's href's path, by the resource's node (`resourcePathsOf`).
- * @param targetAt - The document a resource names at each path.
- * @returns The type a resource names, read from its node.
- */
-const resourceNamer =
-  (tree: Tree, paths: ReadonlyMap<NodeId, string>, targetAt: MetadataIds["targetAt"]) =>
-  (resource: NodeRow<Composed>): ResourceTypeHandle =>
-    Option.match(
-      Option.zipWith(
-        Option.fromNullishOr(tree.valueOf(resource, "type")).pipe(
-          Option.flatMap(typeOf),
-          Option.filter((type) => naming.has(type)),
-        ),
-        Option.fromNullishOr(paths.get(resource.id)).pipe(Option.flatMap(targetAt)),
-        (type) => type,
-      ),
-      { onNone: () => namesNoDocument, onSome: (type) => type },
-    );
-
-/**
- * Build a document's {@link LomResource} rows: one per `cp:resource`, `named` the type of the
- * document it names ({@link resourceNamer}).
- *
- * @param tree - The document's tree.
- * @param namedOf - The type each resource names.
- * @returns The rows, by their node's id.
- */
-const resourceRowsOf = (
-  tree: Tree,
-  namedOf: (resource: NodeRow<Composed>) => ResourceTypeHandle,
-): ReadonlyMap<string, Addition<typeof LomResource>> =>
-  new Map(
-    tree.nodes.flatMap((node) =>
-      node.kind === "cp:resource"
-        ? [[node.id, { named: namedOf(node), node: node.id }] as const]
-        : [],
-    ),
-  );
-
-/**
  * Build a document's {@link LomRecord} rows: one per `lom:lom`, with its owner's kind, start and
- * parent, and `named`, the type its resource names where its owner is a resource's `cp:metadata`
- * (whose parent is the `cp:resource`), else {@link namesNoDocument}.
+ * parent.
  *
  * @param tree - The document's tree.
- * @param namedOf - The type each resource names, as its {@link LomResource} row holds it.
  * @returns The rows, by their node's id.
  */
-const recordRowsOf = (
-  tree: Tree,
-  namedOf: (resource: NodeRow<Composed>) => ResourceTypeHandle,
-): ReadonlyMap<string, Addition<typeof LomRecord>> =>
+const recordRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomRecord>> =>
   new Map(
     tree.nodes.flatMap((node) => {
       if (node.kind !== "lom:lom") {
@@ -480,8 +357,6 @@ const recordRowsOf = (
           node.id,
           {
             ...tree.tupleOf(node),
-            named:
-              owner.kind === resourceMetadata ? namedOf(tree.parentOf(owner)) : namesNoDocument,
             owner: owner.kind,
             ownerParent: owner.parent,
             ownerStart: owner.start,
@@ -506,19 +381,12 @@ const generalRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomGener
 
 /**
  * Build a document's {@link LomEntry} rows: one per `lom:entry`, with its identifier's and holder's
- * tuples, its record's `named` where its holder is a general category, else
- * {@link namesNoDocument}, and its string value in pieces. A general category outside any record
- * holds an entry of no record, which has no row: no `named` is its, and `entryNodes`' copy refuses
- * it under "E1 derived".
+ * tuples and its string value in pieces.
  *
  * @param tree - The document's tree.
- * @param records - The document's {@link LomRecord} rows.
  * @returns The rows, by their node's id.
  */
-const entryRowsOf = (
-  tree: Tree,
-  records: ReadonlyMap<string, Addition<typeof LomRecord>>,
-): ReadonlyMap<string, Addition<typeof LomEntry>> =>
+const entryRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomEntry>> =>
   new Map(
     tree.nodes.flatMap((node) => {
       if (node.kind !== "lom:entry") {
@@ -527,14 +395,6 @@ const entryRowsOf = (
 
       const identifier = tree.parentOf(node);
       const holder = tree.parentOf(identifier);
-      const named: Option.Option<ResourceTypeHandle> =
-        holder.kind === "lom:general"
-          ? Option.map(Option.fromUndefinedOr(records.get(holder.parent)), (record) => record.named)
-          : Option.some(namesNoDocument);
-      if (Option.isNone(named)) {
-        return [];
-      }
-
       const text = tree.stringValueOf(node.id);
 
       return [
@@ -549,7 +409,6 @@ const entryRowsOf = (
             holderStart: holder.start,
             identifierKind: identifier.kind,
             identifierStart: identifier.start,
-            named: named.value,
             text,
           },
         ] as const,
@@ -559,17 +418,12 @@ const entryRowsOf = (
 
 /**
  * Build a document's {@link LomTitle} rows: one per `lom:title`, with its general category's kind,
- * start and parent (the record), and its record's `named`. A title whose category is outside any
- * record has no row: no `named` is its, and `titleNodes`' copy refuses it under "E1 derived".
+ * start and parent (the record).
  *
  * @param tree - The document's tree.
- * @param records - The document's {@link LomRecord} rows.
  * @returns The rows, by their node's id.
  */
-const titleRowsOf = (
-  tree: Tree,
-  records: ReadonlyMap<string, Addition<typeof LomRecord>>,
-): ReadonlyMap<string, Addition<typeof LomTitle>> =>
+const titleRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof LomTitle>> =>
   new Map(
     tree.nodes.flatMap((node) => {
       if (node.kind !== "lom:title") {
@@ -577,10 +431,6 @@ const titleRowsOf = (
       }
 
       const general = tree.parentOf(node);
-      const record = records.get(general.parent);
-      if (record === undefined) {
-        return [];
-      }
 
       return [
         [
@@ -589,7 +439,6 @@ const titleRowsOf = (
             ...tree.tupleOf(node),
             generalKind: general.kind,
             generalStart: general.start,
-            named: record.named,
             record: general.parent,
           },
         ] as const,
@@ -871,7 +720,6 @@ const noRecordRows = {
   LomEntry: new Map(),
   LomGeneral: new Map(),
   LomRecord: new Map(),
-  LomResource: new Map(),
   LomResourceType: new Map(),
   LomResourceTypeSource: new Map(),
   LomString: new Map(),
@@ -895,8 +743,8 @@ const noRecordRows = {
  * `recordDocumentTypes`): the manifest is its one `imsmanifest.xml` (IMS Content Packaging 1.2),
  * and a `cp:metadata` of another document describes no part of the package (170356bd's ruling), so
  * a document of another type writes no record. In a document of a record type, every `lom:lom`,
- * `lom:general`, `lom:entry`, `lom:title` and `lom:string` has its row, every
- * `cp:resource` its {@link LomResource}, every title's string its {@link LomTitleString}, and every
+ * `lom:general`, `lom:entry`, `lom:title` and `lom:string` has its row, every title's string its
+ * {@link LomTitleString}, and every
  * learning resource type its {@link LomResourceType} where it holds a value and its
  * {@link LomResourceTypeSource} where it writes a source. In every document, an item's or
  * test's root has its {@link AssessmentObject}, a usage statistic its {@link StatisticDate} where
@@ -918,18 +766,14 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
     return { ...noRecordRows, ...everyDocument };
   }
 
-  const namedOf = resourceNamer(tree, resourcePathsOf(flatten(doc, ids.idOf)), ids.targetAt);
-  const resources = resourceRowsOf(tree, namedOf);
-  const records = recordRowsOf(tree, namedOf);
-  const titles = titleRowsOf(tree, records);
+  const titles = titleRowsOf(tree);
   const strings = stringRowsOf(tree);
 
   return {
     ...everyDocument,
-    LomEntry: entryRowsOf(tree, records),
+    LomEntry: entryRowsOf(tree),
     LomGeneral: generalRowsOf(tree),
-    LomRecord: records,
-    LomResource: resources,
+    LomRecord: recordRowsOf(tree),
     LomResourceType: termRowsOf(tree, "lom:value"),
     LomResourceTypeSource: termRowsOf(tree, "lom:source"),
     LomString: strings.strings,
@@ -937,215 +781,4 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
     LomTitle: titles,
     LomTitleString: titleStringRowsOf(tree, titles),
   };
-};
-
-/**
- * A document of a package as the object rows read it: its node's id, and what its root writes that
- * a record names it by: its identifier, collapsed, and its title, as `lom-title` compares it, with
- * its language. Each is none where the root is no assessment object or writes no such attribute.
- */
-export interface NamedDocument {
-  readonly document: NodeId;
-  readonly identifier: Option.Option<string>;
-  readonly title: Option.Option<{ readonly lang: string; readonly value: string }>;
-}
-
-/**
- * Read a document as the object rows read it, from its metadata rows: its root's
- * {@link AssessmentObject}, the one whose parent is the document node, and that root's
- * {@link ObjectIdentifier} and {@link ObjectTitle}.
- *
- * @param document - The document's node.
- * @param rows - The document's metadata rows.
- * @returns The document as the object rows read it.
- */
-export const namedDocumentOf = (
-  document: NodeId,
-  rows: Pick<MetadataRows, "AssessmentObject" | "ObjectIdentifier" | "ObjectTitle">,
-): NamedDocument => {
-  const root = pipe(
-    rows.AssessmentObject.values(),
-    Arr.findFirst(({ parent }) => parent === document),
-  );
-
-  return {
-    document,
-    identifier: root.pipe(
-      Option.flatMap(({ node }) => Option.fromUndefinedOr(rows.ObjectIdentifier.get(node))),
-      Option.map(({ identifier }) => identifier),
-    ),
-    title: root.pipe(
-      Option.flatMap(({ langTag, node }) =>
-        Option.map(Option.fromUndefinedOr(rows.ObjectTitle.get(node)), ({ titleValue }) => ({
-          lang: langTag,
-          value: titleValue,
-        })),
-      ),
-    ),
-  };
-};
-
-/**
- * Decide whether a title string is in an object's language (`lom-title`): the object states no
- * language, its `xml:lang`'s compared form being no language tag (spec reading 151: none written,
- * an empty one, one of whitespace alone, or an ill-formed one), the string no `language` (an empty
- * one states none alike), or the two name one tag without regard to case.
- *
- * @param string - The title string.
- * @param lang - The object's `xml:lang`'s compared form, {@link noLanguage} where it writes none.
- * @returns Whether the string's language is the object's.
- */
-const inLanguage = (string: Addition<typeof LomTitleString>, lang: string): boolean =>
-  !statesLanguage(lang) || string.languageTag === noLanguage || string.languageTag === lang;
-
-/**
- * Build a naming record's {@link LomObjectIdentifier} row: its witness the first general entry of
- * the record, in document order, whose token is the document's identifier.
- *
- * @param record - The record's node.
- * @param document - The document it names.
- * @param identifier - The document's identifier, none where its root writes none.
- * @param generalEntries - The manifest's general entries.
- * @returns The row; none where the document has no identifier or no entry of the record is it, so
- *   a record that lists a general entry is refused under `lom-identifier`'s existence.
- */
-const identifierRowOf = (
-  record: NodeId,
-  document: NodeId,
-  identifier: Option.Option<string>,
-  generalEntries: readonly Addition<typeof LomEntry>[],
-): Option.Option<Addition<typeof LomObjectIdentifier>> =>
-  identifier.pipe(
-    Option.flatMap((id) =>
-      Option.map(
-        pipe(
-          generalEntries,
-          Arr.findFirst(({ holderParent, token }) => holderParent === record && token === id),
-        ),
-        (witness) => ({
-          document,
-          entry: witness.node,
-          general: witness.holder,
-          identifier: id,
-          record,
-        }),
-      ),
-    ),
-  );
-
-/**
- * Build a naming record's {@link LomObjectTitle} row: its witness the first title string of the
- * record, in document order, in the document's language whose text has its title's value (both
- * with their whitespace replaced).
- *
- * @param record - The record's node.
- * @param document - The document it names.
- * @param title - The document's title and language, none where its root writes no title.
- * @param metadata - The manifest's rows.
- * @returns The row; none where the document has no title or no string of the record names it, so
- *   a record with a general title is refused under `lom-title`'s existence.
- */
-const titleRowOf = (
-  record: NodeId,
-  document: NodeId,
-  title: NamedDocument["title"],
-  metadata: MetadataRows,
-): Option.Option<Addition<typeof LomObjectTitle>> =>
-  title.pipe(
-    Option.flatMap(({ lang, value }) =>
-      Option.map(
-        pipe(
-          metadata.LomTitleString.values(),
-          Arr.findFirst(
-            (string) =>
-              string.record === record && string.textValue === value && inLanguage(string, lang),
-          ),
-        ),
-        (witness) => ({
-          document,
-          objectLang: lang,
-          record,
-          string: witness.node,
-          stringLanguage: witness.languageTag,
-          title: value,
-        }),
-      ),
-    ),
-  );
-
-/**
- * Build a package's object rows (reading 62): each naming record's {@link LomObject}, the document
- * at its resource's `href`'s path; its {@link LomObjectIdentifier} where one of its general entries
- * names the document's identifier; and its {@link LomObjectTitle} where one of its title strings
- * names the document's title.
- *
- * Each witness is the first, in document order, that names the document (an entry whose token is
- * its identifier; a title string in its language whose text is its title). A record none of whose
- * entries or strings names it, or whose document writes no identifier or no title, has no witness
- * and no row, so the law's existence refuses the record under its own name: no row stands for a
- * witness the record does not hold (reading 62, "One of the values given for the identifier must
- * have an entry that matches"; "The title must have a value that matches"). A record names a
- * document only where its resource's `href` names one ({@link LomResource}'s `named`), so a record
- * whose `href` names none has no row here, and "Document entry" refuses the href. An href's path is
- * the one its `ResourceHref` row compares it by, resolved as the package overlays resolve it
- * (`resourcePathsOf`, readings 102 and 103).
- *
- * @param manifest - The manifest's tree, as shred gives it.
- * @param ids - The ids its rows are written under.
- * @param documents - Each document of the package by its path.
- * @returns The rows, each a keyed set by its record's id.
- */
-export const objectRowsOfPackage = (
-  manifest: XdmDocument<Composed>,
-  ids: MetadataIds,
-  documents: ReadonlyMap<string, NamedDocument>,
-): ObjectRows => {
-  const paths = resourcePathsOf(flatten(manifest, ids.idOf));
-  const metadata = rowsOf(manifest, ids);
-  const generalEntries = [...metadata.LomEntry.values()].filter(
-    ({ holderKind }) => holderKind === "lom:general",
-  );
-  const named = {
-    LomObject: new Map<string, Addition<typeof LomObject>>(),
-    LomObjectIdentifier: new Map<string, Addition<typeof LomObjectIdentifier>>(),
-    LomObjectTitle: new Map<string, Addition<typeof LomObjectTitle>>(),
-  };
-
-  for (const record of metadata.LomRecord.values()) {
-    if (record.named === namesNoDocument) {
-      continue;
-    }
-
-    // A record names a document only where its resource's href's path holds one (`resourceNamer`),
-    // so both lookups find it.
-    const path = paths.get(record.ownerParent);
-    const target = path === undefined ? undefined : documents.get(path);
-    if (path === undefined || target === undefined) {
-      throw new Error(
-        `Record ${record.node} names a ${record.named} document, but its resource ${record.ownerParent} has no href path the package's documents hold. Read the records under the targetAt the documents were listed by.`,
-      );
-    }
-
-    const { document } = target;
-    named.LomObject.set(record.node, {
-      document,
-      package: ids.package,
-      path,
-      record: record.node,
-      resource: record.ownerParent,
-      type: record.named,
-    });
-
-    for (const row of Option.toArray(
-      identifierRowOf(record.node, document, target.identifier, generalEntries),
-    )) {
-      named.LomObjectIdentifier.set(record.node, row);
-    }
-
-    for (const row of Option.toArray(titleRowOf(record.node, document, target.title, metadata))) {
-      named.LomObjectTitle.set(record.node, row);
-    }
-  }
-
-  return named;
 };

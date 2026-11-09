@@ -32,11 +32,7 @@ import {
   identifierPattern,
   LomEntry,
   LomGeneral,
-  LomObject,
-  LomObjectIdentifier,
-  LomObjectTitle,
   LomRecord,
-  LomResource,
   LomResourceType,
   LomResourceTypeSource,
   LomString,
@@ -90,11 +86,7 @@ const metadataRelations = {
   AssessmentObject,
   LomEntry,
   LomGeneral,
-  LomObject,
-  LomObjectIdentifier,
-  LomObjectTitle,
   LomRecord,
-  LomResource,
   LomResourceType,
   LomResourceTypeSource,
   LomString,
@@ -228,7 +220,7 @@ describe("qti/metadata.ts, declared", () => {
       }
     }
 
-    assert.sameMembers([...new Set(named)], ["E1 derived", "LomObjectTitle", "Usage typed value"]);
+    assert.sameMembers([...new Set(named)], ["E1 derived", "Usage typed value"]);
   });
 });
 

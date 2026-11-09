@@ -4,15 +4,17 @@
  * identifier entry matches (`lom-identifier`, QTI 3.0 Metadata §2.7.1.1) and whose title one title
  * string matches (`lom-title`, §2.7.1.2), whatever type the resource is listed under: a document
  * whose root is an item or a test is that object, and a document with no such root has none, so a
- * record that lists an identifier or a title breaks its law. The import holds it so
- * (`#pantry/qti/metadata.ts`, `AssessmentObject` keyed by an item's or a test's root, and
- * `LomObject`, the document at the resource's href). GEN-A's differential found the law oracle
- * reading a record's identifier against no object where the resource's type and the root's kind
- * are no pair of `RootOfType`, which the import's rows hold.
+ * record that lists an identifier or a title breaks its law. The database holds it so, by rules
+ * over queries (`#pantry/qti/queries.ts`: `namingRecords`, the document a resource lists at its
+ * href, and `AssessmentObject`, keyed by an item's or a test's root). GEN-A's differential found
+ * the law oracle reading a record's identifier against no object where the resource's type and the
+ * root's kind are no pair of `RootOfType`, which the import's rows hold.
  *
- * Oracle: a second implementation, the law oracle (`#pantry/test/oracle.ts` `judge`), against the
- * laws the import's rows break on the host (`#pantry/test/gen/genetic/judge.ts` `judgeOne`), and
- * both against §2.7.1.1 and §2.7.1.2 as stated above.
+ * Oracle: the specification as a checker, §2.7.1.1 and §2.7.1.2 as stated above, against the law
+ * oracle (`#pantry/test/oracle.ts` `judge`, through `#pantry/test/gen/genetic/judge.ts`
+ * `judgeOne`, which also builds the import's rows). The host judge leaves a rule over a query
+ * unjudged, so the import's side states neither law; `#pantry/qti/metadata.db.test.ts` holds the
+ * database to them through the importer.
  *
  * Bound: a package of one resource and its document, for each of the 2 resource types a record
  * names (item and test), each of 3 roots (an item's, a test's and a stimulus's, which is no
@@ -28,7 +30,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
-import { judgeOne, shownDisagreement } from "#pantry/test/gen/genetic/judge.ts";
+import { judgeOne } from "#pantry/test/gen/genetic/judge.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 import { scratchDirectory } from "#pantry/test/scratch.ts";
 
@@ -50,7 +52,7 @@ const laws = lawsOf(grammar);
 const document = { identifier: "choice", title: "Unattended Luggage" } as const;
 
 /**
- * The resource types whose records name their document (`LomResource`'s `named`).
+ * The resource types whose records name their document (`objectTypes`, `#pantry/qti/metadata.ts`).
  */
 const types = ["imsqti_item_xmlv3p0", "imsqti_test_xmlv3p0"] as const;
 
@@ -163,7 +165,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
   "a record's identifier and title, against the document its resource names",
   (it) => {
     it.effect(
-      "breaks lom-identifier and lom-title exactly where §2.7.1.1 and §2.7.1.2 say, on the import's rows as in the law oracle",
+      "breaks lom-identifier and lom-title in the law oracle exactly where §2.7.1.1 and §2.7.1.2 say, over rows the import builds",
       (ctx) =>
         searched(
           ctx,
@@ -186,8 +188,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   return of === undefined ? String(at) : nameOf(of);
                 },
                 oracle: {
-                  kind: "second-implementation",
-                  name: "the law oracle and §2.7.1.1 and §2.7.1.2, against the laws the import's rows break on the host",
+                  kind: "specification",
+                  name: "§2.7.1.1 and §2.7.1.2, against the law oracle",
                 },
                 suite: "pantry/lom-object",
               },
@@ -201,29 +203,23 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                   const judged = yield* judgeOne(yield* genomeOf(packageOf(of)), bench, at);
                   const said = `${nameOf(of)}: the oracle ${judged.summary.oracle}; the import ${judged.summary.import}`;
-                  const apart = judged.disagreements.filter(
-                    (disagreement) =>
-                      (disagreement.kind === "oracle-only-law" ||
-                        disagreement.kind === "import-only-law") &&
-                      (disagreement.law === "LomObjectIdentifier" ||
-                        disagreement.law === "LomObjectTitle"),
-                  );
                   const identifierBreaks =
                     of.identifier !== "absent" &&
                     (!of.root.object || of.identifier !== "the document's");
                   const titleBreaks =
                     of.title !== "absent" && (!of.root.object || of.title !== "the document's");
 
-                  assert.deepStrictEqual(apart.map(shownDisagreement), [], said);
                   assert.match(judged.summary.import, /^built /u, said);
-                  for (const side of [judged.summary.oracle, judged.summary.import]) {
-                    assert.strictEqual(
-                      /\bLomObjectIdentifier\b/u.test(side),
-                      identifierBreaks,
-                      said,
-                    );
-                    assert.strictEqual(/\bLomObjectTitle\b/u.test(side), titleBreaks, said);
-                  }
+                  assert.strictEqual(
+                    /\bLomObjectIdentifier\b/u.test(judged.summary.oracle),
+                    identifierBreaks,
+                    said,
+                  );
+                  assert.strictEqual(
+                    /\bLomObjectTitle\b/u.test(judged.summary.oracle),
+                    titleBreaks,
+                    said,
+                  );
                 }),
             );
           }).pipe(Effect.scoped),

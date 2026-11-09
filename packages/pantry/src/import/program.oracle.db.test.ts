@@ -718,7 +718,6 @@ describe.skipIf(!hasLease)(
             containedIn("ResourceHref", "Document"),
             containedIn("FileHref", "Entry"),
             containedIn("File", "Entry"),
-            containedIn("TypedHref", "LomResource"),
           ],
           name: "a document href no entry holds (entry-kind, Q5.06)",
         },
