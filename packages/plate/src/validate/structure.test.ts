@@ -1078,17 +1078,16 @@ const badDiv = el("div", [badId]);
 const looseChoice = el("qti-simple-choice", [attr("identifier", "A")], [text("A")]);
 
 /**
- * Report whether a committed element table declares `id` as an `NCName`.
+ * Report whether a committed element table declares `id` with a given built-in type.
  *
  * @param local The element's local name.
+ * @param name The built-in, `ID` by default, the type the XSD's `UniqueIdentifierDType` restricts.
  * @returns Whether its table declares `id` with that type.
  */
-const declaresNcNameId = (local: string): boolean =>
+const declaresId = (local: string, name: BuiltinName = "ID"): boolean =>
   generatedTables.elements[local]?.attributes.some(
     (attribute) =>
-      attribute.local === "id" &&
-      attribute.type.kind === "builtin" &&
-      attribute.type.name === "NCName",
+      attribute.local === "id" && attribute.type.kind === "builtin" && attribute.type.name === name,
   ) ?? false;
 
 /**
@@ -1928,6 +1927,187 @@ const accessForAll = (...children: readonly SourceChild[]): SourceElement =>
  * The path step of an {@link accessForAll}.
  */
 const accessForAllStep = stepIn(drdNamespace, "accessForAllResource");
+
+/**
+ * The path of an ID/IDREF case's item body.
+ */
+const idBody = "qti-assessment-item/qti-item-body";
+
+/**
+ * The path of an ID/IDREF case's response processing.
+ */
+const idProcessing = "qti-assessment-item/qti-response-processing";
+
+/**
+ * The path of an ID/IDREF case's `qti-set-outcome-value`.
+ */
+const idSetting = `${idProcessing}/qti-set-outcome-value`;
+
+/**
+ * A response declaration of one identifier, `RESPONSE`, of base type string.
+ */
+const idResponse = el("qti-response-declaration", [
+  attr("identifier", "RESPONSE"),
+  attr("cardinality", "single"),
+  attr("base-type", "string"),
+]);
+
+/**
+ * A context declaration of one identifier, `CTX`.
+ */
+const idContext = el("qti-context-declaration", [
+  attr("identifier", "CTX"),
+  attr("cardinality", "single"),
+  attr("base-type", "string"),
+]);
+
+/**
+ * The outcome `SCORE`, which an ID/IDREF case's response processing sets.
+ */
+const idScore = el("qti-outcome-declaration", [
+  attr("identifier", "SCORE"),
+  attr("cardinality", "single"),
+  attr("base-type", "float"),
+]);
+
+/**
+ * Set `SCORE` to an expression, in an ID/IDREF case's response processing.
+ *
+ * @param expression The expression.
+ * @returns The `qti-set-outcome-value`.
+ */
+const idSet = (expression: SourceElement): SourceElement =>
+  el("qti-set-outcome-value", [attr("identifier", "SCORE")], [expression]);
+
+/**
+ * Construct an item, valid by the committed tables, for the ID/IDREF table's cases: its
+ * declarations, a body, and a response processing holding the given rules when any are given. Its
+ * root binds the prefix `q` to QTI's namespace, for an `xsi:type`.
+ *
+ * @param declared The item's declarations.
+ * @param content The body's children.
+ * @param processing The response processing's children, none for no response processing.
+ * @returns The item as a source document.
+ */
+const idItem = (
+  declared: readonly SourceElement[],
+  content: readonly SourceChild[],
+  processing: readonly SourceElement[] = [],
+): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-item",
+      [
+        attr("q", qtiNamespace, xmlnsNamespace),
+        attr("identifier", "item"),
+        attr("time-dependent", "false"),
+        attr("title", "IDs"),
+      ],
+      [
+        ...declared,
+        el("qti-item-body", [], content),
+        ...(processing.length > 0 ? [el("qti-response-processing", [], processing)] : []),
+      ],
+    ),
+  );
+
+/**
+ * Check a document against the committed tables and keep each refusal's rule, location and detail.
+ *
+ * @param source The document.
+ * @returns The refusals, in the order they were found.
+ */
+const idFound = (source: SourceDocument) =>
+  checkStructure(source, generatedTables).map(
+    (refusal) => [refusal.rule, refusal.location, refusal.detail] as const,
+  );
+
+/**
+ * The detail of an `idref-target` refusal.
+ *
+ * @param on The element's name.
+ * @param attribute The attribute's name.
+ * @param token The token that names no ID.
+ * @returns The detail.
+ */
+const idrefTarget = (on: string, attribute: string, token: string) => ({
+  attribute,
+  check: "idref-target",
+  element: on,
+  reading: "156",
+  value: token,
+});
+
+/**
+ * Construct the research probe `a84_null_textentry_idref`'s item: a `qti-null` typed
+ * `TextEntryInteractionDType`, whose `response-identifier` is then an IDREF (reading 84).
+ *
+ * @param response The `response-identifier` as written.
+ * @returns The item as a source document.
+ */
+const idNulled = (response: string): SourceDocument =>
+  idItem(
+    [idResponse, idScore],
+    [el("p", [], [text("x")])],
+    [
+      idSet(
+        el("qti-null", [
+          attr("type", "q:TextEntryInteractionDType", xsiNamespace),
+          attr("response-identifier", response),
+        ]),
+      ),
+    ],
+  );
+
+/**
+ * Construct the research probes `p109a`, `p109b` and `p109d`'s item: a `qti-exit-response` typed
+ * `ImgDType`, which declares `id` of an ID type and admits other attributes by a lax wildcard.
+ *
+ * @param attributes The exit's attributes beside its type, `alt` and `src`.
+ * @returns The item as a source document.
+ */
+const idExit = (...attributes: readonly SourceAttribute[]): SourceDocument =>
+  idItem(
+    [idScore],
+    [el("p", [], [text("x")])],
+    [
+      el("qti-exit-response", [
+        attr("type", "q:ImgDType", xsiNamespace),
+        attr("alt", "a"),
+        attr("src", "x.png"),
+        ...attributes,
+      ]),
+    ],
+  );
+
+/**
+ * Give a declaration another identifier.
+ *
+ * @param declaration The declaration.
+ * @param identifier The identifier it declares instead.
+ * @returns The declaration with that identifier.
+ */
+const renamed = (declaration: SourceElement, identifier: string): SourceElement => ({
+  ...declaration,
+  attributes: declaration.attributes.map((attribute) =>
+    attribute.local === "identifier" ? attr("identifier", identifier) : attribute,
+  ),
+});
+
+/**
+ * Construct a manifest resource `R` of one item file, with the given dependencies.
+ *
+ * @param dependencies Its `dependency` elements.
+ * @returns The resource.
+ */
+const idResource = (dependencies: readonly SourceElement[]): SourceElement =>
+  el(
+    "resource",
+    [attr("identifier", "R"), attr("type", "imsqti_item_xmlv3p0"), attr("href", "items/r.xml")],
+    [el("file", [attr("href", "items/r.xml")], [], manifestNamespace), ...dependencies],
+    manifestNamespace,
+  );
 
 describe("checkStructure", () => {
   describe("the six rules", () => {
@@ -4392,7 +4572,10 @@ describe("checkStructure", () => {
     });
 
     it("[I-5] refuses %q at format on a printed variable inside an item body, and leaves a text entry interaction's format unchecked (reading 132)", () => {
+      // The response declaration gives the text entry's `response-identifier`, an IDREF, the ID it
+      // names (reading 14), so the case refuses the format alone.
       const source = item([
+        idResponse,
         el(
           "qti-item-body",
           [],
@@ -4772,7 +4955,7 @@ describe("checkStructure", () => {
         assert.isFalse(generatedTables.elements[local]?.global, local);
       }
       for (const local of ["div", "p", "qti-choice-interaction"]) {
-        assert.isTrue(declaresNcNameId(local), local);
+        assert.isTrue(declaresId(local), local);
       }
       assert.isUndefined(generatedTables.elements["div"]?.anyElement);
       assert.isFalse(
@@ -5444,5 +5627,247 @@ describe("checkStructure", () => {
 
       assert.deepStrictEqual(foundWith(source), []);
     });
+  });
+  describe("align-54 ID table: the document's IDs are one table, and an IDREF names one of them (readings 14, 74, 84, 101, 109 and 156)", () => {
+    it("align-54 ID table E16: refuses a second element with one id as duplicate-identifier, its id collapsed as its type reads it (reading 101)", () => {
+      assert.deepStrictEqual(
+        idFound(
+          idItem([], [el("p", [attr("id", "a")], [text("x")]), el("div", [attr("id", " a ")])]),
+        ),
+        [["duplicate-identifier", at(`${idBody}/div/@id`), { identifier: "a", reading: "101" }]],
+      );
+      assert.deepStrictEqual(
+        idFound(
+          idItem([], [el("p", [attr("id", "a")], [text("x")]), el("div", [attr("id", "b")])]),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 ID table E16: an id that is no NCName is no ID: its value domain alone refuses it, nothing repeats it and no IDREF names it (reading 156)", () => {
+      const refusals = idFound(
+        idItem(
+          [],
+          [
+            el("p", [attr("id", "1a")], [text("x")]),
+            el("div", [attr("id", "1a"), attr("aria-labelledby", "1a")]),
+          ],
+        ),
+      );
+
+      assert.deepStrictEqual(
+        refusals.map(([rule, where, detail]) => [rule, where, detail["check"]]),
+        [
+          ["attribute-type", at(`${idBody}/p/@id`), undefined],
+          ["attribute-type", at(`${idBody}/div/@id`), undefined],
+          ["attribute-type", at(`${idBody}/div/@aria-labelledby`), undefined],
+          ["attribute-type", at(`${idBody}/div/@aria-labelledby`), "idref-target"],
+        ],
+      );
+    });
+
+    it("align-54 ID table E16: refuses an IDREF, and each token of a list of IDREFs, that names no id of the document as attribute-type, idref-target, and resolves one that names a later id", () => {
+      assert.deepStrictEqual(
+        idFound(
+          idItem(
+            [],
+            [
+              el("div", [attr("aria-describedby", "a b"), attr("aria-activedescendant", "z")]),
+              el("p", [attr("aria-labelledby", "later")], [text("x")]),
+              el("p", [attr("id", "a")], [text("y")]),
+              el("div", [attr("id", "later")]),
+            ],
+          ),
+        ),
+        [
+          [
+            "attribute-type",
+            at(`${idBody}/div[1]/@aria-describedby`),
+            idrefTarget("div", "aria-describedby", "b"),
+          ],
+          [
+            "attribute-type",
+            at(`${idBody}/div[1]/@aria-activedescendant`),
+            idrefTarget("div", "aria-activedescendant", "z"),
+          ],
+        ],
+      );
+    });
+
+    it("align-54 ID table E16: refuses a text entry's response-identifier under qti-null's xsi:type that names no ID, as the governing type makes it an IDREF (reading 84): the research probe a84_null_textentry_idref", () => {
+      assert.deepStrictEqual(idFound(idNulled("NOPE")), [
+        [
+          "attribute-type",
+          at(`${idSetting}/qti-null/@response-identifier`),
+          idrefTarget("qti-null", "response-identifier", "NOPE"),
+        ],
+      ]);
+      assert.deepStrictEqual(idFound(idNulled("RESPONSE")), []);
+    });
+
+    it("align-54 ID table E16: refuses a wildcard xml:id on an element whose governing type declares an ID, written or not, as unknown-attribute (reading 109): the research probes p109a and p109d", () => {
+      const exited = `${idProcessing}/qti-exit-response`;
+      const wild = [
+        "unknown-attribute",
+        at(`${exited}/@xml:id`),
+        { attribute: "xml:id", element: "qti-exit-response", reading: "109" },
+      ] as const;
+
+      assert.deepStrictEqual(idFound(idExit(attr("id", "b", xmlNamespace))), [wild]);
+      assert.deepStrictEqual(idFound(idExit(attr("id", "a"), attr("id", "b", xmlNamespace))), [
+        wild,
+      ]);
+      assert.deepStrictEqual(idFound(idExit()), []);
+    });
+
+    it("align-54 ID table E16: a wildcard xml:id where the governing type declares no ID is one of the document's IDs: an IDREF resolves to it, and another element may not repeat it (reading 109)", () => {
+      const operator = idSet(el("qti-custom-operator", [attr("id", "w", xmlNamespace)]));
+
+      assert.deepStrictEqual(
+        idFound(
+          idItem([idScore], [el("p", [attr("aria-labelledby", "w")], [text("x")])], [operator]),
+        ),
+        [],
+      );
+      assert.deepStrictEqual(
+        idFound(idItem([idScore], [el("p", [attr("id", "w")], [text("x")])], [operator])),
+        [
+          [
+            "duplicate-identifier",
+            at(`${idSetting}/qti-custom-operator/@xml:id`),
+            { identifier: "w", reading: "101" },
+          ],
+        ],
+      );
+    });
+
+    it("align-54 ID table D3b: refuses an element id equal to a response declaration's identifier as duplicate-identifier, and resolves a text entry's response-identifier to the declaration (reading 14): the research probe a74_resp_id", () => {
+      assert.deepStrictEqual(
+        idFound(idItem([idResponse], [el("p", [attr("id", "RESPONSE")], [text("x")])])),
+        [
+          [
+            "duplicate-identifier",
+            at(`${idBody}/p/@id`),
+            { identifier: "RESPONSE", reading: "14" },
+          ],
+        ],
+      );
+      assert.deepStrictEqual(
+        idFound(
+          idItem(
+            [idResponse],
+            [
+              el(
+                "p",
+                [],
+                [el("qti-text-entry-interaction", [attr("response-identifier", "RESPONSE")])],
+              ),
+            ],
+          ),
+        ),
+        [],
+      );
+    });
+
+    it("align-54 ID table E1b: refuses an element id equal to a context declaration's identifier as duplicate-identifier (reading 74): the research probe a74_ctx_id", () => {
+      assert.deepStrictEqual(
+        idFound(idItem([idResponse, idContext], [el("p", [attr("id", "CTX")], [text("x")])])),
+        [["duplicate-identifier", at(`${idBody}/p/@id`), { identifier: "CTX", reading: "74" }]],
+      );
+    });
+
+    it("align-54 ID table E1b: leaves two of the root's declarations of one identifier to the prose rules, which refuse them as two declarations of one name (E1a)", () => {
+      assert.deepStrictEqual(idFound(idItem([idResponse, renamed(idContext, "RESPONSE")], [])), []);
+      assert.deepStrictEqual(idFound(idItem([idResponse, idResponse], [])), []);
+    });
+
+    it("align-54 ID table E16: does not resolve an outcome declaration's variable-identifier-ref, which reading 15 sets aside", () => {
+      const referring = el("qti-outcome-declaration", [
+        attr("identifier", "SCORE"),
+        attr("cardinality", "single"),
+        attr("base-type", "float"),
+        attr("variable-identifier-ref", "EXTERNAL"),
+      ]);
+
+      assert.deepStrictEqual(idFound(idItem([referring], [])), []);
+    });
+
+    it("align-54 ID table E16: leaves an IDREF unrefused where the table cannot be complete: in a document that includes a fragment (reading 117), and where it names an id of a MathML island", () => {
+      const labelled = el("p", [attr("aria-labelledby", "m1")], [text("x")]);
+      const island = el(
+        "math",
+        [],
+        [el("mi", [attr("id", "m1")], [text("y")], mathmlNamespace)],
+        mathmlNamespace,
+      );
+      const include = el("include", [attr("href", "fragment.xml")], [], xincludeNamespace);
+
+      assert.deepStrictEqual(idFound(idItem([], [labelled, include])), []);
+      assert.deepStrictEqual(idFound(idItem([], [labelled, el("p", [], [island])])), []);
+      assert.deepStrictEqual(idFound(idItem([], [labelled])), [
+        [
+          "attribute-type",
+          at(`${idBody}/p/@aria-labelledby`),
+          idrefTarget("p", "aria-labelledby", "m1"),
+        ],
+      ]);
+    });
+
+    it("align-54 ID table E16: judges no manifest's IDs: a repeated resource identifier and a dependency that names nothing draw no ID refusal, the manifest's own rules judging the dependency (rule db2ef322)", () => {
+      const manifest = titledManifest("en");
+      const resources = el(
+        "resources",
+        [],
+        [
+          idResource([el("dependency", [attr("identifierref", "NONE")], [], manifestNamespace)]),
+          idResource([]),
+        ],
+        manifestNamespace,
+      );
+      const source = doc(manifest.location, {
+        ...manifest.root,
+        children: manifest.root.children.map((child) =>
+          child.kind === "element" && child.local === "resources" ? resources : child,
+        ),
+      });
+
+      assert.deepStrictEqual(
+        walkedManifest(source).filter(
+          (refusal) =>
+            refusal.rule === "duplicate-identifier" || refusal.detail["check"] === "idref-target",
+        ),
+        [],
+      );
+    });
+
+    it("align-54 ID table E16: a repeated id on qti-interaction-module, typed xs:NCName, is no ID (the control)", () => {
+      assert.isTrue(declaresId("qti-interaction-module", "NCName"));
+      assert.isTrue(declaresId("p"));
+    });
+
+    it.effect(
+      "align-54 ID table E16: the fractions documents' repeated qti-interaction-module id draws no duplicate-identifier, so they stay refused only as before (the control)",
+      () =>
+        Effect.gen(function* fractions() {
+          const path = "qtiv3-examples/packaging/pci/pci_item_examples.zip.d/fractions1.xml";
+          const source = yield* readCorpusFile(path).pipe(
+            Effect.flatMap((bytes) => readSource(path, bytes)),
+          );
+          const modules = [...walkDocument(source)].filter(
+            ({ element: walked }) => walked.local === "qti-interaction-module",
+          );
+
+          assert.isAbove(modules.length, 1);
+          assert.deepStrictEqual(
+            checkStructure(source, generatedTables).filter(
+              (refusal) =>
+                refusal.rule === "duplicate-identifier" ||
+                refusal.detail["check"] === "idref-target",
+            ),
+            [],
+          );
+        }),
+      { tags: ["corpus"] },
+    );
   });
 });
