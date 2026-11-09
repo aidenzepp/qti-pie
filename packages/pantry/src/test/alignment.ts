@@ -12,8 +12,8 @@
  * - `content:character`, per (version, kind): whether character data may stand among its children,
  *   against `Admission`'s `text` child;
  * - `content:automaton`, per (version, kind) with element content: order, required particles,
- *   at-most-once and exclusive choice, which the operator's ruling of 2026-11-05 gives one owner,
- *   the Glushkov automaton (`Follow` and `Last`);
+ *   at-most-once and exclusive choice, which Bjorn's ruling of 2026-11-05 gives one owner, the
+ *   Glushkov automaton (`Follow` and `Last`);
  * - `content:count`, per particle whose bound lies in 2…n: the count law `Counted`, which the
  *   automaton relaxes;
  * - `content:count-beyond`, per `Counted` row the XSD's particle does not state as a total: a
@@ -31,11 +31,11 @@
  *   readings 90 and 10);
  * - `text:domain`, per simple-content (version, kind): `TextDomain`'s row;
  * - `reading`, per spec reading of `docs/spec-readings.md`, with the status the alignment audit gives
- *   it after the operator's rulings.
+ *   it after Bjorn's rulings.
  *
  * A status is `G` (the grammar states the rule), `reading` (it departs from the XSD by a recorded
  * spec reading), `R` (a ruled gap: reading 2's recorded MathML limits and reading 50), `P` (a named
- * slice owns it and nothing states it yet), `RG` (a representation gap the operator has not ruled),
+ * slice owns it and nothing states it yet), `RG` (a representation gap Bjorn has not ruled),
  * `U` (nothing owns it: XSD-invalid content is accepted) or `X` (contradicted: the grammar refuses
  * XSD-valid content, or states a rule with no reading behind it). The value domains' lexical spaces
  * beyond their enumerations are `lexical.oracle.test.ts`'s, against `xmllint`.
@@ -100,7 +100,7 @@ export interface Rule {
 }
 
 /**
- * A spec reading's entry: its status after the operator's rulings of 2026-11-05 and the slice or
+ * A spec reading's entry: its status after Bjorn's rulings of 2026-11-05 and the slice or
  * relation that owns it, from the alignment audit's Matrix B (§7).
  */
 interface ReadingEntry {

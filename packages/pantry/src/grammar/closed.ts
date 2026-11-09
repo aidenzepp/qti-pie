@@ -173,7 +173,7 @@ export interface Closed<Key extends readonly AnyKeyField[], Payload extends read
 }
 
 /**
- * A closed relation whose rows carry their spec source (the operator's ruling of 2026-11-05): the
+ * A closed relation whose rows carry their spec source (Bjorn's ruling of 2026-11-05): the
  * XSD particle or declaration a row reads, by file and line in its version, or the specification
  * or spec reading that states it. A refusal maps from its law to its source rule by this lookup,
  * so it explains itself from the law, the row's keys and the grammar's constants. The source is
@@ -624,7 +624,7 @@ export const closed = <
 };
 
 /**
- * Construct a closed relation whose rows carry their sources (the operator's ruling of 2026-11-05),
+ * Construct a closed relation whose rows carry their sources (Bjorn's ruling of 2026-11-05),
  * each row stated with its own: the source is host data, read by key, and never enters the
  * relation's constant. It checks no row ({@link lookupOf}).
  *

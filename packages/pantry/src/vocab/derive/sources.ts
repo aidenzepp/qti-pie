@@ -41,7 +41,7 @@ export interface XsdSource {
  * content-packaging extension (`cpext/`), whose 3.0 and 3.0.1 files each import their version's
  * AfA DRD (`drd/`) and the XLink attributes (`xlink/`). The usage data XSD (`usagedata/`) is the
  * schema of a usage data document; 1EdTech publishes it for QTI 3.0 only, and 3.0.1 reads the same
- * file. These nine were taken on 2026-11-05, the operator's ruling, by the same rule.
+ * file. These nine were taken on 2026-11-05, Bjorn's ruling, by the same rule.
  */
 export const sources = {
   "cpext/imsqtiv3p0_cpextv1p2_v1p0.xsd": {

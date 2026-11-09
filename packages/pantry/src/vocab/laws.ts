@@ -656,7 +656,7 @@ export const lawTable = {
   "N5 Follow": {
     rule: "ordering",
     source:
-      "XML Schema Part 1 §3.8, each content model as its Glushkov automaton (content.ts Follow; the operator's ruling of 2026-11-05)",
+      "XML Schema Part 1 §3.8, each content model as its Glushkov automaton (content.ts Follow; Bjorn's ruling of 2026-11-05)",
   },
   "N5 admitted": {
     rule: "admission",

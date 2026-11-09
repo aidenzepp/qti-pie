@@ -2052,7 +2052,7 @@ describe("the fixtures the importer accepts today", () => {
 });
 
 /**
- * Reading 14, restated by the operator on 2026-11-05: a text-entry interaction's
+ * Reading 14, restated by Bjorn on 2026-11-05: a text-entry interaction's
  * `response-identifier` and `string-identifier` are `xs:IDREF`s, and a response declaration's
  * `identifier` is an `xs:ID`, as the XSD types them.
  */

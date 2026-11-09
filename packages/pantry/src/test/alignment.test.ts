@@ -7,7 +7,7 @@
  * reproduces it byte for byte from the cache), and the readings are `docs/spec-readings.md`'s;
  * `census` (`#pantry/test/alignment.ts`) joins each to the relation that owns it.
  *
- * The contract, the operator's completion criterion for exact alignment:
+ * The contract, Bjorn's completion criterion for exact alignment:
  *
  * - No rule is contradicted (`X`): a rule the grammar breaks is either aligned or recorded as a spec
  *   reading (`reading`) or a ruled gap (`R`: reading 2's recorded MathML limits and reading 50),

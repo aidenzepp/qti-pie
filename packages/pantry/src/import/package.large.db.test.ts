@@ -1,5 +1,5 @@
 /**
- * A package past one Bind message (plan W5, Q5.20; fin.md §4.5a; the operator's ruling of
+ * A package past one Bind message (plan W5, Q5.20; fin.md §4.5a; Bjorn's ruling of
  * 2026-11-05 on issue #3): the every-relation package (`#pantry/test/gen/every-relation.ts`) with a
  * bulk of binary entries whose record alone is longer than PostgreSQL's longest message, imported
  * in one transaction and exported back equal.

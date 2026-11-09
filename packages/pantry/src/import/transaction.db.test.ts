@@ -1,5 +1,5 @@
 /**
- * One transaction per package (plan W5, Q5.20; the operator's ruling of 2026-11-05 on issue #3),
+ * One transaction per package (plan W5, Q5.20; Bjorn's ruling of 2026-11-05 on issue #3),
  * over the every-relation package (`#pantry/test/gen/every-relation.ts`), whose import writes a row
  * of every stored relation of `Qti`: its ChangeSet compiles, it imports in one transaction, its
  * export gives back its source, and a failure injected through `WrapApply` while the

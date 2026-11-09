@@ -552,7 +552,7 @@ export const documentDocumentBreaches = (
  * The resource types whose LOM record names its document by identifier and title (QTI 3.0 Metadata
  * §2.7.1; reading 62): an item's and a test's, as the implementation guide's LOM profile says "the
  * test or item identifier should be present as an identifier in the LOM metadata", a
- * recommendation the operator rules binding.
+ * recommendation Bjorn rules binding.
  */
 export const lomNamedTypes: ReadonlySet<string> = new Set([
   "imsqti_item_xmlv3p0",

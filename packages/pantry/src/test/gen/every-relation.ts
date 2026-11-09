@@ -1,5 +1,5 @@
 /**
- * The every-relation package (plan W5, Q5.20; the operator's ruling of 2026-11-05 on issue #3): a
+ * The every-relation package (plan W5, Q5.20; Bjorn's ruling of 2026-11-05 on issue #3): a
  * generator of QTI 3.0 content packages, each valid by construction, whose import writes a row of
  * every stored relation of `Qti` in its one ChangeSet.
  *

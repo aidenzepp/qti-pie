@@ -6,7 +6,7 @@
  * Oracle: a second implementation. libxml2's XML Schema validator (`xmllintValidate`) judges each
  * probe value as the value of an attribute, or the text of a simple-content element, of a kind the
  * pinned XSDs declare, against the type the XSD gives it; the grammar judges the same value by its
- * domain's regex, `lexical ~ pattern`, with no whitespace step before it: the operator's ruling of
+ * domain's regex, `lexical ~ pattern`, with no whitespace step before it: Bjorn's ruling of
  * 2026-11-05 makes the one attribute CHECK `lexical ~ ValuePattern.at(AttributeGrammar.at(...))` on
  * the stored form, so a domain whose XSD type collapses or replaces whitespace must accept the
  * forms XML Schema normalizes (spec-alignment §9.6). The harness,

@@ -1,6 +1,6 @@
 /**
- * The content grammar: each (version, parent)'s content model as its Glushkov automaton (the
- * operator's ruling of 2026-11-05, Glushkov for all 638 models).
+ * The content grammar: each (version, parent)'s content model as its Glushkov automaton (Bjorn's
+ * ruling of 2026-11-05, Glushkov for all 638 models).
  *
  * A model's positions are its element and wildcard particles, numbered from 1 in tree order (U4's
  * particle numbering); 0 is the start. A child's `Admission` row carries its position: the one

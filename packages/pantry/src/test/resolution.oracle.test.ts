@@ -5,7 +5,7 @@
  * decodes with the platform's strict UTF-8 decoder, the oracle runs §5.2.4's five rules over text
  * below a sentinel root and decodes with a UTF-8 decoder of its own.
  *
- * The search is brutal in the operator's sense: generated hrefs, bases and documents under a swarm
+ * The search is brutal in Bjorn's sense: generated hrefs, bases and documents under a swarm
  * that turns each kind of segment on or off per case, the adversarial cases drawn by name, the
  * small scope exhausted, and planted bugs, each a plausible slip of an importer, that the search
  * must tell apart from the importer.
