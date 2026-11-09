@@ -18,7 +18,7 @@ import { Array as Arr, Effect, Formatter, Layer, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawNameOf, schemaLawsOf } from "#pantry/import/refusal.ts";
+import { lawNameOf } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
@@ -27,6 +27,7 @@ import { Author, AuthorApp } from "#pantry/qti/own-login.ts";
 import { loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { schemaLawsOf } from "#pantry/test/law-namer.ts";
 
 /**
  * Break a name: a leading digit, which no NCName's first character is (Namespaces in XML 1.0,

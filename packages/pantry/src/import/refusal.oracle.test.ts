@@ -47,17 +47,11 @@ import {
   contractNames,
   explain,
   generatedNames,
-  keyNames,
   lawNameOf,
   owedRules,
-  patternNameIn,
-  patternTypeOf,
   refusalOf,
   ruleOfLaw,
   rulesOf,
-  schemaLawsOf,
-  statedLaws,
-  textLaws,
 } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { Qti } from "#pantry/qti/own.ts";
@@ -76,6 +70,14 @@ import { PackageReadError } from "#pantry/package/read.ts";
 import { ZipRefusal } from "#pantry/package/zip.ts";
 import { ImportRefused, ImportRule, limitRules, ruleOfError } from "#pantry/import/rules.ts";
 import type { ReadRefusal, Rule } from "#pantry/import/rules.ts";
+import {
+  keyNames,
+  patternNameIn,
+  patternTypeOf,
+  schemaLawsOf,
+  statedLaws,
+  textLaws,
+} from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

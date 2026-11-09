@@ -25,8 +25,9 @@ import { queriesOf } from "#pantry/qti/queries.ts";
  * install: the stored level, every module's relations and laws and the policy's single-CDN laws
  * (`#pantry/qti/cdn.ts`); over it the level `QtiQueries`, every query and every rule over one, each
  * defined over that stored level; and the groups of the statements this call built, the policy's
- * and the queries', by the law each states, which the importer names a refusal of this schema by
- * (`#pantry/import/refusal.ts` `namedLaws`), since it knows a statement by its identity.
+ * and the queries', by the law each states, which the schema's own naming of its laws reads
+ * (`#pantry/test/law-namer.ts` `namedLaws`, the source of the committed law-name dictionary),
+ * since it knows a statement by its identity.
  *
  * Each call builds its own schema, statements and queries: one install builds once and holds the
  * result.

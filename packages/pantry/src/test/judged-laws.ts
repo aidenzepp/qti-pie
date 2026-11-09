@@ -10,8 +10,8 @@
 import { Option } from "effect";
 import { containmentsIn, statedAs } from "#pantry/test/host-judge.ts";
 import type { Containment } from "#pantry/test/host-judge.ts";
-import { installedNameOf, statementLawsOf } from "#pantry/import/refusal.ts";
 import type { Qti } from "#pantry/qti/own.ts";
+import { installedNameOf, statementLawsOf } from "#pantry/test/law-namer.ts";
 
 /**
  * Read every containment the schema states from one relation (`containmentsIn` of
@@ -33,7 +33,7 @@ export const containmentsOf = (schema: typeof Qti, from: string): readonly Conta
  * (SQLSTATE 23514): grizzle's `constraintNamesOf(schema)` lookup of the check the schema states on
  * a relation under a declared name, a row check's CHECK constraint or a check over a derived
  * relation's triggers, so a test takes the name from the installation's own naming and never
- * spells it. It reads the importer's own (`installedNameOf` of `#pantry/import/refusal.ts`), whose
+ * spells it. It reads the schema's own (`installedNameOf` of `#pantry/test/law-namer.ts`), whose
  * lookup is bound once per schema and whose first read compiles the schema's law model, so a test
  * calls this in its body, under its own timeout, never where a run without the lease loads the
  * file.

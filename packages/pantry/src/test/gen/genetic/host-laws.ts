@@ -40,7 +40,7 @@
 import { Array as Arr, Formatter, Option, Predicate, Schema } from "effect";
 import { sameLaw } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
-import { lawNameOf, lawOfCheck, statedLaws, statementLawsOf } from "#pantry/import/refusal.ts";
+import { lawNameOf, lawOfCheck } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
@@ -60,6 +60,7 @@ import {
   unreadIn,
 } from "#pantry/test/predicates.ts";
 import type { Row as HeldRow, StoredSide, Term } from "#pantry/test/predicates.ts";
+import { statedLaws, statementLawsOf } from "#pantry/test/law-namer.ts";
 
 /**
  * One field's value as a row holds it: a text, a number, a natural, a flag or a set of handles.

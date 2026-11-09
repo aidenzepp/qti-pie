@@ -28,6 +28,7 @@ export const QtiBase = levels.base;
 
 /**
  * The groups of the statements built with {@link Qti}, its policy's and its queries', by the law
- * each states: the importer names a refusal by them (`#pantry/import/refusal.ts` `namedLaws`).
+ * each states: the schema's own naming of its laws reads them (`#pantry/test/law-namer.ts`
+ * `namedLaws`), which the committed law-name dictionary is generated from.
  */
 export const builtLawsByName = levels.lawsByName;

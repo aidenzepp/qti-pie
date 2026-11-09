@@ -1,5 +1,5 @@
 /**
- * The laws each module names where it states them (`namedLaws` of `#pantry/import/refusal.ts`),
+ * The laws each module names where it states them (`namedLaws` of `#pantry/test/law-namer.ts`),
  * held to the law table and to the schema: every group's name is a law of the table, a check sits
  * in its own law's group, every statement of `Qti` sits in exactly one group, and every law grizzle
  * names for a statement is named by its group, so the law table reads each name from the
@@ -8,15 +8,10 @@
 import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option } from "effect";
-import {
-  checkNameOf,
-  lawNameOf,
-  lawNames,
-  namedLaws,
-  statementLawsOf,
-} from "#pantry/import/refusal.ts";
+import { checkNameOf, lawNameOf, lawNames } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/own.ts";
+import { namedLaws, statementLawsOf } from "#pantry/test/law-namer.ts";
 
 describe("the laws each module names where it states them", () => {
   it("names each group by a law of the table, holds each check in its own law's group, groups every statement of Qti once, and names each law by its statement's group", () => {

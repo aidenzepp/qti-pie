@@ -221,10 +221,11 @@ const constraintNamesOnce = Fn.memoize(constraintNamesOf);
 
 /**
  * The timeout, in milliseconds, of this file's tests that read a check's installed name: a hang
- * guard, never a budget. A test compiles `Qti`'s law model at most twice, once for the refusal
- * (`#pantry/import/refusal.ts` `installedNameOf`, its lookup bound once per schema) and once for
- * the oracle ({@link constraintNamesOnce}), each only where no test before it in the run has: the
- * slowest is two compiles and the import, and grizzle puts one compile of a large schema at 15 to
+ * guard, never a budget. A test compiles `Qti`'s law model at most once, for the oracle
+ * ({@link constraintNamesOnce}), and only where no test before it in the run has: the refusal reads
+ * a check's installed name from the committed law-name dictionary (`#pantry/vocab/law-names.json`)
+ * and compiles nothing. It was measured when the refusal compiled the model as well, so the
+ * slowest was two compiles and the import, and grizzle puts one compile of a large schema at 15 to
  * 45 s (`e3975d35`). 18.1 s was its slowest such test on 2026-11-08, at a load no run recorded.
  * Measured 2026-11-09: 20.2 s at a load average of 62 to 76, its slowest such test ("under --json
  * prints one error object with the rules, each law and its sources"), the file alone at nice 19 on

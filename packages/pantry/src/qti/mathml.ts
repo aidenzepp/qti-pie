@@ -49,7 +49,7 @@ const namedApart = (statement: (typeof mathmlLaws)[number]): boolean =>
 
 /**
  * {@link mathmlLaws} by the law each states, the law's name its key, as every other module names
- * its laws where it states them (`namedLaws`, `#pantry/import/refusal.ts`), each check in the
+ * its laws where it states them (`namedLaws`, `#pantry/test/law-namer.ts`), each check in the
  * group of its own name:
  *
  * - **MathML head qualifier:** the apply family's head qualifier containment, a pair MathML 3's §4.4

@@ -57,7 +57,7 @@ const xmlSide = [
  * The PostgreSQL side, what pantry keeps (§2.3) at today's paths, as globs relative to `src`: the
  * schema, its roles and logins, the grammar's generators and installed constants, the inventory
  * data and its offline derivers, the database layer, the scan and its paging, and the refusal
- * report with its law catalog.
+ * report with its law catalog and the committed law-name dictionary (`vocab/law-names.json`).
  *
  * `xml/oracle.ts` is the grammar's own `xmllint` harness, which only tests reach and which imports
  * no module of pantry's.
@@ -70,6 +70,7 @@ const databaseSide = [
   "import/refusal.ts",
   "package/refusal-origin.ts",
   "qti/*.ts",
+  "vocab/*.json",
   "vocab/**/*.ts",
   "xml/oracle.ts",
 ];

@@ -38,7 +38,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { grammar, ResourceTypeLexical } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawOfCheck, ruleOfLaw, statedLaws } from "#pantry/import/refusal.ts";
+import { lawOfCheck, ruleOfLaw } from "#pantry/import/refusal.ts";
 import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
@@ -70,6 +70,7 @@ import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { itemResourceType, linkResourceTypes } from "#pantry/vocab/terms/tests.ts";
+import { statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

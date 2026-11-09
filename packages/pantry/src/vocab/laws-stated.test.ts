@@ -12,10 +12,11 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import type { CdnPolicy } from "#pantry/db/install.ts";
-import { lawNames, namedLaws, statedLaws } from "#pantry/import/refusal.ts";
+import { lawNames } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import { cdnLawsByName } from "#pantry/qti/cdn.ts";
 import { statedInParts } from "#pantry/test/oracle-laws.ts";
+import { namedLaws, statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * A single-CDN install's policy, whose schema states the CDN laws: `CDN data`, `CDN foreign`,

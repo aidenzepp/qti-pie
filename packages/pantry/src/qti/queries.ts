@@ -9,8 +9,8 @@
  * A query is over the stored level, and no law of that level reads one, so the queries and their
  * rules live here, in a module `base.ts` never imports, and `Qti` (`#pantry/qti/schema.ts`) is the
  * level that holds them. Each domain's rules are grouped by the law each states, as every module's
- * are, and {@link queriesOf} returns those groups beside the rules, so the importer names a refusal
- * by them (`#pantry/import/refusal.ts` `namedLaws`).
+ * are, and {@link queriesOf} returns those groups beside the rules, so the schema's own naming of
+ * its laws reads them (`#pantry/test/law-namer.ts` `namedLaws`).
  *
  * A query is a value over one built stored level, so {@link queriesOf} builds them over the level it
  * is given, and loading this module builds none. Its statements are its call's own: the caller that

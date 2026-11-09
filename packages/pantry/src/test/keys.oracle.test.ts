@@ -4,7 +4,7 @@
  *
  * - **The list is the schema's.** `#pantry/test/key-copies.ts` reads its copies from the schema's
  *   statements. This file holds them, statement by statement and field by field, to the laws the
- *   law table states (`src/import/refusal.ts` `statedLaws`), to every `keyText` field of the
+ *   law table states (`src/test/law-namer.ts` `statedLaws`), to every `keyText` field of the
  *   document relations, and to the copies whose source is no document row.
  * - **The verdict is the schema's.** Generated packages carry key texts of generated lengths in 1-,
  *   2-, 3- and 4-byte scripts around the bound the schema's type admits. The oracle refuses one
@@ -27,7 +27,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Predicate, Schema } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
-import { ruleOfLaw, statedLaws } from "#pantry/import/refusal.ts";
+import { ruleOfLaw } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { keyText, keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
@@ -38,6 +38,7 @@ import type { Datum } from "#pantry/test/predicates.ts";
 import { generatedFields, judgedSideOf } from "#pantry/test/host-judge.ts";
 import { identityOf, keyCopies, keyTextFields } from "#pantry/test/key-copies.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
+import { statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

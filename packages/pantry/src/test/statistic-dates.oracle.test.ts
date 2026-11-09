@@ -19,12 +19,13 @@ import { searched } from "@grizzle/testing/vitest";
 import { lexical, date } from "@bjornpagen/grizzle";
 import { Array as Arr, Duration, Effect, Equivalence, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
-import { lawNameOf, statedLaws } from "#pantry/import/refusal.ts";
+import { lawNameOf } from "#pantry/import/refusal.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
+import { statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

@@ -10,7 +10,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option } from "effect";
-import { lawNameOf, lawNames, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
+import { lawNameOf, lawNames, lawOfCheck } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import {
   alignLaws,
@@ -22,6 +22,7 @@ import {
 } from "#pantry/qti/mathml-align.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti, QtiBase } from "#pantry/qti/own.ts";
+import { statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * How long building a schema over every relation of `Qti` may take: its statements are planned

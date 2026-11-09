@@ -46,7 +46,7 @@ import {
 import type { Law } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Formatter, Option, Result, Schema } from "effect";
-import { lawNameOf, statedLaws } from "#pantry/import/refusal.ts";
+import { lawNameOf } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { evaluatedLaws } from "#pantry/test/gen/genetic/host-laws.ts";
 import { judge, judgedLaws, modelledRelations } from "#pantry/test/host-judge.ts";
@@ -54,6 +54,7 @@ import type { HostRow } from "#pantry/test/host-judge.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
 import { copiesOf } from "#pantry/test/key-copies.ts";
 import { isJudged, readsDerived, SideSchema, StatementSchema } from "#pantry/test/predicates.ts";
+import { statedLaws } from "#pantry/test/law-namer.ts";
 
 /**
  * The timeout, in milliseconds, of this file's tests that compile Qti's law model: a hang guard,
