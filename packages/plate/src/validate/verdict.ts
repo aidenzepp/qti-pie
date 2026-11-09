@@ -679,6 +679,8 @@ const placeNode = (
       };
     }
 
+    case "feedback-block":
+    case "feedback-inline":
     case "template-block":
     case "template-inline": {
       const inner = placeNodes(node.content, drops, placed, inMedia);
@@ -727,8 +729,9 @@ const inDocumentOrder = (
 /**
  * Give the item its URL notices and the accepted document's unsupported features.
  *
- * A dropped URL whose element the body holds is a notice beside it. One inside a part the body
- * already shows as a notice, or outside the body, has no place to show, so it is a mark.
+ * A dropped URL whose element the body or a modal feedback's content holds is a notice beside it.
+ * One inside a part the page already shows as a notice, or outside both, has no place to show, so
+ * it is a mark.
  *
  * @param built The item built from the secured source.
  * @param secured The secured source and what securing it removed.
@@ -737,6 +740,11 @@ const inDocumentOrder = (
 const complete = (built: Item, secured: Secured): Item => {
   const placed = new Set<string>();
   const result = placeNodes(built.body, secured.drops, placed, false);
+  const modalFeedback = built.modalFeedback?.map((feedback) => {
+    const content = placeNodes(feedback.content, secured.drops, placed, false);
+
+    return { ...feedback, content: [...content.nodes, ...content.lifted] };
+  });
   const dropped = Array.from(secured.drops, ([path, features]) =>
     features.map((feature): UnsupportedFeature => ({
       feature,
@@ -745,7 +753,7 @@ const complete = (built: Item, secured: Secured): Item => {
     })),
   ).flat();
 
-  return {
+  const completed: Item = {
     ...built,
     body: [...result.nodes, ...result.lifted],
     unsupported: inDocumentOrder(
@@ -753,6 +761,8 @@ const complete = (built: Item, secured: Secured): Item => {
       secured.source,
     ),
   };
+
+  return modalFeedback === undefined ? completed : { ...completed, modalFeedback };
 };
 
 /**

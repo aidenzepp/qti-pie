@@ -11,10 +11,10 @@ import { Option } from "effect";
 import type { BodyNode, Interaction } from "#plate/model/item.ts";
 
 /**
- * Collect the interactions of body nodes in document order, inside elements, template blocks and
- * inlines, Prompts, Labels and choices. A template block's or inline's content is walked whatever
- * its visibility, so over the model its interactions are found; a redacted body holds no template
- * block or inline, its hidden content already gone.
+ * Collect the interactions of body nodes in document order, inside elements, template and feedback
+ * blocks and inlines, Prompts, Labels and choices. A template or feedback block's or inline's
+ * content is walked whatever its visibility, so over the model its interactions are found; a
+ * redacted body holds no template or feedback block or inline, its hidden content already gone.
  *
  * @param nodes The body nodes.
  * @returns The interactions.
@@ -25,6 +25,8 @@ export const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction
       case "element": {
         return interactionsIn(node.children);
       }
+      case "feedback-block":
+      case "feedback-inline":
       case "template-block":
       case "template-inline": {
         return interactionsIn(node.content);

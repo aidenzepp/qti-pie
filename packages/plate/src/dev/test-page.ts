@@ -5,7 +5,7 @@
  * the form's posts.
  *
  * The library builds no form and no flow (rule `a9d04969`), so this module composes them, as an
- * example host would. The session page holds `render(redact(item, view.record,
+ * example host would. The session page holds `render(redact(item, view.page,
  * view.configuration))`, with the current item's instance, configuration, values and disabled
  * state, then the playground's Save button, then `renderNavigation` with each navigation button
  * swapped for the playground's own submit button (rule `9af3809b`), so every step is a native post
@@ -375,7 +375,7 @@ const itemPage = (sitting: Sitting, view: ItemView, shown: Shown): Page => {
           Result.map(renderStatus(input, view.configuration), (rendered) => [rendered.html]),
       });
       const item = yield* render(
-        redact(document, view.record, view.configuration),
+        redact(document, view.page, view.configuration),
         view.configuration,
         {
           ...shown.options,

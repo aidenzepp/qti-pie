@@ -56,16 +56,21 @@ export interface ItemRecord {
 }
 
 /**
- * The part of an {@link ItemRecord} `redact` reads: the outcomes and the template values it shows
- * an item by. It holds no seed, so nothing redacted can redraw the values.
+ * The part of an {@link ItemRecord} `redact` and `checkResponses` read: what the page shows an
+ * item by. It holds no seed, so nothing redacted can redraw the values.
+ *
+ * `templates` show or hide template content and choices, and `outcomes` give the printed
+ * variables their values. `attempt` says whether response processing has run in the attempt the
+ * page shows: once it has (`submitted`), the item's feedback follows `outcomes`, and its modal
+ * feedback may show, since modal feedback "is shown to the candidate directly following response
+ * processing" (the information model's ModalFeedback, section 5.93). Before it has (`none`), the
+ * page is the item body as the attempt starts (section 7.19.3, `allow-review`: "the visibility of
+ * any integrated feedback determined by the default values of the outcome variables"), so its
+ * integrated feedback follows each outcome's starting value, `defaults`' where template processing
+ * set one ({@link outcomeStart}), and no modal feedback shows. A record plate writes with no
+ * attempt processed holds exactly those values in `outcomes`.
  */
-export type RedactRecord = Pick<ItemRecord, "outcomes" | "templates">;
-
-/**
- * The part of an {@link ItemRecord} `checkResponses` reads: the template values that decide which
- * choices an item shows. It holds no seed.
- */
-export type ResponsesRecord = Pick<ItemRecord, "templates">;
+export type RedactRecord = Pick<ItemRecord, "attempt" | "defaults" | "outcomes" | "templates">;
 
 /**
  * The part of an {@link ItemRecord} `solution` reads: the correct responses template processing
@@ -208,6 +213,26 @@ export const outcomeDefaults = (item: Item): ItemRecord["outcomes"] => {
     ? { [completionStatus]: completionValue("not_attempted"), ...declared }
     : declared;
 };
+
+/**
+ * Give each declared outcome of an item the value it holds before any processing sets it: the
+ * default template processing set for it, else its starting value, and the built-in
+ * `completionStatus` at `not_attempted` where the item holds it, as {@link outcomeDefaults} gives
+ * them. A default set for a response is not an outcome's, so it never joins the outcomes.
+ *
+ * @param item The item.
+ * @param defaults The defaults template processing set, by identifier.
+ * @returns The outcomes, keyed by identifier.
+ */
+export const outcomeStart = (
+  item: Item,
+  defaults: ItemRecord["defaults"],
+): ItemRecord["outcomes"] => ({
+  ...outcomeDefaults(item),
+  ...Object.fromEntries(
+    Object.entries(defaults).filter(([identifier]) => item.outcomes.has(identifier)),
+  ),
+});
 
 /**
  * Start the session of an item that has not been attempted.

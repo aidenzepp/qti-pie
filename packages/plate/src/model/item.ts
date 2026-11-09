@@ -685,6 +685,77 @@ export interface TemplateContent {
 }
 
 /**
+ * How an outcome variable controls the visibility of a feedback element: its `outcome-identifier`
+ * and its `show-hide` (the information model's FeedbackBlock, section 5.49, FeedbackInline, 5.52,
+ * ModalFeedback, 5.93, and TemplateBlockFeedbackBlock, 5.148).
+ */
+export interface FeedbackVisibility {
+  /**
+   * `outcome-identifier`: the outcome variable, of base type identifier and single or multiple
+   * cardinality, whose value response processing sets to show or hide the element (5.49.1).
+   */
+  readonly outcomeIdentifier: string;
+  /**
+   * `show-hide`: `show` hides the element unless the outcome variable matches, or contains, the
+   * element's identifier; `hide` shows it unless the variable does (5.49.3). A block's or an
+   * inline's is `show` when absent; a modal feedback's is required.
+   */
+  readonly showHide: "hide" | "show";
+}
+
+/**
+ * A `qti-feedback-block` (`kind` `feedback-block`) or a `qti-feedback-inline` (`feedback-inline`):
+ * integrated feedback, content in the item body shown or hidden by an outcome value (sections 5.49
+ * and 5.52), as template content is by a template value.
+ *
+ * The model holds it whatever the outcome's value, which comes from an attempt's record, so
+ * `redactItem` in `#plate/payload.ts` decides what the page sees in its place: its content where
+ * the value shows it, nothing where it hides it. A redacted body holds none.
+ */
+export interface FeedbackContent {
+  /**
+   * The content, read as any body content is: a block's `qti-content-body`'s, an inline's own.
+   */
+  readonly content: readonly BodyNode[];
+  /**
+   * `feedbackVisibility`: its `outcome-identifier` and `show-hide`.
+   */
+  readonly feedbackVisibility: FeedbackVisibility;
+  /**
+   * `identifier`: the identifier the outcome's value is matched against.
+   */
+  readonly identifier: string;
+  readonly kind: "feedback-block" | "feedback-inline";
+  readonly path: string;
+  /**
+   * The responses its content binds, as {@link TemplateContent.responses} lists a template
+   * block's: an interaction in hidden feedback "must also be hidden. The candidate must not be
+   * able to set or update the value of the associated response variables" (5.49).
+   */
+  readonly responses: readonly string[];
+}
+
+/**
+ * A `qti-modal-feedback` (the information model's ModalFeedback, section 5.93): feedback the item
+ * holds outside its body, "shown to the candidate directly following response processing" when its
+ * outcome's value shows it. Its content holds no interaction (5.93).
+ */
+export interface ModalFeedback {
+  /**
+   * The content of its `qti-content-body`, read as any body content is.
+   */
+  readonly content: readonly BodyNode[];
+  readonly feedbackVisibility: FeedbackVisibility;
+  readonly identifier: string;
+  readonly path: string;
+  /**
+   * `title`, an `xs:normalizedString`, none when absent, which "Delivery engines are not required
+   * to present ... but may do so, for example as the title of a modal pop-up window" (5.93.4).
+   */
+  readonly title: Option.Option<string>;
+}
+
+/**
  * A body part plate does not render, shown as a notice in its place; its subtree is dropped.
  */
 export interface Unsupported {
@@ -708,7 +779,7 @@ export type Interaction =
 
 /**
  * A node of the item body: an element, a text, one of the four interactions, a printed variable,
- * a template block or inline, or a notice.
+ * a template block or inline, a feedback block or inline, or a notice.
  */
 export type BodyNode =
   | BodyElement
@@ -719,6 +790,7 @@ export type BodyNode =
   | ExtendedTextInteraction
   | PrintedVariable
   | TemplateContent
+  | FeedbackContent
   | Unsupported;
 
 /**
@@ -780,6 +852,11 @@ export interface Item {
    * The root's `xml:lang`.
    */
   readonly lang: Option.Option<string>;
+  /**
+   * The `qti-modal-feedback` elements, in document order. Absent when the item has none, so an
+   * item built by hand may leave it out.
+   */
+  readonly modalFeedback?: readonly ModalFeedback[];
   readonly outcomes: ReadonlyMap<string, OutcomeDeclaration>;
   readonly processing: Option.Option<readonly Rule[]>;
   /**
@@ -2209,15 +2286,16 @@ const printedVariable = (
   });
 
 /**
- * Read a `qti-template-block`'s content: the content of its `qti-content-body`, read as any body
- * content is. Its `qti-stylesheet`s and its `qti-catalog-info` (`TemplateBlockDType`), which the
- * page does not show, are each a mark keyed by its name, as an item's own are.
+ * Read the content of a `qti-template-block`, a `qti-feedback-block` or a `qti-modal-feedback`:
+ * the content of its `qti-content-body`, read as any body content is. Its `qti-stylesheet`s and
+ * its `qti-catalog-info` (`TemplateBlockDType`, `FeedbackBlockDType`, `ModalFeedbackDType`), which
+ * the page does not show, are each a mark keyed by its name, as an item's own are.
  *
  * @param build The build.
- * @param block The template block.
+ * @param block The block.
  * @returns Its content, or a refusal.
  */
-const templateBlockContent = (
+const contentBodyOf = (
   build: Build,
   block: SourceElement,
 ): Effect.Effect<readonly BodyNode[], Refusal> =>
@@ -2235,23 +2313,20 @@ const templateBlockContent = (
   );
 
 /**
- * Name the responses a template block's or inline's source content binds: the
+ * Name the responses a template or feedback block's or inline's source content binds: the
  * `response-identifier` of every QTI element in it that carries one, each read as `identifierOf`
  * reads it, each once, in document order. A block's content is its `qti-content-body`'s; an
  * inline's, its own. It reads the source, not the body nodes, since a notice drops its subtree:
  * an interaction plate does not render binds its response as surely as one it does. Nested
- * template content is part of the content. The walk keeps its own stack, as `walk` does, so deep
- * content cannot exhaust the call stack.
+ * template and feedback content is part of the content. The walk keeps its own stack, as `walk`
+ * does, so deep content cannot exhaust the call stack.
  *
- * @param element The template block or inline.
- * @param kind Which of the two it is.
+ * @param element The template or feedback block or inline.
+ * @param block Whether it is a block, whose content is its `qti-content-body`'s.
  * @returns The responses, in document order.
  */
-const boundResponses = (
-  element: SourceElement,
-  kind: TemplateContent["kind"],
-): readonly string[] => {
-  const roots = kind === "template-block" ? childrenNamed(element, "qti-content-body") : [element];
+const boundResponses = (element: SourceElement, block: boolean): readonly string[] => {
+  const roots = block ? childrenNamed(element, "qti-content-body") : [element];
   const pending = roots.flatMap((root) => elementsOf(root)).toReversed();
   const responses = new Set<string>();
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
@@ -2293,7 +2368,7 @@ const templateContent = (
     const templateIdentifier = yield* identifierAttribute(build, element, "template-identifier");
     const templateVisibility = yield* templateVisibilityOf(build, element, templateIdentifier);
     const content = yield* kind === "template-block"
-      ? templateBlockContent(build, element)
+      ? contentBodyOf(build, element)
       : bodyNodes(build, element);
 
     return {
@@ -2301,8 +2376,97 @@ const templateContent = (
       identifier,
       kind,
       path: pathOf(build, element),
-      responses: boundResponses(element, kind),
+      responses: boundResponses(element, kind === "template-block"),
       templateVisibility,
+    };
+  });
+
+/**
+ * Read a feedback element's `outcome-identifier`, as an identifier, and its `show-hide`, `show`
+ * when absent (the XSD's default for a block or an inline; a modal feedback's is required).
+ *
+ * @param build The build.
+ * @param element A `qti-feedback-block`, a `qti-feedback-inline` or a `qti-modal-feedback`.
+ * @returns Its feedback visibility, or the refusal `missing-attribute` when it has no
+ *   `outcome-identifier`, or `attribute-type` when `show-hide` is neither `show` nor `hide`; the
+ *   validator refuses each first.
+ */
+const feedbackVisibilityOf = (
+  build: Build,
+  element: SourceElement,
+): Effect.Effect<FeedbackVisibility, Refusal> =>
+  Effect.gen(function* readFeedbackVisibility() {
+    const outcomeIdentifier = yield* identifierAttribute(build, element, "outcome-identifier");
+    const showHide = yield* enumerated(build, element, "show-hide", showHides);
+
+    return { outcomeIdentifier, showHide: Option.getOrElse(showHide, () => "show" as const) };
+  });
+
+/**
+ * Read a `qti-feedback-block` or a `qti-feedback-inline` into its body node: its `identifier`,
+ * read as an identifier, its feedback visibility ({@link feedbackVisibilityOf}), and its content: a
+ * block's `qti-content-body`'s ({@link contentBodyOf}), an inline's own, each read as any body
+ * content is, and the responses that content binds ({@link boundResponses}).
+ *
+ * @param build The build.
+ * @param element The feedback block or inline.
+ * @param kind Which of the two it is.
+ * @returns Its body node, or the refusal `missing-attribute` when it has no `identifier` or no
+ *   `outcome-identifier`, or `attribute-type` when `show-hide` is neither `show` nor `hide`; the
+ *   validator refuses each first.
+ */
+const feedbackContent = (
+  build: Build,
+  element: SourceElement,
+  kind: FeedbackContent["kind"],
+): Effect.Effect<FeedbackContent, Refusal> =>
+  Effect.gen(function* readFeedbackContent() {
+    markElement(build, element, true);
+
+    const identifier = yield* identifierAttribute(build, element, "identifier");
+    const feedbackVisibility = yield* feedbackVisibilityOf(build, element);
+    const content = yield* kind === "feedback-block"
+      ? contentBodyOf(build, element)
+      : bodyNodes(build, element);
+
+    return {
+      content,
+      feedbackVisibility,
+      identifier,
+      kind,
+      path: pathOf(build, element),
+      responses: boundResponses(element, kind === "feedback-block"),
+    };
+  });
+
+/**
+ * Read a `qti-modal-feedback`: its `identifier`, its feedback visibility, its `title` as an
+ * `xs:normalizedString`, and the content of its `qti-content-body` ({@link contentBodyOf}), read
+ * as any body content is, with the marks its elements carry as body elements, since the page shows
+ * it.
+ *
+ * @param build The build.
+ * @param element The modal feedback.
+ * @returns It, or the refusal `missing-attribute` when it has no `identifier` or no
+ *   `outcome-identifier`, or `attribute-type` when `show-hide` is neither `show` nor `hide`; the
+ *   validator refuses each first.
+ */
+const modalFeedbackOf = (
+  build: Build,
+  element: SourceElement,
+): Effect.Effect<ModalFeedback, Refusal> =>
+  Effect.gen(function* readModalFeedback() {
+    markElement(build, element, true);
+
+    const identifier = yield* identifierAttribute(build, element, "identifier");
+    const feedbackVisibility = yield* feedbackVisibilityOf(build, element);
+
+    return {
+      content: yield* contentBodyOf(build, element),
+      feedbackVisibility,
+      identifier,
+      path: pathOf(build, element),
+      title: Option.map(valueOf(element, "title"), normalizedString),
     };
   });
 
@@ -2344,6 +2508,14 @@ const bodyNode = (
 
   if (isQti(child, "qti-template-inline")) {
     return templateContent(build, child, "template-inline");
+  }
+
+  if (isQti(child, "qti-feedback-block")) {
+    return feedbackContent(build, child, "feedback-block");
+  }
+
+  if (isQti(child, "qti-feedback-inline")) {
+    return feedbackContent(build, child, "feedback-inline");
   }
 
   if (!isQti(child) || child.local.startsWith("qti-")) {
@@ -3631,6 +3803,34 @@ const recordResponseNames = (
   );
 
 /**
+ * Give an item the fields it holds only when it has some: `records` when it makes a record response
+ * declaration it holds, `unheld` when it makes a declaration it holds no value of, and
+ * `modalFeedback` when it has modal feedback, as a model built by hand leaves each out.
+ *
+ * @param item The item without them.
+ * @param held What the build collected.
+ * @param held.modalFeedback The item's modal feedback, in document order.
+ * @param held.records The record response declarations it holds, by identifier.
+ * @param held.unheld The declarations it holds no value of, by identifier.
+ * @returns The item with each that is not empty.
+ */
+const withHeld = (
+  item: Item,
+  held: {
+    readonly modalFeedback: readonly ModalFeedback[];
+    readonly records: ReadonlyMap<string, RecordDeclaration>;
+    readonly unheld: ReadonlyMap<string, UnheldDeclaration>;
+  },
+): Item => {
+  const withFeedback: Item =
+    held.modalFeedback.length === 0 ? item : { ...item, modalFeedback: held.modalFeedback };
+  const withRecords: Item =
+    held.records.size === 0 ? withFeedback : { ...withFeedback, records: held.records };
+
+  return held.unheld.size === 0 ? withRecords : { ...withRecords, unheld: held.unheld };
+};
+
+/**
  * Build the item model of a valid `qti-assessment-item`.
  *
  * The body keeps text and HTML elements as written. Choice, Inline Choice, Text Entry and Extended
@@ -3707,6 +3907,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
         }
       });
     const body: BodyNode[] = [];
+    const modalFeedback: ModalFeedback[] = [];
     let processing: Option.Option<ReadProcessing> = Option.none();
     let templateRead: Option.Option<ReadTemplateProcessing> = Option.none();
 
@@ -3769,6 +3970,8 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
         }
 
         yield* holdUnheld(part, "template");
+      } else if (part.local === "qti-modal-feedback") {
+        modalFeedback.push(yield* modalFeedbackOf(build, part));
       } else if (part.local === "qti-template-processing") {
         markElement(build, part, false);
 
@@ -3852,9 +4055,5 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       unsupported: build.unsupported,
     };
 
-    // `records` is absent when the item makes no record response declaration it holds, and `unheld`
-    // when it makes no declaration it holds no value of, as a model built by hand leaves them out.
-    const withRecords: Item = records.size === 0 ? built : { ...built, records };
-
-    return unheld.size === 0 ? withRecords : { ...withRecords, unheld };
+    return withHeld(built, { modalFeedback, records, unheld });
   });

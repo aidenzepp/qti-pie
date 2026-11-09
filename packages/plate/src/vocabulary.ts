@@ -252,11 +252,13 @@ export interface Renders {
   readonly controlNotices: readonly FeatureRule[];
   /**
    * The `qti-*` elements plate renders or reads. They include the engine's response rules, the
-   * template declarations, the template processing and its template rules, and
-   * `qti-printed-variable`, `qti-template-block` (whose content is its `qti-content-body`'s) and
-   * `qti-template-inline`, which the item model holds as body nodes. The item model also reads the
-   * element of each of the 64 expression kinds (`expressionKinds` in `#plate/model/expression.ts`).
-   * Every element in the QTI namespace without the `qti-` prefix is HTML and renders as itself.
+   * template declarations, the template processing and its template rules, `qti-printed-variable`,
+   * `qti-template-block` (whose content is its `qti-content-body`'s), `qti-template-inline`,
+   * `qti-feedback-block` (whose content is its `qti-content-body`'s too) and `qti-feedback-inline`,
+   * which the item model holds as body nodes, and `qti-modal-feedback`, which it holds beside the
+   * body, its content its `qti-content-body`'s. The item model also reads the element of each of
+   * the 64 expression kinds (`expressionKinds` in `#plate/model/expression.ts`). Every element in
+   * the QTI namespace without the `qti-` prefix is HTML and renders as itself.
    */
   readonly elements: readonly string[];
   /**
@@ -346,6 +348,9 @@ export const renders = {
     "qti-template-block",
     "qti-content-body",
     "qti-template-inline",
+    "qti-feedback-block",
+    "qti-feedback-inline",
+    "qti-modal-feedback",
     ...engine,
     "qti-template-declaration",
     "qti-template-processing",

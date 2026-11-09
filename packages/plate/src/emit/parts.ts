@@ -16,7 +16,7 @@ interface PartsOf {
     | "root";
   "extended-text-interaction": "control" | "prompt" | "root";
   "inline-choice-interaction": "control" | "label" | "option" | "placeholder" | "root";
-  item: "message" | "messages" | "notice" | "root" | "status" | "statusHeading";
+  item: "message" | "messages" | "modalFeedback" | "notice" | "root" | "status" | "statusHeading";
   "test-navigation":
     | "end"
     | "item"
@@ -511,6 +511,15 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     merged: ["role"],
     part: "notice",
     tagClass: "phrasing-container",
+  },
+  {
+    defaults: {},
+    element: "section",
+    interaction: "item",
+    listOwner: false,
+    merged: ["aria-label"],
+    part: "modalFeedback",
+    tagClass: "flow-container",
   },
   {
     defaults: {},

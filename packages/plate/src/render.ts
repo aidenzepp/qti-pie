@@ -3,20 +3,21 @@
  * {@link renderStatus} for the Status part, each a plain function that returns a `Result`.
  *
  * The library ends at parts and pure functions (rule `a9d04969`): `render` writes the item Root
- * around its body and nothing else, so the form, its submit control, where the Status part goes
- * and every step of a flow are the author's. Its one input that is not a function of its
- * arguments is the instance a render draws when the author passes none. `render` prints everything
- * or nothing: it writes at most the configuration's `outputBudget` characters of HTML, and an item
- * with a printed variable or a parameter whose text passed its bound, or whose printed text passed
- * the budget `redact` ran under, prints nothing; either way it returns {@link OutputTooLarge} and
- * none of the page, never a part of it. This is a browser module: it value-imports from `effect`
- * only `Option`, `Array`, `pipe`, `Data` and `Result`.
+ * around its body and the modal feedback the record shows, and nothing else, so the form, its
+ * submit control, where the Status part goes and every step of a flow are the author's. Its one
+ * input that is not a function of its arguments is the instance a render draws when the author
+ * passes none. `render` prints everything or nothing: it writes at most the configuration's
+ * `outputBudget` characters of HTML, and an item with a printed variable or a parameter whose text
+ * passed its bound, or whose printed text passed the budget `redact` ran under, prints nothing;
+ * either way it returns {@link OutputTooLarge} and none of the page, never a part of it. This is a
+ * browser module: it value-imports from `effect` only `Option`, `Array`, `pipe`, `Data` and
+ * `Result`.
  *
  * @module
  */
 import { Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
-import { emitBody } from "#plate/emit/body.ts";
+import { emitBody, emitModalFeedback } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { emitItem, emitStatus } from "#plate/emit/item.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
@@ -205,6 +206,19 @@ const checkedInstance = (
  * withheld: a block, an inline or a `param` shows its notice, and a choice is absent, the
  * redacted item's notices naming `template-identifier` once for all such choices.
  *
+ * Feedback is shown as the information model says (FeedbackBlock 5.49, FeedbackInline 5.52,
+ * ModalFeedback 5.93): a feedback element shows when its outcome variable's value matches, or
+ * contains, its `identifier` under `show-hide="show"`, and when it does not under `hide`. Once
+ * response processing has run in the record's attempt (`attempt` `submitted`), the record's
+ * outcomes decide it, and each modal feedback they show is written after the body; before, the page
+ * is the body as the attempt starts, its block and inline feedback decided by the outcomes'
+ * starting values (section 7.19.3), and no modal feedback shows. A feedback block or inline the
+ * values show leaves its content in its place and one they hide nothing, so hidden feedback never
+ * reaches the page, and an interaction inside hidden feedback posts nothing. One whose outcome
+ * `record` holds no value of shows its notice, `qti-feedback-block` or `qti-feedback-inline`. So
+ * after `score`, `restore` the record it returned and redact with it: the page then shows the
+ * feedback the attempt's outcomes set, in any `mode`.
+ *
  * A printed variable or a parameter on content the page sees whose text would pass 1,000,000
  * characters (a conversion wider than that, or a whole text longer) prints nothing, and the
  * redacted item's `unprinted` names the first, with that bound and the limit `"text"`, so
@@ -241,12 +255,16 @@ const checkedInstance = (
  * always gives a redacted item: what it cannot print shows as a notice.
  *
  * @example
- *   const shown = redact(accepted, record, configuration); // record: the attempt's Restored["record"]
- *   const rendered = render(shown, configuration, { instance: "q1" });
+ *   const { record, values } =
+ *     yield * restore(accepted, yield * score(accepted, responses, stored));
+ *   const shown = redact(accepted, record, configuration); // its feedback follows record.outcomes
+ *   const rendered = render(shown, configuration, { instance: "q1", mode: "review", values });
  *
  * @param document The document `check` accepted.
- * @param record The attempt's template values and outcome values, such as its record, whose type
- *   is `Restored["record"]`; none to show the item as it reads with no record.
+ * @param record The record of the attempt the page shows, such as `Restored["record"]` or a test
+ *   item view's `page`: its template values, its outcome values, the defaults its template
+ *   processing set, and whether response processing has run in it; none to show the item as it
+ *   reads with no record.
  * @param limits The output budget its printed text is held to, clamped to 1 to 536,870,888: the
  *   configuration passed to `render`, or `{ outputBudget }`; none for the configuration's default,
  *   16,777,216.
@@ -337,13 +355,14 @@ const interactionRenderer =
   };
 
 /**
- * Render an item: the item Root around its body, as HTML.
+ * Render an item: the item Root around its body and its modal feedback, as HTML.
  *
  * It resolves the overrides once, takes the instance from `options.instance` as given or draws a
  * lowercase UUID v4 (`drawInstance`, from `crypto.getRandomValues`, never derived from the seed;
  * not `crypto.randomUUID`, which a browser gives only in a secure context, so a page served over
  * plain HTTP lacks it), builds the payload from the redacted item and the options, and emits the
- * body and the Root. A shuffled Choice is presented in the order the configuration's `seed`, the
+ * body, the ModalFeedback parts of the modal feedback the redacted item shows, and the Root. A
+ * shuffled Choice is presented in the order the configuration's `seed`, the
  * instance and its response key give. The Root's `data-mode` names `options.mode`. It writes no
  * form, submit control, title or record. Given the same instance, configuration and inputs, it
  * gives the same HTML, and it returns the instance it used.
@@ -397,7 +416,8 @@ export const render = (
     const state = stateOf(configuration, parts, options.assetBase);
     const built = payload(item, viewOf(instance, configuration, options));
     const body = yield* emitBody(built, state, interactionRenderer(built, state));
-    const root = yield* emitItem(built, state, body);
+    const feedback = yield* emitModalFeedback(built, state);
+    const root = yield* emitItem(built, state, [...body, ...feedback]);
     const html = yield* Result.fromOption(
       toHtmlWithin(root, configuration.outputBudget),
       () =>

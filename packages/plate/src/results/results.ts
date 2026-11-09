@@ -39,7 +39,7 @@ import {
   holdsCompletionStatus,
   startingValue,
 } from "#plate/model/record.ts";
-import type { ItemRecord } from "#plate/model/record.ts";
+import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import { atDefault, isNcName, isNullResponse, nullOf, nullRecord } from "#plate/model/values.ts";
 import type { ModelledBaseType, ResponseValue, Value } from "#plate/model/values.ts";
 import { defaultOutputBudget } from "#plate/output-budget.ts";
@@ -535,9 +535,10 @@ const completionOf = (report: ItemReport): Value => {
  * cardinality `record` and no base type, and its candidate response one `value` per field of the
  * record reported, in the record's order, each with its `fieldIdentifier` and `baseType`: none for
  * a NULL record, which a record response the values reported lack holds. An answered status judges
- * only the interactions the page showed under the record's template values, as `checkResponses`
- * does, a record response's typed text among them, and reads a response's default as the record's
- * template processing set it, else as declared ({@link answeredStatusOf}).
+ * only the interactions the page showed under the record's template values, and its feedback as an
+ * attempt starts, as `checkResponses` does, a record response's typed text among them, and reads a
+ * response's default as the record's template processing set it, else as declared ({@link
+ * answeredStatusOf}).
  *
  * @param report What the result says about the item.
  * @returns The `itemResult`.
@@ -545,7 +546,12 @@ const completionOf = (report: ItemReport): Value => {
 const itemResult = (report: ItemReport): Element => {
   const { item } = report.item;
   const invalid = new Set(
+    // The page an attempt starts on: its template values, and its feedback by the outcomes'
+    // starting values, since the report holds no outcome the page showed before its last attempt.
     checkResponses(report.item, { ...report.answers, ...report.records }, judging, {
+      attempt: "none",
+      defaults: report.defaults,
+      outcomes: report.outcomes,
       templates: report.templates,
     }).map((message) => message.response),
   );
@@ -833,15 +839,15 @@ const choiceSequence = (
  * Give the order each shuffled Choice and each shuffled Inline Choice the page showed was presented
  * in, as `render` presents it.
  *
- * The interactions are the item's as `redactItem` shows it under the record's template values, the
- * redaction the page is built from, as `checkResponses` finds them, read through `redactStructure`,
- * which decides the same and prints no text. So a choice its template hides, or withholds because
- * the record holds no value of its template variable, is not listed, and the choices shown are
- * listed in the order `choiceOrder` gives them, which shuffles only those. An interaction a hidden
- * or withheld template block, inline or choice holds reports no order.
+ * The interactions are the item's as `redactItem` shows it under the record, the redaction the
+ * page is built from, as `checkResponses` finds them, read through `redactStructure`, which decides
+ * the same and prints no text. So a choice its template hides, or withholds because the record
+ * holds no value of its template variable, is not listed, and the choices shown are listed in the
+ * order `choiceOrder` gives them, which shuffles only those. An interaction a hidden or withheld
+ * template block, inline or choice, or feedback block or inline, holds reports no order.
  *
  * @param item The item.
- * @param templates The template values of the record the page was shown under.
+ * @param record The record the page was shown under.
  * @param seed The session's shuffle seed, which keyed the page's shuffles as `itemView`'s
  *   configuration does: none when it has none, so the order followed the instance alone. Never the
  *   session's processing seed.
@@ -850,12 +856,12 @@ const choiceSequence = (
  */
 const choiceSequences = (
   item: Item,
-  templates: ItemRecord["templates"],
+  record: RedactRecord,
   seed: Option.Option<string>,
   instance: string,
 ): ReadonlyMap<string, string> =>
   new Map(
-    interactionsIn(redactStructure(item, { outcomes: {}, templates }).body).flatMap((interaction) =>
+    interactionsIn(redactStructure(item, record).body).flatMap((interaction) =>
       Option.match(choiceSequence(interaction, seed, instance), {
         onNone: () => [],
         onSome: (sequence) => [[interaction.response, sequence] as const],
@@ -1019,7 +1025,7 @@ const sessionItemReport = (
       sequences: entry.presented
         ? choiceSequences(
             document.item,
-            entry.record.templates,
+            entry.record,
             session.shuffleSeed,
             `${session.instance}.${String(entry.sequenceIndex)}`,
           )

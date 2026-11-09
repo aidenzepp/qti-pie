@@ -19,7 +19,7 @@ import { validateInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { validateTextEntry } from "#plate/interactions/text-entry.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type { Interaction, Item } from "#plate/model/item.ts";
-import type { ResponsesRecord } from "#plate/model/record.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
 import { isRecordValue, nullOf } from "#plate/model/values.ts";
 import type { RecordValue, ResponseValue, Value } from "#plate/model/values.ts";
 import { redactStructure } from "#plate/payload.ts";
@@ -119,21 +119,17 @@ const validate = (
  * record, by the walk `render` shows the item by (`redactStructure`, which decides what
  * `redactItem` decides and prints no text, so no printed variable is formatted to judge a
  * response). So a choice its template hides is not among its interaction's choices and an
- * interaction a hidden template block, inline or choice holds is not there at all. With no record
- * the redaction reads the item as it does with none (H3), so an item whose template processing runs
- * shows no template block, inline or choice with a template visibility.
+ * interaction a hidden template block, inline or choice, or a hidden feedback block or inline,
+ * holds is not there at all. With no record the redaction reads the item as it does with none (H3),
+ * so an item whose template processing runs shows no template block, inline or choice with a
+ * template visibility, and no feedback block or inline.
  *
  * @param item The item.
- * @param record The template values of the attempt shown, if any.
+ * @param record The record of the attempt shown, as `redact` took it, if any.
  * @returns The interactions shown.
  */
-const shownInteractions = (item: Item, record?: ResponsesRecord): readonly Interaction[] =>
-  interactionsIn(
-    (record === undefined
-      ? redactStructure(item)
-      : redactStructure(item, { outcomes: {}, templates: record.templates })
-    ).body,
-  );
+const shownInteractions = (item: Item, record?: RedactRecord): readonly Interaction[] =>
+  interactionsIn(redactStructure(item, record).body);
 
 /**
  * Validate responses as the item's interactions do, without scoring them.
@@ -152,9 +148,10 @@ const shownInteractions = (item: Item, record?: ResponsesRecord): readonly Inter
  * A choice its template hides, or withholds because the record holds no value of its template
  * variable, is not among the choices presented, so posting it to its interaction gives
  * `unknownChoice`. An interaction a hidden or withheld template block, inline or choice holds is
- * absent, and a response bound to no interaction shown is ignored, whatever it holds: no limit on
- * it holds a post back, so the stored value a host passes for it, such as a session's declared or
- * template-set default, gives no message.
+ * absent, as is one a hidden or withheld feedback block or inline holds, and a response bound to no
+ * interaction shown is ignored, whatever it holds: no limit on it holds a post back, so the stored
+ * value a host passes for it, such as a session's declared or template-set default, gives no
+ * message.
  *
  * With no record, an item whose template processing does not run reads as the record its first
  * attempt starts with (each template variable at its declared default); for an item whose template
@@ -170,8 +167,9 @@ const shownInteractions = (item: Item, record?: ResponsesRecord): readonly Inter
  * @param responses The responses by identifier, each a value, a record or the `Malformed` `decode`
  *   gave.
  * @param configuration The configuration, which gives the locale and `validateResponses`.
- * @param record The template values of the attempt the page showed, the record `redact` took; none
- *   to judge the item as it reads with no record.
+ * @param record The record of the attempt the page showed, the one `redact` took: its template
+ *   values and the outcomes its feedback follows; none to judge the item as it reads with no
+ *   record.
  * @returns Every message of the interactions shown, in their document order; none when all are
  *   accepted.
  */
@@ -179,7 +177,7 @@ export const checkResponses = (
   document: Accepted,
   responses: Readonly<Record<string, ResponseValue | Malformed>>,
   configuration: Configuration,
-  record?: ResponsesRecord,
+  record?: RedactRecord,
 ): readonly ValidationMessage[] =>
   shownInteractions(document.item, record).flatMap((interaction) => {
     const given = Object.hasOwn(responses, interaction.response)

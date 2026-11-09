@@ -6,10 +6,11 @@
  * author's {@link View} into the {@link Payload}, the only input the emitter receives. Each copies
  * every field it names one by one and never spreads a model object, so a field the model gains
  * reaches the page only when this file names it. Neither copy holds a correct response, a mapping,
- * a response default, a processing rule, a template rule or feedback content, nor any outcome or
- * template value but the ones the body's printed variables print, as text, and the ones its
- * `param-variable` parameters pass, as their `value`, nor a template visibility: a template block,
- * inline or choice is settled as shown, hidden or withheld before the page sees it. Neither holds a
+ * a response default, a processing rule, a template rule or feedback content the record hides, nor
+ * any outcome or template value but the ones the body's printed variables print, as text, and the
+ * ones its `param-variable` parameters pass, as their `value`, nor a template or feedback
+ * visibility: a template block, inline or choice, and a feedback block, inline or modal feedback,
+ * is settled as shown, hidden or withheld before the page sees it. Neither holds a
  * seed: the view's seed only orders a shuffled Choice's or Inline Choice's choices. What the page
  * cannot be given, it cannot leak. A `solution` render shows correct responses only when the author
  * passes them as the view's values; nothing here reads them from the item.
@@ -39,6 +40,8 @@ import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
+  FeedbackContent,
+  FeedbackVisibility,
   InlineChoiceInteraction,
   Interaction,
   Item,
@@ -50,7 +53,7 @@ import type {
   TextEntryInteraction,
   UnsupportedFeature,
 } from "#plate/model/item.ts";
-import { outcomeDefaults, unrunTemplateProcessing } from "#plate/model/record.ts";
+import { outcomeDefaults, outcomeStart, unrunTemplateProcessing } from "#plate/model/record.ts";
 import type { RedactRecord } from "#plate/model/record.ts";
 import { format, isRecordValue, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, ResponseValue, Single, Value } from "#plate/model/values.ts";
@@ -421,7 +424,8 @@ export type PayloadNode = ElementPayload | InteractionPayload | NoticePayload | 
  *
  * `lang` is the item's `xml:lang`, else the view's locale. `finished` is the view's: the author
  * disabled every control. `mode` is the view's, the state the Root's and each interaction Root's
- * `data-mode` name. `notices` names the unsupported features the body shows as notices.
+ * `data-mode` name. `notices` names the unsupported features the body and the modal feedback show
+ * as notices. `modalFeedback` holds each modal feedback the redacted item shows, in document order.
  */
 export interface Payload {
   readonly body: readonly PayloadNode[];
@@ -432,9 +436,18 @@ export interface Payload {
   readonly instance: string;
   readonly lang: string;
   readonly messages: readonly MessagePayload[];
+  readonly modalFeedback: readonly ModalFeedbackPayload[];
   readonly mode: RenderMode;
   readonly notices: readonly string[];
   readonly title: string;
+}
+
+/**
+ * A modal feedback the page shows: its content and its title, as the payload holds them.
+ */
+export interface ModalFeedbackPayload {
+  readonly content: readonly PayloadNode[];
+  readonly title: Option.Option<string>;
 }
 
 /**
@@ -470,6 +483,10 @@ export interface RedactedFields {
    * The root's `xml:lang`.
    */
   readonly lang: Option.Option<string>;
+  /**
+   * The modal feedback the page shows, in document order ({@link ShownModalFeedback}).
+   */
+  readonly modalFeedback: readonly ShownModalFeedback[];
   readonly notices: readonly string[];
   readonly responses: readonly ResponseBinding[];
   readonly title: string;
@@ -488,6 +505,16 @@ export interface RedactedFields {
     readonly limit: "budget" | "text";
     readonly path: string;
   }>;
+}
+
+/**
+ * A modal feedback a redaction shows: its content, settled as the body is, and its `title`, none
+ * when it has none. One the record shows holds its content; one whose outcome the record holds no
+ * value of holds only its notice, `qti-modal-feedback`.
+ */
+export interface ShownModalFeedback {
+  readonly content: readonly BodyNode[];
+  readonly title: Option.Option<string>;
 }
 
 /**
@@ -582,6 +609,8 @@ const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
       case "inline-choice": {
         return authoredIdsIn(Option.getOrElse(node.label, () => []));
       }
+      case "feedback-block":
+      case "feedback-inline":
       case "template-block":
       case "template-inline": {
         return authoredIdsIn(node.content);
@@ -1113,6 +1142,20 @@ const templateNotice: Readonly<Record<TemplateContent["kind"], string>> = {
 };
 
 /**
+ * The feature a feedback block's or inline's notice names: its element's name, as for a template
+ * block.
+ */
+const feedbackNotice: Readonly<Record<FeedbackContent["kind"], string>> = {
+  "feedback-block": "qti-feedback-block",
+  "feedback-inline": "qti-feedback-inline",
+};
+
+/**
+ * The feature a withheld modal feedback's notice names: its element's name.
+ */
+const modalNotice = "qti-modal-feedback";
+
+/**
  * The feature the notices name, once, when a choice is withheld: the attribute that gives a choice
  * its template visibility, as `string-identifier` names a text interaction's mark. A withheld
  * choice has no place of its own to show a notice in.
@@ -1151,8 +1194,9 @@ type Printer = (bound: number) => Option.Option<string>;
  *
  * A printed variable becomes its notice. {@link redactItem} leaves none in a redacted body, so the
  * case is reached only by a body built by hand, which is given the notice the variable stands for.
- * A template block or inline becomes its notice too ({@link templateNotice}): `redactItem` leaves
- * none either, and the payload holds no template value to show a hand-built one's content by.
+ * A template block or inline becomes its notice too ({@link templateNotice}), and so does a
+ * feedback block or inline ({@link feedbackNotice}): `redactItem` leaves none of either, and the
+ * payload holds no template or outcome value to show a hand-built one's content by.
  *
  * @param node The body node.
  * @param build The build.
@@ -1182,6 +1226,10 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
     case "template-inline": {
       return { feature: templateNotice[node.kind], kind: "notice" };
     }
+    case "feedback-block":
+    case "feedback-inline": {
+      return { feature: feedbackNotice[node.kind], kind: "notice" };
+    }
     case "choice": {
       return choicePayload(node, build);
     }
@@ -1206,6 +1254,10 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
  */
 interface RedactedBody {
   readonly body: readonly BodyNode[];
+  /**
+   * The modal feedback the page shows: {@link RedactedFields.modalFeedback}.
+   */
+  readonly modalFeedback: readonly ShownModalFeedback[];
   /**
    * The responses some interaction binds that no interaction of `body` binds, in the order the
    * walk first meets them: {@link hiddenOnlyResponses}' set.
@@ -1358,7 +1410,32 @@ const printingOf = (item: Item, record?: RedactRecord): Option.Option<RedactReco
         ]),
       );
 
-  return Option.some({ outcomes: outcomeDefaults(item), templates });
+  return Option.some({ attempt: "none", defaults: {}, outcomes: outcomeDefaults(item), templates });
+};
+
+/**
+ * Decide whether a variable's value shows a part under its `show-hide`, the one rule template
+ * content, a choice's template visibility and feedback share: the value matches the part's
+ * identifier when it holds a single of base type identifier equal to it, as a single value or as a
+ * member of a multiple or ordered one ("matches, or contains"); `show` shows the part exactly when
+ * the value matches, and `hide` exactly when it does not. NULL, a value of another base type, and
+ * no value, match nothing.
+ *
+ * @param showHide The part's `show-hide`.
+ * @param value The variable's value, none when there is none.
+ * @param identifier The part's `identifier`.
+ * @returns Whether the part is shown.
+ */
+const shows = (
+  showHide: "hide" | "show",
+  value: Option.Option<Value>,
+  identifier: string,
+): boolean => {
+  const matches = Option.exists(value, (held) =>
+    held.values.some((single) => single.baseType === "identifier" && single.value === identifier),
+  );
+
+  return showHide === "show" ? matches : !matches;
 };
 
 /**
@@ -1385,13 +1462,71 @@ export const templateShows = (
   visibility: TemplateVisibility,
   identifier: string,
   templates: RedactRecord["templates"],
-): boolean => {
-  const matches = Option.exists(own(templates, visibility.templateIdentifier), (value) =>
-    value.values.some((single) => single.baseType === "identifier" && single.value === identifier),
-  );
+): boolean => shows(visibility.showHide, own(templates, visibility.templateIdentifier), identifier);
 
-  return visibility.showHide === "show" ? matches : !matches;
-};
+/**
+ * Decide whether an outcome value shows a feedback block, a feedback inline or a modal feedback:
+ * `show` hides it "by default and shown only if the associated outcome variable matches, or
+ * contains, the value of the identifier", and `hide` shows it "by default and hidden if" the
+ * variable does (the information model's FeedbackBlock, section 5.49.3, FeedbackInline, 5.52.3,
+ * and ModalFeedback, 5.93.2). It reads the outcome values it is given; which values a page's
+ * feedback reads is {@link feedbackOutcomes}'.
+ *
+ * @example
+ *   // <qti-modal-feedback outcome-identifier="FEEDBACK" identifier="correct" show-hide="show">
+ *   feedbackShows({ outcomeIdentifier: "FEEDBACK", showHide: "show" }, "correct", outcomes);
+ *   // true when FEEDBACK holds correct, or is a multiple value with correct among its members
+ *
+ * @param visibility The element's `outcome-identifier` and `show-hide`.
+ * @param identifier The element's `identifier`.
+ * @param outcomes The outcome values.
+ * @returns Whether the element is shown.
+ */
+export const feedbackShows = (
+  visibility: FeedbackVisibility,
+  identifier: string,
+  outcomes: RedactRecord["outcomes"],
+): boolean => shows(visibility.showHide, own(outcomes, visibility.outcomeIdentifier), identifier);
+
+/**
+ * Give the outcome values a page's feedback reads: the record's own once response processing has
+ * run in the attempt it shows (`attempt` `submitted`), else each outcome's starting value, the
+ * default template processing set for it else its declared one (`outcomeStart`), since before
+ * response processing the page is the item body "displayed to the candidate at the start of each
+ * attempt", "with the visibility of any integrated feedback determined by the default values of
+ * the outcome variables" (the information model's ItemSessionControl `allow-review`, section
+ * 7.19.3). A record plate writes with no attempt processed holds exactly those values.
+ *
+ * @param item The item.
+ * @param record The record the page shows.
+ * @returns The outcome values, keyed by identifier.
+ */
+const feedbackOutcomes = (item: Item, record: RedactRecord): RedactRecord["outcomes"] =>
+  record.attempt === "submitted" ? record.outcomes : outcomeStart(item, record.defaults);
+
+/**
+ * Decide what the page sees of a feedback block, inline or modal feedback: whether the outcome
+ * values show it ({@link feedbackShows}), or none when they cannot say, because there are no
+ * values or they hold no value of its outcome, so it is withheld.
+ *
+ * @param outcomes The outcome values feedback reads ({@link feedbackOutcomes}), none when the
+ *   redaction has no values.
+ * @param visibility The element's `outcome-identifier` and `show-hide`.
+ * @param identifier The element's `identifier`.
+ * @returns Some whether it is shown, or none when it is withheld.
+ */
+const feedbackShownBy = (
+  outcomes: Option.Option<RedactRecord["outcomes"]>,
+  visibility: FeedbackVisibility,
+  identifier: string,
+): Option.Option<boolean> =>
+  outcomes.pipe(
+    Option.flatMap((values) =>
+      Option.map(own(values, visibility.outcomeIdentifier), () =>
+        feedbackShows(visibility, identifier, values),
+      ),
+    ),
+  );
 
 /**
  * Decide what the page sees of a part with a template visibility: whether the values show it, or
@@ -1582,6 +1717,7 @@ const printBody = (
   writing: Writing,
 ): RedactedBody => {
   const listed = item.unsupported.filter((entry) => entry.shown === "notice");
+  const outcomes = printing.pipe(Option.map((record) => feedbackOutcomes(item, record)));
   const listedAt = new Map<string, number[]>();
   for (const [index, entry] of listed.entries()) {
     const indices = listedAt.get(entry.path);
@@ -1697,6 +1833,50 @@ const printBody = (
   };
 
   /**
+   * Show a template or feedback block or inline as its values decide it: its content in its place
+   * when they show it, nothing when they hide it, and its notice when they withhold it. Content the
+   * page does not see is still walked, unseen, so its notices are reached and not named, and every
+   * response it binds is bound on content the page does not see.
+   *
+   * @param part The block or inline.
+   * @param decided Whether the values show it, none when they withhold it.
+   * @param feature Its notice's feature.
+   * @param seen Whether the page sees where it stands.
+   * @returns The nodes the page is given in its place.
+   */
+  const conditional = (
+    part: Pick<TemplateContent, "content" | "path" | "responses">,
+    decided: Option.Option<boolean>,
+    feature: string,
+    seen: boolean,
+  ): readonly BodyNode[] =>
+    Option.match(decided, {
+      onNone: (): readonly BodyNode[] => {
+        note(feature, seen);
+        unseen.add(part.path);
+        bind(part.responses, false);
+        // oxlint-disable-next-line eslint/no-use-before-define -- `conditional` and `nodesOf` are mutually recursive, as template and feedback content holds body nodes; the call runs only after both are defined.
+        nodesOf(part.content, false);
+
+        return [{ feature, kind: "unsupported", path: part.path }];
+      },
+      onSome: (visible) => {
+        if (!visible) {
+          unseen.add(part.path);
+        }
+
+        if (!(seen && visible)) {
+          bind(part.responses, false);
+        }
+
+        // oxlint-disable-next-line eslint/no-use-before-define -- as above: mutually recursive with `nodesOf`.
+        const content = nodesOf(part.content, seen && visible);
+
+        return visible ? content : [];
+      },
+    });
+
+  /**
    * Show body nodes from the values, walking content the page does not see as well, so its notices
    * are reached and its responses bound.
    *
@@ -1772,30 +1952,21 @@ const printBody = (
         }
         case "template-block":
         case "template-inline": {
-          return Option.match(shownBy(printing, node.templateVisibility, node.identifier), {
-            onNone: (): readonly BodyNode[] => {
-              const feature = templateNotice[node.kind];
-              note(feature, seen);
-              unseen.add(node.path);
-              bind(node.responses, false);
-              nodesOf(node.content, false);
-
-              return [{ feature, kind: "unsupported", path: node.path }];
-            },
-            onSome: (visible) => {
-              if (!visible) {
-                unseen.add(node.path);
-              }
-
-              if (!(seen && visible)) {
-                bind(node.responses, false);
-              }
-
-              const content = nodesOf(node.content, seen && visible);
-
-              return visible ? content : [];
-            },
-          });
+          return conditional(
+            node,
+            shownBy(printing, node.templateVisibility, node.identifier),
+            templateNotice[node.kind],
+            seen,
+          );
+        }
+        case "feedback-block":
+        case "feedback-inline": {
+          return conditional(
+            node,
+            feedbackShownBy(outcomes, node.feedbackVisibility, node.identifier),
+            feedbackNotice[node.kind],
+            seen,
+          );
         }
         case "choice": {
           reach(node.path, () => true, seen);
@@ -1872,6 +2043,41 @@ const printBody = (
         : [];
     });
   const body = nodesOf(item.body, true);
+  // Each modal feedback after the body, in document order, as the document holds it. Before
+  // response processing has run in the attempt shown none is seen, so its content is walked unseen:
+  // its notices are not named and its printed variables print nothing.
+  const submitted = Option.exists(printing, (record) => record.attempt === "submitted");
+  const modalFeedback = (item.modalFeedback ?? []).flatMap(
+    (feedback): readonly ShownModalFeedback[] => {
+      const decided = submitted
+        ? feedbackShownBy(outcomes, feedback.feedbackVisibility, feedback.identifier)
+        : Option.some(false);
+
+      return Option.match(decided, {
+        onNone: () => {
+          note(modalNotice, true);
+          unseen.add(feedback.path);
+          nodesOf(feedback.content, false);
+
+          return [
+            {
+              content: [{ feature: modalNotice, kind: "unsupported", path: feedback.path }],
+              title: Option.none(),
+            },
+          ];
+        },
+        onSome: (visible) => {
+          if (!visible) {
+            unseen.add(feedback.path);
+          }
+
+          const content = nodesOf(feedback.content, visible);
+
+          return visible ? [{ content, title: feedback.title }] : [];
+        },
+      });
+    },
+  );
 
   /**
    * Decide whether a listed notice is named: it was not reached where the page does not see it,
@@ -1909,7 +2115,7 @@ const printBody = (
 
   const hiddenOnly = new Set([...unseenBound].filter((response) => !shownBound.has(response)));
 
-  return { body, hiddenOnly, notices, unprinted };
+  return { body, hiddenOnly, modalFeedback, notices, unprinted };
 };
 
 /**
@@ -2015,16 +2221,18 @@ export const redactItem = (
   record?: RedactRecord,
   limits?: Pick<Configuration, "outputBudget">,
 ): Redacted => {
-  const { body, hiddenOnly, notices, unprinted } = printBody(item, printingOf(item, record), {
-    budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget),
-    kind: "text",
-  });
+  const { body, hiddenOnly, modalFeedback, notices, unprinted } = printBody(
+    item,
+    printingOf(item, record),
+    { budget: clampOutputBudget(limits?.outputBudget ?? defaultOutputBudget), kind: "text" },
+  );
 
   return brandRedacted({
     body,
     document: item.document,
     identifier: item.identifier,
     lang: item.lang,
+    modalFeedback,
     notices,
     responses: bindingsShown(item, hiddenOnly),
     title: item.title,
@@ -2248,8 +2456,8 @@ export const postings = (redacted: Redacted, instance: string): readonly Posting
  * @param view The author's inputs: the instance, the mode, the seed, values, names, messages and
  *   posted strings.
  * @returns The payload. It holds no correct response, mapping, default, processing rule, seed,
- *   template value or feedback content of the item, whatever the view; the seed only orders a
- *   shuffled Choice's or Inline Choice's choices, and a value it shows is one the view gave.
+ *   template value or feedback content the redaction hid, whatever the view; the seed only orders
+ *   a shuffled Choice's or Inline Choice's choices, and a value it shows is one the view gave.
  */
 export const payload = (redacted: Redacted, view: View): Payload => {
   const messages = identifyMessages(view.instance, view.messages);
@@ -2278,6 +2486,10 @@ export const payload = (redacted: Redacted, view: View): Payload => {
     instance: view.instance,
     lang: Option.getOrElse(redacted.lang, () => view.locale),
     messages,
+    modalFeedback: redacted.modalFeedback.map((feedback) => ({
+      content: copyNodes(feedback.content, build),
+      title: feedback.title,
+    })),
     mode: view.mode,
     notices: redacted.notices,
     title: redacted.title,

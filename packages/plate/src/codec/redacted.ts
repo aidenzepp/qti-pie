@@ -329,6 +329,41 @@ const NoTemplateContent = Schema.Never.pipe(
 );
 
 /**
+ * Why the JSON form holds no feedback block or inline, the message of the refusal on either side.
+ */
+const noFeedbackContent =
+  "a redacted body holds no feedback block or inline; redact puts its content in its place when its outcome value shows it, nothing when it hides it, or its notice when the record holds no value for it";
+
+/**
+ * A feedback block or inline, which the JSON form never holds: `redact` settles each one's
+ * visibility before the item leaves the server, as it settles template content
+ * ({@link NoTemplateContent}), so neither the outcome that decides it nor hidden feedback, which
+ * can give an answer away, reaches the page. Its encoded side is `Never`, so decoding refuses a
+ * body node of either kind and encoding refuses a body that holds one. Its type side holds every
+ * field of the model's feedback block, so the codec's body-node union stays the model's
+ * `BodyNode`.
+ */
+const NoFeedbackContent = Schema.Never.pipe(
+  Schema.decodeTo(
+    Schema.Struct({
+      content: BodyNodes,
+      feedbackVisibility: Schema.Struct({
+        outcomeIdentifier: Schema.String,
+        showHide: Schema.Literals(["hide", "show"]),
+      }),
+      identifier: Schema.String,
+      kind: Schema.Literals(["feedback-block", "feedback-inline"]),
+      path: Schema.String,
+      responses: Schema.Array(Schema.String),
+    }),
+    {
+      decode: SchemaGetter.forbidden(() => noFeedbackContent),
+      encode: SchemaGetter.forbidden(() => noFeedbackContent),
+    },
+  ),
+);
+
+/**
  * The fields a Text Entry and an Extended Text share, as `TextEntryInteraction` declares them.
  */
 const textControlFields = {
@@ -346,10 +381,10 @@ const textControlFields = {
 };
 
 /**
- * The Schema of one body node, a union over the ten kinds of `BodyNode`, every field included; its
- * type is {@link BodyNode} and its encoded form {@link BodyNodeJson}, which holds no path
- * ({@link NoPath}), no printed variable ({@link NoPrintedVariable}) and no template block or inline
- * ({@link NoTemplateContent}).
+ * The Schema of one body node, a union over the twelve kinds of `BodyNode`, every field included;
+ * its type is {@link BodyNode} and its encoded form {@link BodyNodeJson}, which holds no path
+ * ({@link NoPath}), no printed variable ({@link NoPrintedVariable}), no template block or inline
+ * ({@link NoTemplateContent}) and no feedback block or inline ({@link NoFeedbackContent}).
  */
 const BodyNodeSchema = Schema.Union([
   Schema.Struct({
@@ -413,6 +448,7 @@ const BodyNodeSchema = Schema.Union([
   }),
   NoPrintedVariable,
   NoTemplateContent,
+  NoFeedbackContent,
 ]);
 
 /**
@@ -467,6 +503,7 @@ export const RedactedSchema = Schema.Struct({
   document: Schema.String,
   identifier: Schema.String,
   lang: OptionalText,
+  modalFeedback: Schema.Array(Schema.Struct({ content: BodyNodes, title: OptionalText })),
   notices: Schema.Array(Schema.String),
   responses: Schema.Array(ResponseBindingSchema),
   title: Schema.String,
@@ -652,17 +689,19 @@ const regionsOf = (interaction: Interaction): readonly Region[] => {
 /**
  * Find the first interaction, in document order, that the body holds inside a Choice's Prompt or a
  * choice's content, inside an Extended Text's Prompt, or inside an Inline Choice's Label or the
- * content of one of its choices: content where QTI's schema admits no interaction, and where
- * `render` throws `NestedInteractionDefect` on one, or, in an Inline Choice's choice, writes no
- * text for it.
+ * content of one of its choices, or that a modal feedback's content holds at all: content where
+ * QTI's schema admits no interaction, and where `render` throws `NestedInteractionDefect` on one,
+ * or, in an Inline Choice's choice, writes no text for it.
  *
  * It walks with a list of pending nodes rather than by recursion, as {@link nestsTooDeep} does, so
  * no body the depth bound lets through can overflow the stack.
  *
- * @param body The body the Schema decoded.
- * @returns What the interaction is and where it sits, or none when the body holds none there.
+ * @param fields The body and the modal feedback the Schema decoded.
+ * @returns What the interaction is and where it sits, or none when the item holds none there.
  */
-const misplacedInteraction = (body: readonly BodyNode[]): Option.Option<string> => {
+const misplacedInteraction = (
+  fields: Pick<RedactedFields, "body" | "modalFeedback">,
+): Option.Option<string> => {
   const pending: PendingNode[] = [];
   const enqueue = (nodes: readonly BodyNode[], within: Option.Option<string>): void => {
     for (const node of nodes.toReversed()) {
@@ -670,7 +709,13 @@ const misplacedInteraction = (body: readonly BodyNode[]): Option.Option<string> 
     }
   };
 
-  enqueue(body, Option.none());
+  // The walk pops the last pending node first, so the modal feedback goes on before the body to be
+  // walked after it, in document order.
+  for (const [index, feedback] of [...fields.modalFeedback.entries()].toReversed()) {
+    enqueue(feedback.content, Option.some(`the content of modal feedback ${String(index + 1)}`));
+  }
+
+  enqueue(fields.body, Option.none());
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
     const { node, within } = next;
 
@@ -679,9 +724,11 @@ const misplacedInteraction = (body: readonly BodyNode[]): Option.Option<string> 
         enqueue(node.children, within);
         break;
       }
+      case "feedback-block":
+      case "feedback-inline":
       case "template-block":
       case "template-inline": {
-        // The Schema refuses either kind first; a body that held one would hold its content here.
+        // The Schema refuses each kind first; a body that held one would hold its content here.
         enqueue(node.content, within);
         break;
       }
@@ -737,7 +784,7 @@ const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
           (schemaError) => new InvalidRedacted({ issue: schemaError.message, stage: "decode" }),
         ),
         (fields: RedactedFields) =>
-          Option.match(misplacedInteraction(fields.body), {
+          Option.match(misplacedInteraction(fields), {
             onNone: () => Result.succeed(brandRedacted(fields)),
             onSome: (issue) => Result.fail(new InvalidRedacted({ issue, stage: "decode" })),
           }),
@@ -748,13 +795,13 @@ const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
  * throws, whatever it is handed.
  *
  * It checks the JSON's shape, every field against {@link RedactedSchema}, which admits no printed
- * variable and no template block or inline, since `redact` leaves none, and one rule of the body's
- * content: no interaction stands, at any depth, inside a Choice's Prompt or a choice's content,
- * inside an Extended Text's Prompt, or inside an Inline Choice's Label or a choice's content, where
- * QTI's schema admits none and `render` cannot emit one, so `render` never meets such an
- * interaction in a `Redacted` it returns. It checks the item against no other rule of QTI's, so a
- * host trusts redacted JSON only as far as the item it came from; the emitter still keeps only the
- * HTML subset's elements and attributes, and the URLs `url.ts` keeps.
+ * variable and no template or feedback block or inline, since `redact` leaves none, and one rule of
+ * the content: no interaction stands, at any depth, inside a Choice's Prompt or a choice's content,
+ * inside an Extended Text's Prompt, inside an Inline Choice's Label or a choice's content, or in a
+ * modal feedback's content, where QTI's schema admits none and `render` cannot emit one, so
+ * `render` never meets such an interaction in a `Redacted` it returns. It checks the item against
+ * no other rule of QTI's, so a host trusts redacted JSON only as far as the item it came from; the
+ * emitter still keeps only the HTML subset's elements and attributes, and the URLs `url.ts` keeps.
  *
  * @param input The JSON form as the host handed it over: the {@link RedactedJson}
  *   {@link encodeRedacted} wrote, after any JSON round trip. A count written as a JSON number is

@@ -25,7 +25,7 @@ import { checkTemplateDefaults, evaluateTemplateDefaults } from "#plate/engine/t
 import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
 import { fresh, startingValue } from "#plate/model/record.ts";
-import type { ItemRecord } from "#plate/model/record.ts";
+import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import { itemRefsIn } from "#plate/model/item-refs.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -149,9 +149,9 @@ export class ItemNotInSession extends Data.TaggedError("ItemNotInSession")<{
  * What a host renders for one item of a test session.
  *
  * The host renders it with exactly these fields:
- * `render(redact(items.get(view.ref), view.record, view.configuration), view.configuration, {
+ * `render(redact(items.get(view.ref), view.page, view.configuration), view.configuration, {
  * instance: view.instance, values: view.values, disabled: view.disabled })`, so a restored session
- * presents the choice order and the template values it showed.
+ * presents the choice order, the template values and the feedback it showed.
  *
  * The view is server data, since its `record` is: the host reads it on the server and sends the
  * page only what `render` writes.
@@ -185,6 +185,18 @@ export interface ItemView {
    * The navigation mode of the item's part.
    */
   readonly navigation: NavigationMode;
+  /**
+   * The record the page shows the item by, which the host passes to `redact` and
+   * `checkResponses`: the item's {@link ItemView.record}, except for a closed item whose
+   * `show-feedback` is false. "If it is 'false' then feedback is not shown. This includes both
+   * Modal Feedback and Integrated Feedback even if the candidate has access to the review state"
+   * (the information model's ItemSessionControl, section 7.19.2), so that item's page reads as one
+   * no response processing has run in (`attempt` `none`): its integrated feedback follows its
+   * outcomes' starting values, "the version of the qti-item-body displayed to the candidate at the
+   * start of each attempt" (section 7.19.3), and no modal feedback shows. An open item shows the
+   * feedback its last processed attempt set, as a candidate sees it before the next attempt.
+   */
+  readonly page: RedactRecord;
   /**
    * The decoded record of the item it shows: the record its first presentation started, through
    * `firstAttempt`, and each processed attempt's after it. The host passes it to `redact`,
@@ -1203,6 +1215,19 @@ export const valuesOf = (item: SessionItem): Responses => {
 };
 
 /**
+ * Give the part of an item's record its page is shown by, as `redact` takes it.
+ *
+ * @param record The item's record.
+ * @returns Its attempt, defaults, outcomes and template values.
+ */
+const pageOf = (record: ItemRecord): RedactRecord => ({
+  attempt: record.attempt,
+  defaults: record.defaults,
+  outcomes: record.outcomes,
+  templates: record.templates,
+});
+
+/**
  * Build the view of one session item.
  *
  * @param index The test, indexed for the session.
@@ -1224,6 +1249,10 @@ const viewOf = (
     instance: `${session.instance}.${item.sequenceIndex}`,
     kind: "item",
     navigation: inspected.place.part.navigation,
+    page:
+      inspected.closed && !inspected.control.showFeedback
+        ? { ...pageOf(item.record), attempt: "none" }
+        : pageOf(item.record),
     record: item.record,
     ref: item.ref,
     sequenceIndex: item.sequenceIndex,
