@@ -1148,12 +1148,15 @@ const shreddedText = Effect.fn("test.metadata.shreddedText")(function* shreddedD
 
 describe("import/overlays/metadata.ts, the manifest's resources", () => {
   it.effect(
-    "writes a LomResource for each cp:resource of the manifest, and none for a cp:resource of a record file whose root is a cp:manifest",
+    "writes no row of a cp:resource, the manifest's or a record file's whose root is a cp:manifest, whose records the manifest's resource hrefs name",
     () =>
       // Oracle: the specification as a checker, IMS Content Packaging 1.2: a package's resources are
       // its one manifest's, so a `cp:resource` of any other document, a record file's included,
-      // names no resource of the package and has no `LomResource` (E1 derived, a `LomResource` the
-      // node of a `Resource`, which the manifest alone writes).
+      // names no resource of the package. Sterling's 05cdedfa case, restated: our model holds no
+      // `LomResource` (660a9d64). A record names the document it describes through `namingRecords`
+      // (`#pantry/qti/queries.ts`), over the `ResourceHref` rows that the package overlay writes
+      // from the manifest alone (`#pantry/import/overlays/index.ts`), so the metadata overlay writes
+      // no row of a resource in either document.
       // Bound: R-O3s, its manifest listing two resources and its record file a `cp:manifest` root
       // holding one `cp:resource`.
       Effect.gen(function* manifestResources() {
@@ -1168,11 +1171,15 @@ describe("import/overlays/metadata.ts, the manifest's resources", () => {
         const recordFile = yield* shreddedText(
           `<manifest xmlns="${namespaces.cp}"><resources><resource/></resources></manifest>`,
         );
+        const manifestIds = idsFor(0, "manifest");
 
-        assert.deepStrictEqual(countsOf(rowsOf(manifest, idsFor(0, "none"))), {
-          LomResource: 2,
-        });
+        assert.deepStrictEqual(countsOf(rowsOf(manifest, manifestIds)), {});
         assert.deepStrictEqual(countsOf(rowsOf(recordFile, idsFor(1, "resourcemetadata/xml"))), {});
+        assert.deepStrictEqual(
+          [...resourcePathsOf(flatten(manifest, manifestIds.idOf)).values()],
+          ["test.xml", "test.xml"],
+          "the manifest's two resources, by the paths their hrefs name",
+        );
       }),
   );
 });
