@@ -45,7 +45,7 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
-import type { Containment } from "#pantry/import/host-judge.ts";
+import type { Containment } from "#pantry/test/host-judge.ts";
 
 /**
  * One attribute row of the box, as both laws read it: its element's version, kind, governing type

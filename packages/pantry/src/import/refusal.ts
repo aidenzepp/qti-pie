@@ -4,23 +4,26 @@
  *
  * A package is refused before any row exists, by the reader, the ZIP container or the codec
  * ({@link ruleOfError}), or by grizzle's `invariant-rejected` outcome, which names every law
- * merged into the PostgreSQL object that refused the write ({@link refusalOfLaws}). Each law keeps
- * the rule of the guard or schema rule it replaces, so a verdict reads as it did.
+ * merged into the PostgreSQL object that refused the write ({@link refusalOf}). Each law keeps the
+ * rule of the guard or schema rule it replaces, so a verdict reads as it did.
  *
  * - **Laws by name.** Every law the schema states has a name, the law oracle's (`src/test/oracle.ts`
  *   `LawName`) where the oracle states the law, with its rule and its spec source
  *   ({@link lawTable}). A check is named by its law ({@link checkNameOf}); every other law is a row
  *   of {@link statedLaws}, as grizzle's `lawsOf` names it, matched to an outcome's law by grizzle's
- *   `sameLaw` ({@link lawNameOf}).
- * - **One rule per refusal.** A family's axis foreign key discharges the family and every containment
- *   and fold merged into it, and its violation names them all, so a refusal picks the rule of its
- *   most specific law by one fixed order ({@link precedence}).
+ *   `sameLaw` ({@link lawNameOf}). The table is a dictionary keyed by the database's law, never a
+ *   judge.
+ * - **A refusal is what the database said.** A family's axis foreign key discharges the family and
+ *   every containment and fold merged into it, and its violation names them all. The refusal
+ *   carries how grizzle decided them, every law it named and the set of their rules
+ *   ({@link rulesOf}), listed by one fixed order ({@link precedence}) for display. It singles out
+ *   no law where grizzle's outcome does not, and reads no row of the import's.
  * - **Explanations are computed.** {@link explain} reads the laws, the witness and the installed
  *   grammar's rows; for a content-order law it names the positions `Follow` allows next, each with
  *   its XSD particle. There is no catalog of messages.
  */
-import { lawsByStatement, lawsOf, sameLaw } from "@bjornpagen/grizzle";
-import type { AnySchema, Law, RegexText, Statement, Witness } from "@bjornpagen/grizzle";
+import { constraintNameOf, lawsByStatement, lawsOf, sameLaw } from "@bjornpagen/grizzle";
+import type { AnySchema, Law, Refused, RegexText, Statement, Witness } from "@bjornpagen/grizzle";
 import {
   Array as Arr,
   Function as Fn,
@@ -33,6 +36,7 @@ import {
   Result,
   Schema,
 } from "effect";
+import type { Types } from "effect";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -98,6 +102,7 @@ import {
   XmlVersion,
 } from "#pantry/qti/chardata.ts";
 import { readerOrigin, RefusalOrigin } from "#pantry/package/refusal-origin.ts";
+import type { RefusedLaw } from "#pantry/package/refusal-origin.ts";
 import { keyText, namespaceText } from "#pantry/qti/limits.ts";
 import {
   AriaElement,
@@ -249,7 +254,7 @@ export const limitRules = [
 
 /**
  * Every name a refused import may carry: the laws' rules, the codec's, the reader's and the
- * container's.
+ * container's, in the order a refusal lists its rules ({@link ruleOrder}).
  *
  * The verdict file names its refusals by these (`verdicts/*.tsv`, `src/test/verdicts.ts`).
  */
@@ -259,6 +264,16 @@ export const ImportRule = Schema.Literals([...precedence, ...codecRules]);
  * One name of the roster.
  */
 export type Rule = typeof ImportRule.Type;
+
+/**
+ * The order a refusal lists its rules in, and the verdict file writes them in: the roster's, the
+ * laws' rules most specific first by {@link precedence}, then the codec's. It is a total order, so
+ * a set of rules has one listing, and it decides nothing: a refusal carries every rule its laws
+ * carry.
+ */
+export const ruleOrder: Order.Order<Rule> = Order.mapInput(Order.Number, (rule: Rule) =>
+  ImportRule.literals.indexOf(rule),
+);
 
 /**
  * The rules no law of the schema keeps yet, each with the W5 slice that states its law, so the
@@ -333,8 +348,7 @@ const relationsOf = (law: Law): readonly string[] =>
 
 /**
  * File a law by its kind and its sides' relations, so {@link lawNameOf} holds an outcome's law to
- * the few stated laws of that kind over those relations, never every law of Qti, as the import's
- * host judge holds it to the laws it judges (`#pantry/import/host-judge.ts` `rulingOf`).
+ * the few stated laws of that kind over those relations, never every law of Qti.
  *
  * This is no identity of the law: grizzle's `sameLaw` decides whether two laws are one, comparing
  * them whole, and two laws one bucket holds may still differ in their terms or selections. The
@@ -344,7 +358,7 @@ const relationsOf = (law: Law): readonly string[] =>
  * @param law - A law as grizzle names it.
  * @returns Its bucket.
  */
-export const bucketOf = (law: Law): string => [law.kind, ...relationsOf(law)].join(" ");
+const bucketOf = (law: Law): string => [law.kind, ...relationsOf(law)].join(" ");
 
 /**
  * The law of a given kind.
@@ -503,8 +517,9 @@ export const namedPatternLaws = (
  * - A namespace declaration's value is "Namespace name": an RFC 3986 URI reference (reading 131),
  *   which crust does not check, so the domain is the law;
  * - The whitespace around an IDREF token is the host's own split, "E1 derived", as is every other
- *   piece the host splits a lexical form into: a map key's, a reference's, a node's end characters,
- *   a selection's form.
+ *   piece the host splits a lexical form into: a map key's, a reference's, a node's end characters.
+ *   A selection's form and a statistic's day restate an attribute's value, so each is "value
+ *   domain", the law of the value it restates.
  */
 export const textLaws: ReadonlyMap<RegexText<string>, LawName> = new Map<
   RegexText<string>,
@@ -540,7 +555,12 @@ export const textLaws: ReadonlyMap<RegexText<string>, LawName> = new Map<
   [Separator, "E1 derived"],
   [HrefParams, "E1 derived"],
   [EndCharacter, "E1 derived"],
-  [SelectForm, "E1 derived"],
+  // `selectForm` restates a selection's `select`, an `xs:int`, whose lexical space the attribute's
+  // value domain states, with its whitespace split off. The import writes every selection's row
+  // whatever its `select` holds, so PostgreSQL may meet `SelectForm`'s domain before the
+  // attribute's value domain. Its pattern law is the value domain's, with its rule, so one cause
+  // names one rule, as `DayForm`'s is.
+  [SelectForm, "value domain"],
   // `day` restates `lastUpdated`, a `DateDType`, whose language the attribute's value domain
   // states: xs:date's lexical space, the month lengths and the leap rule included, under its
   // pattern. Its type, `DayForm`, `lexical(date)`, is that language, and its pattern law is the
@@ -967,9 +987,11 @@ const nameOfStatement: ReadonlyMap<Statement, LawName> = new Map(
  *
  * `lawsByStatement` compiles the schema's law model, which takes seconds, and returns a lookup that
  * compiles nothing, so this builds one lookup per schema, on its first call, and pairs every
- * statement through it, memoized by the schema's identity: the laws this module names
- * ({@link statedIn}) and the laws the import's host judge judges (`#pantry/import/host-judge.ts`)
- * share that one lookup per process, and loading either module builds none.
+ * statement through it, memoized by the schema's identity. It is exported: the laws this module
+ * names ({@link statedIn}) and the laws the tests' host judge reads (`#pantry/test/host-judge.ts`,
+ * `src/test/judged-laws.ts`) share that one lookup per process, which a memo of the tests' own
+ * would compile again in every test that loads both (on 2026-11-08 a compile of `Qti`'s law model
+ * took 51 s, and a second one 62 s, under load). Loading either module builds none.
  */
 export const statementLawsOf = Fn.memoize((schema: typeof Qti) => {
   const lawsOfStatement = lawsByStatement(schema);
@@ -1019,7 +1041,10 @@ const statedIn = Fn.memoize((schema: typeof Qti): Stated => {
 
 /**
  * Every law `Qti` states that is no check, each as its outcome names it, with its name in
- * {@link lawTable} ({@link statedIn}). The first call compiles Qti's law model.
+ * {@link lawTable} ({@link statedIn}): the law table's index, which {@link lawNameOf} looks an
+ * outcome's law up in. It is exported for the table's census (`refusal.oracle.test.ts`) and the
+ * tests that read the laws by their names, so they read the very index production names a refusal
+ * by. The first call compiles Qti's law model.
  *
  * @returns The laws, with their names.
  */
@@ -1032,7 +1057,7 @@ export const statedLaws = (): readonly (readonly [Law, LawName])[] => statedIn(Q
  *
  * `sameLaw` encodes both laws on every call, so the name is memoized by the law value (Effect's
  * `Function.memoize`): a law read again, as a refusal's laws are when the same outcome is explained
- * and ruled, is named once.
+ * and its facts and rules are read, is named once.
  *
  * @param law - A law as an `invariant-rejected` outcome names it.
  * @returns Its name, or none for a law no row of the table states.
@@ -1049,25 +1074,29 @@ export const lawNameOf: (law: Law) => Option.Option<LawName> = Fn.memoize(
 );
 
 /**
- * Name the one rule a refusal that names `laws` is refused under: the most specific rule among
- * theirs, by {@link precedence}.
+ * The rule the law table gives a law: its name's row's ({@link lawNameOf}).
  *
- * The laws are a set: their order and any repeat change nothing. A law no row of the table states
- * is left out, so the rule is the most specific of the others; the census in
+ * @param law - A law as an `invariant-rejected` outcome names it.
+ * @returns Its rule, or none for a law no row of the table states.
+ */
+export const ruleOfLaw = (law: Law): Option.Option<Rule> =>
+  Option.map(lawNameOf(law), (name) => lawTable[name].rule);
+
+/**
+ * The rules a refusal that names `laws` is refused under: the rule of each law the table states,
+ * each once, listed in {@link ruleOrder}.
+ *
+ * The laws are a set, and so are the rules: the laws' order and any repeat change nothing. No law
+ * is singled out: grizzle's `some` and `first` say only that one or more of the laws broke, so the
+ * refusal is under all of their rules, and a reader of the verdict reads them all. A law no row of
+ * the table states carries no rule, and still prints its text in the refusal; the census in
  * `refusal.oracle.test.ts` keeps every law the schema states in the table.
  *
  * @param laws - The `laws` of an `invariant-rejected` outcome.
- * @returns The rule, or none when no law of the set is in the table.
+ * @returns The rules, none when no law of the set is in the table.
  */
-export const ruleOfLaws = (laws: Arr.NonEmptyReadonlyArray<Law>): Option.Option<Rule> =>
-  Arr.head(
-    Arr.sort(
-      laws.flatMap((law) =>
-        Option.toArray(Option.map(lawNameOf(law), (name) => lawTable[name].rule)),
-      ),
-      Order.mapInput(Order.Number, (rule: (typeof precedence)[number]) => precedence.indexOf(rule)),
-    ),
-  );
+export const rulesOf = (laws: readonly Law[]): readonly Rule[] =>
+  Arr.sort(Arr.dedupe(laws.flatMap((law) => Option.toArray(ruleOfLaw(law)))), ruleOrder);
 
 /**
  * What a refusal knows of the row that broke its laws: grizzle's witness, or the row's fields as
@@ -1120,9 +1149,10 @@ export interface Explanation {
    */
   readonly next: Option.Option<readonly Allowed[]>;
   /**
-   * Each law's spec source, then for a content-order law its model's and each allowed position's.
+   * Each law's spec source, then for a content-order law its model's and each allowed position's,
+   * each once; none where the law table holds none of the laws.
    */
-  readonly sources: Arr.NonEmptyReadonlyArray<string>;
+  readonly sources: readonly string[];
 }
 
 /**
@@ -1444,103 +1474,116 @@ export const explain = (
         .flatMap(({ source }) => Option.toArray(source)),
     ],
   });
-  const [first, ...rest] = Arr.dedupe([
+  const sources = Arr.dedupe([
     ...named.flatMap(({ name }) =>
       Option.toArray(name.pipe(Option.map((law) => lawTable[law].source))),
     ),
     ...modelSources,
   ]);
 
-  return {
-    detail: `${lawText}, ${witnessText(witness)}${stateText}`,
-    next,
-    sources:
-      first === undefined
-        ? ["no law of the refusal is in the law table, so none names its source"]
-        : [first, ...rest],
-  };
+  return { detail: `${lawText}, ${witnessText(witness)}${stateText}`, next, sources };
 };
 
 /**
- * The package was refused under one rule of the roster.
+ * Name the rules a refusal is under, as its message says them.
  *
- * `detail` says what broke it, and `origin` where the refusal came from
+ * @param rules - The refusal's rules, in {@link ruleOrder}.
+ * @returns The phrase: the one rule, the rules listed, or that the law table names no rule of the
+ *   laws.
+ */
+const rulesText = (rules: readonly Rule[]): string => {
+  const [only, ...more] = rules;
+  if (only === undefined) {
+    return "under laws no rule of the law table names";
+  }
+
+  return more.length === 0 ? `under the ${only} rule` : `under the rules ${rules.join(", ")}`;
+};
+
+/**
+ * The package was refused, under the rules of the roster its refusal names.
+ *
+ * `rules` is a set, listed in {@link ruleOrder}: the one rule of a refusal made before the
+ * database, or every rule the laws of the database's refusal carry, none where the law table holds
+ * none of them. `detail` says what broke it, and `origin` where the refusal came from
  * (`#pantry/package/refusal-origin.ts`): the reader, the container or the codec, or the database,
- * whose case carries the laws it named, each shown as grizzle reports it with its name and rule,
- * where each is stated, and how the refusal names the row that broke them. A reader that tells the
- * user where to look reads the witness's kind rather than the detail's wording.
+ * whose case carries how grizzle decided the laws it named, each law shown as grizzle reports it
+ * with its installed name, its name and its rule, where each is stated, and how the refusal names
+ * the row that broke them. A reader that tells the user where to look reads the witness's kind
+ * rather than the detail's wording.
  */
 export class ImportRefused extends Schema.TaggedError<ImportRefused>()("ImportRefused", {
   detail: Schema.String,
   origin: RefusalOrigin,
-  rule: ImportRule,
+  rules: Schema.Array(ImportRule),
 }) {
   /**
-   * What was refused and by which rule, in one sentence.
+   * What was refused and under which rules, in one sentence.
    */
   override get message(): string {
-    return `The package was refused under the ${this.rule} rule: ${this.detail}`;
+    return `The package was refused ${rulesText(this.rules)}: ${this.detail}`;
   }
 }
 
 /**
- * The database refused an apply under laws no row of the law table states, so no rule names the
- * refusal. It is a defect of this module's table, which the census in `refusal.oracle.test.ts`
- * keeps whole, never a verdict on the package.
+ * One law of a refusal as the refusal carries it: its display text, the installed name of a
+ * check's CHECK constraint, and the name and rule the law table gives it.
+ *
+ * `constraintNameOf` names a check by its declared name, which every check law an outcome names
+ * carries, and throws for a name no check could be declared under: a defect of grizzle's outcome,
+ * never a verdict on the package.
+ *
+ * @param law - A law of an `invariant-rejected` outcome.
+ * @returns Its facts.
  */
-export class UnownedLaws extends Schema.TaggedError<UnownedLaws>()("UnownedLaws", {
-  laws: Schema.Array(Schema.String),
-}) {
-  /**
-   * The laws, and the repair.
-   */
-  override get message(): string {
-    return `No rule owns the laws ${this.laws.join("; ")}. Group the statement of each under the law it states in its module's laws by name (namedLaws in src/import/refusal.ts), or give a primary key or generated field a row of writtenLaws there and a text type a row of textLaws, and run the census in refusal.oracle.test.ts.`;
+const lawFactOf = (law: Law): typeof RefusedLaw.Type => {
+  const fact: Types.Mutable<typeof RefusedLaw.Type> = { text: Formatter.format(law) };
+  if (law.kind === "check") {
+    fact.installed = constraintNameOf(law);
   }
-}
+
+  const name = lawNameOf(law);
+  if (Option.isSome(name)) {
+    fact.name = name.value;
+    fact.rule = lawTable[name.value].rule;
+  }
+
+  return fact;
+};
 
 /**
- * Build the refusal of an `invariant-rejected` outcome: its rule by {@link ruleOfLaws}, its
- * explanation by {@link explain}.
+ * Build the refusal of an `invariant-rejected` outcome from the outcome alone: how grizzle decided
+ * its laws, each law's facts ({@link lawFactOf}) in the outcome's order, the set of their rules
+ * ({@link rulesOf}), and its explanation ({@link explain}). It reads no row and judges no law, so
+ * a `some` or `first` refusal stays as undecided as grizzle left it.
  *
  * A host-side key conflict, two facts of one key that grizzle refuses before any SQL, names its
  * key law and the submitted key as its witness, and is refused the same way, with no SQLSTATE.
  *
- * @param laws - The outcome's `laws`.
+ * @param refused - The outcome's `refused`.
  * @param witness - Its `witness`, or the row the caller read.
  * @param constants - The installed grammar's rows.
- * @returns The refusal, or {@link UnownedLaws} when no law of the set is in the table.
+ * @returns The refusal.
  */
-export const refusalOfLaws = (
-  laws: Arr.NonEmptyReadonlyArray<Law>,
+export const refusalOf = (
+  refused: Refused,
   witness: RefusalWitness,
   constants: RefusalConstants,
-): Result.Result<ImportRefused, UnownedLaws> =>
-  Option.match(ruleOfLaws(laws), {
-    onNone: () => Result.fail(new UnownedLaws({ laws: laws.map((law) => Formatter.format(law)) })),
-    onSome: (rule) => {
-      const { detail, sources } = explain(laws, witness, constants);
-      const named = pipe(
-        laws,
-        Arr.map((law) => {
-          const text = Formatter.format(law);
+): ImportRefused => {
+  const { detail, sources } = explain(refused.laws, witness, constants);
 
-          return Option.match(lawNameOf(law), {
-            onNone: () => ({ text }),
-            onSome: (name) => ({ name, rule: lawTable[name].rule, text }),
-          });
-        }),
-      );
-
-      return Result.succeed(
-        new ImportRefused({
-          detail,
-          origin: { _tag: "Database", laws: named, sources, witness: witness.kind },
-          rule,
-        }),
-      );
+  return new ImportRefused({
+    detail,
+    origin: {
+      _tag: "Database",
+      kind: refused.kind,
+      laws: pipe(refused.laws, Arr.map(lawFactOf)),
+      sources,
+      witness: witness.kind,
     },
+    rules: rulesOf(refused.laws),
   });
+};
 
 /**
  * Every error that refuses a package before the database does: the reader's, the ZIP container's,
@@ -1571,32 +1614,32 @@ export const ruleOfError = (e: ReadRefusal): ImportRefused =>
     Match.tagsExhaustive({
       ImportRefused: (refused) => refused,
       NotQti3: (refused) =>
-        new ImportRefused({ detail: refused.message, origin: readerOrigin, rule: "not-qti3" }),
+        new ImportRefused({ detail: refused.message, origin: readerOrigin, rules: ["not-qti3"] }),
       PackageReadError: (refused) =>
         new ImportRefused({
           detail: refused.message,
           origin: readerOrigin,
-          rule: refused.rule === "manifest-root" ? "manifest-root" : "href-path",
+          rules: [refused.rule === "manifest-root" ? "manifest-root" : "href-path"],
         }),
       ReaderRefusal: (refused) =>
         new ImportRefused({
           detail: `${refused.rule}: ${refused.detail}`,
           origin: readerOrigin,
-          rule: "reader-refusal",
+          rules: ["reader-refusal"],
         }),
       UnmodeledVocabulary: (refused) =>
         new ImportRefused({
           detail: refused.message,
           origin: readerOrigin,
-          rule: refused.reason === "unadmitted" ? "attribute-admission" : "unmodeled-vocabulary",
+          rules: [refused.reason === "unadmitted" ? "attribute-admission" : "unmodeled-vocabulary"],
         }),
       WellFormednessError: (refused) =>
         new ImportRefused({
           detail: `${refused.message} at line ${String(refused.line)}, column ${String(refused.column)}`,
           origin: readerOrigin,
-          rule: "well-formedness",
+          rules: ["well-formedness"],
         }),
       ZipRefusal: (refused) =>
-        new ImportRefused({ detail: refused.message, origin: readerOrigin, rule: refused.rule }),
+        new ImportRefused({ detail: refused.message, origin: readerOrigin, rules: [refused.rule] }),
     }),
   );

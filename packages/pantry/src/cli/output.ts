@@ -4,7 +4,7 @@
  */
 import { Array as Arr, Config, Console, Effect, Option, Schema } from "effect";
 import { CliError, Flag, GlobalFlag } from "effect/cli";
-import { RefusedLaw, WitnessKind } from "#pantry/package/refusal-origin.ts";
+import { RefusedKind, RefusedLaw, WitnessKind } from "#pantry/package/refusal-origin.ts";
 
 /**
  * The modes `--output` names, in the order the help lists them.
@@ -185,12 +185,22 @@ export type LawFact = typeof ErrorLaw.Type;
 export const ErrorWitness = WitnessKind;
 
 /**
+ * How grizzle decided the laws a refusal the database gave names, as the error object prints it:
+ * the refusal's own `RefusedKind` (`#pantry/package/refusal-origin.ts`). `every`: each law is
+ * broken; `first`: the laws of the CHECK PostgreSQL tried first, and the row may break others too;
+ * `some`: at least one law is broken, and nothing says which.
+ */
+export const ErrorRefusedKind = RefusedKind;
+
+/**
  * What a failure prints under `json` and `jsonl`: one line on standard error, in the shape of the
  * success envelope's `schema_version`, `command` and `ok`, with `error` true and the failure's
  * kind, message, next step and exit code.
  *
- * - `rule` is present only when an import was refused, and `laws`, `sources` and `witness` only when
- *   the database refused it: the laws its refusal names, where each is stated, and whether the
+ * - `rules` is present only when an import was refused: the rules it was refused under, each once,
+ *   most specific first, none where the database named only laws the law table does not hold.
+ *   `refused_kind`, `laws`, `sources` and `witness` are present only when the database refused it:
+ *   how grizzle decided the laws its refusal names, the laws, where each is stated, and whether the
  *   message names the row that broke them (`key` or `row`) or the database named none
  *   (`unreported`).
  * - `failure` is present only for an `internal` failure qti can name, such as an export that cannot
@@ -206,7 +216,8 @@ export const ErrorObject = Schema.Struct({
   laws: Schema.optionalKey(Schema.Array(ErrorLaw)),
   message: Schema.String,
   ok: Schema.Literal(false),
-  rule: Schema.optionalKey(Schema.String),
+  refused_kind: Schema.optionalKey(ErrorRefusedKind),
+  rules: Schema.optionalKey(Schema.Array(Schema.String)),
   schema_version: Schema.Literal(1),
   sources: Schema.optionalKey(Schema.Array(Schema.String)),
   witness: Schema.optionalKey(ErrorWitness),

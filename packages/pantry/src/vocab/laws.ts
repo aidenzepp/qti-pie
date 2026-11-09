@@ -7,9 +7,10 @@
  */
 
 /**
- * Every rule a law keeps or will keep, most specific first: the order `ruleOfLaws`
- * (`#pantry/import/refusal.ts`) picks a refusal's rule by when one PostgreSQL object discharges
- * several laws.
+ * Every rule a law keeps or will keep, most specific first: the order a refusal lists the rules
+ * of its laws in (`ruleOrder` of `#pantry/import/refusal.ts`), when one PostgreSQL object
+ * discharges several laws. It orders the rules for display and decides none: a refusal carries
+ * every rule its laws carry.
  *
  * The tiers run from QTI's own rules to the representation's:
  *
@@ -25,9 +26,9 @@
  * 6. The document layer: the stated bound on a key's text, foreign names, derived fields and the tree.
  *
  * A specific law says what in the content to change, and a general one only that the representation
- * broke, so a QTI rule wins over a tree law and a content-order law over a family law. The rules
- * `owedRules` (`#pantry/import/refusal.ts`) lists stand at their tier already, so the order holds
- * when their laws land.
+ * broke, so a QTI rule is listed before a tree law and a content-order law before a family law. The
+ * rules `owedRules` (`#pantry/import/refusal.ts`) lists stand at their tier already, so the order
+ * holds when their laws land.
  */
 export const precedence = [
   // O1, identity.

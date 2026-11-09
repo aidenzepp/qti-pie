@@ -59,9 +59,10 @@ import {
   limitRules,
   namedPatternLaws,
   owedRules,
-  refusalOfLaws,
+  refusalOf,
   ruleOfError,
-  ruleOfLaws,
+  ruleOfLaw,
+  rulesOf,
   schemaLawsOf,
   statedLaws,
   statementLawsOf,
@@ -492,44 +493,56 @@ const tierOf = (rule: Rule): number => {
 };
 
 /**
- * Read the rule of each law of a set by its name.
+ * Read the rule of each law of a set by its name, straight from the table.
  *
  * @param laws - The laws.
- * @returns Their rules, one per law the table owns.
+ * @returns Their rules, one per law the table owns, repeats and order kept.
  */
-const rulesOf = (laws: readonly Law[]): readonly Rule[] =>
+const lawRules = (laws: readonly Law[]): readonly (typeof precedence)[number][] =>
   laws.flatMap((law) => Option.toArray(Option.map(lawNameOf(law), (name) => lawTable[name].rule)));
 
 /**
- * Check one set of laws one native object carries: it resolves to exactly one rule, one of its
- * laws', of the most specific tier among them, whatever their order or repeats.
+ * Write rules as one text, so two listings compare by a string's equality.
+ *
+ * @param named - The rules.
+ * @returns Them, space separated.
+ */
+const listed = (named: readonly string[]): string => named.join(" ");
+
+/**
+ * Check the rules of one set of laws one native object carries: every rule of its laws, each once
+ * and no other, most specific first by the precedence, whatever the laws' order or repeats, and
+ * the first of the most specific tier among them. No law is singled out: a refusal carries them
+ * all.
  *
  * @param laws - The laws, in any order, with any repeats.
  */
-const assertResolves = (laws: Arr.NonEmptyReadonlyArray<Law>): void => {
-  const rule = ruleOfLaws(laws);
-  const reversed = Arr.reverse(laws);
-  // A repeat is a drawn law again, the same value, so the set keeps each value once.
-  const once = Arr.dedupeWith(laws, (a, b) => a === b);
-  const resolved = Option.getOrUndefined(rule);
+const assertRules = (laws: Arr.NonEmptyReadonlyArray<Law>): void => {
   const rules = rulesOf(laws);
+  const expected = Arr.dedupe(lawRules(laws)).toSorted(
+    (a, b) => precedence.indexOf(a) - precedence.indexOf(b),
+  );
+  const reversed = rulesOf(Arr.reverse(laws));
+  // A repeat is a drawn law again, the same value, so the set keeps each value once.
+  const once = rulesOf(Arr.dedupeWith(laws, (a, b) => a === b));
+  const [first] = rules;
   if (
-    resolved !== undefined &&
-    Option.getOrUndefined(ruleOfLaws(reversed)) === resolved &&
-    Option.getOrUndefined(ruleOfLaws(once)) === resolved &&
-    rules.includes(resolved) &&
-    tierOf(resolved) === Math.min(...rules.map(tierOf))
+    first !== undefined &&
+    listed(rules) === listed(expected) &&
+    listed(reversed) === listed(rules) &&
+    listed(once) === listed(rules) &&
+    tierOf(first) === Math.min(...rules.map(tierOf))
   ) {
     return;
   }
 
   const identities = laws.map((law) => Formatter.format(law)).join(" & ");
-  assert.isTrue(Option.isSome(rule), identities);
-  assert.deepStrictEqual(ruleOfLaws(reversed), rule, identities);
-  assert.deepStrictEqual(ruleOfLaws(once), rule, identities);
-  if (Option.isSome(rule)) {
-    assert.include(rules, rule.value, identities);
-    assert.strictEqual(tierOf(rule.value), Math.min(...rules.map(tierOf)), identities);
+  assert.isNotEmpty(rules, identities);
+  assert.deepStrictEqual(rules, expected, identities);
+  assert.deepStrictEqual(reversed, rules, identities);
+  assert.deepStrictEqual(once, rules, identities);
+  if (first !== undefined) {
+    assert.strictEqual(tierOf(first), Math.min(...rules.map(tierOf)), identities);
   }
 };
 
@@ -731,16 +744,27 @@ describe("the merged axes and the laws no row states", () => {
     });
   });
 
-  it("refuses to name a rule for laws no row states, naming each law", () => {
+  it("names no rule for laws no row states, and still carries each law as the outcome names it", () => {
+    // Oracle: the outcome itself, read back field by field: its decision, the law's display text
+    // with no name or rule, no source, the witness's kind, and no rule.
     const law: Law = { from: sideOf("Nowhere", "x"), kind: "contained", to: sideOf("Node", "id") };
-    const refused = refusalOfLaws([law], { kind: "unreported" }, grammar);
+    const refused = refusalOf({ kind: "every", laws: [law] }, { kind: "unreported" }, grammar);
 
-    assert.isTrue(Result.isFailure(refused));
-    if (Result.isFailure(refused)) {
-      assert.deepStrictEqual(refused.failure.laws, [Formatter.format(law)]);
-    }
-
-    assert.isTrue(Option.isNone(ruleOfLaws([law])));
+    assert.deepStrictEqual(refused.rules, []);
+    assert.deepStrictEqual(refused.origin, {
+      _tag: "Database",
+      kind: "every",
+      laws: [{ text: Formatter.format(law) }],
+      sources: [],
+      witness: "unreported",
+    });
+    assert.isTrue(
+      refused.message.startsWith(
+        "The package was refused under laws no rule of the law table names: ",
+      ),
+      refused.message,
+    );
+    assert.isTrue(Option.isNone(ruleOfLaw(law)));
   });
 });
 
@@ -1140,7 +1164,7 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ],
 ];
 
-describe("the precedence over the laws one native object carries", () => {
+describe("the rules of the laws one native object carries, in the precedence's order", () => {
   it("holds each adjacent pair of the precedence to the reading or source that orders it", () => {
     // Oracle: the readings and the plan's tiers, pair by pair (precedencePairs). Bound: every
     // adjacent pair of the 100 rules, so a swap of any two neighbours, or a rule moved or added,
@@ -1153,15 +1177,15 @@ describe("the precedence over the laws one native object carries", () => {
     assert.isTrue(precedencePairs.every((pair) => pair[2].length > 0));
   });
 
-  it("resolves each planned axis whole to the rule the spec's order names", () => {
+  it("lists each planned axis's rules with the one the spec's order names first", () => {
     for (const { label, laws, rule } of plannedAxes) {
       assert.isAbove(laws.length, 0, label);
-      assert.deepStrictEqual(ruleOfLaws(laws), Option.some(rule), label);
+      assert.deepStrictEqual(Arr.head(rulesOf(laws)), Option.some(rule), label);
     }
   });
 
   it.effect(
-    "resolves every sequence of at most 4 of each planned axis's laws, any order and repeats, to one rule of its most specific tier",
+    "lists the rules of every sequence of at most 4 of each planned axis's laws, any order and repeats, each once, most specific first",
     (ctx) =>
       searched(
         ctx,
@@ -1186,14 +1210,14 @@ describe("the precedence over the laws one native object carries", () => {
                 c.note(label);
               }
 
-              assertResolves(carried.laws);
+              assertRules(carried.laws);
             }),
         ),
       ),
   );
 
   it.effect(
-    "resolves every sequence of at most 3 laws across the tiers to one rule of its most specific tier",
+    "lists the rules of every sequence of at most 3 laws across the tiers each once, most specific first",
     (ctx) =>
       searched(
         ctx,
@@ -1214,7 +1238,7 @@ describe("the precedence over the laws one native object carries", () => {
           (carried, c) =>
             Effect.sync(() => {
               c.note("cross-tier");
-              assertResolves(carried.laws);
+              assertRules(carried.laws);
             }),
         ),
       ),
@@ -1466,10 +1490,10 @@ describe("the refusals made before the database", () => {
     ];
 
     for (const [error, rule] of cases) {
-      assert.strictEqual(ruleOfError(error).rule, rule, error._tag);
+      assert.deepStrictEqual(ruleOfError(error).rules, [rule], error._tag);
     }
 
-    const refused = new ImportRefused({ detail: "x", origin: readerOrigin, rule: "admission" });
+    const refused = new ImportRefused({ detail: "x", origin: readerOrigin, rules: ["admission"] });
     assert.strictEqual(ruleOfError(refused), refused);
   });
 });
@@ -1713,7 +1737,7 @@ describe("the pattern laws, one per field", () => {
 
 describe("the census of the composed Qti schema", () => {
   it.effect(
-    "owns every statement and primary key of Qti, and resolves every merged axis of its families to one rule",
+    "owns every statement and primary key of Qti, and lists every merged axis's rules each once, most specific first",
     (ctx) =>
       Effect.gen(function* census() {
         const Qti = yield* composedQti;
@@ -1726,7 +1750,7 @@ describe("the census of the composed Qti schema", () => {
 
         const axes = mergedAxes(lawsStatedBy(Qti), Qti.relations);
         for (const { laws: carried } of axes) {
-          assertResolves(carried);
+          assertRules(carried);
         }
 
         yield* Effect.promise(() =>
@@ -1838,7 +1862,7 @@ describe("the census of the composed Qti schema", () => {
 
           assert.isNotEmpty(laws, `${shown}: no containment Qti states`);
           for (const law of laws) {
-            assert.deepStrictEqual(ruleOfLaws([law]), Option.some(rule), shown);
+            assert.deepStrictEqual(ruleOfLaw(law), Option.some(rule), shown);
           }
         }
       }),

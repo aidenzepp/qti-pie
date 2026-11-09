@@ -55,11 +55,11 @@ const names = namesOf(grammar);
 const orderTimeoutMs = 900_000;
 
 /**
- * What an import of a package did: accepted under the id it answered, or refused under a rule.
+ * What an import of a package did: accepted under the id it answered, or refused under rules.
  */
 type Imported =
   | { readonly id: Uuid; readonly verdict: "accepted" }
-  | { readonly rule: string; readonly verdict: "refused" };
+  | { readonly rules: readonly string[]; readonly verdict: "refused" };
 
 /**
  * Import a package's files on the lease.
@@ -81,19 +81,19 @@ const importedOf = Effect.fn("test.attributeOrder.imported")(function* importedO
     return yield* Effect.die(refused);
   }
 
-  return { rule: refused.rule, verdict: "refused" } satisfies Imported;
+  return { rules: refused.rules, verdict: "refused" } satisfies Imported;
 });
 
 /**
  * Write what an import did without the id it drew.
  *
  * @param imported - What the import did.
- * @returns Its verdict and, for a refusal, its rule.
+ * @returns Its verdict and, for a refusal, its rules.
  */
 const verdictOf = (imported: Imported) =>
   imported.verdict === "accepted"
     ? { verdict: imported.verdict }
-    : { rule: imported.rule, verdict: imported.verdict };
+    : { rules: imported.rules, verdict: imported.verdict };
 
 /**
  * Hold an accepted package's export to the order its source writes: every XML entry exported
@@ -212,8 +212,9 @@ describe.skipIf(!hasLease)(
                     const predicted = yield* oracleVerdict(written);
 
                     assert.isTrue(
-                      predicted.kind === "refused" && predicted.rules.has(after.rule),
-                      `refused under ${after.rule}, and the oracle predicts ${JSON.stringify(predicted.kind === "refused" ? [...predicted.rules] : predicted.kind)}`,
+                      predicted.kind === "refused" &&
+                        after.rules.some((rule) => predicted.rules.has(rule)),
+                      `refused under ${after.rules.join(", ")}, and the oracle predicts ${JSON.stringify(predicted.kind === "refused" ? [...predicted.rules] : predicted.kind)}`,
                     );
                   } else {
                     yield* exportHolds(

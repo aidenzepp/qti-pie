@@ -135,7 +135,7 @@ const readerVerdict = (drawn: RootCase) =>
       return "read";
     }
 
-    return read.failure._tag === "ImportRefused" ? read.failure.rule : read.failure._tag;
+    return read.failure._tag === "ImportRefused" ? read.failure.rules.join("|") : read.failure._tag;
   });
 
 /**

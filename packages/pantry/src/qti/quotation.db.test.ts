@@ -239,7 +239,7 @@ describe.skipIf(!hasLease)(
                 refused
                   ? outcome._tag === "Failure" &&
                       outcome.failure instanceof ImportRefused &&
-                      outcome.failure.rule === "q-punctuation"
+                      outcome.failure.rules.includes("q-punctuation")
                   : outcome._tag === "Success",
                 outcome._tag === "Failure" ? outcome.failure.message : "accepted",
               );

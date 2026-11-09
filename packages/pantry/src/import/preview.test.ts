@@ -123,7 +123,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
       const error = yield* Effect.flip(previewPackage(fixtures.sample_pci));
 
       assert.instanceOf(error, ImportRefused);
-      assert.strictEqual(error instanceof ImportRefused ? error.rule : undefined, "not-qti3");
+      assert.deepStrictEqual(error instanceof ImportRefused ? error.rules : undefined, [
+        "not-qti3",
+      ]);
     }),
   );
 });

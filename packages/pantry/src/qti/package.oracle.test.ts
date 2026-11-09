@@ -32,8 +32,8 @@ import {
 } from "#pantry/qti/package.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
-import { judge, judgedLaws } from "#pantry/import/host-judge.ts";
-import type { HostRows, JudgedLaw } from "#pantry/import/host-judge.ts";
+import { judge, judgedLaws } from "#pantry/test/host-judge.ts";
+import type { HostRows, JudgedLaw } from "#pantry/test/host-judge.ts";
 import { lawNames } from "#pantry/test/oracle.ts";
 
 /**

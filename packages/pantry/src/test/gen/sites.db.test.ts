@@ -54,14 +54,13 @@ const importJudged = (box: SiteBox) =>
       assert.fail(`${literal} failed with ${refused.message}`);
     }
 
-    const [only] = rules;
     assert.isTrue(
-      rules.size === 1 ? refused.rule === only : rules.has(refused.rule),
-      `${literal} was refused under ${refused.rule}, and its cases' rules are ${[...rules].join(", ")}: ${refused.message}`,
+      refused.rules.some((rule) => rules.has(rule)),
+      `${literal} was refused under ${refused.rules.join(", ")}, and its cases' rules are ${[...rules].join(", ")}: ${refused.message}`,
     );
     assert.isTrue(
-      verdict.kind === "refused" && verdict.rules.has(refused.rule),
-      `${literal} was refused under ${refused.rule}, which the law oracle does not name`,
+      verdict.kind === "refused" && refused.rules.some((rule) => verdict.rules.has(rule)),
+      `${literal} was refused under ${refused.rules.join(", ")}, none of which the law oracle names`,
     );
   }).pipe(Effect.scoped);
 

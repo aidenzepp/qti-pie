@@ -55,7 +55,7 @@ describe.skipIf(!hasLease)(
                   assert.isTrue(
                     outcome._tag === "Failure" &&
                       outcome.failure instanceof ImportRefused &&
-                      outcome.failure.rule === "inclusion-cycle",
+                      outcome.failure.rules.includes("inclusion-cycle"),
                     outcome._tag === "Failure" ? outcome.failure.message : "accepted",
                   );
                 }

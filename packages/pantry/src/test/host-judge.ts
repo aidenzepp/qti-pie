@@ -2,12 +2,13 @@
  * The import's rows as the database holds them, rebuilt on the host from a program's inputs by the
  * schema's own statements, judged by every law of the schema the host can read
  * ({@link judgedLaws}): each containment and each half of a `mirrors`, each key, each check, and
- * each family's and tree's owner axis; and the laws a refusal is ruled by, where grizzle names laws
- * it did not decide ({@link rulingOf}).
+ * each family's and tree's owner axis.
  *
- * The import rules a refusal by it, and the tests judge the import's rows by it, so it is the one
- * host judge: the law oracle (`#pantry/test/oracle.ts`) never reads it, since it judges the
- * import's own rows by the schema's own statements (`src/grammar/purity.test.ts`).
+ * Only tests read it, to judge the import's rows without a database: production judges no law and
+ * reads no row of its own, since a refusal is what the database's outcome says
+ * (`#pantry/import/refusal.ts` `refusalOf`). The law oracle (`#pantry/test/oracle.ts`) never reads
+ * it, since it judges the import's own rows by the schema's own statements
+ * (`src/grammar/purity.test.ts`).
  *
  * A program writes each row without the values grizzle fills, and nests a sequence's members under
  * their owner (`#pantry/import/write.ts`). {@link hostRowsOf} restores what grizzle's README says
@@ -34,8 +35,7 @@
  * not judged, and {@link judge} names it with every absent value, so a skip is always named by its
  * cause.
  */
-import { sameLaw } from "@bjornpagen/grizzle";
-import type { Law, LawSide, Refused } from "@bjornpagen/grizzle";
+import type { Law, LawSide } from "@bjornpagen/grizzle";
 import { Array as Arr, Formatter, Function as Fn, Option, Predicate, Schema } from "effect";
 import {
   closedOf,
@@ -53,9 +53,9 @@ import {
   termOf,
   truthOf,
   unreadIn,
-} from "#pantry/host/predicates.ts";
-import type { Datum, Row, Source, StoredSide } from "#pantry/host/predicates.ts";
-import { bucketOf, ruleOfLaws, statementLawsOf } from "#pantry/import/refusal.ts";
+} from "#pantry/test/predicates.ts";
+import type { Datum, Row, Source, StoredSide } from "#pantry/test/predicates.ts";
+import { statementLawsOf } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
@@ -167,7 +167,7 @@ export const modelledRelations = (members: readonly unknown[]): ReadonlyMap<stri
 
   if (unread.length > 0) {
     throw new Error(
-      `The host judge cannot read ${unread.join(", ")}: each is neither a stored relation it models nor a kind it reads elsewhere, so every law over it would go unjudged. Teach src/import/host-judge.ts the member's shape, or name its kind in readElsewhere with why.`,
+      `The host judge cannot read ${unread.join(", ")}: each is neither a stored relation it models nor a kind it reads elsewhere, so every law over it would go unjudged. Teach src/test/host-judge.ts the member's shape, or name its kind in readElsewhere with why.`,
     );
   }
 
@@ -1390,138 +1390,4 @@ export const judge = (rows: HostRows, laws: readonly JudgedLaw[]): Judgment => {
   }
 
   return { broken, judged, skipped };
-};
-
-/**
- * Each law the host judges, filed by grizzle's kind and its sides' relations (`bucketOf` of
- * `#pantry/import/refusal.ts`), so a refusal's law is held by `sameLaw` to the few laws of its
- * bucket, never every law of the schema. Built on first use, from {@link judgedLaws}.
- */
-const judgedBuckets = Fn.memoize((schema: typeof Qti): ReadonlyMap<string, readonly JudgedLaw[]> =>
-  Map.groupBy(judgedLaws(schema), ({ law }) => bucketOf(law)),
-);
-
-/**
- * What the host judged of one law a refusal names: broken where a row breaks it, held where every
- * row it reads holds every value it reads and none breaks it, and unjudged where it is no law the
- * host judges ({@link judgedLaws}) or a value it reads is absent.
- */
-type Verdict = "broken" | "held" | "unjudged";
-
-/**
- * Judge one law a refusal names over the host's rows, by every law the host judges that is it
- * (grizzle's `sameLaw`): a law two statements state is judged by each, broken where either breaks
- * it, held only where both hold it.
- *
- * @param rows - The import's rows ({@link hostRowsOf}).
- * @param law - The law, as the refusal names it.
- * @returns The verdict.
- */
-const verdictOf = (rows: HostRows, law: Law): Verdict => {
-  const own = (judgedBuckets(Qti).get(bucketOf(law)) ?? []).filter((judged) =>
-    sameLaw(judged.law, law),
-  );
-  if (!Arr.isReadonlyArrayNonEmpty(own)) {
-    return "unjudged";
-  }
-
-  const { broken, skipped } = judge(rows, own);
-  if (broken.length > 0) {
-    return "broken";
-  }
-
-  return skipped.length > 0 ? "unjudged" : "held";
-};
-
-/**
- * The laws a refusal is ruled by, and what the host judged of each law it named: each list empty
- * where it judged none, as for an `every` refusal or one whose laws share one rule.
- */
-export interface Ruling {
-  /**
-   * The named laws the host judged the rows to break.
-   */
-  readonly broken: readonly Law[];
-  /**
-   * Whether the rule is decided: every named law has one rule, or the most specific rule among
-   * {@link Ruling.laws} is a law's the host judged broken, never only one's it could not judge.
-   */
-  readonly decided: boolean;
-  /**
-   * The named laws the host judged the rows to hold, which never name the refusal.
-   */
-  readonly held: readonly Law[];
-  /**
-   * The laws the refusal is ruled by, each one it named: those the host judged broken or could not
-   * judge, or every named law where it judged none or judged each held.
-   */
-  readonly laws: Arr.NonEmptyReadonlyArray<Law>;
-  /**
-   * The named laws the host could not judge, each of which the rows may break.
-   */
-  readonly unjudged: readonly Law[];
-}
-
-/**
- * Choose the laws a refusal is ruled by, among the laws grizzle's `invariant-rejected` outcome
- * names (README, "Errors and outcomes"; `Refused` of grizzle-engine `types/changeset/changeset.ts`
- * at the vendored commit).
- *
- * - `every`: grizzle judged each law broken, so the refusal is ruled by all of them.
- * - `some`: one PostgreSQL object that discharges every law named refused the write, at least one law
- *   broken and nothing deciding which; `first`: the laws of the first CHECK PostgreSQL tried, which
- *   orders them by their installed names. Neither says which law the rows broke. Where the named
- *   laws share one rule, the rule is that one whichever broke, and nothing is judged. Otherwise the
- *   host judges each named law over the import's own rows ({@link hostRowsOf}, {@link judge}), and
- *   the refusal is ruled by those it judged broken and those it could not judge, never by one it
- *   judged held.
- *
- * A stated limit: a law the host cannot judge (a fold, a pattern, a law that reads a value the host
- * does not restore, such as a copy along a predecessor or a last axis) may be broken, so it stays
- * among them, and where the most specific rule among them is such a law's, the rule falls back to
- * the most specific of the laws not judged held, as it was before the host judged any (`decided`
- * false). Where the host judges every named law held, which the database's refusal contradicts,
- * the refusal is ruled by every law named, also undecided.
- *
- * @param refused - The outcome's `refused`.
- * @param rowsOf - The rows the refused write stated, as the database holds them
- *   ({@link hostRowsOf} of the program's inputs), built only where a law is judged.
- * @returns The ruling.
- */
-export const rulingOf = (refused: Refused, rowsOf: () => HostRows): Ruling => {
-  const judgedNone: Ruling = {
-    broken: [],
-    decided: true,
-    held: [],
-    laws: refused.laws,
-    unjudged: [],
-  };
-  if (refused.kind === "every") {
-    return judgedNone;
-  }
-
-  const rules = new Set(refused.laws.flatMap((law) => Option.toArray(ruleOfLaws([law]))));
-  if (rules.size <= 1) {
-    return judgedNone;
-  }
-
-  const rows = rowsOf();
-  const judged = refused.laws.map((law) => ({ law, verdict: verdictOf(rows, law) }));
-  const lawsJudged = (verdict: Verdict): readonly Law[] =>
-    judged.flatMap((at) => (at.verdict === verdict ? [at.law] : []));
-  const broken = lawsJudged("broken");
-  const open = judged.flatMap((at) => (at.verdict === "held" ? [] : [at.law]));
-  const laws = Arr.isReadonlyArrayNonEmpty(open) ? open : refused.laws;
-  const ruled = Option.getOrUndefined(ruleOfLaws(laws));
-
-  return {
-    broken,
-    decided:
-      ruled !== undefined &&
-      Arr.isReadonlyArrayNonEmpty(broken) &&
-      Option.getOrUndefined(ruleOfLaws(broken)) === ruled,
-    held: lawsJudged("held"),
-    laws,
-    unjudged: lawsJudged("unjudged"),
-  };
 };

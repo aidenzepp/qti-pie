@@ -18,7 +18,7 @@ import { assert, layer } from "@effect/vitest";
 import { Array as Arr, Effect, Formatter, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ruleOfLaws } from "#pantry/import/refusal.ts";
+import { rulesOf } from "#pantry/import/refusal.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materializeSpec, specOf } from "#pantry/test/fixtures.ts";
@@ -150,7 +150,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             );
             assert.strictEqual(
               Arr.isReadonlyArrayNonEmpty(host.brokenLaws)
-                ? Option.getOrUndefined(ruleOfLaws(host.brokenLaws))
+                ? Option.getOrUndefined(Arr.head(rulesOf(host.brokenLaws)))
                 : undefined,
               verdict.verdict === "accepted" ? undefined : verdict.rule,
               "the import's rows, judged on the host, refused under the same rule",

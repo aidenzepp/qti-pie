@@ -79,7 +79,7 @@ describe.skipIf(!hasLease)(
                 assert.isTrue(
                   outcome._tag === "Failure" &&
                     outcome.failure instanceof ImportRefused &&
-                    outcome.failure.rule === "attribute-lexical",
+                    outcome.failure.rules.includes("attribute-lexical"),
                   `${lexical}: ${outcome._tag === "Failure" ? outcome.failure.message : "accepted"}`,
                 );
               }

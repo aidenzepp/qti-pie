@@ -27,15 +27,15 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Predicate, Schema } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
-import { ruleOfLaws, statedLaws } from "#pantry/import/refusal.ts";
+import { ruleOfLaw, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { keyText, keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { SideSchema } from "#pantry/host/predicates.ts";
-import type { Datum } from "#pantry/host/predicates.ts";
-import { generatedFields, judgedSideOf } from "#pantry/import/host-judge.ts";
+import { SideSchema } from "#pantry/test/predicates.ts";
+import type { Datum } from "#pantry/test/predicates.ts";
+import { generatedFields, judgedSideOf } from "#pantry/test/host-judge.ts";
 import { identityOf, keyCopies, keyTextFields } from "#pantry/test/key-copies.ts";
 import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
@@ -827,7 +827,7 @@ const databaseRules = (refused: ReadonlySet<string>): ReadonlySet<string> =>
 
       return statedLaws().flatMap(([law]) =>
         law.kind === "contained" && law.to.relation === relation
-          ? Option.toArray(ruleOfLaws([law]))
+          ? Option.toArray(ruleOfLaw(law))
           : [],
       );
     }),

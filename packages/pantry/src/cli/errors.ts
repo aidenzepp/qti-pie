@@ -11,7 +11,6 @@ import type { DatabaseRefusal } from "#pantry/cli/refused.ts";
 import type { exportPackage } from "#pantry/export/package.ts";
 import type { OverlayConflict } from "#pantry/import/overlays/index.ts";
 import type { importPackage } from "#pantry/import/package.ts";
-import type { UnownedLaws } from "#pantry/import/refusal.ts";
 
 /**
  * Every kind a failure of this program has.
@@ -137,13 +136,12 @@ export type ExportDefectTag = Exclude<
 
 /**
  * Every other way the import ends (`#pantry/import/package.ts`): the codec refusing a value the
- * builders wrote (grizzle's `EncodingFailure`), and the two defects it dies with, laws no rule owns
- * and two builders that disagree on a row. Each is a defect of qti, never of the package.
+ * builders wrote (grizzle's `EncodingFailure`), and the defect it dies with, two builders that
+ * disagree on a row. Each is a defect of qti, never of the package.
  */
 export type ImportDefectTag =
   | Exclude<Effect.Error<ReturnType<typeof importPackage>>["_tag"], KindedTag>
-  | OverlayConflict["_tag"]
-  | UnownedLaws["_tag"];
+  | OverlayConflict["_tag"];
 
 /**
  * What to do next after an export that cannot rebuild a package the database holds.
@@ -190,7 +188,6 @@ const namedHelp = {
   RootMissing: exportDefectHelp,
   RowMissing: exportDefectHelp,
   RowsOutsideImage: exportDefectHelp,
-  UnownedLaws: importDefectHelp,
   XmlVersionUnread: exportDefectHelp,
 } as const satisfies Readonly<Record<NamedTag, string>>;
 

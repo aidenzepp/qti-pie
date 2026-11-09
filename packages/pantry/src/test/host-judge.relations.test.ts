@@ -1,13 +1,13 @@
 /**
  * The host judge's model of a schema's members (`modelledRelations` of
- * `#pantry/import/host-judge.ts`): every member it can read neither as a stored relation nor as a
+ * `#pantry/test/host-judge.ts`): every member it can read neither as a stored relation nor as a
  * kind it reads elsewhere fails loudly, by name, rather than vanishing with its laws unjudged.
  *
  * Oracle: the rule as a table, over the schema's own members and three planted ones: a stored
  * relation whose heading is no record, a relation of no primary key, and a member of a kind the
  * host does not know.
  *
- * And the laws it judges (`judgedLaws` of `#pantry/import/host-judge.ts`), and each containment a
+ * And the laws it judges (`judgedLaws` of `#pantry/test/host-judge.ts`), and each containment a
  * test reads from one relation (`containmentsOf`), are named as the refusal names an outcome's
  * (`lawNameOf` of `#pantry/import/refusal.ts`, by grizzle's `sameLaw`), so a test that names the
  * laws a package's rows break names each by its law, never by its shape. A law whose sides'
@@ -24,7 +24,7 @@ import { Formatter, Option } from "effect";
 import { lawNameOf, statedLaws } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { evaluatedLaws } from "#pantry/test/gen/genetic/host-laws.ts";
-import { judgedLaws, modelledRelations } from "#pantry/import/host-judge.ts";
+import { judgedLaws, modelledRelations } from "#pantry/test/host-judge.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
 
 /**

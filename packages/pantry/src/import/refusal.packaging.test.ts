@@ -12,7 +12,7 @@ import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 /**
  * The packaging fixtures of the retired guards, each with the rules its refusal may name: the
  * rules of every law the law oracle (`src/test/oracle.ts` `judge`) finds broken in it, judged on
- * 2026-11-06 over the composed grammar, so a verdict names the rule the oracle predicts.
+ * 2026-11-06 over the composed grammar, so a refusal's rules meet the rules the oracle predicts.
  *
  * A fixture that breaks several laws lists each one's rule, since PostgreSQL reports whichever
  * constraint it checks first: `extmeta-item-href` breaks `Href listed`, `LomObjectIdentifier`,
@@ -67,16 +67,24 @@ describe.skipIf(!hasLease)(
       timeout: "120 seconds",
     })("the retired guards' packaging fixtures, refused under the rules their laws keep", (it) => {
       for (const [name, rules] of refused) {
-        it.effect(`refuses ${name} naming ${rules.join(" or ")}`, () =>
+        it.effect(`refuses ${name} under rules that meet ${rules.join(", ")}`, () =>
           Effect.gen(function* refusesFixture() {
             const failure = yield* Effect.flip(importPackage(yield* materialize(name)));
 
             assert.strictEqual(failure._tag, "ImportRefused", `${name}: refused by another error`);
 
             if (failure._tag === "ImportRefused") {
-              yield* Effect.log(`${name} refused under ${failure.rule}`, failure.detail);
+              yield* Effect.log(
+                `${name} refused under ${failure.rules.join(", ")}`,
+                failure.detail,
+              );
 
-              assert.include(rules, failure.rule, `${name}: the refusal named another rule`);
+              const expected: readonly string[] = rules;
+
+              assert.isTrue(
+                failure.rules.some((rule) => expected.includes(rule)),
+                `${name}: the refusal names ${failure.rules.join(", ")}, none of ${rules.join(", ")}`,
+              );
             }
           }),
         );

@@ -117,11 +117,11 @@ const databaseDrivers = ["pg"];
 const keptReaderImports: ReadonlySet<string> = new Set(["qti/chardata.ts: @qti-pie/crust/uri.ts"]);
 
 /**
- * The modules on neither side today, each by the step that takes it out of production: S1 moves
- * the host judge and the host's reading of grizzle's predicates into `src/test/`. The list only
- * shrinks.
+ * The modules on neither side today, each by the step that takes it out of production: none since
+ * S1 moved the host judge and the host's reading of grizzle's predicates into `src/test/`. The
+ * list only shrinks.
  */
-const unsided: ByStep = [["S1", ["host/predicates.ts", "import/host-judge.ts"]]];
+const unsided: ByStep = [];
 
 /**
  * Every crossing today, `module: specifier`, grouped by the step of §4 that removes it at the
@@ -129,11 +129,6 @@ const unsided: ByStep = [["S1", ["host/predicates.ts", "import/host-judge.ts"]]]
  * crossing fails the test, and so does an entry whose import is gone, until the entry goes too.
  */
 const crossings: ByStep = [
-  // S1 moves the host judge into `src/test/` and deletes `UnownedLaws` (J1, J5).
-  [
-    "S1",
-    ["cli/errors.ts: #pantry/import/refusal.ts", "import/package.ts: #pantry/import/host-judge.ts"],
-  ],
   // S3 drops the NCName gate of declarations.ts:219 (B1).
   ["S3", ["import/overlays/declarations.ts: #pantry/grammar/domains.ts"]],
   // S6 makes generated fields of operators.ts:228's collapse (B3) and tests.ts:466's boolean read

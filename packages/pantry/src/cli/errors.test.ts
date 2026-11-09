@@ -135,16 +135,14 @@ const exportDefects = {
 
 /**
  * One failure of every tag the import ends with on a defect of qti: grizzle's codec refusing a
- * built value, and the two the importer dies with, keyed by the import's tags as
- * {@link exportDefects} is by the export's. The two are matched by their tag alone, which
- * `errors.ts` checks against their classes by type, so they are written as their tags here: the
- * modules that define them load the composed grammar and the author login, which this file does
- * not need.
+ * built value, and the one the importer dies with, keyed by the import's tags as
+ * {@link exportDefects} is by the export's. The one is matched by its tag alone, which `errors.ts`
+ * checks against its class by type, so it is written as its tag here: the module that defines it
+ * loads the composed grammar, which this file does not need.
  */
 const importDefects = {
   EncodingFailure: new EncodingFailure({ place: { _tag: "Fact" }, reason: { _tag: "textNul" } }),
   OverlayConflict: { _tag: "OverlayConflict" },
-  UnownedLaws: { _tag: "UnownedLaws" },
 } as const satisfies { readonly [K in ImportDefectTag]: { readonly _tag: K } };
 
 /**
@@ -243,6 +241,7 @@ describe("describeFailure, a program grizzle refused to compile", () => {
  * One law a database refusal names, as the refusal carries it: AL1's admission check.
  */
 const refusedLaw = {
+  installed: "al_1_admission",
   name: "AL1 admission",
   rule: "attribute-admission",
   text: "check AL1_admission",
@@ -259,8 +258,8 @@ describe("describeFailure, a refused import", () => {
       const { exitCode, help, kind } = describeFailure({
         _tag: "ImportRefused",
         detail: "x",
-        origin: { _tag: "Database", laws: [refusedLaw], sources: ["AL1"], witness },
-        rule: "attribute-admission",
+        origin: { _tag: "Database", kind: "every", laws: [refusedLaw], sources: ["AL1"], witness },
+        rules: ["attribute-admission"],
       });
       const named = witness === "key" || witness === "row";
 
@@ -272,13 +271,14 @@ describe("describeFailure, a refused import", () => {
     }
   });
 
-  it("a database origin without all of its laws, sources and witness is no refusal's", () => {
-    // Oracle: the origin's shape, one case that carries the three facts together or the reader's
-    // that carries none: an origin that lacks any of them, or holds no law or no source, is not a
-    // refusal the command line reads, and keeps the help of the import-refused kind. Bound: every
-    // subset of the three facts, exhausted, and each list empty; residual none.
-    const whole = { laws: [refusedLaw], sources: ["AL1"], witness: "key" };
-    const facts = ["laws", "sources", "witness"] as const;
+  it("a database origin without all of its decision, laws, sources and witness is no refusal's", () => {
+    // Oracle: the origin's shape, one case that carries the four facts together or the reader's
+    // that carries none: an origin that lacks any of them, or holds no law, is not a refusal the
+    // command line reads, and keeps the help of the import-refused kind; one with no source, where
+    // the law table holds none of its laws, is one. Bound: every subset of the four facts,
+    // exhausted, and each list empty; residual none.
+    const whole = { kind: "some", laws: [refusedLaw], sources: ["AL1"], witness: "key" };
+    const facts = ["kind", "laws", "sources", "witness"] as const;
     const subsets: (readonly (typeof facts)[number][])[] = [[]];
     for (const fact of facts) {
       subsets.push(...subsets.map((subset) => [...subset, fact]));
@@ -294,10 +294,11 @@ describe("describeFailure, a refused import", () => {
         _tag: "ImportRefused",
         detail: "x",
         origin: { _tag: "Database", ...origin },
-        rule: "attribute-admission",
+        rules: ["attribute-admission"],
       };
       const reads = Option.isSome(refusalFieldsOf(refused));
-      const carriesAll = facts.every((fact) => fact in origin && [origin[fact]].flat().length > 0);
+      const carriesAll =
+        facts.every((fact) => fact in origin) && [origin["laws"]].flat().length > 0;
 
       assert.strictEqual(reads, carriesAll, JSON.stringify(origin));
       assert.strictEqual(

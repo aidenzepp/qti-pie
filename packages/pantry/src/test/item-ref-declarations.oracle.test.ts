@@ -37,7 +37,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawOfCheck, ruleOfLaws, statedLaws } from "#pantry/import/refusal.ts";
+import { lawOfCheck, ruleOfLaw, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
@@ -1070,7 +1070,7 @@ const judged = (input: ItemRefPackage, c: Case<Situation>) =>
 
 describe("an item ref's declarations: the schema's restatement", () => {
   plainIt("names each restated law as refusal.ts names the schema's statement of it", () => {
-    // Oracle: `refusal.ts`'s naming of the laws the schema states (`ruleOfLaws`), against the rule
+    // Oracle: `refusal.ts`'s naming of the laws the schema states (`ruleOfLaw`), against the rule
     // each host law's name keeps (`ruleOf`). A check is named by its name; any other restated
     // statement is each law of `statedLaws` it reads as. Bound: every law the host restates.
     for (const [restated, name] of hostLaws) {
@@ -1078,7 +1078,7 @@ describe("an item ref's declarations: the schema's restatement", () => {
       const rules =
         restated.kind === "check"
           ? [Option.map(lawOfCheck(restated.name), (law) => lawTable[law].rule)]
-          : statedLaws().flatMap(([law]) => (restates(law, restated) ? [ruleOfLaws([law])] : []));
+          : statedLaws().flatMap(([law]) => (restates(law, restated) ? [ruleOfLaw(law)] : []));
 
       assert.isNotEmpty(rules, `${Formatter.format(restated)}: no law the schema states`);
       for (const rule of rules) {

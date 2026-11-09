@@ -92,7 +92,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
               const refused = yield* Effect.flip(readProgram(dir));
 
               assert.strictEqual(
-                refused._tag === "ImportRefused" ? refused.rule : refused._tag,
+                refused._tag === "ImportRefused" ? refused.rules.join("|") : refused._tag,
                 stated.rule,
                 `${name}: the import's reader`,
               );

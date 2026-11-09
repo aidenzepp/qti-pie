@@ -38,7 +38,7 @@ import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { expressionTypings } from "#pantry/grammar/expression.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ruleOfLaws } from "#pantry/import/refusal.ts";
+import { ruleOfLaw } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { OperatorArity } from "#pantry/grammar/install.ts";
 import { Document } from "#pantry/qti/chardata.ts";
@@ -1475,7 +1475,7 @@ describe.skipIf(!hasLease)(
                     ? [
                         ...new Set(
                           outcome.refused.laws.map((law): string | undefined =>
-                            Option.getOrUndefined(ruleOfLaws([law])),
+                            Option.getOrUndefined(ruleOfLaw(law)),
                           ),
                         ),
                       ]
@@ -1509,7 +1509,7 @@ describe.skipIf(!hasLease)(
               const refused =
                 outcome.kind === "invariant-rejected"
                   ? outcome.refused.laws.map((law): string | undefined =>
-                      Option.getOrUndefined(ruleOfLaws([law])),
+                      Option.getOrUndefined(ruleOfLaw(law)),
                     )
                   : [outcome.kind];
 

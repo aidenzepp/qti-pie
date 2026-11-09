@@ -26,7 +26,7 @@ import { readProgram } from "#pantry/import/program.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge as hostJudge, judgedLaws } from "#pantry/import/host-judge.ts";
+import { hostRowsOf, judge as hostJudge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
 
 /**

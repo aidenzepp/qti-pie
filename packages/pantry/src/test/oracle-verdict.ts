@@ -21,10 +21,10 @@ import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 const laws = lawsOf(grammar);
 
 /**
- * What the law oracle predicts of a package: accepted, or refused under one of the rules its
- * breaches keep (or its codec refusal's). The database refuses a package under the rule of the
- * first native object that fails, by the refusal's precedence over the laws that object
- * discharges, so an import agrees with the oracle when its rule is any of these.
+ * What the law oracle predicts of a package: accepted, or refused under the rules its breaches
+ * keep (or its codec refusal's). The database refuses a package by the first native object that
+ * fails, under every rule of the laws that object discharges, so an import agrees with the oracle
+ * when one of its rules is one of these.
  */
 export type OracleVerdict =
   | { readonly kind: "accepted" }
@@ -62,7 +62,8 @@ export const oracleCodecRule = (
 
 /**
  * Import a package on the lease, and hold its verdict to the oracle's: accepted where the oracle
- * accepts, and refused under one of the rules the oracle's breaches keep where it refuses.
+ * accepts, and refused under rules that meet the rules the oracle's breaches keep where it
+ * refuses.
  *
  * @param dir - The package directory or `.zip` file.
  * @param label - Its name, for the assertion's message.
@@ -94,7 +95,7 @@ export const importAgreesWithOracle = (dir: string, label: string) =>
     }
 
     assert.isTrue(
-      expected.rules.has(refused.rule),
+      refused.rules.some((rule) => expected.rules.has(rule)),
       `${label}: ${refused.message}; the oracle's rules are ${[...expected.rules].join(", ")}`,
     );
 

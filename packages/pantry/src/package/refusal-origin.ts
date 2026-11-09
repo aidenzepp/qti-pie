@@ -3,14 +3,16 @@
  * read: the reader, the container or the codec, which refuse a package before any row exists, or
  * the database, which names the laws its outcome refused the write under.
  *
- * The database's account is one case of {@link RefusalOrigin}, never three optional fields, so a
- * refusal either carries its laws, their sources and its witness together or carries none of them,
- * and a reader switches on the case rather than testing each field. The laws are parsed once, where
- * `refusalOfLaws` of `#pantry/import/refusal.ts` builds the refusal, into the facts every reader
- * prints. The module imports Effect alone, and it sits with the package's readers rather than the
- * importer, so the command line reads a refusal without loading the importer: its startup graph
- * reaches no `#pantry/import/` module (`src/cli/startup.test.ts`).
+ * The database's account is one case of {@link RefusalOrigin}, never four optional fields, so a
+ * refusal either carries how grizzle decided its laws, the laws, their sources and its witness
+ * together or carries none of them, and a reader switches on the case rather than testing each
+ * field. The laws are read once, where `refusalOf` of `#pantry/import/refusal.ts` builds the
+ * refusal from the outcome alone, into the facts every reader prints. The module imports Effect
+ * alone, and it sits with the package's readers rather than the importer, so the command line reads
+ * a refusal without loading the importer: its startup graph reaches no `#pantry/import/` module
+ * (`src/cli/startup.test.ts`).
  */
+import type { Refused } from "@bjornpagen/grizzle";
 import { Schema } from "effect";
 import type { RefusalWitness } from "#pantry/import/refusal.ts";
 
@@ -33,9 +35,31 @@ const witnessKinds = {
 export const WitnessKind = Schema.Literals(Object.values(witnessKinds));
 
 /**
+ * The ways grizzle decides the laws an `invariant-rejected` outcome names, checked against the
+ * kinds of its `Refused` both ways: a kind it adds or drops fails to compile here.
+ */
+const refusedKinds = {
+  every: "every",
+  first: "first",
+  some: "some",
+} as const satisfies { readonly [Kind in Refused["kind"]]: Kind };
+
+/**
+ * How grizzle decided the laws a database refusal names, as its outcome says (grizzle-engine
+ * `types/changeset/changeset.ts` `Refused`, at the vendored commit): `every`, each law named is
+ * broken; `first`, the laws of the CHECK PostgreSQL tried first, and the row may break others too;
+ * `some`, at least one law named is broken, and nothing grizzle holds says which. A refusal reports
+ * it as it is and never decides more than the outcome does.
+ */
+export const RefusedKind = Schema.Literals(Object.values(refusedKinds));
+
+/**
  * One law a database refusal names: its `text`, the law as grizzle's outcome names it, written by
- * Effect's `Formatter.format` for a person to read, and the `name` and `rule` the law table gives
- * it, absent for a law the table does not hold. A program reads which law broke by its `name`.
+ * Effect's `Formatter.format` for a person to read; its `installed` name, the name PostgreSQL holds
+ * a check's CHECK constraint under (grizzle's `constraintNameOf`), absent for every other kind of
+ * law, which grizzle names no installed object of at the vendored commit; and the `name` and `rule`
+ * the law table gives it, absent for a law the table does not hold. A program reads which law broke
+ * by its `name`, or by its `installed` name where the table names none.
  *
  * The text is no JSON: `Formatter.format` writes a literal's absent type as `undefined` and a
  * bigint as `1n`. The law stays display text because grizzle has no encoder or decoder of its
@@ -44,6 +68,7 @@ export const WitnessKind = Schema.Literals(Object.values(witnessKinds));
  * and its installed name.
  */
 export const RefusedLaw = Schema.Struct({
+  installed: Schema.optionalKey(Schema.String),
   name: Schema.optionalKey(Schema.String),
   rule: Schema.optionalKey(Schema.String),
   text: Schema.String,
@@ -51,14 +76,16 @@ export const RefusedLaw = Schema.Struct({
 
 /**
  * Where a refusal comes from: `Reader`, the reader, the ZIP container, the package reader or the
- * codec, before any row exists; or `Database`, an `invariant-rejected` outcome, with every law it
- * named, every law's source and its witness's kind.
+ * codec, before any row exists; or `Database`, an `invariant-rejected` outcome, with how grizzle
+ * decided its laws, every law it named, the source of every law the table holds (none where it
+ * holds none of them) and its witness's kind.
  */
 export const RefusalOrigin = Schema.Union([
   Schema.TaggedStruct("Reader", {}),
   Schema.TaggedStruct("Database", {
+    kind: RefusedKind,
     laws: Schema.NonEmptyArray(RefusedLaw),
-    sources: Schema.NonEmptyArray(Schema.String),
+    sources: Schema.Array(Schema.String),
     witness: WitnessKind,
   }),
 ]);

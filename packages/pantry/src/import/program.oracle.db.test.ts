@@ -227,7 +227,7 @@ const applyEdited = (
 
 /**
  * Hold PostgreSQL to a verdict on a package: an accepted one commits, and a refused one is
- * refused under its rule.
+ * refused under rules that include its rule.
  *
  * @param name - The package's name, for the assertions' messages.
  * @param dir - The package.
@@ -252,8 +252,8 @@ const holdsVerdict = (
 
     const refused = yield* Effect.flip(importPackage(dir));
 
-    assert.strictEqual(
-      refused instanceof ImportRefused ? refused.rule : refused._tag,
+    assert.include(
+      refused instanceof ImportRefused ? refused.rules : [refused._tag],
       verdict.rule,
       name,
     );
@@ -996,7 +996,7 @@ describe.skipIf(!hasLease)(
               assert.isTrue(
                 outcome._tag === "Failure" &&
                   outcome.failure instanceof ImportRefused &&
-                  rules.includes(outcome.failure.rule),
+                  outcome.failure.rules.some((rule) => rules.includes(rule)),
                 `${name}: ${outcome._tag === "Failure" ? outcome.failure.message : "accepted"}`,
               );
             }
@@ -1083,8 +1083,8 @@ describe.skipIf(!hasLease)(
           const refused = yield* Effect.flip(importPackage(fixtures.lti));
 
           assert.instanceOf(refused, ImportRefused);
-          assert.strictEqual(
-            refused instanceof ImportRefused ? refused.rule : undefined,
+          assert.include(
+            refused instanceof ImportRefused ? refused.rules : [],
             "attribute-lexical",
           );
         }),

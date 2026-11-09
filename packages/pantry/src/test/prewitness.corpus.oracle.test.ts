@@ -216,7 +216,10 @@ describe.skipIf(!settings.corpusRequested)("prewitness.corpus.oracle.test.ts, th
           const changed = predictions.filter((row) => {
             const held = byFile.get(row.file);
 
-            return held?.verdict !== row.verdict || held.rule !== row.rule;
+            return (
+              held?.verdict !== row.verdict ||
+              (row.verdict === "refused" && !held.rules.some((rule) => rule === row.rule))
+            );
           });
           const accepted = predictions.filter(({ verdict }) => verdict === "accepted").length;
 
@@ -248,7 +251,7 @@ describe.skipIf(!settings.corpusRequested)("prewitness.corpus.oracle.test.ts, th
               ...changed.map((row) => {
                 const held = byFile.get(row.file);
 
-                return `  ${row.name}: ${held?.verdict ?? "absent"} ${held?.rule ?? ""} -> ${row.verdict} ${row.rule}; ${rulesOf(row.judgment)}`;
+                return `  ${row.name}: ${held?.verdict ?? "absent"} ${held?.rules.join("|") ?? ""} -> ${row.verdict} ${row.rule}; ${rulesOf(row.judgment)}`;
               }),
             ].join("\n"),
           );

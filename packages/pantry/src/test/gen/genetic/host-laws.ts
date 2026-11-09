@@ -119,7 +119,7 @@ const LiteralSchema = Schema.Union([
 /**
  * A term of a stored predicate as grizzle keeps it, read field by field, a literal's value unread:
  * {@link termOf} reads it, and a literal of no {@link Literal} is `unread` there, as the production
- * host judge reads one (`#pantry/host/predicates.ts` `termOf`), so the statement that holds it is
+ * host judge reads one (`#pantry/test/predicates.ts` `termOf`), so the statement that holds it is
  * still evaluated, unknown where the literal decides.
  */
 interface StoredTerm {
@@ -1659,7 +1659,7 @@ export interface HostVerdict {
   readonly broken: ReadonlyMap<LawName, Broken>;
   /**
    * Each statement the rows break, as an `invariant-rejected` outcome would name its law, a key
-   * text past its bound as its field type's pattern law: what `ruleOfLaws` names the refusal by.
+   * text past its bound as its field type's pattern law, which the refusal names it by.
    */
   readonly brokenLaws: readonly Law[];
   readonly dangling: readonly Dangling[];

@@ -30,7 +30,7 @@ import { flatten } from "#pantry/model/xdm.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/import/host-judge.ts";
+import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/test/host-judge.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { Judgment } from "#pantry/test/oracle.ts";
@@ -444,7 +444,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a document's XML decla
                   );
                   assert.deepStrictEqual(
                     Result.isFailure(read) && read.failure._tag === "ImportRefused"
-                      ? read.failure.rule
+                      ? read.failure.rules.join("|")
                       : "read",
                     expected.rule,
                     `${label}: the import`,

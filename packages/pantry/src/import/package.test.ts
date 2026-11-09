@@ -400,14 +400,15 @@ describe.skipIf(!hasLease)(
       }
 
       for (const [name, rules] of brokenBeyondOracle) {
-        it.effect(`refuses ${name} under ${rules.join(" or ")}`, () =>
+        it.effect(`refuses ${name} under rules that meet ${rules.join(", ")}`, () =>
           // Oracle: the specification as a checker, the rule Q5.08's law keeps (the retired guard's,
           // `value-single` and `value-lexical`, as the refusal table maps them).
           Effect.gen(function* refusedBeyondOracle() {
             const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
 
             assert.isTrue(
-              refused instanceof ImportRefused && rules.includes(refused.rule),
+              refused instanceof ImportRefused &&
+                refused.rules.some((rule) => rules.includes(rule)),
               `${name}: ${refused.message}`,
             );
           }),

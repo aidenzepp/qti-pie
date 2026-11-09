@@ -34,12 +34,12 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawNameOf, ruleOfLaws } from "#pantry/import/refusal.ts";
+import { lawNameOf, rulesOf } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/import/host-judge.ts";
+import { hostRowsOf, judge as judgeHost, judgedLaws } from "#pantry/test/host-judge.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
 import { judge, lawsOf, ruleOf, shownBreach } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
@@ -509,7 +509,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                   const brokenLaws = broken.map(({ law }) => law);
                   const rule = Arr.isReadonlyArrayNonEmpty(brokenLaws)
-                    ? ruleOfLaws(brokenLaws)
+                    ? Arr.head(rulesOf(brokenLaws))
                     : Option.none();
                   const rules = [...expected].map((law) => ruleOf(law));
 

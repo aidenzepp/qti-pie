@@ -20,7 +20,7 @@
  *
  * A copy out of a `keyText` field is bounded where that field is written, so only these first hops
  * are listed. Each selection and check is read from the predicate grizzle keeps for it and
- * evaluated on the host in SQL's three-valued logic (`#pantry/host/predicates.ts`, which reads no
+ * evaluated on the host in SQL's three-valued logic (`#pantry/test/predicates.ts`, which reads no
  * schema of its own), over the fields the oracle knows of a row ({@link attributeFields},
  * {@link nodeFields}).
  */
@@ -37,8 +37,8 @@ import {
   StatementSchema,
   subtermsOf,
   termOf,
-} from "#pantry/host/predicates.ts";
-import type { Datum, Row, StoredSide, StoredStatement, Term } from "#pantry/host/predicates.ts";
+} from "#pantry/test/predicates.ts";
+import type { Datum, Row, StoredSide, StoredStatement, Term } from "#pantry/test/predicates.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
@@ -574,7 +574,7 @@ export const keyCopies: readonly KeyCopy[] = Result.getOrThrowWith(
  * Read a check the schema states as the value its predicate takes over a row, from the predicate
  * grizzle keeps for it, in SQL's three-valued logic: true, false, or unknown (`undefined`) where it
  * reads a field the row does not hold, a closed read at a key no row holds, or a term the host does
- * not read (`#pantry/host/predicates.ts`).
+ * not read (`#pantry/test/predicates.ts`).
  *
  * @param statements - The schema's statements.
  * @param relation - The check's relation.

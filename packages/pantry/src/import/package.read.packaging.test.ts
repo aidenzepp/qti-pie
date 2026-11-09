@@ -18,14 +18,15 @@ import { oracleCodecRule, packagingFixtures } from "#pantry/test/oracle-verdict.
 const fixtures = inject("fixtures");
 
 /**
- * Name the rule a read failed under: a refusal's own, or the platform failure's tag, which no
- * refusal names.
+ * Name the rule a read failed under: a refusal's own, the one rule a refusal made before the
+ * database carries, written as the verdict file writes a refusal's rules, or the platform
+ * failure's tag, which no refusal names.
  *
  * @param failure - The read's failure.
  * @returns Its rule.
  */
 const ruleOf = (failure: ImportRefused | PlatformError.PlatformError): string =>
-  failure instanceof ImportRefused ? failure.rule : failure._tag;
+  failure instanceof ImportRefused ? failure.rules.join("|") : failure._tag;
 
 layer(NodeServices.layer, { excludeTestServices: true })(
   "readProgram over the packaging fixtures",

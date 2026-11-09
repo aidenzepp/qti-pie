@@ -1,8 +1,9 @@
 /**
  * The verdict file's machinery, checked as properties against the file's format as AGENTS.md
- * states it: TSV with LF line ends, the header `file`, `verdict`, `rule`, one row per corpus zip
- * sorted by `file` in UTF-16 code-unit order, `rule` empty exactly when the row is accepted and
- * otherwise a rule of the importer's roster.
+ * states it, with the owner's answer of 2026-11-08 on a refusal's rules: TSV with LF line ends, the
+ * header `file`, `verdict`, `rule`, one row per corpus zip sorted by `file` in UTF-16 code-unit
+ * order, `rule` empty exactly when the row is accepted and otherwise the refusal's rules, each a
+ * rule of the importer's roster, each once, in the roster's order, joined by `|`.
  */
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
@@ -18,6 +19,7 @@ import { swarm, swarmChoice } from "@grizzle/testing/swarm";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Result } from "effect";
 import { ImportRule } from "#pantry/import/refusal.ts";
+import type { Rule } from "#pantry/import/refusal.ts";
 import { parseVerdicts, renderVerdicts, verdictsPath } from "#pantry/test/verdicts.ts";
 import type { VerdictRow } from "#pantry/test/verdicts.ts";
 
@@ -32,8 +34,18 @@ const caseHang = Duration.seconds(10);
 const pathLetter = element(["a", "B", "z", "é", "/", ".", "_"] as const);
 
 /**
+ * One to three rules of the roster, each once, in the roster's order (`ImportRule.literals`), as
+ * the format lists a refusal's rules.
+ */
+const rulesDrawn: Gen<readonly Rule[]> = (source) => {
+  const picked = source.draw(array(element(ImportRule.literals), { max: 3, min: 1 }));
+
+  return ImportRule.literals.filter((rule) => picked.includes(rule));
+};
+
+/**
  * A row of the format: a member path of one to eight letters, made distinct by its index, and a
- * verdict whose rule is empty when accepted and a roster rule when refused.
+ * verdict whose rules are none when accepted and one to three roster rules when refused.
  */
 const rowOf =
   (index: number): Gen<VerdictRow> =>
@@ -41,8 +53,8 @@ const rowOf =
     const file = `${source.draw(string(pathLetter, { max: 8, min: 1 }))}-${index}.zip`;
 
     return source.draw(element(["accepted", "refused"] as const)) === "accepted"
-      ? { file, rule: "", verdict: "accepted" }
-      : { file, rule: source.draw(element(ImportRule.literals)), verdict: "refused" };
+      ? { file, rules: [], verdict: "accepted" }
+      : { file, rules: source.draw(rulesDrawn), verdict: "refused" };
   };
 
 /**
@@ -65,9 +77,17 @@ const byFile = (left: VerdictRow, right: VerdictRow): number => {
  * The format's text for rows, written from the format's statement, not from `verdicts.ts`.
  */
 const formatted = (rows: readonly VerdictRow[]): string =>
-  [HEADER, ...rows.toSorted(byFile).map((row) => [row.file, row.verdict, row.rule].join("\t"))]
+  [
+    HEADER,
+    ...rows.toSorted(byFile).map((row) => [row.file, row.verdict, row.rules.join("|")].join("\t")),
+  ]
     .map((line) => `${line}\n`)
     .join("");
+
+/**
+ * The roster's first two rules, in its order and then out of it.
+ */
+const [firstRule, secondRule] = ImportRule.literals;
 
 /**
  * The named ways a row breaks the format, and `valid`, the floor.
@@ -79,6 +99,8 @@ const ROW_FAULTS = [
   "carriage-return-in-file",
   "refused-without-rule",
   "accepted-with-rule",
+  "repeated-rule",
+  "rules-out-of-order",
 ] as const;
 
 type RowFault = (typeof ROW_FAULTS)[number];
@@ -87,10 +109,12 @@ type RowFault = (typeof ROW_FAULTS)[number];
  * Each row fault applied to one row.
  */
 const BROKEN_ROW: Readonly<Record<RowFault, (row: VerdictRow) => VerdictRow>> = {
-  "accepted-with-rule": (row) => ({ ...row, rule: "admission", verdict: "accepted" }),
+  "accepted-with-rule": (row) => ({ ...row, rules: ["admission"], verdict: "accepted" }),
   "carriage-return-in-file": (row) => ({ ...row, file: `${row.file}\r` }),
   "line-feed-in-file": (row) => ({ ...row, file: `x\n${row.file}` }),
-  "refused-without-rule": (row) => ({ ...row, rule: "", verdict: "refused" }),
+  "refused-without-rule": (row) => ({ ...row, rules: [], verdict: "refused" }),
+  "repeated-rule": (row) => ({ ...row, rules: [firstRule, firstRule], verdict: "refused" }),
+  "rules-out-of-order": (row) => ({ ...row, rules: [secondRule, firstRule], verdict: "refused" }),
   "tab-in-file": (row) => ({ ...row, file: `x\t${row.file}` }),
   valid: (row) => row,
 };
@@ -120,6 +144,9 @@ const TEXT_FAULTS = [
   "refused-without-rule",
   "accepted-with-rule",
   "unknown-rule",
+  "unknown-rule-among-rules",
+  "repeated-rule",
+  "rules-out-of-order",
 ] as const;
 
 type TextFault = (typeof TEXT_FAULTS)[number];
@@ -133,8 +160,13 @@ const BROKEN_TEXT: Readonly<Record<TextFault, (rows: readonly VerdictRow[]) => s
   "four-columns": (rows) => `${formatted(rows)}late.zip\taccepted\t\textra\n`,
   "no-final-newline": (rows) => formatted(rows).slice(0, -1),
   "refused-without-rule": (rows) => `${formatted(rows)}late.zip\trefused\t\n`,
+  "repeated-rule": (rows) => `${formatted(rows)}late.zip\trefused\t${firstRule}|${firstRule}\n`,
+  "rules-out-of-order": (rows) =>
+    `${formatted(rows)}late.zip\trefused\t${secondRule}|${firstRule}\n`,
   "two-columns": (rows) => `${formatted(rows)}late.zip\taccepted\n`,
   "unknown-rule": (rows) => `${formatted(rows)}late.zip\trefused\tnot-a-rule\n`,
+  "unknown-rule-among-rules": (rows) =>
+    `${formatted(rows)}late.zip\trefused\t${firstRule}|not-a-rule\n`,
   "unknown-verdict": (rows) => `${formatted(rows)}late.zip\tmaybe\t\n`,
   valid: formatted,
   "wrong-header": (rows) => formatted(rows).replace(HEADER, "file\tverdict"),

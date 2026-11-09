@@ -25,7 +25,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ruleOfLaws } from "#pantry/import/refusal.ts";
+import { rulesOf } from "#pantry/import/refusal.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
@@ -227,7 +227,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                 if (Arr.isReadonlyArrayNonEmpty(host.brokenLaws)) {
                   assert.strictEqual(
-                    Option.getOrUndefined(ruleOfLaws(host.brokenLaws)),
+                    Option.getOrUndefined(Arr.head(rulesOf(host.brokenLaws))),
                     verdict.verdict === "accepted" ? undefined : verdict.rule,
                     `${manifest}: the import's rows, judged on the host, refused under the oracle's rule`,
                   );

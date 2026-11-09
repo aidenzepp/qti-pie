@@ -15,7 +15,7 @@
  * variable, a printed variable's name and its `base`, and a portable custom interaction's context
  * variable. Every package declares none of the names, so each reference resolves
  * to its root's built-in or to nothing. Every case is judged by the law oracle and by the schema's
- * own laws over the import's rows (`#pantry/import/host-judge.ts`), and the laws each side breaks
+ * own laws over the import's rows (`#pantry/test/host-judge.ts`), and the laws each side breaks
  * must be one set; the oracle's verdict is held to the specification's table, written by hand.
  */
 import type { Law } from "@bjornpagen/grizzle";
@@ -34,7 +34,7 @@ import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import { hostRowsOf, judge, judgedLaws } from "#pantry/import/host-judge.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { judge as judgeOracle, lawsOf } from "#pantry/test/oracle.ts";
 
 /**

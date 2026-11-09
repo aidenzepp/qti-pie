@@ -21,14 +21,14 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { readProgram } from "#pantry/import/program.ts";
-import { ruleOfLaws } from "#pantry/import/refusal.ts";
+import { ruleOfLaw } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
-import { datumText } from "#pantry/host/predicates.ts";
-import type { Datum } from "#pantry/host/predicates.ts";
+import { datumText } from "#pantry/test/predicates.ts";
+import type { Datum } from "#pantry/test/predicates.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
 import { checkOf } from "#pantry/test/key-copies.ts";
 import {
@@ -247,7 +247,7 @@ const schemaRules = (inputs: PackageInputs): ReadonlyMap<string, ReadonlySet<str
       if (containment.selected(row) && !present.has(sought)) {
         breach(
           row["node"],
-          Option.getOrElse(ruleOfLaws([containment.law]), () => "unnamed"),
+          Option.getOrElse(ruleOfLaw(containment.law), () => "unnamed"),
         );
       }
     }

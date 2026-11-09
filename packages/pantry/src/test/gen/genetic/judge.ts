@@ -29,7 +29,6 @@ import {
   FileSystem,
   Formatter,
   Option,
-  Result,
 } from "effect";
 import type { Path, PlatformError } from "effect";
 import { sameLaw } from "@bjornpagen/grizzle";
@@ -38,7 +37,7 @@ import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ImportRefused, refusalOfLaws } from "#pantry/import/refusal.ts";
+import { ImportRefused, refusalOf } from "#pantry/import/refusal.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
@@ -69,9 +68,9 @@ import type { Breach, LawName, Judgment as OracleJudgment, Laws } from "#pantry/
  * - `dangling-uuid`: a row names a uuid the program did not mint;
  * - `noise-moved`: a side's verdict moved when the package took a noise no law reads
  *   (`#pantry/test/gen/genetic/noise.ts`);
- * - `lone-refusal`: the oracle breaks one law alone, and the refusal the import names over the laws
- *   its rows break (`refusalOfLaws`, as the database's outcome names it) is under another rule than
- *   that law's, or carries another witness than the outcome's.
+ * - `lone-refusal`: the oracle breaks one law alone, and the most specific rule of the refusal the
+ *   import names over the laws its rows break (`refusalOf`, as the database's outcome names it) is
+ *   another rule than that law's, or the refusal carries another witness than the outcome's.
  */
 export type Disagreement =
   | {
@@ -472,7 +471,7 @@ const importSideOf = (
       const failure = Cause.findErrorOption(cause);
 
       return Option.isSome(failure) && failure.value instanceof ImportRefused
-        ? { kind: "refused", rule: failure.value.rule }
+        ? { kind: "refused", rule: failure.value.rules.join("|") }
         : { detail: Cause.pretty(cause), kind: "died" };
     },
     onSuccess: (program): ImportSide => ({
@@ -744,11 +743,13 @@ const witnessOf = (refused: ImportRefused): string =>
 
 /**
  * Judge the refusal the import names for a package whose oracle breaks one law alone: the import's
- * rows break laws on the host, and `refusalOfLaws` names the refusal over them and the lone law
- * (which the database breaks too, by a statement the host may not evaluate, so it stands as its
- * check, named by the law) as it names the database's outcome. Its rule must be the lone law's,
- * and its witness the outcome's: a rule some other broken law ranks before in precedence is a
- * refusal the oracle does not predict.
+ * rows break laws on the host, and `refusalOf` names the refusal over them and the lone law (which
+ * the database breaks too, by a statement the host may not evaluate, so it stands as its check,
+ * named by the law) as it names the database's outcome. The most specific of its rules, by the
+ * precedence it lists them in, must be the lone law's, and its witness the outcome's: a rule some
+ * other broken law ranks before in precedence is a refusal the oracle does not predict. The import
+ * no longer singles out one rule, so this models the ruling it made before, until the class goes
+ * with the host judge.
  *
  * @param breaches - The oracle's breaches.
  * @param host - The host's verdict over the import's rows.
@@ -771,32 +772,21 @@ const loneRefusal = (
     { kind: "check", name: lone.replaceAll(" ", "_"), relation: "Node" } satisfies Law,
     ...host.brokenLaws,
   ] as const;
+  const refused = refusalOf({ kind: "every", laws }, unreported, grammar);
+  const importRule = Option.getOrElse(Arr.head(refused.rules), () => "none");
 
-  return Result.match(refusalOfLaws(laws, unreported, grammar), {
-    onFailure: (unowned): readonly Disagreement[] => [
-      {
-        importRule: "none",
-        kind: "lone-refusal",
-        law: lone,
-        laws: unowned.laws.join("; "),
-        rule,
-        witness: "none",
-      },
-    ],
-    onSuccess: (refused): readonly Disagreement[] =>
-      refused.rule === rule && witnessOf(refused) === unreported.kind
-        ? []
-        : [
-            {
-              importRule: refused.rule,
-              kind: "lone-refusal",
-              law: lone,
-              laws: laws.map((law) => Formatter.format(law)).join("; "),
-              rule,
-              witness: witnessOf(refused),
-            },
-          ],
-  });
+  return importRule === rule && witnessOf(refused) === unreported.kind
+    ? []
+    : [
+        {
+          importRule,
+          kind: "lone-refusal",
+          law: lone,
+          laws: laws.map((law) => Formatter.format(law)).join("; "),
+          rule,
+          witness: witnessOf(refused),
+        },
+      ];
 };
 
 /**

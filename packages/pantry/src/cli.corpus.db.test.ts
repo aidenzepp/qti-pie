@@ -70,7 +70,8 @@ const errorObjectOf = Schema.decodeUnknownOption(Schema.fromJsonString(ErrorObje
 const isUuid = Schema.is(Schema.String.check(Schema.isUUID()));
 
 /**
- * The packages the importer refused, with the rule each broke.
+ * The packages the importer refused, with the rules each was refused under, as the verdict file
+ * writes them.
  */
 const refusals: { readonly name: string; readonly rule: string }[] = [];
 
@@ -188,16 +189,20 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
       assert.strictEqual(errors[0]?.kind, "roundtrip-differs", `${entry.name}: the CLI's kind`);
     }
 
-    verdicts.push({ file: entry.member, rule: "", verdict: "accepted" });
+    verdicts.push({ file: entry.member, rules: [], verdict: "accepted" });
     tally.accepted += 1;
     tally.equalEntries += report.length - differing;
   } else {
-    const rule = refusal._tag === "ImportRefused" ? refusal.rule : "";
+    const rules = refusal._tag === "ImportRefused" ? refusal.rules : [];
 
     assert.strictEqual(cli.code, 1, `${entry.name}: refused directly, so the CLI exits 1`);
     assert.strictEqual(errors.length, 1, `${entry.name}: one ErrorObject line on stderr`);
     assert.strictEqual(errors[0]?.kind, "import-refused", `${entry.name}: the CLI's kind`);
-    assert.strictEqual(errors[0]?.rule, rule, `${entry.name}: the CLI names the importer's rule`);
+    assert.deepStrictEqual(
+      errors[0]?.rules,
+      rules,
+      `${entry.name}: the CLI names the importer's rules`,
+    );
 
     const laws = Option.map(
       Option.flatMap(refusalFieldsOf(refusal), databaseRefusalOf),
@@ -214,8 +219,8 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
       Option.isNone(laws),
       `${entry.name}: the CLI gives sources exactly when the database refused the package`,
     );
-    verdicts.push({ file: entry.member, rule, verdict: "refused" });
-    tally.refused.push({ name: entry.name, rule });
+    verdicts.push({ file: entry.member, rules, verdict: "refused" });
+    tally.refused.push({ name: entry.name, rule: rules.join("|") });
   }
 });
 

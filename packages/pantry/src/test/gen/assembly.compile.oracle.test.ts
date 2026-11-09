@@ -148,7 +148,7 @@ const keep = (assembly: Assembly) =>
       assert.isTrue(
         Result.isFailure(outcome) &&
           outcome.failure._tag === "ImportRefused" &&
-          outcome.failure.rule === judgment.rule,
+          outcome.failure.rules.join("|") === judgment.rule,
         `${literal}: the law oracle refuses it under ${judgment.rule}, and readProgram ${Result.isFailure(outcome) ? `fails with ${outcome.failure.message}` : "yields a write program"}`,
       );
 

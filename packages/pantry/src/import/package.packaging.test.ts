@@ -52,10 +52,12 @@ describe.skipIf(!hasLease)(
           Effect.gen(function* includeTarget() {
             const refused = yield* Effect.flip(importPackage(yield* dir));
 
-            assert.include(
-              rules,
-              refused instanceof ImportRefused ? refused.rule : refused._tag,
-              name,
+            const named = refused instanceof ImportRefused ? refused.rules : [refused._tag];
+            const expected: readonly string[] = rules;
+
+            assert.isTrue(
+              named.some((rule) => expected.includes(rule)),
+              `${name}: refused under ${named.join(", ")}, none of ${rules.join(", ")}`,
             );
           }),
         );

@@ -73,8 +73,8 @@ const importJudged = (assembly: Assembly) =>
         predicted.kind === "refused" ? [...predicted.faults].map(ruleOfFault) : [],
       );
       assert.isTrue(
-        rules.has(refused.rule),
-        `${literal} was refused under ${refused.rule}, and the model's faults are ${[...rules].join(", ")}: ${refused.message}`,
+        refused.rules.some((rule) => rules.has(rule)),
+        `${literal} was refused under ${refused.rules.join(", ")}, and the model's faults are ${[...rules].join(", ")}: ${refused.message}`,
       );
     } else {
       assert.fail(`${literal} failed with ${outcome.failure.message}`);

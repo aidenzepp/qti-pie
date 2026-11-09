@@ -1,5 +1,5 @@
 /**
- * What a test reads of the laws the import's host judge judges (`#pantry/import/host-judge.ts`)
+ * What a test reads of the laws the tests' host judge judges (`#pantry/test/host-judge.ts`)
  * beyond the judge itself: each containment a relation is the source of, named as grizzle's
  * `lawsOf` names its statement's law ({@link containmentsOf}), and a check's installed name from
  * its law ({@link checkConstraintOf}).
@@ -10,14 +10,14 @@
 import { constraintNameOf } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { Function as Fn } from "effect";
-import { containmentsIn, statedAs } from "#pantry/import/host-judge.ts";
-import type { Containment } from "#pantry/import/host-judge.ts";
+import { containmentsIn, statedAs } from "#pantry/test/host-judge.ts";
+import type { Containment } from "#pantry/test/host-judge.ts";
 import { statementLawsOf } from "#pantry/import/refusal.ts";
 import type { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * Read every containment the schema states from one relation (`containmentsIn` of
- * `#pantry/import/host-judge.ts`), so a test can judge rows by the schema's own statements, their
+ * `#pantry/test/host-judge.ts`), so a test can judge rows by the schema's own statements, their
  * selections included. Each law is its statement's own, named as the host judge's `judgedLaws`
  * names it (its `statedAs`), so `src/import/refusal.ts`'s `lawNameOf` names it.
  *

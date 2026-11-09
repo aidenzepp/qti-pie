@@ -10,7 +10,7 @@
  * content, is such a site, and its placement's document is a fragment, whose root is any kind the
  * include may stand for (spec readings 114 and 117). Each package below is the every-relation
  * package, which the law oracle accepts, with one site placed differently, and every law the host
- * judges (`#pantry/import/host-judge.ts`) holds over its rows.
+ * judges (`#pantry/test/host-judge.ts`) holds over its rows.
  *
  * A section's include is no splice: it places its document as a section ref does (readings 86 and
  * 117, "includes in a section follow it"), so a section document a section includes twice is
@@ -25,8 +25,8 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import type { Addition } from "@bjornpagen/grizzle";
-import { Duration, Effect, Formatter, Option } from "effect";
-import { ruleOfLaws } from "#pantry/import/refusal.ts";
+import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
+import { rulesOf } from "#pantry/import/refusal.ts";
 import type { InstanceMember } from "#pantry/import/overlays/tests.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
@@ -34,8 +34,8 @@ import { Qti } from "#pantry/qti/schema.ts";
 import type { Site } from "#pantry/qti/tests.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
-import type { Datum } from "#pantry/host/predicates.ts";
-import { hostRowsOf, judge, judgedLaws } from "#pantry/import/host-judge.ts";
+import type { Datum } from "#pantry/test/predicates.ts";
+import { hostRowsOf, judge, judgedLaws } from "#pantry/test/host-judge.ts";
 import { checkOf } from "#pantry/test/key-copies.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
@@ -382,7 +382,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("a site at every placem
           const program = yield* readProgram(dir);
           const { broken } = judge(hostRowsOf(program.inputs), laws);
           const [first, ...rest] = broken.map(({ law }) => law);
-          const rule = first === undefined ? Option.none() : ruleOfLaws([first, ...rest]);
+          const rule = first === undefined ? Option.none() : Arr.head(rulesOf([first, ...rest]));
 
           assert.deepStrictEqual(
             verdict.kind === "refused" ? [...verdict.rules] : [],

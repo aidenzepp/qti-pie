@@ -5,9 +5,10 @@
  * It states no law and reads no schema: a caller hands it the statements it reads and the schema's
  * members whose closed relations a predicate's closed reads look up ({@link closedOf}). Two callers
  * share it: the law oracle's key copies (`#pantry/test/key-copies.ts`), which read the composed
- * schema's copies into a key text, and the import's host judge (`#pantry/import/host-judge.ts`),
- * which judges the import's own rows by the schema's laws. The law oracle may read this module
- * because it reads no statement of its own; `src/grammar/purity.test.ts` holds it to that.
+ * schema's copies into a key text, and the tests' host judge (`#pantry/test/host-judge.ts`), which
+ * judges the import's own rows by the schema's laws. No production module reads it. The law oracle
+ * may read this module because it reads no statement of its own; `src/grammar/purity.test.ts`
+ * holds it to that.
  *
  * - **Values.** A row is its fields' values, each a {@link Datum}: a text, a natural, a float, a
  *   truth value or a set of a roster's handles.

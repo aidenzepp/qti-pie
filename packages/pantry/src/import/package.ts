@@ -17,23 +17,11 @@ import {
   TransientFailure,
 } from "@bjornpagen/grizzle";
 import type { ApplyError, DbLayer, OpenError, ReadError, Uuid } from "@bjornpagen/grizzle";
-import {
-  Clock,
-  Context,
-  Duration,
-  Effect,
-  Option,
-  Random,
-  Ref,
-  Result,
-  Schedule,
-  Schema,
-} from "effect";
+import { Clock, Context, Duration, Effect, Option, Random, Ref, Schedule, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
-import { hostRowsOf, rulingOf } from "#pantry/import/host-judge.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { refusalOfLaws } from "#pantry/import/refusal.ts";
+import { refusalOf } from "#pantry/import/refusal.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
@@ -207,11 +195,11 @@ export const settleCommitUnknown = Effect.fnUntraced(function* settleCommitUnkno
  * {@link RetrySchedule}, and each attempt of the apply through {@link WrapApply}.
  *
  * @param dir - The package directory or `.zip` file.
- * @returns The id of the committed package. Fails with `ImportRefused` naming the rule the package
- *   broke, whether the reader, the codec or the database refused it; with the platform's error
- *   when the directory cannot be read; with `CommitUnresolved` when the commit's outcome is
- *   unknown and the read-back failed, so the package may or may not be stored; and with grizzle's
- *   own error when the database failed for a reason that is not a refusal.
+ * @returns The id of the committed package. Fails with `ImportRefused` naming the rules the package
+ *   was refused under, whether the reader, the codec or the database refused it; with the
+ *   platform's error when the directory cannot be read; with `CommitUnresolved` when the commit's
+ *   outcome is unknown and the read-back failed, so the package may or may not be stored; and with
+ *   grizzle's own error when the database failed for a reason that is not a refusal.
  */
 export const importPackage = Effect.fn("import.importPackage")(function* importPackage(
   dir: string,
@@ -236,65 +224,31 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   yield* Effect.annotateCurrentSpan({ applyMillis: Duration.toMillis(elapsed), packageId });
 
   if (outcome.kind === "invariant-rejected") {
-    // The laws the refusal names, by how grizzle decided them (grizzle-engine
-    // `src/types/changeset/changeset.ts:1040` and `src/write/program/witness.ts`'s hostJudgement at
-    // `999facc`):
-    // - `every`: every law of the refused row's table that the stated row breaks, each once, in
-    //   the schema's order, a domain's one per column whose value it refuses; for any other
-    //   refusal, the one law its PostgreSQL object discharges. The refusal is ruled by them all.
-    // - `first`: the laws of the first CHECK PostgreSQL tried, where grizzle's host cannot witness
-    //   the row, for example a law over a family's filled counts (Choice not variable's).
-    // - `some`: the laws one PostgreSQL object discharges, two or more, at least one of them broken
-    //   and nothing deciding which: a family's axis foreign key and every law merged into it, or a
-    //   domain over a row the host does not judge whole.
-    // Neither `first` nor `some` says which law broke, so where their laws have more than one rule
-    // the import judges each over its own rows on the host and rules by the laws the rows break
-    // and the laws the host cannot judge, never by one the rows hold (`rulingOf` of
-    // `#pantry/import/host-judge.ts`). A stated limit: a law the host cannot judge (a fold, a
-    // pattern, a law over a value the host does not restore) may be broken, so it stays among
-    // them, and where it holds the most specific rule the rule falls back to the most specific of
-    // the laws not judged held, as before; the ruling's span counts such laws and says whether the
-    // rule was decided, and a fallback is logged. `first` names one CHECK's laws, so a law of
-    // another CHECK the row also breaks never reaches the rule.
-    // The rule is the most specific among the ruling's laws (`ruleOfLaws`). A breach in a table
-    // written or checked later, or one the host cannot witness, never reaches the rule, however
-    // specific its law; GEN-A's differential records any such divergence from the oracle.
-    // The witness is grizzle's own, as the refusal carries it: the key of the first stated row
-    // that breaks the law, or `unreported` for a foreign key and for a law no stated row breaks as
-    // the host judges it (README "Errors and outcomes"). Laws no rule owns die as `UnownedLaws`, a
-    // defect of the law table, never a verdict on the package.
+    // The refusal is what the outcome says, read from it alone (`refusalOf`): how grizzle decided
+    // its laws (`refused.kind`), every law it names with the set of their rules, and grizzle's
+    // witness (grizzle-engine `src/types/changeset/changeset.ts:1013-1043`, `Witness` and
+    // `Refused`, at `999facc`). `every` names the laws grizzle judged broken; `first` the laws of the CHECK
+    // PostgreSQL tried first, which the row may not be alone in breaking; `some` the laws one
+    // PostgreSQL object discharges, at least one of them broken and nothing deciding which. The
+    // import judges no law and reads no row of its own to decide more than grizzle did, so a
+    // `some` or `first` refusal stays under every rule its laws carry. The witness is the key of
+    // the first stated row that breaks a law, or `unreported` for a foreign key and for a law no
+    // stated row breaks as grizzle's host judges it (README "Errors and outcomes"). A law no row of
+    // the law table names still prints its text, and carries no rule. The first refusal of a
+    // process compiles Qti's law model to name the laws, so the naming has a span of its own.
     const { refused } = outcome;
-    const ruling = yield* Effect.sync(() =>
-      rulingOf(refused, () => hostRowsOf(program.inputs)),
-    ).pipe(
-      Effect.tap((ruled) =>
+    const refusal = yield* Effect.sync(() => refusalOf(refused, outcome.witness, grammar)).pipe(
+      Effect.tap((built) =>
         Effect.annotateCurrentSpan({
-          lawsBroken: ruled.broken.length,
-          lawsHeld: ruled.held.length,
           lawsNamed: refused.laws.length,
-          lawsUnjudged: ruled.unjudged.length,
           refusedKind: refused.kind,
-          ruleDecided: ruled.decided,
+          rules: built.rules.join("|"),
         }),
       ),
-      Effect.withSpan("import.ruleRefusal"),
+      Effect.withSpan("import.nameRefusal"),
     );
-    if (!ruling.decided) {
-      yield* Effect.logDebug(
-        "refusal ruled by the most specific law the host could not judge broken or held",
-      ).pipe(
-        Effect.annotateLogs({
-          lawsHeld: ruling.held.length,
-          lawsUnjudged: ruling.unjudged.length,
-          refusedKind: refused.kind,
-        }),
-      );
-    }
 
-    return yield* Result.match(refusalOfLaws(ruling.laws, outcome.witness, grammar), {
-      onFailure: (unowned) => Effect.die(unowned),
-      onSuccess: (refusal) => Effect.fail(refusal),
-    });
+    return yield* refusal;
   }
 
   if (outcome.kind === "accepted") {

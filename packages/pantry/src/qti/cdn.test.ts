@@ -1,6 +1,6 @@
 /**
  * Single-CDN mode's laws (`#pantry/qti/cdn.ts`), with no database: each law a policy states is a
- * check, read as the import's host judge reads it (`#pantry/import/host-judge.ts` `judgedOf`) and
+ * check, read as the tests' host judge reads it (`#pantry/test/host-judge.ts` `judgedOf`) and
  * evaluated as PostgreSQL evaluates the CHECK it compiles to, over rows drawn for it, against the
  * reading its law states, written here apart from its pattern:
  *
@@ -24,15 +24,15 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import type { Law } from "@bjornpagen/grizzle";
-import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import type { CdnPolicy } from "#pantry/db/install.ts";
 import { grammar } from "#pantry/grammar/install.ts";
-import type { Datum } from "#pantry/host/predicates.ts";
-import { judgedOf } from "#pantry/import/host-judge.ts";
-import { checkNameOf, lawNames, refusalOfLaws } from "#pantry/import/refusal.ts";
+import { checkNameOf, lawNames, refusalOf } from "#pantry/import/refusal.ts";
 import { cdnLawsByName, governorsOf } from "#pantry/qti/cdn.ts";
 import { Qti, qtiSchema } from "#pantry/qti/schema.ts";
 import { policyLaws } from "#pantry/test/oracle-laws.ts";
+import type { Datum } from "#pantry/test/predicates.ts";
+import { judgedOf } from "#pantry/test/host-judge.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { addressLists, fetchedAttributes, fetchedTexts } from "#pantry/vocab/fetched.ts";
 
@@ -789,16 +789,16 @@ describe("qti/cdn.ts, the laws a policy states", () => {
               name: statement.name,
               relation: statement.relation.name,
             };
-            const refusal = refusalOfLaws([refused], { kind: "unreported" }, grammar);
-
-            assert.isTrue(
-              Result.isSuccess(refusal),
-              `${name} over ${statement.relation.name}: unowned`,
+            const refusal = refusalOf(
+              { kind: "every", laws: [refused] },
+              { kind: "unreported" },
+              grammar,
             );
-            assert.strictEqual(
-              Result.isSuccess(refusal) ? refusal.success.rule : undefined,
-              lawTable[law].rule,
-              name,
+
+            assert.deepStrictEqual(
+              refusal.rules,
+              [lawTable[law].rule],
+              `${name} over ${statement.relation.name}`,
             );
           }
         }

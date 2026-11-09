@@ -57,7 +57,7 @@ describe.skipIf(!hasLease)(
                       assert.isTrue(
                         outcome._tag === "Failure" &&
                           outcome.failure instanceof ImportRefused &&
-                          rules.includes(outcome.failure.rule),
+                          outcome.failure.rules.some((rule) => rules.includes(rule)),
                         `${JSON.stringify(drawn)}: ${outcome._tag === "Failure" ? outcome.failure.message : "accepted"}`,
                       );
                     }
