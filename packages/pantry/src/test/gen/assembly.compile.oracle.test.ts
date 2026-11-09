@@ -22,7 +22,8 @@
  * the schema, never on the rows bound at run time, so two packages with one list have one program.
  * The layer needs the committed snapshot to be the schema's, as every `DbLayer` does,
  * and the import's write program is also declared in the author login's workload
- * (`#pantry/qti/own-login.ts` `importWork`).
+ * (`#pantry/qti/own-login.ts` `importWork`). The probe login holds an author role of its own
+ * ({@link probeAuthor}), since grizzle puts a role in one login only.
  */
 import { DbLayer, login, OpenError, workload } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -42,7 +43,7 @@ import { changeSetOf } from "#pantry/import/write.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { Qti } from "#pantry/qti/own.ts";
-import { Author } from "#pantry/qti/own-login.ts";
+import { authorRoleOf } from "#pantry/qti/roles.ts";
 import {
   assemblyLiteral,
   assemblyPackage,
@@ -60,6 +61,14 @@ import { judge, lawsOf } from "#pantry/test/oracle.ts";
  * 73, its slowest test.
  */
 const testTimeoutMs = 1_200_000;
+
+/**
+ * The probe login's author role, a role of its own over `Qti` (`#pantry/qti/roles.ts`
+ * `authorRoleOf`): grizzle puts a role in one login only, and `AuthorApp` holds the package's own
+ * (`#pantry/qti/own-login.ts` `Author`), so a probe login over that one is refused
+ * (`LoginRefused`).
+ */
+const probeAuthor = authorRoleOf(Qti);
 
 /**
  * Every generated package's write program, with the package's literal, in the order the searches
@@ -168,7 +177,7 @@ const keep = (assembly: Assembly) =>
       set(structuralHash, exact),
     );
     programs.push({
-      change: changeSetOf(Author, program.inputs),
+      change: changeSetOf(probeAuthor, program.inputs),
       inserts: insertsOf(program.inputs),
       literal,
     });
@@ -202,10 +211,10 @@ const snapshotOf = Effect.gen(function* snapshotOf() {
  */
 const compileKept = Effect.gen(function* compileKept() {
   const snapshot = yield* snapshotOf;
-  const probe = login(Qti, "author_app", [Author], {
+  const probe = login(Qti, "author_app", [probeAuthor], {
     workload: [
       workload(
-        Author,
+        probeAuthor,
         Object.fromEntries(distinct().map(([at, { change }]) => [`case${String(at)}`, change])),
       ),
     ],
