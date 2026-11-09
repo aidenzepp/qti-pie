@@ -752,9 +752,8 @@ export const pciNegativeNames = [
  * - `pci-context-undeclared` is read at 3.0.0, where the reader's declared-variable rule may name it
  *   `idref-target`; `pci-context-undeclared-3-0-1` only `context-variable-ref`.
  * - `pci-markup-text` is the automaton's character-data rule, predicted `admission`.
- * - `template-outside` is predicted `admission` or `ordering`; the oracle at the base of this slice
- *   names it `unmodeled-vocabulary` (reading 57 admits `template` only in the markup), a finding
- *   the table keeps as predicted.
+ * - `template-outside` is `unmodeled-vocabulary`, reading 57's rule: an HTML `template` is admitted
+ *   only inside a PCI's markup.
  * - `custom-attribute` is reading 90's refusal of an undeclared attribute on the custom interaction
  *   (open question O5 can turn it into a positive).
  * - `pci-items-fallback` is reading 11; `pci-configuration-missing` is `file-exists`, or the
@@ -778,7 +777,7 @@ export const pciVerdicts: readonly (readonly [FixtureName, readonly string[]])[]
   ["pci-markup-text", ["admission"]],
   ["pci-stylesheet-3-0-0", ["admission", "ordering"]],
   ["pci-catalog-info-3-0-0", ["admission", "ordering"]],
-  ["template-outside", ["admission", "ordering"]],
+  ["template-outside", ["unmodeled-vocabulary"]],
   ["pci-nested", ["ancestry-ban"]],
   ["pci-type-malformed", ["attribute-lexical"]],
   ["pci-path-malformed", ["attribute-lexical"]],
@@ -6080,9 +6079,24 @@ const configurationsSecondData = [
 ] as const;
 
 /**
+ * The edits that make the two correct responses of a `fractions_deps` item valid: the corpus writes
+ * the `identifier` values `1` and `6`, which the identifier type refuses (it starts with no digit),
+ * so a positive writes `N1` and `N6`, keeping the base type.
+ *
+ * @param file - The item, `fractions_deps.xml` or `fractions_deps_2.xml`.
+ * @returns The two edits.
+ */
+const validCorrectResponses = (file: string): readonly TextEdit[] => [
+  replaceIn(file, "<qti-value>1</qti-value>", "<qti-value>N1</qti-value>"),
+  replaceIn(file, "<qti-value>6</qti-value>", "<qti-value>N6</qti-value>"),
+];
+
+/**
  * The edits of `pci-configurations`: `fractions_deps_2.xml` with its corpus PCIs' custom `data-*`
  * dropped, the first PCI given both module forms and the corpus's misspelt `XX` paths repaired,
- * and the configuration attributes of its `qti-interaction-modules` written as `configurations`.
+ * the configuration attributes of its `qti-interaction-modules` written as `configurations`, and
+ * its two `identifier` correct responses, which the corpus writes `1` and `6` and the identifier
+ * type refuses, written `N1` and `N6` ({@link validCorrectResponses}).
  *
  * @param configurations - The attributes of the `qti-interaction-modules` start tag, as written.
  * @returns The edits, in the order the positive applies them.
@@ -6116,6 +6130,7 @@ const pciConfigurationsEdits = (configurations: string): readonly Edit[] => [
     '<qti-interaction-module id="raphael"/>',
     '<qti-interaction-module id="raphael" fallback-path="modules/lib/raphael.js"/>',
   ),
+  ...validCorrectResponses("fractions_deps_2.xml"),
 ];
 
 /**
@@ -6128,7 +6143,8 @@ const pciConfigurationFiles =
 /**
  * The edits of `pci-modules`: `fractions_deps.xml` with its corpus PCIs' custom `data-*` dropped,
  * in a package of the three module files it keeps, the handlebars file listed and `raphael.js`
- * absent.
+ * absent, and its two `identifier` correct responses, which the corpus writes `1` and `6` and the
+ * identifier type refuses, written `N1` and `N6` ({@link validCorrectResponses}).
  */
 const pciModulesEdits: readonly Edit[] = [
   ...pciItemsKept("pci-modules", "fractions_deps.xml", [
@@ -6138,6 +6154,7 @@ const pciModulesEdits: readonly Edit[] = [
   ]),
   withoutData("fractions_deps.xml", depsFirstKept, depsFirstData),
   withoutData("fractions_deps.xml", depsSecondKept, depsSecondData),
+  ...validCorrectResponses("fractions_deps.xml"),
 ];
 
 /**
