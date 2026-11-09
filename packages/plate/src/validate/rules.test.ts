@@ -1883,6 +1883,7 @@ describe("checkRules", () => {
         [
           {
             detail: {
+              cardinality: "single",
               check: "gap-match-single",
               gaps: "2",
               interaction: "qti-gap-match-interaction",
@@ -1900,6 +1901,55 @@ describe("checkRules", () => {
         judged(item([response("RESPONSE", "single", "directedPair")], [gapMatch(1)])),
         [],
       );
+      assert.deepStrictEqual(
+        judged(item([response("RESPONSE", "multiple", "directedPair")], [gapMatch(2)])),
+        [],
+      );
+    });
+
+    it("align-54 r11 gaps bind multiple P7: refuses a Gap Match bound ordered over two gaps, as binding gap-match-single naming its cardinality (reading 169)", () => {
+      assert.deepStrictEqual(
+        judged(item([response("RESPONSE", "ordered", "directedPair")], [gapMatch(2)])),
+        [
+          {
+            detail: {
+              cardinality: "ordered",
+              check: "gap-match-single",
+              gaps: "2",
+              interaction: "qti-gap-match-interaction",
+              response: "RESPONSE",
+            },
+            path: `${body}/qti-gap-match-interaction`,
+            rule: "binding",
+          },
+        ],
+      );
+    });
+
+    it("align-54 r11 gaps bind multiple P7: refuses a Gap Match bound record over two gaps, as binding gap-match-single naming its cardinality (reading 169)", () => {
+      assert.deepStrictEqual(judged(item([response("RESPONSE", "record")], [gapMatch(2)])), [
+        {
+          detail: {
+            cardinality: "record",
+            check: "gap-match-single",
+            gaps: "2",
+            interaction: "qti-gap-match-interaction",
+            response: "RESPONSE",
+          },
+          path: `${body}/qti-gap-match-interaction`,
+          rule: "binding",
+        },
+      ]);
+    });
+
+    it("align-54 r11 gaps bind multiple P7: accepts a Gap Match over one gap bound single or multiple, and one over two gaps bound multiple (reading 169)", () => {
+      for (const cardinality of ["single", "multiple"]) {
+        assert.deepStrictEqual(
+          judged(item([response("RESPONSE", cardinality, "directedPair")], [gapMatch(1)])),
+          [],
+          cardinality,
+        );
+      }
       assert.deepStrictEqual(
         judged(item([response("RESPONSE", "multiple", "directedPair")], [gapMatch(2)])),
         [],

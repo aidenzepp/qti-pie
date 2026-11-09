@@ -2194,8 +2194,9 @@ const multipleCardinality = code('cardinality="multiple"');
  * - `count-cardinality` (reading 92, E11a): an `interaction` whose count `attribute` is above 1, or
  *   0, which sets no limit, bound to a response that is not `multiple`. An unwritten count is read
  *   as its XSD default, which the detail's `count` holds.
- * - `gap-match-single` (the operator's P7): a gap match interaction of several `gaps` bound to a
- *   single response.
+ * - `gap-match-single` (the operator's P7, reading 169): a gap match interaction of several `gaps`
+ *   bound to a response that is not `multiple`, of the `cardinality` the detail names; a detail
+ *   that names none is worded as a `single` response's.
  * - `string-binding` (reading 14, D3a): an `interaction`'s `string-identifier` names a response of a
  *   type it cannot bind, worded by the `interaction`: a text entry's binds a single `string`
  *   response, and an extended text's a `string` response of the cardinality of the response its
@@ -2232,9 +2233,11 @@ const interactionBinding = (refusal: Refusal): string => {
       );
     }
     case "gap-match-single": {
+      const bound = withArticle(`${fact(refusal, "cardinality", "single")} response`);
+
       return sentence(
         refusal,
-        `${interaction} holds ${fact(refusal, "gaps", "several")} gaps and is bound to ${response}, a single response, and an interaction of several gaps needs a ${code("multiple")} response${settled(refusal)}.`,
+        `${interaction} holds ${fact(refusal, "gaps", "several")} gaps and is bound to ${response}, ${bound}, and an interaction of several gaps needs a ${code("multiple")} response${settled(refusal)}.`,
         `declare ${response} with ${multipleCardinality}`,
       );
     }
