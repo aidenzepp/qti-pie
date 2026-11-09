@@ -50,8 +50,8 @@ import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { governingTables } from "#plate/validate/structure.ts";
 import type { ChildName, Tables } from "#plate/validate/xsd.ts";
-import { baseTypes, cardinalities, interactionNames, templateName } from "#plate/vocabulary.ts";
-import type { BaseType, Cardinality, InteractionName, TemplateName } from "#plate/vocabulary.ts";
+import { baseTypes, cardinalities, templateName } from "#plate/vocabulary.ts";
+import type { BaseType, Cardinality, TemplateName } from "#plate/vocabulary.ts";
 
 /**
  * The base types and cardinalities a response declaration may have when an interaction is bound to
@@ -67,42 +67,47 @@ interface Requirement {
 }
 
 /**
- * The binding each interaction plate renders requires, by its information-model class, quoted from
- * QTI 3.0's information model.
+ * The binding an interaction requires, by local name, quoted from the normative class descriptions
+ * of QTI 3.0's information model (its section 5).
  *
  * This is what QTI allows, not what plate renders: a binding QTI allows and plate does not render,
  * such as a Text Entry bound to a record response with a `file` field, is valid and becomes a
- * notice (`renders` in the vocabulary), so it is not refused here. Other interactions' bindings are
- * not checked.
+ * notice (`renders` in the vocabulary), so it is not refused here. An interaction whose binding
+ * sentence is only in the non-normative section 2 has no entry, by rule `5b8ee08b` (refuse only
+ * what the standard refuses) and the operator's ruling `e3bc2c3d`: the Order's "must be bound to a
+ * response variable with a base-type of identifier and ordered cardinality only" is §2.4.1.2's
+ * alone (info.txt:8766), and its class description, §5.97, does not repeat it. The other
+ * interactions' bindings are not checked here; reading 92's counts reach some of them
+ * ({@link cardinalityCounts}).
  */
-const requirements = {
-  // "The qti-choice-interaction must be bound to a response variable with a base-type of identifier
-  // and single or multiple cardinality." (info.txt:8760)
-  "qti-choice-interaction": {
-    baseTypes: ["identifier"],
-    cardinalities: ["single", "multiple"],
-  },
-  // "The extendedTextInteraction must be bound to a response variable of single, multipe, ordered or
-  // record cardinality. [...] Otherwise it must have a base-type of string, integer or float."
-  // (info.txt:8850)
-  "qti-extended-text-interaction": {
-    baseTypes: ["string", "integer", "float"],
-    cardinalities: ["single", "multiple", "ordered", "record"],
-  },
-  // "The qti-inline-choice-interaction must be bound to a response variable with a base-type of
-  // identifier and single cardinality only." (info.txt:8818)
-  "qti-inline-choice-interaction": {
-    baseTypes: ["identifier"],
-    cardinalities: ["single"],
-  },
-  // "The qti-text-entry-interaction must be bound to a response variable with either single or
-  // record cardinality only. For single cardinality the base-type must be one of string, integer or
-  // float." (info.txt:8826)
-  "qti-text-entry-interaction": {
-    baseTypes: ["string", "integer", "float"],
-    cardinalities: ["single", "record"],
-  },
-} as const satisfies Record<InteractionName, Requirement>;
+const requirements: ReadonlyMap<string, Requirement> = new Map<string, Requirement>([
+  // "The ChoiceInteraction must be bound to a response variable with a base-type of identifier and
+  // single or multiple cardinality." (§5.30, info.txt:21733)
+  ["qti-choice-interaction", { baseTypes: ["identifier"], cardinalities: ["single", "multiple"] }],
+  // "The qti-extended-text-interaction must be bound to a response variable of single, multiple,
+  // ordered or record cardinality. [...] Otherwise it ust have a base-type of string, integer or
+  // float." (§5.48, info.txt:25345)
+  [
+    "qti-extended-text-interaction",
+    {
+      baseTypes: ["string", "integer", "float"],
+      cardinalities: ["single", "multiple", "ordered", "record"],
+    },
+  ],
+  // "The order hotspot interaction must be bound to a response variable with a base-type of
+  // identifier and ordered cardinality." (§5.61, info.txt:29186)
+  ["qti-graphic-order-interaction", { baseTypes: ["identifier"], cardinalities: ["ordered"] }],
+  // "The inlineChoiceInteraction must be bound to a response variable with a base-type of identifier
+  // and single cardinality only." (§5.74, info.txt:32207)
+  ["qti-inline-choice-interaction", { baseTypes: ["identifier"], cardinalities: ["single"] }],
+  // "The textEntryInteraction must be bound to a response variable with single or record
+  // cardinality only. If the response variable has single cardinality the base-type must be one of
+  // string, integer or float" (§5.162, info.txt:47996)
+  [
+    "qti-text-entry-interaction",
+    { baseTypes: ["string", "integer", "float"], cardinalities: ["single", "record"] },
+  ],
+]);
 
 /**
  * The count that decides the cardinality of the response an interaction binds: its attribute, and
@@ -348,18 +353,6 @@ const isDeclaration = (element: SourceElement): boolean =>
  */
 const isInteraction = (element: SourceElement): boolean =>
   isQti(element, (local) => local.startsWith("qti-") && local.endsWith("-interaction"));
-
-/**
- * Find which of the interactions plate renders an element is, the ones whose binding these rules
- * check (`interactionNames` in the vocabulary).
- *
- * @param element The element.
- * @returns Its QTI name, or none for any other element.
- */
-const renderedInteraction = (element: SourceElement): Option.Option<InteractionName> =>
-  element.namespace === qtiNamespace
-    ? Arr.findFirst(interactionNames, (name) => name === element.local)
-    : Option.none();
 
 /**
  * Report whether a declaration's base type and cardinality meet an interaction's requirement.
@@ -871,10 +864,10 @@ const cardinalityRules = (
  *
  * `binding` reads the declaration the interaction's `response-identifier` names, never any other
  * declaration in the document: QTI's Schematron runs some base-type tests against every
- * declaration, and by reading 9 ("the Schematron's rules are read by their intent, not their
- * text") each rule applies over the bound declaration. The interactions plate renders are held to
- * {@link requirements}; every interaction {@link cardinalityCounts} lists is held to its count, and
- * a gap match to its gaps ({@link cardinalityRules}), only where the requirement gives no refusal,
+ * declaration, and by reading 9 ("the Schematron's rules are read by their intent, not their text")
+ * each rule applies over the bound declaration. Every interaction {@link requirements} lists is held
+ * to its requirement; every interaction {@link cardinalityCounts} lists is held to its count, and a
+ * gap match to its gaps ({@link cardinalityRules}), only where the requirement gives no refusal,
  * since that refusal already names the response's cardinality.
  *
  * Reading 158 ("a declaration whose cardinality or base type spells nothing is still a declaration:
@@ -908,15 +901,15 @@ const bindingRules = (
 
   const { baseType, written } = baseTypeOf(declaration);
   const judged = cardinality.value === "record" || Option.isSome(baseType);
-  const binding = Option.match(renderedInteraction(visit.element), {
+  const binding = Option.match(qtiEntry(requirements, visit.element), {
     onNone: () => [],
-    onSome: (name) =>
-      judged && !meets(requirements[name], cardinality.value, baseType)
+    onSome: (requirement) =>
+      judged && !meets(requirement, cardinality.value, baseType)
         ? [
             refusal(source, "binding", visit.path, {
               baseType: Option.getOrElse(written, () => ""),
               cardinality: cardinality.value,
-              interaction: name,
+              interaction: visit.element.local,
               response,
             }),
           ]
