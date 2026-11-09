@@ -712,12 +712,6 @@ const blocks = new Map<string, CodeSet>([
 ]);
 
 /**
- * The code points of Unicode general categories, by XSD's category name, read once from the
- * runtime's own Unicode tables (`\p{…}` of a `u`-flag regular expression) and kept.
- */
-const categoryCache = new Map<string, CodeSet>();
-
-/**
  * The general category names XSD's `\p{…}` reads (XML Schema Part 2, F.1.1).
  */
 const categoryNames: ReadonlySet<string> = new Set(
@@ -727,31 +721,34 @@ const categoryNames: ReadonlySet<string> = new Set(
 );
 
 /**
- * Read a general category's code points, within XML's `Char`.
+ * Read a general category's code points, within XML's `Char`, from the runtime's own Unicode
+ * tables (`\p{…}` of a `u`-flag regular expression), each code point tested once and joined to the
+ * run before it where it follows it.
+ *
+ * It reads the whole of `Char`, so it is costly, and it runs where a pattern names a category
+ * (`\p{…}`, `\d`, `\w` and their complements). The composition's patterns name none, so a
+ * composition reads no category, and nothing keeps one.
  *
  * @param name - The category, such as `Nd`.
  * @returns Its set.
  */
 const categoryOf = (name: string): CodeSet => {
-  const known = categoryCache.get(name);
-  if (known !== undefined) {
-    return known;
-  }
-
   const test = new RegExp(`^\\p{gc=${name}}$`, "u");
-  const runs: CodeRange[] = [];
+  const runs: [number, number][] = [];
   for (const [lo, hi] of xmlChar) {
     for (let point = lo; point <= hi; point += 1) {
       if (test.test(String.fromCodePoint(point))) {
-        runs.push([point, point]);
+        const last = runs.at(-1);
+        if (last !== undefined && last[1] + 1 === point) {
+          last[1] = point;
+        } else {
+          runs.push([point, point]);
+        }
       }
     }
   }
 
-  const set = setOf(runs);
-  categoryCache.set(name, set);
-
-  return set;
+  return runs;
 };
 
 /**
@@ -767,7 +764,7 @@ const categoryOf = (name: string): CodeSet => {
  * built as its product ({@link intersection}), and a word narrowed at an end by its first or last
  * character ({@link firstIn}, {@link lastIn}).
  */
-export type Regex =
+export type Regex = (
   | { readonly _tag: "alt"; readonly arms: readonly Regex[] }
   | { readonly _tag: "chars"; readonly set: CodeSet }
   | {
@@ -776,13 +773,22 @@ export type Regex =
       readonly max: Option.Option<number>;
       readonly min: number;
     }
-  | { readonly _tag: "seq"; readonly parts: readonly Regex[] };
+  | { readonly _tag: "seq"; readonly parts: readonly Regex[] }
+) & {
+  /**
+   * Whether the tree's language holds the empty word, read once when the tree is built from its
+   * parts': a sequence of parts that all hold it, an alternation with an arm that does, or a
+   * repetition that may occur no times or repeats a body that holds it. A character never does,
+   * and {@link nothing}, with no arm, does not.
+   */
+  readonly empty: boolean;
+};
 
 /**
  * The language with no word: what a set with no character leaves, and what an intersection or a
  * sequence holding it is.
  */
-const nothing: Regex = { _tag: "alt", arms: [] };
+const nothing: Regex = { _tag: "alt", arms: [], empty: false };
 
 /**
  * Whether a tree is {@link nothing}.
@@ -798,7 +804,8 @@ const isNothing = (tree: Regex): boolean => tree._tag === "alt" && tree.arms.len
  * @param set - The set.
  * @returns The tree.
  */
-const chars = (set: CodeSet): Regex => (set.length === 0 ? nothing : { _tag: "chars", set });
+const chars = (set: CodeSet): Regex =>
+  set.length === 0 ? nothing : { _tag: "chars", empty: false, set };
 
 /**
  * A sequence: nested sequences flattened, one part standing alone, and {@link nothing} where a part
@@ -814,7 +821,9 @@ const seq = (...parts: readonly Regex[]): Regex => {
     return nothing;
   }
 
-  return flat.length === 1 && only !== undefined ? only : { _tag: "seq", parts: flat };
+  return flat.length === 1 && only !== undefined
+    ? only
+    : { _tag: "seq", empty: flat.every(({ empty }) => empty), parts: flat };
 };
 
 /**
@@ -827,7 +836,9 @@ const alt = (...arms: readonly Regex[]): Regex => {
   const flat = arms.flatMap((arm) => (arm._tag === "alt" ? arm.arms : [arm]));
   const [only] = flat;
 
-  return flat.length === 1 && only !== undefined ? only : { _tag: "alt", arms: flat };
+  return flat.length === 1 && only !== undefined
+    ? only
+    : { _tag: "alt", arms: flat, empty: flat.some(({ empty }) => empty) };
 };
 
 /**
@@ -863,10 +874,10 @@ const repeat = (body: Regex, min: number, max: Option.Option<number>): Regex => 
     body.min === 1 &&
     Option.isNone(body.max)
   ) {
-    return { _tag: "repeat", body: body.body, max: Option.none(), min: 0 };
+    return { _tag: "repeat", body: body.body, empty: true, max: Option.none(), min: 0 };
   }
 
-  return { _tag: "repeat", body, max, min };
+  return { _tag: "repeat", body, empty: min === 0 || body.empty, max, min };
 };
 
 /**
@@ -2417,82 +2428,7 @@ const mapSets = (tree: Regex, map: (set: CodeSet) => Regex): Regex => {
   }
 };
 
-/**
- * The least and the most length of a tree's words, the most `Infinity` where an unbounded
- * repetition holds a nonempty word. {@link nothing} has no word, so its least is `Infinity` and its
- * most `-Infinity`, and no length lies between them.
- */
-interface Lengths {
-  readonly max: number;
-  readonly min: number;
-}
 
-/**
- * The lengths of the trees read so far: a product reads the lengths of each subtree at every span.
- */
-const lengthsCache = new WeakMap<Regex, Lengths>();
-
-/**
- * Read the least and the most length of a tree's words.
- *
- * @param tree - The tree.
- * @returns Its {@link Lengths}.
- */
-const lengthsOf = (tree: Regex): Lengths => {
-  const known = lengthsCache.get(tree);
-  if (known !== undefined) {
-    return known;
-  }
-
-  const read = (): Lengths => {
-    switch (tree._tag) {
-      case "chars": {
-        return { max: 1, min: 1 };
-      }
-      case "seq": {
-        const parts = tree.parts.map(lengthsOf);
-
-        return {
-          max: parts.reduce((total, { max }) => total + max, 0),
-          min: parts.reduce((total, { min }) => total + min, 0),
-        };
-      }
-      case "alt": {
-        const arms = tree.arms.map(lengthsOf);
-
-        return {
-          max: Math.max(...arms.map(({ max }) => max)),
-          min: Math.min(...arms.map(({ min }) => min)),
-        };
-      }
-      case "repeat": {
-        const body = lengthsOf(tree.body);
-        // An unbounded repetition of a nonempty word has no longest word.
-        const most = Option.match(tree.max, {
-          onNone: () => Number.POSITIVE_INFINITY,
-          onSome: (held) => held,
-        });
-
-        return { max: body.max === 0 ? 0 : body.max * most, min: body.min * tree.min };
-      }
-      default: {
-        return tree satisfies never;
-      }
-    }
-  };
-  const lengths = read();
-  lengthsCache.set(tree, lengths);
-
-  return lengths;
-};
-
-/**
- * Whether a tree's language holds the empty word.
- *
- * @param tree - The tree.
- * @returns Whether it is nullable.
- */
-const admitsEmpty = (tree: Regex): boolean => lengthsOf(tree).min === 0;
 
 /**
  * Every character a tree's words may hold: the union of its sets.
@@ -2532,7 +2468,7 @@ const firstSetOf = (tree: Regex): CodeSet => {
       return tree.set;
     }
     case "seq": {
-      const reached = tree.parts.findIndex((part) => !admitsEmpty(part));
+      const reached = tree.parts.findIndex((part) => !part.empty);
 
       return union(
         ...(reached === -1 ? tree.parts : tree.parts.slice(0, reached + 1)).map(firstSetOf),
@@ -2595,7 +2531,7 @@ const reversed = (tree: Regex): Regex => {
  */
 const firstIn = (tree: Regex, set: CodeSet): Regex => {
   const first = firstSetOf(tree);
-  if (!admitsEmpty(tree) && sameSet(intersect(first, set), first)) {
+  if (!tree.empty && sameSet(intersect(first, set), first)) {
     return tree;
   }
 
@@ -2611,7 +2547,7 @@ const firstIn = (tree: Regex, set: CodeSet): Regex => {
 
       const tail = seq(...rest);
 
-      return alt(seq(firstIn(head, set), tail), admitsEmpty(head) ? firstIn(tail, set) : nothing);
+      return alt(seq(firstIn(head, set), tail), head.empty ? firstIn(tail, set) : nothing);
     }
     case "alt": {
       return alt(...tree.arms.map((arm) => firstIn(arm, set)));
@@ -3704,11 +3640,11 @@ const foldCollapse = (tree: Regex): Result.Result<Regex, UnreadDefinition> => {
  */
 const asToken = (tree: Regex): Regex => {
   const bare = mapSets(tree, (set) => chars(subtract(set, whitespace)));
-  if (!admitsEmpty(bare)) {
+  if (!bare.empty) {
     return bare;
   }
 
-  if (bare._tag === "repeat" && bare.min === 0 && !admitsEmpty(bare.body)) {
+  if (bare._tag === "repeat" && bare.min === 0 && !bare.body.empty) {
     return repeat(bare.body, 1, bare.max);
   }
 
