@@ -4,7 +4,6 @@ import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Predicate, Schema } from "effect";
-import { committedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import {
   cnForms,
@@ -727,65 +726,32 @@ describe("the MathML relations", () => {
   });
 });
 
-/**
- * A roster's handles as the install declares them: the committed snapshot's live handles in code
- * order, then the handles new since it, in the grammar's order.
- *
- * @param name - The roster's name.
- * @param handles - The handles as the grammar computes them.
- * @returns The handles, ordered.
- */
-const ordered = (name: string, handles: readonly string[]): readonly string[] =>
-  Arr.isReadonlyArrayNonEmpty(handles)
-    ? inCommittedOrder(committedRosters.get(name) ?? [], handles)
-    : handles;
-
 describe("the rosters", () => {
-  it("hold every generator's handles in the committed codes' order, new handles last, the null objects where the rulings place them", () => {
-    assert.deepStrictEqual(
-      handlesOf("NodeKind"),
-      ordered("NodeKind", grammar.kinds.nodeKind.handles),
-    );
-    assert.deepStrictEqual(
-      handlesOf("AttributeName"),
-      ordered("AttributeName", grammar.kinds.attributeName.handles),
-    );
-    assert.deepStrictEqual(
-      handlesOf("TypeName"),
-      ordered("TypeName", grammar.xsi.typeName.handles),
-    );
+  it("hold every generator's handles in the generator's order, the null objects where the rulings place them", () => {
+    assert.deepStrictEqual(handlesOf("NodeKind"), grammar.kinds.nodeKind.handles);
+    assert.deepStrictEqual(handlesOf("AttributeName"), grammar.kinds.attributeName.handles);
+    assert.deepStrictEqual(handlesOf("TypeName"), grammar.xsi.typeName.handles);
     assert.notInclude(handlesOf("TypeName"), "none");
-    assert.deepStrictEqual(
-      handlesOf("SchemaVersion"),
-      ordered("SchemaVersion", grammar.kinds.versions.handles),
-    );
-    assert.deepStrictEqual(handlesOf("BaseType"), ordered("BaseType", grammar.baseTypes.handles));
-    assert.deepStrictEqual(
-      handlesOf("Cardinality"),
-      ordered("Cardinality", [...grammar.typedCardinalities.handles, "record"]),
-    );
-    assert.deepStrictEqual(
-      handlesOf("ResourceType"),
-      ordered("ResourceType", ["none", ...grammar.package.resourceType.handles]),
-    );
+    assert.deepStrictEqual(handlesOf("SchemaVersion"), grammar.kinds.versions.handles);
+    assert.deepStrictEqual(handlesOf("BaseType"), grammar.baseTypes.handles);
+    assert.deepStrictEqual(handlesOf("Cardinality"), [
+      ...grammar.typedCardinalities.handles,
+      "record",
+    ]);
+    assert.deepStrictEqual(handlesOf("ResourceType"), grammar.package.resourceType.handles);
+    assert.notInclude(handlesOf("ResourceType"), "none");
     assert.deepStrictEqual(handlesOf("Position"), grammar.content.positions.handles);
     assert.deepStrictEqual(handlesOf("AttributeSlot"), grammar.attributes.positions.handles);
-    assert.deepStrictEqual(
-      handlesOf("Governor"),
-      ordered("Governor", [...grammar.kinds.nodeKind.handles, ...governed.keys()]),
-    );
+    assert.deepStrictEqual(handlesOf("Governor"), [
+      ...grammar.kinds.nodeKind.handles,
+      ...governed.keys(),
+    ]);
     assert.deepStrictEqual(
       handlesOf("Identity"),
-      ordered("Identity", grammar.attributes.identity.payload[0].roster.handles),
+      grammar.attributes.identity.payload[0].roster.handles,
     );
-    assert.deepStrictEqual(
-      handlesOf("ContentModel"),
-      ordered("ContentModel", grammar.content.models.handles),
-    );
-    assert.deepStrictEqual(
-      handlesOf("SharedModel"),
-      ordered("SharedModel", grammar.content.sharedModels.handles),
-    );
+    assert.deepStrictEqual(handlesOf("ContentModel"), grammar.content.models.handles);
+    assert.deepStrictEqual(handlesOf("SharedModel"), grammar.content.sharedModels.handles);
     assert.notInclude(handlesOf("SharedModel"), "none");
     // Spec reading 118's include model is a model of its own, and names the ignored elements'
     // wildcards at two positions.

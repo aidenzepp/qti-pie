@@ -38,7 +38,6 @@
  */
 import { closed, closedId, fin, natural, pg, slot, str } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Result } from "effect";
-import { committedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
 import type { Flag as FlagHandle } from "#pantry/grammar/ancestry.ts";
 import { attributeCounts } from "#pantry/grammar/attributes.ts";
 import type { AttributeCount } from "#pantry/grammar/attributes.ts";
@@ -72,18 +71,18 @@ export const grammar: ComposedGrammar = Result.getOrThrowWith(composed(), (refus
 
 /**
  * Take a generated roster's handles as a nonempty list, the form a grizzle roster declares, in the
- * order grizzle accepts: the handles the committed snapshot holds for the roster, in their code
- * order, then the handles new since the snapshot, in the generator's order (`inCommittedOrder`).
+ * generator's order, which is the order grizzle codes them in: a roster's codes follow its declared
+ * order, and this package's migrations are drafted from zero (one `_init`), so no install of it
+ * holds another history. Loading this module reads no snapshot.
  *
- * @param name - The roster's name: its declared name, which keys the snapshot's codes, and the
- *   defect's message.
+ * @param name - The roster's name, which the defect's message names.
  * @param handles - The handles in the generator's order.
- * @returns The same handles, typed nonempty and ordered by the committed codes.
+ * @returns The same handles, typed nonempty.
  * @throws {Error} When the generator gave the roster no handle, which no vocabulary list does.
  */
 const nonEmpty = <H extends string>(name: string, handles: readonly H[]): readonly [H, ...H[]] => {
   if (Arr.isReadonlyArrayNonEmpty(handles)) {
-    return inCommittedOrder(committedRosters.get(name) ?? [], handles);
+    return handles;
   }
 
   throw new Error(
