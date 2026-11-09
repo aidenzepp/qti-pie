@@ -38,11 +38,12 @@ import {
   closed,
   fin,
   idField,
+  indexed,
   OutsideCodeSpace,
   roster,
   valueField,
 } from "#pantry/grammar/closed.ts";
-import type { Closed, IdField, Roster, ValueField } from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Indexed, Roster, ValueField } from "#pantry/grammar/closed.ts";
 import {
   compile,
   boundFacets,
@@ -1276,7 +1277,7 @@ export interface AttributeGrammar {
    * `AttributeGrammar`: each attribute an element of a kind may carry in a version, with its value
    * domain, its use and its position.
    */
-  readonly admission: Closed<AttributeKey, AttributePayload>;
+  readonly admission: Indexed<AttributeKey, AttributePayload>;
   /**
    * The `ValueDomain` roster's domains, in code order: each at its first use, versions outermost,
    * then the declarations in order, then the texts, then the governed declarations and the type
@@ -1297,12 +1298,12 @@ export interface AttributeGrammar {
    * governor, the XSD-derived admission is the governing type's, and the rules spec readings state
    * follow the element's kind (spec reading 84); an element of no governor reads `admission`.
    */
-  readonly governed: Closed<GovernedKey, AttributePayload>;
+  readonly governed: Indexed<GovernedKey, AttributePayload>;
   /**
    * `Governor`: the governor of each (version, kind, type) where the type governs an element of the
    * kind in place of its declared type, or a simple type governs a foreign element's text.
    */
-  readonly governor: Closed<
+  readonly governor: Indexed<
     readonly [IdField<"version", string>, IdField<"kind", string>, IdField<"governs", string>],
     readonly [IdField<"governor", string>]
   >;
@@ -1323,7 +1324,7 @@ export interface AttributeGrammar {
    * `TextDomain`: the value domain of a simple-content kind's text in a version, the language its
    * one `Text` child is read in.
    */
-  readonly text: Closed<
+  readonly text: Indexed<
     readonly [IdField<"version", string>, IdField<"kind", string>],
     readonly [IdField<"domain", string>]
   >;
@@ -1331,7 +1332,7 @@ export interface AttributeGrammar {
    * `TypeText`: the value domain of the text of each named type with simple content in a version,
    * which an element that type governs holds its text in (spec readings 60 and 84).
    */
-  readonly typeText: Closed<
+  readonly typeText: Indexed<
     readonly [IdField<"version", string>, IdField<"governs", string>],
     readonly [IdField<"domain", string>]
   >;
@@ -1892,19 +1893,21 @@ export const generate = (
     const governs = idField("governs", input.typeName);
     const governorRoster = roster("Governor", [...new Set(input.governors.map(governorHandle))]);
     const governorField = idField("governor", governorRoster);
-    const admission = closed({
-      key: [version, kind, name],
-      name: "AttributeGrammar",
-      payload: [domain, use, position],
-      rows: kindRows.map(({ position: at, row }) => ({
-        domain: row.domain.handle,
-        kind: row.kind,
-        name: row.name,
-        position: String(at),
-        use: row.use,
-        version: row.version,
-      })),
-    });
+    const admission = indexed(
+      closed({
+        key: [version, kind, name],
+        name: "AttributeGrammar",
+        payload: [domain, use, position],
+        rows: kindRows.map(({ position: at, row }) => ({
+          domain: row.domain.handle,
+          kind: row.kind,
+          name: row.name,
+          position: String(at),
+          use: row.use,
+          version: row.version,
+        })),
+      }),
+    );
     const valueDomain = closed({
       key: [domain],
       name: "ValueDomain",
@@ -1944,50 +1947,58 @@ export const generate = (
         Option.toArray(held.identity).map((value) => ({ domain: held.handle, identity: value })),
       ),
     });
-    const text = closed({
-      key: [version, kind],
-      name: "TextDomain",
-      payload: [domain],
-      rows: texts.map((row) => ({
-        domain: row.domain.handle,
-        kind: row.kind,
-        version: row.version,
-      })),
-    });
-    const governor = closed({
-      key: [version, kind, governs],
-      name: "Governor",
-      payload: [governorField],
-      rows: input.governors.map((held) => ({
-        governor: governorHandle(held),
-        governs: held.governs,
-        kind: held.kind,
-        version: held.version,
-      })),
-    });
-    const governedRelation = closed({
-      key: [version, governorField, name],
-      name: "GovernedAttribute",
-      payload: [domain, use, position],
-      rows: governorRows.map(({ position: at, row }) => ({
-        domain: row.domain.handle,
-        governor: row.governor,
-        name: row.name,
-        position: String(at),
-        use: row.use,
-        version: row.version,
-      })),
-    });
-    const typeText = closed({
-      key: [version, governs],
-      name: "TypeText",
-      payload: [domain],
-      rows: typeTexts.map((row) => ({
-        domain: row.domain.handle,
-        governs: row.governs,
-        version: row.version,
-      })),
-    });
+    const text = indexed(
+      closed({
+        key: [version, kind],
+        name: "TextDomain",
+        payload: [domain],
+        rows: texts.map((row) => ({
+          domain: row.domain.handle,
+          kind: row.kind,
+          version: row.version,
+        })),
+      }),
+    );
+    const governor = indexed(
+      closed({
+        key: [version, kind, governs],
+        name: "Governor",
+        payload: [governorField],
+        rows: input.governors.map((held) => ({
+          governor: governorHandle(held),
+          governs: held.governs,
+          kind: held.kind,
+          version: held.version,
+        })),
+      }),
+    );
+    const governedRelation = indexed(
+      closed({
+        key: [version, governorField, name],
+        name: "GovernedAttribute",
+        payload: [domain, use, position],
+        rows: governorRows.map(({ position: at, row }) => ({
+          domain: row.domain.handle,
+          governor: row.governor,
+          name: row.name,
+          position: String(at),
+          use: row.use,
+          version: row.version,
+        })),
+      }),
+    );
+    const typeText = indexed(
+      closed({
+        key: [version, governs],
+        name: "TypeText",
+        payload: [domain],
+        rows: typeTexts.map((row) => ({
+          domain: row.domain.handle,
+          governs: row.governs,
+          version: row.version,
+        })),
+      }),
+    );
 
     return {
       admission,

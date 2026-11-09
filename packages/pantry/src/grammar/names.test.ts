@@ -6,7 +6,7 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
-import { roster } from "#pantry/grammar/closed.ts";
+import { indexed, roster } from "#pantry/grammar/closed.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import {
   expandedText,
@@ -388,7 +388,7 @@ describe("HeldRootsUnder", () => {
         });
         for (const version of schemaVersions) {
           const names = Option.getOrElse(
-            Option.map(relation.lookup({ parent: "host", version }), (row) => row.names),
+            Option.map(indexed(relation).lookup({ parent: "host", version }), (row) => row.names),
             () => "(none)",
           );
           for (const { local, namespace, versions: declared } of roots) {

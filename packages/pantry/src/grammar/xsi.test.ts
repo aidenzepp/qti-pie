@@ -6,7 +6,7 @@ import { array, element, int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
 import { admittedOf, governorOf, textDomainOf } from "#pantry/grammar/attributes.ts";
-import { roster } from "#pantry/grammar/closed.ts";
+import { indexedSourced, roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -129,7 +129,8 @@ describe("XsiType", () => {
               });
               assert.isTrue(Result.isSuccess(result));
               if (Result.isSuccess(result)) {
-                const { anonymousType, xsiType } = result.success;
+                const anonymousType = indexedSourced(result.success.anonymousType);
+                const xsiType = indexedSourced(result.success.xsiType);
                 for (const [index, at] of declared.entries()) {
                   for (const version of schemaVersions) {
                     for (const [named, type] of types.entries()) {
@@ -184,7 +185,11 @@ describe("XsiType", () => {
         Result.map(({ xsiType }) =>
           [declared, ...derived].map((type) =>
             Option.isSome(
-              xsiType.lookup({ kind: "csmd:GUID", type: typeHandle(type), version: "3.0.1" }),
+              indexedSourced(xsiType).lookup({
+                kind: "csmd:GUID",
+                type: typeHandle(type),
+                version: "3.0.1",
+              }),
             ),
           ),
         ),
@@ -341,7 +346,9 @@ describe.skipIf(!cached)("XsiType against xmllint", () => {
       // the probe's own declaration: a global element of the kind, or one of its named type.
       Effect.gen(function* againstXmllint() {
         const grammar = yield* Effect.fromResult(composed());
-        const { kinds, xsi } = grammar;
+        const { kinds } = grammar;
+        const anonymousType = indexedSourced(grammar.xsi.anonymousType);
+        const xsiType = indexedSourced(grammar.xsi.xsiType);
         const failures: string[] = [];
         let probed = 0;
         for (const [root, version, target] of typedSchemas) {
@@ -357,10 +364,10 @@ describe.skipIf(!cached)("XsiType against xmllint", () => {
             probed += 1;
             const handle = Option.match(probe.type, { onNone: () => "(none)", onSome: typeHandle });
             const admitted = Option.match(probe.type, {
-              onNone: () => Option.isSome(xsi.anonymousType.lookup({ kind: probe.kind, version })),
+              onNone: () => Option.isSome(anonymousType.lookup({ kind: probe.kind, version })),
               onSome: (type) =>
                 Option.isSome(
-                  xsi.xsiType.lookup({ kind: probe.kind, type: typeHandle(type), version }),
+                  xsiType.lookup({ kind: probe.kind, type: typeHandle(type), version }),
                 ),
             });
             const verdict = verdicts[index];

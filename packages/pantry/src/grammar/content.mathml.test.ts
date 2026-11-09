@@ -2,9 +2,10 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { composed, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { accepts, contentModelOf } from "#pantry/grammar/content.ts";
+import { contentModelOf } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { breachesOf, judged as judgedPackage, shown, withItem } from "#pantry/test/probe.ts";
+import { accepts } from "#pantry/test/indexes.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**

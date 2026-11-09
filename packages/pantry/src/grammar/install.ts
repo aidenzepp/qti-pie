@@ -802,7 +802,7 @@ export const StrictlyHeld = closed.relation(
  * @param set - `Enters`, `Banned` or `Needs`.
  * @returns Its (kind, flag) rows.
  */
-const kindFlags = (set: ComposedGrammar["ancestry"]["enters"]) =>
+const kindFlags = (set: ComposedGrammar["ancestry"]["banned"]) =>
   set.rows.map(({ flag, kind }) => ({ flag, kind: memberOf(grammar.kinds.nodeKind, kind) }));
 
 /**

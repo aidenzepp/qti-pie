@@ -7,7 +7,14 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
-import { closed, faultOf, idField, repeatOf, roster as rosterOf } from "#pantry/grammar/closed.ts";
+import {
+  closed,
+  faultOf,
+  idField,
+  indexed,
+  repeatOf,
+  roster as rosterOf,
+} from "#pantry/grammar/closed.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
 import {
   fixedKinds,
@@ -273,16 +280,18 @@ describe("KindByNameUnder's kind payload", () => {
     const rosters = generate({ interactions: [], layer: [], vocabularies });
     const anyKind: Roster<string> = rosters.nodeKind;
     const relationOver = <K extends string>(kinds: Roster<K>, kind: K) =>
-      closed({
-        key: [
-          idField("namespace", rosterOf("Namespace", ["urn:toy"])),
-          idField("local", rosterOf("LocalName", ["a"])),
-          idField("parent", anyKind),
-        ],
-        name: "KindByNameUnder",
-        payload: [idField("kind", kinds)],
-        rows: [{ kind, local: "a", namespace: "urn:toy", parent: "document" }],
-      });
+      indexed(
+        closed({
+          key: [
+            idField("namespace", rosterOf("Namespace", ["urn:toy"])),
+            idField("local", rosterOf("LocalName", ["a"])),
+            idField("parent", anyKind),
+          ],
+          name: "KindByNameUnder",
+          payload: [idField("kind", kinds)],
+          rows: [{ kind, local: "a", namespace: "urn:toy", parent: "document" }],
+        }),
+      );
     const narrow: KindByNameUnder<KindOf<typeof vocabularies>> = relationOver(
       rosters.nodeKind,
       "k1",

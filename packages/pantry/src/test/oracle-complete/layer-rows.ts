@@ -19,6 +19,7 @@ import type { FoldedAttribute, FoldedRows } from "#pantry/model/folds.ts";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import { corrupt } from "#pantry/test/gen/xdm.ts";
 import type { Corruption } from "#pantry/test/gen/xdm.ts";
+import { indexesOf } from "#pantry/test/indexes.ts";
 import type { Mutation } from "#pantry/test/oracle-complete/mutation.ts";
 
 /**
@@ -106,7 +107,7 @@ const typingOf = (grammar: ComposedGrammar, attribute: FoldedAttribute<Composed>
       attribute.kind === "qti-context-declaration" && attribute.name === "identifier"
         ? Option.some("ID")
         : domain.pipe(
-            Option.flatMap((held) => grammar.attributes.identity.lookup({ domain: held })),
+            Option.flatMap((held) => indexesOf(grammar).identity.lookup({ domain: held })),
             Option.map(({ identity }) => identity),
           ),
   };

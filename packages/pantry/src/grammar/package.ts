@@ -8,8 +8,8 @@
  * which the attribute's value domain states (spec reading 67), so no relation states it again.
  * `RootOfType` is a set of those handles' rows, and grizzle packs it into a constant with no table.
  */
-import { closed, idField, roster } from "#pantry/grammar/closed.ts";
-import type { Closed, IdField, Roster } from "#pantry/grammar/closed.ts";
+import { closed, idField, indexed, roster } from "#pantry/grammar/closed.ts";
+import type { IdField, Indexed, Roster } from "#pantry/grammar/closed.ts";
 
 /**
  * The root element kind of the documents one resource type lists.
@@ -44,7 +44,7 @@ export interface PackageGrammar {
    * has every kind an include stands for (spec reading 114). A type absent from it lists no
    * document.
    */
-  readonly rootOfType: Closed<
+  readonly rootOfType: Indexed<
     readonly [IdField<"type", string>, IdField<"root", string>],
     readonly []
   >;
@@ -72,11 +72,13 @@ export const packageGrammar = (input: {
 
   return {
     resourceType,
-    rootOfType: closed({
-      key: [type, idField("root", input.kinds)],
-      name: "RootOfType",
-      payload: [],
-      rows: input.facets.flatMap((facet) => facet.roots),
-    }),
+    rootOfType: indexed(
+      closed({
+        key: [type, idField("root", input.kinds)],
+        name: "RootOfType",
+        payload: [],
+        rows: input.facets.flatMap((facet) => facet.roots),
+      }),
+    ),
   };
 };

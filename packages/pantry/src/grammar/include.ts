@@ -24,8 +24,8 @@
  * `qti-template-block`) never roots a fragment (reading 116): {@link fragmentRootsOf} keeps the
  * kind of each name whose handle is its name.
  */
-import { closed, idField, roster } from "#pantry/grammar/closed.ts";
-import type { Closed, IdField, Roster } from "#pantry/grammar/closed.ts";
+import { closed, idField, indexed, roster } from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Indexed, Roster } from "#pantry/grammar/closed.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
 
@@ -196,7 +196,7 @@ export interface IncludeGrammar {
   /**
    * `IncludeRoot`, the set of (version, include parent, kind) an include stands for.
    */
-  readonly includeRoot: Closed<
+  readonly includeRoot: Indexed<
     readonly [
       IdField<"version", SchemaVersion>,
       IdField<"parent", string>,
@@ -233,11 +233,13 @@ export const includeGrammar = (input: {
       payload: [idField("kind", input.kinds)],
       rows: parents.map((handle) => ({ kind: handle, parent: handle })),
     }),
-    includeRoot: closed({
-      key: [idField("version", input.versions), parent, idField("kind", input.kinds)],
-      name: "IncludeRoot",
-      payload: [],
-      rows: input.alternatives,
-    }),
+    includeRoot: indexed(
+      closed({
+        key: [idField("version", input.versions), parent, idField("kind", input.kinds)],
+        name: "IncludeRoot",
+        payload: [],
+        rows: input.alternatives,
+      }),
+    ),
   };
 };

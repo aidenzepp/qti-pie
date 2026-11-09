@@ -3,8 +3,9 @@
  *
  * A roster is a closed vocabulary of handles, each coded by its position. A closed relation is
  * fixed when the schema compiles, so it has no table: grizzle packs it into a constant. This module
- * holds the rows a generator states and answers lookups on the host. It checks no row, packs
- * nothing and sizes nothing: grizzle refuses a value outside its field's code space and a key
+ * holds the rows a generator states and, for a relation a serving path reads by key, its index
+ * ({@link indexed}); a test indexes any other itself. It checks no row, packs nothing and sizes
+ * nothing: grizzle refuses a value outside its field's code space and a key
  * stated twice when it declares and packs the relation, and a constant past PostgreSQL's longest
  * bit string (README, "Limits"); {@link faultOf} is the same row check for the tests over a
  * composition.
@@ -146,7 +147,8 @@ type AnyRow = Readonly<Record<string, Primitive>>;
 
 /**
  * A closed relation under a declared key: its rows, one per key, each value within its field's code
- * space. A relation with no payload is a set.
+ * space. A relation with no payload is a set. It answers no lookup: a relation the host reads by
+ * key is {@link Indexed}, built where a serving path reads it, and a test indexes any other itself.
  */
 export interface Closed<Key extends readonly AnyKeyField[], Payload extends readonly AnyField[]> {
   readonly name: string;
@@ -160,6 +162,15 @@ export interface Closed<Key extends readonly AnyKeyField[], Payload extends read
    * The rows as stated, every value within its field's code space.
    */
   readonly rows: readonly Row<Key, Payload>[];
+}
+
+/**
+ * A closed relation the host reads by key: its rows, indexed once by their keys ({@link indexed}).
+ */
+export interface Indexed<
+  Key extends readonly AnyKeyField[],
+  Payload extends readonly AnyField[],
+> extends Closed<Key, Payload> {
   /**
    * Find the row at a key.
    *
@@ -175,14 +186,29 @@ export interface Closed<Key extends readonly AnyKeyField[], Payload extends read
 /**
  * A closed relation whose rows carry their spec source (Bjorn's ruling of 2026-11-05): the
  * XSD particle or declaration a row reads, by file and line in its version, or the specification
- * or spec reading that states it. A refusal maps from its law to its source rule by this lookup,
- * so it explains itself from the law, the row's keys and the grammar's constants. The source is
- * host data: it never enters the relation's constant.
+ * or spec reading that states it. A refusal maps from its law to its source rule by its row's
+ * source, so it explains itself from the law, the row's keys and the grammar's constants. The
+ * source is host data: it never enters the relation's constant.
  */
 export interface Sourced<
   Key extends readonly AnyKeyField[],
   Payload extends readonly AnyField[],
 > extends Closed<Key, Payload> {
+  /**
+   * Each row with its source, in the rows' order.
+   */
+  readonly sourced: readonly SourcedRow<Key, Payload>[];
+}
+
+/**
+ * A sourced relation the host reads by key: its rows and their sources, indexed once by their keys
+ * ({@link indexedSourced}).
+ */
+export interface IndexedSourced<
+  Key extends readonly AnyKeyField[],
+  Payload extends readonly AnyField[],
+>
+  extends Indexed<Key, Payload>, Sourced<Key, Payload> {
   /**
    * Find where the row at a key comes from.
    *
@@ -590,8 +616,9 @@ export const faultOf = (relation: {
 };
 
 /**
- * Construct a closed relation from rows of handles and values, answering lookups by key. It
- * checks no row ({@link lookupOf}).
+ * Construct a closed relation from rows of handles and values. It indexes nothing and checks no
+ * row: grizzle checks them when it declares and packs the relation, and the tests with
+ * {@link faultOf}.
  *
  * @param relation - The relation as a generator states it.
  * @param relation.key - Its key's fields in index order, the first the most significant digit.
@@ -608,32 +635,42 @@ export const closed = <
   readonly name: string;
   readonly payload: Payload;
   readonly rows: readonly Row<Key, Payload>[];
-}): Closed<Key, Payload> => {
+}): Closed<Key, Payload> => ({
+  key: relation.key,
+  name: relation.name,
+  payload: relation.payload,
+  rows: relation.rows,
+});
+
+/**
+ * Index a closed relation's rows by their keys, for a reader that looks rows up: built once, where
+ * a serving path reads the relation by key ({@link lookupOf}).
+ *
+ * @param relation - The relation.
+ * @returns It, answering lookups.
+ */
+export const indexed = <Key extends readonly AnyKeyField[], Payload extends readonly AnyField[]>(
+  relation: Closed<Key, Payload>,
+): Indexed<Key, Payload> => {
   const at = lookupOf(
     relation.key,
     relation.rows.map((row) => ({ row })),
   );
 
-  return {
-    key: relation.key,
-    lookup: (key) => Option.map(at(key), ({ row }) => row),
-    name: relation.name,
-    payload: relation.payload,
-    rows: relation.rows,
-  };
+  return { ...relation, lookup: (key) => Option.map(at(key), ({ row }) => row) };
 };
 
 /**
  * Construct a closed relation whose rows carry their sources (Bjorn's ruling of 2026-11-05),
- * each row stated with its own: the source is host data, read by key, and never enters the
- * relation's constant. It checks no row ({@link lookupOf}).
+ * each row stated with its own: the source is host data, which never enters the relation's
+ * constant. It indexes nothing and checks no row.
  *
  * @param relation - The relation as a generator states it, each row with its source.
  * @param relation.key - Its key's fields in index order, the first the most significant digit.
  * @param relation.name - Its name, as its laws and its failures name it.
  * @param relation.payload - The fields outside the key, none for a set.
  * @param relation.rows - Its rows, each with where it comes from.
- * @returns The relation, answering each key's source.
+ * @returns The relation.
  */
 export const sourced = <
   const Key extends readonly AnyKeyField[],
@@ -643,15 +680,32 @@ export const sourced = <
   readonly name: string;
   readonly payload: Payload;
   readonly rows: readonly SourcedRow<Key, Payload>[];
-}): Sourced<Key, Payload> => {
-  const at = lookupOf(relation.key, relation.rows);
+}): Sourced<Key, Payload> => ({
+  key: relation.key,
+  name: relation.name,
+  payload: relation.payload,
+  rows: relation.rows.map(({ row }) => row),
+  sourced: relation.rows,
+});
+
+/**
+ * Index a sourced relation's rows and their sources by their keys, for a reader that looks either
+ * up: built once, where a serving path reads the relation by key ({@link lookupOf}).
+ *
+ * @param relation - The relation.
+ * @returns It, answering lookups and sources.
+ */
+export const indexedSourced = <
+  Key extends readonly AnyKeyField[],
+  Payload extends readonly AnyField[],
+>(
+  relation: Sourced<Key, Payload>,
+): IndexedSourced<Key, Payload> => {
+  const at = lookupOf(relation.key, relation.sourced);
 
   return {
-    key: relation.key,
+    ...relation,
     lookup: (key) => Option.map(at(key), ({ row }) => row),
-    name: relation.name,
-    payload: relation.payload,
-    rows: relation.rows.map(({ row }) => row),
     sourceOf: (key) => Option.map(at(key), ({ source }) => source),
   };
 };

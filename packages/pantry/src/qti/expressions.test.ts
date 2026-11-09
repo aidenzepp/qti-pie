@@ -10,7 +10,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
-import { contentEnds, stepOf } from "#pantry/grammar/content.ts";
+import { stepOf } from "#pantry/grammar/content.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import {
   builtInTypes,
@@ -82,6 +82,7 @@ import { nodeLaws } from "#pantry/qti/node.ts";
 import { qtiRelations } from "#pantry/qti/base.ts";
 import { Qti } from "#pantry/qti/own.ts";
 import { itemRefKind, linkResourceTypes } from "#pantry/qti/tests.ts";
+import { contentEnds } from "#pantry/test/indexes.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its

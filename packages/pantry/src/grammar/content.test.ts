@@ -13,7 +13,6 @@ import { int8Max } from "#pantry/grammar/closed.ts";
 import { composed, namespaceOfKind, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import {
-  accepts,
   contentModelOf,
   editedBy,
   finds,
@@ -54,6 +53,7 @@ import {
   XsdOracleLayer,
   xsdContents,
 } from "#pantry/test/gen/grammar.ts";
+import { accepts, indexesOf } from "#pantry/test/indexes.ts";
 import type {
   Content,
   DrawnChild,
@@ -121,7 +121,7 @@ const arityHolds = (
   parent: string,
   children: readonly string[],
 ): boolean =>
-  Option.match(composedGrammar.operatorArity.lookup({ kind: parent }), {
+  Option.match(indexesOf(composedGrammar).operatorArity.lookup({ kind: parent }), {
     onNone: () => true,
     onSome: ({ max, min }) => BigInt(children.length) >= min && BigInt(children.length) <= max,
   });
@@ -1319,7 +1319,7 @@ const arityStates = (
 ): boolean => {
   const { max, min } = group.occurs;
   const exact = Option.exists(
-    composedGrammar.operatorArity.lookup({ kind: parent }),
+    indexesOf(composedGrammar).operatorArity.lookup({ kind: parent }),
     (row) => row.min === BigInt(min) && row.max === (Number.isFinite(max) ? BigInt(max) : int8Max),
   );
 
@@ -1502,7 +1502,9 @@ describe.skipIf(!cached)("the content grammar's sources", () => {
       // Oracle: the pinned XSD files' own text, read line by line apart from every reader, and
       // the versions their names pin. The box is every row of the five relations.
       Effect.gen(function* sources() {
-        const { admission, content } = yield* grammar;
+        const composedGrammar = yield* grammar;
+        const { admission, content } = composedGrammar;
+        const { counted } = indexesOf(composedGrammar);
         const fs = yield* FileSystem.FileSystem;
         const directory = yield* xsdDirectory;
         const lines = new Map<string, readonly string[]>();
@@ -1591,7 +1593,7 @@ describe.skipIf(!cached)("the content grammar's sources", () => {
         }
 
         for (const row of content.counted.rows) {
-          yield* check("Counted", row.version, content.counted.sourceOf(row));
+          yield* check("Counted", row.version, counted.sourceOf(row));
         }
 
         assert.isAbove(checked.size, 0);

@@ -39,16 +39,17 @@ import {
   Option,
   Result,
 } from "effect";
-import { admits, step } from "#pantry/grammar/ancestry.ts";
+import { step } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { accepts, mixedEndingsOf } from "#pantry/grammar/content.ts";
+import { mixedEndingsOf } from "#pantry/grammar/content.ts";
 import type { ModelEdit } from "#pantry/grammar/content.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { breachesOf, judged as judgedPackage, shown, withItem } from "#pantry/test/probe.ts";
+import { accepts, admits } from "#pantry/test/indexes.ts";
 import { xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";

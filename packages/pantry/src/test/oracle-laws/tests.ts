@@ -49,6 +49,7 @@ import {
   testDocumentsOf,
   testKinds,
 } from "#pantry/test/oracle-laws/assembly.ts";
+import { indexesOf } from "#pantry/test/indexes.ts";
 import { declarationKindsOf, referenceBasesOf } from "#pantry/test/oracle-laws/expressions.ts";
 import type {
   Instance,
@@ -972,9 +973,10 @@ const feedbackTypeOf = (
   // single identifier. Any other, `numAttempts` and `duration` among them, "Feedback reference"
   // alone refuses, as the import's rows do.
   const at = { root: "qti-assessment-item", variable: named.value };
-  const baseType = Option.map(grammar.references.builtInBaseType.lookup(at), (row) => row.baseType);
+  const { builtIn, builtInBaseType } = indexesOf(grammar);
+  const baseType = Option.map(builtInBaseType.lookup(at), (row) => row.baseType);
 
-  return Option.toArray(grammar.references.builtIn.lookup(at))
+  return Option.toArray(builtIn.lookup(at))
     .filter(
       ({ cardinality, declaration }) =>
         declaration === "qti-outcome-declaration" &&

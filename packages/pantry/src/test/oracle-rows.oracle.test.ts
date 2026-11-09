@@ -22,7 +22,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { admits, flags, rowOf } from "#pantry/grammar/ancestry.ts";
+import { flags, rowOf } from "#pantry/grammar/ancestry.ts";
 import { grammar } from "#pantry/grammar/install.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -31,6 +31,7 @@ import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
+import { admits, ancestryIndexesOf } from "#pantry/test/indexes.ts";
 
 /**
  * The oracle's law tables over the installed grammar.
@@ -146,14 +147,18 @@ describe("the law oracle's node laws over rows no document's text gives", () => 
         assert.isTrue(
           edits.some(
             ({ node, parentAncestry }) =>
-              !rowOf(grammar.ancestry.needs, node.kind).isSubsetOf(parentAncestry),
+              !rowOf(ancestryIndexesOf(grammar.ancestry).needs, node.kind).isSubsetOf(
+                parentAncestry,
+              ),
           ),
           "an edit drops a needed flag",
         );
         assert.isTrue(
           edits.some(
             ({ node, parentAncestry }) =>
-              !rowOf(grammar.ancestry.banned, node.kind).isDisjointFrom(parentAncestry),
+              !rowOf(ancestryIndexesOf(grammar.ancestry).banned, node.kind).isDisjointFrom(
+                parentAncestry,
+              ),
           ),
           "an edit adds a banned flag",
         );

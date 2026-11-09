@@ -73,12 +73,7 @@ import {
 } from "#pantry/grammar/attributes.ts";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import {
-  contentEnds,
-  contentFollows,
-  contentModelOf,
-  followPairsOf,
-} from "#pantry/grammar/content.ts";
+import { contentFollows, contentModelOf, followPairsOf } from "#pantry/grammar/content.ts";
 import {
   cnDefaultType,
   cnForms,
@@ -125,6 +120,7 @@ import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { Domain, WhiteSpace } from "#pantry/vocab/inventory/types.ts";
 import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantry/qti/limits.ts";
+import { contentEnds, indexesOf } from "#pantry/test/indexes.ts";
 import { datumText } from "#pantry/test/predicates.ts";
 import { keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
@@ -1301,7 +1297,10 @@ const tableHeadersOf = (view: View): ReadonlyMap<NodeId, ReadonlySet<string>> =>
 const heldRoot = (grammar: ComposedGrammar, view: View, node: FoldedNode<Composed>): boolean =>
   Option.exists(
     Option.all({
-      held: grammar.heldRootsUnder.lookup({ parent: node.parentKind, version: node.version }),
+      held: indexesOf(grammar).heldRootsUnder.lookup({
+        parent: node.parentKind,
+        version: node.version,
+      }),
       name: Option.fromNullishOr(view.rows.openElementNames.find((row) => row.node === node.id)),
     }),
     ({ held, name }) => new RegExp(held.names, patternFlags).test(expandedText(name)),
@@ -1577,8 +1576,8 @@ const nodeLaws: readonly NodeLaw[] = [
   },
   {
     breaks: (node, _view, { grammar }) => {
-      const banned = rowOf(grammar.ancestry.banned, node.kind).intersection(node.parentAncestry);
-      const missing = rowOf(grammar.ancestry.needs, node.kind).difference(node.parentAncestry);
+      const banned = rowOf(indexesOf(grammar).banned, node.kind).intersection(node.parentAncestry);
+      const missing = rowOf(indexesOf(grammar).needs, node.kind).difference(node.parentAncestry);
 
       return unless(banned.size === 0 && missing.size === 0, () => ({
         parentAncestry: spaced(node.parentAncestry),
@@ -1748,7 +1747,7 @@ const nodeLaws: readonly NodeLaw[] = [
   {
     breaks: (node, view, laws) =>
       Option.flatMap(
-        laws.grammar.barredBy.lookup({ parent: node.kind, version: node.version }),
+        indexesOf(laws.grammar).barredBy.lookup({ parent: node.kind, version: node.version }),
         ({ name, position }) => {
           const carries = Option.exists(
             positionOf(laws, node.version, node.kind, node.governs, name),
@@ -2082,11 +2081,11 @@ const nodeLaws: readonly NodeLaw[] = [
           Option.match(node.governs, {
             onNone: () =>
               Option.isSome(
-                grammar.xsi.anonymousType.lookup({ kind: node.kind, version: node.version }),
+                indexesOf(grammar).anonymousType.lookup({ kind: node.kind, version: node.version }),
               ),
             onSome: (type) =>
               Option.isSome(
-                grammar.xsi.xsiType.lookup({ kind: node.kind, type, version: node.version }),
+                indexesOf(grammar).xsiType.lookup({ kind: node.kind, type, version: node.version }),
               ),
           }),
         () => ({
@@ -3641,7 +3640,7 @@ const declares = (overlay: Overlay, identifier: string, kinds: ReadonlySet<strin
  */
 const builtInAs = (overlay: Overlay, identifier: string, kinds: ReadonlySet<string>): boolean =>
   Option.exists(
-    overlay.laws.grammar.references.builtIn.lookup({
+    indexesOf(overlay.laws.grammar).builtIn.lookup({
       root: overlay.rootKind,
       variable: identifier,
     }),
@@ -3963,7 +3962,7 @@ const overlayLaws: readonly ((
             );
       }
 
-      const record = Option.isSome(grammar.recordBindingFit.lookup({ kind: node.kind }));
+      const record = Option.isSome(indexesOf(grammar).recordBindingFit.lookup({ kind: node.kind }));
       if (!record && !grammar.bindingFit.rows.some(({ kind }) => kind === node.kind)) {
         return [];
       }
@@ -3975,7 +3974,7 @@ const overlayLaws: readonly ((
       return Option.toArray(
         typeBreach(baseType, (held) =>
           Option.isSome(
-            grammar.bindingFit.lookup({
+            indexesOf(grammar).bindingFit.lookup({
               baseType: held,
               cardinality: cardinality.value,
               kind: node.kind,
@@ -4004,7 +4003,7 @@ const overlayLaws: readonly ((
       ? [{ keys: {}, law: "PCI module source" }]
       : [],
   (node, overlay) => {
-    const { choiceBound, choiceCount } = overlay.laws.grammar.references;
+    const { choiceBound, choiceCount } = indexesOf(overlay.laws.grammar);
 
     return Option.toArray(choiceBound.lookup({ kind: node.kind })).flatMap(
       ({ max, min, zero }): readonly Finding[] => {
@@ -4062,7 +4061,7 @@ const overlayLaws: readonly ((
           )
       : [],
   (node, overlay) =>
-    Option.toArray(overlay.laws.grammar.operatorArity.lookup({ kind: node.kind }))
+    Option.toArray(indexesOf(overlay.laws.grammar).operatorArity.lookup({ kind: node.kind }))
       .filter(({ max, min }) => node.elementChildren < min || node.elementChildren > max)
       .map((): Finding => ({ keys: { count: String(node.elementChildren) }, law: "Arity" })),
   (node, overlay) =>
@@ -4076,7 +4075,7 @@ const overlayLaws: readonly ((
               targets.size === 0 &&
               !overlay.declared.has(identifier) &&
               Option.isNone(
-                overlay.laws.grammar.references.builtIn.lookup({
+                indexesOf(overlay.laws.grammar).builtIn.lookup({
                   root: overlay.rootKind,
                   variable: identifier,
                 }),
@@ -4102,7 +4101,9 @@ const overlayLaws: readonly ((
       ...recordBreach(overlay, node, "MappableBaseType"),
       ...Option.toArray(
         typeBreach(baseTypeOf(overlay, node), (held) =>
-          Option.isSome(overlay.laws.grammar.mappableBaseType.lookup({ baseType: held })),
+          Option.isSome(
+            indexesOf(overlay.laws.grammar).mappableBaseType.lookup({ baseType: held }),
+          ),
         ),
       ).map((keys): Finding => ({ keys, law: "MappableBaseType" })),
     ];
@@ -4216,7 +4217,7 @@ const overlayLaws: readonly ((
     }
 
     const parts = (overlay.view.childrenOf.get(node.parent) ?? []).filter(({ kind }) =>
-      Option.isSome(overlay.laws.grammar.references.sectionPart.lookup({ kind })),
+      Option.isSome(indexesOf(overlay.laws.grammar).sectionPart.lookup({ kind })),
     ).length;
     const replaced = Option.contains(
       Option.flatMap(typedValueOf(overlay.view, node.id, "with-replacement"), booleanOf),
@@ -4396,9 +4397,9 @@ const overlayLaws: readonly ((
       // `QTI_CONTEXT` as the context, which "Feedback reference" alone refuses, as the import's
       // rows do (the built-in-roots differential).
       const at = { root: "qti-assessment-item", variable: named.value };
-      const builtIn = overlay.laws.grammar.references.builtIn.lookup(at);
+      const builtIn = indexesOf(overlay.laws.grammar).builtIn.lookup(at);
       const builtInBase = Option.map(
-        overlay.laws.grammar.references.builtInBaseType.lookup(at),
+        indexesOf(overlay.laws.grammar).builtInBaseType.lookup(at),
         ({ baseType }) => baseType,
       );
 
@@ -4685,7 +4686,7 @@ const overlayBreaches = (
 
     return overlay.isItem &&
       Option.isSome(
-        laws.grammar.references.builtIn.lookup({ root: overlay.rootKind, variable: identifier }),
+        indexesOf(laws.grammar).builtIn.lookup({ root: overlay.rootKind, variable: identifier }),
       )
       ? "built-in"
       : undefined;
@@ -7038,7 +7039,7 @@ const ownLaws = {
   },
   Arity: {
     explain: (keys, grammar) =>
-      Option.match(grammar.operatorArity.lookup({ kind: field(keys, "kind") }), {
+      Option.match(indexesOf(grammar).operatorArity.lookup({ kind: field(keys, "kind") }), {
         onNone: () => `${field(keys, "kind")} has no OperatorArity row`,
         onSome: ({ max, min }) =>
           `${field(keys, "kind")} holds ${field(keys, "count")} expressions; OperatorArity admits ${String(min)} to ${String(max)}`,
@@ -7436,9 +7437,9 @@ const ownLaws = {
       const kind = field(keys, "kind");
 
       return `${kind} sits in ${inBraces([...sits])}: Banned holds ${inBraces(
-        [...rowOf(grammar.ancestry.banned, kind)].filter((flag) => sits.has(flag)),
+        [...rowOf(indexesOf(grammar).banned, kind)].filter((flag) => sits.has(flag)),
       )} of it, and Needs lacks ${inBraces(
-        [...rowOf(grammar.ancestry.needs, kind)].filter((flag) => !sits.has(flag)),
+        [...rowOf(indexesOf(grammar).needs, kind)].filter((flag) => !sits.has(flag)),
       )}`;
     },
     node: true,
@@ -7450,7 +7451,7 @@ const ownLaws = {
           const [position = "", count = ""] = entry.split(":");
 
           return Option.match(
-            grammar.content.counted.lookup({
+            indexesOf(grammar).counted.lookup({
               parent: field(keys, "kind"),
               position,
               version: field(keys, "version"),
@@ -7487,7 +7488,10 @@ const ownLaws = {
   "N7 barred by": {
     explain: (keys, grammar) =>
       Option.match(
-        grammar.barredBy.lookup({ parent: field(keys, "kind"), version: field(keys, "version") }),
+        indexesOf(grammar).barredBy.lookup({
+          parent: field(keys, "kind"),
+          version: field(keys, "version"),
+        }),
         {
           onNone: () => `${field(keys, "kind")} bars no position`,
           onSome: ({ name, position }) =>

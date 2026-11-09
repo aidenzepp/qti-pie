@@ -55,6 +55,7 @@ import type {
   XdmFeature,
 } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawNames, lawsOf } from "#pantry/test/oracle.ts";
+import { ancestryIndexesOf } from "#pantry/test/indexes.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 
 /**
@@ -1039,7 +1040,9 @@ describe("the host's law model over folded rows", { timeout: searchTimeout }, ()
 
                 return (placedAlone.get(`${version} ${owner}`) ?? [])
                   .filter((child) =>
-                    [...rowOf(grammar.ancestry.banned, child)].some((flag) => entered.has(flag)),
+                    [...rowOf(ancestryIndexesOf(grammar.ancestry).banned, child)].some((flag) =>
+                      entered.has(flag),
+                    ),
                   )
                   .map((child) => ({ child, number }));
               });
@@ -1082,10 +1085,12 @@ describe("the host's law model over folded rows", { timeout: searchTimeout }, ()
                 }
 
                 return (
-                  [...rowOf(grammar.ancestry.banned, node.kind)].some((flag) =>
+                  [...rowOf(ancestryIndexesOf(grammar.ancestry).banned, node.kind)].some((flag) =>
                     entered.has(flag),
                   ) ||
-                  [...rowOf(grammar.ancestry.needs, node.kind)].some((flag) => !entered.has(flag))
+                  [...rowOf(ancestryIndexesOf(grammar.ancestry).needs, node.kind)].some(
+                    (flag) => !entered.has(flag),
+                  )
                 );
               });
               const refused = documentBreaches("generated.xml", rows, laws).filter(

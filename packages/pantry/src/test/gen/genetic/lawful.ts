@@ -34,7 +34,7 @@
  */
 import type { Attribute, Child, Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 import { Option } from "effect";
-import { admits, step } from "#pantry/grammar/ancestry.ts";
+import { step } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import { enumerationKept } from "#pantry/grammar/domains.ts";
@@ -47,6 +47,7 @@ import type { ElementKind, ExpandedName } from "#pantry/model/xdm.ts";
 import { indexOf, keyOf, kindOfDrawn, requiredUnder } from "#pantry/test/gen/xdm.ts";
 import type { Automaton, Index } from "#pantry/test/gen/xdm.ts";
 import { accepts, families } from "#pantry/test/lexical-harness.ts";
+import { admits } from "#pantry/test/indexes.ts";
 
 /**
  * One lawful document and the name the report gives it.

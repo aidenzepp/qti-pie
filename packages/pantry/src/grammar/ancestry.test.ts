@@ -4,7 +4,8 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option } from "effect";
-import { admits, flags, rowOf, step } from "#pantry/grammar/ancestry.ts";
+import { flags, rowOf, step } from "#pantry/grammar/ancestry.ts";
+import { admits, ancestryIndexesOf } from "#pantry/test/indexes.ts";
 import type { Ancestry, Flag } from "#pantry/grammar/ancestry.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 
@@ -207,7 +208,9 @@ describe("the ancestry grammar against the reference model", () => {
               if (
                 expected &&
                 last !== undefined &&
-                !rowOf(ancestry.banned, last).isDisjointFrom(rowOf(ancestry.enters, last))
+                !rowOf(ancestryIndexesOf(ancestry).banned, last).isDisjointFrom(
+                  rowOf(ancestry.enters, last),
+                )
               ) {
                 c.note("self-banned admitted");
               }
@@ -226,8 +229,8 @@ describe("the ancestry grammar against the reference model", () => {
         const reference = referenceOf(kind, Option.isSome(kinds.interaction.lookup({ kind })));
 
         return same(rowOf(ancestry.enters, kind), reference.enters) &&
-          same(rowOf(ancestry.banned, kind), reference.banned) &&
-          same(rowOf(ancestry.needs, kind), reference.needs)
+          same(rowOf(ancestryIndexesOf(ancestry).banned, kind), reference.banned) &&
+          same(rowOf(ancestryIndexesOf(ancestry).needs, kind), reference.needs)
           ? []
           : [kind];
       });

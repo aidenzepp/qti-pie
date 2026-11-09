@@ -5,7 +5,7 @@ import { array, element as choice, int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { faultOf, repeatOf } from "#pantry/grammar/closed.ts";
+import { faultOf, indexed, repeatOf } from "#pantry/grammar/closed.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
 import { composed, layerAttributeNames, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
@@ -48,7 +48,7 @@ type Literal<Handle extends string> = string extends Handle ? false : true;
 type Relation = Parameters<typeof faultOf>[0];
 
 /**
- * Whether a value of a grammar is a closed relation: its key, payload and rows, and its lookup.
+ * Whether a value of a grammar is a closed relation: its key, payload and rows, indexed or not.
  *
  * @param value - A value the grammar holds.
  * @returns Whether it is one.
@@ -58,8 +58,7 @@ const isRelation = (value: unknown): value is Relation =>
   value !== null &&
   "key" in value &&
   "payload" in value &&
-  "rows" in value &&
-  "lookup" in value;
+  "rows" in value;
 
 /**
  * Whether a value of a grammar is a roster: its handles and their codes.
@@ -654,6 +653,7 @@ describe("spec reading 109, wild IDs", () => {
       // governor), in both versions.
       Effect.gen(function* wildIds() {
         const { attributes } = yield* Effect.fromResult(composed());
+        const identity = indexed(attributes.identity);
         const hosts = [
           ...Map.groupBy(
             attributes.admission.rows,
@@ -701,7 +701,7 @@ describe("spec reading 109, wild IDs", () => {
                   ({ domain, name }) =>
                     name === "xml:id" &&
                     !uses.has(name) &&
-                    attributes.identity
+                    identity
                       .lookup({ domain })
                       .pipe(Option.exists(({ identity }) => identity === "ID")),
                 );

@@ -9,10 +9,10 @@
  * and rendering a kind back into its name; no law reads them, so none is installed.
  */
 import { Option } from "effect";
-import { closed, idField, roster, valueField } from "#pantry/grammar/closed.ts";
+import { closed, idField, indexed, roster, valueField } from "#pantry/grammar/closed.ts";
 import { spelledNamespace } from "#pantry/vocab/namespaces.ts";
 import type { Nameless, NamespaceClass, NamespaceName } from "#pantry/vocab/namespaces.ts";
-import type { Closed, IdField, Roster, ValueField } from "#pantry/grammar/closed.ts";
+import type { IdField, Indexed, Roster, ValueField } from "#pantry/grammar/closed.ts";
 
 /**
  * The QTI schema versions the model admits, in code order: the `SchemaVersion` roster's handles,
@@ -145,7 +145,7 @@ export type NameOf<V extends readonly Vocabulary[]> =
 /**
  * A set over `NodeKind`: one bit per kind, set for each kind it holds.
  */
-export type KindSet<Kind extends string> = Closed<readonly [IdField<"kind", Kind>], readonly []>;
+export type KindSet<Kind extends string> = Indexed<readonly [IdField<"kind", Kind>], readonly []>;
 
 /**
  * The closed relations of kinds and attribute names one vocabulary list generates.
@@ -171,7 +171,7 @@ export interface Kinds<Kind extends string, Name extends string> {
    * `ElementName`: the namespace name and local name each element kind is written with, as crust's
    * tree spells them (`spelledNamespace`), since the codec reads and writes names against them.
    */
-  readonly elementName: Closed<
+  readonly elementName: Indexed<
     readonly [IdField<"kind", Kind>],
     readonly [ValueField<"namespace", string>, ValueField<"local", string>]
   >;
@@ -273,44 +273,50 @@ export const generate = <const V extends readonly Vocabulary[]>(source: {
           })),
   );
   const kind = idField("kind", nodeKind);
-  const elementName = closed({
-    key: [kind],
-    name: "ElementName",
-    payload: [
-      valueField(
-        "namespace",
-        elements.map(({ row }) => row.namespace),
-      ),
-      valueField(
-        "local",
-        elements.map(({ row }) => row.local),
-      ),
-    ],
-    rows: elements.map(({ handle, row }) => ({
-      kind: handle,
-      local: row.local,
-      namespace: row.namespace,
-    })),
-  });
-  const isElement = closed({
-    key: [kind],
-    name: "IsElement",
-    payload: [],
-    rows: [
-      foreignKinds.other,
-      foreignKinds.absent,
-      foreignKinds.own,
-      ...elements.map(({ handle }) => handle),
-    ].map((handle) => ({
-      kind: handle,
-    })),
-  });
-  const interaction = closed({
-    key: [kind],
-    name: "Interaction",
-    payload: [],
-    rows: source.interactions.map((handle) => ({ kind: handle })),
-  });
+  const elementName = indexed(
+    closed({
+      key: [kind],
+      name: "ElementName",
+      payload: [
+        valueField(
+          "namespace",
+          elements.map(({ row }) => row.namespace),
+        ),
+        valueField(
+          "local",
+          elements.map(({ row }) => row.local),
+        ),
+      ],
+      rows: elements.map(({ handle, row }) => ({
+        kind: handle,
+        local: row.local,
+        namespace: row.namespace,
+      })),
+    }),
+  );
+  const isElement = indexed(
+    closed({
+      key: [kind],
+      name: "IsElement",
+      payload: [],
+      rows: [
+        foreignKinds.other,
+        foreignKinds.absent,
+        foreignKinds.own,
+        ...elements.map(({ handle }) => handle),
+      ].map((handle) => ({
+        kind: handle,
+      })),
+    }),
+  );
+  const interaction = indexed(
+    closed({
+      key: [kind],
+      name: "Interaction",
+      payload: [],
+      rows: source.interactions.map((handle) => ({ kind: handle })),
+    }),
+  );
 
   return {
     attributeName,
@@ -336,7 +342,7 @@ export type KindRosters<Kind extends string, Name extends string> = Omit<
  * name's kind from. Its kind payload is an id field over the `NodeKind` roster, so `closed` refuses
  * a row whose kind is outside it, and a row's kind is a `Kind` by its type.
  */
-export type KindByNameUnder<Kind extends string> = Closed<
+export type KindByNameUnder<Kind extends string> = Indexed<
   readonly [IdField<"namespace", string>, IdField<"local", string>, IdField<"parent", string>],
   readonly [IdField<"kind", Kind>]
 >;
@@ -382,19 +388,21 @@ export const resolution = <Kind extends string, Name extends string>(
   // The payload ranges over the `NodeKind` roster itself, so a resolved kind is a `Kind` by
   // construction and `resolve` needs no test of it. The annotation is the guard: a payload over
   // a wider roster (`anyKind`) is no `KindByNameUnder<Kind>`, and `tsc` refuses it.
-  const under: KindByNameUnder<Kind> = closed({
-    key: [
-      idField(
-        "namespace",
-        roster("Namespace", [...new Set(named.map(({ namespace }) => namespace))]),
-      ),
-      idField("local", roster("LocalName", [...new Set(named.map(({ local }) => local))])),
-      idField("parent", anyKind),
-    ],
-    name: "KindByNameUnder",
-    payload: [idField("kind", kinds.nodeKind)],
-    rows: named,
-  });
+  const under: KindByNameUnder<Kind> = indexed(
+    closed({
+      key: [
+        idField(
+          "namespace",
+          roster("Namespace", [...new Set(named.map(({ namespace }) => namespace))]),
+        ),
+        idField("local", roster("LocalName", [...new Set(named.map(({ local }) => local))])),
+        idField("parent", anyKind),
+      ],
+      name: "KindByNameUnder",
+      payload: [idField("kind", kinds.nodeKind)],
+      rows: named,
+    }),
+  );
 
   return {
     ...kinds,

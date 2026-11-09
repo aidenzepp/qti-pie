@@ -30,6 +30,7 @@ import {
   replaceOnce,
   withNodes,
 } from "#pantry/test/oracle-complete/mutation.ts";
+import { indexesOf } from "#pantry/test/indexes.ts";
 import type { Mutation } from "#pantry/test/oracle-complete/mutation.ts";
 
 /**
@@ -274,7 +275,7 @@ export const foreignEdits = {
           oneOf(
             atomicTypes.filter((held) =>
               Option.isNone(
-                grammar.xsi.xsiType.lookup({
+                indexesOf(grammar).xsiType.lookup({
                   kind: "qti-description",
                   type: held,
                   version: baseVersion,

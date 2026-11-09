@@ -20,9 +20,9 @@
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info | QTI 3.0 ASI Information Model}
  */
 import { Array as Arr, Option } from "effect";
-import { closed, idField, roster, rowsAt, valueField } from "#pantry/grammar/closed.ts";
-import type { Closed, IdField, Roster, ValueField } from "#pantry/grammar/closed.ts";
-import type { KindSet, SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { closed, idField, indexed, roster, rowsAt, valueField } from "#pantry/grammar/closed.ts";
+import type { Closed, IdField, Indexed, Roster, ValueField } from "#pantry/grammar/closed.ts";
+import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { attributeDeclarations, textTypes } from "#pantry/vocab/inventory/attributes.ts";
 import { contentModels } from "#pantry/vocab/inventory/models.ts";
 import type {
@@ -1017,12 +1017,12 @@ export interface References {
   /**
    * `SectionPart`: the kinds a section holds as its parts, among which its selection selects.
    */
-  readonly sectionPart: KindSet<string>;
+  readonly sectionPart: Closed<readonly [KindField], readonly []>;
   /**
    * `ReferenceAttribute`: (version, kind, name) → form, every attribute by which an element of a
    * kind names a file of its package in the version, and how its value names it (spec reading 103).
    */
-  readonly referenceAttribute: Closed<
+  readonly referenceAttribute: Indexed<
     readonly [IdField<"version", SchemaVersion>, KindField, AttributeField<"name">],
     readonly [IdField<"form", ReferenceForm>]
   >;
@@ -1163,16 +1163,18 @@ export const references = (input: {
       payload: [declaration],
       rows: declarationKind.handles.map((handle) => ({ declaration: handle, kind: handle })),
     }),
-    referenceAttribute: closed({
-      key: [idField("version", input.versions), kind, idField("name", input.names)],
-      name: "ReferenceAttribute",
-      payload: [idField("form", referenceForm)],
-      rows: facets
-        .flatMap((facet) => facet.fileReferences)
-        .flatMap(({ form, kind: owner, name, versions }) =>
-          versions.map((version) => ({ form, kind: owner, name, version })),
-        ),
-    }),
+    referenceAttribute: indexed(
+      closed({
+        key: [idField("version", input.versions), kind, idField("name", input.names)],
+        name: "ReferenceAttribute",
+        payload: [idField("form", referenceForm)],
+        rows: facets
+          .flatMap((facet) => facet.fileReferences)
+          .flatMap(({ form, kind: owner, name, versions }) =>
+            versions.map((version) => ({ form, kind: owner, name, version })),
+          ),
+      }),
+    ),
     referenceForm,
     sectionPart: closed({
       key: [kind],

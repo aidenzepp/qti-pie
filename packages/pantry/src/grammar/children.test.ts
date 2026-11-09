@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { faultOf } from "#pantry/grammar/closed.ts";
+import { faultOf, indexedSourced } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { vocabularyFacets } from "#pantry/grammar/facets.ts";
 import { toyFacets, toyGrammar, toySources, toyVocabulary } from "#pantry/test/gen/grammar.ts";
@@ -84,7 +84,7 @@ describe("ChildBarredBy", () => {
 
       for (const version of ["3.0.0", "3.0.1"] as const) {
         assert.deepStrictEqual(
-          barredBy.lookup({ parent: "colgroup", version }),
+          indexedSourced(barredBy).lookup({ parent: "colgroup", version }),
           Option.map(
             admission.lookup({ child: "col", parent: "colgroup", version }),
             ({ position }) => ({
@@ -112,7 +112,7 @@ describe("ChildBarredBy", () => {
 
       assert.isNotEmpty(stated);
       assert.deepStrictEqual(
-        stated.map(({ parent, version }) => barredBy.sourceOf({ parent, version })),
+        stated.map(({ parent, version }) => indexedSourced(barredBy).sourceOf({ parent, version })),
         stated.map(({ source }) => Option.some({ _tag: "spec", cite: source })),
       );
     }),

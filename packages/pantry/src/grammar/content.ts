@@ -43,6 +43,8 @@ import {
   dependentField,
   fin,
   idField,
+  indexed,
+  indexedSourced,
   prefixHandle,
   roster,
   rowsAt,
@@ -54,6 +56,8 @@ import type {
   Closed,
   DependentField,
   IdField,
+  Indexed,
+  IndexedSourced,
   Roster,
   Sourced,
   ValueField,
@@ -175,7 +179,7 @@ export interface ContentGrammar {
    * follow; a family no content model holds reads the model of one position that nothing follows
    * and nothing ends at.
    */
-  readonly contentModelOf: Closed<FamilyKey, readonly [IdField<"model", string>]>;
+  readonly contentModelOf: Indexed<FamilyKey, readonly [IdField<"model", string>]>;
   /**
    * `Counted`: the positions whose count is a law beside the automaton, with their bounds, each
    * sourced to the particle whose bound it is, or to the reading that caps it at one.
@@ -187,7 +191,7 @@ export interface ContentGrammar {
   /**
    * `FollowMember`: (set, to) for each position `to` a follow set holds.
    */
-  readonly followMember: Closed<
+  readonly followMember: Indexed<
     readonly [IdField<"set", string>, IdField<"to", string>],
     readonly []
   >;
@@ -202,7 +206,7 @@ export interface ContentGrammar {
    * start: the positions a child may take after one at `from`, in the model's automaton. A state
    * nothing follows holds the empty set, which `FollowMember` holds no row of.
    */
-  readonly followSetOf: Closed<
+  readonly followSetOf: Indexed<
     readonly [IdField<"model", string>, DependentField<"from">],
     readonly [IdField<"set", string>]
   >;
@@ -236,7 +240,7 @@ export interface ContentGrammar {
    * `SharedModelOf`: (version, parent) → shared model, for each family a kind names at several
    * positions; a family whose kinds each name one position has no row.
    */
-  readonly sharedModelOf: Closed<FamilyKey, readonly [IdField<"model", string>]>;
+  readonly sharedModelOf: Indexed<FamilyKey, readonly [IdField<"model", string>]>;
   /**
    * `SharedPositions`: shared model → positions, each shared model's position count, its start 0
    * included, `Symbol`'s dependent size.
@@ -290,7 +294,7 @@ export interface ContentGrammar {
    * holds or a built-in, against which XML Schema assesses it (Part 1, §3.3.4 clause 1.2; spec
    * reading 81); without one it is invalid (§3.10.4 clause 2, §3.3.5 [validity] clause 1.1.3).
    */
-  readonly strictlyHeld: Sourced<
+  readonly strictlyHeld: IndexedSourced<
     readonly [
       IdField<"version", SchemaVersion>,
       IdField<"parent", string>,
@@ -1315,24 +1319,28 @@ export const contentOf = (input: {
         ),
       ),
     });
-    const sharedModelOf = closed({
-      key: [version, parent],
-      name: "SharedModelOf",
-      payload: [sharedModel],
-      rows: sharedModels.families,
-    });
+    const sharedModelOf = indexed(
+      closed({
+        key: [version, parent],
+        name: "SharedModelOf",
+        payload: [sharedModel],
+        rows: sharedModels.families,
+      }),
+    );
     // `Symbol`'s positions by shared model and kind, for the host's step.
     const sharedAt = Map.groupBy(symbol.rows, (row) => `${row.model} ${row.kind}`);
 
     return {
       admitted,
       content: {
-        contentModelOf: closed({
-          key: [version, parent],
-          name: "ContentModelOf",
-          payload: [model],
-          rows: contentModels.families,
-        }),
+        contentModelOf: indexed(
+          closed({
+            key: [version, parent],
+            name: "ContentModelOf",
+            payload: [model],
+            rows: contentModels.families,
+          }),
+        ),
         counted: sourced({
           key: [version, parent, position],
           name: "Counted",
@@ -1348,18 +1356,22 @@ export const contentOf = (input: {
           ],
           rows: countedRows,
         }),
-        followMember: closed({
-          key: [followSet, idField("to", positions)],
-          name: "FollowMember",
-          payload: [],
-          rows: members,
-        }),
-        followSetOf: closed({
-          key: [model, modelPosition("from")],
-          name: "FollowSetOf",
-          payload: [followSet],
-          rows: statedSets,
-        }),
+        followMember: indexed(
+          closed({
+            key: [followSet, idField("to", positions)],
+            name: "FollowMember",
+            payload: [],
+            rows: members,
+          }),
+        ),
+        followSetOf: indexed(
+          closed({
+            key: [model, modelPosition("from")],
+            name: "FollowSetOf",
+            payload: [followSet],
+            rows: statedSets,
+          }),
+        ),
         followSets: followSet.roster,
         last: closed({
           key: [model, modelPosition("position")],
@@ -1392,18 +1404,20 @@ export const contentOf = (input: {
               rowsAt(sharedAt, `${shared} ${kind}`).map((row) => Number(row.position)),
           }),
         sourceOf,
-        strictlyHeld: sourced({
-          key: [version, parent, idField("child", input.kinds)],
-          name: "StrictlyHeld",
-          payload: [],
-          rows: admittedBy.flatMap(({ entry, rows }) =>
-            rows.flatMap(({ child, parent: held, source, version: in_ }) =>
-              entry.strictly.has(child)
-                ? [{ row: { child, parent: held, version: in_ }, source }]
-                : [],
+        strictlyHeld: indexedSourced(
+          sourced({
+            key: [version, parent, idField("child", input.kinds)],
+            name: "StrictlyHeld",
+            payload: [],
+            rows: admittedBy.flatMap(({ entry, rows }) =>
+              rows.flatMap(({ child, parent: held, source, version: in_ }) =>
+                entry.strictly.has(child)
+                  ? [{ row: { child, parent: held, version: in_ }, source }]
+                  : [],
+              ),
             ),
-          ),
-        }),
+          }),
+        ),
         symbol,
       },
     };
@@ -1627,53 +1641,3 @@ export const stepOf = (
   Option.flatMap(placementOf(grammar, key), (placement) =>
     placedStep(grammar.content, key, placement, was),
   );
-
-/**
- * Whether a family may end in a state: `Last`'s cell under the family's model.
- *
- * @param content - The content grammar.
- * @param version - The version.
- * @param parent - The parent's kind.
- * @param state - The last child's state, 0 for an empty family.
- * @returns Whether the family may end there.
- */
-export const contentEnds = (
-  content: ContentGrammar,
-  version: SchemaVersion,
-  parent: string,
-  state: number,
-): boolean =>
-  Option.exists(contentModelOf(content, { parent, version }), (model) =>
-    Option.isSome(content.last.lookup({ model, position: String(state) })),
-  );
-
-/**
- * Judge a family of child kinds by the installed automaton, as the database does: each child steps
- * from its predecessor's state (0 for the first), and the last state must be one `Last` holds.
- *
- * @param grammar - The composed grammar's `Admission` and content grammar.
- * @param grammar.admission - `Admission`.
- * @param grammar.content - The content grammar.
- * @param version - The version.
- * @param parent - The parent's kind.
- * @param children - The children's kinds, in order.
- * @returns Whether the family's content is the model's.
- */
-export const accepts = (
-  grammar: { readonly admission: Admission; readonly content: ContentGrammar },
-  version: SchemaVersion,
-  parent: string,
-  children: readonly string[],
-): boolean => {
-  let state = 0;
-  for (const child of children) {
-    const next = stepOf(grammar, { child, parent, version }, state);
-    if (Option.isNone(next)) {
-      return false;
-    }
-
-    state = next.value;
-  }
-
-  return contentEnds(grammar.content, version, parent, state);
-};

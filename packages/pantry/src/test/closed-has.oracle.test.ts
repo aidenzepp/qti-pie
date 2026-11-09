@@ -48,6 +48,7 @@ import {
 import { Qti } from "#pantry/qti/own.ts";
 import type { Datum } from "#pantry/test/predicates.ts";
 import { checkValueOf } from "#pantry/test/key-copies.ts";
+import { indexesOf } from "#pantry/test/indexes.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
 
 /**
@@ -162,11 +163,13 @@ const barringOf = (
   version: (typeof families)[number]["version"],
   parent: string,
 ): Option.Option<Barring> =>
-  Option.flatMap(laws.grammar.barredBy.lookup({ parent, version }), ({ name, position }) =>
-    Option.map(
-      laws.grammar.attributes.admission.lookup({ kind: parent, name, version }),
-      (cell) => ({ position, slot: cell.position }),
-    ),
+  Option.flatMap(
+    indexesOf(laws.grammar).barredBy.lookup({ parent, version }),
+    ({ name, position }) =>
+      Option.map(
+        laws.grammar.attributes.admission.lookup({ kind: parent, name, version }),
+        (cell) => ({ position, slot: cell.position }),
+      ),
   );
 
 /**

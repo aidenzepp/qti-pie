@@ -53,7 +53,7 @@ import type {
 } from "#pantry/grammar/attributes.ts";
 import { barredByOf } from "#pantry/grammar/children.ts";
 import type { BarredBy, ChildError, LastWhere } from "#pantry/grammar/children.ts";
-import { idField, roster, rowsAt, sourced } from "#pantry/grammar/closed.ts";
+import { idField, indexedSourced, roster, rowsAt, sourced } from "#pantry/grammar/closed.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
 import { compositions } from "#pantry/grammar/compositions.ts";
 import {
@@ -732,25 +732,27 @@ export const compose = <const V extends readonly Vocabulary[]>(
     const kinds = resolution(base, [...installed.admitted, ...stating]);
     // A child the models admit carries its position's particle, or its model's at 0; a triple a
     // vocabulary states beside them carries its own source.
-    const admission = sourced({
-      key: [
-        idField("version", kinds.versions),
-        idField("parent", kinds.nodeKind),
-        idField("child", kinds.nodeKind),
-      ],
-      name: "Admission",
-      payload: [idField("position", installed.content.positions)],
-      rows: [
-        ...installed.admitted.map(({ child, parent, position, source, version }) => ({
-          row: { child, parent, position: String(position), version },
-          source,
-        })),
-        ...stating.map(({ child, parent, source, version }) => ({
-          row: { child, parent, position: "0", version },
-          source,
-        })),
-      ],
-    });
+    const admission = indexedSourced(
+      sourced({
+        key: [
+          idField("version", kinds.versions),
+          idField("parent", kinds.nodeKind),
+          idField("child", kinds.nodeKind),
+        ],
+        name: "Admission",
+        payload: [idField("position", installed.content.positions)],
+        rows: [
+          ...installed.admitted.map(({ child, parent, position, source, version }) => ({
+            row: { child, parent, position: String(position), version },
+            source,
+          })),
+          ...stating.map(({ child, parent, source, version }) => ({
+            row: { child, parent, position: "0", version },
+            source,
+          })),
+        ],
+      }),
+    );
     const declarations = list.flatMap((entry) => entry.declarations);
     const declared = new Set(
       declarations.flatMap(({ kind, name, versions }) =>

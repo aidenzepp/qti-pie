@@ -7,7 +7,7 @@
  * reads, so what is admitted and where it stands are one fact.
  */
 import { Schema } from "effect";
-import type { IdField, Sourced } from "#pantry/grammar/closed.ts";
+import type { IdField, IndexedSourced } from "#pantry/grammar/closed.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 
 /**
@@ -37,7 +37,7 @@ export type AdmissionPayload = readonly [IdField<"position", string>];
 /**
  * `Admission`.
  */
-export type Admission = Sourced<AdmissionKey, AdmissionPayload>;
+export type Admission = IndexedSourced<AdmissionKey, AdmissionPayload>;
 
 /**
  * A law names a child its parent does not admit, so the law states nothing about it.
