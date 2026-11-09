@@ -47,7 +47,8 @@
  *     reports, so a reading through it names a built-in every item has as that built-in and any other
  *     name unchecked (reading 106, "an item ref that names an LTI link has no item whose declarations
  *     a prefix reads, so a prefixed reference through it is accepted unchecked, a recorded limit"),
- *     and its variable mappings are judged by no rule, while each of its template defaults is
+ *     and its variable mappings' sources are judged by no rule, their targets only against one
+ *     another and the session variables (reading 97), while each of its template defaults is
  *     `undeclared-variable` (reading 110, "under an item ref that names an LTI link a variable
  *     mapping is accepted unchecked, a recorded limit, and a template default is refused"): a link is
  *     no QTI item and has no template variables to override. A source that listed the outcomes a link
@@ -510,6 +511,19 @@ const itemBuiltIns: ReadonlyMap<string, BuiltIn> = new Map<string, BuiltIn>([
   ["duration", { kind: "response", type: singleOf("float") }],
   ["numAttempts", { kind: "response", type: singleOf("integer") }],
   ["QTI_CONTEXT", { kind: "context", type: { baseType: "unknown", cardinality: "record" } }],
+]);
+
+/**
+ * The built-in session variables, the built-ins of {@link itemBuiltIns} but `QTI_CONTEXT`, whose
+ * identifiers "are reserved. They are completionStatus, numAttempts and duration" (reading 97,
+ * information model section 4.5.1), as the qti package's `sessionVariables` lists them
+ * (`packages/pantry/src/qti/tests.ts`). A variable mapping's target under an item ref that names an
+ * LTI link may name none of them ({@link judgeMappings}).
+ */
+const sessionVariables: ReadonlySet<string> = new Set([
+  "completionStatus",
+  "duration",
+  "numAttempts",
 ]);
 
 /**
@@ -1772,8 +1786,9 @@ interface ItemVariables {
 interface TargetVariables extends ItemVariables {
   /**
    * Whether the item ref names an LTI link rather than an item: a name a reading reads through it
-   * that no built-in gives is accepted unchecked (reading 106), and its variable mappings are
-   * judged by no rule (reading 110).
+   * that no built-in gives is accepted unchecked (reading 106), and so are its variable mappings'
+   * sources (reading 110), their targets judged only against one another and the session variables
+   * (reading 97).
    */
   readonly link: boolean;
 }
@@ -2472,17 +2487,25 @@ const judgeReference = (
  * names another variable its item holds (reading 97, "a variable mapping's target names no other
  * variable its item ref's item holds"): one the item declares, other than the mapping's own source,
  * or one of the built-ins every item has, `QTI_CONTEXT` among them, its detail the `identifier` and
- * `reading: "97"`, judged only through an item ref whose item the reader read; both are pantry's
- * `Variable_mapping_target`. A target that is its own source maps nothing away, and is accepted. A
- * value that is no NCName is the structure check's refusal, so it is passed over.
+ * `reading: "97"`, judged only through an item ref whose item the reader read or that names an LTI
+ * link (below); both are pantry's `Variable_mapping_target`. A target that is its own source maps
+ * nothing away, and is accepted. A value that is no NCName is the structure check's refusal, so it
+ * is passed over.
  *
- * A mapping under an item ref that names an LTI link is judged by none of the three (reading 110,
- * "under an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded
- * limit, and a template default is refused"): the package declares nothing a link reports, so its
- * source names no declaration to check, its target no variable of an item, and pantry keys a
- * mapping's target only through its source's declaration (the `Variable mapping target` law over
- * `MappingSourceDeclaration` in `packages/pantry/src/qti/expressions.ts`), which a mapping under a
- * link has not. A source that listed the outcomes a link reports would lift the limit.
+ * Under an item ref that names an LTI link a mapping's target is judged too, as pantry's `Variable
+ * mapping target` law (`packages/pantry/src/qti/tests.ts`) keys every `VariableMapping` by its item
+ * ref and its target and holds the target outside the session variables, a link's mapping included:
+ * a second mapping of that item ref with the same target is `duplicate-identifier`, its detail the
+ * `identifier`, and a target that names a built-in session variable ({@link sessionVariables}),
+ * `completionStatus`, `numAttempts` or `duration`, is `duplicate-identifier` with `reading: "97"`
+ * (reading 97, "one another mapping of the same item ref names; or a built-in session variable.
+ * Each is refused"), unless it is the mapping's own source, as under an item. Its source stays
+ * unchecked, and so does a target that names `QTI_CONTEXT` or any other variable the link may
+ * report (reading 110, "a mapping's source under such an item ref names a variable nothing in the
+ * package lists"): the package declares nothing a link reports, so there is no declaration to check
+ * a source against and no item variable a target could take the name of. A source that listed the
+ * outcomes a link reports would lift the limit; only pantry's `Variable mapping source` law exempts
+ * a link.
  *
  * @param document The document's location.
  * @param visits The visits of the document's elements, in document order.
@@ -2502,11 +2525,9 @@ const judgeMappings = (
       Option.filter((one) => isQti(one, itemRefElements)),
       Option.getOrUndefined,
     );
-    if (
-      itemRef !== undefined &&
-      isQti(element, mappingElements) &&
-      !Option.exists(variablesFor(itemRef), ({ link }) => link)
-    ) {
+    if (itemRef !== undefined && isQti(element, mappingElements)) {
+      const variables = variablesFor(itemRef);
+      const linked = Option.exists(variables, ({ link }) => link);
       /**
        * Give the variable an attribute of the mapping names.
        *
@@ -2525,9 +2546,10 @@ const judgeMappings = (
       const at = (local: string): string => attributePath(path, { local, namespace: "" });
       for (const source of Option.toArray(named("source-identifier"))) {
         if (
+          !linked &&
           Option.exists(
-            variablesFor(itemRef),
-            (variables) => !declaresAs(variables, source, "qti-outcome-declaration"),
+            variables,
+            (declared) => !declaresAs(declared, source, "qti-outcome-declaration"),
           )
         ) {
           refusals.push(
@@ -2551,9 +2573,10 @@ const judgeMappings = (
           );
         } else if (
           !Option.contains(named("source-identifier"), target) &&
-          Option.exists(
-            variablesFor(itemRef),
-            (variables) => variables.declarations.has(target) || itemBuiltIns.has(target),
+          Option.exists(variables, (held) =>
+            held.link
+              ? sessionVariables.has(target)
+              : held.declarations.has(target) || itemBuiltIns.has(target),
           )
         ) {
           refusals.push(
@@ -2911,7 +2934,8 @@ interface ItemRefTarget {
   /**
    * Whether it names an LTI link rather than an item: the package declares nothing a link reports,
    * so a name read through it that no built-in gives is accepted unchecked (reading 106) and so are
-   * its variable mappings, while its template defaults name no template variable (reading 110).
+   * its variable mappings' sources, their targets judged only against one another and the session
+   * variables (reading 97), while its template defaults name no template variable (reading 110).
    */
   readonly link: boolean;
   readonly path: string;
@@ -3733,9 +3757,10 @@ const assemble = (
  * Give the variables of what a resolved item ref names: its item's, read from the item's document,
  * or, for an LTI link, none declared, with the link said: the package declares nothing a link
  * reports, so a name read through it that no built-in gives is accepted unchecked (reading 106) and
- * so are its variable mappings, while each of its template defaults is refused (reading 110, "under
- * an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded limit,
- * and a template default is refused").
+ * so are its variable mappings' sources, their targets judged only against one another and the
+ * session variables (reading 97), while each of its template defaults is refused (reading 110,
+ * "under an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded
+ * limit, and a template default is refused").
  *
  * @param target The resolved item ref.
  * @param documents The package's documents.
@@ -4504,7 +4529,8 @@ interface TestJudgement {
  * a reading through it names a built-in every item has as that built-in, and any other name
  * unchecked, which no kind or type rule judges (reading 106, "an item ref that names an LTI link
  * has no item whose declarations a prefix reads, so a prefixed reference through it is accepted
- * unchecked, a recorded limit"); its variable mappings are judged by no rule, and each of its
+ * unchecked, a recorded limit"); its variable mappings' sources are judged by no rule, their
+ * targets only against one another and the session variables (reading 97), and each of its
  * template defaults is `undeclared-variable` (reading 110, "under an item ref that names an LTI
  * link a variable mapping is accepted unchecked, a recorded limit, and a template default is
  * refused"). A source that listed the outcomes a link reports would lift the limit. The test

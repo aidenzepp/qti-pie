@@ -5287,19 +5287,92 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      'align-54 R3 LTI unchecked G2-2: three variable mappings under the LTI item ref, two of one target S2 and one whose target is the built-in duration, are accepted, as a mapping under it has no source declaration to key its target by (reading 110 ("under an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded limit, and a template default is refused"))',
+      'align-54 r11 LTI mapping targets finding 6: under the LTI item ref, of three variable mappings the second of target S2 is refused as duplicate-identifier at its target-identifier, and the one whose target is the built-in session variable duration as duplicate-identifier with reading 97, as under an item, while their undeclared sources stay unchecked (reading 97 ("a target that another variable of the item already holds would make two variables of one name there: ... one another mapping of the same item ref names; or a built-in session variable. Each is refused"))',
       () =>
         Effect.gen(function* linkedMappingTargets() {
-          const verdict = yield* openPackage(
-            location,
-            ltiPackage(
-              settingTotal(oneFloat),
-              '<qti-variable-mapping source-identifier="A" target-identifier="S2"/><qti-variable-mapping source-identifier="B" target-identifier="S2"/><qti-variable-mapping source-identifier="C" target-identifier="duration"/>',
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openPackage(
+                location,
+                ltiPackage(
+                  settingTotal(oneFloat),
+                  '<qti-variable-mapping source-identifier="A" target-identifier="S2"/><qti-variable-mapping source-identifier="B" target-identifier="S2"/><qti-variable-mapping source-identifier="C" target-identifier="duration"/>',
+                ),
+              ),
             ),
+            [
+              {
+                detail: { identifier: "S2" },
+                document: fileLocation(location, "test.xml"),
+                location: {
+                  kind: "path",
+                  path: `${ltiRefPath}/qti-variable-mapping[2]/@target-identifier`,
+                },
+                rule: "duplicate-identifier",
+              },
+              {
+                detail: { identifier: "duration", reading: "97" },
+                document: fileLocation(location, "test.xml"),
+                location: {
+                  kind: "path",
+                  path: `${ltiRefPath}/qti-variable-mapping[3]/@target-identifier`,
+                },
+                rule: "duplicate-identifier",
+              },
+            ],
           );
+        }),
+    );
 
-          assert.deepStrictEqual(refusalsOf(verdict), []);
-          assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+    it.effect(
+      'align-54 r11 LTI mapping targets finding 6: under the LTI item ref a variable mapping whose target is the session variable completionStatus or numAttempts is refused as duplicate-identifier with reading 97 at its target-identifier, as one of duration is (reading 97 ("The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts and duration"))',
+      () =>
+        Effect.gen(function* linkedSessionTargets() {
+          for (const target of ["completionStatus", "numAttempts"]) {
+            assert.deepStrictEqual(
+              refusalsOf(
+                yield* openPackage(
+                  location,
+                  ltiPackage(
+                    settingTotal(oneFloat),
+                    `<qti-variable-mapping source-identifier="A" target-identifier="${target}"/>`,
+                  ),
+                ),
+              ),
+              [
+                {
+                  detail: { identifier: target, reading: "97" },
+                  document: fileLocation(location, "test.xml"),
+                  location: {
+                    kind: "path",
+                    path: `${ltiRefPath}/qti-variable-mapping/@target-identifier`,
+                  },
+                  rule: "duplicate-identifier",
+                },
+              ],
+              target,
+            );
+          }
+        }),
+    );
+
+    it.effect(
+      'align-54 r11 LTI mapping targets finding 6: under the LTI item ref a variable mapping whose source A nothing declares and whose target is S2, one whose target is QTI_CONTEXT, and one whose target duration is its own source are each accepted, as the link holds no item variables and a mapping onto its own source maps nothing away (reading 110 ("a mapping\'s source under such an item ref names a variable nothing in the package lists ... accepted unchecked"); reading 97 ("A mapping whose target is its own source maps nothing away and is valid"))',
+      () =>
+        Effect.gen(function* linkedAcceptedMappings() {
+          for (const mapping of [
+            '<qti-variable-mapping source-identifier="A" target-identifier="S2"/>',
+            '<qti-variable-mapping source-identifier="A" target-identifier="QTI_CONTEXT"/>',
+            '<qti-variable-mapping source-identifier="duration" target-identifier="duration"/>',
+          ]) {
+            const verdict = yield* openPackage(
+              location,
+              ltiPackage(settingTotal(oneFloat), mapping),
+            );
+
+            assert.deepStrictEqual(refusalsOf(verdict), [], mapping);
+            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", mapping);
+          }
         }),
     );
 
