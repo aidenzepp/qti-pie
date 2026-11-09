@@ -305,7 +305,9 @@ export const lawOfCheck = (name: string): Option.Option<LawName> => {
 
 /**
  * The relation each side of a law reads, in the order the law names its sides: the part of a law
- * {@link bucketOf} files it under beside its kind. A contract reads no relation.
+ * {@link bucketOf} files it under beside its kind. A contract reads no relation, and a law of a
+ * level above the schema reads its own law's relations: `Qti` is one level, which no level extends,
+ * so no outcome names one (grizzle `999facc6`'s `above`), and none is in the table.
  *
  * @param law - A law as grizzle names it.
  * @returns Its sides' relations.
@@ -313,6 +315,7 @@ export const lawOfCheck = (name: string): Option.Option<LawName> => {
 const relationsOf = (law: Law): readonly string[] =>
   Match.value(law).pipe(
     Match.discriminatorsExhaustive("kind")({
+      above: ({ law: stated }) => relationsOf(stated),
       check: ({ relation }) => [relation],
       contained: ({ from, to }) => [from.relation, to.relation],
       contract: () => [],
