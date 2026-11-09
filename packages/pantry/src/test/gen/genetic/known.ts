@@ -464,6 +464,31 @@ export const fixed = {
       fix: "the variant class: the 3.0.1 profile forbids cpx:variant (its maxOccurs is 0), and the oracle's fold now refuses the node, drops its subtree and folds the rest, so it judges every document's rows and precedence picks among every breach",
       owner: "VD",
     },
+  "import-only-law: Binding declared, contained PlacedBinding(instance, node, attribute, assembly, document, kind, identifier) in PlacedBindingDeclaration(instance, node, attribute, assembly, document, kind, identifier)":
+    {
+      files: [
+        [
+          "imsmanifest.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml"/></resources></manifest>`,
+        ],
+        [
+          "rtest01/rtest01-fragment.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-hottext-interaction response-identifier="RESPONSE"/></div>`,
+        ],
+        [
+          "rtest01/rtest01-set01.xml",
+          "xml",
+          `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-item-body><p><xi:include href="rtest01-fragment.xml"/></p></qti-item-body></qti-assessment-item>`,
+        ],
+      ],
+      fix: "a site places its target only where it is a section ref or an include that may stand for the target's root (SiteTarget.places), so an include Include root refuses places no child instance and its fragment's interaction no PlacedBinding under the item",
+      owner: "genetic-repair gr-2",
+    },
   "import-only-law: Branch forward, check Branch_forward on BranchResolution": {
     files: [
       [

@@ -17,8 +17,10 @@
  *
  * **The assembled test** (RG3, reading 5). {@link Instance} is a tree: its root is a document that
  * heads an assembly, every assembled document no include splices in place ({@link splicingParents},
- * reading 117), and each instance has exactly one child per site of its document, the instance of
- * the document that site names. A chain of section refs and includes that returns to a document
+ * reading 117), and each instance has exactly one child per site of its document that places its
+ * target, the instance of the document that site names: a section ref, or an include that may stand
+ * for its target's root (`IncludeRoot`, reading 114), whatever its parent ({@link sitesFold}). A
+ * chain of section refs and includes that returns to a document
  * already on it would need infinitely many instances, so no finite tree holds it: the count law
  * `children = sites` refuses one a head reaches, and `TestDocument.instances` above 0 one no head
  * reaches, whose documents no assembly places (reading 85). Under a test's root,
@@ -275,9 +277,11 @@ export const collapsedPattern =
  * scope (`#pantry/qti/package.ts` `ReferencePath`).
  *
  * - **the host's:** `node`, `package`, `path` and `rootKind` (its `Document` row's);
- * - **drawn:** `sites`, `names` and `rules`, the counts of {@link siteFamily}, {@link nameFamily} and
- *   {@link ruleFamily}; and `instances`, its placements in every assembly, the count of
- *   {@link documentInstanceFamily}, which "Inclusion cycle" holds above 0.
+ * - **drawn:** `targets`, `names` and `rules`, the counts of {@link siteFamily}, {@link nameFamily}
+ *   and {@link ruleFamily}; and `instances`, its placements in every assembly, the count of
+ *   {@link documentInstanceFamily}, which "Inclusion cycle" holds above 0;
+ * - **accumulated:** `sites`, the count of its sites that place their target ({@link sitesFold}), the
+ *   children each of its instances holds.
  */
 export const TestDocument = relation(
   "TestDocument",
@@ -289,7 +293,8 @@ export const TestDocument = relation(
     path: EntryPath,
     rootKind: closedId(NodeKind),
     rules: drawn(natural),
-    sites: drawn(natural),
+    sites: accumulated(natural, 0n),
+    targets: drawn(natural),
   },
   ["node"],
 );
@@ -576,7 +581,8 @@ export const SitePath = relation(
  *   and its `ancestry`, its part of the target's context (`Document.context`, the union over the
  *   sites that name a document, spec reading 117);
  * - **its include's:** `splices`, whether it splices its target in place, its {@link Inclusion}'s;
- *   false for a section ref, which places its target whole.
+ *   false for a section ref, which places its target whole; and `places`, whether it places its
+ *   target at all, its {@link Inclusion}'s; true for a section ref.
  */
 export const SiteTarget = relation(
   "SiteTarget",
@@ -590,6 +596,7 @@ export const SiteTarget = relation(
     package: uuid,
     parentKind: closedId(NodeKind),
     path: keyText,
+    places: pg.boolean,
     splices: pg.boolean,
     target: uuid,
     targetNearest: uuid,
@@ -606,8 +613,10 @@ export const SiteTarget = relation(
  * (spec reading 114), and `splices`, whether it splices that document in place: its parent is one
  * of {@link splicingParents} and it may stand for the root (`IncludeRoot`), as the law oracle's
  * `standsFor` judges. An include that may not stand for its target's root, which "Include root"
- * refuses, splices nothing, so its target is judged as no fragment of its document's. An optional
- * value is a row of its own: a section ref has none.
+ * refuses, splices nothing, so its target is judged as no fragment of its document's; and `places`,
+ * whether it places that document at all: it may stand for the root, whatever its parent, so an
+ * include under a section places its target whole without splicing it, and one "Include root"
+ * refuses places nothing. An optional value is a row of its own: a section ref has none.
  */
 export const Inclusion = relation(
   "Inclusion",
@@ -615,6 +624,7 @@ export const Inclusion = relation(
     includeParent: closedId(IncludeParent),
     node: uuid,
     parentKind: closedId(NodeKind),
+    places: pg.boolean,
     root: closedId(NodeKind),
     splices: pg.boolean,
     version: closedId(SchemaVersion),
@@ -992,11 +1002,31 @@ export const testRelations = {
 };
 
 /**
- * Each document's sites that name a document, counted by `TestDocument.sites`: the children its
- * instance places (reading 85). A site that names none places nothing, and "Include target" alone
- * refuses it (reading 115).
+ * Each document's sites that name a document, counted by `TestDocument.targets`. A site that names
+ * none places nothing, and "Include target" alone refuses it (reading 115).
  */
-export const siteFamily = counted(on(SiteTarget, "document"), fin(TestDocument, "sites"));
+export const siteFamily = counted(on(SiteTarget, "document"), fin(TestDocument, "targets"));
+
+/**
+ * The sites that place their target (`SiteTarget.places`): each section ref, and each include that
+ * may stand for its target's root (`IncludeRoot`, reading 114), whatever its parent.
+ */
+const placingSites = select(SiteTarget, (s) => s.eq(s.places, true));
+
+/**
+ * Each document's sites that place their target, counted into `TestDocument.sites`: the children
+ * each of its instances holds (reading 85), one per site that places its target. An include that
+ * may not stand for its target's root names it (`Document.targetedBy`, reading 117's context) but
+ * places nothing, and "Include root" alone refuses it. A family's member is a whole relation, which
+ * no selection narrows, so the count is a fold over {@link siteFamily}, as {@link splicedFold} is
+ * over {@link siteTargetFamily}.
+ */
+export const sitesFold = fold(
+  siteFamily,
+  Monoid.count,
+  on(placingSites, "document"),
+  on(TestDocument, "node", "sites"),
+);
 
 /**
  * The sites that name each document, counted by `Document.targetedBy` (spec reading 117).
@@ -1571,7 +1601,7 @@ const flagCopies = flagCarriers.map(flagCopy);
  * - **the stimulus refs** ({@link StimulusRef}): one per stimulus ref that writes an identifier
  *   (reading 147), no two of one item sharing an identifier (B16);
  * - **the assembly** ({@link Instance}): one tree per document of a test or a section, one child per
- *   site, so an inclusion cycle has no finite tree (reading 85);
+ *   site that places its target, so an inclusion cycle has no finite tree (reading 85);
  * - **the namespace** ({@link InstanceName}, {@link AssembledName}): `Test_name_key`, each written
  *   element once per test, and the key `(assembly, identifier)` (reading 86);
  * - **the jumps** ({@link BranchResolution}, {@link BranchTarget}, {@link BranchShuffle}): each
@@ -1586,12 +1616,14 @@ const flagCopies = flagCarriers.map(flagCopy);
  * and each item ref's href resolved, each its element's row, copying its node's tuple and its
  * attributes' values, and each there exactly where its element is.
  *
- * The statements of reading 85's law, "Inclusion cycle": the instance tree, each instance's copy
- * of its parent's scope and of its site, one child per site, one root per head and none for any
- * other document, and two counts that make a chain returning to a document on it unrepresentable.
+ * The statements of reading 85's law, "Inclusion cycle": the instance tree, each instance's copy of
+ * its parent's scope and of its site, one child per site that places its target
+ * ({@link sitesFold}), one root per head and none for any other document, and two counts that make
+ * a chain returning to a document on it unrepresentable.
  *
  * - **A chain a head reaches:** the deferred foreign key `Instance(document, rootKind, children) →
- *   TestDocument(node, rootKind, sites)`, since no finite tree has one child per site under it.
+ *   TestDocument(node, rootKind, sites)`, since no finite tree has one child per site that places
+ *   its target under it.
  * - **A chain no head reaches**, such as two fragments each of which includes the other, which no
  *   head places, and any fragment only they place: `TestDocument.instances` above 0, since none of
  *   them is placed in any assembly. Its converse, every `Instance` row's document an assembled
@@ -1909,9 +1941,15 @@ export const testLawsByName = {
             i.or(i.not(i.in(i.parentKind, splicingParents)), i.not(standsFor(i))),
           ),
         ),
+        i.or(
+          i.and(i.eq(i.places, true), standsFor(i)),
+          i.and(i.eq(i.places, false), i.not(standsFor(i))),
+        ),
       ),
     ),
-    check("E1_derived", SiteTarget, (s) => s.or(s.eq(s.kind, includeKind), s.eq(s.splices, false))),
+    check("E1_derived", SiteTarget, (s) =>
+      s.or(s.eq(s.kind, includeKind), s.and(s.eq(s.splices, false), s.eq(s.places, true))),
+    ),
     check("E1_derived", Site, (s) =>
       s.and(
         s.or(
@@ -2079,7 +2117,7 @@ export const testLawsByName = {
       ),
       on(Site, "document", "node", "parentLooseChain", "parentMixes", "part", "replaced", "start"),
     ),
-    contained(on(instanceMembers, "site", "document"), on(SiteTarget, "node", "target")),
+    contained(on(instanceMembers, "site", "document"), on(placingSites, "node", "target")),
     key(on(instanceMembers, "parent", "site")),
     contained(
       on(Instance, "document", "rootKind", "children"),
@@ -2192,6 +2230,7 @@ export const testLawsByName = {
       on(TestDocument, "node"),
     ),
     siteFamily,
+    sitesFold,
     nameFamily,
     ruleFamily,
     contained(
@@ -2367,8 +2406,8 @@ export const testLawsByName = {
     contained(on(nodesOf(sectionRefKind), "id"), on(Site, "node")),
     contained(on(includes, "id"), on(Site, "node")),
     contained(
-      on(Inclusion, "node", "parentKind", "root", "splices", "version"),
-      on(SiteTarget, "node", "parentKind", "targetRoot", "splices", "version"),
+      on(Inclusion, "node", "parentKind", "places", "root", "splices", "version"),
+      on(SiteTarget, "node", "parentKind", "places", "targetRoot", "splices", "version"),
     ),
     contained(on(includeTargets, "node"), on(Inclusion, "node")),
     contained(
