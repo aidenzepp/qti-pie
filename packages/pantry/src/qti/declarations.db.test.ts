@@ -261,7 +261,7 @@ const keyOver =
  * The lexical form `Mastery_range` parses: grizzle's double precision form, read by a JavaScript
  * host.
  */
-const doubleForm = new RegExp(lexicalForm(pg["double precision"]), "u");
+const doubleForm = new RegExp(lexicalForm(pg["double precision"]).source, "u");
 
 /**
  * Read a scale attribute as the specification's model reads it: an `xs:double`, or none where it

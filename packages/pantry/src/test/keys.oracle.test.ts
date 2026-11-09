@@ -80,10 +80,6 @@ const isKeyText = (relation: string, field: string): boolean =>
 const statedCopies = statedLaws().flatMap(([law]) => {
   if (law.kind === "contained") {
     return law.from.terms.flatMap((term, at) => {
-      if (term.kind === "constant") {
-        return [];
-      }
-
       const held = law.to.terms[at]?.field ?? "";
 
       return isKeyText(law.to.relation, held) && !isKeyText(law.from.relation, term.field)
@@ -381,7 +377,7 @@ type Sketch = Readonly<Partial<Record<Site, Drawn>>>;
 /**
  * `keyText`'s pattern, read as grizzle installs it.
  */
-const keyTextPattern = new RegExp(keyText.pattern.source, keyText.pattern.flags);
+const keyTextPattern = new RegExp(keyText.patterns[0].source, keyText.patterns[0].flags);
 
 /**
  * Decide whether the schema's type admits a text as a key text, as grizzle's `str.bytes` domain

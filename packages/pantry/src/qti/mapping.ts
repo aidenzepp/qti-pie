@@ -95,14 +95,14 @@ import { doublePattern } from "#pantry/qti/operators.ts";
  * integer is too long), and `mapping.oracle.test.ts` holds it to the deleted schema's `xsInteger`
  * with JavaScript's engine as the oracle.
  */
-export const integerKeyPattern = "^[+-]?[0-9]+$";
+export const integerKeyPattern = Compute.pattern("^[+-]?[0-9]+$");
 
 /**
  * A point's lexical form as an attribute writes it: two integers and the one whitespace character
  * between them, as `BaseTypePattern`'s point row reads it, none around (reading 7): the map keys of
  * a point mapping whose value {@link MapKeyPoint} holds.
  */
-export const pointKeyPattern = "^[+-]?[0-9]+[\\t\\n\\r ][+-]?[0-9]+$";
+export const pointKeyPattern = Compute.pattern("^[+-]?[0-9]+[\\t\\n\\r ][+-]?[0-9]+$");
 
 /**
  * A pair's or a directed pair's lexical form as an attribute writes it: two runs of non-space
@@ -110,8 +110,9 @@ export const pointKeyPattern = "^[+-]?[0-9]+[\\t\\n\\r ][+-]?[0-9]+$";
  * {@link MapKeyPair} or {@link MapKeyDirectedPair} holds. That each run is an identifier is
  * `Typed_attribute_value`'s to judge.
  */
-export const pairKeyPattern =
-  "^[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+[\\t\\n\\r ][\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+$";
+export const pairKeyPattern = Compute.pattern(
+  "^[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+[\\t\\n\\r ][\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]+$",
+);
 
 /**
  * A text with no whitespace before or after it: an XML `Char` other than whitespace at each end,
@@ -119,8 +120,9 @@ export const pairKeyPattern =
  * written so (reading 7), since `BaseTypePattern` reads a value as XML Schema's collapse leaves it,
  * outer whitespace absorbed.
  */
-export const exactValuePattern =
-  "^(?:[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}](?:[\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}])?)?$";
+export const exactValuePattern = Compute.pattern(
+  "^(?:[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}](?:[\\t\\n\\r\\u{20}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}]*[\\u{21}-\\u{D7FF}\\u{E000}-\\u{FFFD}\\u{10000}-\\u{10FFFF}])?)?$",
+);
 
 /**
  * A mapping's overlay, keyed by its `qti-mapping` node: its {@link nodeRef} tuple, its
@@ -273,7 +275,7 @@ export const MapKeyInteger = relation.generated(
  * key sits in the mirror's UNIQUE. Exported for `src/import/refusal.ts`, which names its pattern
  * law.
  */
-export const FloatKey = str.bytes(keyTextBytes, str.regex(doublePattern));
+export const FloatKey = str.bytes(keyTextBytes, str.regex(doublePattern.source));
 
 /**
  * A float map key's typed value, keyed by its entry's node: `value`, the double its key names,

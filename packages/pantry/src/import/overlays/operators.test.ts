@@ -163,9 +163,9 @@ describe("import/overlays/operators.ts, tolerancePiecesOf", () => {
  * classes, groups and alternation alone, which ECMAScript's `u` mode reads the same.
  */
 const database = {
-  integer: new RegExp(integerForm, "u"),
-  numeric: new RegExp(doublePattern, "u"),
-  positive: new RegExp(positivePattern, "u"),
+  integer: new RegExp(integerForm.source, "u"),
+  numeric: new RegExp(doublePattern.source, "u"),
+  positive: new RegExp(positivePattern.source, "u"),
 };
 
 /**

@@ -279,11 +279,7 @@ const schemaRules = (inputs: PackageInputs): ReadonlyMap<string, ReadonlySet<str
         .map((row) => keyOf(containment.toFields.map((field) => row[field]))),
     );
     for (const row of held.get(containment.from) ?? []) {
-      const sought = keyOf(
-        containment.fromTerms.map((term) =>
-          term.kind === "constant" ? term.value : row[term.field],
-        ),
-      );
+      const sought = keyOf(containment.fromFields.map((field) => row[field]));
       if (containment.selected(row) && !present.has(sought)) {
         breach(
           row["node"],

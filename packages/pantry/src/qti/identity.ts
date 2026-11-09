@@ -158,12 +158,17 @@ import { Node, nodeRef } from "#pantry/qti/node.ts";
 import { Instance, itemKind, testKind } from "#pantry/qti/tests.ts";
 
 /**
+ * {@link namingPattern} as a `Compute.matches` pattern.
+ */
+const naming = Compute.pattern(namingPattern);
+
+/**
  * XML whitespace `S`, possibly none: what an ID's lexical form holds around its value, the
  * language of `Space` (`#pantry/qti/attributes.ts`), the type its pieces are of.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
  */
-export const spacePattern = "^[\\t\\n\\r ]*$";
+export const spacePattern = Compute.pattern("^[\\t\\n\\r ]*$");
 
 /**
  * A nonempty run holding no XML whitespace: an ID's value once its lexical form's outer whitespace
@@ -171,12 +176,12 @@ export const spacePattern = "^[\\t\\n\\r ]*$";
  * ({@link namingPattern}); that an IDREF token is, AL1's lexical half over the attribute and
  * TextDomain's over the element's text.
  */
-export const idValuePattern = "^[^\\t\\n\\r ]+$";
+export const idValuePattern = Compute.pattern("^[^\\t\\n\\r ]+$");
 
 /**
  * A same-document fragment reference: `#` and one or more characters (MathML 3 §4.2.7).
  */
-const shareFragmentPattern = "^#.+$";
+const shareFragmentPattern = Compute.pattern("^#.+$");
 
 /**
  * The nil uuid: the start of the owner-axis copy of `document`, which every member's owner
@@ -814,7 +819,7 @@ export const idAttributes = select(Attribute, idTyped);
  * with a key of its own over `node` that the copy's reverse probe reads (C18).
  */
 const namingIdAttributes = select(Attribute, (a) =>
-  a.and(idTyped(a), Compute.matches(a.lexical, namingPattern)),
+  a.and(idTyped(a), Compute.matches(a.lexical, naming)),
 );
 
 /**
@@ -827,7 +832,7 @@ const identityNodes = select(Node, (n) => textIdentityIn(n, identities));
  * of an `xs:ID` domain and names something once collapsed ({@link namingPattern}).
  */
 const idTexts = select(IdentityText, (t) =>
-  t.and(textIdentityIn(t, ["ID"]), Compute.matches(t.lexical, namingPattern)),
+  t.and(textIdentityIn(t, ["ID"]), Compute.matches(t.lexical, naming)),
 );
 
 /**

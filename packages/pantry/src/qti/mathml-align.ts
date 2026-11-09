@@ -107,6 +107,13 @@ export const directionSpellings = [
 ] as const;
 
 /**
+ * {@link directionSpellings} as `Compute.matches` patterns, each handle beside its spelling's.
+ */
+const directionMatches = directionSpellings.map(
+  ([handle, spelling]) => [handle, Compute.pattern<string>(spelling)] as const,
+);
+
+/**
  * The lexical form of a `selection` that `Compute.cast` reads exactly: `xs:integer`'s, within the
  * signed 64-bit range. A selection outside it counts as 0, which no child has.
  */
@@ -456,7 +463,7 @@ export const alignLaws = [
         s.and(
           s.ne(s.dirLexical, ""),
           s.or(
-            ...directionSpellings.map(([direction, spelling]) =>
+            ...directionMatches.map(([direction, spelling]) =>
               s.and(s.eq(s.own, direction), Compute.matches(s.dirLexical, spelling)),
             ),
           ),

@@ -2,7 +2,7 @@
  * The import's rows judged on the host: the laws `Qti` states that a package's rows can be held to
  * before any of them is written, evaluated over the rows `readProgram` builds, each named by its
  * law as a refusal names it (`#pantry/import/refusal.ts` `lawNameOf`), each statement's laws as
- * grizzle's `lawsOf` gives them.
+ * grizzle's `lawsByStatement` gives them.
  *
  * Four kinds of statement are evaluated, from the statements grizzle keeps for them, never from a
  * list written here:
@@ -28,8 +28,8 @@
  * the program names no row PostgreSQL can hold, as a sentinel standing for an absent target does.
  */
 import { Array as Arr, Formatter, Option, pipe, Predicate, Schema } from "effect";
-import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
-import type { Law, LawSourceSide } from "@bjornpagen/grizzle";
+import { lawsByStatement, sameLaw } from "@bjornpagen/grizzle";
+import type { Law, LawSide } from "@bjornpagen/grizzle";
 import { lawNameOf, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
@@ -292,10 +292,6 @@ const StoredSide = Schema.Struct({
     Schema.Union([
       Schema.String,
       Schema.Struct({ field: Schema.String, kind: Schema.Literal("pred") }),
-      Schema.Struct({
-        kind: Schema.Literal("constant"),
-        value: Schema.Union([Schema.String, Schema.BigInt, Schema.Number, Schema.Boolean]),
-      }),
     ]),
   ),
 });
@@ -335,21 +331,16 @@ interface Side {
   readonly predicate: Option.Option<Term>;
   readonly relation: string;
   /**
-   * Each term: a field's name, a containment source's constant as its value's text, and none for a
-   * `pred` term, which this module does not evaluate.
+   * Each term: a field's name, and none for a `pred` term, which this module does not evaluate.
    */
-  readonly terms: readonly (
-    | { readonly field: string; readonly kind: "field" }
-    | { readonly kind: "constant"; readonly text: string }
-    | undefined
-  )[];
+  readonly terms: readonly ({ readonly field: string; readonly kind: "field" } | undefined)[];
 }
 
 /**
  * A side read two ways: as the host evaluates it, and as an outcome names its law.
  */
 interface ReadSide {
-  readonly law: LawSourceSide;
+  readonly law: LawSide;
   readonly side: Side;
 }
 
@@ -377,15 +368,9 @@ const sideOf = (side: typeof StoredSide.Type): ReadSide => {
       predicate:
         "desc" in side.source ? Option.some(termOf(side.source.desc.predicate)) : Option.none(),
       relation,
-      terms: side.terms.map((term) => {
-        if (Predicate.isString(term)) {
-          return { field: term, kind: "field" as const };
-        }
-
-        return term.kind === "constant"
-          ? { kind: "constant" as const, text: String(term.value) }
-          : undefined;
-      }),
+      terms: side.terms.map((term) =>
+        Predicate.isString(term) ? { field: term, kind: "field" as const } : undefined,
+      ),
     },
   };
 };
@@ -417,20 +402,13 @@ type Evaluated =
  * @param read - The side as this module read it.
  * @returns Whether they are one side.
  */
-const sameSide = (law: LawSourceSide, read: LawSourceSide): boolean =>
+const sameSide = (law: LawSide, read: LawSide): boolean =>
   law.relation === read.relation &&
   law.terms.length === read.terms.length &&
   law.terms.every((term, at) => {
     const held = read.terms[at];
-    if (held === undefined) {
-      return false;
-    }
 
-    if (term.kind === "constant" || held.kind === "constant") {
-      return term.kind === "constant" && held.kind === "constant" && term.value === held.value;
-    }
-
-    return term.kind === held.kind && term.field === held.field;
+    return held !== undefined && term.kind === held.kind && term.field === held.field;
   });
 
 /**
@@ -487,10 +465,14 @@ const evaluatedOf = (
 };
 
 /**
- * Each statement of `Qti` with its laws, as grizzle's `lawsOf` names them: the one compile of
- * Qti's law model this module runs.
+ * Each statement of `Qti` with its laws, as grizzle's `lawsByStatement` names them, in the schema's
+ * statement order: the one compile of Qti's law model this module runs.
  */
-const statementLaws = lawsOf(Qti);
+const statementLaws = (() => {
+  const lawsOfStatement = lawsByStatement(Qti);
+
+  return Qti.statements.map((statement) => ({ laws: lawsOfStatement(statement), statement }));
+})();
 
 /**
  * The stored statements of `Qti`, each as this module reads it with its laws, none for one it does
@@ -598,8 +580,10 @@ const StoredRelation = Schema.Struct({
   fields: Schema.Record(
     Schema.String,
     Schema.Struct({
-      pattern: Schema.optionalKey(
-        Schema.Struct({ flags: Schema.Literals(["su", "u"]), source: Schema.String }),
+      patterns: Schema.optionalKey(
+        Schema.NonEmptyArray(
+          Schema.Struct({ flags: Schema.Literals(["su", "u"]), source: Schema.String }),
+        ),
       ),
       sql: Schema.optionalKey(Schema.String),
     }),
@@ -640,7 +624,7 @@ const unflattened: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * A pattern law: its field's relation and name, and its source and flags.
+ * A pattern law: its field's relation and name, and its patterns, each with its source and flags.
  */
 type PatternLaw = Extract<Law, { readonly kind: "pattern" }>;
 
@@ -660,17 +644,11 @@ const patternLaws: readonly PatternLaw[] = writtenLaws.flatMap(([law]) =>
 const patternFields: ReadonlyMap<PatternLaw, readonly (readonly [string, string])[]> = (() => {
   const byLaw = new Map<PatternLaw, (readonly [string, string])[]>();
   for (const [name, { fields, kind }] of relations) {
-    for (const [field, { pattern }] of Object.entries(fields)) {
+    for (const [field, { patterns }] of Object.entries(fields)) {
       const law =
-        kind === "relation" && pattern !== undefined
+        kind === "relation" && patterns !== undefined
           ? patternLaws.find((stated) =>
-              sameLaw(stated, {
-                field,
-                flags: pattern.flags,
-                kind: "pattern",
-                relation: name,
-                source: pattern.source,
-              }),
+              sameLaw(stated, { field, kind: "pattern", patterns, relation: name }),
             )
           : undefined;
       if (law !== undefined) {
@@ -712,7 +690,7 @@ const patternVerdictOf = (
   law: PatternLaw,
   fields: readonly (readonly [string, string])[],
 ): Verdict => {
-  const pattern = new RegExp(law.source, law.flags);
+  const patterns = law.patterns.map(({ flags, source }) => new RegExp(source, flags));
   let unknown = false;
   for (const [relation, field] of fields) {
     const rows = view.get(relation);
@@ -725,7 +703,7 @@ const patternVerdictOf = (
       const value = row[field];
       if (!Predicate.isString(value)) {
         unknown = true;
-      } else if (!pattern.test(value)) {
+      } else if (!patterns.every((pattern) => pattern.test(value))) {
         return {
           kind: "broken",
           witness: `${relation}.${field} = ${JSON.stringify(value.slice(0, 80))}`,
@@ -1381,9 +1359,7 @@ const tuplesOf = (view: View, side: Side): Option.Option<readonly string[]> => {
     }
 
     if (selected === true) {
-      const values = terms.map((term) =>
-        term.kind === "constant" ? term.text : textOf(row[term.field]),
-      );
+      const values = terms.map((term) => textOf(row[term.field]));
       if (values.includes(undefined)) {
         return Option.none();
       }

@@ -299,7 +299,7 @@ describe("Node's declarations", () => {
     // them), and `endsOf` against `Array.from`, which splits a text into its code points.
     // Bound: the empty text, one and two characters, a line end, a surrogate pair alone, at
     // either end and between two letters.
-    const end = new RegExp(EndCharacter.pattern.source, EndCharacter.pattern.flags);
+    const end = new RegExp(EndCharacter.patterns[0].source, EndCharacter.patterns[0].flags);
     for (const held of ["", "a", "\n", "é", "😀"]) {
       assert.isTrue(end.test(held), JSON.stringify(held));
     }
