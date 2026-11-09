@@ -375,6 +375,22 @@ const startedFromPackage = Effect.fnUntraced(function* startedFromPackage(place:
 });
 
 /**
+ * Name what {@link startedFromPackage} gave: `started`, or the reason `startTest` refused and the
+ * document it expected.
+ *
+ * @param outcome What `startTest` returned.
+ * @returns Its name.
+ */
+const outcomeName = (outcome: Effect.Success<ReturnType<typeof startedFromPackage>>): string =>
+  Result.match(outcome, {
+    onFailure: (failure) =>
+      failure._tag === "TestNotDeliverable"
+        ? `${failure.reason}: expected ${failure.expected}`
+        : failure._tag,
+    onSuccess: () => "started",
+  });
+
+/**
  * Start a session of a delivery, failing the test when `startTest` refuses.
  *
  * @param delivery The test and its items.
@@ -738,16 +754,40 @@ describe("startTest", () => {
 
         const outcomes = yield* Effect.all(
           places.map(([label, place]) =>
-            Effect.map(startedFromPackage(place), (outcome) => [
-              label,
-              Result.match(outcome, {
-                onFailure: (failure) =>
-                  failure._tag === "TestNotDeliverable"
-                    ? `${failure.reason}: expected ${failure.expected}`
-                    : failure._tag,
-                onSuccess: () => "started",
-              }),
-            ]),
+            Effect.map(startedFromPackage(place), (outcome) => [label, outcomeName(outcome)]),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          outcomes,
+          places.map(([label]) => [label, "started"]),
+        );
+      }),
+  );
+
+  it.effect(
+    "align-54 hrefs and keys E17: startTest resolves an item ref holding %2F to the same item openPackage does, the decoded / kept in its segment",
+    () =>
+      Effect.gen(function* escapedSlashHref() {
+        const plain: PackagePlace = {
+          directory: "d",
+          directoryHref: "d",
+          item: "first.xml",
+          itemHref: "first.xml",
+          location: "pkgs/m2",
+        };
+        const places: readonly (readonly [string, PackagePlace])[] = [
+          ["an item named a%2Fb.xml", { ...plain, item: "a%2Fb.xml", itemHref: "a%2Fb.xml" }],
+          [
+            "an item named a%2fb c.xml",
+            { ...plain, item: "a%2fb c.xml", itemHref: "a%2fb%20c.xml" },
+          ],
+          ["a segment x%2Fy that one .. removes", { ...plain, itemHref: "x%2Fy/../first.xml" }],
+        ];
+
+        const outcomes = yield* Effect.all(
+          places.map(([label, place]) =>
+            Effect.map(startedFromPackage(place), (outcome) => [label, outcomeName(outcome)]),
           ),
         );
 

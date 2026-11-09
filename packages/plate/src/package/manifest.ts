@@ -12,18 +12,22 @@
  * which the walk leaves alone: the root's `organizations` and `resources` once each, a resource's
  * `file` at least once. Each LOM element the walk checks holds each child the loose LOM binding's
  * Schematron caps at most once (reading 130, {@link lomCaps}). The manifest's own rules follow: a
- * resource's `href` references one of its `file` entries, a `dependency` names a resource, every
- * `href` stays inside the package's root, and no LOM `learningResourceType` of the LOM vocabulary
- * is `exam` or `self assessment` (reading 122). The walk's refusals, the counts' and the rules'
- * are reported together, in that order. What needs the package's files or documents, which files
- * exist and what each document's root is, belongs to the package reader. {@link resourceLom} reads
- * what each resource's own LOM metadata gives as its object's identifier and title, which the
- * package reader compares with the object's document (reading 62).
+ * resource's `href` references one of its `file` entries, a `dependency` names a resource, a
+ * document resource's `href` names a path inside the package's root (reading 102), and no LOM
+ * `learningResourceType` of the LOM vocabulary is `exam` or `self assessment` (reading 122). The
+ * walk's refusals, the counts' and the rules' are reported together, in that order. What needs the
+ * package's files or documents, which files exist and what each document's root is, belongs to the
+ * package reader. {@link resourceLom} reads what each resource's own LOM metadata gives as its
+ * object's identifier and title, which the package reader compares with the object's document
+ * (reading 62).
  *
  * The readings the manifest binds: `qtiMetadata` is admitted as a `cp:metadata` child or inside
  * `lom` (reading 32), a `controlfile` resource and a packaged XSD listed as a file are admitted
  * (reading 33), an absolute `href` is admitted and stored as written, never fetched (reading 35),
- * and one file may be listed twice by a resource and by several resources (reading 36).
+ * one file may be listed twice by a resource and by several resources (reading 36), and every
+ * `href` and `xml:base` is collapsed, as an `xs:anyURI` is, and resolved by RFC 3986: a `file`'s or
+ * a non-document resource's that leads outside the package is an external link, admitted and never
+ * looked for (reading 102).
  *
  * @module
  */
@@ -44,17 +48,18 @@ import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { checkStructure, governingTables } from "#plate/validate/structure.ts";
 import type { ChildOccurrence, ContentTable, Occurrences, Tables } from "#plate/validate/xsd.ts";
-import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
+import { cpVersions, manifestNamespace, resourceTypes } from "#plate/vocabulary.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
 
 /**
  * One `href` a manifest writes, on a `resource` or a `file`, with the package path it names.
  *
  * `path` is the file's path from the package's root, which is where the manifest sits: the
- * reference resolved against the `xml:base` values above it, its dot segments removed, each
- * segment's percent escapes decoded and its query and fragment set aside, so `./items/a%20b.xml`
- * names `items/a b.xml`. It is none for an absolute URI, which the package does not hold and which
- * is never fetched (reading 35).
+ * reference collapsed, resolved against the `xml:base` values above it, its dot segments removed,
+ * each segment's percent escapes decoded and its query and fragment set aside, so
+ * `./items/a%20b.xml`, padded with spaces or not, names `items/a b.xml`. It is none for an external
+ * link, which the package does not hold and which is never fetched: an absolute URI (reading 35), a
+ * path from a host's root, or one whose `..` climbs above the package's root (reading 102).
  */
 export interface ManifestHref {
   /**
@@ -149,12 +154,13 @@ const lomNamespace = "http://ltsc.ieee.org/xsd/LOM";
 
 /**
  * Where an `href` leads: a path inside the package, as its segments, an absolute URI with its query
- * and fragment set aside, or outside the package's root.
+ * and fragment set aside, or outside the package's root, with the reference's path as written,
+ * which is all an external link is compared by (reading 102).
  */
 type Target =
   | { readonly kind: "absolute"; readonly uri: string }
   | { readonly kind: "inside"; readonly segments: readonly string[] }
-  | { readonly kind: "outside" };
+  | { readonly kind: "outside"; readonly written: string };
 
 /**
  * The target of the package's root, the base every relative reference resolves against: its
@@ -170,10 +176,10 @@ const packageRoot: Target = { kind: "inside", segments: [""] };
  * base is the absolute URI the URL parser resolves it to, or, when the parser refuses it, the base
  * and the reference joined, which no other reference shares. A relative reference under a path
  * inside the package resolves through {@link resolveInside}, and is outside when it names no path
- * inside.
+ * inside, as is every relative reference under a base outside.
  *
  * @param base The target the reference is resolved against.
- * @param reference The reference as written.
+ * @param reference The reference, collapsed ({@link collapse}).
  * @returns Its target.
  * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.2
  */
@@ -188,39 +194,51 @@ const resolve = (base: Target, reference: string): Target => {
     return { kind: "absolute", uri: parsed === null ? `${base.uri} ${reference}` : parsed.href };
   }
 
+  const outside: Target = { kind: "outside", written: withoutQuery(reference) };
   if (base.kind === "outside") {
-    return base;
+    return outside;
   }
 
   return Option.match(resolveInside(base.segments, reference), {
-    onNone: (): Target => ({ kind: "outside" }),
+    onNone: () => outside,
     onSome: (segments): Target => ({ kind: "inside", segments }),
   });
 };
 
 /**
  * Name a target as a comparable key: two `href` values reference the same file exactly when their
- * keys are equal.
+ * keys are equal. A path inside the package is compared resolved, and a target outside it by its
+ * path as written, since no URI outside the package is resolved (reading 102).
  *
  * @param target The target.
- * @returns Its key, none for a target outside the package.
+ * @returns Its key.
  */
-const keyOf = (target: Target): Option.Option<string> => {
+const keyOf = (target: Target): string => {
   switch (target.kind) {
     case "absolute": {
-      return Option.some(`uri:${target.uri}`);
+      return `uri:${target.uri}`;
     }
     case "inside": {
-      return Option.some(`path:${target.segments.join("/")}`);
+      return `path:${target.segments.join("/")}`;
     }
     case "outside": {
-      return Option.none();
+      return `written:${target.written}`;
     }
     default: {
       return target satisfies never;
     }
   }
 };
+
+/**
+ * Read an `xs:anyURI` value as XML Schema's `collapse` whitespace facet reads it, as every manifest
+ * `href` and every `xml:base` is typed: its outer XML whitespace removed and each inner run of it
+ * one space (reading 102).
+ *
+ * @param value The value as written.
+ * @returns The value, collapsed.
+ */
+const collapse = (value: string): string => trimXmlSpace(value).replaceAll(xmlWhitespaceRun, " ");
 
 /**
  * Take an element's children in the manifest's namespace with one local name.
@@ -275,7 +293,9 @@ const required = (element: SourceElement, local: string): string =>
   );
 
 /**
- * Resolve an element's `xml:base` against its parent's base.
+ * Resolve an element's `xml:base`, collapsed, against its parent's base. A base outside the
+ * package is refused nowhere: what it places outside is an external link, refused only as a
+ * document resource's `href`.
  *
  * @param base The parent's base.
  * @param element The element.
@@ -288,7 +308,7 @@ const baseOf = (base: Target, element: SourceElement): Target =>
         (attribute) => attribute.namespace === xmlNamespace && attribute.local === "base",
       ),
     ),
-    { onNone: () => base, onSome: (attribute) => resolve(base, attribute.value) },
+    { onNone: () => base, onSome: (attribute) => resolve(base, collapse(attribute.value)) },
   );
 
 /**
@@ -682,7 +702,7 @@ const resourcesOf = (
    */
   const pathOf = (element: SourceElement): string => paths.get(element) ?? "";
   /**
-   * Read an element's `href`, resolved against a base.
+   * Read an element's `href`, collapsed and resolved against a base.
    *
    * @param base The base its `xml:base` values give the element.
    * @param element A `resource` or a `file`.
@@ -692,7 +712,7 @@ const resourcesOf = (
     Option.map(attributeOf(element, "href"), (attribute) => ({
       at: attributePath(pathOf(element), attribute),
       href: attribute.value,
-      target: resolve(base, attribute.value),
+      target: resolve(base, collapse(attribute.value)),
     }));
   const rootBase = baseOf(packageRoot, root);
 
@@ -723,13 +743,30 @@ const resourcesOf = (
 };
 
 /**
- * Check the manifest's own rules over its resources: each `href` stays inside the package's root
- * (`package-path-outside`), a resource's `href` references one of its `file` entries
- * (`child-count`, Content Packaging 1.2 section 6.6.2), and each `dependency` names a resource
- * (`dependency-unresolved`).
+ * The document types, whose resource's `href` names the one document the package holds at that
+ * path: the eight QTI types (`imsqti_*`) and the LOM and usage-data records, the ten types reading
+ * 102's "Document entry" holds to an entry, as pantry's `documentTypes` (`src/grammar/install.ts`)
+ * lists them.
+ */
+const documentTypes: ReadonlySet<string> = new Set([
+  ...Object.values(resourceTypes).flatMap((types) =>
+    types.filter((type) => type.startsWith("imsqti_")),
+  ),
+  "qtiusagedata/xml",
+  "resourcemetadata/xml",
+]);
+
+/**
+ * Check the manifest's own rules over its resources: a document resource's `href` names a path
+ * inside the package (`package-path-outside`, `check: "document-entry"`, reading 102), a resource's
+ * `href` references one of its `file` entries (`child-count`, Content Packaging 1.2 section 6.6.2),
+ * and each `dependency` names a resource (`dependency-unresolved`).
  *
- * An `href` leaves the root when its resolution through the `xml:base` values above it does, so
- * an `xml:base` that climbs out is refused through each relative `href` beneath it.
+ * An `href` leads outside when it is an absolute URI, starts with `/`, or climbs above the root
+ * through the `xml:base` values above it and its own `..` segments. A `file`'s and a non-document
+ * resource's `href` that does is an external link, admitted (reading 102); a document resource's is
+ * refused, since its document is an entry of the package. A resource's `href` outside the package
+ * references a `file` entry whose `href` is outside with the same path as written.
  *
  * @param source The manifest.
  * @param entries Its resources.
@@ -744,24 +781,26 @@ const checkResources = (
       Option.toArray(Option.map(attributeOf(entry.element, "identifier"), (id) => id.value)),
     ),
   );
-  /**
-   * Refuse a reference that leaves the package's root.
-   *
-   * @param reference The reference.
-   * @returns Its `package-path-outside` refusal at its attribute, or none when it stays inside.
-   */
-  const outside = (reference: Located): readonly Refusal[] =>
-    reference.target.kind === "outside"
-      ? [refuse(source, "package-path-outside", reference.at, { path: reference.href })]
-      : [];
 
   return entries.flatMap((entry) => {
     const owner = Option.map(attributeOf(entry.element, "identifier"), (id) => id.value);
-    const fileKeys = new Set(entry.files.flatMap((file) => Option.toArray(keyOf(file.target))));
+    const isDocument = Option.exists(attributeOf(entry.element, "type"), (type) =>
+      documentTypes.has(type.value),
+    );
+    const outsideDocument = entry.href.pipe(
+      Option.filter((href) => isDocument && href.target.kind !== "inside"),
+      Option.map((href) =>
+        refuse(source, "package-path-outside", href.at, {
+          check: "document-entry",
+          path: href.href,
+          reading: "102",
+        }),
+      ),
+    );
+    const fileKeys = new Set(entry.files.map((file) => keyOf(file.target)));
     const unmatched = entry.href.pipe(
-      Option.flatMap((href) => keyOf(href.target).pipe(Option.map((key) => ({ href, key })))),
-      Option.filter(({ key }) => !fileKeys.has(key)),
-      Option.map(({ href }) =>
+      Option.filter((href) => !fileKeys.has(keyOf(href.target))),
+      Option.map((href) =>
         refuse(source, "child-count", entry.path, {
           child: `file entry that references its href ${href.href}`,
           element: elementName(entry.element),
@@ -779,12 +818,7 @@ const checkResources = (
         }),
       );
 
-    return [
-      ...Option.toArray(entry.href).flatMap(outside),
-      ...entry.files.flatMap(outside),
-      ...Option.toArray(unmatched),
-      ...unresolved,
-    ];
+    return [...Option.toArray(outsideDocument), ...Option.toArray(unmatched), ...unresolved];
   });
 };
 
@@ -884,10 +918,7 @@ const forbiddenResourceTypes: ReadonlySet<string> = new Set(["exam", "self asses
  * @returns Its text, collapsed.
  */
 const collapsedText = (element: SourceElement): string =>
-  trimXmlSpace(element.children.map((child) => writtenText(child)).join("")).replaceAll(
-    xmlWhitespaceRun,
-    " ",
-  );
+  collapse(element.children.map((child) => writtenText(child)).join(""));
 
 /**
  * Check every LOM learning resource type the walk checks against reading 122: one whose `source`
@@ -949,8 +980,9 @@ const checkLearningResourceTypes = (
  * carrying the profile it was judged against as `schemaversion` in its detail; its elements' child
  * counts are checked against the profile's occurrences and its LOM elements' against the loose LOM
  * binding's caps (`child-count`, also carrying `schemaversion`); and it is checked by the
- * manifest's own rules: `package-path-outside`, `child-count` for a resource whose `href` no `file`
- * entry references, `dependency-unresolved`, and `lom-learning-resource-type`. All are reported,
+ * manifest's own rules: `package-path-outside` for a document resource's `href` that leads outside
+ * the package, `child-count` for a resource whose `href` no `file` entry references,
+ * `dependency-unresolved`, and `lom-learning-resource-type`. All are reported,
  * in that order. Nothing is read or fetched beyond the document given.
  *
  * @param source The manifest, as the reader adapter built it, whose location every refusal carries.
