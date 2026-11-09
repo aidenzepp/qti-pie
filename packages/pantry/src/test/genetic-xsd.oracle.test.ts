@@ -461,7 +461,7 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * difference a record matches, so these controls show the two agree there, not that the record
  * stays narrow.
  *
- * The last four are the LOM xml:id class gr-lom-1 found with seed 1281456798, two causes each of
+ * The next four are the LOM xml:id class gr-lom-1 found with seed 1281456798, two causes each of
  * which the law oracle's "DocumentId key" refuses and xmllint accepts. The first two are an
  * external LOM file holding one `xml:id` twice, padded and plain: the loose LOM binding's set
  * declares no `xml:id`, so XML Schema keys nothing there, while the grammar types it as a
@@ -470,6 +470,29 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
  * declares `xml:id`, and libxml2 keys it by its raw value at parse time (`paddedIdRecord`). With
  * `v` twice there both refuse, which gr-lom-1's controls showed and the replay cannot: it reports
  * no agreement.
+ *
+ * The next six are genetic repair round 4's X1, X2 and X3a, each a reading that refuses more than
+ * the XSD. The two context declarations sharing an identifier, in a test and in an item, are
+ * reading 74's: a context's identifier is unique among its document's IDs, which 3.0.0's XSD types
+ * `xs:ID` and 3.0.1's `IdentifierDType`, so they differ in 3.0.1 alone. The three sources without
+ * their attribute are reading 124's: a source in a video or an audio carries `src`, and one in a
+ * picture `srcset`, where the XSD makes both optional; reading 124's earlier records held only a
+ * blank value. The stylesheet's type opening with a space is reading 135's: a MIME type is two
+ * RFC 2045 tokens, where the XSD's `MimeTypeDType` pattern admits a space.
+ *
+ * The last eight are genetic repair round 4's X3b, X4a, X4b and X5: the search's reduced document
+ * of each, verbatim, beside the trace's reduction of it to its cause (X3b, X4a, X4b) or a plain
+ * item that shows it in both versions (X5). An SSML speak whose version is no `1.1`, in an
+ * include's content or in a paragraph, is reading 39's: SSML 1.1 says the version is `1.1`, where
+ * QTI's XSD types it `xs:NMTOKEN`. Whitespace in a MathML `exists` beside text in a nested item, in
+ * one include, is two recorded classes in one difference, reading 2's whitespace and reading 6's
+ * nested root (`nestedRootBesideMath`). A truncate whose `xsi:type` admits one expression and holds
+ * two, beneath a no-namespace element of an include, is reading 50's limit: the law oracle accepts
+ * a laxly held element whose `xsi:type` names a complex type without checking it against the type,
+ * and xmllint checks it (`laxComplexType`). An interaction beneath a hottext through SSML and HTML
+ * wrappers is the specification's (§5.65: a hottext holds no nested interaction), a ban the XSD
+ * loses beneath a foreign element's lax wildcard; the reduced stimulus holds a custom interaction,
+ * which only 3.0.1 admits, so the item's text entry interaction shows it in 3.0.0 too.
  */
 const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
   {
@@ -595,6 +618,62 @@ const keptDocuments: readonly { readonly name: string; readonly text: string }[]
   {
     name: "a padded xml:id held twice on two foreign elements of a section's selection",
     text: '<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="s" title="t" visible="true"><qti-selection select="1"><w:config xmlns:w="urn:w"><w:a xml:id="&#x9;vé "/><w:b xml:id="&#x9;vé "/></w:config></qti-selection></qti-assessment-section>',
+  },
+  {
+    name: "two context declarations of a test that share an identifier",
+    text: '<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-context-declaration identifier="a1"/><qti-context-declaration identifier="a1"/></qti-assessment-test>',
+  },
+  {
+    name: "two context declarations of an item that share an identifier",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-context-declaration identifier="a1"/><qti-context-declaration identifier="a1"/></qti-assessment-item>',
+  },
+  {
+    name: "a video's source with no src",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-item-body><div><video><source/></video></div></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "an audio's source with no src",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-item-body><div><audio><source/></audio></div></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "a picture's source with no srcset",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-item-body><div><picture><source/><img src="a.png" alt="a"/></picture></div></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "a modal feedback's stylesheet whose type opens with a space",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-modal-feedback><qti-stylesheet type=" text/plain"/></qti-modal-feedback></qti-assessment-item>',
+  },
+  {
+    name: "an SSML speak whose version is no 1.1, in an include of an item's response processing",
+    text: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<?p-q?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-processing><include xmlns="http://www.w3.org/2001/XInclude"><a:speak xmlns:y="urn:y" xmlns:a="http://www.w3.org/2001/10/synthesis" version="x"/></include></qti-response-processing></qti-assessment-item>',
+  },
+  {
+    name: "an SSML speak whose version is no 1.1, in an item body's paragraph",
+    text: '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i1" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p><speak xmlns="http://www.w3.org/2001/10/synthesis" version="x" xml:lang="en">hi</speak></p></qti-item-body></qti-assessment-item>',
+  },
+  {
+    name: "a section's include holding whitespace in empty MathML elements beside text in nested items",
+    text: '<?xml version="1.0"?>\n<!---->\n<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><include xmlns="http://www.w3.org/2001/XInclude"><config xmlns=""><qti-prompt><mi xmlns="urn:w">&amp;tté<math xmlns="http://www.w3.org/1998/Math/MathML"><exists><!---cé--><!--&-->\n</exists></math>éé&lt;t<mi><s xmlns="http://www.w3.org/2001/10/synthesis" xmlns:n="urn:n">&lt;&#xD;t\né<!-- c-->tt<!-- -->&lt;<!-->>-c--></s></mi></mi><a:abbr xmlns:a="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><break xmlns="http://www.w3.org/2001/10/synthesis"><qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">&lt;]]&gt;<!--&>-->&lt;&amp;<!----></qti-assessment-item><config xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">&amp;é<!--><-->t>é<!-- --></config><widget xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">é&amp;<!---c>-->\t😀&amp;\n</widget><td xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:n="urn:n"/><p xmlns="urn:w" xmlns:n="urn:n">&amp;]]&gt;<!--<<c-->]]&gt;&lt;&lt;&amp;<!--<--> é\t </p><var xmlns:n="urn:n" xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"/><qti-assessment-item xmlns="urn:w">a b&amp;é&#xD;\t<!-- -->\n>t]]&gt;</qti-assessment-item></break><math xmlns="http://www.w3.org/1998/Math/MathML"><cn xmlns:n="urn:n">>😀&amp;😀<!---c-->&amp;&#xD;é😀&#xD;<!-- é-->> &lt;<!--c-->&amp; &#xD;</cn><csymbol>\né\n<!----></csymbol><b:mode xmlns:b="http://www.w3.org/1998/Math/MathML">&#xD;<!--&-c--></b:mode><ci>\nt<!---c-->&lt;é<!---->😀&lt;a b&lt;<!--< &--></ci><!--> --><a:mode xmlns:a="http://www.w3.org/1998/Math/MathML"><!--c<-->\t<!-- é-->&#xD;\n<!--é--></a:mode>\t&#xD;<!--é--></math><s xmlns="http://www.w3.org/2001/10/synthesis"><a:qti-assessment-item xmlns:a="urn:w" xmlns:n="urn:n">a b&lt;&amp;<!--&-->\t\tt<!-->-c>--></a:qti-assessment-item><qti-prompt xmlns="urn:w"/>t&amp;t&amp;<!----></s><a:sub xmlns:a="http://www.w3.org/2001/10/synthesis" xmlns:n="urn:n"><config xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">tt</config>&#xD;a bt<cite xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"> \t <!-- -->&lt;>&#xD;<!--c>--></cite><config xmlns="urn:w"/></a:sub></a:abbr></qti-prompt></config></include></qti-assessment-section>',
+  },
+  {
+    name: "an include of response processing holding whitespace in a MathML exists beside text in a nested item",
+    text: '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i1" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>A.</p></qti-item-body><qti-response-processing><xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="rules.xml"><config xmlns=""><math xmlns="http://www.w3.org/1998/Math/MathML"><exists>\n</exists></math><qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">t</qti-assessment-item></config></xi:include><qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value></qti-response-processing></qti-assessment-item>',
+  },
+  {
+    name: "expressions whose xsi:type names a complex type, under a no-namespace element of a response processing's include",
+    text: '<?xml version="1.0"?>\n<?p-q?>\n<?x1 ?d?dd?>\n<qti-response-processing xmlns:n="urn:n" xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><include xmlns="http://www.w3.org/2001/XInclude" xml:id=" \'" href="&#xD;v"><config xmlns="" xmlns:x="urn:x" x:b="]]>&lt;v&#xD;" x:a="\'"><qti-set-outcome-value xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="]]>é"><qti-container-size xmlns:xsitype="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xsi:noNamespaceSchemaLocation="é&#xA;&lt;a b" xsi:type="xsitype:LogicSingleDType"><qti-truncate xsi:type="xsitype:LogicSingleDType" xsi:noNamespaceSchemaLocation="a b" xsi:schemaLocation=""><qti-number-presented xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"/>\n<qti-integer-modulus xsi:type="xsitype:LogicPairDType"><qti-lcm> <?t ?d>d?><!-- é&--></qti-lcm><!-->--></qti-integer-modulus><!--<--></qti-truncate>\t<?x1 > ?d?></qti-container-size><!----></qti-set-outcome-value></config></include></qti-response-processing>',
+  },
+  {
+    name: "a truncate whose xsi:type admits one expression, holding two, under a no-namespace element of an include",
+    text: '<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i1" title="t" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>A.</p></qti-item-body><qti-response-processing><xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="rules.xml"><config xmlns="" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:q="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-truncate xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xsi:type="q:LogicSingleDType"><qti-number-presented/><qti-integer-modulus xsi:type="q:LogicPairDType"><qti-lcm/></qti-integer-modulus></qti-truncate></config></xi:include><qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value></qti-response-processing></qti-assessment-item>',
+  },
+  {
+    name: "an interaction under a hottext through foreign SSML and HTML wrappers",
+    text: '<?xml version="1.0" standalone="yes"?>\n<?t ?d?>\n<?p-q d?>\n<qti-assessment-stimulus xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">\t\t\n<qti-stylesheet xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><!----><!--c --><!--&<--><!--c>--></qti-stylesheet><qti-stimulus-body xmlns:xsitype="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsitype:StimulusBodyDType" data-y.z="\'&amp;" label="v"><h5 xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-text-entry-interaction response-identifier="a1"/></h5><ol data-x="&#xD;&lt;">  <li data-x=" ">t<kbd xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">éé😀&#xD;<!---->é<?x1 dd?>t&lt;&#xD; </kbd><sup data-a-b="" data-x=""><say-as xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" xmlns:y="urn:y" xmlns:x="urn:x" xmlns="http://www.w3.org/2001/10/synthesis"><sup xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsitype="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" data-x="&quot;&amp;\'&#x9;" xsi:type="xsitype:HTMLTextDType" data-q_1="é&quot;]]>&quot;">é&amp;éé<!--é--> &#xD;\t</sup><widget xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">&amp;<config xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsitype="http://www.w3.org/2001/XMLSchema" zs:type="xsitype:QName"/><qti-assessment-item xmlns="urn:w" lax-a="&lt;v" data-y.z="&quot;v">&lt;&lt;\n<template xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><widget xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsitype="http://www.w3.org/2001/XMLSchema" zs:type="xsitype:integer">\t&amp; \t<?x1?>t&lt;t</widget><mi xmlns="urn:w" xmlns:y="urn:y" xmlns:x="urn:x" y:a="" x:a="&amp;&amp;év"/></template></qti-assessment-item></widget><a xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" href="a1"><qti-hottext identifier="a1"><qti-printed-variable identifier="a1"/><speak xmlns:y="urn:y" xmlns:x="urn:x" xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:xsitype="http://www.w3.org/2001/10/synthesis" y:a="&lt;&amp;év" zs:schemaLocation="" zs:type="xsitype:speak" x:a="" version="v&amp;v&#xA;">\n>é]]&gt;<h6 xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:b="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:x="urn:x" xmlns:o="urn:w" xmlns:y="urn:y" data-y.z="\'&lt;" data-a-b="&#x9;é&#xD;&quot;">\t\t&amp;<b:qti-custom-interaction xmlns:b="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><!----><b:qti-prompt xmlns:y="urn:y" xmlns:x="urn:x" xmlns:o="urn:w" xmlns:b="urn:w" x:a="&quot;&#x9;" o:zz="&quot;\' &#xA;" y:a="év&#xD;&lt;">é é</b:qti-prompt><kbd data-x="&#xD;v" data-q_1="a b]]>" data-a-b="\'&#xD;" data-y.z="\'&lt;">t&#xD;t<?p-q é>?></kbd></b:qti-custom-interaction></h6></speak></qti-hottext></a></say-as>&lt;t<label aria-hidden="é v" aria-required="&lt;&quot;&quot;v">é&lt;><?t d ?></label></sup></li></ol></qti-stimulus-body></qti-assessment-stimulus>\n<?x1 ?d?>',
+  },
+  {
+    name: "a text entry interaction in a heading of an SSML speak in a hottext",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="i" title="t" time-dependent="false"><qti-response-declaration identifier="R" cardinality="single" base-type="identifier"/><qti-response-declaration identifier="S" cardinality="single" base-type="string"/><qti-item-body><qti-hottext-interaction response-identifier="R"><p><qti-hottext identifier="H"><speak xmlns="http://www.w3.org/2001/10/synthesis" version="1.1" xml:lang="en"><h6 xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-text-entry-interaction response-identifier="S"/></h6></speak></qti-hottext></p></qti-hottext-interaction></qti-item-body></qti-assessment-item>',
   },
 ];
 

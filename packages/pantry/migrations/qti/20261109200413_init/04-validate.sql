@@ -126,6 +126,44 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION "qti"."__rule_data_ssml_property_required_ssml_property_in_sve4dfykyi"() FROM PUBLIC;
 
+CREATE OR REPLACE FUNCTION "qti"."__rule_declaration_base_type_placed_reference_type_f66viyx6qz"() RETURNS "pg_catalog"."trigger"
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
+AS $$
+BEGIN
+  IF TG_OP <> 'DELETE'::"pg_catalog"."text" THEN
+    IF EXISTS (SELECT "r11"."c51", "r11"."c52", "r11"."c53", "r11"."c54", "r11"."c55", "r11"."c56", "r11"."c57", "r11"."c58" FROM (SELECT "r10"."c43", "r10"."c49", "r10"."c50", "r10"."c44", "r10"."c45", "r10"."c46", "r10"."c47", "r10"."c48" FROM (SELECT "r9"."c35", "r9"."c36", "r9"."c37", "r9"."c38", "r9"."c39", "r9"."c40", "r9"."c41", "r9"."c42" FROM (SELECT "r2"."c2", "r2"."c5", "r2"."c8", "r2"."c9", "r2"."c10", "r4"."c23", "r6"."c28", "r8"."c32" FROM (SELECT "r1"."assembly", "r1"."attribute", "r1"."decl_base_types", "r1"."decl_cardinalities", "r1"."declaration", "r1"."declaration_kind", "r1"."identifier", "r1"."instance", "r1"."kind", "r1"."node" FROM "qti"."placed_variable_ref_declaration" AS "r1") AS "r2"("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"), (SELECT "r3"."base_type", "r3"."cardinality", "r3"."document", "r3"."kind", "r3"."language", "r3"."lead_cardinalities", "r3"."nearest", "r3"."node", "r3"."operand_base_types", "r3"."operand_cardinalities", "r3"."operands", "r3"."parent", "r3"."parent_kind", "r3"."start", "r3"."tail_base_types", "r3"."tail_cardinalities", "r3"."version" FROM "qti"."expression" AS "r3") AS "r4"("c11", "c12", "c13", "c14", "c15", "c16", "c17", "c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27"), (SELECT "r5"."base_type", "r5"."base_type_lexical", "r5"."node", "r5"."value_base" FROM "qti"."declaration_base_type" AS "r5") AS "r6"("c28", "c29", "c30", "c31"), (SELECT "r7"."cardinality", "r7"."cardinality_lexical", "r7"."node" FROM "qti"."declaration_cardinality" AS "r7") AS "r8"("c32", "c33", "c34") WHERE "r2"."c10" = "r4"."c18" AND "r2"."c5" = "r6"."c30" AND "r2"."c5" = "r8"."c34") AS "r9"("c35", "c36", "c37", "c38", "c39", "c40", "c41", "c42") WHERE "r9"."c36" = NEW."node"::"pg_catalog"."uuid" AND NOT (NOT "r9"."c38" IN (49::smallint, 50::smallint, 62::smallint) OR NOT "r9"."c40" IN (174::smallint, 173::smallint, 191::smallint, 190::smallint, 218::smallint, 211::smallint, 210::smallint) OR "r9"."c41" = 0::smallint AND "r9"."c42" = 0::smallint)) AS "r10"("c43", "c44", "c45", "c46", "c47", "c48", "c49", "c50")) AS "r11"("c51", "c52", "c53", "c54", "c55", "c56", "c57", "c58")) THEN
+      RAISE EXCEPTION 'a write breaks a rule over a query'
+        USING ERRCODE = 'check_violation'::"pg_catalog"."text",
+              CONSTRAINT = '__rule_placed_reference_type_check_condition_type_6itrlcjpvb'::"pg_catalog"."text",
+              SCHEMA = TG_TABLE_SCHEMA,
+              TABLE = TG_TABLE_NAME;
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE EXECUTE ON FUNCTION "qti"."__rule_declaration_base_type_placed_reference_type_f66viyx6qz"() FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION "qti"."__rule_declaration_cardinality_placed_reference_type_gwpyvkuz2j"() RETURNS "pg_catalog"."trigger"
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
+AS $$
+BEGIN
+  IF TG_OP <> 'DELETE'::"pg_catalog"."text" THEN
+    IF EXISTS (SELECT "r11"."c51", "r11"."c52", "r11"."c53", "r11"."c54", "r11"."c55", "r11"."c56", "r11"."c57", "r11"."c58" FROM (SELECT "r10"."c43", "r10"."c49", "r10"."c50", "r10"."c44", "r10"."c45", "r10"."c46", "r10"."c47", "r10"."c48" FROM (SELECT "r9"."c35", "r9"."c36", "r9"."c37", "r9"."c38", "r9"."c39", "r9"."c40", "r9"."c41", "r9"."c42" FROM (SELECT "r2"."c2", "r2"."c5", "r2"."c8", "r2"."c9", "r2"."c10", "r4"."c23", "r6"."c28", "r8"."c32" FROM (SELECT "r1"."assembly", "r1"."attribute", "r1"."decl_base_types", "r1"."decl_cardinalities", "r1"."declaration", "r1"."declaration_kind", "r1"."identifier", "r1"."instance", "r1"."kind", "r1"."node" FROM "qti"."placed_variable_ref_declaration" AS "r1") AS "r2"("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"), (SELECT "r3"."base_type", "r3"."cardinality", "r3"."document", "r3"."kind", "r3"."language", "r3"."lead_cardinalities", "r3"."nearest", "r3"."node", "r3"."operand_base_types", "r3"."operand_cardinalities", "r3"."operands", "r3"."parent", "r3"."parent_kind", "r3"."start", "r3"."tail_base_types", "r3"."tail_cardinalities", "r3"."version" FROM "qti"."expression" AS "r3") AS "r4"("c11", "c12", "c13", "c14", "c15", "c16", "c17", "c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27"), (SELECT "r5"."base_type", "r5"."base_type_lexical", "r5"."node", "r5"."value_base" FROM "qti"."declaration_base_type" AS "r5") AS "r6"("c28", "c29", "c30", "c31"), (SELECT "r7"."cardinality", "r7"."cardinality_lexical", "r7"."node" FROM "qti"."declaration_cardinality" AS "r7") AS "r8"("c32", "c33", "c34") WHERE "r2"."c10" = "r4"."c18" AND "r2"."c5" = "r6"."c30" AND "r2"."c5" = "r8"."c34") AS "r9"("c35", "c36", "c37", "c38", "c39", "c40", "c41", "c42") WHERE "r9"."c36" = NEW."node"::"pg_catalog"."uuid" AND NOT (NOT "r9"."c38" IN (49::smallint, 50::smallint, 62::smallint) OR NOT "r9"."c40" IN (174::smallint, 173::smallint, 191::smallint, 190::smallint, 218::smallint, 211::smallint, 210::smallint) OR "r9"."c41" = 0::smallint AND "r9"."c42" = 0::smallint)) AS "r10"("c43", "c44", "c45", "c46", "c47", "c48", "c49", "c50")) AS "r11"("c51", "c52", "c53", "c54", "c55", "c56", "c57", "c58")) THEN
+      RAISE EXCEPTION 'a write breaks a rule over a query'
+        USING ERRCODE = 'check_violation'::"pg_catalog"."text",
+              CONSTRAINT = '__rule_placed_reference_type_check_condition_type_6itrlcjpvb'::"pg_catalog"."text",
+              SCHEMA = TG_TABLE_SCHEMA,
+              TABLE = TG_TABLE_NAME;
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE EXECUTE ON FUNCTION "qti"."__rule_declaration_cardinality_placed_reference_type_gwpyvkuz2j"() FROM PUBLIC;
+
 CREATE OR REPLACE FUNCTION "qti"."__rule_declaration_identifier_declared_placement_z6fsvuaebl"() RETURNS "pg_catalog"."trigger"
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
 AS $$
@@ -317,6 +355,25 @@ END
 $$;
 
 REVOKE EXECUTE ON FUNCTION "qti"."__rule_expression_held_type_check_set_type_mnty4kooqh"() FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION "qti"."__rule_expression_placed_reference_type_check_naqzwfz6fd"() RETURNS "pg_catalog"."trigger"
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
+AS $$
+BEGIN
+  IF TG_OP <> 'DELETE'::"pg_catalog"."text" THEN
+    IF EXISTS (SELECT "r11"."c51", "r11"."c52", "r11"."c53", "r11"."c54", "r11"."c55", "r11"."c56", "r11"."c57", "r11"."c58" FROM (SELECT "r10"."c43", "r10"."c49", "r10"."c50", "r10"."c44", "r10"."c45", "r10"."c46", "r10"."c47", "r10"."c48" FROM (SELECT "r9"."c35", "r9"."c36", "r9"."c37", "r9"."c38", "r9"."c39", "r9"."c40", "r9"."c41", "r9"."c42" FROM (SELECT "r2"."c2", "r2"."c5", "r2"."c8", "r2"."c9", "r2"."c10", "r4"."c23", "r6"."c28", "r8"."c32" FROM (SELECT "r1"."assembly", "r1"."attribute", "r1"."decl_base_types", "r1"."decl_cardinalities", "r1"."declaration", "r1"."declaration_kind", "r1"."identifier", "r1"."instance", "r1"."kind", "r1"."node" FROM "qti"."placed_variable_ref_declaration" AS "r1") AS "r2"("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"), (SELECT "r3"."base_type", "r3"."cardinality", "r3"."document", "r3"."kind", "r3"."language", "r3"."lead_cardinalities", "r3"."nearest", "r3"."node", "r3"."operand_base_types", "r3"."operand_cardinalities", "r3"."operands", "r3"."parent", "r3"."parent_kind", "r3"."start", "r3"."tail_base_types", "r3"."tail_cardinalities", "r3"."version" FROM "qti"."expression" AS "r3") AS "r4"("c11", "c12", "c13", "c14", "c15", "c16", "c17", "c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27"), (SELECT "r5"."base_type", "r5"."base_type_lexical", "r5"."node", "r5"."value_base" FROM "qti"."declaration_base_type" AS "r5") AS "r6"("c28", "c29", "c30", "c31"), (SELECT "r7"."cardinality", "r7"."cardinality_lexical", "r7"."node" FROM "qti"."declaration_cardinality" AS "r7") AS "r8"("c32", "c33", "c34") WHERE "r2"."c10" = "r4"."c18" AND "r2"."c5" = "r6"."c30" AND "r2"."c5" = "r8"."c34") AS "r9"("c35", "c36", "c37", "c38", "c39", "c40", "c41", "c42") WHERE "r9"."c39" = NEW."node"::"pg_catalog"."uuid" AND NOT (NOT "r9"."c38" IN (49::smallint, 50::smallint, 62::smallint) OR NOT "r9"."c40" IN (174::smallint, 173::smallint, 191::smallint, 190::smallint, 218::smallint, 211::smallint, 210::smallint) OR "r9"."c41" = 0::smallint AND "r9"."c42" = 0::smallint)) AS "r10"("c43", "c44", "c45", "c46", "c47", "c48", "c49", "c50")) AS "r11"("c51", "c52", "c53", "c54", "c55", "c56", "c57", "c58")) THEN
+      RAISE EXCEPTION 'a write breaks a rule over a query'
+        USING ERRCODE = 'check_violation'::"pg_catalog"."text",
+              CONSTRAINT = '__rule_placed_reference_type_check_condition_type_6itrlcjpvb'::"pg_catalog"."text",
+              SCHEMA = TG_TABLE_SCHEMA,
+              TABLE = TG_TABLE_NAME;
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE EXECUTE ON FUNCTION "qti"."__rule_expression_placed_reference_type_check_naqzwfz6fd"() FROM PUBLIC;
 
 CREATE OR REPLACE FUNCTION "qti"."__rule_expression_held_type_in_variable_ref_table_7gfwn46kjs"() RETURNS "pg_catalog"."trigger"
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
@@ -1061,6 +1118,25 @@ END
 $$;
 
 REVOKE EXECUTE ON FUNCTION "qti"."__rule_placed_variable_ref_declared_placement_check_5eyfihmist"() FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION "qti"."__rule_placed_variable_ref_declaration_placed_4zjm6fnswv"() RETURNS "pg_catalog"."trigger"
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
+AS $$
+BEGIN
+  IF TG_OP <> 'DELETE'::"pg_catalog"."text" THEN
+    IF EXISTS (SELECT "r11"."c51", "r11"."c52", "r11"."c53", "r11"."c54", "r11"."c55", "r11"."c56", "r11"."c57", "r11"."c58" FROM (SELECT "r10"."c43", "r10"."c49", "r10"."c50", "r10"."c44", "r10"."c45", "r10"."c46", "r10"."c47", "r10"."c48" FROM (SELECT "r9"."c35", "r9"."c36", "r9"."c37", "r9"."c38", "r9"."c39", "r9"."c40", "r9"."c41", "r9"."c42" FROM (SELECT "r2"."c2", "r2"."c5", "r2"."c8", "r2"."c9", "r2"."c10", "r4"."c23", "r6"."c28", "r8"."c32" FROM (SELECT "r1"."assembly", "r1"."attribute", "r1"."decl_base_types", "r1"."decl_cardinalities", "r1"."declaration", "r1"."declaration_kind", "r1"."identifier", "r1"."instance", "r1"."kind", "r1"."node" FROM "qti"."placed_variable_ref_declaration" AS "r1") AS "r2"("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"), (SELECT "r3"."base_type", "r3"."cardinality", "r3"."document", "r3"."kind", "r3"."language", "r3"."lead_cardinalities", "r3"."nearest", "r3"."node", "r3"."operand_base_types", "r3"."operand_cardinalities", "r3"."operands", "r3"."parent", "r3"."parent_kind", "r3"."start", "r3"."tail_base_types", "r3"."tail_cardinalities", "r3"."version" FROM "qti"."expression" AS "r3") AS "r4"("c11", "c12", "c13", "c14", "c15", "c16", "c17", "c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27"), (SELECT "r5"."base_type", "r5"."base_type_lexical", "r5"."node", "r5"."value_base" FROM "qti"."declaration_base_type" AS "r5") AS "r6"("c28", "c29", "c30", "c31"), (SELECT "r7"."cardinality", "r7"."cardinality_lexical", "r7"."node" FROM "qti"."declaration_cardinality" AS "r7") AS "r8"("c32", "c33", "c34") WHERE "r2"."c10" = "r4"."c18" AND "r2"."c5" = "r6"."c30" AND "r2"."c5" = "r8"."c34") AS "r9"("c35", "c36", "c37", "c38", "c39", "c40", "c41", "c42") WHERE "r9"."c37" = NEW."instance"::"pg_catalog"."uuid" AND "r9"."c39" = NEW."node"::"pg_catalog"."uuid" AND "r9"."c35" = NEW."attribute"::smallint AND NOT (NOT "r9"."c38" IN (49::smallint, 50::smallint, 62::smallint) OR NOT "r9"."c40" IN (174::smallint, 173::smallint, 191::smallint, 190::smallint, 218::smallint, 211::smallint, 210::smallint) OR "r9"."c41" = 0::smallint AND "r9"."c42" = 0::smallint)) AS "r10"("c43", "c44", "c45", "c46", "c47", "c48", "c49", "c50")) AS "r11"("c51", "c52", "c53", "c54", "c55", "c56", "c57", "c58")) THEN
+      RAISE EXCEPTION 'a write breaks a rule over a query'
+        USING ERRCODE = 'check_violation'::"pg_catalog"."text",
+              CONSTRAINT = '__rule_placed_reference_type_check_condition_type_6itrlcjpvb'::"pg_catalog"."text",
+              SCHEMA = TG_TABLE_SCHEMA,
+              TABLE = TG_TABLE_NAME;
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE EXECUTE ON FUNCTION "qti"."__rule_placed_variable_ref_declaration_placed_4zjm6fnswv"() FROM PUBLIC;
 
 CREATE OR REPLACE FUNCTION "qti"."__rule_reading_held_scope_check_e_1_derived_b6h6b2lmgm"() RETURNS "pg_catalog"."trigger"
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = "pg_catalog", "pg_temp"
@@ -2041,6 +2117,16 @@ CREATE CONSTRAINT TRIGGER "__rule_required_ssml_property_in_data_ssml_property_r
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_data_ssml_property_required_ssml_property_in_sve4dfykyi"();
 
+CREATE CONSTRAINT TRIGGER "__rule_placed_reference_type_check_condition_type_6itrlcjpvb"
+  AFTER INSERT OR UPDATE OF "base_type", "node" ON "qti"."declaration_base_type"
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_declaration_base_type_placed_reference_type_f66viyx6qz"();
+
+CREATE CONSTRAINT TRIGGER "__rule_placed_reference_type_check_condition_type_6itrlcjpvb"
+  AFTER INSERT OR UPDATE OF "cardinality", "node" ON "qti"."declaration_cardinality"
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_declaration_cardinality_placed_reference_type_gwpyvkuz2j"();
+
 CREATE CONSTRAINT TRIGGER "__rule_declared_placement_check_e_1_derived_xbr43pqopp"
   AFTER INSERT OR UPDATE OF "document", "identifier" ON "qti"."declaration_identifier"
   DEFERRABLE INITIALLY DEFERRED
@@ -2085,6 +2171,11 @@ CREATE CONSTRAINT TRIGGER "__rule_held_type_check_set_type_zs75obnkq4"
   AFTER INSERT OR UPDATE OF "base_type", "cardinality", "parent" ON "qti"."expression"
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_expression_held_type_check_set_type_mnty4kooqh"();
+
+CREATE CONSTRAINT TRIGGER "__rule_placed_reference_type_check_condition_type_6itrlcjpvb"
+  AFTER INSERT OR UPDATE OF "node", "parent_kind" ON "qti"."expression"
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_expression_placed_reference_type_check_naqzwfz6fd"();
 
 CREATE CONSTRAINT TRIGGER "__rule_held_type_in_variable_ref_table_d5nxy5jest"
   AFTER INSERT OR UPDATE OF "base_type", "cardinality", "parent" ON "qti"."expression"
@@ -2255,6 +2346,11 @@ CREATE CONSTRAINT TRIGGER "__rule_declared_placement_check_e_1_derived_xbr43pqop
   AFTER INSERT OR UPDATE OF "assembly", "attribute", "identifier", "instance", "node", "resolution" ON "qti"."placed_variable_ref"
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_placed_variable_ref_declared_placement_check_5eyfihmist"();
+
+CREATE CONSTRAINT TRIGGER "__rule_placed_reference_type_check_condition_type_6itrlcjpvb"
+  AFTER INSERT OR UPDATE OF "attribute", "declaration", "instance", "kind", "node" ON "qti"."placed_variable_ref_declaration"
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_placed_variable_ref_declaration_placed_4zjm6fnswv"();
 
 CREATE CONSTRAINT TRIGGER "__rule_held_scope_check_e_1_derived_j5n3hjxdgp"
   AFTER INSERT OR UPDATE OF "assembly", "attribute", "form", "found", "node", "scope", "split" ON "qti"."reading"
@@ -2470,6 +2566,17 @@ CREATE CONSTRAINT TRIGGER "__rule_held_type_in_variable_ref_table_d5nxy5jest"
   AFTER DELETE OR UPDATE OF "attribute", "node", "table" ON "qti"."variable_ref_table"
   DEFERRABLE INITIALLY DEFERRED
   FOR EACH ROW EXECUTE FUNCTION "qti"."__rule_variable_ref_table_held_type_in_variable_ref_vlewg2ilu5"();
+
+-- The full violation query of law __placed_reference_type_check_condition_type_a6lyswicsn.
+DO $$
+BEGIN
+  IF EXISTS (SELECT "r11"."c51" AS "t0", "r11"."c52" AS "t1", "r11"."c53" AS "t2", "r11"."c54" AS "t3", "r11"."c55" AS "t4", "r11"."c56" AS "t5", "r11"."c57" AS "t6", "r11"."c58" AS "t7" FROM (SELECT DISTINCT "r10"."c43", "r10"."c49", "r10"."c50", "r10"."c44", "r10"."c45", "r10"."c46", "r10"."c47", "r10"."c48" FROM (SELECT DISTINCT "r9"."c35", "r9"."c36", "r9"."c37", "r9"."c38", "r9"."c39", "r9"."c40", "r9"."c41", "r9"."c42" FROM (SELECT DISTINCT "r2"."c2", "r2"."c5", "r2"."c8", "r2"."c9", "r2"."c10", "r4"."c23", "r6"."c28", "r8"."c32" FROM (SELECT DISTINCT "r1"."assembly", "r1"."attribute", "r1"."decl_base_types", "r1"."decl_cardinalities", "r1"."declaration", "r1"."declaration_kind", "r1"."identifier", "r1"."instance", "r1"."kind", "r1"."node" FROM "qti"."placed_variable_ref_declaration" AS "r1") AS "r2"("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "c10"), (SELECT DISTINCT "r3"."base_type", "r3"."cardinality", "r3"."document", "r3"."kind", "r3"."language", "r3"."lead_cardinalities", "r3"."nearest", "r3"."node", "r3"."operand_base_types", "r3"."operand_cardinalities", "r3"."operands", "r3"."parent", "r3"."parent_kind", "r3"."start", "r3"."tail_base_types", "r3"."tail_cardinalities", "r3"."version" FROM "qti"."expression" AS "r3") AS "r4"("c11", "c12", "c13", "c14", "c15", "c16", "c17", "c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27"), (SELECT DISTINCT "r5"."base_type", "r5"."base_type_lexical", "r5"."node", "r5"."value_base" FROM "qti"."declaration_base_type" AS "r5") AS "r6"("c28", "c29", "c30", "c31"), (SELECT DISTINCT "r7"."cardinality", "r7"."cardinality_lexical", "r7"."node" FROM "qti"."declaration_cardinality" AS "r7") AS "r8"("c32", "c33", "c34") WHERE "r2"."c10" = "r4"."c18" AND "r2"."c5" = "r6"."c30" AND "r2"."c5" = "r8"."c34") AS "r9"("c35", "c36", "c37", "c38", "c39", "c40", "c41", "c42") WHERE NOT (NOT "r9"."c38" IN (49::smallint, 50::smallint, 62::smallint) OR NOT "r9"."c40" IN (174::smallint, 173::smallint, 191::smallint, 190::smallint, 218::smallint, 211::smallint, 210::smallint) OR "r9"."c41" = 0::smallint AND "r9"."c42" = 0::smallint)) AS "r10"("c43", "c44", "c45", "c46", "c47", "c48", "c49", "c50")) AS "r11"("c51", "c52", "c53", "c54", "c55", "c56", "c57", "c58")) THEN
+    RAISE EXCEPTION 'law __placed_reference_type_check_condition_type_a6lyswicsn is violated by existing rows'
+      USING ERRCODE = 'integrity_constraint_violation'::"pg_catalog"."text",
+            CONSTRAINT = '__placed_reference_type_check_condition_type_a6lyswicsn'::"pg_catalog"."text";
+  END IF;
+END
+$$;
 
 -- The full violation query of law __typed_href_check_document_entry_slt2mgp4jr.
 DO $$

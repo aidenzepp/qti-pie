@@ -10,7 +10,12 @@
  *
  * - Each known entry's package (`#pantry/test/gen/genetic/known.ts`) must still show its class, so an
  *   entry its owner's fix closed fails as stale until the fix's commit deletes it, and each fixed
- *   entry's must never show its class again;
+ *   entry's must never show its class again, under its plain signature or under any stated limit;
+ *   an entry that names a noise is judged beside its package's noised twin, as the search judges
+ *   it, since a noise's class shows only there;
+ * - No signature is a class of both tables: a known class whose plain signature is a fixed entry's is
+ *   keyed by the stated limit it falls under (`#pantry/test/gen/genetic/judge.ts` `limitOf`), so
+ *   the fixed entry keeps guarding the cause it closed;
  * - Each known and fixed entry's signature is a class some package can show: a law the host judges
  *   (grizzle's `sameLaw` holds it one of them, its selections included), or a uuid field it holds
  *   to the mint, since a law no statement states, or a field a later commit removed, can never
@@ -47,10 +52,13 @@ import { residualsOf } from "#pantry/test/gen/genetic/engine.ts";
 import type { Budget } from "#pantry/test/gen/genetic/engine.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
 import { judgedLaws, uuidFields } from "#pantry/test/gen/genetic/host-laws.ts";
+import { noised } from "#pantry/test/gen/genetic/noise.ts";
 import {
   familyOf,
   judgeOne,
+  movedBy,
   recordsClassOf,
+  recordsPlainClassOf,
   sameSignature,
   shownDisagreement,
   shownSignature,
@@ -312,7 +320,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       "still shows every known disagreement, and no fixed one",
       (ctx) =>
         // Oracle: a second implementation, the law oracle, against readProgram's refusal and the
-        // laws its rows hold on the host. Bound: each known and fixed entry's package, judged once.
+        // laws its rows hold on the host. Bound: each known and fixed entry's package, judged once,
+        // and beside its noised twin where the entry names a noise.
         searched(
           ctx,
           Effect.gen(function* knownRuns() {
@@ -343,12 +352,31 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   assert.isDefined(held, `no known entry ${String(at)}`);
                   if (held !== undefined) {
                     const { entry, shows } = held;
-                    const judged = yield* judgeOne(yield* genomeOf(knownEntries(entry)), bench, at);
+                    const genome = yield* genomeOf(knownEntries(entry));
+                    const judged = yield* judgeOne(genome, bench, at);
+                    const moved =
+                      entry.noised === undefined
+                        ? []
+                        : movedBy(
+                            judged,
+                            yield* judgeOne(
+                              noised(genome, entry.noised.noise, entry.noised.salt),
+                              bench,
+                              at,
+                            ),
+                            entry.noised.noise,
+                            entry.noised.salt,
+                          );
+                    const disagreements = [...judged.disagreements, ...moved];
                     const signature = shownSignature(entry.signature);
-                    const shown = judged.disagreements.map(shownDisagreement).join("; ") || "none";
+                    const shown = disagreements.map(shownDisagreement).join("; ") || "none";
+                    // A known class shows as it is keyed; a fixed one must not show again, under its
+                    // plain signature or under any stated limit.
                     assert.strictEqual(
-                      judged.disagreements.some((disagreement) =>
-                        recordsClassOf([entry.signature], disagreement),
+                      disagreements.some((disagreement) =>
+                        shows
+                          ? recordsClassOf([entry.signature], disagreement)
+                          : recordsPlainClassOf([entry.signature], disagreement),
                       ),
                       shows,
                       shows
@@ -409,6 +437,22 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           }).pipe(Effect.scoped),
         ),
       testTimeoutMs,
+    );
+
+    it.effect("keys no signature in both the known and the fixed table", () =>
+      // Oracle: the two tables' classes, by sameSignature. Bound: every known and fixed entry's
+      // signature.
+      Effect.sync(() => {
+        assert.deepStrictEqual(
+          known
+            .filter(({ signature }) =>
+              fixed.some((entry) => sameSignature(entry.signature, signature)),
+            )
+            .map(({ signature }) => shownSignature(signature)),
+          [],
+          "these signatures key a known entry and a fixed one, so the known entry hides the fixed cause if it shows again; key the known class by the stated limit it falls under (#pantry/test/gen/genetic/judge.ts limitOf), or move it",
+        );
+      }),
     );
 
     it.effect("keys every known and fixed entry by a class some package can show", () =>

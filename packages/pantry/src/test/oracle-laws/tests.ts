@@ -405,14 +405,17 @@ const itemRefLawsOf = (
       .flatMap((mapping): readonly Breach[] => {
         const written = typedValueOf(rows, mapping.id, "source-identifier");
         const source = Option.getOrElse(written, () => "");
-        const mapped = Option.getOrElse(
-          typedValueOf(rows, mapping.id, "target-identifier"),
-          () => "",
-        );
+        const targeted = typedValueOf(rows, mapping.id, "target-identifier");
+        const mapped = Option.getOrElse(targeted, () => "");
         // An unwritten or unread source-identifier names nothing: AL3 refuses it alone, as the
-        // importer writes no row for an absent attribute (reading 155).
+        // importer writes no row for an absent attribute (reading 155). Neither half of a pair with
+        // one half unwritten or unread names anything, as the importer writes a mapping's row only
+        // where both are written.
         const sourced =
-          linked || Option.isNone(written) || kindsOf(source).includes("qti-outcome-declaration")
+          linked ||
+          Option.isNone(written) ||
+          Option.isNone(targeted) ||
+          kindsOf(source).includes("qti-outcome-declaration")
             ? []
             : [breachAt(rows, mapping, "Variable mapping source", { itemRef, source })];
         const shadowed =
@@ -1142,8 +1145,9 @@ const contentBreachesOf = (
  * {@link readDocumentsOf}). A `section-identifier` names one section or section ref of the assembly,
  * placed once (A61); a variable reference processing makes has exactly one reading that resolves,
  * through a name the test places once (M3, readings 48 and 88), and an unprefixed one that resolves
- * nowhere names nothing (P8); and a content reference, one `ContentReference` names, resolves in
- * the test's declarations or its built-ins ({@link contentBreachesOf}).
+ * nowhere names nothing (P8); a prefixed one in place of a literal is typed by rule P24; and a
+ * content reference, one `ContentReference` names, resolves in the test's declarations or its
+ * built-ins ({@link contentBreachesOf}).
  *
  * @param input - The package.
  * @param assembled - The test's assembly.

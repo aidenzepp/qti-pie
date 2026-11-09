@@ -5207,6 +5207,10 @@ COMMENT ON COLUMN "qti"."placed_variable_ref"."__node_uxuuifp4t7" IS 'node where
 
 COMMENT ON COLUMN "qti"."placed_variable_ref_declaration"."__tag_resolution_declared_2v4qpdk4sg" IS 'tag PlacedVariableRef.resolution = declared';
 
+COMMENT ON COLUMN "qti"."placed_variable_ref_declaration"."__declaration_tjmicd327x" IS 'declaration where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-map-response"}}';
+
+COMMENT ON COLUMN "qti"."placed_variable_ref_declaration"."__declaration_y3rrijdizl" IS 'declaration where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-map-response-point"}}';
+
 COMMENT ON COLUMN "qti"."placed_xml_lang"."__copy_langs_peuiwgat4k" IS 'the owner''s count of the family Instance.langs';
 
 COMMENT ON COLUMN "qti"."placed_xml_lang"."__index_langs_kmrmqf7mk4" IS 'the index of the family Instance.langs';
@@ -7875,6 +7879,10 @@ COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_fk_instance_node_xvpaav
 
 COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_fk_instance_node_uad7elyejo" ON "qti"."placed_variable_ref_declaration" IS 'foreign key PlacedVariableRefDeclaration(instance, node, attribute, tag PlacedVariableRef.resolution = declared) to PlacedVariableRef(instance, node, attribute, resolution)';
 
+COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_fk_declaration_w3orw7lk64" ON "qti"."placed_variable_ref_declaration" IS 'foreign key PlacedVariableRefDeclaration(declaration where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-map-response"}}) to Mapping(declaration)';
+
+COMMENT ON CONSTRAINT "__placed_variable_ref_declaration_fk_declaration_dv64vpnjpw" ON "qti"."placed_variable_ref_declaration" IS 'foreign key PlacedVariableRefDeclaration(declaration where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-map-response-point"}}) to AreaMapping(declaration)';
+
 COMMENT ON CONSTRAINT "__placed_xml_lang_fk_instance_copy_langs_assembly_z6bjy5bus4" ON "qti"."placed_xml_lang" IS 'foreign key PlacedXmlLang(instance, the owner''s count of the family Instance.langs, assembly, document) to Instance(id, langs, assembly, document)';
 
 COMMENT ON CONSTRAINT "__placed_xml_lang_fk_instance_predecessor_langs_4t6v577qxt" ON "qti"."placed_xml_lang" IS 'foreign key PlacedXmlLang(instance, the predecessor of the index of the family Instance.langs) to PlacedXmlLang(instance, the index of the family Instance.langs)';
@@ -9059,7 +9067,13 @@ COMMENT ON INDEX "qti"."__placed_variable_ref_ix_assembly_root_kind_wtjndqcygw" 
 
 COMMENT ON INDEX "qti"."__placed_variable_ref_ix_node_attribute_document_gz2i4fauh7" IS 'btree index PlacedVariableRef(node, attribute, document, identifier, kind)';
 
+COMMENT ON INDEX "qti"."__placed_variable_ref_declaration_ix_declaration_r2vnccylrq" IS 'btree index PlacedVariableRefDeclaration(__declaration_tjmicd327x)';
+
+COMMENT ON INDEX "qti"."__placed_variable_ref_declaration_ix_declaration_y_3_zpns6slygz" IS 'btree index PlacedVariableRefDeclaration(__declaration_y3rrijdizl)';
+
 COMMENT ON INDEX "qti"."__placed_variable_ref_declaration_ix_declaration_ven6cno7wf" IS 'btree index PlacedVariableRefDeclaration(declaration, assembly, identifier, declarationKind, declBaseTypes, declCardinalities)';
+
+COMMENT ON INDEX "qti"."__placed_variable_ref_declaration_ix_node_vh52t27gbk" IS 'btree index PlacedVariableRefDeclaration(node, declaration)';
 
 COMMENT ON INDEX "qti"."__placed_xml_lang_ix_node_document_lang_scope_3xyzhgioqj" IS 'btree index PlacedXmlLang(node, document, lang, scope)';
 
@@ -9357,6 +9371,10 @@ COMMENT ON FUNCTION "qti"."__rule_data_ssml_member_required_ssml_property_in_eer
 
 COMMENT ON FUNCTION "qti"."__rule_data_ssml_property_required_ssml_property_in_sve4dfykyi"() IS 'function of rule RequiredSsmlProperty(node, member, name) in DataSsmlProperty(node, member, name) on DataSsmlProperty';
 
+COMMENT ON FUNCTION "qti"."__rule_declaration_base_type_placed_reference_type_f66viyx6qz"() IS 'function of rule check Condition_type of PlacedReferenceType on DeclarationBaseType';
+
+COMMENT ON FUNCTION "qti"."__rule_declaration_cardinality_placed_reference_type_gwpyvkuz2j"() IS 'function of rule check Condition_type of PlacedReferenceType on DeclarationCardinality';
+
 COMMENT ON FUNCTION "qti"."__rule_declaration_identifier_declared_placement_z6fsvuaebl"() IS 'function of rule check E1_derived of DeclaredPlacement on DeclarationIdentifier';
 
 COMMENT ON FUNCTION "qti"."__rule_declaration_identifier_declared_reference_kfakcpzj7v"() IS 'function of rule check E1_derived of DeclaredReference on DeclarationIdentifier';
@@ -9374,6 +9392,8 @@ COMMENT ON FUNCTION "qti"."__rule_document_lang_described_lang_in_resource_lom_i
 COMMENT ON FUNCTION "qti"."__rule_expression_held_type_check_lookup_type_y3otjbln7g"() IS 'function of rule check Lookup_type of HeldType on Expression';
 
 COMMENT ON FUNCTION "qti"."__rule_expression_held_type_check_set_type_mnty4kooqh"() IS 'function of rule check Set_type of HeldType on Expression';
+
+COMMENT ON FUNCTION "qti"."__rule_expression_placed_reference_type_check_naqzwfz6fd"() IS 'function of rule check Condition_type of PlacedReferenceType on Expression';
 
 COMMENT ON FUNCTION "qti"."__rule_expression_held_type_in_variable_ref_table_7gfwn46kjs"() IS 'function of rule HeldType(node) where {"arg":{"arg":{"field":"heldBase","kind":"field"},"kind":"in","values":["any","integer","unknown"]},"kind":"not"} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-lookup-outcome-value"}} and {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in VariableRefTable(node) where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} and {"kind":"compare","left":{"field":"table","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-interpolation-table"}} on Expression';
 
@@ -9442,6 +9462,8 @@ COMMENT ON FUNCTION "qti"."__rule_object_lang_listed_title_in_matched_title_gay5
 COMMENT ON FUNCTION "qti"."__rule_object_title_listed_title_in_matched_title_dkd3ndl5dh"() IS 'function of rule ListedTitle(record) in MatchedTitle(record) on ObjectTitle';
 
 COMMENT ON FUNCTION "qti"."__rule_placed_variable_ref_declared_placement_check_5eyfihmist"() IS 'function of rule check E1_derived of DeclaredPlacement on PlacedVariableRef';
+
+COMMENT ON FUNCTION "qti"."__rule_placed_variable_ref_declaration_placed_4zjm6fnswv"() IS 'function of rule check Condition_type of PlacedReferenceType on PlacedVariableRefDeclaration';
 
 COMMENT ON FUNCTION "qti"."__rule_reading_held_scope_check_e_1_derived_b6h6b2lmgm"() IS 'function of rule check E1_derived of HeldScope on Reading';
 
@@ -9541,6 +9563,10 @@ COMMENT ON TRIGGER "__rule_required_ssml_property_in_data_ssml_property_rbvm6556
 
 COMMENT ON TRIGGER "__rule_required_ssml_property_in_data_ssml_property_rbvm655642" ON "qti"."data_ssml_property" IS 'trigger of rule RequiredSsmlProperty(node, member, name) in DataSsmlProperty(node, member, name)';
 
+COMMENT ON TRIGGER "__rule_placed_reference_type_check_condition_type_6itrlcjpvb" ON "qti"."declaration_base_type" IS 'trigger of rule check Condition_type of PlacedReferenceType';
+
+COMMENT ON TRIGGER "__rule_placed_reference_type_check_condition_type_6itrlcjpvb" ON "qti"."declaration_cardinality" IS 'trigger of rule check Condition_type of PlacedReferenceType';
+
 COMMENT ON TRIGGER "__rule_declared_placement_check_e_1_derived_xbr43pqopp" ON "qti"."declaration_identifier" IS 'trigger of rule check E1_derived of DeclaredPlacement';
 
 COMMENT ON TRIGGER "__rule_declared_reference_check_e_1_derived_lajaorm2xf" ON "qti"."declaration_identifier" IS 'trigger of rule check E1_derived of DeclaredReference';
@@ -9558,6 +9584,8 @@ COMMENT ON TRIGGER "__rule_described_lang_in_resource_lom_language_set_aditcr352
 COMMENT ON TRIGGER "__rule_held_type_check_lookup_type_ta6p36uoy4" ON "qti"."expression" IS 'trigger of rule check Lookup_type of HeldType';
 
 COMMENT ON TRIGGER "__rule_held_type_check_set_type_zs75obnkq4" ON "qti"."expression" IS 'trigger of rule check Set_type of HeldType';
+
+COMMENT ON TRIGGER "__rule_placed_reference_type_check_condition_type_6itrlcjpvb" ON "qti"."expression" IS 'trigger of rule check Condition_type of PlacedReferenceType';
 
 COMMENT ON TRIGGER "__rule_held_type_in_variable_ref_table_d5nxy5jest" ON "qti"."expression" IS 'trigger of rule HeldType(node) where {"arg":{"arg":{"field":"heldBase","kind":"field"},"kind":"in","values":["any","integer","unknown"]},"kind":"not"} and {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-lookup-outcome-value"}} and {"kind":"compare","left":{"field":"resolution","kind":"field"},"op":"eq","right":{"kind":"literal","value":"declared"}} in VariableRefTable(node) where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"identifier"}} and {"kind":"compare","left":{"field":"table","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-interpolation-table"}}';
 
@@ -9626,6 +9654,8 @@ COMMENT ON TRIGGER "__rule_listed_title_in_matched_title_dxnciepe7l" ON "qti"."o
 COMMENT ON TRIGGER "__rule_listed_title_in_matched_title_dxnciepe7l" ON "qti"."object_title" IS 'trigger of rule ListedTitle(record) in MatchedTitle(record)';
 
 COMMENT ON TRIGGER "__rule_declared_placement_check_e_1_derived_xbr43pqopp" ON "qti"."placed_variable_ref" IS 'trigger of rule check E1_derived of DeclaredPlacement';
+
+COMMENT ON TRIGGER "__rule_placed_reference_type_check_condition_type_6itrlcjpvb" ON "qti"."placed_variable_ref_declaration" IS 'trigger of rule check Condition_type of PlacedReferenceType';
 
 COMMENT ON TRIGGER "__rule_held_scope_check_e_1_derived_j5n3hjxdgp" ON "qti"."reading" IS 'trigger of rule check E1_derived of HeldScope';
 

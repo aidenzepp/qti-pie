@@ -36,8 +36,14 @@ import { documentTypes } from "#pantry/grammar/install.ts";
 import type { QtiBase } from "#pantry/qti/base.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { DataSsmlMember, DataSsmlProperty } from "#pantry/qti/data-ssml.ts";
-import { DeclarationIdentifier } from "#pantry/qti/declarations.ts";
 import {
+  DeclarationBaseType,
+  DeclarationCardinality,
+  DeclarationIdentifier,
+} from "#pantry/qti/declarations.ts";
+import {
+  conditionKindHandles,
+  declaredKinds,
   heldKinds,
   lookupKindHandle,
   ReadingForm,
@@ -47,6 +53,7 @@ import {
   Expression,
   MappingSourceDeclaration,
   PlacedVariableRef,
+  PlacedVariableRefDeclaration,
   Reading,
   ReadingDeclaration,
   silentBases,
@@ -528,6 +535,42 @@ export const queriesOf = (base: QtiBase) => {
   );
 
   /**
+   * A declared placed reference's type in its item (spec reading 117), keyed as the placed
+   * reference: each `PlacedVariableRefDeclaration`, its `kind` and `declaration`, joined with its
+   * element's `Expression`, for `parentKind`, its parent's kind, and with the declaration's
+   * `DeclarationBaseType` and `DeclarationCardinality`, for `baseType` and `cardinality`, as
+   * `PlacedBindingBaseType`'s are a placed binding's (`#pantry/qti/interactions.ts`). A reference
+   * in an included rules fragment is typed in the fragment's own document, where its name is
+   * undeclared, so its `VariableRef`'s type is `unknown`; a row here types it in the item, and
+   * "Condition type" reads it. The item's own document is an instance too, so an inline reference
+   * has a row as well, and an inline condition is held twice, here and over its `Expression`, under
+   * the one law.
+   *
+   * A declaration's type is never silent: a declaration whose cardinality spells nothing, or a
+   * record, which writes no base type, has no row of either relation (spec readings 158 and 159),
+   * so its references have none here, and no rule reads a type the declaration does not have.
+   */
+  const PlacedReferenceType = derived(
+    "PlacedReferenceType",
+    query(base).rule((r) => {
+      const { attribute, declaration, instance, kind, node } = v(
+        PlacedVariableRefDeclaration,
+        "placed",
+      );
+      const { parentKind } = v(Expression, "element");
+      const { baseType } = v(DeclarationBaseType, "base");
+      const { cardinality } = v(DeclarationCardinality, "cardinality");
+
+      return r
+        .match(PlacedVariableRefDeclaration, { attribute, declaration, instance, kind, node })
+        .match(Expression, { node, parentKind })
+        .match(DeclarationBaseType, { baseType, node: declaration })
+        .match(DeclarationCardinality, { cardinality, node: declaration })
+        .find({ attribute, baseType, cardinality, declaration, instance, kind, node, parentKind });
+    }),
+  );
+
+  /**
    * A variable mapping whose item declares its target (spec reading 97): each
    * `MappingSourceDeclaration` joined with its item's `DeclarationIdentifier` of its target, which
    * `Variable_mapping_target` holds to the mapping's own source: a mapping may not rename a
@@ -744,11 +787,25 @@ export const queriesOf = (base: QtiBase) => {
 
   /**
    * The rules over the expression overlays' queries, grouped by the law each states, each `check`
-   * named by its oracle law: `E1_derived`, each reference's resolution and each reading's scope and
-   * source proved from what they are derived from; `Lookup_type` (P22) and `Set_type` (P20) over
-   * {@link HeldType}; and `Variable_mapping_target` (reading 97) over {@link DeclaredTarget}.
+   * named by its oracle law: `Condition_type` (P21) over {@link PlacedReferenceType}; `E1_derived`,
+   * each reference's resolution and each reading's scope and source proved from what they are
+   * derived from; `Lookup_type` (P22) and `Set_type` (P20) over {@link HeldType}; and
+   * `Variable_mapping_target` (reading 97) over {@link DeclaredTarget}.
    */
   const expressionQueryLawsByName = {
+    "Condition type": [
+      // The placed twin, per placement (spec reading 117): a variable, correct or default reference
+      // that is a whole condition is typed as its item's declaration, never silent, since the row
+      // exists only where the declaration has a base type and a cardinality. A composite condition
+      // over a fragment's references stays reading 117's stated limit.
+      check("Condition_type", PlacedReferenceType, (r) =>
+        r.or(
+          r.not(r.in(r.kind, declaredKinds)),
+          r.not(r.in(r.parentKind, conditionKindHandles)),
+          r.and(r.eq(r.baseType, "boolean"), r.eq(r.cardinality, "single")),
+        ),
+      ),
+    ],
     "E1 derived": [
       // A reference, or a placed one, to a name its document or its assembly's item declares
       // resolves to that declaration.
@@ -1137,6 +1194,7 @@ export const queriesOf = (base: QtiBase) => {
     MappedReading,
     MatchedIdentifier,
     MatchedTitle,
+    PlacedReferenceType,
     RequiredSsmlProperty,
     TypedHref,
     UnreadTypeHref,

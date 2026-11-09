@@ -1077,6 +1077,9 @@ const computers: ReadonlyMap<string, (args: readonly Datum[]) => Datum | undefin
   ["concat", (args) => ofTexts(args, 2, ([left = "", right = ""]) => left + right)],
   ["translate", (args) => ofTexts(args, 3, translated)],
   [
+    // As the database's `Compute.collapse` is `btrim(regexp_replace(x, '[ \t\n\r]+', ' ', 'g'))`:
+    // the one space a run leaves at either end is trimmed and nothing else, never as
+    // `String.prototype.trim` trims, which also strips U+00A0 and the other Unicode whitespace.
     "collapse",
     (args) =>
       ofTexts(args, 1, ([text = ""]) =>

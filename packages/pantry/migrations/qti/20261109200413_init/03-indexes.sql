@@ -558,7 +558,13 @@ CREATE INDEX "__placed_variable_ref_ix_assembly_root_kind_wtjndqcygw" ON "qti"."
 
 CREATE INDEX "__placed_variable_ref_ix_node_attribute_document_gz2i4fauh7" ON "qti"."placed_variable_ref" USING btree ("node", "attribute", "document", "identifier", "kind");
 
+CREATE INDEX "__placed_variable_ref_declaration_ix_declaration_r2vnccylrq" ON "qti"."placed_variable_ref_declaration" USING btree ("__declaration_tjmicd327x");
+
+CREATE INDEX "__placed_variable_ref_declaration_ix_declaration_y_3_zpns6slygz" ON "qti"."placed_variable_ref_declaration" USING btree ("__declaration_y3rrijdizl");
+
 CREATE INDEX "__placed_variable_ref_declaration_ix_declaration_ven6cno7wf" ON "qti"."placed_variable_ref_declaration" USING btree ("declaration", "assembly", "identifier", "declaration_kind", "decl_base_types", "decl_cardinalities");
+
+CREATE INDEX "__placed_variable_ref_declaration_ix_node_vh52t27gbk" ON "qti"."placed_variable_ref_declaration" USING btree ("node", "declaration");
 
 CREATE INDEX "__placed_xml_lang_ix_node_document_lang_scope_3xyzhgioqj" ON "qti"."placed_xml_lang" USING btree ("node", "document", "lang", "scope");
 

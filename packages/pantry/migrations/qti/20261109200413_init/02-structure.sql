@@ -5321,6 +5321,10 @@ ALTER TABLE "qti"."placed_variable_ref" ADD COLUMN "__node_uxuuifp4t7" "pg_catal
 
 ALTER TABLE "qti"."placed_variable_ref_declaration" ADD COLUMN "__tag_resolution_declared_2v4qpdk4sg" smallint GENERATED ALWAYS AS (0::smallint) STORED NOT NULL;
 
+ALTER TABLE "qti"."placed_variable_ref_declaration" ADD COLUMN "__declaration_tjmicd327x" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "attribute" = 86::smallint AND "kind" = 69::smallint THEN "declaration" END) STORED;
+
+ALTER TABLE "qti"."placed_variable_ref_declaration" ADD COLUMN "__declaration_y3rrijdizl" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "attribute" = 86::smallint AND "kind" = 68::smallint THEN "declaration" END) STORED;
+
 ALTER TABLE "qti"."placed_xml_lang" ADD COLUMN "__copy_langs_peuiwgat4k" bigint NOT NULL;
 
 ALTER TABLE "qti"."placed_xml_lang" ADD COLUMN "__index_langs_kmrmqf7mk4" bigint NOT NULL;
@@ -8992,6 +8996,10 @@ ALTER TABLE "qti"."placed_variable_ref_declaration" ADD CONSTRAINT "__placed_var
 ALTER TABLE "qti"."placed_variable_ref_declaration" ADD CONSTRAINT "__placed_variable_ref_declaration_fk_instance_node_xvpaavu2cx" FOREIGN KEY ("instance", "node", "attribute", "assembly", "identifier", "kind") REFERENCES "qti"."placed_variable_ref" ("instance", "node", "attribute", "assembly", "identifier", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."placed_variable_ref_declaration" ADD CONSTRAINT "__placed_variable_ref_declaration_fk_instance_node_uad7elyejo" FOREIGN KEY ("instance", "node", "attribute", "__tag_resolution_declared_2v4qpdk4sg") REFERENCES "qti"."placed_variable_ref" ("instance", "node", "attribute", "resolution") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."placed_variable_ref_declaration" ADD CONSTRAINT "__placed_variable_ref_declaration_fk_declaration_w3orw7lk64" FOREIGN KEY ("__declaration_tjmicd327x") REFERENCES "qti"."mapping" ("declaration") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."placed_variable_ref_declaration" ADD CONSTRAINT "__placed_variable_ref_declaration_fk_declaration_dv64vpnjpw" FOREIGN KEY ("__declaration_y3rrijdizl") REFERENCES "qti"."area_mapping" ("declaration") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."placed_xml_lang" ADD CONSTRAINT "__placed_xml_lang_fk_instance_copy_langs_assembly_z6bjy5bus4" FOREIGN KEY ("instance", "__copy_langs_peuiwgat4k", "assembly", "document") REFERENCES "qti"."instance" ("id", "langs", "assembly", "document") MATCH SIMPLE ON UPDATE CASCADE;
 

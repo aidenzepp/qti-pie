@@ -523,6 +523,60 @@ export const isLaxXsiType = (difference: Difference, laxNames: ReadonlySet<strin
   });
 
 /**
+ * Decide whether one `xmllint` message is on an element of a set: within a nested root (reading 6)
+ * or within an element whose `xsi:type` names a complex type (reading 50). `xmllint` names an
+ * element in no namespace by its local name alone, which the rows write `{}` before.
+ *
+ * @param message - The message, as {@link compareJudgments} writes it.
+ * @param names - The expanded names of the elements.
+ * @returns Whether it is.
+ */
+const isMessageOn = (message: string, names: ReadonlySet<string>): boolean => {
+  const name = /^line \d+ (?<name>\S+): /u.exec(message)?.groups?.["name"];
+
+  return name !== undefined && names.has(name.startsWith("{") ? name : `{}${name}`);
+};
+
+/**
+ * The class of disagreement spec reading 50 states as its known limit: an element laxly assessed
+ * under a wildcard whose `xsi:type` names a complex type of its schema set is assessed strictly
+ * against that type by XML Schema (Part 1, 3.3.4, Schema-Validity Assessment (Element), clause
+ * 1.2), as `xmllint` does, while the law oracle accepts it without checking it against the type: a
+ * child the type does not expect, or one it misses, is `xmllint`'s refusal alone.
+ *
+ * Only such an element and what it holds is this class, decided from the law oracle's own rows: a
+ * foreign element in a foreign element's content, which the ur-type's lax wildcard holds, whose
+ * governing type is complex, and every element within it ({@link ForeignNames}' `laxComplex`). A
+ * typed element directly beneath a declared kind's wildcard is not matched, since that wildcard
+ * may be strict (the ASI XSD's `grpStrict.any`), which the reading does not state.
+ */
+export const laxComplexType: Recorded = {
+  direction: "xsd-only",
+  reason: {
+    _tag: "reading",
+    reading: 50,
+    says: "Under a `lax` wildcard, foreign content whose `xsi:type` names a resolved complex type is accepted without being checked against that type.",
+    why: "an element laxly held under a wildcard whose xsi:type names a complex type is accepted without a check against that type, a known limit; xmllint assesses it strictly against the type",
+  },
+};
+
+/**
+ * Decide whether a difference is reading 50's class ({@link laxComplexType}): every message
+ * `xmllint` gave for it is on an element at or within a laxly held element whose `xsi:type`
+ * names a complex type.
+ *
+ * @param difference - The difference.
+ * @param laxComplex - The expanded names of those elements.
+ * @returns Whether it is.
+ */
+export const isLaxComplexType = (
+  difference: Difference,
+  laxComplex: ReadonlySet<string>,
+): boolean =>
+  difference.direction === laxComplexType.direction &&
+  difference.detail.split(" | ").every((message) => isMessageOn(message, laxComplex));
+
+/**
  * The class of disagreement spec reading 6 departs from the XSD by: a QTI root, processing root or
  * manifest nested inside `lax` wildcard content is valid and kept as foreign content, while XML
  * Schema finds its global declaration there and assesses it strictly (Part 1, 3.10.4), so
@@ -542,21 +596,6 @@ export const nestedRoot: Recorded = {
 };
 
 /**
- * Decide whether one `xmllint` message is reading 6's: it is on an element within a nested root.
- * `xmllint` names an element in no namespace by its local name alone, which the rows write `{}`
- * before.
- *
- * @param message - The message, as {@link compareJudgments} writes it.
- * @param nested - The expanded names of the document's elements within a nested root.
- * @returns Whether it is.
- */
-const isNestedMessage = (message: string, nested: ReadonlySet<string>): boolean => {
-  const name = /^line \d+ (?<name>\S+): /u.exec(message)?.groups?.["name"];
-
-  return name !== undefined && nested.has(name.startsWith("{") ? name : `{}${name}`);
-};
-
-/**
  * Decide whether a difference is reading 6's class ({@link nestedRoot}): every message `xmllint`
  * gave for it is on an element within a nested root.
  *
@@ -566,7 +605,7 @@ const isNestedMessage = (message: string, nested: ReadonlySet<string>): boolean 
  */
 export const isNestedRoot = (difference: Difference, nested: ReadonlySet<string>): boolean =>
   difference.direction === nestedRoot.direction &&
-  difference.detail.split(" | ").every((message) => isNestedMessage(message, nested));
+  difference.detail.split(" | ").every((message) => isMessageOn(message, nested));
 
 /**
  * The class of disagreement spec reading 81 states as its known limit: the grammar is keyed by
@@ -1078,6 +1117,56 @@ const mathmlSegment = (() => {
 const coveredMessages = new RegExp(String.raw`^${mathmlSegment}(?: \| ${mathmlSegment})*$`, "u");
 
 /**
+ * One message of reading 2's MathML classes ({@link mathmlSegment}), alone.
+ */
+const mathmlMessage = new RegExp(String.raw`^${mathmlSegment}$`, "u");
+
+/**
+ * Two reading classes in one difference: `xmllint` gives one content difference for a document, so
+ * a MathML element that holds only whitespace (reading 2's records above) and a nested root that
+ * holds text (reading 6, {@link nestedRoot}) in one document show as one difference, which neither
+ * class matches alone, since each needs every message to be its own. The nested root is reading 6's
+ * and the MathML element reading 2's, wherever the document holds them, an include's content
+ * among them.
+ */
+export const nestedRootBesideMath: Recorded = {
+  class: "content",
+  direction: "xsd-only",
+  reason: {
+    _tag: "reading",
+    reading: 6,
+    says: "It is kept as foreign content like any other element",
+    why: "two recorded classes in one content difference: a QTI root nested in lax wildcard content is kept as foreign content, and a MathML element whose RelaxNG content is empty admits whitespace-only text (reading 2); xmllint assesses the root against its global declaration and the MathML element against QTI's bundled XSD",
+  },
+};
+
+/**
+ * Decide whether a difference is {@link nestedRootBesideMath}'s: every message `xmllint` gave for
+ * it is reading 2's on MathML content or on an element within a nested root, and it holds one of
+ * each, since a difference of one class alone is that class's record.
+ *
+ * @param difference - The difference.
+ * @param nested - The expanded names of the document's elements within a nested root.
+ * @returns Whether it is.
+ */
+export const isNestedRootBesideMath = (
+  difference: Difference,
+  nested: ReadonlySet<string>,
+): boolean => {
+  const messages = difference.detail.split(" | ");
+  const math = messages.filter((message) => mathmlMessage.test(message));
+  const other = messages.filter((message) => !mathmlMessage.test(message));
+
+  return (
+    difference.direction === nestedRootBesideMath.direction &&
+    difference.class === nestedRootBesideMath.class &&
+    math.length > 0 &&
+    other.length > 0 &&
+    other.every((message) => isMessageOn(message, nested))
+  );
+};
+
+/**
  * One message of libxml2's refusing a match table entry's `target-value` as no base-type name: the
  * value as written between its quotes, line ends included, which runs to the message's own end and
  * no further, so a run of messages never reads as one value.
@@ -1129,6 +1218,32 @@ export const generatedRecorded: readonly Recorded[] = [
     rule: "attribute-lexical",
   },
   {
+    class: "attribute-value",
+    detail:
+      /^value domain at \S+: (?:mime-type|type): "(?:[^"\\]|\\.)*" is outside MimeTypeDType \(reading 135\)/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 135,
+      says: "A MIME type is RFC 2045's type and subtype: two tokens joined by a slash.",
+      why: "a MIME type is two RFC 2045 tokens joined by a slash, and a token holds no space; the XSD's MimeTypeDType pattern admits a space",
+    },
+    rule: "attribute-lexical",
+  },
+  {
+    class: "attribute-value",
+    detail:
+      /^value domain at \S*\/ssml:speak\[\d+\]: version: "(?:[^"\\]|\\.)*" is not among the 1 values of ssml:speak@version in \S+: 1\.1$/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 39,
+      says: "An SSML `speak/@version` is `1.1`.",
+      why: "SSML 1.1 says a speak's version must have the value 1.1, wherever the speak stands; QTI's core XSD types it xs:NMTOKEN, which admits any token",
+    },
+    rule: "attribute-lexical",
+  },
+  {
     class: "content",
     detail:
       /^N6 ancestry at \S*\/qti-template-block(?:\.rubric)?\[\d+\]\/\S*: \S+ sits in \{[^}]*\btmpl\b[^}]*\}: Banned holds \{[^}]*\btmpl\b[^}]*\}/u,
@@ -1151,6 +1266,19 @@ export const generatedRecorded: readonly Recorded[] = [
       source:
         "https://www.imsglobal.org/spec/qti/v3p0/info#Data_ModalFeedback (§5.93: 'The content of the modalFeedback must not contain any interactions')",
       why: "a modal feedback holds no interaction at any depth; the XSD admits one its content body's HTML holds",
+    },
+    rule: "ancestry-ban",
+  },
+  {
+    class: "content",
+    detail:
+      /^N6 ancestry at \S*\/qti-hottext\[\d+\]\/\S*: \S+ sits in \{[^}]*\bhtx\b[^}]*\}: Banned holds \{[^}]*\bhtx\b[^}]*\}/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_HotText (§5.65: 'It must not contain any nested interactions or other hottext areas')",
+      why: "a hottext holds no interaction at any depth; the XSD loses the ban beneath a foreign element's lax wildcard",
     },
     rule: "ancestry-ban",
   },
@@ -1193,6 +1321,28 @@ export const generatedRecorded: readonly Recorded[] = [
       why: "the information model says a track's src is a valid non-empty URL potentially surrounded by spaces (5.163.2); the XSD types it URLDType, an xs:normalizedString that may be empty or blank",
     },
     rule: "attribute-lexical",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 124,
+      says: "A `source` in a `picture` carries `srcset`, and one in an `audio` or a `video` carries `src`.",
+      why: "a source in an audio or a video carries src, as the HTML Standard decides the information model's 5.135.1; the XSD makes src optional",
+    },
+    rule: "source-src",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "reading",
+      reading: 124,
+      says: "A `source` in a `picture` carries `srcset`, and one in an `audio` or a `video` carries `src`.",
+      why: "a source in a picture carries srcset, which the information model requires there (5.135.3); the XSD makes srcset optional",
+    },
+    rule: "source-srcset",
   },
   {
     class: "content",
@@ -1256,6 +1406,20 @@ export const generatedRecorded: readonly Recorded[] = [
       why: "a qti-gap lies in a gap-match interaction, its nearest; the XSD admits it in any phrasing container, where it may lie in no interaction",
     },
     rule: "owner-copy",
+  },
+  {
+    class: "identity",
+    detail:
+      /^DocumentId key at \/\S*\/qti-context-declaration\[\d+\]: a second element purports the id [\s\S]*, which \/\S* already holds$/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 74,
+      says: "For a context's identifier among the document's IDs it is one, and the information model is followed over the XSD.",
+      why: "a context declaration's identifier is unique among its document's IDs as a response declaration's is; 3.0.1's XSD types it IdentifierDType, no xs:ID, so xmllint keys nothing there",
+    },
+    rule: "document-key",
+    versions: ["3.0.1"],
   },
   {
     class: "beyond",
@@ -1719,6 +1883,12 @@ const nodeIdOf = (index: number): NodeId =>
  */
 export interface ForeignNames {
   readonly lax: ReadonlySet<string>;
+  /**
+   * The expanded names of the elements at or within a foreign element in a foreign element's
+   * content whose governing type is complex, which reading 50 leaves unchecked
+   * ({@link laxComplexType}).
+   */
+  readonly laxComplex: ReadonlySet<string>;
   readonly lomReads: ReadonlySet<string>;
   readonly nested: ReadonlySet<string>;
   readonly nestedPaths: ReadonlySet<string>;
@@ -1780,6 +1950,7 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
   if (Result.isFailure(tree)) {
     return {
       lax: new Set(),
+      laxComplex: new Set(),
       lomReads: new Set(),
       nested: new Set(),
       nestedPaths: new Set(),
@@ -1863,19 +2034,27 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
   );
   const below = (anchors: readonly (typeof rows.nodes)[number][]) =>
     rows.nodes.filter((node) => anchors.some((at) => at.start < node.start && node.end <= at.end));
+  // A foreign element's content is held by the ur-type's lax wildcard. A governing type no
+  // attribute governor names is complex (a simple one's is `simpleHeld`'s governor).
+  const complexTyped = rows.nodes.filter(
+    (node) =>
+      isForeignKind(node.kind) &&
+      Option.isSome(node.governs) &&
+      Option.isNone(governorOf(grammar.attributes, node)) &&
+      isForeignKind(byId.get(node.parent)?.kind ?? ""),
+  );
+  const nameOf = (node: (typeof rows.nodes)[number]) =>
+    Option.toArray(
+      Option.orElse(Option.fromNullishOr(opened.get(node.id)), () =>
+        Option.map(kindNameOf(node.kind), writtenName),
+      ),
+    );
 
   return {
     lax: new Set(opened.values()),
+    laxComplex: new Set([...complexTyped, ...below(complexTyped)].flatMap(nameOf)),
     lomReads,
-    nested: new Set(
-      within.flatMap((node) =>
-        Option.toArray(
-          Option.orElse(Option.fromNullishOr(opened.get(node.id)), () =>
-            Option.map(kindNameOf(node.kind), writtenName),
-          ),
-        ),
-      ),
-    ),
+    nested: new Set(within.flatMap(nameOf)),
     nestedPaths: new Set(within.map(placeOf)),
     outside: new Set(
       rows.nodes.flatMap((node) =>
@@ -2179,7 +2358,7 @@ const elementsIn = (root: Element): readonly (readonly [Element, readonly number
 /**
  * Decide whether a difference is reading 61's ({@link orderingSlot}): at least one message is the
  * `##other` wildcard's on a child of a `qti-ordering` of the document, where the law oracle admits
- * it, and every other is reading 6's ({@link isNestedMessage}), since `xmllint` reports both
+ * it, and every other is reading 6's ({@link isMessageOn}), since `xmllint` reports both
  * classes' messages as one content difference. The same message under another `##other` slot,
  * such as `qti-selection`'s, which reading 61 leaves to the XSD, is not this class.
  *
@@ -2217,7 +2396,7 @@ export const isOrderingSlot = (
 
   return (
     messages.some(slotMessage) &&
-    messages.every((message) => slotMessage(message) || isNestedMessage(message, nested))
+    messages.every((message) => slotMessage(message) || isMessageOn(message, nested))
   );
 };
 
@@ -2400,10 +2579,10 @@ export interface GeneratedContext {
 
 /**
  * Find the record a generated or bred document's difference matches: reading 114's fragment root,
- * reading 6's nested roots on `xmllint`'s side and on the law oracle's, reading 61's ordering slot,
- * reading 81's schema set by the rows or by an edit the codec refused, reading 60's lax
- * `xsi:type`, and then the corpus's, libxml2's and the generated records, each held to its gate
- * ({@link gateHolds}).
+ * reading 6's nested roots on `xmllint`'s side, alone and beside reading 2's MathML whitespace, and
+ * on the law oracle's side, reading 61's ordering slot, reading 81's schema set by the rows or by
+ * an edit the codec refused, reading 60's lax `xsi:type`, reading 50's lax complex type, and then
+ * the corpus's, libxml2's and the generated records, each held to its gate ({@link gateHolds}).
  *
  * @param difference - The difference.
  * @param context - What the classes read of the document.
@@ -2420,6 +2599,10 @@ export const generatedRecordOf = (
 
   if (isNestedRoot(difference, names.nested)) {
     return nestedRoot;
+  }
+
+  if (isNestedRootBesideMath(difference, names.nested)) {
+    return nestedRootBesideMath;
   }
 
   if (isNestedRootLaw(difference, names.nestedPaths)) {
@@ -2443,6 +2626,10 @@ export const generatedRecordOf = (
 
   if (isLaxXsiType(difference, new Set([...names.lax, ...names.outside]))) {
     return laxXsiType;
+  }
+
+  if (isLaxComplexType(difference, names.laxComplex)) {
+    return laxComplexType;
   }
 
   const holds = (held: Recorded): boolean => gateHolds(held, difference, names, Option.some(root));
@@ -2469,8 +2656,10 @@ export const everyRecord: readonly Recorded[] = [
   ...generatedRecorded,
   ...libxml2Records,
   fragmentRoot,
+  laxComplexType,
   laxXsiType,
   nestedRoot,
+  nestedRootBesideMath,
   nestedRootLaw,
   orderingSlot,
   outsideSet,

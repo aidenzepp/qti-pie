@@ -3183,6 +3183,9 @@
     "__placed_reference_pk_instance_node_attribute_nkzr3nuq4l": {
       "name": "E1 derived"
     },
+    "__placed_reference_type_check_condition_type_a6lyswicsn": {
+      "installed": "__rule_placed_reference_type_check_condition_type_6itrlcjpvb"
+    },
     "__placed_share_target_check_e_1_derived_edsziwl2wo": {
       "installed": "e_1_derived"
     },
@@ -3230,6 +3233,12 @@
     },
     "__placed_variable_ref_declaration_attribute_in_kkpref54xg": {
       "name": "Variable kind"
+    },
+    "__placed_variable_ref_declaration_attribute_kind_in_u55bdjnnk2": {
+      "name": "Mapped response"
+    },
+    "__placed_variable_ref_declaration_attribute_kind_in_ywjlnkktnx": {
+      "name": "Mapped response"
     },
     "__placed_variable_ref_declaration_in_declaration_3u42xcokky": {
       "name": "Variable declared"
