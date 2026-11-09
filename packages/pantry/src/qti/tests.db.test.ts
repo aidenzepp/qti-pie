@@ -14,26 +14,9 @@
  * before any statement runs. An href's own laws are `#pantry/qti/package.ts`'s, judged in
  * `package.db.test.ts`.
  *
- * The cases over whole packages need the importer's ChangeSet (Q5.15), and are listed for it and
- * for the network seat's probe:
- *
- * - A test whose section ref names a section document that refs it back is refused by
- *   `Instance(document, rootKind, children) → TestDocument(node, rootKind, sites)` (Inclusion
- *   cycle); the same test with the cycle cut is accepted;
- * - A section document placed twice in one test is accepted, and an item ref of the test that shares
- *   an identifier with a section of the placed document is refused by `key(AssembledName, assembly,
- *   identifier)` (Test name key);
- * - A branch rule on an item ref naming the item ref after it is accepted; one naming the item ref
- *   before it is refused by `Branch_forward` unless their section's `qti-ordering` shuffles, and
- *   one naming its own owner or its section is refused by `Branch_forward` either way; one naming
- *   an item ref under a selection with replacement is refused by `Branch_target`; one naming
- *   nothing has no `BranchTarget` and is refused by `BranchResolution(instance, rule) →
- *   BranchTarget(instance, rule)` (Branch target) alone (`src/test/gen/assembly.db.test.ts`);
- * - An item ref whose href names no entry is refused by `ReferencePath(package, path) →
- *   Entry(package, path)`, and a section ref whose href names an item document by the site's
- *   containment into the section documents;
- * - A section holding three parts, two of them required, under a selection of `select="1"` is refused
- *   by `Selection_required`, and under `select="2"` accepted.
+ * The cases over whole packages, the inclusion cycle, the section document placed twice, the
+ * branch rules, the missing and misplaced refs and the selection of required parts, are witnessed
+ * through the importer's ChangeSet in `#pantry/import/tests.assembly.db.test.ts`.
  *
  * A branch rule's target is judged here row by row: a `BranchTarget` the family's owner (its
  * `shuffles` its own column, which the case states), whose `Branch_target` and `Branch_forward`

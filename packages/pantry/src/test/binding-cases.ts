@@ -104,12 +104,12 @@ export const bindingSites: readonly BindingSite[] = [
   {
     attribute: "response-identifier",
     binding: item,
-    bound: '<qti-custom-interaction response-identifier="WIDGET"',
+    bound: '<qti-portable-custom-interaction response-identifier="PORTABLE"',
     declaration:
-      '<qti-response-declaration identifier="WIDGET" cardinality="single" base-type="string"/>',
+      '<qti-response-declaration identifier="PORTABLE" cardinality="single" base-type="string"/>',
     declared: item,
-    identifier: "WIDGET",
-    kind: "qti-custom-interaction",
+    identifier: "PORTABLE",
+    kind: "qti-portable-custom-interaction",
     prepare: (entries) => entries,
   },
   {

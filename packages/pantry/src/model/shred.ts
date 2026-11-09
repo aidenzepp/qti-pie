@@ -161,6 +161,17 @@ export interface ShredGrammar<V extends XdmVocabulary> {
    */
   readonly declaredType: (version: V["version"], kind: ElementKind<V>) => Option.Option<string>;
   /**
+   * Whether some element kind of the vocabulary is written with a name: a row of `ElementName`.
+   *
+   * Shred asks it of a MathML name that resolves to no kind under its parent, to tell a kind the
+   * parent does not admit there from a name no kind takes.
+   *
+   * @param namespace - The element's namespace name, empty when it has none.
+   * @param local - The element's local name.
+   * @returns Whether a kind is written with that name, under any parent.
+   */
+  readonly named: (namespace: string, local: string) => boolean;
+  /**
    * Find the kind an element is: `resolve` of `src/grammar/kinds.ts`.
    *
    * @param namespace - The element's namespace name, empty when it has none.
@@ -234,11 +245,12 @@ export type ValueSite<V extends XdmVocabulary> =
  * - `strict-undeclared`: an element a `strict` wildcard holds that no global declaration of its
  *   document's schema set names, with no `xsi:type` naming a type of that set or a built-in, so XML
  *   Schema cannot assess it (§3.10.4 clause 2, §3.3.4 clause 1.2; spec reading 81).
- * - `mathml-foreign`: an element in the MathML namespace that would be read as a foreign element,
- *   where no MathML kind its parent admits takes its name. MathML's grammar starts at `math` and
- *   its `anyElement` excludes MathML's own namespace (MathML 3 RelaxNG, `mathml3-common.rnc` lines
- *   15 and 61), and "all other MathML content must be contained in a math element" (MathML 3 §2.2),
- *   so no foreign element is in that namespace (law "MathML foreign element", spec reading 2).
+ * - `mathml-foreign`: an element in the MathML namespace that would be read as a foreign element, or
+ *   that is a MathML kind its parent does not admit, where no MathML kind its parent admits takes
+ *   its name. MathML's grammar starts at `math` and its `anyElement` excludes MathML's own
+ *   namespace (MathML 3 RelaxNG, `mathml3-common.rnc` lines 15 and 61), and "all other MathML
+ *   content must be contained in a math element" (MathML 3 §2.2), so no foreign element is in that
+ *   namespace (law "MathML foreign element", spec reading 2).
  *
  * `declared` and `data-name` are `openClassOf`'s own refusals (`openClassRefusals` of
  * `#pantry/vocab/open.ts`), passed through under their names.
@@ -719,7 +731,9 @@ const rootReadingOf = <V extends XdmVocabulary>(
  *
  * An element in the MathML namespace is never foreign: MathML's grammar starts at `math`, and its
  * `anyElement` excludes MathML's own namespace, so where no MathML kind the parent admits takes its
- * name it is refused, as `mathml-foreign` (law "MathML foreign element").
+ * name it is refused, as `mathml-foreign` (law "MathML foreign element"), and so is a MathML name
+ * that is a kind elsewhere but that its parent does not admit, where the parent admits no foreign
+ * kind either; a MathML name no kind takes is `unnamed`.
  *
  * Under a `strict` wildcard a foreign element stands only with an `xsi:type` its document's schema
  * set resolves, unless it is one of reading 6's roots whose declaration the wildcard finds there,
@@ -772,7 +786,15 @@ const childReadingOf = <V extends XdmVocabulary>(
 
   return Result.fromOption(
     resolved.pipe(Option.map((kind) => ({ _tag: "kind", element, kind }) as const)),
-    () => unnamedElement(element, Option.some(parent.element)),
+    () =>
+      element.namespace === mathmlNamespace && grammar.named(element.namespace, element.local)
+        ? new UnmodeledVocabulary({
+            kind: "element",
+            name: element.qname,
+            parent: Option.some(parent.element.qname),
+            reason: "mathml-foreign",
+          })
+        : unnamedElement(element, Option.some(parent.element)),
   );
 };
 

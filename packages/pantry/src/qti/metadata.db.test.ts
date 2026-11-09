@@ -25,10 +25,12 @@
  *   `usage3-typed`, `usage3-padded` and `usage3-float-padded` is accepted by its row's laws, its
  *   generated `date` the day it names; `usage3-feb-30`'s and `usage3-bad-month`'s are refused by
  *   `day`'s domain, `lexicalForm(date)` (23514).
- * - **Usage typed value** (reading 105): each usage value that writes a `baseType` in `usage3-typed`
- *   and `usage3-float-padded` is accepted by its row's laws; `usage3-integer-float`'s float under
- *   `integer` is refused by the `Usage_typed_value` CHECK (23514), and a code its lexical form does
- *   not spell by `E1_derived`.
+ * - **Usage typed value** (reading 105): a usage value is typed only in a record, so each fixture's
+ *   values are put into a record first (`fieldIdentifier="F"`); outside one a value writes no row.
+ *   Each usage value that writes a `baseType` in `usage3-typed` and `usage3-float-padded` is
+ *   accepted by its row's laws; `usage3-integer-float`'s float under `integer` is refused by the
+ *   `Usage_typed_value` CHECK (23514), and a code its lexical form does not spell by
+ *   `E1_derived`.
  *
  * The other whole-package cases arrive with Q5.15: `simple` accepted, `identifier-mismatch` refused
  * `lom-identifier`, `title-mismatch` refused `lom-title`, and the usage-data fixtures accepted but
@@ -52,7 +54,7 @@ import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { StatisticDate, UsageValue } from "#pantry/qti/metadata.ts";
+import { StatisticDate, UsageValueBaseType } from "#pantry/qti/metadata.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import {
   assertVerdict,
@@ -76,7 +78,7 @@ const shredGrammar = shredGrammarOf(grammar);
  * Draw the ids of one document's rows, numbered by its place in the package, the manifest 0.
  *
  * @param document - The document's number.
- * @param documentType - The type it is listed under, `none` for the manifest.
+ * @param documentType - The type it is listed under, `manifest` for the manifest.
  * @returns The ids.
  */
 const idsFor = (document: number, documentType: MetadataIds["documentType"]): MetadataIds => {
@@ -146,12 +148,32 @@ const builtOf = Effect.fn("test.metadata.db.builtOf")(function* builtOf(
       const ids = idsFor(at + 1, listed.value.type);
       const rows = rowsOf(tree.value, ids);
       dates.push(...rows.StatisticDate.values());
-      values.push(...rows.UsageValue.values());
+      values.push(...rows.UsageValueBaseType.values());
     }
   }
 
   return { dates, values };
 });
+
+/**
+ * Put every usage value that writes a `baseType` into a record, as reading 105 types it: each such
+ * `value` also writes `fieldIdentifier="F"`, in the package's `example.xml`.
+ *
+ * @param files - The package's entries.
+ * @returns The package with each typed value in a record.
+ */
+const inRecords = (files: readonly PackageFile[]): readonly PackageFile[] =>
+  files.map((file) => {
+    if (file.path !== "example.xml") {
+      return file;
+    }
+
+    const text = new TextDecoder().decode(file.bytes);
+    const edited = text.replaceAll(/<value (?=baseType=)/gu, '<value fieldIdentifier="F" ');
+    assert.notStrictEqual(edited, text, "the example holds a value that writes a baseType");
+
+    return { ...file, bytes: new TextEncoder().encode(edited) };
+  });
 
 /**
  * The `metaData` package's tarball member.
@@ -306,27 +328,28 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
   it.effect(
     "accepts each usage value its base type reads, and refuses a float under integer and a code its lexical form does not spell, by Usage typed value and E1 derived",
     () =>
-      // Oracle: PostgreSQL, `UsageValue`'s own laws: the `Usage_typed_value` check (reading 105),
-      // its text matched against `BaseTypePattern`'s pattern of its base type (23514), and
-      // `E1_derived`, its code the one `BaseTypeLexical` spells.
-      // Bound: the three usage-data fixtures whose values write a `baseType`: `usage3-typed`'s 24
-      // (19 floats and 5 identifiers), `usage3-float-padded`'s padded float, accepted, and
-      // `usage3-integer-float`'s `0.87` under `integer`, refused; one hand row of code `float`
-      // under the lexical form `integer`.
+      // Oracle: PostgreSQL, `UsageValueBaseType`'s own laws: the `Usage_typed_value` check
+      // (reading 105), its text matched against `BaseTypePattern`'s pattern of its base type
+      // (23514), and `E1_derived`, its code the one `BaseTypeLexical` spells.
+      // Bound: the three usage-data fixtures whose values write a `baseType`, each value put into a
+      // record (`fieldIdentifier="F"`, `inRecords`) because outside one a value is untyped text and
+      // writes no row (reading 105): `usage3-typed`'s 24 (19 floats and 5 identifiers),
+      // `usage3-float-padded`'s padded float, accepted, and `usage3-integer-float`'s `0.87` under
+      // `integer`, refused; one hand row of code `float` under the lexical form `integer`.
       Effect.gen(function* usageTyped() {
         const client = yield* loginSession;
-        const typed = checkConstraintOf(Qti, UsageValue.name, "Usage_typed_value");
+        const typed = checkConstraintOf(Qti, UsageValueBaseType.name, "Usage_typed_value");
         for (const [name, count, refused] of [
           ["usage3-typed", 24, false],
           ["usage3-float-padded", 1, false],
           ["usage3-integer-float", 1, true],
         ] as const satisfies readonly (readonly [FixtureName, number, boolean])[]) {
-          const built = yield* builtOf(yield* readPackage(yield* materialize(name)));
+          const built = yield* builtOf(inRecords(yield* readPackage(yield* materialize(name))));
           assert.lengthOf(built.values, count, `${name} writes a baseType on ${String(count)}`);
 
           for (const row of built.values) {
             assertVerdict(
-              yield* judged(client, statedInserts([{ fact: row, relation: UsageValue }])),
+              yield* judged(client, statedInserts([{ fact: row, relation: UsageValueBaseType }])),
               typed,
               refused,
               `${name} ${row.text}`,
@@ -345,11 +368,11 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
                   node: "00000000-0000-4000-8fff-000000000001",
                   text: "1",
                 },
-                relation: UsageValue,
+                relation: UsageValueBaseType,
               },
             ]),
           ),
-          checkConstraintOf(Qti, UsageValue.name, "E1_derived"),
+          checkConstraintOf(Qti, UsageValueBaseType.name, "E1_derived"),
           true,
           "a code its lexical form does not spell",
         );

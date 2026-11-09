@@ -10,12 +10,14 @@
  *   source` and `Variable mapping target` breaches, each by the name its element writes.
  * - **The schema's laws, restated on the host** over the import's rows (`readProgram`): the existence
  *   of each template default's `TemplateDefaultTarget` and each mapping's
- *   `MappingSourceDeclaration`, their containments into `ItemRefDocument` and `Declaration`, their
- *   CHECKs, a mapped reading's declaration (its mapping's source's), `MappingLookup`'s forced and
- *   justified rows, `VariableMapping`'s key and session check, and what each item ref names: its
- *   `ItemRefTarget` and `ItemRefDocument`, each a row only where the package holds it, and the
- *   assembly's names' copies of them. Each law carries the name `src/import/refusal.ts` gives the
- *   schema's statement of it ({@link hostLaws}, held to `statedLaws` by the first test).
+ *   `MappingSourceDeclaration`, but a mapping's under an LTI item ref, which with a reading through
+ *   it is accepted unchecked (reading 110, its `MappingItemRefType`), their containments into
+ *   `ItemRefDocument` and `Declaration`, their CHECKs, a mapped reading's declaration (its
+ *   mapping's source's), `MappingLookup`'s forced and justified rows, `VariableMapping`'s key and
+ *   session check, and what each item ref names: its `ItemRefTarget` and `ItemRefDocument`, each a
+ *   row only where the package holds it, and the assembly's names' copies of them. Each law carries
+ *   the name `src/import/refusal.ts` gives the schema's statement of it ({@link hostLaws}, held to
+ *   `statedLaws` by the first test).
  *
  * The two must name the same breaches, but one residual the schema states on purpose: the declared
  * half of `Variable mapping target` is judged on a mapping's `MappingSourceDeclaration`, so a
@@ -40,6 +42,7 @@ import { readProgram } from "#pantry/import/program.ts";
 import { lawOfCheck, ruleOfLaw, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
+import { itemRefKind, itemResourceType, linkResourceTypes } from "#pantry/qti/tests.ts";
 import { ValueBaseOf, ValueCardinalityOf } from "#pantry/qti/expression-types.ts";
 import type {
   DeclarationBaseType,
@@ -54,7 +57,6 @@ import type {
   TemplateDefaultTarget,
 } from "#pantry/qti/expressions.ts";
 import type { VariableMapping } from "#pantry/qti/tests.ts";
-import { itemResourceType, linkResourceTypes } from "#pantry/qti/tests.ts";
 import { orphansOf } from "#pantry/test/family-owners.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import {
@@ -108,6 +110,12 @@ const sessionVariables: ReadonlySet<string> = new Set([
   "numAttempts",
   "duration",
 ]);
+
+/**
+ * The resource types of an LTI link, under whose item ref a mapping, and a reading through it, is
+ * accepted unchecked (spec reading 110).
+ */
+const linkTypes: ReadonlySet<string> = new Set(linkResourceTypes);
 
 /**
  * The silent expression bases `Template_default_type` lets through.
@@ -336,7 +344,47 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
   ],
   [
     {
-      from: ["VariableMapping", "node"],
+      from: ["VariableMapping", "node", "parent"],
+      kind: "contained",
+      to: ["MappingItemRef", "node", "itemRef"],
+    },
+    "Item ref target",
+  ],
+  [
+    {
+      from: ["MappingItemRef", "node", "itemRef"],
+      kind: "contained",
+      to: ["VariableMapping", "node", "parent"],
+    },
+    "Item ref target",
+  ],
+  [
+    {
+      from: ["MappingItemRefType", "node", "itemRef"],
+      kind: "contained",
+      to: ["MappingItemRef", "node", "itemRef"],
+    },
+    "Item ref target",
+  ],
+  [
+    {
+      from: ["MappingItemRefType", "itemRef", "type"],
+      kind: "contained",
+      to: ["ItemRefTarget", "node", "type"],
+    },
+    "Item ref target",
+  ],
+  [
+    {
+      from: ["MappingItemRef", "node"],
+      kind: "contained",
+      to: ["MappingSourceDeclaration", "node"],
+    },
+    "Variable mapping source",
+  ],
+  [
+    {
+      from: ["MappingItemRefType", "node"],
       kind: "contained",
       to: ["MappingSourceDeclaration", "node"],
     },
@@ -691,6 +739,19 @@ const readingResolves = (reading: Addition<typeof Reading>): boolean =>
     (reading.replaced && /^[0-9]*[1-9][0-9]*$/u.test(reading.number)));
 
 /**
+ * Whether a reading reads through an LTI item ref, whose mapping has no source declaration and is
+ * accepted unchecked, with the reading (spec reading 110).
+ *
+ * @param reading - The reading.
+ * @returns Whether it is read through an LTI link.
+ */
+const throughLink = (reading: Addition<typeof Reading>): boolean =>
+  (reading.form === "split" || reading.form === "numbered") &&
+  reading.found &&
+  reading.namedKind === itemRefKind &&
+  linkTypes.has(reading.resourceType);
+
+/**
  * The key a reading's declaration row copies of its reading: the reading's key and the item ref it
  * reads through.
  *
@@ -715,7 +776,10 @@ const readingBreaches = (rows: HostRows): readonly HostBreach[] => {
 
   return [
     ...[...rows.inputs.Reading.values()]
-      .filter((reading) => reading.source === "mapped" && readingResolves(reading))
+      .filter(
+        (reading) =>
+          reading.source === "mapped" && readingResolves(reading) && !throughLink(reading),
+      )
       .flatMap((reading) => {
         const mapping = rows.mappings.find(
           ({ parent, target }) => parent === reading.named && target === reading.variable,
@@ -896,9 +960,26 @@ const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
       ),
     ),
     ...[...inputs.TemplateDefaultTarget.values()].flatMap((target) => targetBreaches(rows, target)),
+    // A mapping's item ref and what that names hang on the item ref's target, so they are refused
+    // with it under "Item ref target", by the empty name the oracle keys that law by: each mapping
+    // has its item ref, and a type row only where the item ref has a target, its type copied.
+    ...rows.mappings.flatMap((mapping) => {
+      const itemRef = inputs.MappingItemRef.get(mapping.node);
+      const typed = inputs.MappingItemRefType.get(mapping.node);
+      const target = inputs.ItemRefTarget.get(mapping.parent);
+
+      return unless(
+        itemRef?.itemRef === mapping.parent &&
+          (typed === undefined ||
+            (typed.itemRef === mapping.parent && typed.type === target?.type)),
+        "Item ref target",
+        "",
+      );
+    }),
     ...rows.mappings.flatMap((mapping) => [
       ...unless(
-        inputs.MappingSourceDeclaration.has(mapping.node),
+        linkTypes.has(inputs.MappingItemRefType.get(mapping.node)?.type ?? "") ||
+          inputs.MappingSourceDeclaration.has(mapping.node),
         "Variable mapping source",
         mapping.source,
       ),
@@ -1038,6 +1119,12 @@ const assertNoSentinel = (input: ItemRefPackage, inputs: PackageInputs, literal:
   assert.isFalse(
     [...inputs.ItemRefTarget.values()].some(({ type }) => type === "none"),
     `${literal}: an item ref's target stands for a resource the package lacks`,
+  );
+  assert.isFalse(
+    [...inputs.MappingItemRef.values(), ...inputs.MappingItemRefType.values()].some((row) =>
+      Object.values<unknown>(row).includes("none"),
+    ),
+    `${literal}: a mapping's item ref names a resource the package lacks`,
   );
   assert.deepStrictEqual(orphansOf(inputs), [], `${literal}: a family member has no owner`);
   assert.isFalse(

@@ -20,6 +20,7 @@ import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { identityLaws, identityRelations, idValuePattern } from "#pantry/qti/identity.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { QtiBase } from "#pantry/qti/base.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { judge, lawNames, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
@@ -44,6 +45,10 @@ describe("qti/identity.ts, declared", { timeout: buildTimeout }, () => {
         Object.getOwnPropertyDescriptor(built.relations, relation.name)?.value,
         relation,
       );
+    }
+
+    for (const name of ["BodyXmlLang", "CatalogScope", "PlacedBodyXmlLang"] as const) {
+      assert.strictEqual(Qti.relations[name], identityRelations[name]);
     }
 
     assert.strictEqual(new Set(identityLaws).size, identityLaws.length);
@@ -678,6 +683,62 @@ describe("test/oracle.ts, Document lang (R26)", { timeout: buildTimeout }, () =>
             }),
         ),
       ),
+  );
+});
+
+/**
+ * The package of the catalog case: an item whose resource lists only `en`, `xml:lang="en"` on its
+ * root, a catalog whose card entry writes `es`, whose card writes `de` and whose HTML content
+ * holds a `span` of `fr`, and a body paragraph that writes `bodyLang`, if any.
+ *
+ * @param bodyLang - The `xml:lang` of the body paragraph, none for no attribute.
+ * @returns The package's files.
+ */
+const catalogLangPackage = (bodyLang: Option.Option<string>): readonly PackageFile[] =>
+  packageOf({
+    "imsmanifest.xml": `<manifest xmlns="${cp}" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><metadata><imsmd:lom><imsmd:general><imsmd:language>en</imsmd:language></imsmd:general></imsmd:lom></metadata><file href="item.xml"/></resource></resources></manifest>`,
+    "item.xml": `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false" xml:lang="en"><qti-item-body><p${Option.match(bodyLang, { onNone: () => "", onSome: (lang) => ` xml:lang="${lang}"` })}>Hi</p></qti-item-body><qti-catalog-info><qti-catalog id="C"><qti-card support="spoken" xml:lang="de"><qti-card-entry xml:lang="es"><qti-html-content><span xml:lang="fr">Salut</span></qti-html-content></qti-card-entry></qti-card></qti-catalog></qti-catalog-info></qti-assessment-item>`,
+  });
+
+describe("test/oracle.ts, Document lang (R26) under a catalog (R9-c)", () => {
+  it.effect(
+    "breaks no Document lang for an xml:lang a catalog's cards, entries and HTML content write",
+    () =>
+      Effect.gen(function* catalogLang() {
+        // Oracle: QTI 3.0 Metadata §2.7.1.3 counts "the associated assessmentItem ... and its
+        // 'bodyElements'", and the information model's §5.28 puts a catalog "outside the content
+        // body node", so es, de and fr, written there, are no language of the item.
+        const judgment = yield* judge(catalogLangPackage(Option.none()), grammar, laws);
+        const breaches =
+          judgment._tag === "Judged"
+            ? judgment.breaches.filter(({ law }) => law === "Document lang")
+            : assert.fail(`the codec refused the package: ${judgment.rule}`);
+
+        assert.deepStrictEqual(
+          breaches.map(({ keys }) => keys["lang"] ?? ""),
+          [],
+        );
+      }),
+    { timeout: buildTimeout },
+  );
+
+  it.effect(
+    "breaks Document lang once, at the item, for a body xml:lang the resource does not list, though the catalog's alone do not",
+    () =>
+      Effect.gen(function* bodyLang() {
+        // Oracle: the same sections; the body paragraph is a 'bodyElement', so its es is counted.
+        const judgment = yield* judge(catalogLangPackage(Option.some("es")), grammar, laws);
+        const breaches =
+          judgment._tag === "Judged"
+            ? judgment.breaches.filter(({ law }) => law === "Document lang")
+            : assert.fail(`the codec refused the package: ${judgment.rule}`);
+
+        assert.deepStrictEqual(
+          breaches.map(({ document, keys }) => `${document} ${keys["lang"] ?? ""}`),
+          ["item.xml es"],
+        );
+      }),
+    { timeout: buildTimeout },
   );
 });
 

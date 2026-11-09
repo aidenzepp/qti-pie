@@ -6,8 +6,9 @@
  * identifier as the law oracle (`#pantry/test/oracle.ts`) judges it and as the spec reads the
  * package's own sketch, the title as the spec reads the sketch, in `xs:normalizedString`'s value
  * space with tags compared without regard to case; a usage value has its typed row exactly where it
- * writes a `baseType` (reading 105); and each LOM learning resource type has its value's row and
- * its source's row exactly where it holds them, each its first term's string value (reading 122).
+ * writes a `baseType` and a `fieldIdentifier`, a record's value (reading 105); and each LOM
+ * learning resource type has its value's row and its source's row exactly where it holds them, each
+ * its first term's string value (reading 122).
  */
 import { NodeServices } from "@effect/platform-node";
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
@@ -1094,18 +1095,22 @@ describe("import/overlays/metadata.ts, the metaData fixture", () => {
 });
 
 /**
- * One usage value of the usage-value box: its `baseType` as written, none where it writes none, and
- * its content, as XML text and as the string value XML 1.0 reads from it.
+ * One usage value of the usage-value box: its `baseType` as written, none where it writes none, its
+ * `fieldIdentifier` as written, none where it writes none (a value that writes one forms part of a
+ * record, spec reading 105), and its content, as XML text and as the string value XML 1.0 reads
+ * from it.
  */
 interface UsageCase {
   readonly baseType: string | undefined;
+  readonly fieldIdentifier: string | undefined;
   readonly content: { readonly value: string; readonly xml: string };
 }
 
 /**
  * The usage-value box: a `ud:value` that writes no `baseType`, one of three spelled base types, a
- * misspelled one and a padded one, over four contents: none, a number, a padded number, and a text
- * that escapes its ampersand, which the reader expands (XML 1.0 §4.6, the predefined entities).
+ * misspelled one and a padded one, with and without a `fieldIdentifier`, over four contents: none,
+ * a number, a padded number, and a text that escapes its ampersand, which the reader expands (XML
+ * 1.0 §4.6, the predefined entities).
  */
 const usageCases: Gen<UsageCase> = (source) => ({
   baseType: source.draw(element([undefined, "float", "integer", "identifier", "Float", " float"])),
@@ -1117,12 +1122,19 @@ const usageCases: Gen<UsageCase> = (source) => ({
       { value: "a&b", xml: "a&amp;b" },
     ]),
   ),
+  fieldIdentifier: source.draw(element([undefined, "SCORE"])),
 });
 
 /**
  * A situation the usage-value box must reach.
  */
-type UsageSituation = "escaped" | "misspelled" | "padded" | "spelled" | "unwritten";
+type UsageSituation =
+  | "escaped"
+  | "misspelled"
+  | "outside a record"
+  | "padded"
+  | "spelled"
+  | "unwritten";
 
 /**
  * The base types the usage-value box spells as `BaseType` handles.
@@ -1149,28 +1161,33 @@ const usageSituationOf = (baseType: string | undefined): UsageSituation => {
 
 describe("import/overlays/metadata.ts, usage values", () => {
   it.effect(
-    "writes a UsageValue row exactly for a ud:value whose baseType spells a code, that code and its text its string value",
+    "writes a UsageValue row exactly for a ud:value that writes baseType and fieldIdentifier, its text its string value, its UsageValueBaseType row where the baseType spells a handle, and a UsageBaseType row for every one that writes baseType, as written",
     (ctx) =>
-      // Oracle: the specification as a checker, reading 105 and C17: a row where `baseType` is
-      // written and spells a `BaseType` handle as written, and none elsewhere (a misspelled or a
-      // padded one types nothing, and its value domain refuses it alone, lane NIL's B11), its code
-      // that handle, its text the string value of its content.
-      // Bound: 6 baseType spellings, none among them, by 4 contents, 24 cases.
+      // Oracle: the specification as a checker, reading 105 and C17: a row where `baseType` and
+      // `fieldIdentifier` are both written, the value forming part of a record, and none elsewhere
+      // (a `baseType` outside a record is no base type, so its value is untyped text), its text
+      // the string value of its content, and its `UsageValueBaseType` row only where its
+      // lexical form spells a `BaseType` handle as written (decision 427: a misspelling has none,
+      // and its value domain refuses it); and a `UsageBaseType` row
+      // for every value that writes a `baseType`, in a record or not, its lexical form as written.
+      // Bound: 6 baseType spellings, none among them, by 2 field identifiers, none among them, by
+      // 4 contents, 48 cases.
       searched(
         ctx,
         exhaust(
           {
-            box: "a ud:value with no, a spelled, a misspelled or a padded baseType, by four contents",
+            box: "a ud:value with no, a spelled, a misspelled or a padded baseType, with and without a fieldIdentifier, by four contents",
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<UsageSituation>([
               "escaped",
               "misspelled",
+              "outside a record",
               "padded",
               "spelled",
               "unwritten",
             ]),
             generator: usageCases,
-            limit: 30,
+            limit: 50,
             literal: Formatter.format,
             oracle: { kind: "specification", name: "reading 105 and C17's spelled codes" },
             suite: "pantry/import/overlays-metadata-usage-values",
@@ -1178,11 +1195,20 @@ describe("import/overlays/metadata.ts, usage values", () => {
           (input: UsageCase, c) =>
             Effect.gen(function* usageValue() {
               c.note(usageSituationOf(input.baseType));
+              if (input.baseType !== undefined && input.fieldIdentifier === undefined) {
+                c.note("outside a record");
+              }
+
               if (input.content.xml !== input.content.value) {
                 c.note("escaped");
               }
 
-              const attribute = input.baseType === undefined ? "" : ` baseType="${input.baseType}"`;
+              const attribute = [
+                input.baseType === undefined ? "" : ` baseType="${input.baseType}"`,
+                input.fieldIdentifier === undefined
+                  ? ""
+                  : ` fieldIdentifier="${input.fieldIdentifier}"`,
+              ].join("");
               const xml = [
                 '<usageData xmlns="http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0">',
                 '<ordinaryStatistic name="AIS" context="http://example.org/c">',
@@ -1192,23 +1218,39 @@ describe("import/overlays/metadata.ts, usage values", () => {
               ].join("");
               const read = yield* Effect.orDie(readXml(new TextEncoder().encode(xml)));
               const tree = yield* Effect.orDie(shred(read, "3.0.1", shredGrammar));
-              const rows = [...rowsOf(tree, idsFor(1, "qtiusagedata/xml")).UsageValue.values()];
+              const built = rowsOf(tree, idsFor(1, "qtiusagedata/xml"));
+              const rows = [...built.UsageValue.values()];
+              const typed = [...built.UsageValueBaseType.values()];
+              const copies = [...built.UsageBaseType.values()];
+              const inRecord = input.baseType !== undefined && input.fieldIdentifier !== undefined;
 
               assert.deepStrictEqual(
-                rows.map(({ baseType, baseTypeLexical, text }) => ({
+                rows.map(({ baseTypeLexical, text }) => ({ baseTypeLexical, text })),
+                inRecord ? [{ baseTypeLexical: input.baseType, text: input.content.value }] : [],
+              );
+              assert.deepStrictEqual(
+                typed.map(({ baseType, baseTypeLexical, text }) => ({
                   baseType,
                   baseTypeLexical,
                   text,
                 })),
-                input.baseType === undefined || !spelledUsageTypes.has(input.baseType)
-                  ? []
-                  : [
+                inRecord && spelledUsageTypes.has(input.baseType ?? "")
+                  ? [
                       {
                         baseType: input.baseType,
                         baseTypeLexical: input.baseType,
                         text: input.content.value,
                       },
-                    ],
+                    ]
+                  : [],
+              );
+              assert.deepStrictEqual(
+                copies.map(({ lexical }) => lexical),
+                input.baseType === undefined ? [] : [input.baseType],
+              );
+              assert.deepStrictEqual(
+                copies.map(({ node }) => node),
+                [...built.UsageBaseType.keys()],
               );
             }),
         ),

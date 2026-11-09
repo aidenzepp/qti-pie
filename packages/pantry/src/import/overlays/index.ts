@@ -16,6 +16,8 @@
  * holds.
  */
 import { Equal, Formatter, Option, Result, Schema, Struct } from "effect";
+import { placedCatalogRowsOf, rowsOf as catalogRowsOf } from "#pantry/import/overlays/catalog.ts";
+import type { CatalogRows, PlacedCatalogRows } from "#pantry/import/overlays/catalog.ts";
 import { rowsOf as declarationRowsOf } from "#pantry/import/overlays/declarations.ts";
 import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
 import {
@@ -58,6 +60,10 @@ import { rowsOf as mappingRowsOf } from "#pantry/import/overlays/mapping.ts";
 import type { MappingRows } from "#pantry/import/overlays/mapping.ts";
 import { rowsOf as metadataRowsOf } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataRows } from "#pantry/import/overlays/metadata.ts";
+import { mathmlRowsOf } from "#pantry/import/overlays/mathml.ts";
+import type { MathmlRows } from "#pantry/import/overlays/mathml.ts";
+import { placedShareRowsOf } from "#pantry/import/overlays/mathml-share.ts";
+import type { PlacedShareRows } from "#pantry/import/overlays/mathml-share.ts";
 import { rowsOf as operatorRowsOf } from "#pantry/import/overlays/operators.ts";
 import type { OperatorRows } from "#pantry/import/overlays/operators.ts";
 import {
@@ -73,6 +79,7 @@ import type { QuotationRows } from "#pantry/import/overlays/quotation.ts";
 import { assembledRowsOf, rowsOf as testRowsOf } from "#pantry/import/overlays/tests.ts";
 import type { AssembledRows, TestRows } from "#pantry/import/overlays/tests.ts";
 import type { PlacedDocument } from "#pantry/import/write.ts";
+import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { overlayRelations } from "#pantry/import/roster.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
@@ -83,6 +90,7 @@ import { manifestPath } from "#pantry/qti/package.ts";
  */
 export type OverlayRows = AssembledExpressionRows &
   AssembledRows &
+  CatalogRows &
   DeclarationRows &
   ExpressionRows &
   HtmlRows &
@@ -90,12 +98,15 @@ export type OverlayRows = AssembledExpressionRows &
   InteractionRows &
   LanguageRows &
   MappingRows &
+  MathmlRows &
   MetadataRows &
   OperatorRows &
   PackageRows &
   PlacedBindingRows &
+  PlacedCatalogRows &
   PlacedIdRows &
   PlacedLanguageRows &
+  PlacedShareRows &
   PlacedVariableRows &
   QuotationRows &
   ReferenceRows &
@@ -106,12 +117,14 @@ export type OverlayRows = AssembledExpressionRows &
  * One document's rows from every document builder.
  */
 interface DocumentRows {
+  readonly catalog: CatalogRows;
   readonly declarations: DeclarationRows;
   readonly expressions: ExpressionRows;
   readonly html: HtmlRows;
   readonly identity: IdentityRows;
   readonly interactions: InteractionRows;
   readonly mapping: MappingRows;
+  readonly mathml: MathmlRows;
   readonly metadata: MetadataRows;
   readonly operators: OperatorRows;
   readonly package: PackageRows;
@@ -134,12 +147,14 @@ interface DocumentRows {
  * @returns Every builder's rows.
  */
 const documentRowsOf = ({ ids, listed: { path, tree } }: PlacedDocument): DocumentRows => ({
+  catalog: catalogRowsOf(tree, ids),
   declarations: declarationRowsOf(tree, ids),
   expressions: expressionRowsOf(tree, ids),
   html: htmlRowsOf(tree, ids),
   identity: identityRowsOf(tree, ids),
   interactions: interactionRowsOf(tree, ids),
   mapping: mappingRowsOf(tree, ids),
+  mathml: mathmlRowsOf(tree, ids),
   metadata: metadataRowsOf(tree, ids),
   operators: operatorRowsOf(tree, ids),
   package: path === manifestPath ? packageRowsOf(tree, ids) : noPackageRows,
@@ -282,14 +297,37 @@ export const overlayPartsOf = (
     built.flatMap(({ rows }) => typedHrefsOf(rows.package)),
   );
 
+  const placedIds = placedIdRowsOf({
+    ids: built.flatMap(({ rows }) => [...rows.identity.DocumentId.values()]),
+    instances: assembled.Instance.values(),
+    targets: built.flatMap(({ rows }) => [...rows.identity.IdrefTarget.values()]),
+  });
+
+  const documentsById = new Map(
+    built.map(({ document }) => [document.ids.idOf(0), document] as const),
+  );
+  const placedShares = placedShareRowsOf({
+    ids: built.flatMap(({ rows }) => [...rows.identity.DocumentId.values()]),
+    instances: assembled.Instance.values(),
+    nodesOf: (document) => {
+      const read = documentsById.get(document);
+
+      return read === undefined ? [] : flatten(read.listed.tree, read.ids.idOf).nodes;
+    },
+    shares: built.flatMap(({ rows }) => [...rows.identity.ShareFragment.values()]),
+    sites: built.flatMap(({ rows }) => [...rows.tests.Site.values()]),
+  });
+
   return [
     ...built.flatMap(({ rows }) => [
+      rows.catalog,
       rows.declarations,
       rows.expressions,
       rows.html,
       rows.identity,
       rows.interactions,
       rows.mapping,
+      rows.mathml,
       rows.metadata,
       rows.operators,
       rows.package,
@@ -326,10 +364,13 @@ export const overlayPartsOf = (
       mosts: built.flatMap(({ rows }) => [...rows.interactions.MostCount.values()]),
       names: built.flatMap(({ rows }) => [...rows.interactions.BindingName.values()]),
     }),
-    placedIdRowsOf({
-      ids: built.flatMap(({ rows }) => [...rows.identity.DocumentId.values()]),
+    placedIds,
+    placedShares,
+    placedCatalogRowsOf({
+      assembledIds: placedIds.AssembledId.values(),
+      catalogs: built.flatMap(({ rows }) => [...rows.catalog.CatalogId.values()]),
       instances: assembled.Instance.values(),
-      targets: built.flatMap(({ rows }) => [...rows.identity.IdrefTarget.values()]),
+      targets: built.flatMap(({ rows }) => [...rows.catalog.CatalogTarget.values()]),
     }),
     sectionRowsOf({
       baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),

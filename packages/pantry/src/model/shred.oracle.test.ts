@@ -2154,3 +2154,117 @@ describe("XLink's attributes (C30, spec reading 81)", () => {
       }),
   );
 });
+
+describe("a MathML element where the parent admits none (p6n-6)", () => {
+  it.effect(
+    "refuses m:annotation, m:sep and m:math directly in m:annotation-xml as mathml-foreign, and a MathML name no kind takes as unnamed: both versions",
+    () =>
+      // Oracle: the specification as a checker: MathML 3's `annotation-xml` content is `anyElement`
+      // outside MathML's own namespace, or MathML content its own models admit, so an `m:annotation`,
+      // `m:sep` or `m:math` is a MathML kind `m:annotation-xml` does not admit there (a kind the
+      // vocabulary reads), while `m:notanelement` is no MathML kind at all (MathML 3 RelaxNG,
+      // `mathml3-common.rnc` lines 15 and 61).
+      // Bound: three MathML kinds and one unnamed MathML name, in the 2 versions.
+      Effect.gen(function* mathmlNotAdmitted() {
+        const mathml = "http://www.w3.org/1998/Math/MathML";
+        const refusalOf = (version: Composed["version"], child: string) =>
+          Effect.flip(
+            reread(
+              new TextEncoder().encode(
+                `<qti-assessment-item xmlns="${asi}" xmlns:m="${mathml}" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p><m:math><m:semantics><m:mi>x</m:mi><m:annotation-xml encoding="x">${child}</m:annotation-xml></m:semantics></m:math></p></qti-item-body></qti-assessment-item>`,
+              ),
+              version,
+            ),
+          );
+
+        for (const version of schemaVersions) {
+          for (const [local, child] of [
+            ["annotation", '<m:annotation encoding="text/plain">y</m:annotation>'],
+            ["sep", "<m:sep/>"],
+            ["math", "<m:math/>"],
+          ] as const) {
+            assert.deepStrictEqual(
+              yield* refusalOf(version, child),
+              new UnmodeledVocabulary({
+                kind: "element",
+                name: `m:${local}`,
+                parent: Option.some("m:annotation-xml"),
+                reason: "mathml-foreign",
+              }),
+              `m:${local} in ${version}`,
+            );
+          }
+          assert.deepStrictEqual(
+            yield* refusalOf(version, "<m:notanelement/>"),
+            new UnmodeledVocabulary({
+              kind: "element",
+              name: "m:notanelement",
+              parent: Option.some("m:annotation-xml"),
+              reason: "unnamed",
+            }),
+            `m:notanelement in ${version}`,
+          );
+        }
+      }),
+  );
+});
+
+/**
+ * The refusal of an SSML `role` on an `ssml:` element of a local name.
+ *
+ * @param tag - The local name, `w` or `token`.
+ * @returns The `prefix-unbound` refusal naming `ssml:<tag>` as the parent of the attribute.
+ */
+const refusalOfRole = (tag: string): UnmodeledVocabulary =>
+  new UnmodeledVocabulary({
+    kind: "attribute",
+    name: "role",
+    parent: Option.some(`ssml:${tag}`),
+    reason: "prefix-unbound",
+  });
+
+describe("an SSML role item whose prefix nothing binds (p7n-6.1)", () => {
+  it.effect(
+    "refuses an ssml:w or ssml:token role item whose prefix no declaration in scope binds as prefix-unbound, and reads a bound prefix, xml:, an unprefixed item and a role on any other element: both versions",
+    () =>
+      // Oracle: the specification as a checker: SSML's `role` on `token` and `w` is a list of
+      // `xsd:QName` (`ssml/synthesis-nonamespace.xsd` line 308), a QName's prefix must resolve in
+      // the namespace declarations in scope, and `xml` is bound by definition (XML Schema 1.0 Part
+      // 2, §3.2.18; Namespaces in XML 1.0, §3; spec reading 83). An unprefixed item takes the
+      // default namespace and is never unbound.
+      // Bound: two kinds and five role values, in the 2 versions.
+      Effect.gen(function* roleItems() {
+        const ssml = "http://www.w3.org/2001/10/synthesis";
+        const read = (version: Composed["version"], tag: string, role: string, declaration = "") =>
+          reread(
+            new TextEncoder().encode(
+              `<qti-assessment-item xmlns="${asi}" xmlns:ssml="${ssml}" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p><ssml:speak version="1.1" xml:lang="en"${declaration}><ssml:${tag} role="${role}">x</ssml:${tag}></ssml:speak></p></qti-item-body></qti-assessment-item>`,
+            ),
+            version,
+          );
+
+        for (const version of schemaVersions) {
+          for (const tag of ["w", "token"]) {
+            assert.deepStrictEqual(
+              yield* Effect.flip(read(version, tag, "x:noun")),
+              refusalOfRole(tag),
+              `unbound x: on ${tag} in ${version}`,
+            );
+            assert.deepStrictEqual(
+              yield* Effect.flip(read(version, tag, "noun y:verb")),
+              refusalOfRole(tag),
+              `unbound y: after a bare item on ${tag} in ${version}`,
+            );
+            for (const [role, declaration] of [
+              ["x:noun", ' xmlns:x="urn:x"'],
+              ["noun xml:lang", ""],
+              ["noun", ""],
+              ["  noun \n verb  ", ""],
+            ] as const) {
+              yield* read(version, tag, role, declaration);
+            }
+          }
+        }
+      }),
+  );
+});

@@ -156,12 +156,15 @@ const besideCardinality = (
  * @param key - Its key.
  * @returns The row.
  */
-const mapKeyRow = (at: number, key: string): Fact<typeof MapKey> => ({
+const mapKeyRow = (at: number, key: string, baseType = "string"): Fact<typeof MapKey> => ({
   baseTypes: 1n,
+  caseText: "",
   document: stray,
+  folded: baseType === "string",
   key,
   kind: "qti-map-entry",
   mapping: stray,
+  matched: baseType === "string" ? key.replaceAll(/[A-Z]/gu, (c) => c.toLowerCase()) : key,
   nearest: stray,
   node: strayNode(at),
   start: BigInt(5 + 2 * at),

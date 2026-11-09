@@ -94,12 +94,17 @@ const valueSetKinds: ReadonlySet<string> = new Set(["qti-default-value", "qti-co
 
 /**
  * The outcome names the specification types (§2.2.2.3, Outcomes Variable: "SCORE MUST be a
- * float", "MAXSCORE MUST be a float", "PASSED MUST be a boolean").
+ * float", "MAXSCORE MUST be a float", "PASSED MUST be a boolean"), and whether a test's declaration
+ * is held to the type: SCORE and MAXSCORE are said of items ("Items that declare ... SCORE MUST be
+ * a float"), PASSED of "Items or tests".
  */
-const reservedBaseTypes: ReadonlyMap<string, string> = new Map([
-  ["MAXSCORE", "float"],
-  ["PASSED", "boolean"],
-  ["SCORE", "float"],
+const reservedBaseTypes: ReadonlyMap<
+  string,
+  { readonly baseType: string; readonly testsHeld: boolean }
+> = new Map([
+  ["MAXSCORE", { baseType: "float", testsHeld: false }],
+  ["PASSED", { baseType: "boolean", testsHeld: true }],
+  ["SCORE", { baseType: "float", testsHeld: false }],
 ]);
 
 /**
@@ -296,7 +301,8 @@ const valueSetLawsOf = (
  *
  * @param rows - The document.
  * @param node - The declaration.
- * @param sessionVariables - The built-in session variables, which must not be declared.
+ * @param sessionVariables - The built-in session variables of the document's root, which must not be
+ *   declared there: an item's three, a test's `duration` (reading 168).
  * @param grammar - The composed grammar.
  * @returns The breaches.
  */
@@ -335,7 +341,9 @@ const declarationLawsOf = (
       (node.kind === "qti-outcome-declaration" &&
         reserved !== undefined &&
         (Option.contains(isRecord, true) ||
-          Option.exists(baseType, (held) => held !== reserved))) ||
+          Option.exists(baseType, (held) => held !== reserved.baseType)) &&
+        (reserved.testsHeld ||
+          !Option.exists(rows.root, ({ kind }) => kind === "qti-assessment-test"))) ||
       (name === "QTI_CONTEXT" &&
         (node.kind !== "qti-context-declaration" || Option.contains(isRecord, false)))
     );
@@ -520,9 +528,12 @@ export const documentDocumentBreaches = (
   rows: View,
   grammar: ComposedGrammar,
 ): readonly Breach[] => {
+  const rootKind = Option.match(rows.root, { onNone: () => "", onSome: ({ kind }) => kind });
   const sessionVariables = new Set(
     grammar.references.builtIn.rows
-      .filter(({ declaration }) => declaration !== "qti-context-declaration")
+      .filter(
+        ({ declaration, root }) => root === rootKind && declaration !== "qti-context-declaration",
+      )
       .map(({ variable }) => variable),
   );
 

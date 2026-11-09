@@ -37,11 +37,21 @@
  */
 import { closed, closedId, fin, natural, pg, slot, str } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Result } from "effect";
+import { committedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
 import type { Flag as FlagHandle } from "#pantry/grammar/ancestry.ts";
+import { attributeCounts } from "#pantry/grammar/attributes.ts";
+import type { AttributeCount } from "#pantry/grammar/attributes.ts";
 import type { Roster as GeneratedRoster } from "#pantry/grammar/closed.ts";
 import { int8Max, rowsAt } from "#pantry/grammar/closed.ts";
 import { composed, recordCardinality } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
+import {
+  cnForms,
+  cnPatternOf,
+  mathArities,
+  mathHeadOperators,
+  mathHeadQualifiers,
+} from "#pantry/grammar/expression.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
 import { toolLabelKindsOf } from "#pantry/grammar/labels.ts";
 import { vocabularyNamespacesPattern } from "#pantry/grammar/names.ts";
@@ -60,16 +70,19 @@ import { typeDerivations } from "#pantry/vocab/inventory/models.ts";
 export const grammar: ComposedGrammar = Result.getOrThrowWith(composed(), (refusal) => refusal);
 
 /**
- * Take a generated roster's handles as a nonempty list, the form a grizzle roster declares.
+ * Take a generated roster's handles as a nonempty list, the form a grizzle roster declares, in the
+ * order grizzle accepts: the handles the committed snapshot holds for the roster, in their code
+ * order, then the handles new since the snapshot, in the generator's order (`inCommittedOrder`).
  *
- * @param name - The roster's name, for the defect's message.
- * @param handles - The handles in code order.
- * @returns The same handles, typed nonempty.
+ * @param name - The roster's name: its declared name, which keys the snapshot's codes, and the
+ *   defect's message.
+ * @param handles - The handles in the generator's order.
+ * @returns The same handles, typed nonempty and ordered by the committed codes.
  * @throws {Error} When the generator gave the roster no handle, which no vocabulary list does.
  */
 const nonEmpty = <H extends string>(name: string, handles: readonly H[]): readonly [H, ...H[]] => {
   if (Arr.isReadonlyArrayNonEmpty(handles)) {
-    return handles;
+    return inCommittedOrder(committedRosters.get(name) ?? [], handles);
   }
 
   throw new Error(
@@ -363,12 +376,17 @@ export const Identity = closed(
  * handle first, in code order, a kind governing its own elements by its declared type; then each
  * (kind, type) where the type governs an element of the kind in place of its declared type, or a
  * simple type governs a foreign element's text (spec readings 60 and 84), spelled `<kind> <type>`
- * (`attributes.ts`). A kind's handle holds no space, so no two spellings meet.
+ * (`attributes.ts`). A kind's handle holds no space, so no two spellings meet. The list is ordered
+ * as the `Governor` roster, by the committed snapshot's codes with new handles last, so a kind's
+ * handle keeps its place only while the snapshot says so.
  */
-export const Governor = closed("Governor", [
-  ...nonEmpty("NodeKind", grammar.kinds.nodeKind.handles),
-  ...grammar.attributes.governor.payload[0].roster.handles,
-]);
+export const Governor = closed(
+  "Governor",
+  nonEmpty("Governor", [
+    ...nonEmpty("NodeKind", grammar.kinds.nodeKind.handles),
+    ...grammar.attributes.governor.payload[0].roster.handles,
+  ]),
+);
 
 /**
  * A generated value as a `Governor` handle ({@link handleLookup}).
@@ -1123,6 +1141,88 @@ export const Required = closed.relation(
 );
 
 /**
+ * The attribute models a count of `attributeCounts` judges (spec readings 41 and 43), each with
+ * its count: the model each element of a counted kind reads under its governor, its counted slots
+ * the slots of the count's names the model admits, and its bounds, an unbounded `max` written as
+ * the number of those slots, which no count exceeds. A name a model does not admit has no slot, so
+ * it counts nothing, as the oracle reads it.
+ *
+ * A model is shared by every (version, governor) of one attribute grammar, so a counted model
+ * another kind reads, or two counts read, would judge that kind by a count that is not its own:
+ * the grammar has neither, and a change that makes one throws here rather than install it.
+ */
+const countedModels = (() => {
+  const modelAt = new Map(
+    AttributeModelOf.rows.map(({ governor, model, version }) => [`${version} ${governor}`, model]),
+  );
+  const modelOfRow = ({ governor, version }: (typeof GoverningOf.rows)[number]) => {
+    const model = modelAt.get(`${version} ${governor}`);
+    if (model === undefined) {
+      throw new Error(
+        `The governor ${governor} has no attribute model in version ${version}, though AttributeModelOf is total; correct its rows.`,
+      );
+    }
+
+    return model;
+  };
+  const counts = new Map<string, AttributeCount>();
+  for (const row of GoverningOf.rows) {
+    const count = attributeCounts.find(({ kind }) => kind === row.kind);
+    if (count !== undefined) {
+      const model = modelOfRow(row);
+      const earlier = counts.get(model);
+      if (earlier !== undefined && earlier !== count) {
+        throw new Error(
+          `The attribute model ${model} is read by the counted kinds ${earlier.kind} and ${count.kind}, whose counts differ; give each its own model.`,
+        );
+      }
+
+      counts.set(model, count);
+    }
+  }
+
+  for (const row of GoverningOf.rows) {
+    const model = modelOfRow(row);
+    if (counts.has(model) && !attributeCounts.some(({ kind }) => kind === row.kind)) {
+      throw new Error(
+        `The attribute model ${model} is read by ${row.kind}, which no attribute count names, and by ${counts.get(model)?.kind ?? model}, which one does; give the counted kind its own model.`,
+      );
+    }
+  }
+
+  return [...counts].map(([model, { max, min, names }]) => {
+    const slots = AttributeSlotOf.rows
+      .filter((row) => row.model === model && names.includes(row.name))
+      .map(({ slot: at }) => at);
+
+    return { max: BigInt(Math.min(max, slots.length)), min: BigInt(min), model, slots };
+  });
+})();
+
+/**
+ * `CountedSlot`: the set of (model, slot) where the attribute at the slot counts toward its model's
+ * `AttributeCountOf`, read as `CountedSlot.row(model)` by AL5.
+ */
+export const CountedSlot = closed.relation(
+  "CountedSlot",
+  { model: closedId(AttributeModel), slot: modelSlot },
+  ["model", "slot"],
+  countedModels.flatMap(({ model, slots }) => slots.map((at) => ({ model, slot: at }))),
+);
+
+/**
+ * `AttributeCountOf`: model → (min, max), how many of its `CountedSlot` attributes an element under
+ * a governor of the model carries (spec readings 41 and 43), a model of no count having no row,
+ * which AL5 reads through `AttributeCountOf.has`.
+ */
+export const AttributeCountOf = closed.relation(
+  "AttributeCountOf",
+  { max: pg.bigint, min: pg.bigint, model: closedId(AttributeModel) },
+  ["model"],
+  countedModels.map(({ max, min, model }) => ({ max, min, model })),
+);
+
+/**
  * `ValueDomainOf`: domain → (primitive, pattern), each value domain's primitive and the pattern its
  * lexical forms match as written, its lexical space. AL1 and the text law read `pattern` through
  * `Compute.matches`, whose pattern term must meet its subject's type, so `pattern` is plain text,
@@ -1343,6 +1443,148 @@ export const OperatorArity = closed.relation(
     max,
     min,
   })),
+);
+
+/**
+ * The `CnType` roster: the `type` values of a MathML `cn` whose content takes a form
+ * ({@link cnForms}); every other `type` is text and is no handle.
+ */
+export const CnType = closed("CnType", nonEmpty("CnType", [...cnForms.keys()]));
+
+/**
+ * A generated value as a `CnType` handle ({@link handleLookup}).
+ */
+const asCnType = handleLookup("CnType", CnType.handles);
+
+/**
+ * The `CnPartForm` roster: the forms a part of a `cn`'s content takes ({@link cnForms}), in the
+ * order a type first states them.
+ */
+export const CnPartForm = closed(
+  "CnPartForm",
+  nonEmpty("CnPartForm", [...new Set([...cnForms.values()].flat())]),
+);
+
+/**
+ * A generated value as a `CnPartForm` handle ({@link handleLookup}).
+ */
+const asCnPartForm = handleLookup("CnPartForm", CnPartForm.handles);
+
+/**
+ * The `CnPart` roster: a part's place among the parts of a `cn`'s content, the numerals 0 to the
+ * most any type holds ({@link cnForms}). The last place is one no type lists: a `cn` with more
+ * parts than its type writes a row there, which `CnForm` lists for no type, and its drawn count
+ * passes `CnParts`' for no type, so the database refuses it. It is appended, so `"0"` and `"1"`
+ * keep their codes.
+ */
+export const CnPart = closed(
+  "CnPart",
+  nonEmpty(
+    "CnPart",
+    Arr.range(0, Math.max(...[...cnForms.values()].map((forms) => forms.length))).map(String),
+  ),
+);
+
+/**
+ * The `CnBase` roster: the radixes of a `cn`'s digits, the numerals 2 to 36 ({@link cnPatternOf}).
+ */
+export const CnBase = closed("CnBase", nonEmpty("CnBase", Arr.range(2, 36).map(String)));
+
+/**
+ * `MathArity`: Content MathML operator kind → (min, max), the fewest and the most arguments its
+ * `m:apply` takes ({@link mathArities}), `int8Max` for no upper bound.
+ */
+export const MathArity = closed.relation(
+  "MathArity",
+  { kind: closedId(NodeKind), max: natural, min: natural },
+  ["kind"],
+  [...mathArities].map(([kind, { max, min }]) => ({
+    kind: memberOf(grammar.kinds.nodeKind, kind),
+    max: naturalOf(max),
+    min: naturalOf(min),
+  })),
+);
+
+/**
+ * `MathHeadOperator`: the set of operator kinds the head-qualifier law judges
+ * ({@link mathHeadOperators}).
+ */
+export const MathHeadOperator = closed.relation(
+  "MathHeadOperator",
+  { kind: closedId(NodeKind) },
+  ["kind"],
+  [...mathHeadOperators].map((kind) => ({ kind: memberOf(grammar.kinds.nodeKind, kind) })),
+);
+
+/**
+ * `HeadQualifier`: the set of (head, qualifier) where an operator's syntax table lists the
+ * qualifier beside its arguments ({@link mathHeadQualifiers}).
+ */
+export const HeadQualifier = closed.relation(
+  "HeadQualifier",
+  { head: closedId(NodeKind), qualifier: closedId(NodeKind) },
+  ["head", "qualifier"],
+  mathHeadQualifiers.map(({ head, qualifier }) => ({
+    head: memberOf(grammar.kinds.nodeKind, head),
+    qualifier: memberOf(grammar.kinds.nodeKind, qualifier),
+  })),
+);
+
+/**
+ * `CnParts`: type → parts, how many parts a `cn` of the type holds, the count of its {@link CnForm}
+ * rows.
+ */
+export const CnParts = closed.relation(
+  "CnParts",
+  { parts: natural, type: closedId(CnType) },
+  ["type"],
+  [...cnForms].map(([type, forms]) => ({
+    parts: BigInt(forms.length),
+    type: asCnType(type),
+  })),
+);
+
+/**
+ * `CnForm`: (type, part) → form, the form of each part of a `cn` of the type, a part's number being
+ * its place among the parts `m:sep` separates ({@link cnForms}).
+ */
+export const CnForm = closed.relation(
+  "CnForm",
+  {
+    form: closedId(CnPartForm),
+    part: slot(closedId(CnPart), fin(CnParts, "parts")),
+    type: closedId(CnType),
+  },
+  ["type", "part"],
+  [...cnForms].flatMap(([type, forms]) =>
+    forms.map((form, part) => ({
+      form: asCnPartForm(form),
+      part: String(part),
+      type: asCnType(type),
+    })),
+  ),
+);
+
+/**
+ * `CnPattern`: (form, base) → pattern, the lexical space of a part of the form, its digits read in
+ * the base from 2 to 36 ({@link cnPatternOf}); a double's and a hexdouble's pattern reads no base.
+ * {@link cnPatternOf} returns an XML Schema pattern, which anchors itself; PostgreSQL's `~`
+ * searches, and grizzle requires a pattern anchored by `^` and `$`, so each row's payload is the
+ * pattern wrapped as `^(?:…)$` and the database judges a part's whole text.
+ */
+export const CnPattern = closed.relation(
+  "CnPattern",
+  { base: closedId(CnBase), form: closedId(CnPartForm), pattern: anyText },
+  ["form", "base"],
+  CnPartForm.handles.flatMap((form) =>
+    Arr.range(2, 36).flatMap((base) =>
+      Option.toArray(cnPatternOf(form, base)).map((pattern) => ({
+        base: String(base),
+        form,
+        pattern: `^(?:${pattern})$`,
+      })),
+    ),
+  ),
 );
 
 /**

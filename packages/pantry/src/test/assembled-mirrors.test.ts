@@ -86,19 +86,23 @@ const unjudged = {
   "MapKeyPoint.value": typedKeyValue,
   "MasteryCeiling: a when term": unreadTerm("when"),
   "MasteryFloor: a when term": unreadTerm("when"),
+  "MathAction: a base term": unreadTerm("base"),
+  "MathAction: a when term": unreadTerm("when"),
+  "MathApply: a base term": unreadTerm("base"),
+  "MathApply: a between term": unreadTerm("between"),
   "MostCount: a base term": unreadTerm("base"),
   "MostCount: a when term": unreadTerm("when"),
   "Node.elements":
     "a tree root's running value of the element fold, the start value grizzle keeps in the field's builder",
-  "Node.lastState": "a copy along a last axis, `pred(children)`, which the host does not restore",
   "Node.parentAncestry": rootCopy,
   "Node.parentGovernor": rootCopy,
   "Node.parentKind": rootCopy,
   "Node.parentNearest": rootCopy,
   "Node.parentNearestKind": rootCopy,
   "Node.parentParentKind": rootCopy,
-  "Node.was": "a copy along a predecessor axis, `pred(at)`, which the host does not restore",
   "Node: a between term": unreadTerm("between"),
+  "OpenAttributeName: a literal term":
+    "its predicate holds a literal of no datum's type, a Bits set over AttributeName",
   "OpenElementName: a literal term": "its predicate holds a literal of no datum's type",
   "OpenElementType: a cond term": unreadTerm("cond"),
   "Quotation: a base term": unreadTerm("base"),
@@ -106,7 +110,10 @@ const unjudged = {
   "RoundingModeFigures: a when term": unreadTerm("when"),
   "SectionSelection.select": unreadGenerated("a cast of `selectForm`"),
   "SectionSelection: a base term": unreadTerm("base"),
+  "ShareFragment: a charLength function term":
+    "its predicate calls Compute.charLength, a function the host's evaluator does not compute",
   "Slider: a when term": unreadTerm("when"),
+  "TextReference: a base term": unreadTerm("base"),
 } satisfies Readonly<Record<string, string>>;
 
 /**

@@ -405,6 +405,7 @@ const tiers: readonly (readonly Rule[])[] = [
     "template-ref",
     "printed-variable-ref",
     "context-variable-ref",
+    "pci-module-source",
     "slider-bounds",
     "max-strings-required",
     "aria-value-range",
@@ -879,8 +880,18 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ],
   [
     "label-tool",
+    "card-support",
+    "O1 (phase-9-n §4.1): the catalog's rules join the identity tier after label-tool (reading R9-a)",
+  ],
+  [
+    "card-support",
+    "card-default",
+    "reading R9-a: a card's support (§5.26.1) before the entries it holds (§5.27.2), section order and containment",
+  ],
+  [
+    "card-default",
     "document-lang",
-    "O1 (plan §1.7): an element's own identity before its document's language (R26)",
+    "O1 (phase-9-n §4.1): the catalog's rules before the document's language (R26), an element's own identity first",
   ],
   ["document-lang", "declaration-key", "the tiers: O1 before O2 (plan §1.7)"],
   [
@@ -958,8 +969,13 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ],
   [
     "context-variable-ref",
+    "pci-module-source",
+    "O3: references before a PCI's module source (R10-a)",
+  ],
+  [
+    "pci-module-source",
     "slider-bounds",
-    "O3: references before an interaction's numeric bounds (§5.137)",
+    "O3: a PCI's module source before an interaction's numeric bounds (§5.137)",
   ],
   [
     "slider-bounds",
@@ -1192,6 +1208,11 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ],
   [
     "fragment-context",
+    "remote-section",
+    "limitRules' order: the fragment's one context (reading 117), then the remote section ref (reading 170)",
+  ],
+  [
+    "remote-section",
     "namespace-name",
     "the document layer: its stated limits before its laws, the first a namespace name (reading 131)",
   ],
@@ -1216,7 +1237,7 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
 describe("the rules of the laws one native object carries, in the precedence's order", () => {
   it("holds each adjacent pair of the precedence to the reading or source that orders it", () => {
     // Oracle: the readings and the plan's tiers, pair by pair (precedencePairs). Bound: every
-    // adjacent pair of the 100 rules, so a swap of any two neighbours, or a rule moved or added,
+    // adjacent pair of the 103 rules, so a swap of any two neighbours, or a rule moved or added,
     // breaks a pair, and the message names it.
     assert.deepStrictEqual(
       precedencePairs.map(([earlier, later]) => `${earlier} before ${later}`),

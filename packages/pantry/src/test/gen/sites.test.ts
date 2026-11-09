@@ -33,6 +33,7 @@ import { containmentsOf } from "#pantry/test/judged-laws.ts";
 import { checkOf } from "#pantry/test/key-copies.ts";
 import {
   hrefCases,
+  outsideRulesOfBox,
   ruleOfCase,
   rulesOfBox,
   siteBox,
@@ -53,14 +54,15 @@ const testTimeoutMs = 2_400_000;
 
 /**
  * The rules a site's laws, the required href of a section ref, or an absent file refuse a package
- * under: the include's target, the section ref's document entry, the href's reachability, AL3 and
- * the file's existence.
+ * under: the include's target, the section ref's document entry, the stated limit on a remote
+ * section ref (reading 170), the href's reachability, AL3 and the file's existence.
  */
 const siteRules: ReadonlySet<string> = new Set([
   "entry-kind",
   "file-exists",
   "include-target",
   "reachability",
+  "remote-section",
   "required-attribute",
 ]);
 
@@ -96,9 +98,12 @@ const siteOf = (inputs: PackageInputs, name: SiteName): Addition<typeof Site> =>
  * path its href's `ReferencePath` and `entry` exactly where an entry is there; each `SiteTarget` a
  * site's and its path's, exactly where that path is a listed document. The rules the rows break,
  * each site's one: `File_exists` where its path's `entry` is false, which PostgreSQL judges as the
- * row is inserted; otherwise, for an include with no target, "Include target"; for a section ref
- * with no href, AL3, which PostgreSQL judges first, and with one that names no section document of
- * the package, "Document entry".
+ * row is inserted; otherwise, for an include with no target whose href does not resolve outside the
+ * package, "Include target" (an external include, marked `external` exactly where its href's
+ * `Reference` is external, is stored as written and never fetched, reading 115); for a section ref
+ * marked `external`, the stated limit "Remote section ref" (reading 170), with no href, AL3, which
+ * PostgreSQL judges first, and with one that names no section document of the package, "Document
+ * entry".
  *
  * @param inputs - The package's import inputs.
  * @param literal - The package's literal, for the assertions' messages.
@@ -112,6 +117,11 @@ const rowRules = (inputs: PackageInputs, literal: string): ReadonlySet<string> =
   );
   const hrefs = new Set(
     [...inputs.Reference.values()].flatMap(({ name, node }) => (name === "href" ? [node] : [])),
+  );
+  const externalHrefs = new Set(
+    [...inputs.Reference.values()].flatMap(({ name, node, scope }) =>
+      name === "href" && scope === "external" ? [node] : [],
+    ),
   );
   const entries = new Set(
     [...inputs.Package.values()].flatMap(({ entries: held }) => held.map(({ path }) => path)),
@@ -135,6 +145,11 @@ const rowRules = (inputs: PackageInputs, literal: string): ReadonlySet<string> =
     const site = siteOf(inputs, name);
     const path = pathOf.get(site.node);
     const target = targetOf.get(site.node);
+    assert.strictEqual(
+      site.external,
+      externalHrefs.has(site.node),
+      `${literal}: ${name}'s external mark`,
+    );
     if (path !== undefined) {
       assert.isTrue(
         hrefPaths.has(JSON.stringify([path.node, path.package, path.path])),
@@ -157,9 +172,11 @@ const rowRules = (inputs: PackageInputs, literal: string): ReadonlySet<string> =
     if (path?.entry === false) {
       broken.add("file-exists");
     } else if (sites[name].kind === "xi:include") {
-      if (target === undefined) {
+      if (target === undefined && !site.external) {
         broken.add("include-target");
       }
+    } else if (site.external) {
+      broken.add("remote-section");
     } else if (path === undefined) {
       broken.add(hrefs.has(site.node) ? "entry-kind" : "required-attribute");
     } else if (!sectionPaths.has(path.path)) {
@@ -181,6 +198,11 @@ type Row = Readonly<Record<string, Datum>>;
 const fileExists = Option.getOrThrow(checkOf(Qti.statements, "SitePath", "File_exists"));
 
 /**
+ * `Site`'s `Remote_section_ref`, read from the predicate grizzle keeps for it.
+ */
+const remoteSection = Option.getOrThrow(checkOf(Qti.statements, "Site", "Remote_section_ref"));
+
+/**
  * Write the values a containment pairs as one key, each as its text, so a source tuple is sought
  * among its target's.
  *
@@ -199,9 +221,10 @@ const siteContainments = [...containmentsOf(Qti, "Site"), ...containmentsOf(Qti,
 
 /**
  * Judge each site's rows by the schema's own statements, read from grizzle's: `File_exists` over
- * its path, and every containment from it or its path into a relation these rows hold, each source
- * row its selection holds sought among the target rows its selection holds. Each breach is named by
- * refusal.ts's rule for its law, by the site it is the row of.
+ * its path, `Remote_section_ref` over the site, and every containment from it or its path into a
+ * relation these rows hold, each source row its selection holds sought among the target rows its
+ * selection holds. Each breach is named by refusal.ts's rule for its law, by the site it is the row
+ * of.
  *
  * @param inputs - The package's import inputs.
  * @returns The rules each site's rows break, by its node.
@@ -214,6 +237,7 @@ const schemaRules = (inputs: PackageInputs): ReadonlyMap<string, ReadonlySet<str
         entries.map(({ path }) => ({ package: id, path })),
       ),
     ],
+    ["Reference", [...inputs.Reference.values()]],
     ["ReferencePath", [...inputs.ReferencePath.values()]],
     ["Site", [...inputs.Site.values()]],
     ["SitePath", [...inputs.SitePath.values()]],
@@ -228,6 +252,12 @@ const schemaRules = (inputs: PackageInputs): ReadonlyMap<string, ReadonlySet<str
   for (const path of inputs.SitePath.values()) {
     if (!fileExists(path)) {
       breach(path.node, "file-exists");
+    }
+  }
+
+  for (const site of inputs.Site.values()) {
+    if (!remoteSection(site)) {
+      breach(site.node, "remote-section");
     }
   }
 
@@ -272,6 +302,7 @@ const judged = (box: SiteBox, c: Case<Situation>) =>
     const program = yield* readProgram(dir);
     const byRows = rowRules(program.inputs, literal);
     const byCases = rulesOfBox(box);
+    const outside = outsideRulesOfBox(box);
     const oracled = new Set(
       verdict.kind === "refused" ? [...verdict.rules].filter((rule) => siteRules.has(rule)) : [],
     );
@@ -289,9 +320,24 @@ const judged = (box: SiteBox, c: Case<Situation>) =>
     );
     assert.strictEqual(
       verdict.kind === "accepted",
-      byCases.size === 0,
+      byCases.size === 0 && outside.size === 0,
       `${literal}: the law oracle ${verdict.kind === "accepted" ? "accepts" : "refuses"} it`,
     );
+    if (byCases.size > 0 && verdict.kind === "refused") {
+      assert.deepStrictEqual(
+        [...verdict.rules].filter((rule) => !byCases.has(rule) && !outside.has(rule)),
+        [],
+        `${literal}: the law oracle names rules beyond its cases {${[...byCases].join(", ")}} and the outside rules {${[...outside].join(", ")}}`,
+      );
+    }
+
+    if (byCases.size === 0 && verdict.kind === "refused") {
+      assert.deepStrictEqual(
+        verdict.rules,
+        outside,
+        `${literal}: the law oracle refuses it under {${[...verdict.rules].join(", ")}}, outside the site laws`,
+      );
+    }
   }).pipe(Effect.scoped);
 
 layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (it) => {
@@ -339,7 +385,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (i
   );
 
   it.effect(
-    "breaks, by the schema's own statements over each package's rows, each site's one law: an absent file File_exists alone, never its site's document law beside it",
+    "breaks, by the schema's own statements over each package's rows, each site's one law: an absent file File_exists alone, never its site's document law beside it, and an external section ref Remote_section_ref alone",
     (ctx) =>
       // Oracle: the specification as a checker, reading 115 and §7.5 per case (`ruleOfCase`),
       // against the schema's statements as grizzle keeps them, their selections included
@@ -358,6 +404,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/sites.ts", (i
               "fragment absent",
               "rules absent",
               "section absent",
+              "section external",
               "section missing",
             ]),
             generator: siteBox,

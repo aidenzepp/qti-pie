@@ -229,8 +229,11 @@ const spelledName = (lexical: string, spelling: string, kind: string): Option.Op
 
 /**
  * Read the base type an attribute-typed expression's attribute gives it: a base value's and a test
- * variables' `base-type` as its type reads it (`typedValueOf`), `unknown` where a test variables
- * writes none or the form lies outside the type's lexical space, a type no law can know; a math
+ * variables' `base-type` as its type reads it (`typedValueOf`), `unknown` where the form lies
+ * outside the type's lexical space, a type no law can know; a test variables that writes no
+ * `base-type`, float where it writes a `weight-identifier` (information model §7.39.5: "When a
+ * weighting is specified the result of the expression always has base-type float"), and `unknown`
+ * where it writes none, a type its document alone does not give (§7.39.6; spec reading 167); a math
  * operator's `name`, `integer` for `signum`, `floor` and `ceil` and `float` for every other
  * (information model §2.11.3.32).
  *
@@ -245,6 +248,14 @@ const attributeBaseOf = (rows: View, node: Row): string => {
     )
       ? "integer"
       : "float";
+  }
+
+  if (
+    node.kind === "qti-test-variables" &&
+    Option.isNone(valueOf(rows, node.id, "base-type")) &&
+    Option.isSome(valueOf(rows, node.id, "weight-identifier"))
+  ) {
+    return "float";
   }
 
   return Option.getOrElse(typedValueOf(rows, node.id, "base-type"), () => "unknown");
@@ -711,7 +722,10 @@ const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean]
       reference.attribute === "identifier" &&
       (reference.node.kind === "qti-map-response" ||
         reference.node.kind === "qti-map-response-point") &&
-      reference.resolution === "declared" &&
+      // A built-in response declares no table, so it holds none (decision 431, reading 166).
+      (reference.resolution === "declared" ||
+        (reference.resolution === "builtIn" &&
+          Option.contains(reference.declarationKind, "qti-response-declaration"))) &&
       !(
         Option.contains(reference.declarationKind, "qti-response-declaration") &&
         ((reference.node.kind === "qti-map-response" && Option.contains(table, "qti-mapping")) ||
@@ -789,8 +803,8 @@ const referenceBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly B
 
 /**
  * Judge each typing attribute and literal of a document: a test variables with a
- * `weight-identifier` is of base type float, where it writes one (§2.11.4.8, P29); a base value's
- * text is a lexical form of its base type (§8.13, `Literal lexical`).
+ * `weight-identifier` is of base type float, where it writes one (§7.39.5 and §7.39.6, P29); a
+ * base value's text is a lexical form of its base type (§8.13, `Literal lexical`).
  *
  * @param typed - The document.
  * @param grammar - The composed grammar.

@@ -115,7 +115,10 @@ describe("qti/attributes.ts, declared", () => {
       "AL1 admission",
       "AL2 distinct",
       "AL3 required",
+      "AL4 data name",
+      "AL4 declared data name",
       "AL4 open names",
+      "AL5 attribute count",
       "Attribute prefix",
       "Double bound",
       "Double value",
@@ -645,6 +648,97 @@ describe("qti/attributes.ts, the attribute prefix (C54)", () => {
               `${name} written with ${JSON.stringify(prefix)}`,
             );
           }
+        }
+      }),
+  );
+});
+
+/**
+ * An item whose body holds one paragraph carrying the attribute `data-x`, which the data name box
+ * rewrites to each class, host and local name.
+ */
+const dataItem = `<qti-assessment-item xmlns="${asiNamespace}" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p data-x="1">t</p></qti-item-body></qti-assessment-item>`;
+
+describe("qti/attributes.ts, the data name (reading 13)", () => {
+  it.effect(
+    "breaks law AL4 data name on a data-* name outside reading 13's language and on a no-namespace data- name of an element that is not foreign, and on no name of the language",
+    () =>
+      // Oracle: the specification as a checker, reading 13 of `docs/spec-readings.md`: the
+      // information model's pattern and prose (section 7.11), `data-` and one or more lower-case
+      // ASCII letters, digits, `_`, `.` or `-`, and a no-namespace `data-` name of an element that
+      // is not foreign is `data-*` or refused (a foreign element's is `no-namespace`).
+      // Bound: the four cases of the brief, written out.
+      Effect.gen(function* dataNameBox() {
+        const rows = yield* foldedOf(dataItem, "3.0.1");
+        const target =
+          rows.attributes.find(({ name }) => name === "data-*") ??
+          assert.fail("the paragraph carries its data-x");
+        const host =
+          rows.nodes.find(({ id }) => id === target.node) ?? assert.fail("the paragraph is a node");
+        const cases = [
+          { broken: true, class: "data-*", kind: host.kind, local: "data-A" },
+          { broken: true, class: "no-namespace", kind: host.kind, local: "data-x" },
+          { broken: false, class: "data-*", kind: host.kind, local: "data-x" },
+          { broken: false, class: "no-namespace", kind: "foreign-element", local: "data-x" },
+        ] as const;
+
+        for (const { broken, class: name, kind, local } of cases) {
+          const tampered: FoldedRows<Composed> = {
+            ...rows,
+            attributes: rows.attributes.map((attribute) =>
+              attribute === target ? { ...attribute, name } : attribute,
+            ),
+            nodes: rows.nodes.map((node) => (node === host ? { ...node, kind } : node)),
+            openNames: rows.openNames.map((open) =>
+              open.attribute === target.id ? { ...open, local } : open,
+            ),
+          };
+
+          assert.strictEqual(
+            lawsBroken(tampered).has("AL4 data name"),
+            broken,
+            `${name} ${local} on ${kind}`,
+          );
+        }
+      }),
+  );
+});
+
+describe("qti/attributes.ts, a declared data- name (goal part E)", () => {
+  it.effect(
+    "breaks law AL4 declared data name on a data-* attribute named for a data- name its element declares, and on no other data-* name or host",
+    () =>
+      // Oracle: the specification as a checker, goal part E: a data- name QTI declares on an
+      // element is that attribute, never a custom one; `p` declares `data-catalog-idref` and
+      // `qti-assessment-item` does not (the XSDs, read through `AttributeGrammar.rows`).
+      // Bound: the three cases of the brief, written out.
+      Effect.gen(function* declaredDataNameBox() {
+        const rows = yield* foldedOf(dataItem, "3.0.1");
+        const target =
+          rows.attributes.find(({ name }) => name === "data-*") ??
+          assert.fail("the paragraph carries its data-x");
+        const host =
+          rows.nodes.find(({ id }) => id === target.node) ?? assert.fail("the paragraph is a node");
+        const cases = [
+          { broken: true, kind: host.kind, local: "data-catalog-idref" },
+          { broken: false, kind: "qti-assessment-item", local: "data-catalog-idref" },
+          { broken: false, kind: host.kind, local: "data-x" },
+        ] as const;
+
+        for (const { broken, kind, local } of cases) {
+          const tampered: FoldedRows<Composed> = {
+            ...rows,
+            nodes: rows.nodes.map((node) => (node === host ? { ...node, kind } : node)),
+            openNames: rows.openNames.map((open) =>
+              open.attribute === target.id ? { ...open, local } : open,
+            ),
+          };
+
+          assert.strictEqual(
+            lawsBroken(tampered).has("AL4 declared data name"),
+            broken,
+            `${local} on ${kind}`,
+          );
         }
       }),
   );

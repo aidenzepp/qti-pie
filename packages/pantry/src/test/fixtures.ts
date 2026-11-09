@@ -10,7 +10,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
  * A fix-forward of the materializer that changes what any directory holds bumps it, so the
  * corrected directories appear beside the old ones under new names instead of replacing them.
  */
-export const FIXTURES_VERSION = "2" as const;
+export const FIXTURES_VERSION = "3" as const;
 
 /**
  * A string edit applied to one file of a freshly extracted package, as plain data.
@@ -70,9 +70,10 @@ export type FileEdit =
  * The edit that turns an extracted package into a minimal package of one item.
  *
  * It keeps the item file `item` and the files that item references by a relative `src`, `data`,
- * `href`, `poster`, `srcset`, `cite` or `longdesc`, deletes every other entry and
- * writes a manifest of one `imsqti_item_xmlv3p0` resource declaring `schemaversion`. It applies
- * after the {@link FileEdit}s and {@link TextEdit}s of its spec, once the package is extracted.
+ * `href`, `poster`, `srcset`, `cite`, `altimg` or `longdesc`, or by the text of a `qti-file-href`
+ * or a `qti-resource-icon`, deletes every other entry and writes a manifest of one
+ * `imsqti_item_xmlv3p0` resource declaring `schemaversion`. It applies after the {@link FileEdit}s
+ * and {@link TextEdit}s of its spec, once the package is extracted.
  */
 export interface CutEdit {
   readonly _tag: "cut";
@@ -85,11 +86,13 @@ export interface CutEdit {
  *
  * It keeps the test document `test`, every document its item, section and stimulus refs reach
  * (transitively) and every file those documents reference by a relative `src`, `data`, `href`,
- * `poster`, `srcset`, `cite` or `longdesc`, and deletes every other entry. It writes a manifest
- * declaring `schemaversion` with one resource per kept document under its real type
+ * `poster`, `srcset`, `cite`, `altimg` or `longdesc`, and deletes every other entry. It writes a
+ * manifest declaring `schemaversion` with one resource per kept document under its real type
  * (`imsqti_test_xmlv3p0`, `imsqti_section_xmlv3p0`, `imsqti_item_xmlv3p0`,
  * `imsqti_stimulus_xmlv3p0`), each referenced file listed under the resource whose document
- * references it. It applies after the {@link FileEdit}s and {@link TextEdit}s of its spec.
+ * references it. A document an `xi:include` names is kept too, as a resource of its own of type
+ * `imsqti_fragment_xmlv3p0` (readings 93 and 115), not as a file of the including resource. It
+ * applies after the {@link FileEdit}s and {@link TextEdit}s of its spec.
  */
 export interface CutTestEdit {
   readonly _tag: "cutTest";
@@ -104,8 +107,10 @@ export interface CutTestEdit {
  * names it (a member under `qtiv3-examples/tests/`). The edit writes one stub item per distinct
  * item `href` of the test, from `simple`'s item as the template, at that `href`. A stub's
  * identifier is the item ref's identifier and it declares `RESPONSE` (identifier, single),
- * `SCORE` (float, single) and every other variable the test prefixes with that identifier or names
- * in a `qti-variable-mapping` `source-identifier` inside that item ref, as a float single outcome.
+ * `SCORE` (float, single; left out when a `qti-variable-mapping` inside that item ref targets
+ * `SCORE`, which reading 97 forbids an item that declares it) and every other variable the test
+ * prefixes with that identifier or names in a `qti-variable-mapping` `source-identifier` inside
+ * that item ref, as a float single outcome.
  * It writes a manifest declaring `schemaversion` of one test resource and one item resource per
  * stub, and deletes every other entry. It applies last, after the spec's {@link FileEdit}s and
  * {@link TextEdit}s.
@@ -216,6 +221,9 @@ const cutNames = [
 const corpusMembers = {
   BBQsTest: "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip",
   BPIG_22April: "QTI3_BPIG_Examples/BPIG_22April.zip",
+  items: "qtiv3-examples/packaging/items/items.zip",
+  sharedStimulus: "qtiv3-examples/packaging/sharedStimulus/sharedStimulus.zip",
+  testWithLti: "qtiv3-examples/packaging/testWithLti/testWithLti.zip",
 } as const;
 
 /**
@@ -403,6 +411,193 @@ export const negativeNames = [
 ] as const;
 
 /**
+ * The names of the fixtures that restore a lost check, each a data-only edit set over `simple` or
+ * one of {@link testNames}: `aria-h1-role-button` and `aria-source-role` break the two ARIA role
+ * rules (a `role` of `button` on an `h1`, a `role` on a `source`), `lang-case-mismatch` is the item
+ * root's `xml:lang="en-GB"` against the resource's LOM `language` `en-gb` (accepted, the two
+ * languages are the same one), and `pattern-unresolved-item` and `pattern-unresolved-test` hold a
+ * `qti-pattern-match` whose `pattern` is `{NOSUCH}`, with no variable of that name, in an item's
+ * response processing and a test's outcome processing (accepted, an unresolved braced pattern is a
+ * string).
+ */
+export const restoredNames = [
+  "aria-h1-role-button",
+  "aria-source-role",
+  "lang-case-mismatch",
+  "pattern-unresolved-item",
+  "pattern-unresolved-test",
+] as const;
+
+/**
+ * The names of the whole-package test fixtures over {@link testNames}: the section document
+ * placed twice (`section-doc-twice`, accepted), the item ref that shares an identifier with a
+ * section of the placed document (`section-doc-name-clash`), a backward branch inside a shuffled
+ * section (`branch-backward-shuffled`, accepted), a branch to the rule's own section
+ * (`branch-to-own-section`), a selection that equals its required parts (`select-two-required`,
+ * accepted) and a branch rule inside a section document placed twice that names a later item ref
+ * of the same document (`branch-in-twice-placed-section`, accepted).
+ */
+export const assemblyNames = [
+  "section-doc-twice",
+  "section-doc-name-clash",
+  "branch-backward-shuffled",
+  "branch-to-own-section",
+  "select-two-required",
+  "branch-in-twice-placed-section",
+] as const;
+
+/**
+ * The names of the weighted test variables fixtures over `test-mapping`, whose item refs carry
+ * `rtest04.xml`'s weights (decision 434, spec reading 167): `weighted-sum-float` sets a float
+ * single outcome from `rtest04.xml`'s weighted sum of a `qti-test-variables` that writes no
+ * `base-type` (accepted: the weighted test variables is float, its sum float), and
+ * `weighted-variables-integer` sets an integer multiple outcome from the same test variables
+ * (refused under "Set type": a weighted test variables with no `base-type` is float, §7.39.5).
+ */
+export const weightedNames = ["weighted-sum-float", "weighted-variables-integer"] as const;
+
+/**
+ * The names of phase 9's catalog positives: the five catalog items of `BPIG_22April` cut as they
+ * are (`cut-catalog-supports`, `cut-catalog-multiple`, `cut-catalog-nodes`,
+ * `cut-catalog-reference` and `cut-catalog-rubric`), `catalog-300` (the first at 3.0.0) and eight
+ * hand-edited packages, one for each shape the corpus lacks: `catalog-hosts` (a catalog in a
+ * feedback block, a modal feedback, a template block, a feedback block in a template block and a
+ * template block in a rubric block), `card-files` (cards that hold files), `catalog-padded` (outer
+ * whitespace in the values that collapse), `catalog-lang` (decision 85:
+ * languages in catalog content that the item's metadata does not list), `card-qti-content`
+ * (decision 216: a printed variable and an interaction in a card), `card-gap-inside` (decision
+ * 309's case B: a gap in a card inside a gap match), `card-empty` (a card with no content) and
+ * `entry-empty` (a card whose one entry has none), the last two accepted by decision 324.
+ */
+export const catalogNames = [
+  "cut-catalog-supports",
+  "cut-catalog-multiple",
+  "cut-catalog-nodes",
+  "cut-catalog-reference",
+  "cut-catalog-rubric",
+  "catalog-300",
+  "catalog-hosts",
+  "card-files",
+  "catalog-padded",
+  "catalog-lang",
+  "card-qti-content",
+  "card-gap-inside",
+  "card-empty",
+  "entry-empty",
+] as const;
+
+/**
+ * The names of phase 9's companion-materials positives, cut or edited from `testWithLti`'s
+ * `elements.xml`, the one corpus item with a `qti-companion-materials-info`: `cut-companion` (a
+ * digital material with a label, a media type, a file and an icon, at 3.0.0), `companion-301` (the
+ * same at 3.0.1), `companion-full` (every kind of material, every calculator type and every unit
+ * value) and `companion-padded` (outer whitespace and a tab in the values that collapse or
+ * normalize).
+ */
+export const companionNames = [
+  "cut-companion",
+  "companion-301",
+  "companion-full",
+  "companion-padded",
+] as const;
+
+/**
+ * The names of phase 9's 29 XML-path negatives, each a hand-broken copy of a catalog or companion
+ * positive (or of `simple`) that breaks the laws of one rule, in the order of the spec's 4.9
+ * table. They are a list of their own, not part of {@link negativeNames}, which holds phase 5's 63
+ * test-document negatives. `card-empty` and `entry-empty` are not here: decision 324 accepts an
+ * empty card and an empty entry, and they are positives of {@link catalogNames}.
+ *
+ * - The catalog: `support-twice`, `default-twice` (one `true`, one `1`), `idref-html`,
+ *   `idref-missing`, `catalog-id-twice`, `catalog-no-id`, `card-file-no-type`, `info-empty`,
+ *   `catalog-empty`, `card-mixed`, `html-twice`, `card-file-first`, `default-default`,
+ *   `support-case`, `support-ext-empty`, `card-file-missing`, `card-file-undescribed`,
+ *   `card-interaction-in-modal`, `card-gap-outside` and `body-lang`.
+ * - The companion materials: `physical-first`, `calculator-no-description`, `two-infos` (two
+ *   `qti-calculator-info` in one calculator), `rule-both-systems`, `calculator-Basic`, `unit-case`,
+ *   `increment-text`, `rule-system-SI` and `icon-missing`.
+ */
+export const catalogNegativeNames = [
+  "support-twice",
+  "default-twice",
+  "idref-html",
+  "idref-missing",
+  "catalog-id-twice",
+  "catalog-no-id",
+  "card-file-no-type",
+  "info-empty",
+  "catalog-empty",
+  "card-mixed",
+  "html-twice",
+  "card-file-first",
+  "physical-first",
+  "calculator-no-description",
+  "two-infos",
+  "rule-both-systems",
+  "default-default",
+  "support-case",
+  "support-ext-empty",
+  "calculator-Basic",
+  "unit-case",
+  "increment-text",
+  "rule-system-SI",
+  "card-file-missing",
+  "icon-missing",
+  "card-file-undescribed",
+  "card-interaction-in-modal",
+  "card-gap-outside",
+  "body-lang",
+] as const;
+
+/**
+ * The rules each of {@link catalogNegativeNames} may be refused under, from the predicted column
+ * of the spec's 4.9 table, as the metadata fixtures' verdicts are written. A leased run that
+ * refuses one under a rule outside its row reports a finding; it does not edit this table.
+ *
+ * - `child-set` or `ordering` name the content model's automaton, which refuses an empty container, a
+ *   repeated child and a missing required child alike.
+ * - The two element-text negatives (`calculator-Basic`, `increment-text`) are the text-domain rule,
+ *   `text-copy`; the attribute ones (`default-default`, `support-case`, `support-ext-empty`,
+ *   `unit-case`) are `attribute-lexical`.
+ * - `card-file-undescribed` is `file-listed` (reading 103: a file a document references is described
+ *   in the manifest).
+ */
+export const catalogVerdicts: readonly (readonly [
+  (typeof catalogNegativeNames)[number],
+  readonly string[],
+])[] = [
+  ["support-twice", ["card-support"]],
+  ["default-twice", ["card-default"]],
+  ["idref-html", ["idref-target"]],
+  ["idref-missing", ["idref-target"]],
+  ["catalog-id-twice", ["document-key"]],
+  ["catalog-no-id", ["required-attribute"]],
+  ["card-file-no-type", ["required-attribute"]],
+  ["info-empty", ["child-set", "ordering"]],
+  ["catalog-empty", ["child-set", "ordering"]],
+  ["card-mixed", ["child-set", "ordering"]],
+  ["html-twice", ["child-set", "ordering"]],
+  ["card-file-first", ["ordering"]],
+  ["physical-first", ["ordering"]],
+  ["calculator-no-description", ["child-set", "ordering"]],
+  ["two-infos", ["child-set", "ordering"]],
+  ["rule-both-systems", ["child-set", "ordering"]],
+  ["default-default", ["attribute-lexical"]],
+  ["support-case", ["attribute-lexical"]],
+  ["support-ext-empty", ["attribute-lexical"]],
+  ["calculator-Basic", ["text-copy"]],
+  ["unit-case", ["attribute-lexical"]],
+  ["increment-text", ["text-copy"]],
+  ["rule-system-SI", ["unmodeled-vocabulary"]],
+  ["card-file-missing", ["file-exists"]],
+  ["icon-missing", ["file-exists"]],
+  ["card-file-undescribed", ["file-listed"]],
+  ["card-interaction-in-modal", ["ancestry-ban"]],
+  ["card-gap-outside", ["ancestry-ban"]],
+  ["body-lang", ["document-lang"]],
+];
+
+/**
  * The names of the ten wildcard fixtures of phase 11 (spec W12): foreign content under the lax
  * hosts of `qti-custom-operator`, `xi:include`, `xi:fallback` and LOM, the four refusals, and
  * `test-selection-foreign`, a test with an extension element and an `xml:lang` on the strict
@@ -422,6 +617,179 @@ const wildcardNames = [
 ] as const;
 
 /**
+ * The names of the nine SSML and `data-ssml` positives of phase 7's stage N (spec 5.3), the first
+ * seven SSML in the item body and the last two `data-ssml` attributes: `ssml-corpus-sub`, the
+ * corpus's one SSML shape cut from `sharedStimulus`; `ssml-hooks`, the twelve elements the item's
+ * inline hosts admit, in both namespace forms and as a bare hook; `ssml-speak`, the `speak`
+ * element's attributes and its head of `meta`, `metadata` and `lexicon`; `ssml-voice`,
+ * `ssml-prosody` and `ssml-nested`, the attribute domains and content models below it;
+ * `ssml-two-speaks`, mark scope per fragment; `data-ssml`, valid Data-SSML on four hosts; and
+ * `data-ssml-custom`, a value on an element that does not declare the attribute.
+ */
+const ssmlNames = [
+  "ssml-corpus-sub",
+  "ssml-hooks",
+  "ssml-speak",
+  "ssml-voice",
+  "ssml-prosody",
+  "ssml-nested",
+  "ssml-two-speaks",
+  "data-ssml",
+  "data-ssml-custom",
+] as const;
+
+/**
+ * The names of the eight `data-*` fixtures of phase 8's stage N (spec 5.3): four positives and four
+ * negatives. `cut-data-dash` and `cut-data-attributes` are the corpus's two items with custom
+ * `data-*` attributes, cut; `data-custom` puts the name class through `simple` (every host kind,
+ * every name shape, every value shape); `data-entity` holds an entity reference in a value; The
+ * negatives break the name language, `data-non-ascii` (a name with a non-ASCII letter, which the
+ * information model's pattern bars, reading 13), `data-uppercase` and `data-bare-prefix`, or name a
+ * host that does not admit the class, `data-item-body`.
+ */
+const dataNames = [
+  "cut-data-dash",
+  "cut-data-attributes",
+  "data-custom",
+  "data-entity",
+  "data-non-ascii",
+  "data-uppercase",
+  "data-bare-prefix",
+  "data-item-body",
+] as const;
+
+/**
+ * The names of phase 10's ten PCI positives, from the corpus packages `pci_simple_example` and
+ * `pci_item_examples` and hand-edited items of the first: `pci-simple` (the `module` attribute,
+ * markup of HTML and ARIA, the module files as bytes), `pci-modules` (two PCIs of four modules
+ * each with repeated module ids and whitespace-only markup), `pci-configurations` (the two
+ * configuration attributes as file references, a PCI with both module forms and the three
+ * path shapes of a module), `pci-variables` (a prompt, a template variable, a context variable, a
+ * record binding and an `identifier multiple` binding, at 3.0.0), `pci-3-0-1` (an undeclared
+ * `QTI_CONTEXT` and a `qti-stylesheet`), `pci-context-3-0-1` (a declared `QTI_CONTEXT` record and a
+ * second context declaration), `pci-catalog-3-0-1` (a `qti-catalog-info` of one catalog of one
+ * card), `pci-markup-content` (the QTI content a PCI's markup holds, then two `template`
+ * elements), `template-foreign` (foreign content in a `template`) and `custom-3-0-1` (a custom
+ * interaction at 3.0.1, bound to a record). Every `template` and custom interaction is
+ * self-closed except `template-foreign`'s. The corpus PCIs' custom `data-*` attributes are
+ * dropped: phase 8's law for them has not landed.
+ */
+export const pciNames = [
+  "pci-simple",
+  "pci-modules",
+  "pci-configurations",
+  "pci-variables",
+  "pci-3-0-1",
+  "pci-context-3-0-1",
+  "pci-catalog-3-0-1",
+  "pci-markup-content",
+  "template-foreign",
+  "custom-3-0-1",
+] as const;
+
+/**
+ * The names of phase 10's 28 PCI negatives, each one of {@link pciNames}' positives (or a corpus
+ * package cut) with one defect, in the order of the spec's 4.5 table. They are a list of their own,
+ * not part of {@link negativeNames}, which holds phase 5's 63 test-document negatives.
+ *
+ * - The module source and the version: `pci-no-module`, `custom-3-0-0` (a custom interaction in a
+ *   3.0.0 package), `pci-stylesheet-3-0-0` and `pci-catalog-info-3-0-0` (what 3.0.1 adds, in
+ *   3.0.0).
+ * - The variables: `pci-context-builtin-3-0-0` (`QTI_CONTEXT` read at 3.0.0 without a declaration),
+ *   `pci-context-undeclared` and `pci-context-undeclared-3-0-1`, and `pci-template-undeclared`.
+ * - The content model: `pci-no-type`, `pci-two-modules`, `pci-modules-empty`, `pci-no-markup`,
+ *   `pci-two-markups`, `pci-markup-order`, `pci-modules-after-markup`, `pci-prompt-late`,
+ *   `pci-markup-text`, `template-outside` and `pci-nested`.
+ * - The lexical forms: `pci-type-malformed` and `pci-path-malformed` (each `%zz`),
+ *   `pci-module-malformed` and `pci-module-id-malformed` (each `1shading`), and `custom-attribute`
+ *   (a namespaced attribute on a custom interaction).
+ * - The corpus cuts of `pci_item_examples`, each with exactly one of the corpus's defects left:
+ *   `pci-items-fallback`, `pci-items-unlisted`, `pci-items-missing` and
+ *   `pci-configuration-missing`.
+ */
+export const pciNegativeNames = [
+  "pci-no-module",
+  "custom-3-0-0",
+  "pci-context-builtin-3-0-0",
+  "pci-context-undeclared",
+  "pci-context-undeclared-3-0-1",
+  "pci-template-undeclared",
+  "pci-no-type",
+  "pci-two-modules",
+  "pci-modules-empty",
+  "pci-no-markup",
+  "pci-two-markups",
+  "pci-markup-order",
+  "pci-modules-after-markup",
+  "pci-prompt-late",
+  "pci-markup-text",
+  "pci-stylesheet-3-0-0",
+  "pci-catalog-info-3-0-0",
+  "template-outside",
+  "pci-nested",
+  "pci-type-malformed",
+  "pci-path-malformed",
+  "pci-module-malformed",
+  "pci-module-id-malformed",
+  "custom-attribute",
+  "pci-items-fallback",
+  "pci-items-unlisted",
+  "pci-items-missing",
+  "pci-configuration-missing",
+] as const;
+
+/**
+ * The rules each of {@link pciNegativeNames} may be refused under, from the predicted column of the
+ * spec's 4.5 table, as {@link catalogVerdicts} writes them. A leased run that refuses one under a
+ * rule outside its row reports a finding; it does not edit this table.
+ *
+ * - `child-set` or `ordering` name the content model's automaton, which refuses a repeated, an empty
+ *   and a missing required child alike; `admission` or `ordering` are the two ways it can refuse a
+ *   child the version does not admit.
+ * - `pci-module-source` is the law "PCI module source" (reading R10-a); `admission` for
+ *   `custom-3-0-0` is the law "Custom interaction version" (reading R10-b).
+ * - `pci-context-undeclared` is read at 3.0.0, where the reader's declared-variable rule may name it
+ *   `idref-target`; `pci-context-undeclared-3-0-1` only `context-variable-ref`.
+ * - `pci-markup-text` is the automaton's character-data rule, predicted `admission`.
+ * - `template-outside` is `unmodeled-vocabulary`, reading 57's rule: an HTML `template` is admitted
+ *   only inside a PCI's markup.
+ * - `custom-attribute` is reading 90's refusal of an undeclared attribute on the custom interaction
+ *   (open question O5 can turn it into a positive).
+ * - `pci-items-fallback` is reading 11; `pci-configuration-missing` is `file-exists`, or the
+ *   description rule (reading 103: `file-listed`) when the missing path is also unlisted.
+ */
+export const pciVerdicts: readonly (readonly [FixtureName, readonly string[]])[] = [
+  ["pci-no-module", ["pci-module-source"]],
+  ["custom-3-0-0", ["admission"]],
+  ["pci-context-builtin-3-0-0", ["idref-target"]],
+  ["pci-context-undeclared", ["context-variable-ref", "idref-target"]],
+  ["pci-context-undeclared-3-0-1", ["context-variable-ref"]],
+  ["pci-template-undeclared", ["template-ref"]],
+  ["pci-no-type", ["required-attribute"]],
+  ["pci-two-modules", ["child-set", "ordering"]],
+  ["pci-modules-empty", ["child-set", "ordering"]],
+  ["pci-no-markup", ["child-set", "ordering"]],
+  ["pci-two-markups", ["child-set", "ordering"]],
+  ["pci-markup-order", ["ordering"]],
+  ["pci-modules-after-markup", ["ordering"]],
+  ["pci-prompt-late", ["ordering"]],
+  ["pci-markup-text", ["admission"]],
+  ["pci-stylesheet-3-0-0", ["admission", "ordering"]],
+  ["pci-catalog-info-3-0-0", ["admission", "ordering"]],
+  ["template-outside", ["unmodeled-vocabulary"]],
+  ["pci-nested", ["ancestry-ban"]],
+  ["pci-type-malformed", ["attribute-lexical"]],
+  ["pci-path-malformed", ["attribute-lexical"]],
+  ["pci-module-malformed", ["attribute-lexical"]],
+  ["pci-module-id-malformed", ["attribute-lexical"]],
+  ["custom-attribute", ["attribute-admission"]],
+  ["pci-items-fallback", ["attribute-admission"]],
+  ["pci-items-unlisted", ["file-listed"]],
+  ["pci-items-missing", ["file-exists"]],
+  ["pci-configuration-missing", ["file-exists", "file-listed"]],
+];
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-edited
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
@@ -429,8 +797,15 @@ const wildcardNames = [
  * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, the
  * packaging phase's metadata and content cuts with their negatives, the 11 positive fixtures of
  * phase 5's tests, sections and stimuli ({@link testNames}) and its 60 negatives
- * ({@link negativeNames}), the ten wildcard fixtures of {@link wildcardNames}, and `rtest01`, the
- * examples' included fragment in place (spec reading 117), with one negative per include law.
+ * ({@link
+ * negativeNames}), the five restored-check fixtures of {@link restoredNames}, the six
+ * assembly fixtures of {@link assemblyNames}, the 14 catalog positives of {@link catalogNames}, the
+ * four companion-materials positives of {@link companionNames}, the 29 XML-path negatives of
+ * {@link catalogNegativeNames}, the ten PCI positives of {@link pciNames}, the 28 PCI negatives of
+ * {@link pciNegativeNames}, the ten wildcard fixtures of {@link wildcardNames}, the nine SSML and
+ * `data-ssml` positives of {@link ssmlNames}, the eight `data-*` fixtures of {@link dataNames}, and
+ * `rtest01`, the examples' included fragment in place (spec reading 117), with one negative per
+ * include law.
  */
 export const fixtureNames = [
   "simple",
@@ -460,6 +835,14 @@ export const fixtureNames = [
   ...copyNames,
   ...testNames,
   ...negativeNames,
+  ...restoredNames,
+  ...assemblyNames,
+  ...weightedNames,
+  ...catalogNames,
+  ...companionNames,
+  ...catalogNegativeNames,
+  ...pciNames,
+  ...pciNegativeNames,
   "lomrest",
   "lomrest-two-titles",
   "lomrest-two-purposes",
@@ -528,6 +911,8 @@ export const fixtureNames = [
   "usage3-bad-context",
   "usage3-bad-name",
   ...wildcardNames,
+  ...ssmlNames,
+  ...dataNames,
 ] as const;
 
 /**
@@ -2431,7 +2816,7 @@ const testsDirectory = "qtiv3-examples/tests";
 /**
  * The tarball member of the `sharedStimulus` package.
  */
-const sharedStimulusMember = "qtiv3-examples/packaging/sharedStimulus/sharedStimulus.zip";
+const sharedStimulusMember = corpusMembers.sharedStimulus;
 
 /**
  * The tarball member of the `basicFeedbackTest` package.
@@ -2481,17 +2866,22 @@ const addExample = (file: string, member: string): FileEdit => ({
  *
  * @param identifier - The item's identifier and title.
  * @param outcomes - Each further outcome's identifier and base type, declared single.
+ * @param scored - Whether the stub declares `SCORE`; `false` for an item a mapping targets
+ *   `SCORE` of (reading 97).
  * @returns The item's text.
  */
 const stubItem = (
   identifier: string,
   outcomes: readonly (readonly [string, string])[] = [],
+  scored = true,
 ): string =>
   [
     '<?xml version="1.0" encoding="UTF-8"?>',
     `<qti-assessment-item ${asiRoot} identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
     '  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>',
-    '  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+    ...(scored
+      ? ['  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>']
+      : []),
     ...outcomes.map(
       ([name, baseType]) =>
         `  <qti-outcome-declaration identifier="${name}" cardinality="single" base-type="${baseType}"/>`,
@@ -2722,7 +3112,9 @@ const setOutcome = (outcome: string, expression: string): string =>
  * and the non-canonical `I.02.SCORE`; `PART.duration` with `RTEST-26-A` the part; `I.A.B` of a
  * stub declaring a float outcome `A.B` (reading 37); and, of decision 189, the item refs `J` and
  * `J.K` that name one stub declaring `SCORE` and no `K.SCORE`, so that `J.K.SCORE` has one
- * resolving reading, `J.K` with `SCORE`.
+ * resolving reading, `J.K` with `SCORE`. `item034`, whose mapping targets `SCORE`, is a stub that
+ * does not declare it (reading 97), and `I` sits in a section whose selection is with replacement,
+ * the one place a numbered reference `I.2.SCORE` resolves (reading 88).
  */
 const testMappingEdits: readonly Edit[] = [
   replaceIn("rtest26.xml", "Ã¯tem065.xml", "item065.xml"),
@@ -2756,7 +3148,10 @@ const testMappingEdits: readonly Edit[] = [
     '<qti-assessment-item-ref identifier="item063" href="item063.xml"/>',
     [
       '<qti-assessment-item-ref identifier="item063" href="item063.xml"/>',
-      '            <qti-assessment-item-ref identifier="I" href="itemI.xml"/>',
+      '            <qti-assessment-section identifier="sectionI" title="Section I" visible="false">',
+      '                <qti-selection select="2" with-replacement="true"/>',
+      '                <qti-assessment-item-ref identifier="I" href="itemI.xml"/>',
+      "            </qti-assessment-section>",
       '            <qti-assessment-item-ref identifier="J" href="itemJ.xml"/>',
       '            <qti-assessment-item-ref identifier="J.K" href="itemJ.xml"/>',
     ].join("\n"),
@@ -2991,8 +3386,8 @@ const adaptiveFiles: readonly Edit[] = ["engine", "settings", "usagedata", "meta
  * `basicFeedbackTest`'s test with its four items' content removed (`id-a360e0fa63e6` holds
  * MathML, which no language phase has landed), the items kept as stubs of the same identifiers.
  * The test gains a test rubric, part and section rubrics with and without `use`, a stylesheet, a
- * context declaration, a `during` feedback with a `title` and `xml:lang`, and its manifest the test
- * resource's LOM `language`.
+ * context declaration, a `during` feedback with a `title`, and its manifest the test resource's LOM
+ * `language`. The test root states no language: reading 90 refuses an `xml:lang` on it.
  */
 const testContentEdits: readonly Edit[] = [
   ...[
@@ -3002,11 +3397,6 @@ const testContentEdits: readonly Edit[] = [
     ["id-b0dd9e732083/Example02-feedbackInline.xml", "id-b0dd9e732083"],
   ].map(([file, identifier]) => addText(file ?? "", stubItem(identifier ?? ""))),
   addText("styles/test.css", ".qti-test { margin: 0; }\n"),
-  replaceIn(
-    "assessment.xml",
-    'title="Simple Feedback Test" identifier="SPECTATUS-GENERATED-TEST">',
-    'title="Simple Feedback Test" identifier="SPECTATUS-GENERATED-TEST" xml:lang="en">',
-  ),
   replaceIn(
     "assessment.xml",
     '<qti-outcome-declaration base-type="float" cardinality="single" identifier="TEST_total">',
@@ -3398,8 +3788,8 @@ const stimulus301Edits: readonly Edit[] = [
   ),
   replaceIn(
     "imsmanifest.xml",
-    '<file href="passages/stylesheets/unbelievable_night.css"/>',
-    '<file href="passages/stylesheets/unbelievable_night.css"/>\n            <file href="passages/fragment.xml"/>',
+    "</resources>",
+    '    <resource identifier="Fragment1" type="imsqti_fragment_xmlv3p0" href="passages/fragment.xml">\n            <file href="passages/fragment.xml"/>\n        </resource>\n    </resources>',
   ),
   ...["exemplar06.xml", "exemplar04.xml", "exemplar05.xml"].map((file) =>
     replaceIn(file, "imsqti_asiv3p0_v1p0.xsd", "imsqti_asiv3p0p1_v1p0.xsd"),
@@ -3497,7 +3887,7 @@ const testSpecs: Record<(typeof testNames)[number], FixtureSpec> = {
     replaceIn(
       "imsmanifest.xml",
       '<resource identifier="experiment101" type="imslti_xmlv1p1">',
-      '<resource identifier="ltitest" type="imsqti_test_xmlv3p0" href="ltitest.xml">\n            <file href="ltitest.xml"/>\n        </resource>\n        <resource identifier="experiment101" type="imslti_xmlv1p1">',
+      '<resource identifier="ltitest" type="imsqti_test_xmlv3p0" href="ltitest.xml">\n            <file href="ltitest.xml"/>\n        </resource>\n        <resource identifier="experiment101" type="imslti_xmlv1p1" href="links/streaming_video_experiment101.xml">',
     ),
   ]),
   "test-mapping": {
@@ -3560,20 +3950,24 @@ const testSpecs: Record<(typeof testNames)[number], FixtureSpec> = {
 };
 
 /**
- * The spec of a negative: the positive `base` with `edits` after its own, under the negative's
- * name.
+ * The spec of a negative, or of a restored-check or assembly fixture built the same way: the
+ * positive `base` with `edits` after its own, under the fixture's name.
  *
  * The edits of a spec apply by kind (file edits, then text edits, then the cut), each kind in list
  * order, so the extra edits of a negative see the positive's result.
  *
- * @param name - The negative's name.
+ * @param name - The fixture's name.
  * @param base - The positive it edits.
  * @param edits - The edits that make the breach; none for a "(direct)" negative, whose spec is the
  *   positive's own under the negative's name.
  * @returns The spec, whose directory is named by the hash of exactly these values like any other.
  */
 const negativeOver = (
-  name: (typeof negativeNames)[number],
+  name:
+    | (typeof negativeNames)[number]
+    | (typeof restoredNames)[number]
+    | (typeof assemblyNames)[number]
+    | (typeof weightedNames)[number],
   base: (typeof testNames)[number],
   edits: readonly Edit[] = [],
 ): FixtureSpec => {
@@ -3667,8 +4061,9 @@ const linearStubs: readonly (readonly [string, string])[] = [
 
 /**
  * The stubs of `test-mapping`, written by hand as its generated ones are: `item034` declares the
- * mapping's source `NOTA`, `I` is time-dependent and declares `A.B`, and `J` declares nothing more
- * (the spec's `time-dependent` and declarations of the positive).
+ * mapping's source `NOTA` and not `SCORE`, its target (reading 97), `I` is time-dependent and
+ * declares `A.B`, and `J` declares nothing more (the spec's `time-dependent` and declarations of
+ * the positive).
  *
  * @param overrides - Stub texts that replace the positive's, by `href`.
  * @returns Each stub's `href` and text.
@@ -3678,7 +4073,7 @@ const mappingStubs = (
 ): readonly (readonly [string, string])[] =>
   (
     [
-      ["item034.xml", stubItem("item034", [["NOTA", "float"]])],
+      ["item034.xml", stubItem("item034", [["NOTA", "float"]], false)],
       ["item160.xml", stubItem("item160")],
       ["item063.xml", stubItem("item063")],
       ["itemI.xml", durationStub("I", [["A.B", "float"]])],
@@ -4175,6 +4570,7 @@ const negativeSpecs: Record<(typeof negativeNames)[number], FixtureSpec> = {
     ),
   ]),
   "test-lang-no-lom": negativeOver("test-lang-no-lom", "test-content", [
+    replaceIn("assessment.xml", "<p>Part notes</p>", '<p xml:lang="en">Part notes</p>'),
     replaceIn(
       "imsmanifest.xml",
       testResourceGeneral,
@@ -4209,6 +4605,885 @@ const negativeSpecs: Record<(typeof negativeNames)[number], FixtureSpec> = {
         "</qti-assessment-test>",
       ].join("\n"),
     ),
+  ]),
+};
+
+/**
+ * `simple`'s one `img`, which `aria-source-role` wraps in a `picture`.
+ */
+const simpleImage = '<img src="images/sign.png" alt="NEVER LEAVE LUGGAGE UNATTENDED"/>';
+
+/**
+ * A `qti-pattern-match` whose `pattern` names `NOSUCH`, a variable no fixture declares, over a
+ * string literal.
+ */
+const unresolvedPattern =
+  '<qti-pattern-match pattern="{NOSUCH}"><qti-base-value base-type="string">x</qti-base-value></qti-pattern-match>';
+
+/**
+ * A rule that sets `SCORE` to 1, which both `pattern-unresolved-*` fixtures put under the pattern.
+ */
+const scoreOne =
+  '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>';
+
+/**
+ * The specs of {@link restoredNames}.
+ */
+const restoredSpecs: Record<(typeof restoredNames)[number], FixtureSpec> = {
+  "aria-h1-role-button": overSimple("aria-h1-role-button", [
+    replaceIn(
+      "choice.xml",
+      "<p>Look at the text in the picture.</p>",
+      '<h1 role="button">Look at the text in the picture.</h1>',
+    ),
+  ]),
+  "aria-source-role": overSimple("aria-source-role", [
+    replaceIn(
+      "choice.xml",
+      simpleImage,
+      `<picture><source srcset="images/sign.png" type="image/png" role="presentation"/>${simpleImage}</picture>`,
+    ),
+  ]),
+  "lang-case-mismatch": overSimple("lang-case-mismatch", [
+    replaceIn(
+      "choice.xml",
+      'adaptive="false" time-dependent="false">',
+      'adaptive="false" time-dependent="false" xml:lang="en-GB">',
+    ),
+    {
+      _tag: "InsertAfterLine",
+      file: "imsmanifest.xml",
+      line: simpleResourceTitleEnd,
+      text: "                        <imsmd:language>en-gb</imsmd:language>",
+    },
+  ]),
+  "pattern-unresolved-item": overSimple("pattern-unresolved-item", [
+    replaceIn(
+      "choice.xml",
+      '<qti-response-processing template="https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml"/>',
+      [
+        "<qti-response-processing>",
+        "        <qti-response-condition>",
+        "            <qti-response-if>",
+        `                ${unresolvedPattern}`,
+        `                ${scoreOne}`,
+        "            </qti-response-if>",
+        "        </qti-response-condition>",
+        "    </qti-response-processing>",
+      ].join(CRLF),
+    ),
+  ]),
+  "pattern-unresolved-test": negativeOver("pattern-unresolved-test", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      "    </qti-test-part>",
+      [
+        "    </qti-test-part>",
+        "    <qti-outcome-processing>",
+        "        <qti-outcome-condition>",
+        "            <qti-outcome-if>",
+        `                ${unresolvedPattern}`,
+        `                ${scoreOne}`,
+        "            </qti-outcome-if>",
+        "        </qti-outcome-condition>",
+        "    </qti-outcome-processing>",
+      ].join("\n"),
+    ),
+  ]),
+};
+
+/**
+ * The edit that places `test-section-ref`'s section document a second time in the first test's
+ * part, under the section ref `S2`.
+ */
+const placeSectionTwice: Edit = replaceIn(
+  "rtest01.xml",
+  '<qti-assessment-section-ref identifier="S1" href="sections/shared.xml"/>',
+  [
+    '<qti-assessment-section-ref identifier="S1" href="sections/shared.xml"/>',
+    '            <qti-assessment-section-ref identifier="S2" href="sections/shared.xml"/>',
+  ].join("\n"),
+);
+
+/**
+ * The specs of {@link assemblyNames}.
+ */
+const assemblySpecs: Record<(typeof assemblyNames)[number], FixtureSpec> = {
+  "branch-backward-shuffled": negativeOver("branch-backward-shuffled", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      '<qti-item-session-control max-attempts="2"/>',
+      '<qti-item-session-control max-attempts="2"/>\n            <qti-ordering shuffle="true"/>',
+    ),
+    replaceIn(
+      "rtest13.xml",
+      '<qti-branch-rule target="EXIT_TESTPART">',
+      [
+        `<qti-branch-rule target="item347">${greaterThan("item653.SCORE", "float", "1")}</qti-branch-rule>`,
+        '                <qti-branch-rule target="EXIT_TESTPART">',
+      ].join("\n"),
+    ),
+  ]),
+  "branch-in-twice-placed-section": negativeOver(
+    "branch-in-twice-placed-section",
+    "test-section-ref",
+    [
+      placeSectionTwice,
+      replaceIn(
+        "sections/shared.xml",
+        '<qti-assessment-item-ref identifier="shared-item" href="../items/shared.xml"/>',
+        [
+          '<qti-assessment-item-ref identifier="first-item" href="../items/shared.xml">',
+          `    <qti-branch-rule target="shared-item">${greaterThan("SCORE", "float", "0")}</qti-branch-rule>`,
+          "  </qti-assessment-item-ref>",
+          '  <qti-assessment-item-ref identifier="shared-item" href="../items/shared.xml"/>',
+        ].join("\n"),
+      ),
+    ],
+  ),
+  "branch-to-own-section": negativeOver("branch-to-own-section", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      '<qti-branch-rule target="item656">',
+      '<qti-branch-rule target="sectionB">',
+    ),
+  ]),
+  "section-doc-name-clash": negativeOver("section-doc-name-clash", "test-section-ref", [
+    replaceIn("sections/shared.xml", 'identifier="shared-item"', 'identifier="shared"'),
+  ]),
+  "section-doc-twice": negativeOver("section-doc-twice", "test-section-ref", [placeSectionTwice]),
+  "select-two-required": negativeOver("select-two-required", "test-selection", [
+    replaceIn(
+      "rtest12.xml",
+      '<qti-assessment-item-ref identifier="item434" href="item434.xml"/>',
+      '<qti-assessment-item-ref identifier="item434" href="item434.xml" required="true"/>',
+    ),
+    replaceIn(
+      "rtest12.xml",
+      '            <qti-assessment-item-ref identifier="item365" href="item365.xml"/>\n',
+      "",
+    ),
+  ]),
+};
+
+/**
+ * Set an outcome of `test-mapping` that it declares beside its own, in its outcome processing.
+ *
+ * @param name - The fixture's name.
+ * @param declaration - The outcome's declaration.
+ * @param outcome - The outcome it sets.
+ * @param expression - The expression it sets it to.
+ * @returns The spec.
+ */
+const weightedOver = (
+  name: (typeof weightedNames)[number],
+  declaration: string,
+  outcome: string,
+  expression: string,
+): FixtureSpec =>
+  negativeOver(name, "test-mapping", [
+    replaceIn(
+      "rtest26.xml",
+      '    <qti-outcome-declaration identifier="TIMED" cardinality="single" base-type="float"/>',
+      [
+        '    <qti-outcome-declaration identifier="TIMED" cardinality="single" base-type="float"/>',
+        `    ${declaration}`,
+      ].join("\n"),
+    ),
+    replaceIn(
+      "rtest26.xml",
+      "    </qti-outcome-processing>",
+      [setOutcome(outcome, expression), "    </qti-outcome-processing>"].join("\n"),
+    ),
+  ]);
+
+/**
+ * The weighted test variables a weighted fixture sets an outcome from: `rtest04.xml`'s, with a
+ * `weight-identifier` and no `base-type`.
+ */
+const weightedVariables =
+  '<qti-test-variables variable-identifier="SCORE" weight-identifier="WEIGHT"/>';
+
+const weightedSpecs: Record<(typeof weightedNames)[number], FixtureSpec> = {
+  "weighted-sum-float": weightedOver(
+    "weighted-sum-float",
+    '<qti-outcome-declaration identifier="WSUM" cardinality="single" base-type="float"/>',
+    "WSUM",
+    `<qti-sum>${weightedVariables}</qti-sum>`,
+  ),
+  "weighted-variables-integer": weightedOver(
+    "weighted-variables-integer",
+    '<qti-outcome-declaration identifier="NS" cardinality="multiple" base-type="integer"/>',
+    "NS",
+    weightedVariables,
+  ),
+};
+
+/**
+ * The `BPIG_22April` item that `cut-catalog-supports` is cut from: one catalog of two cards, the
+ * first with two entries, referenced from a `span` in the interaction's prompt.
+ */
+const catalogSupportsItem = "items/CatalogWithMultipleSupports.xml";
+
+/**
+ * The edit that adds a card at the end of {@link catalogSupportsItem}'s one catalog.
+ *
+ * @param card - The card's text.
+ * @returns The edit as plain data.
+ */
+const addCatalogCard = (card: string): TextEdit =>
+  replaceIn(catalogSupportsItem, "</qti-catalog>", `${card}</qti-catalog>`);
+
+/**
+ * A `qti-catalog-info` of one catalog of one card, a linguistic guidance with html content.
+ *
+ * @param id - The catalog's `id`.
+ * @param text - The card's text.
+ * @returns The element's text.
+ */
+const guidanceCatalog = (id: string, text: string): string =>
+  `<qti-catalog-info><qti-catalog id="${id}"><qti-card support="linguistic-guidance"><qti-html-content>${text}</qti-html-content></qti-card></qti-catalog></qti-catalog-info>`;
+
+/**
+ * The feedback block that `catalog-hosts` adds to {@link bgChoiceItem}, with a catalog that a
+ * `data-catalog-idref` in its own content names.
+ */
+const catalogHostFeedback = `<qti-feedback-block outcome-identifier="FEEDBACK" identifier="fb" show-hide="show"><qti-content-body><p data-catalog-idref="cat-feedback">Wrong</p></qti-content-body>${guidanceCatalog("cat-feedback", "Wrong means not right.")}</qti-feedback-block>`;
+
+/**
+ * The template block of `catalog-hosts`, with a catalog of its own and a feedback block that has
+ * one too.
+ */
+const catalogHostTemplate = `<qti-template-block template-identifier="T" identifier="tb"><qti-content-body><p data-catalog-idref="cat-template">Hint</p><qti-feedback-block outcome-identifier="FEEDBACK" identifier="tfb" show-hide="hide"><qti-content-body><p data-catalog-idref="cat-template-feedback">More</p></qti-content-body>${guidanceCatalog("cat-template-feedback", "More means extra.")}</qti-feedback-block></qti-content-body>${guidanceCatalog("cat-template", "A hint helps.")}</qti-template-block>`;
+
+/**
+ * The rubric block of `catalog-hosts`, whose template block holds a catalog.
+ */
+const catalogHostRubric = `<qti-rubric-block use="instructions" view="candidate"><qti-content-body><qti-template-block template-identifier="T" identifier="rtb" show-hide="hide"><qti-content-body><p data-catalog-idref="cat-rubric-template">Read</p></qti-content-body>${guidanceCatalog("cat-rubric-template", "To read is to look.")}</qti-template-block></qti-content-body></qti-rubric-block>`;
+
+/**
+ * The modal feedback of `catalog-hosts`, which follows the item's response processing.
+ */
+const catalogHostModal = `<qti-modal-feedback outcome-identifier="FEEDBACK" show-hide="show" identifier="mf"><qti-content-body><p data-catalog-idref="cat-modal">Done</p></qti-content-body>${guidanceCatalog("cat-modal", "Done means finished.")}</qti-modal-feedback>`;
+
+/**
+ * The files the cards of `card-files` name by `qti-file-href`, beside `simple`'s own
+ * `images/sign.png`: a copy of it and a short video, each listed in the manifest.
+ */
+const cardFileEdits: readonly Edit[] = [
+  { _tag: "copyFile", from: "images/sign.png", to: "images/sign-large.png" },
+  {
+    _tag: "addFile",
+    path: "video/clip.mp4",
+    source: { member: "QTI3_BPIG_Examples/items/images/bubble.mp4" },
+  },
+  replaceIn(
+    "imsmanifest.xml",
+    '<file href="images/sign.png"/>',
+    [
+      '<file href="images/sign.png"/>',
+      '            <file href="images/sign-large.png"/>',
+      '            <file href="video/clip.mp4"/>',
+    ].join(CRLF),
+  ),
+];
+
+/**
+ * The edits that give `simple`'s item a catalog after its body, named by a `data-catalog-idref` on
+ * its first paragraph.
+ *
+ * @param reference - The `data-catalog-idref` value.
+ * @param catalog - The `qti-catalog-info` element's text.
+ * @returns The edits, each of which must match exactly once.
+ */
+const simpleWithCatalog = (reference: string, catalog: string): readonly TextEdit[] => [
+  replaceIn(
+    "choice.xml",
+    "<p>Look at the text in the picture.</p>",
+    `<p data-catalog-idref="${reference}">Look at the text in the picture.</p>`,
+  ),
+  replaceIn("choice.xml", "</qti-item-body>", `</qti-item-body>${CRLF}    ${catalog}`),
+];
+
+/**
+ * The specs of {@link catalogNames}.
+ */
+const catalogSpecs: Record<(typeof catalogNames)[number], FixtureSpec> = {
+  "card-empty": {
+    edits: [
+      addCatalogCard('<qti-card support="spoken"/>'),
+      { _tag: "cut", item: catalogSupportsItem, schemaversion: "3.0.1" },
+    ],
+    member: corpusMembers.BPIG_22April,
+    name: "card-empty",
+  },
+  "card-files": overSimple("card-files", [
+    ...cardFileEdits,
+    ...simpleWithCatalog(
+      "files1",
+      [
+        '<qti-catalog-info><qti-catalog id="files1">',
+        '<qti-card support="sign-language"><qti-file-href mime-type="video/mp4">video/clip.mp4</qti-file-href><qti-file-href mime-type="image/png">images/sign.png</qti-file-href></qti-card>',
+        '<qti-card support="long-description"><qti-html-content><p data-catalog-idref="files1">The sign.</p></qti-html-content><qti-file-href mime-type="image/png">images/sign-large.png</qti-file-href></qti-card>',
+        '<qti-card support="ext:org.example-sign_1"><qti-card-entry default="1"><qti-file-href mime-type="video/mp4">video/clip.mp4</qti-file-href></qti-card-entry></qti-card>',
+        "</qti-catalog></qti-catalog-info>",
+      ].join(""),
+    ),
+  ]),
+  "card-gap-inside": {
+    edits: [
+      replaceIn(
+        "items/gap-match-example-1.xml",
+        '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+        '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>',
+      ),
+      replaceIn(
+        "items/gap-match-example-1.xml",
+        "</blockquote>",
+        `</blockquote><div><qti-feedback-block outcome-identifier="FEEDBACK" identifier="hint" show-hide="show"><qti-content-body><p data-catalog-idref="cat-gap">Hint</p></qti-content-body><qti-catalog-info><qti-catalog id="cat-gap"><qti-card support="linguistic-guidance"><qti-html-content><p>The season is <qti-gap identifier="G3"/>.</p></qti-html-content></qti-card></qti-catalog></qti-catalog-info></qti-feedback-block></div>`,
+      ),
+      { _tag: "cut", item: "items/gap-match-example-1.xml", schemaversion: "3.0.1" },
+    ],
+    member: corpusMembers.BPIG_22April,
+    name: "card-gap-inside",
+  },
+  "card-qti-content": {
+    edits: [
+      replaceIn(
+        catalogSupportsItem,
+        '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+        '<qti-response-declaration identifier="RESPONSE2" cardinality="single" base-type="identifier"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="SHOWN" cardinality="single" base-type="string"/>',
+      ),
+      addCatalogCard(
+        '<qti-card support="additional-directions"><qti-html-content><p>Shown: <qti-printed-variable identifier="SHOWN"/></p><div><qti-choice-interaction response-identifier="RESPONSE2" max-choices="1"><qti-simple-choice identifier="yes">Yes</qti-simple-choice><qti-simple-choice identifier="no">No</qti-simple-choice></qti-choice-interaction></div></qti-html-content></qti-card>',
+      ),
+      { _tag: "cut", item: catalogSupportsItem, schemaversion: "3.0.1" },
+    ],
+    member: corpusMembers.BPIG_22April,
+    name: "card-qti-content",
+  },
+  "catalog-300": {
+    edits: [
+      replaceIn(catalogSupportsItem, "imsqti_asiv3p0p1_v1p0.xsd", "imsqti_asiv3p0_v1p0.xsd"),
+      { _tag: "cut", item: catalogSupportsItem, schemaversion: "3.0.0" },
+    ],
+    member: corpusMembers.BPIG_22April,
+    name: "catalog-300",
+  },
+  "catalog-hosts": bgCopy("catalog-hosts", [
+    replaceIn(
+      bgChoiceItem,
+      "</qti-outcome-declaration>",
+      `</qti-outcome-declaration><qti-outcome-declaration base-type="identifier" cardinality="single" identifier="FEEDBACK"/>${templateDeclaration}`,
+    ),
+    replaceIn(
+      bgChoiceItem,
+      "</qti-choice-interaction>",
+      `</qti-choice-interaction>${catalogHostFeedback}${catalogHostTemplate}${catalogHostRubric}`,
+    ),
+    replaceIn(bgChoiceItem, "</qti-assessment-item>", `${catalogHostModal}</qti-assessment-item>`),
+  ]),
+  "catalog-lang": overSimple("catalog-lang", [
+    ...copySpecs["item-lang-en"].edits,
+    ...simpleWithCatalog(
+      "catalog1",
+      '<qti-catalog-info><qti-catalog id="catalog1"><qti-card support="keyword-translation"><qti-card-entry xml:lang="es"><qti-html-content>preciso</qti-html-content></qti-card-entry><qti-card-entry xml:lang="de"><qti-html-content>genau</qti-html-content></qti-card-entry></qti-card><qti-card support="linguistic-guidance" xml:lang="es"><qti-html-content xml:lang="es">Preciso significa <span xml:lang="fr">exact</span>.</qti-html-content></qti-card></qti-catalog></qti-catalog-info>',
+    ),
+  ]),
+  // The MIME type is not padded (decision 447): `MimeTypeDType` is an `xs:normalizedString`,
+  // whose whitespace is replaced and never collapsed, so a space or a tab in it stays and reading
+  // 135 refuses it. The other padded values (`id`, `default`, the href) are of types that collapse.
+  "catalog-padded": overSimple(
+    "catalog-padded",
+    simpleWithCatalog(
+      "catalog1",
+      '<qti-catalog-info><qti-catalog id=" catalog1 "><qti-card support="sign-language"><qti-card-entry default=" true "><qti-file-href mime-type="image/png"> images/sign.png </qti-file-href></qti-card-entry></qti-card></qti-catalog></qti-catalog-info>',
+    ),
+  ),
+  "cut-catalog-multiple": cutItem(
+    "cut-catalog-multiple",
+    "BPIG_22April",
+    "items/MultipleCatalogs.xml",
+    "3.0.1",
+  ),
+  "cut-catalog-nodes": cutItem(
+    "cut-catalog-nodes",
+    "BPIG_22April",
+    "items/CatalogsAcrossContentNodes.xml",
+    "3.0.1",
+  ),
+  "cut-catalog-reference": cutItem(
+    "cut-catalog-reference",
+    "BPIG_22April",
+    "items/ReferencingCatalogContent.xml",
+    "3.0.1",
+  ),
+  "cut-catalog-rubric": cutItem(
+    "cut-catalog-rubric",
+    "BPIG_22April",
+    "items/rubric_block.xml",
+    "3.0.1",
+  ),
+  "cut-catalog-supports": cutItem(
+    "cut-catalog-supports",
+    "BPIG_22April",
+    catalogSupportsItem,
+    "3.0.1",
+  ),
+  "entry-empty": {
+    edits: [
+      addCatalogCard('<qti-card support="spoken"><qti-card-entry xml:lang="en"/></qti-card>'),
+      { _tag: "cut", item: catalogSupportsItem, schemaversion: "3.0.1" },
+    ],
+    member: corpusMembers.BPIG_22April,
+    name: "entry-empty",
+  },
+};
+
+/**
+ * The item `testWithLti` carries its companion materials in, the one corpus item that has any.
+ */
+const companionItem = "elements.xml";
+
+/**
+ * The file and icon of {@link companionItem}'s digital material, which a cut keeps because the
+ * item's `qti-file-href` and `qti-resource-icon` name them.
+ */
+const companionFileInfo =
+  "<qti-file-href>links/periodicTable.xml</qti-file-href><qti-resource-icon>links/table.svg</qti-resource-icon>";
+
+/**
+ * The edit that adds `materials` to {@link companionItem}'s `qti-companion-materials-info`, ahead
+ * of its one digital material (the schema orders calculators, rules, protractors, digital
+ * materials and physical materials).
+ *
+ * @param materials - The elements to add, calculators, rules and protractors in that order.
+ * @returns The edit as plain data.
+ */
+const companionBefore = (materials: string): TextEdit =>
+  replaceIn(
+    companionItem,
+    "<qti-companion-materials-info>",
+    `<qti-companion-materials-info>${materials}`,
+  );
+
+/**
+ * The edit that adds `materials` at the end of {@link companionItem}'s
+ * `qti-companion-materials-info`, after its one digital material.
+ *
+ * @param materials - The elements to add, digital materials then physical materials.
+ * @returns The edit as plain data.
+ */
+const companionAfter = (materials: string): TextEdit =>
+  replaceIn(
+    companionItem,
+    "</qti-companion-materials-info>",
+    `${materials}</qti-companion-materials-info>`,
+  );
+
+/**
+ * A `qti-calculator`.
+ *
+ * @param type - The `qti-calculator-type` text.
+ * @param info - The `qti-calculator-info` element's text, or empty for none.
+ * @returns The element's text.
+ */
+const companionCalculator = (type: string, info: string): string =>
+  `<qti-calculator><qti-calculator-type>${type}</qti-calculator-type><qti-description>A ${type} calculator</qti-description>${info}</qti-calculator>`;
+
+/**
+ * A `qti-rule` of one rule system.
+ *
+ * @param system - `si` or `us`.
+ * @param minimum - The `qti-minimum-length` text.
+ * @param minor - The `qti-minor-increment` element's text, or empty for none.
+ * @param major - The `qti-major-increment` element's text.
+ * @returns The element's text.
+ */
+const companionRule = (
+  system: "si" | "us",
+  minimum: string,
+  minor: string,
+  major: string,
+): string =>
+  `<qti-rule><qti-description>A ${system} rule</qti-description><qti-rule-system-${system}><qti-minimum-length>${minimum}</qti-minimum-length>${minor}${major}</qti-rule-system-${system}></qti-rule>`;
+
+/**
+ * A `qti-protractor` of one increment system.
+ *
+ * @param system - `si` or `us`.
+ * @param minor - The `qti-minor-increment` element's text, or empty for none.
+ * @param major - The `qti-major-increment` element's text.
+ * @returns The element's text.
+ */
+const companionProtractor = (system: "si" | "us", minor: string, major: string): string =>
+  `<qti-protractor><qti-description>A ${system} protractor</qti-description><qti-increment-${system}>${minor}${major}</qti-increment-${system}></qti-protractor>`;
+
+/**
+ * A `qti-minor-increment` or `qti-major-increment`.
+ *
+ * @param kind - `minor` or `major`.
+ * @param unit - The `unit` value.
+ * @param value - The decimal text.
+ * @returns The element's text.
+ */
+const companionIncrement = (kind: "major" | "minor", unit: string, value: string): string =>
+  `<qti-${kind}-increment unit="${unit}">${value}</qti-${kind}-increment>`;
+
+/**
+ * The materials `companion-full` adds ahead of the digital material: one calculator of each type,
+ * the last with a calculator info and its icon; SI and US rules, with and without a minor
+ * increment, that name all eight linear units; SI and US protractors, likewise, that name all four
+ * radial units.
+ */
+const companionFullFirst = [
+  companionCalculator("basic", ""),
+  companionCalculator("standard", ""),
+  companionCalculator("scientific", ""),
+  companionCalculator(
+    "graphing",
+    `<qti-calculator-info>${companionFileInfo}</qti-calculator-info>`,
+  ),
+  companionRule(
+    "si",
+    "30",
+    companionIncrement("minor", "Millimeter", "1"),
+    companionIncrement("major", "Centimeter", "10"),
+  ),
+  companionRule("si", "100", "", companionIncrement("major", "Meter", "0.5")),
+  companionRule(
+    "si",
+    "1000",
+    companionIncrement("minor", "Meter", "100"),
+    companionIncrement("major", "Kilometer", "1"),
+  ),
+  companionRule(
+    "us",
+    "12",
+    companionIncrement("minor", "Inch", "0.25"),
+    companionIncrement("major", "Foot", "1"),
+  ),
+  companionRule("us", "36", "", companionIncrement("major", "Yard", "1")),
+  companionRule(
+    "us",
+    "120",
+    companionIncrement("minor", "Yard", "10"),
+    companionIncrement("major", "Mile", "1"),
+  ),
+  companionProtractor(
+    "si",
+    companionIncrement("minor", "Radian", "0.1"),
+    companionIncrement("major", "Radian", "1"),
+  ),
+  companionProtractor("si", "", companionIncrement("major", "Radian", "0.5")),
+  companionProtractor(
+    "us",
+    companionIncrement("minor", "Second", "30"),
+    companionIncrement("major", "Minute", "1"),
+  ),
+  companionProtractor("us", "", companionIncrement("major", "Degree", "5")),
+].join("");
+
+/**
+ * The materials `companion-full` adds after the digital material: a second digital material with
+ * only a file, and two physical materials.
+ */
+const companionFullLast =
+  "<qti-digital-material><qti-file-href>links/periodicTable.xml</qti-file-href></qti-digital-material><qti-physical-material>Scratch paper</qti-physical-material><qti-physical-material>Coloured pencils</qti-physical-material>";
+
+/**
+ * The specs of {@link companionNames}.
+ */
+const companionSpecs: Record<(typeof companionNames)[number], FixtureSpec> = {
+  "companion-301": {
+    edits: [
+      replaceIn(companionItem, "imsqti_asiv3p0_v1p0.xsd", "imsqti_asiv3p0p1_v1p0.xsd"),
+      { _tag: "cut", item: companionItem, schemaversion: "3.0.1" },
+    ],
+    member: corpusMembers.testWithLti,
+    name: "companion-301",
+  },
+  "companion-full": {
+    edits: [
+      companionBefore(companionFullFirst),
+      companionAfter(companionFullLast),
+      { _tag: "cut", item: companionItem, schemaversion: "3.0.0" },
+    ],
+    member: corpusMembers.testWithLti,
+    name: "companion-full",
+  },
+  "companion-padded": {
+    edits: [
+      companionBefore(
+        `<qti-rule><qti-description>A ruler&#9;of one metre</qti-description><qti-rule-system-si><qti-minimum-length> 30 </qti-minimum-length><qti-major-increment unit="Meter"> 1.5 </qti-major-increment></qti-rule-system-si></qti-rule>`,
+      ),
+      { _tag: "cut", item: companionItem, schemaversion: "3.0.0" },
+    ],
+    member: corpusMembers.testWithLti,
+    name: "companion-padded",
+  },
+  "cut-companion": cutItem("cut-companion", "testWithLti", companionItem, "3.0.0"),
+};
+
+/**
+ * The spec of an XML-path negative over a catalog or companion positive: the positive's edits,
+ * then `edits`, which see its result (a spec's edits apply by kind, so the positive's cut still
+ * applies last).
+ *
+ * @param name - The negative's name.
+ * @param base - The positive it edits.
+ * @param edits - The edits that make the breach.
+ * @returns The spec.
+ */
+const catalogNegativeOver = (
+  name: (typeof catalogNegativeNames)[number],
+  base: (typeof catalogNames)[number] | (typeof companionNames)[number],
+  edits: readonly Edit[],
+): FixtureSpec => {
+  const positive = { ...catalogSpecs, ...companionSpecs }[base];
+
+  return { edits: [...positive.edits, ...edits], member: positive.member, name };
+};
+
+/**
+ * The spec of an XML-path negative over `simple`, whose item gains one catalog `c1` holding
+ * `cards`, named by its first paragraph.
+ *
+ * @param name - The negative's name.
+ * @param cards - The `qti-card` elements of the catalog.
+ * @param edits - Further edits, such as the files the cards name.
+ * @returns The spec.
+ */
+const simpleCatalogNegative = (
+  name: (typeof catalogNegativeNames)[number],
+  cards: string,
+  edits: readonly Edit[] = [],
+): FixtureSpec =>
+  overSimple(name, [
+    ...edits,
+    ...simpleWithCatalog(
+      "c1",
+      `<qti-catalog-info><qti-catalog id="c1">${cards}</qti-catalog></qti-catalog-info>`,
+    ),
+  ]);
+
+/**
+ * The edit that lists `files` in the manifest's one resource, after `images/sign.png`.
+ *
+ * @param files - The `href`s to list.
+ * @returns The edit as plain data.
+ */
+const listFiles = (files: readonly string[]): TextEdit =>
+  replaceIn(
+    "imsmanifest.xml",
+    '<file href="images/sign.png"/>',
+    [
+      '<file href="images/sign.png"/>',
+      ...files.map((file) => `            <file href="${file}"/>`),
+    ].join(CRLF),
+  );
+
+/**
+ * A card holding one card file, as `simple`'s catalog negatives write it.
+ *
+ * @param attributes - The `qti-file-href` element's attributes, with their leading space.
+ * @param href - The file's text.
+ * @returns The `qti-card` element.
+ */
+const fileCard = (attributes: string, href: string): string =>
+  `<qti-card support="sign-language"><qti-file-href${attributes}>${href}</qti-file-href></qti-card>`;
+
+/**
+ * A card of the given `support` holding html content only.
+ *
+ * @param support - The `support` value as written.
+ * @returns The `qti-card` element.
+ */
+const textCard = (support: string): string =>
+  `<qti-card support="${support}"><qti-html-content>Read aloud.</qti-html-content></qti-card>`;
+
+/**
+ * One rule system, `qti-rule-system-<system>`, with the minimum length 30 and the major increment
+ * `1 Meter`.
+ *
+ * @param system - `si` or `us`.
+ * @returns The element's text.
+ */
+const ruleOf = (system: string): string =>
+  `<qti-rule-system-${system}><qti-minimum-length>30</qti-minimum-length><qti-major-increment unit="Meter">1</qti-major-increment></qti-rule-system-${system}>`;
+
+/**
+ * The specs of {@link catalogNegativeNames}. The catalog negatives that need a card the corpus
+ * item lacks add it to `cut-catalog-supports`' one catalog; the file negatives are `simple` with
+ * one card; the companion negatives add one material to `cut-companion`.
+ *
+ * - `catalog-no-id` and `catalog-id-twice` add a second catalog to the item's `qti-catalog-info`, so
+ *   the one `data-catalog-idref` still names a catalog.
+ * - `idref-html` names a `span`'s own `id`, `idref-missing` an `id` nothing holds.
+ * - `card-file-missing` and `icon-missing` list the file in the manifest and leave it out of the
+ *   package, so only the file's existence is broken; `card-file-undescribed` keeps the file in the
+ *   package and out of the manifest.
+ * - `card-interaction-in-modal` puts a `qti-text-entry-interaction` (with its response declaration)
+ *   in the card of `catalog-hosts`' modal feedback (decision 309 A); `card-gap-outside` a `qti-gap`
+ *   in a card with no gap match around it.
+ * - `body-lang` is `catalog-lang` with an `xml:lang="es"` on the item body's first paragraph
+ *   (decision 85).
+ */
+const catalogNegativeSpecs: Record<(typeof catalogNegativeNames)[number], FixtureSpec> = {
+  "body-lang": catalogNegativeOver("body-lang", "catalog-lang", [
+    replaceIn(
+      "choice.xml",
+      '<p data-catalog-idref="catalog1">Look',
+      '<p xml:lang="es" data-catalog-idref="catalog1">Look',
+    ),
+  ]),
+  "calculator-Basic": catalogNegativeOver("calculator-Basic", "cut-companion", [
+    companionBefore(companionCalculator("Basic", "")),
+  ]),
+  "calculator-no-description": catalogNegativeOver("calculator-no-description", "cut-companion", [
+    companionBefore(
+      "<qti-calculator><qti-calculator-type>basic</qti-calculator-type></qti-calculator>",
+    ),
+  ]),
+  "card-file-first": simpleCatalogNegative(
+    "card-file-first",
+    '<qti-card support="sign-language"><qti-file-href mime-type="image/png">images/sign.png</qti-file-href><qti-html-content>The sign.</qti-html-content></qti-card>',
+  ),
+  "card-file-missing": simpleCatalogNegative(
+    "card-file-missing",
+    fileCard(' mime-type="image/png"', "images/absent.png"),
+    [listFiles(["images/absent.png"])],
+  ),
+  "card-file-no-type": simpleCatalogNegative("card-file-no-type", fileCard("", "images/sign.png")),
+  "card-file-undescribed": simpleCatalogNegative(
+    "card-file-undescribed",
+    fileCard(' mime-type="image/png"', "images/unlisted.png"),
+    [{ _tag: "copyFile", from: "images/sign.png", to: "images/unlisted.png" }],
+  ),
+  "card-gap-outside": catalogNegativeOver("card-gap-outside", "cut-catalog-supports", [
+    addCatalogCard(
+      '<qti-card support="spoken"><qti-html-content><p>The word <qti-gap identifier="G1"/>.</p></qti-html-content></qti-card>',
+    ),
+  ]),
+  "card-interaction-in-modal": catalogNegativeOver("card-interaction-in-modal", "catalog-hosts", [
+    replaceIn(
+      bgChoiceItem,
+      '<qti-outcome-declaration base-type="float"',
+      '<qti-response-declaration identifier="RESPONSE2" cardinality="single" base-type="string"/><qti-outcome-declaration base-type="float"',
+    ),
+    replaceIn(
+      bgChoiceItem,
+      "<qti-html-content>Done means finished.</qti-html-content>",
+      '<qti-html-content><p>Done: <qti-text-entry-interaction response-identifier="RESPONSE2"/></p></qti-html-content>',
+    ),
+  ]),
+  "card-mixed": catalogNegativeOver("card-mixed", "cut-catalog-supports", [
+    addCatalogCard(
+      '<qti-card support="spoken"><qti-html-content>Read aloud.</qti-html-content><qti-card-entry xml:lang="en"><qti-html-content>Read aloud.</qti-html-content></qti-card-entry></qti-card>',
+    ),
+  ]),
+  "catalog-empty": simpleCatalogNegative("catalog-empty", ""),
+  "catalog-id-twice": catalogNegativeOver("catalog-id-twice", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      "</qti-catalog-info>",
+      `<qti-catalog id="catalog1">${textCard("spoken")}</qti-catalog></qti-catalog-info>`,
+    ),
+  ]),
+  "catalog-no-id": catalogNegativeOver("catalog-no-id", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      "</qti-catalog-info>",
+      `<qti-catalog>${textCard("spoken")}</qti-catalog></qti-catalog-info>`,
+    ),
+  ]),
+  "default-default": catalogNegativeOver("default-default", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      '<qti-card-entry xml:lang="es">',
+      '<qti-card-entry xml:lang="es" default="yes">',
+    ),
+  ]),
+  "default-twice": catalogNegativeOver("default-twice", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      '<qti-card-entry xml:lang="es">',
+      '<qti-card-entry xml:lang="es" default="true">',
+    ),
+    replaceIn(
+      catalogSupportsItem,
+      '<qti-card-entry xml:lang="de">',
+      '<qti-card-entry xml:lang="de" default="1">',
+    ),
+  ]),
+  "html-twice": catalogNegativeOver("html-twice", "cut-catalog-supports", [
+    addCatalogCard(
+      '<qti-card support="spoken"><qti-html-content>Read aloud.</qti-html-content><qti-html-content>Read it twice.</qti-html-content></qti-card>',
+    ),
+  ]),
+  "icon-missing": overSimple("icon-missing", [
+    listFiles(["images/absent.svg"]),
+    replaceIn(
+      "choice.xml",
+      "<qti-item-body>",
+      "<qti-companion-materials-info><qti-digital-material><qti-file-href>images/sign.png</qti-file-href><qti-resource-icon>images/absent.svg</qti-resource-icon></qti-digital-material></qti-companion-materials-info><qti-item-body>",
+    ),
+  ]),
+  "idref-html": catalogNegativeOver("idref-html", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      "accurate.</span>",
+      'accurate.</span> <span id="html1" data-catalog-idref="html1">here</span>',
+    ),
+  ]),
+  "idref-missing": catalogNegativeOver("idref-missing", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      "accurate.</span>",
+      'accurate.</span> <span data-catalog-idref="nowhere">here</span>',
+    ),
+  ]),
+  "increment-text": catalogNegativeOver("increment-text", "cut-companion", [
+    companionBefore(companionRule("si", "30", "", companionIncrement("major", "Meter", "one"))),
+  ]),
+  "info-empty": overSimple("info-empty", [
+    replaceIn("choice.xml", "</qti-item-body>", `</qti-item-body>${CRLF}    <qti-catalog-info/>`),
+  ]),
+  "physical-first": catalogNegativeOver("physical-first", "cut-companion", [
+    companionBefore("<qti-physical-material>Scratch paper</qti-physical-material>"),
+  ]),
+  "rule-both-systems": catalogNegativeOver("rule-both-systems", "cut-companion", [
+    companionBefore(
+      `<qti-rule><qti-description>A rule of both systems</qti-description>${ruleOf("si")}${ruleOf("us")}</qti-rule>`,
+    ),
+  ]),
+  "rule-system-SI": catalogNegativeOver("rule-system-SI", "cut-companion", [
+    companionBefore(
+      companionRule("si", "30", "", companionIncrement("major", "Meter", "1")).replaceAll(
+        "qti-rule-system-si",
+        "qti-rule-system-SI",
+      ),
+    ),
+  ]),
+  "support-case": catalogNegativeOver("support-case", "cut-catalog-supports", [
+    addCatalogCard(textCard("Spoken")),
+  ]),
+  "support-ext-empty": catalogNegativeOver("support-ext-empty", "cut-catalog-supports", [
+    addCatalogCard(textCard("ext:")),
+  ]),
+  "support-twice": catalogNegativeOver("support-twice", "cut-catalog-supports", [
+    addCatalogCard(textCard("keyword-translation")),
+  ]),
+  "two-infos": catalogNegativeOver("two-infos", "cut-companion", [
+    companionBefore(
+      companionCalculator(
+        "basic",
+        `<qti-calculator-info>${companionFileInfo}</qti-calculator-info><qti-calculator-info>${companionFileInfo}</qti-calculator-info>`,
+      ),
+    ),
+  ]),
+  "unit-case": catalogNegativeOver("unit-case", "cut-companion", [
+    companionBefore(companionRule("si", "30", "", companionIncrement("major", "meter", "1"))),
   ]),
 };
 
@@ -4286,6 +5561,1047 @@ const wildcardSpecs: Record<(typeof wildcardNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The SSML namespace, which `speak` declares in an item body and the hooks of `ssml-hooks` bind
+ * on the item root.
+ */
+const ssmlNamespace = "http://www.w3.org/2001/10/synthesis";
+
+/**
+ * The paragraph `simple`'s item body opens with, after which the SSML fixtures place their markup.
+ */
+const simpleOpeningParagraph = "<p>Look at the text in the picture.</p>";
+
+/**
+ * Build the edit that places markup in `simple`'s item body, after its opening paragraph.
+ *
+ * @param markup - The markup, ASCII like every edit.
+ * @returns The edit as plain data.
+ */
+const afterOpeningParagraph = (markup: string): TextEdit =>
+  replaceIn("choice.xml", simpleOpeningParagraph, `${simpleOpeningParagraph}${markup}`);
+
+/**
+ * Write one `speak` fragment in a paragraph, declaring the SSML namespace as `ssml` on itself.
+ *
+ * @param attributes - The attributes beyond the namespace declaration, `version` and `xml:lang`,
+ *   each led by a space.
+ * @param content - The fragment's content.
+ * @returns A paragraph holding the fragment.
+ */
+const speakParagraph = (attributes: string, content: string): string =>
+  `<p><ssml:speak xmlns:ssml="${ssmlNamespace}" version="1.1" xml:lang="en"${attributes}>${content}</ssml:speak></p>`;
+
+/**
+ * Build the edits that list languages in `simple`'s resource LOM, each as a `general.language`
+ * after the title. The `document-lang` law (R26) asks every `xml:lang` form in an item, an SSML
+ * `speak`'s and `lang`'s included, to be listed there, and `simple` lists none.
+ *
+ * @param tags - The language tags, in the order the LOM lists them.
+ * @returns One edit for each, each of which must follow the one before it.
+ */
+const simpleLanguages = (tags: readonly string[]): readonly TextEdit[] =>
+  tags.map((tag, index) => ({
+    _tag: "InsertAfterLine",
+    file: "imsmanifest.xml",
+    line: simpleResourceTitleEnd + index,
+    text: `                        <imsmd:language>${tag}</imsmd:language>`,
+  }));
+
+/**
+ * Build an SSML fixture over `simple` that places one markup in the item body.
+ *
+ * @param name - The fixture's name.
+ * @param markup - The markup placed after the item body's opening paragraph.
+ * @param languages - The languages the markup's `xml:lang`s state, which the resource's LOM lists
+ *   so that `document-lang` has nothing to refuse.
+ * @returns The spec.
+ */
+const ssmlOverSimple = (
+  name: string,
+  markup: string,
+  languages: readonly string[] = ["en"],
+): FixtureSpec => overSimple(name, [...simpleLanguages(languages), afterOpeningParagraph(markup)]);
+
+/**
+ * `simple`'s first choice, which `ssml-hooks` extends with a `speak` in the default namespace.
+ */
+const simpleFirstChoice =
+  '<qti-simple-choice identifier="ChoiceA">You must stay with your luggage at all times.</qti-simple-choice>';
+
+/**
+ * `simple`'s `xmlns:xsi` declaration, before which `ssml-hooks` binds the `ssml` prefix on the item
+ * root so that its hooks need no declaration of their own.
+ */
+const simpleXsiDeclaration = 'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"';
+
+/**
+ * The item of `sharedStimulus` that holds the corpus's one SSML element.
+ */
+const ssmlCorpusItem = "exemplar06.xml";
+
+/**
+ * The reference to a stimulus that `ssml-corpus-sub` drops from {@link ssmlCorpusItem}.
+ */
+const ssmlCorpusStimulusRef =
+  '<qti-assessment-stimulus-ref identifier="Stimulus1" href="passages/unbelievableNight.xml"/>';
+
+/**
+ * The `data-ssml` values of the `data-ssml` fixture: each member alone, all five, whitespace and
+ * member order varied, an escaped member name, a repeated name and the two `rate` spellings. Each
+ * is a value Data-SSML 1.0's schema admits (reading R7-a), so the importer accepts it.
+ */
+const dataSsmlValues = {
+  all: '{"break":{"strength":"x-strong","time":"2s"},"phoneme":{"ph":"t@mA:toU","alphabet":"x-sampa","type":"default"},"prosody":{"rate":"slow"},"say-as":{"interpret-as":"ordinal"},"sub":{"alias":"World Wide Web"}}',
+  break: '{"break":{"strength":"weak","time":"1s"}}',
+  empty: "{}",
+  escaped: '{"b\\u0072eak":{"time":"1s"}}',
+  fast: '{"prosody":{"rate":"x-fast"}}',
+  percent: '{"prosody":{"rate":"80%"}}',
+  phoneme: '{"phoneme":{"ph":"t@mA:toU"}}',
+  repeated: '{"break":{"strength":"weak"},"break":{"time":"1s"}}',
+  sayAs: '{"say-as":{"interpret-as":"date"}}',
+  spaced: ' \t{ "sub" : {"alias":"a"} , "break" : {"time":"1s"} }\n',
+  sub: '{"sub":{"alias":"World Wide Web"}}',
+} as const;
+
+/**
+ * The nine SSML and `data-ssml` positives of phase 7's stage N (spec 5.3), keyed by name. Every one
+ * is accepted, so each is the package its source is with the markup in place.
+ *
+ * - `ssml-corpus-sub` is `sharedStimulus`'s `exemplar06.xml`, the one corpus item with SSML: an
+ *   `ssml:sub` in the spoken card of its catalog, kept where the corpus has it.
+ * - `ssml-hooks` binds `ssml` on the item root and places the twelve elements of the hook list in
+ *   four hosts: `ssml:p`, `ssml:s`, `ssml:say-as`, `ssml:phoneme` and `ssml:sub` in a paragraph;
+ *   `ssml:voice`, `ssml:emphasis`, `ssml:break` and `ssml:prosody` in a `span`; `ssml:audio` and a
+ *   `ssml:mark` outside every `speak` in `qti-prompt`; and a `speak` that declares SSML as its
+ *   default namespace in a `qti-simple-choice`.
+ * - `ssml-speak` is a `speak` with its optional attributes, a comment and a processing instruction
+ *   before its head, the head's `meta` in both forms, `metadata` and `lexicon` with every attribute
+ *   and a `maxage` of `+5`, then a `w` with a bound `role`, a `lang`, a `lookup` of the lexicon, a
+ *   `token` and the two marks `startmark` and `endmark` name.
+ * - `ssml-voice` is a `voice` with every attribute, `voice`s with an empty `gender`, `age` and
+ *   `variant` and with integers, an `audio` whose `maxage` is larger than any machine integer, an
+ *   `emphasis`, a `break` and a padded `say-as`.
+ * - `ssml-prosody` is a `prosody` for each value class of its attributes, `pitch="10 Hz"`, which the
+ *   XSD's `.` admits, an `audio` with a `desc` and a `phoneme`.
+ * - `ssml-nested` is `p > s > sub`, `s > token > say-as`, a `voice` in an `s`, an HTML `span` and a
+ *   foreign element in an `s`, and `xml:space` on an `s`.
+ * - `ssml-two-speaks` is two fragments that each define `mark name="a"` and name it in `startmark`,
+ *   and a third whose `startmark` is `a b` beside `<mark name="a b"/>`: a mark is judged within its
+ *   fragment, by its collapsed name.
+ * - `data-ssml` is a `data-ssml` on a `p`, a `span`, a `div` and a `qti-rubric-block`, which declare
+ *   it, holding {@link dataSsmlValues}.
+ * - `data-ssml-custom` is `data-ssml="anything"` on a `li`, which does not declare it, so it is a
+ *   custom `data-*` attribute with any text.
+ */
+const ssmlSpecs: Record<(typeof ssmlNames)[number], FixtureSpec> = {
+  "data-ssml": ssmlOverSimple(
+    "data-ssml",
+    [
+      `<p data-ssml='${dataSsmlValues.empty}'>one</p>`,
+      `<p data-ssml='${dataSsmlValues.break}'>two</p>`,
+      `<p data-ssml='${dataSsmlValues.phoneme}'>three</p>`,
+      `<p data-ssml='${dataSsmlValues.sayAs}'>four</p>`,
+      `<p data-ssml='${dataSsmlValues.sub}'>five</p>`,
+      `<p data-ssml='${dataSsmlValues.all}'>six</p>`,
+      `<p data-ssml='${dataSsmlValues.spaced}'>seven</p>`,
+      `<p><span data-ssml='${dataSsmlValues.escaped}'>eight</span></p>`,
+      `<p><span data-ssml='${dataSsmlValues.repeated}'>nine</span></p>`,
+      `<div data-ssml='${dataSsmlValues.fast}'><p>ten</p></div>`,
+      `<div data-ssml='${dataSsmlValues.percent}'><p>eleven</p></div>`,
+      `<qti-rubric-block use="instructions" view="candidate" data-ssml='${dataSsmlValues.break}'><qti-content-body><p>twelve</p></qti-content-body></qti-rubric-block>`,
+    ].join(""),
+  ),
+  "data-ssml-custom": ssmlOverSimple(
+    "data-ssml-custom",
+    '<ul><li data-ssml="anything">one</li><li data-ssml=\'{"not":"data-ssml"}\'>two</li></ul>',
+  ),
+  "ssml-corpus-sub": {
+    ...cutItem("ssml-corpus-sub", "sharedStimulus", ssmlCorpusItem, "3.0.0"),
+    edits: [
+      // The item names a stimulus the cut does not keep, which `file-exists` and
+      // `stimulus-ref-target` refuse, so the reference goes and the item keeps its body and its
+      // catalog, where the corpus's `ssml:sub` stands.
+      replaceIn(ssmlCorpusItem, ssmlCorpusStimulusRef, ""),
+      { _tag: "cut", item: ssmlCorpusItem, schemaversion: "3.0.0" },
+    ],
+  },
+  "ssml-hooks": overSimple("ssml-hooks", [
+    ...simpleLanguages(["en"]),
+    replaceIn(
+      "choice.xml",
+      simpleXsiDeclaration,
+      `xmlns:ssml="${ssmlNamespace}" ${simpleXsiDeclaration}`,
+    ),
+    afterOpeningParagraph(
+      [
+        "<p>",
+        "<ssml:p>a paragraph</ssml:p>",
+        "<ssml:s>a sentence</ssml:s>",
+        '<ssml:say-as interpret-as="characters">UK</ssml:say-as>',
+        '<ssml:phoneme ph="t@mA:toU" alphabet="x-sampa">tomato</ssml:phoneme>',
+        '<ssml:sub alias="World Wide Web">WWW</ssml:sub>',
+        "</p>",
+        "<p><span>",
+        '<ssml:voice gender="female">a voice</ssml:voice>',
+        '<ssml:emphasis level="strong">stress</ssml:emphasis>',
+        '<ssml:break strength="weak"/>',
+        '<ssml:prosody rate="slow">slowly</ssml:prosody>',
+        "</span></p>",
+      ].join(""),
+    ),
+    replaceIn(
+      "choice.xml",
+      prompt,
+      '<qti-prompt>What does it say? <ssml:audio src="https://example.org/a.mp3">a sound</ssml:audio><ssml:mark name="free"/></qti-prompt>',
+    ),
+    replaceIn(
+      "choice.xml",
+      simpleFirstChoice,
+      `<qti-simple-choice identifier="ChoiceA">You must stay with your luggage at all times.<speak xmlns="${ssmlNamespace}" version="1.1" xml:lang="en"><p><s>Stay.</s></p></speak></qti-simple-choice>`,
+    ),
+  ]),
+  "ssml-nested": ssmlOverSimple(
+    "ssml-nested",
+    speakParagraph(
+      "",
+      [
+        '<ssml:p><ssml:s>The <ssml:sub alias="World Wide Web">WWW</ssml:sub> is big.</ssml:s></ssml:p>',
+        '<ssml:s><ssml:token><ssml:say-as interpret-as="cardinal">12</ssml:say-as></ssml:token> <span>html</span>',
+        `<ma:extension xmlns:ma="${mathassessNamespace}"/></ssml:s>`,
+        '<ssml:s><ssml:voice gender="male">a voice</ssml:voice></ssml:s>',
+        '<ssml:s xml:space="preserve">  kept  </ssml:s>',
+      ].join(""),
+    ),
+  ),
+  "ssml-prosody": ssmlOverSimple(
+    "ssml-prosody",
+    speakParagraph(
+      "",
+      [
+        '<ssml:prosody pitch="x-high">a</ssml:prosody>',
+        '<ssml:prosody pitch="200Hz" range="+10Hz">b</ssml:prosody>',
+        '<ssml:prosody pitch="10 Hz">c</ssml:prosody>',
+        '<ssml:prosody pitch="-5%" range="+2st">d</ssml:prosody>',
+        '<ssml:prosody contour="(0%,+20Hz) (50%,-10st) (100%,medium)">e</ssml:prosody>',
+        '<ssml:prosody rate="1.5" duration="2s">f</ssml:prosody>',
+        '<ssml:prosody rate="80%" volume="+6dB">g</ssml:prosody>',
+        '<ssml:prosody rate="fast" volume="soft">h</ssml:prosody>',
+        '<ssml:audio src="https://example.org/a.mp3"><ssml:desc xml:lang="en">a sound</ssml:desc>fallback</ssml:audio>',
+        '<ssml:phoneme alphabet="ipa" ph="tomato" type="ruby">tomato</ssml:phoneme>',
+      ].join(""),
+    ),
+  ),
+  "ssml-speak": ssmlOverSimple(
+    "ssml-speak",
+    speakParagraph(
+      ' xml:base="https://example.org/speech/" onlangfailure="ignorelang" startmark="s" endmark="e"',
+      [
+        "<!-- a comment --><?pi data?>",
+        '<ssml:meta name="seeAlso" content="x"/>',
+        '<ssml:meta http-equiv="Cache-Control" content="no-cache"/>',
+        "<ssml:metadata/>",
+        '<ssml:lexicon uri="https://example.org/lexicon.pls" xml:id="L" type="application/pls+xml" fetchtimeout="5s" maxage="+5" maxstale="3"/>',
+        '<ssml:mark name="s"/>',
+        '<ssml:w role="ssml:noun">word</ssml:w>',
+        '<ssml:lang xml:lang="fr">oui</ssml:lang>',
+        '<ssml:lookup ref="L">looked up</ssml:lookup>',
+        "<ssml:token>token</ssml:token>",
+        '<ssml:mark name="e"/>',
+      ].join(""),
+    ),
+    ["en", "fr"],
+  ),
+  "ssml-two-speaks": ssmlOverSimple(
+    "ssml-two-speaks",
+    [
+      speakParagraph(' startmark="a"', '<ssml:mark name="a"/>one'),
+      speakParagraph(' startmark="a"', '<ssml:mark name="a"/>two'),
+      speakParagraph(' startmark="a  b"', '<ssml:mark name="a b"/>three'),
+    ].join(""),
+  ),
+  "ssml-voice": ssmlOverSimple(
+    "ssml-voice",
+    speakParagraph(
+      "",
+      [
+        '<ssml:voice xml:lang="en" gender="female" age="30" variant="2" name="alice" languages="en-US" required="gender" ordering="gender age" onvoicefailure="keepexisting">a</ssml:voice>',
+        '<ssml:voice gender="">b</ssml:voice>',
+        '<ssml:voice age="">c</ssml:voice>',
+        '<ssml:voice variant="">d</ssml:voice>',
+        '<ssml:voice age="7" variant="12">e</ssml:voice>',
+        '<ssml:audio src="https://example.org/a.mp3" maxage="99999999999999999999">f</ssml:audio>',
+        '<ssml:emphasis level="reduced">g</ssml:emphasis>',
+        '<ssml:break time="500ms" strength="medium"/>',
+        '<ssml:say-as interpret-as=" date " format=" mdy " detail=" 1 ">h</ssml:say-as>',
+      ].join(""),
+    ),
+  ),
+};
+
+/**
+ * The tarball member of `pci_simple_example`, the corpus package of one item whose PCI names its
+ * module by the `module` attribute. It is written out here because {@link zipMembers} is defined
+ * after the specs that read it.
+ */
+const pciSimpleMember = "qtiv3-examples/packaging/pci-simple/pci_simple_example.zip";
+
+/**
+ * The tarball member of `pci_item_examples`, the corpus package of four items with PCIs and the
+ * modules and configuration files they name.
+ */
+const pciItemsMember = "qtiv3-examples/packaging/pci/pci_item_examples.zip";
+
+/**
+ * The item of `pci_simple_example`, whose text the hand-written PCI positives replace.
+ */
+const pciSimpleItem = "measuring_ph.xml";
+
+/**
+ * Write the item of a hand-written PCI positive, in the corpus items' form.
+ *
+ * @param version - The version the item's schema location names.
+ * @param declarations - The item's declarations, as written.
+ * @param body - The content of the item body, as written.
+ * @returns The item's text.
+ */
+const pciItemText = (
+  version: CutEdit["schemaversion"],
+  declarations: string,
+  body: string,
+): string =>
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    `  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/${version === "3.0.0" ? "imsqti_asiv3p0_v1p0.xsd" : "imsqti_asiv3p0p1_v1p0.xsd"}"`,
+    '  identifier="pci-item" title="A PCI" adaptive="false" time-dependent="false">',
+    declarations,
+    `  <qti-item-body>${body}</qti-item-body>`,
+    "</qti-assessment-item>",
+    "",
+  ].join("\n");
+
+/**
+ * The spec of a hand-written PCI positive: `pci_simple_example` with its item replaced by one the
+ * given declarations and body make, and its manifest at `version`.
+ *
+ * @param name - The fixture's name.
+ * @param version - The version the manifest and the item declare.
+ * @param declarations - The item's declarations, as written.
+ * @param body - The content of the item body, as written.
+ * @param files - Files to add to the package, each listed in the manifest after the corpus's own.
+ * @returns The spec.
+ */
+const overPciSimple = (
+  name: (typeof pciNames)[number] | (typeof pciNegativeNames)[number],
+  version: CutEdit["schemaversion"],
+  declarations: string,
+  body: string,
+  files: Readonly<Record<string, string>> = {},
+): FixtureSpec => ({
+  edits: [
+    {
+      _tag: "addFile",
+      path: pciSimpleItem,
+      source: { text: pciItemText(version, declarations, body) },
+    },
+    ...Object.entries(files).map(([file, text]): Edit => ({
+      _tag: "addFile",
+      path: file,
+      source: { text },
+    })),
+    ...(version === "3.0.0"
+      ? []
+      : [
+          replaceIn(
+            "imsmanifest.xml",
+            "<schemaversion>3.0.0</schemaversion>",
+            "<schemaversion>3.0.1</schemaversion>",
+          ),
+        ]),
+    ...Object.keys(files).map((file) =>
+      replaceIn(
+        "imsmanifest.xml",
+        '<file href="vinegar.svg" />',
+        `<file href="vinegar.svg" />\n            <file href="${file}" />`,
+      ),
+    ),
+  ],
+  member: pciSimpleMember,
+  name,
+});
+
+/**
+ * The attribute that gives the hand-written PCIs their type.
+ */
+const pciTypeAttribute = 'custom-interaction-type-identifier="urn-fdc-hmhco.com-pci-tapToReveal"';
+
+/**
+ * A PCI of the hand-written items with the given start-tag attributes, as written, for the
+ * negatives that break the tag itself.
+ *
+ * @param attributes - The attributes of the start tag.
+ * @param children - The PCI's children, as written.
+ * @returns The element's text.
+ */
+const pciElement = (attributes: string, children: string): string =>
+  `<qti-portable-custom-interaction ${attributes}>${children}</qti-portable-custom-interaction>`;
+
+/**
+ * A PCI of the hand-written items: bound to `response`, naming the module `tap` that the package
+ * holds, with the given children.
+ *
+ * @param response - The response the PCI binds.
+ * @param children - The PCI's children, as written.
+ * @returns The element's text.
+ */
+const pciOf = (response: string, children: string): string =>
+  pciElement(`response-identifier="${response}" module="tap" ${pciTypeAttribute}`, children);
+
+/**
+ * The declaration of an integer response `RESPONSE`, and of the `SCORE` outcome.
+ */
+const pciScored =
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>';
+
+/**
+ * The file edits that keep only `kept` of `pci_item_examples`: every other file of the package is
+ * deleted, and a manifest of one item resource and one `webcontent` resource of the module and
+ * configuration files takes the corpus manifest's place.
+ *
+ * @param name - The fixture's name, which names the manifest.
+ * @param item - The item the package keeps.
+ * @param modules - The module and configuration files it keeps, listed in one resource.
+ * @returns The edits, deletions first.
+ */
+const pciItemsKept = (name: string, item: string, modules: readonly string[]): readonly Edit[] => [
+  ...[
+    "ammonia.svg",
+    "baking_soda.svg",
+    "fractions1.xml",
+    "fractions_deps.xml",
+    "fractions_deps_2.xml",
+    "measuring_ph.xml",
+    "modules/hmh_co_com.js",
+    "modules/hmh_co_com_fallback.json",
+    "modules/lib/eve.js",
+    "modules/lib/handlebars.min-latest.js",
+    "modules/lib/jquery-2.2.2.min.js",
+    "modules/module_resolution.js",
+    "modules/shading.js",
+    "modules/shading_deps.js",
+    "modules/tap.js",
+    "vinegar.svg",
+  ]
+    .filter((file) => file !== item && !modules.includes(file))
+    .map((file): Edit => ({ _tag: "deleteFile", path: file })),
+  {
+    _tag: "addFile",
+    path: "imsmanifest.xml",
+    source: {
+      text: manifestText(name, "3.0.0", [
+        { files: [item], href: item, identifier: `${name}-item`, type: "imsqti_item_xmlv3p0" },
+        {
+          files: modules,
+          href: modules[0] ?? item,
+          identifier: `${name}-modules`,
+          type: "webcontent",
+        },
+      ]),
+    },
+  },
+];
+
+/**
+ * The edit that drops the custom `data-*` attributes of a corpus PCI's opening tag.
+ *
+ * @param file - The item the tag is in.
+ * @param kept - The tag's lines up to the last attribute that stays, the first line the element's
+ *   name.
+ * @param data - The lines that carry the `data-*` attributes and the tag's end.
+ * @param replacementKept - The lines that take `kept`'s place, when the edit changes them too.
+ * @returns The edit as plain data.
+ */
+const withoutData = (
+  file: string,
+  kept: readonly string[],
+  data: readonly string[],
+  replacementKept: readonly string[] = kept,
+): TextEdit => replaceIn(file, [...kept, ...data].join("\n"), `${replacementKept.join("\n")}>`);
+
+/**
+ * The lines of `fractions_deps.xml`'s two PCIs that `pci-modules` keeps and drops.
+ */
+const depsFirstKept = [
+  '<qti-portable-custom-interaction custom-interaction-type-identifier="urn:fdc:hmhco.com:2019:pci:shading_deps"',
+  '        response-identifier="EXAMPLE"',
+] as const;
+
+const depsFirstData = [
+  '        data-controls="none" data-render="grid" data-selected="0.0,1.0" data-selected_color="green"',
+  '        data-unselected_color="white" data-dimension1_initial="3" data-dimension2_initial="2" ',
+  '        data-element_diameter="60" data-value="numShaded" data-active="0">',
+] as const;
+
+const depsSecondKept = [
+  '<qti-portable-custom-interaction custom-interaction-type-identifier="urn:fdc:hmhco.com:2019:pci:shading_deps"',
+  '        response-identifier="RESPONSE"',
+] as const;
+
+const depsSecondData = [
+  '        data-controls="full" data-render="grid" data-selected_color="green"',
+  '        data-unselected_color="white" data-dimension1_initial="2" data-dimension2_initial="2" ',
+  '        data-element_diameter="60" data-value="numShaded" >',
+] as const;
+
+/**
+ * The lines of `fractions_deps_2.xml`'s two PCIs that `pci-configurations` keeps and drops.
+ */
+const configurationsFirstKept = [
+  '<qti-portable-custom-interaction custom-interaction-type-identifier="urn:fdc:hmhco.com:2019:pci:shading"',
+  '        response-identifier="EXAMPLE"',
+] as const;
+
+const configurationsFirstData = [
+  '        data-controls="none" data-render="grid" data-selected="0.0,1.0" data-selected_color="blue"',
+  '        data-unselected_color="white" data-dimension1_initial="3" data-dimension2_initial="2" ',
+  '        data-element_diameter="60" data-value="numShaded" data-active="0">',
+] as const;
+
+const configurationsSecondKept = [
+  '<qti-portable-custom-interaction custom-interaction-type-identifier="urn:fdc:hmhco.com:2019:pci:shading" ',
+  '        module="shadingD"',
+  '        response-identifier="RESPONSE"',
+] as const;
+
+const configurationsSecondData = [
+  '        data-controls="full" data-render="grid" data-selected_color="blue"',
+  '        data-unselected_color="white" data-dimension1_initial="2" data-dimension2_initial="2" ',
+  '        data-element_diameter="60" data-value="numShaded" >',
+] as const;
+
+/**
+ * The edits that make the two correct responses of a `fractions_deps` item valid: the corpus writes
+ * the `identifier` values `1` and `6`, which the identifier type refuses (it starts with no digit),
+ * so a positive writes `N1` and `N6`, keeping the base type.
+ *
+ * @param file - The item, `fractions_deps.xml` or `fractions_deps_2.xml`.
+ * @returns The two edits.
+ */
+const validCorrectResponses = (file: string): readonly TextEdit[] => [
+  replaceIn(file, "<qti-value>1</qti-value>", "<qti-value>N1</qti-value>"),
+  replaceIn(file, "<qti-value>6</qti-value>", "<qti-value>N6</qti-value>"),
+];
+
+/**
+ * The edits of `pci-configurations`: `fractions_deps_2.xml` with its corpus PCIs' custom `data-*`
+ * dropped, the first PCI given both module forms and the corpus's misspelt `XX` paths repaired,
+ * the configuration attributes of its `qti-interaction-modules` written as `configurations`, and
+ * its two `identifier` correct responses, which the corpus writes `1` and `6` and the identifier
+ * type refuses, written `N1` and `N6` ({@link validCorrectResponses}).
+ *
+ * @param configurations - The attributes of the `qti-interaction-modules` start tag, as written.
+ * @returns The edits, in the order the positive applies them.
+ */
+const pciConfigurationsEdits = (configurations: string): readonly Edit[] => [
+  ...pciItemsKept("pci-configurations", "fractions_deps_2.xml", [
+    "modules/hmh_co_com.js",
+    "modules/hmh_co_com_fallback.json",
+    "modules/shading_deps.js",
+    "modules/lib/eve.js",
+    "modules/lib/jquery-2.2.2.min.js",
+  ]),
+  withoutData("fractions_deps_2.xml", configurationsFirstKept, configurationsFirstData, [
+    configurationsFirstKept[0],
+    '        module="shadingD"',
+    configurationsFirstKept[1],
+  ]),
+  withoutData("fractions_deps_2.xml", configurationsSecondKept, configurationsSecondData),
+  replaceIn(
+    "fractions_deps_2.xml",
+    "the primary-configuration URL is deliberately incorrect to \n            demonstrate the use of fallback-configuration -->",
+    "the primary-configuration and the secondary-configuration are files this package holds -->",
+  ),
+  replaceIn(
+    "fractions_deps_2.xml",
+    '<qti-interaction-modules primary-configuration="modules/hmh_co_comXX.js" fallback-configuration="modules/hmh_co_com.js">',
+    `<qti-interaction-modules ${configurations}>`,
+  ),
+  replaceIn(
+    "fractions_deps_2.xml",
+    '<qti-interaction-module id="raphael"/>',
+    '<qti-interaction-module id="raphael" fallback-path="modules/lib/raphael.js"/>',
+  ),
+  ...validCorrectResponses("fractions_deps_2.xml"),
+];
+
+/**
+ * The attributes of `pci-configurations`' `qti-interaction-modules`: both configurations are files
+ * the package holds and lists.
+ */
+const pciConfigurationFiles =
+  'primary-configuration="modules/hmh_co_com.js" secondary-configuration="modules/hmh_co_com_fallback.json"';
+
+/**
+ * The edits of `pci-modules`: `fractions_deps.xml` with its corpus PCIs' custom `data-*` dropped,
+ * in a package of the three module files it keeps, the handlebars file listed and `raphael.js`
+ * absent, and its two `identifier` correct responses, which the corpus writes `1` and `6` and the
+ * identifier type refuses, written `N1` and `N6` ({@link validCorrectResponses}).
+ */
+const pciModulesEdits: readonly Edit[] = [
+  ...pciItemsKept("pci-modules", "fractions_deps.xml", [
+    "modules/shading_deps.js",
+    "modules/lib/eve.js",
+    "modules/lib/handlebars.min-latest.js",
+  ]),
+  withoutData("fractions_deps.xml", depsFirstKept, depsFirstData),
+  withoutData("fractions_deps.xml", depsSecondKept, depsSecondData),
+  ...validCorrectResponses("fractions_deps.xml"),
+];
+
+/**
+ * The specs of {@link pciNames}.
+ */
+const pciSpecs: Record<(typeof pciNames)[number], FixtureSpec> = {
+  "custom-3-0-1": overPciSimple(
+    "custom-3-0-1",
+    "3.0.1",
+    '<qti-response-declaration identifier="RESPONSE" cardinality="record"/>',
+    '<div><qti-custom-interaction response-identifier="RESPONSE"/></div>',
+  ),
+  "pci-3-0-1": overPciSimple(
+    "pci-3-0-1",
+    "3.0.1",
+    pciScored,
+    pciOf(
+      "RESPONSE",
+      '<qti-interaction-markup><p>Tap</p></qti-interaction-markup><qti-context-variable identifier="QTI_CONTEXT"/><qti-stylesheet href="pci.css" type="text/css"/>',
+    ),
+    { "pci.css": "p { color: green; }\n" },
+  ),
+  "pci-catalog-3-0-1": overPciSimple(
+    "pci-catalog-3-0-1",
+    "3.0.1",
+    pciScored,
+    pciOf(
+      "RESPONSE",
+      '<qti-interaction-markup><p data-catalog-idref="tap-help">Tap</p></qti-interaction-markup><qti-catalog-info><qti-catalog id="tap-help"><qti-card support="linguistic-guidance"><qti-html-content><p>To tap is to touch lightly.</p></qti-html-content></qti-card></qti-catalog></qti-catalog-info>',
+    ),
+  ),
+  "pci-configurations": {
+    edits: pciConfigurationsEdits(pciConfigurationFiles),
+    member: pciItemsMember,
+    name: "pci-configurations",
+  },
+  "pci-context-3-0-1": overPciSimple(
+    "pci-context-3-0-1",
+    "3.0.1",
+    `<qti-context-declaration identifier="QTI_CONTEXT" cardinality="record"/><qti-context-declaration identifier="LEVEL" cardinality="single" base-type="integer"/>${pciScored}`,
+    pciOf(
+      "RESPONSE",
+      '<qti-interaction-markup><p>Tap</p></qti-interaction-markup><qti-context-variable identifier="QTI_CONTEXT"/><qti-context-variable identifier="LEVEL"/>',
+    ),
+  ),
+  "pci-markup-content": overPciSimple(
+    "pci-markup-content",
+    "3.0.0",
+    `${pciScored}<qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>${templateDeclaration}`,
+    pciOf(
+      "RESPONSE",
+      '<qti-interaction-markup><p>Score <qti-printed-variable identifier="SCORE"/></p><qti-feedback-block outcome-identifier="FEEDBACK" identifier="fb" show-hide="show"><qti-content-body><p>Shown</p></qti-content-body></qti-feedback-block><p>See <qti-feedback-inline outcome-identifier="FEEDBACK" identifier="fi" show-hide="show">this</qti-feedback-inline></p><qti-template-block template-identifier="T" identifier="tb" show-hide="show"><qti-content-body><p>Block</p></qti-content-body></qti-template-block><p><qti-template-inline template-identifier="T" identifier="ti" show-hide="show">inline</qti-template-inline></p><template/><template/></qti-interaction-markup>',
+    ),
+  ),
+  "pci-modules": {
+    edits: pciModulesEdits,
+    member: pciItemsMember,
+    name: "pci-modules",
+  },
+  "pci-simple": {
+    edits: [
+      replaceIn(
+        pciSimpleItem,
+        '            data-toggle="true" data-tap-message="Tap to reveal the color of the solution"\n',
+        "",
+      ),
+    ],
+    member: pciSimpleMember,
+    name: "pci-simple",
+  },
+  "pci-variables": overPciSimple(
+    "pci-variables",
+    "3.0.0",
+    `<qti-context-declaration identifier="CTX" cardinality="single" base-type="integer"/><qti-response-declaration identifier="RECORD" cardinality="record"/><qti-response-declaration identifier="PICKED" cardinality="multiple" base-type="identifier"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>${templateDeclaration}`,
+    `${pciOf(
+      "RECORD",
+      '<qti-prompt><p>Tap</p></qti-prompt><qti-interaction-markup><p>Tap</p></qti-interaction-markup><qti-template-variable template-identifier="T"/><qti-context-variable identifier="CTX"/>',
+    )}${pciOf("PICKED", "<qti-interaction-markup><p>Pick</p></qti-interaction-markup>")}`,
+  ),
+  "template-foreign": overPciSimple(
+    "template-foreign",
+    "3.0.0",
+    pciScored,
+    pciOf(
+      "RESPONSE",
+      '<qti-interaction-markup><p>Tap</p><template><x:widget xmlns:x="urn:example:widget" size="3"/></template></qti-interaction-markup>',
+    ),
+  ),
+};
+
+/**
+ * The markup of the hand-written PCI negatives: one paragraph.
+ */
+const pciMarkup = "<qti-interaction-markup><p>Tap</p></qti-interaction-markup>";
+
+/**
+ * The module element of the hand-written PCI negatives: the `tap` module the package holds.
+ */
+const pciModuleTap =
+  '<qti-interaction-modules><qti-interaction-module id="tap" primary-path="modules/tap.js"/></qti-interaction-modules>';
+
+/**
+ * The catalog of `pci-catalog-3-0-1`, which `pci-catalog-info-3-0-0` writes at 3.0.0.
+ */
+const pciCatalogInfo =
+  '<qti-catalog-info><qti-catalog id="tap-help"><qti-card support="linguistic-guidance"><qti-html-content><p>To tap is to touch lightly.</p></qti-html-content></qti-card></qti-catalog></qti-catalog-info>';
+
+/**
+ * The specs of {@link pciNegativeNames}. Each is a hand-written positive of {@link pciNames} or a
+ * cut of `pci_item_examples` with the one defect its name says.
+ */
+const pciNegativeSpecs: Record<(typeof pciNegativeNames)[number], FixtureSpec> = {
+  "custom-3-0-0": overPciSimple(
+    "custom-3-0-0",
+    "3.0.0",
+    '<qti-response-declaration identifier="RESPONSE" cardinality="record"/>',
+    '<div><qti-custom-interaction response-identifier="RESPONSE"/></div>',
+  ),
+  "custom-attribute": overPciSimple(
+    "custom-attribute",
+    "3.0.1",
+    '<qti-response-declaration identifier="RESPONSE" cardinality="record"/>',
+    '<div><qti-custom-interaction response-identifier="RESPONSE" xmlns:x="urn:example:widget" x:mode="draw"/></div>',
+  ),
+  "pci-catalog-info-3-0-0": overPciSimple(
+    "pci-catalog-info-3-0-0",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", `${pciMarkup}${pciCatalogInfo}`),
+  ),
+  "pci-configuration-missing": {
+    edits: pciConfigurationsEdits(
+      'primary-configuration="modules/hmh_co_comXX.js" secondary-configuration="modules/hmh_co_com_fallback.json"',
+    ),
+    member: pciItemsMember,
+    name: "pci-configuration-missing",
+  },
+  "pci-context-builtin-3-0-0": overPciSimple(
+    "pci-context-builtin-3-0-0",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", `${pciMarkup}<qti-context-variable identifier="QTI_CONTEXT"/>`),
+  ),
+  "pci-context-undeclared": overPciSimple(
+    "pci-context-undeclared",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", `${pciMarkup}<qti-context-variable identifier="CTX"/>`),
+  ),
+  "pci-context-undeclared-3-0-1": overPciSimple(
+    "pci-context-undeclared-3-0-1",
+    "3.0.1",
+    `<qti-context-declaration identifier="QTI_CONTEXT" cardinality="record"/>${pciScored}`,
+    pciOf(
+      "RESPONSE",
+      `${pciMarkup}<qti-context-variable identifier="QTI_CONTEXT"/><qti-context-variable identifier="LEVEL"/>`,
+    ),
+  ),
+  "pci-items-fallback": {
+    edits: pciConfigurationsEdits(
+      'primary-configuration="modules/hmh_co_com.js" fallback-configuration="modules/hmh_co_com_fallback.json"',
+    ),
+    member: pciItemsMember,
+    name: "pci-items-fallback",
+  },
+  "pci-items-missing": {
+    edits: [
+      ...pciModulesEdits,
+      replaceIn(
+        "imsmanifest.xml",
+        '      <file href="modules/lib/eve.js"/>\n',
+        '      <file href="modules/lib/eve.js"/>\n      <file href="modules/lib/raphael.js"/>\n',
+      ),
+    ],
+    member: pciItemsMember,
+    name: "pci-items-missing",
+  },
+  "pci-items-unlisted": {
+    edits: [
+      ...pciModulesEdits,
+      replaceIn(
+        "imsmanifest.xml",
+        '      <file href="modules/lib/handlebars.min-latest.js"/>\n',
+        "",
+      ),
+    ],
+    member: pciItemsMember,
+    name: "pci-items-unlisted",
+  },
+  "pci-markup-order": overPciSimple(
+    "pci-markup-order",
+    "3.0.0",
+    `${pciScored}${templateDeclaration}`,
+    pciOf("RESPONSE", `<qti-template-variable template-identifier="T"/>${pciMarkup}`),
+  ),
+  "pci-markup-text": overPciSimple(
+    "pci-markup-text",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", "<qti-interaction-markup>Tap</qti-interaction-markup>"),
+  ),
+  "pci-module-id-malformed": overPciSimple(
+    "pci-module-id-malformed",
+    "3.0.0",
+    pciScored,
+    pciOf(
+      "RESPONSE",
+      `<qti-interaction-modules><qti-interaction-module id="1shading" primary-path="modules/tap.js"/></qti-interaction-modules>${pciMarkup}`,
+    ),
+  ),
+  "pci-module-malformed": overPciSimple(
+    "pci-module-malformed",
+    "3.0.0",
+    pciScored,
+    pciElement(`response-identifier="RESPONSE" module="1shading" ${pciTypeAttribute}`, pciMarkup),
+  ),
+  "pci-modules-after-markup": overPciSimple(
+    "pci-modules-after-markup",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", `${pciMarkup}${pciModuleTap}`),
+  ),
+  "pci-modules-empty": overPciSimple(
+    "pci-modules-empty",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", `<qti-interaction-modules/>${pciMarkup}`),
+  ),
+  "pci-nested": overPciSimple(
+    "pci-nested",
+    "3.0.0",
+    `<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"/><qti-response-declaration identifier="INNER" cardinality="single" base-type="integer"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>`,
+    pciOf(
+      "RESPONSE",
+      `<qti-interaction-markup><qti-feedback-block outcome-identifier="FEEDBACK" identifier="fb" show-hide="show"><qti-content-body>${pciOf("INNER", pciMarkup)}</qti-content-body></qti-feedback-block></qti-interaction-markup>`,
+    ),
+  ),
+  "pci-no-markup": overPciSimple("pci-no-markup", "3.0.0", pciScored, pciOf("RESPONSE", "")),
+  "pci-no-module": overPciSimple(
+    "pci-no-module",
+    "3.0.0",
+    pciScored,
+    pciElement(`response-identifier="RESPONSE" ${pciTypeAttribute}`, pciMarkup),
+  ),
+  "pci-no-type": overPciSimple(
+    "pci-no-type",
+    "3.0.0",
+    pciScored,
+    pciElement('response-identifier="RESPONSE" module="tap"', pciMarkup),
+  ),
+  "pci-path-malformed": overPciSimple(
+    "pci-path-malformed",
+    "3.0.0",
+    pciScored,
+    pciOf(
+      "RESPONSE",
+      `<qti-interaction-modules><qti-interaction-module id="tap" primary-path="modules/ta%zzp.js"/></qti-interaction-modules>${pciMarkup}`,
+    ),
+  ),
+  "pci-prompt-late": overPciSimple(
+    "pci-prompt-late",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", `${pciMarkup}<qti-prompt><p>Tap</p></qti-prompt>`),
+  ),
+  "pci-stylesheet-3-0-0": overPciSimple(
+    "pci-stylesheet-3-0-0",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", `${pciMarkup}<qti-stylesheet href="pci.css" type="text/css"/>`),
+    { "pci.css": "p { color: green; }\n" },
+  ),
+  "pci-template-undeclared": overPciSimple(
+    "pci-template-undeclared",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", `${pciMarkup}<qti-template-variable template-identifier="T"/>`),
+  ),
+  "pci-two-markups": overPciSimple(
+    "pci-two-markups",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", `${pciMarkup}${pciMarkup}`),
+  ),
+  "pci-two-modules": overPciSimple(
+    "pci-two-modules",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", `${pciModuleTap}${pciModuleTap}${pciMarkup}`),
+  ),
+  "pci-type-malformed": overPciSimple(
+    "pci-type-malformed",
+    "3.0.0",
+    pciScored,
+    pciElement(
+      'response-identifier="RESPONSE" module="tap" custom-interaction-type-identifier="a%zz"',
+      pciMarkup,
+    ),
+  ),
+  "template-outside": overPciSimple(
+    "template-outside",
+    "3.0.0",
+    pciScored,
+    pciOf("RESPONSE", `${pciMarkup}<template/>`),
+  ),
+};
+
+/**
+ * The edits of `doctype`: a document type declaration with a general entity, `org`, and an
+ * `ATTLIST` default for `adaptive`, the attribute dropped from the root, and a reference to the
+ * entity in the prompt. `data-entity` extends them.
+ */
+const doctypeEdits: readonly Edit[] = [
+  {
+    _tag: "InsertAfterLine",
+    file: "choice.xml",
+    line: 1,
+    text: '<!DOCTYPE qti-assessment-item [<!ENTITY org "1EdTech &amp; friends"><!ATTLIST qti-assessment-item adaptive CDATA "false">]>',
+  },
+  replaceIn("choice.xml", ' adaptive="false"', ""),
+  replaceIn("choice.xml", prompt, "<qti-prompt>What does it say? &org;</qti-prompt>"),
+];
+
+/**
+ * `data_dash.xml` of `BPIG_22April`, the corpus's item with `data-*` attributes at 3.0.1.
+ */
+const dataDashItem = "items/data_dash.xml";
+
+/**
+ * `data-attributes.xml` of the corpus's `items.zip`, the corpus's item with `data-*` attributes at
+ * 3.0.0.
+ */
+const dataAttributesItem = "data-attributes.xml";
+
+/**
+ * A `data-` name with `é` in it, which a latin1 edit writes as the two bytes of its UTF-8 form:
+ * the escapes are `Ã` and `©`, the latin1 reading of U+00E9's bytes `C3 A9`.
+ */
+const dataAcute = "data-Ã©";
+
+/**
+ * The paragraph `data-custom` puts in `simple`'s item body, after the first, which holds the
+ * names and values the class has to read: digits, `_`, `.` and `-` in names; and values that are
+ * empty, that hold `<`, `&`, `"`, a tab and a line feed as character data, outer spaces and a
+ * non-ASCII letter (the bytes of `é`, as {@link dataAcute}).
+ */
+const dataCustomValues = [
+  '<p data-empty="" data-lt="a&lt;b" data-amp="a&amp;b" data-quot=\'say "x"\' data-quot-ref="say &quot;x&quot;"',
+  ' data-tab="a&#9;b" data-newline="a&#10;b" data-padded="  x  " data-acute="cafÃ©"',
+  ' data-n1="1" data-a_b="2" data-a.b="3" data-a-b="4" data-9="5" data-_="6">values</p>',
+].join("");
+
+/**
+ * Ten names on one element, `data-k0` to `data-k9`.
+ */
+const dataTen = `<p ${Array.from({ length: 10 }, (_, index) => `data-k${String(index)}="${String(index)}"`).join(" ")}>ten</p>`;
+
+/**
+ * The eight `data-*` fixtures of phase 8's stage N (spec 5.3), keyed by name.
+ *
+ * - `cut-data-dash` is `BPIG_22April`'s `data_dash.xml`, cut: three custom names on a
+ *   `qti-hottext-interaction`.
+ * - `cut-data-attributes` is `items.zip`'s `data-attributes.xml`, cut: the same names on the
+ *   `qti-hottext`s of its interaction. The item's `qti-rubric-block` has no `use`, which
+ *   `rubric-block-use` refuses, so the edit adds `use="instructions"` (the rule the cut would
+ *   otherwise break).
+ * - `data-custom` is `simple` with custom names on the root (`data-qti-suppress-tts`, which no
+ *   element declares), `p`, `img`, `qti-choice-interaction`, `qti-prompt` and `qti-simple-choice`;
+ *   `data-prompt` on `p` and `data-ssml` on a `li`, declared names where an element declares them
+ *   and custom where it does not; ten names on one element; and {@link dataCustomValues}.
+ * - `data-entity` is `doctype` with `data-org="&org;"` on the prompt, the entity declared in the
+ *   internal subset.
+ * - `data-non-ascii` is `data-é="x"` on a `p`, a name with a non-ASCII letter, which the information
+ *   model's pattern bars (reading 13).
+ * - `data-uppercase` is `data-Group="g"` on `qti-choice-interaction`, `data-bare-prefix` is
+ *   `data-="x"` on a `p`, and `data-item-body` is `data-x="1"` on `qti-item-body`.
+ */
+const dataSpecs: Record<(typeof dataNames)[number], FixtureSpec> = {
+  "cut-data-attributes": {
+    ...cutItem("cut-data-attributes", "items", dataAttributesItem, "3.0.0"),
+    edits: [
+      replaceIn(
+        dataAttributesItem,
+        '<qti-rubric-block view="candidate">',
+        '<qti-rubric-block use="instructions" view="candidate">',
+      ),
+      { _tag: "cut", item: dataAttributesItem, schemaversion: "3.0.0" },
+    ],
+  },
+  "cut-data-dash": cutItem("cut-data-dash", "BPIG_22April", dataDashItem, "3.0.1"),
+  "data-bare-prefix": overSimple("data-bare-prefix", [
+    replaceIn(
+      "choice.xml",
+      simpleOpeningParagraph,
+      '<p data-="x">Look at the text in the picture.</p>',
+    ),
+  ]),
+  "data-custom": overSimple("data-custom", [
+    replaceIn(
+      "choice.xml",
+      ' time-dependent="false">',
+      ' time-dependent="false" data-qti-suppress-tts="true">',
+    ),
+    replaceIn(
+      "choice.xml",
+      simpleOpeningParagraph,
+      `<p data-prompt="p" data-a="1">Look at the text in the picture.</p>${dataCustomValues}${dataTen}<ul><li data-ssml="anything">one</li></ul>`,
+    ),
+    replaceIn(
+      "choice.xml",
+      '<img src="images/sign.png"',
+      '<img data-img="i" src="images/sign.png"',
+    ),
+    replaceIn("choice.xml", 'max-choices="1">', 'max-choices="1" data-group="g">'),
+    replaceIn("choice.xml", prompt, '<qti-prompt data-p="x">What does it say?</qti-prompt>'),
+    replaceIn(
+      "choice.xml",
+      '<qti-simple-choice identifier="ChoiceA">',
+      '<qti-simple-choice identifier="ChoiceA" data-c="a">',
+    ),
+  ]),
+  "data-entity": overSimple("data-entity", [
+    ...doctypeEdits,
+    replaceIn(
+      "choice.xml",
+      "<qti-prompt>What does it say? &org;</qti-prompt>",
+      '<qti-prompt data-org="&org;">What does it say? &org;</qti-prompt>',
+    ),
+  ]),
+  "data-item-body": overSimple("data-item-body", [
+    replaceIn("choice.xml", "<qti-item-body>", '<qti-item-body data-x="1">'),
+  ]),
+  "data-non-ascii": overSimple("data-non-ascii", [
+    replaceIn(
+      "choice.xml",
+      simpleOpeningParagraph,
+      `<p ${dataAcute}="x">Look at the text in the picture.</p>`,
+    ),
+  ]),
+  "data-uppercase": overSimple("data-uppercase", [
+    replaceIn("choice.xml", 'max-choices="1">', 'max-choices="1" data-Group="g">'),
+  ]),
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -4336,7 +6652,17 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...copySpecs,
   ...testSpecs,
   ...negativeSpecs,
+  ...restoredSpecs,
+  ...assemblySpecs,
+  ...weightedSpecs,
+  ...catalogSpecs,
+  ...companionSpecs,
+  ...catalogNegativeSpecs,
+  ...pciSpecs,
+  ...pciNegativeSpecs,
   ...wildcardSpecs,
+  ...ssmlSpecs,
+  ...dataSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
@@ -4429,16 +6755,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
     ),
   ]),
   doctype: {
-    edits: [
-      {
-        _tag: "InsertAfterLine",
-        file: "choice.xml",
-        line: 1,
-        text: '<!DOCTYPE qti-assessment-item [<!ENTITY org "1EdTech &amp; friends"><!ATTLIST qti-assessment-item adaptive CDATA "false">]>',
-      },
-      replaceIn("choice.xml", ' adaptive="false"', ""),
-      replaceIn("choice.xml", prompt, "<qti-prompt>What does it say? &org;</qti-prompt>"),
-    ],
+    edits: doctypeEdits,
     member: simpleMember,
     name: "doctype",
   },
@@ -4814,6 +7131,8 @@ const specs: Record<FixtureName, FixtureSpec> = {
     "usage3-float-padded",
     replaceIn("example.xml", "<value>0.87</value>", '<value baseType="float"> 0.87 </value>'),
   ),
+  // `<value baseType="integer">0.87</value>`, outside a record: a `baseType` is no base type
+  // there (reading 105), so the value is untyped text, and the package imports and round-trips.
   "usage3-integer-float": overUsage(
     "usage3-integer-float",
     replaceIn("example.xml", "<value>0.87</value>", '<value baseType="integer">0.87</value>'),
@@ -5383,11 +7702,18 @@ const attributePattern =
   /(?<name>[A-Za-z_][\w:.-]*)\s*=\s*(?:"(?<double>[^"]*)"|'(?<single>[^']*)')/gu;
 
 /**
+ * One `qti-file-href` or `qti-resource-icon` element, whose text may name a file of the package
+ * (the companion materials of an item name theirs so).
+ */
+const fileElementPattern =
+  /<(?:qti-file-href|qti-resource-icon)(?:\s[^>]*)?>(?<text>[^<]*)<\/(?:qti-file-href|qti-resource-icon)>/gu;
+
+/**
  * The attributes whose values may name a file of the package: `src`, `data`, `href`, `poster`,
- * `srcset` and `cite`.
+ * `srcset`, `cite` and `altimg` (an `m:math`'s image fallback).
  */
 const fileAttributePattern =
-  /\s(?<name>src|data|href|poster|srcset|cite)\s*=\s*(?:"(?<double>[^"]*)"|'(?<single>[^']*)')/gu;
+  /\s(?<name>src|data|href|poster|srcset|cite|altimg)\s*=\s*(?:"(?<double>[^"]*)"|'(?<single>[^']*)')/gu;
 
 /**
  * Read XML's five predefined entities back out of an attribute value.
@@ -5436,20 +7762,58 @@ const refsOf = (text: string) =>
   });
 
 /**
+ * One `xi:include` start tag, with its attribute text.
+ */
+const includePattern = /<xi:include\b(?<attrs>[^>]*?)\/?>/gu;
+
+/**
+ * The documents a QTI document's `xi:include` elements name, resolved against its folder.
+ *
+ * @param text - A QTI document, decoded as UTF-8.
+ * @param documentPath - The document's path in the package.
+ * @returns The resolved paths, each once, in document order. They are not checked for existence.
+ */
+const includesOf = (text: string, documentPath: string): string[] => {
+  const folder = path.posix.dirname(documentPath);
+  const targets = new Set<string>();
+
+  for (const match of text.matchAll(includePattern)) {
+    const href = attributesOf(match.groups?.["attrs"] ?? "").get("href") ?? "";
+    const reference = href.replace(/[?#].*$/u, "");
+
+    if (reference !== "" && !externalReference.test(reference)) {
+      targets.add(path.posix.join(folder, reference));
+    }
+  }
+
+  return [...targets];
+};
+
+/**
  * The relative file paths a document references, resolved against the document's folder.
  *
- * Item, section and stimulus refs name documents, not files, so their start tags are left out.
+ * Item, section and stimulus refs name documents, not files, so their start tags are left out. The
+ * text of a `qti-file-href` or a `qti-resource-icon` is a reference too.
  * A `srcset` value is a comma separated list of a URL and an optional descriptor each. Fragments
  * and queries are cut off, and a reference with a scheme, a leading `/` or only a fragment is not
  * a path inside the package.
  *
  * @param text - A QTI document, decoded as UTF-8.
  * @param documentPath - The document's path in the package.
- * @returns The resolved paths, each once, in document order. They are not checked for existence.
+ * @returns The resolved paths, each once: the element texts first, then the attribute values, each
+ *   in document order. They are not checked for existence.
  */
 const fileReferencesOf = (text: string, documentPath: string): string[] => {
   const folder = path.posix.dirname(documentPath);
   const paths = new Set<string>();
+
+  for (const match of text.matchAll(fileElementPattern)) {
+    const reference = (match.groups?.["text"] ?? "").trim().replace(/[?#].*$/u, "");
+
+    if (reference !== "" && !externalReference.test(reference)) {
+      paths.add(path.posix.join(folder, reference));
+    }
+  }
 
   for (const match of text.replaceAll(documentRefPattern, "").matchAll(fileAttributePattern)) {
     const value = unescapeAttribute(match.groups?.["double"] ?? match.groups?.["single"] ?? "");
@@ -5473,12 +7837,12 @@ const fileReferencesOf = (text: string, documentPath: string): string[] => {
 /**
  * Cut an extracted package down to one item, in place.
  *
- * The files kept are the item and each file its `src`, `data`, `href`, `poster`, `srcset`, `cite`
- * and `longdesc` values name, read as {@link fileReferencesOf} reads a test document's (relative
- * paths only, resolved from the item's directory, and only when the package holds the file). Every
- * other entry is deleted, the kept files keep their paths, and a fresh `imsmanifest.xml` replaces
- * the package's own. The cut is a function of the package and the edit alone, so the directory it
- * makes is named by the same hash as every other fixture.
+ * The files kept are the item and each file its `src`, `data`, `href`, `poster`, `srcset`, `cite`,
+ * `altimg` and `longdesc` values name, read as {@link fileReferencesOf} reads a test document's
+ * (relative paths only, resolved from the item's directory, and only when the package holds the
+ * file). Every other entry is deleted, the kept files keep their paths, and a fresh
+ * `imsmanifest.xml` replaces the package's own. The cut is a function of the package and the edit
+ * alone, so the directory it makes is named by the same hash as every other fixture.
  *
  * @param pkg - The extracted package directory.
  * @param tmp - The temporary directory that holds it, where the cut is assembled.
@@ -5596,10 +7960,21 @@ const cutTestPackage = Effect.fn("fixtures.cutTestPackage")(function* cutTestPac
       }
     }
 
+    const included = includesOf(text, document.path);
+
+    for (const target of included) {
+      if (
+        !documents.some((known) => known.path === target) &&
+        (yield* isPackageFile(pkg, target))
+      ) {
+        documents.push({ path: target, type: "imsqti_fragment_xmlv3p0" });
+      }
+    }
+
     files[at] = [];
 
     for (const reference of fileReferencesOf(text, document.path)) {
-      if (yield* isPackageFile(pkg, reference)) {
+      if (!included.includes(reference) && (yield* isPackageFile(pkg, reference))) {
         files[at]?.push(reference);
       }
     }
@@ -5630,12 +8005,13 @@ const cutTestPackage = Effect.fn("fixtures.cutTestPackage")(function* cutTestPac
  * identifiers both begin a value (`J` and `J.K` for `J.K.SCORE`), the longer names it; a value that
  * is itself an item ref's identifier (`J.K`) names no variable. `duration` is the test's own name
  * for an item's duration, not a declared variable: it makes the item's stub time-dependent.
- * `RESPONSE` and `SCORE` are always there.
+ * `RESPONSE` and `SCORE` are always there, but for `SCORE` of an item whose ref holds a mapping
+ * that targets it.
  *
  * @param test - The test document's text.
- * @returns For each distinct item `href`, the first ref's identifier, whether any ref names its
- *   `duration` and the variables of every ref that names that `href`, besides `RESPONSE` and
- *   `SCORE`.
+ * @returns For each distinct item `href`, the first ref's identifier, whether it declares `SCORE`,
+ *   whether any ref names its `duration` and the variables of every ref that names that `href`,
+ *   besides `RESPONSE` and `SCORE`.
  */
 const stubsOf = (test: string) => {
   const refs = [...test.matchAll(documentRefPattern)].flatMap((match) => {
@@ -5652,6 +8028,7 @@ const stubsOf = (test: string) => {
     }
 
     const mapped: string[] = [];
+    let targetsScore = false;
 
     if (match.groups["self"] !== "/") {
       const start = (match.index ?? 0) + match[0].length;
@@ -5660,15 +8037,20 @@ const stubsOf = (test: string) => {
       for (const mapping of test
         .slice(start, end === -1 ? test.length : end)
         .matchAll(/<qti-variable-mapping\b(?<attrs>[^>]*?)\/?>/gu)) {
-        const source = attributesOf(mapping.groups?.["attrs"] ?? "").get("source-identifier");
+        const mappingAttributes = attributesOf(mapping.groups?.["attrs"] ?? "");
+        const source = mappingAttributes.get("source-identifier");
 
         if (source !== undefined) {
           mapped.push(source);
         }
+
+        if (mappingAttributes.get("target-identifier") === "SCORE") {
+          targetsScore = true;
+        }
       }
     }
 
-    return [{ href, identifier, mapped }];
+    return [{ href, identifier, mapped, targetsScore }];
   });
   const values = [...test.matchAll(attributePattern)]
     .filter((match) => !["href", "xsi:schemaLocation"].includes(match.groups?.["name"] ?? ""))
@@ -5678,14 +8060,22 @@ const stubsOf = (test: string) => {
     identifiers
       .filter((identifier) => value.startsWith(`${identifier}.`))
       .toSorted((left, right) => right.length - left.length)[0];
-  const stubs = new Map<string, { identifier: string; timed: boolean; variables: Set<string> }>();
+  const stubs = new Map<
+    string,
+    { identifier: string; scored: boolean; timed: boolean; variables: Set<string> }
+  >();
 
   for (const ref of refs) {
     const stub = stubs.get(ref.href) ?? {
       identifier: ref.identifier,
+      scored: true,
       timed: false,
       variables: new Set<string>(),
     };
+
+    if (ref.targetsScore) {
+      stub.scored = false;
+    }
 
     for (const mapped of ref.mapped) {
       stub.variables.add(mapped);
@@ -5715,6 +8105,7 @@ const stubsOf = (test: string) => {
   return [...stubs].map(([href, stub]) => ({
     href,
     identifier: stub.identifier,
+    scored: stub.scored,
     timed: stub.timed,
     variables: [...stub.variables].filter(
       (variable) => variable !== "RESPONSE" && variable !== "SCORE",
@@ -5790,6 +8181,10 @@ const packageLooseTest = Effect.fn("fixtures.packageLooseTest")(function* packag
               `identifier="${escapeAttribute(stub.identifier)}" title="${escapeAttribute(stub.identifier)}"`,
             )
             .replace(/<p>\s*<img [^>]*\/>\s*<\/p>\s*/u, "")
+            .replace(
+              /[ \t]*<qti-outcome-declaration identifier="SCORE"[\s\S]*?<\/qti-outcome-declaration>\r?\n/u,
+              stub.scored ? "$&" : "",
+            )
             .replace(
               'time-dependent="false"',
               stub.timed ? 'time-dependent="true"' : 'time-dependent="false"',

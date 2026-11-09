@@ -190,9 +190,9 @@ export const packageMutations = {
   ]),
   // Include fragment identifier, Include target and Include root (readings 85, 114 and 117): the
   // second item's include naming its fragment by a fragment identifier; naming no document, by an
-  // entry the manifest lists as none, a file outside the package or no href (one naming a file the
-  // package does not hold is "File exists"'s alone); or naming the rule fragment, whose root no
-  // item body holds.
+  // entry the manifest lists as none or no href (one naming a file the package does not hold is
+  // "File exists"'s alone, and one naming a file outside the package is stored as written and never
+  // fetched, reading 115); or naming the rule fragment, whose root no item body holds.
   "Include fragment identifier": passageAt("items/item2.xml", '<xi:include href="fragment.xml"/>', [
     '<xi:include href="fragment.xml#part"/>',
   ]),
@@ -201,7 +201,6 @@ export const packageMutations = {
   ]),
   "Include target": passageAt("items/item2.xml", '<xi:include href="fragment.xml"/>', [
     '<xi:include href="fragment.xml"/><xi:include href="media/pic.png"/>',
-    '<xi:include href="fragment.xml"/><xi:include href="https://example.com/external.xml"/>',
     '<xi:include href="fragment.xml"/><xi:include/>',
   ]),
   // Inclusion cycle (reading 85): the section document placing itself.
@@ -406,6 +405,17 @@ export const packageMutations = {
         ),
     over: "package",
   },
+  // Remote section ref (reading 170, a stated limit): the test's section ref of section.xml given an
+  // href that resolves outside the package, by a scheme, a leading slash or a climb above the root.
+  "Remote section ref": passageAt(
+    "test.xml",
+    '<qti-assessment-section-ref identifier="placement" href="section.xml"/>',
+    [
+      '<qti-assessment-section-ref identifier="placement" href="https://example.com/section.xml"/>',
+      '<qti-assessment-section-ref identifier="placement" href="/section.xml"/>',
+      '<qti-assessment-section-ref identifier="placement" href="../section.xml"/>',
+    ],
+  ),
   // RootOfType (P2): the usage data listed as an item, a test or a stimulus.
   RootOfType: passageAt(manifest, usageResource, [
     usageResource.replace("qtiusagedata/xml", "imsqti_item_xmlv3p0"),
@@ -451,6 +461,10 @@ export const packageMutations = {
   "Template reference": passageAt(item, '<qti-template-inline template-identifier="SHOWN"', [
     '<qti-template-inline template-identifier="ABSENT"',
   ]),
+  // Template variable type: the template inline naming the item's single integer template.
+  "Template variable type": passageAt(item, '<qti-template-inline template-identifier="SHOWN"', [
+    '<qti-template-inline template-identifier="N"',
+  ]),
   // Track srclang (reading 125): a subtitles track that names no language.
   "Track srclang": passageAt(item, "    <p>It says <q>read this</q> and stops.</p>", [
     '    <video src="media/pic.png"><track src="media/pic.png"/></video>\n    <p>It says <q>read this</q> and stops.</p>',
@@ -462,10 +476,14 @@ export const packageMutations = {
     '<qti-map-entry map-key="3.5" mapped-value="1"/>',
   ]),
   // Usage typed value (reading 105): the usage statistic's float value written as no float.
-  "Usage typed value": passageAt("usage.xml", '<value baseType="float">0.5</value>', [
-    '<value baseType="float">half</value>',
-    '<value baseType="float">0,5</value>',
-  ]),
+  "Usage typed value": passageAt(
+    "usage.xml",
+    '<value fieldIdentifier="F" baseType="float">0.5</value>',
+    [
+      '<value fieldIdentifier="F" baseType="float">half</value>',
+      '<value fieldIdentifier="F" baseType="float">0,5</value>',
+    ],
+  ),
   // Variable declared (P8): the item's round reading a variable nothing declares.
   "Variable declared": passageAt(
     item,

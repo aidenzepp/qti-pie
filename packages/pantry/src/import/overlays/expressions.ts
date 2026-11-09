@@ -70,6 +70,8 @@ import type {
   HeldType,
   Literal,
   LiteralTyped,
+  MappingItemRef,
+  MappingItemRefType,
   MappingLookup,
   MappingSourceDeclaration,
   NameLookup,
@@ -516,26 +518,32 @@ const spelledBases: readonly ValueBase[] = valueBases.filter(
  * math operator's `integer` where its `name` is one of the integer operators and `float` for every
  * other (information model §2.11.3.32), an unwritten one among them, as the law oracle reads it;
  * a base value's and a test variables' the base its `base-type` spells exactly, `unknown` where
- * none is written or the one written spells none.
+ * the one written spells none; and a test variables that writes no `base-type` float where it
+ * writes a `weight-identifier` (§7.39.5: "When a weighting is specified the result of the
+ * expression always has base-type float"), `unknown` where it writes none (spec reading 167).
  *
  * @param kind - The expression's kind.
- * @param baseTypeLexical - Its `base-type`, if written.
- * @param name - Its `name`, if written.
+ * @param inputs - Its `base-type`, `name` and `weight-identifier`, each if written.
  * @returns The base type.
  */
 const attributeBaseOf = (
   kind: string,
-  baseTypeLexical: Option.Option<string>,
-  name: Option.Option<string>,
+  inputs: Pick<TypeInputs, "baseTypeLexical" | "name" | "weighted">,
 ): ValueBase => {
   if (kind === "qti-math-operator") {
-    return Option.exists(name, (written) => integerNames.test(written)) ? "integer" : "float";
+    return Option.exists(inputs.name, (written) => integerNames.test(written))
+      ? "integer"
+      : "float";
   }
 
-  return baseTypeLexical.pipe(
-    Option.flatMap((lexical) => Arr.findFirst(spelledBases, (base) => base === lexical)),
-    Option.getOrElse(() => unknownType.baseType),
-  );
+  return Option.match(inputs.baseTypeLexical, {
+    onNone: () => (inputs.weighted ? "float" : unknownType.baseType),
+    onSome: (lexical) =>
+      Option.getOrElse(
+        Arr.findFirst(spelledBases, (base) => base === lexical),
+        () => unknownType.baseType,
+      ),
+  });
 };
 
 /**
@@ -559,6 +567,7 @@ interface TypeInputs {
   readonly name: Option.Option<string>;
   readonly operands: readonly Typed[];
   readonly reference: Option.Option<Typed>;
+  readonly weighted: boolean;
 }
 
 /**
@@ -669,7 +678,7 @@ const typeOf = (kind: string, inputs: TypeInputs): Typed => {
     }
     case "attribute": {
       return {
-        baseType: attributeBaseOf(kind, inputs.baseTypeLexical, inputs.name),
+        baseType: attributeBaseOf(kind, inputs),
         cardinality: rule.cardinality,
       };
     }
@@ -1037,6 +1046,7 @@ const typesOf = (
             expressions.has(child.kind) ? [operandOf(child)] : [],
           ),
           reference: Option.fromNullishOr(references.get(pairKey(node.id, "identifier"))),
+          weighted: valueOf(doc, node.id, "weight-identifier") !== undefined,
         }),
       );
     }
@@ -1072,14 +1082,15 @@ const typingAttributes: ReadonlyMap<string, readonly string[]> = new Map([
 ]);
 
 /**
- * The typing attribute of each kind whose element may omit it (`optionallyTypedKinds` of
- * `#pantry/qti/expressions.ts`), which has a row on every element of the kind, unwritten where the
- * element omits it: a test variables' `base-type`. A base value's `base-type` and a math operator's
- * `name` are required, so an element that omits one has no row, and AL3 refuses it alone.
+ * The attributes of each kind whose element may omit them that have a row on every element of the
+ * kind, unwritten where the element omits one: a test variables' `base-type`
+ * (`optionallyTypedKinds` of `#pantry/qti/expressions.ts`), and its `weight-identifier`, whose
+ * unwritten row proves it unweighted, so its unwritten `base-type` is `unknown` (decision 434). A
+ * base value's `base-type` and a math operator's `name` are required, so an element that omits one
+ * has no row, and AL3 refuses it alone.
  */
-const unwrittenTypingOf: ReadonlyMap<string, "base-type"> = new Map(
-  optionallyTypedKinds.map((kind) => [kind, "base-type"] as const),
-);
+const unwrittenTypingOf: ReadonlyMap<string, readonly ("base-type" | "weight-identifier")[]> =
+  new Map(optionallyTypedKinds.map((kind) => [kind, ["base-type", "weight-identifier"]] as const));
 
 /**
  * The lexical form of an unwritten typing attribute's row: empty, `ExpressionAttribute`'s null
@@ -1179,14 +1190,18 @@ const expressionRowsOf = (
     }
   }
 
-  const typing = unwrittenTypingOf.get(node.kind);
-  if (typing !== undefined && !built.ExpressionAttribute.has(pairKey(node.id, typing))) {
-    built.ExpressionAttribute.set(pairKey(node.id, typing), {
-      ...own,
-      attribute: typing,
-      lexical: unwrittenLexical,
-      written: false,
-    });
+  for (const typing of Option.getOrElse(
+    Option.fromNullishOr(unwrittenTypingOf.get(node.kind)),
+    Arr.empty,
+  )) {
+    if (!built.ExpressionAttribute.has(pairKey(node.id, typing))) {
+      built.ExpressionAttribute.set(pairKey(node.id, typing), {
+        ...own,
+        attribute: typing,
+        lexical: unwrittenLexical,
+        written: false,
+      });
+    }
   }
 
   if (node.kind === "qti-base-value") {
@@ -1609,6 +1624,8 @@ export interface AssembledExpressionRows {
   readonly AssembledReference: ReadonlyMap<string, AssembledReferenceRow>;
   readonly ItemRefDocument: ReadonlyMap<string, Addition<typeof ItemRefDocument>>;
   readonly ItemRefTarget: ReadonlyMap<string, Addition<typeof ItemRefTarget>>;
+  readonly MappingItemRef: ReadonlyMap<string, Addition<typeof MappingItemRef>>;
+  readonly MappingItemRefType: ReadonlyMap<string, Addition<typeof MappingItemRefType>>;
   readonly MappingLookup: ReadonlyMap<string, Addition<typeof MappingLookup>>;
   readonly MappingSourceDeclaration: ReadonlyMap<string, Addition<typeof MappingSourceDeclaration>>;
   readonly NameLookup: ReadonlyMap<string, Addition<typeof NameLookup>>;
@@ -2441,6 +2458,40 @@ const mappingSourcesOf = (
 };
 
 /**
+ * Write each variable mapping's item ref, and what it names where it has a target, its
+ * `ItemRefTarget`'s type, which leaves a mapping under an LTI link unchecked (spec reading 110). An
+ * item ref with no target writes no href, which AL3 alone refuses (spec reading 155), or its href
+ * names no resource, which "Item ref target" refuses over the item ref: its mapping has no type
+ * row, so grizzle draws its `types` as 0, and "Variable mapping source" judges it (decision 428).
+ *
+ * @param documents - Every document of the package.
+ * @param lookups - The lookups, which hold each item ref's target.
+ * @returns The mappings' item refs and their types, each by the mapping's node.
+ */
+const mappingItemRefsOf = (
+  documents: readonly AssembledExpressionInput[],
+  lookups: Lookups,
+): Pick<AssembledExpressionRows, "MappingItemRef" | "MappingItemRefType"> => {
+  const mappings = documents.flatMap((input) => [...input.tests.VariableMapping.values()]);
+  const types = mappings.flatMap((mapping) => {
+    const type = lookups.targets.get(mapping.parent);
+
+    return type === undefined
+      ? []
+      : [[mapping.node, { itemRef: mapping.parent, node: mapping.node, type }] as const];
+  });
+
+  return {
+    MappingItemRef: new Map(
+      mappings.map(
+        (mapping) => [mapping.node, { itemRef: mapping.parent, node: mapping.node }] as const,
+      ),
+    ),
+    MappingItemRefType: new Map(types),
+  };
+};
+
+/**
  * Force every written element of every test's assembly into the name lookups: its node, kind and
  * placements, one instance that places it and whether a replacement can repeat it there, and,
  * for an item ref, what it names. An item ref of the item type whose item the package holds no
@@ -2634,6 +2685,7 @@ export const assembledExpressionRowsOf = (
     ...placed,
     ItemRefDocument: items.itemRefDocuments,
     ItemRefTarget: items.itemRefTargets,
+    ...mappingItemRefsOf(documents, lookups),
     MappingLookup: lookups.mappings,
     MappingSourceDeclaration: sources,
     NameLookup: lookups.names,

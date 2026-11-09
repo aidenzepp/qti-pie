@@ -5,9 +5,8 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { boolean, element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Option, Result } from "effect";
+import { Duration, Effect, Formatter, Option } from "effect";
 import { inject } from "vitest";
-import { composed } from "#pantry/grammar/compose.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
@@ -15,7 +14,6 @@ import type { FoldedAttribute, FoldedNode, FoldedRows } from "#pantry/model/fold
 import { shred } from "#pantry/model/shred.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import type { PackageFile } from "#pantry/package/read.ts";
 import {
   contentLawOf,
   documentBreaches,
@@ -23,12 +21,27 @@ import {
   boundBroken,
   judge,
   lawNames,
-  lawsOf,
   ruleOf,
-  shownBreach,
   verdictOf,
 } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment, LawName, OracleRule } from "#pantry/test/oracle.ts";
+import {
+  asi,
+  base,
+  breachesOf,
+  contextPci,
+  edit,
+  grammar,
+  item,
+  itemResource,
+  judged,
+  laws,
+  manifestOf,
+  refusedBy,
+  shown,
+  test,
+  withItem,
+} from "#pantry/test/probe.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
@@ -45,152 +58,6 @@ const testTimeoutMs = 600_000;
 const fixtures = inject("fixtures");
 
 /**
- * The composed grammar every case judges by.
- */
-const grammar = Result.getOrThrow(composed());
-
-/**
- * The tables the laws read, derived from {@link grammar} once.
- */
-const laws = lawsOf(grammar);
-
-/**
- * The QTI 3 ASI namespace, of every item and test element.
- */
-const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
-
-/**
- * Write a manifest that lists its resources under one schema version.
- *
- * @param resources - The `resource` elements, as written.
- * @param version - The `schemaversion` it declares.
- * @returns The manifest's text.
- */
-const manifestOf = (resources: string, version = "3.0.1"): string =>
-  `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M">
-  <metadata><schema>QTI Package</schema><schemaversion>${version}</schemaversion></metadata>
-  <organizations/>
-  <resources>${resources}</resources>
-</manifest>`;
-
-/**
- * The one resource of the base package: the item `item.xml`.
- */
-const itemResource = `<resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource>`;
-
-/**
- * The base item: one choice interaction bound to an identifier response, scored by matching it.
- */
-const item = `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false">
-  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">
-    <qti-correct-response><qti-value>A</qti-value></qti-correct-response>
-  </qti-response-declaration>
-  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>
-  <qti-item-body>
-    <p id="intro">Pick one.</p>
-    <qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
-      <qti-simple-choice identifier="A">A</qti-simple-choice>
-      <qti-simple-choice identifier="B">B</qti-simple-choice>
-    </qti-choice-interaction>
-  </qti-item-body>
-  <qti-response-processing>
-    <qti-response-condition>
-      <qti-response-if>
-        <qti-match><qti-variable identifier="RESPONSE"/><qti-correct identifier="RESPONSE"/></qti-match>
-        <qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>
-      </qti-response-if>
-    </qti-response-condition>
-  </qti-response-processing>
-</qti-assessment-item>`;
-
-/**
- * The base test: one part, one section selecting from its one item reference.
- */
-const test = `<qti-assessment-test xmlns="${asi}" identifier="T" title="Test">
-  <qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual">
-    <qti-assessment-section identifier="S" title="Section" visible="true">
-      <qti-selection select="1"/>
-      <qti-assessment-item-ref identifier="I" href="item.xml"/>
-    </qti-assessment-section>
-  </qti-test-part>
-</qti-assessment-test>`;
-
-/**
- * Build a package from its files' texts, each encoded as UTF-8, as `readPackage` returns one.
- *
- * @param files - Each file's text by path; `imsmanifest.xml` is the manifest.
- * @returns The entries, sorted by path.
- */
-const packageOf = (files: Readonly<Record<string, string>>): readonly PackageFile[] =>
-  Object.entries(files)
-    .map(([path, text]): PackageFile => ({
-      bytes: new TextEncoder().encode(text),
-      kind: path === "imsmanifest.xml" ? "manifest" : "file",
-      path,
-    }))
-    .toSorted((left, right) => (left.path < right.path ? -1 : 1));
-
-/**
- * The base package: the manifest and the base item.
- */
-const base = { "imsmanifest.xml": manifestOf(itemResource), "item.xml": item };
-
-/**
- * Judge a package built from its files' texts.
- *
- * @param files - Each file's text by path.
- * @returns The judgment.
- */
-const judged = (files: Readonly<Record<string, string>>) => judge(packageOf(files), grammar, laws);
-
-/**
- * Read the breaches of a judgment the codec did not refuse.
- *
- * @param judgment - The judgment.
- * @returns Its breaches.
- */
-const breachesOf = (judgment: Judgment): readonly Breach[] =>
-  judgment._tag === "Judged"
-    ? judgment.breaches
-    : assert.fail(`the codec refused the package: ${judgment.rule}, ${judgment.detail}`);
-
-/**
- * Write a judgment's breaches as `law: rule` lines, for an assertion's message.
- *
- * @param breaches - The breaches.
- * @returns One line per breach.
- */
-const shown = (breaches: readonly Breach[]): string =>
-  breaches.map((breach) => shownBreach(breach, grammar)).join("\n");
-
-/**
- * Replace one passage of a text, failing when the text does not hold it, so a case never tests an
- * edit that did not happen.
- *
- * @param text - The text.
- * @param passage - The passage to replace.
- * @param replacement - What replaces it.
- * @returns The edited text.
- */
-const edit = (text: string, passage: string, replacement: string): string => {
-  assert.include(text, passage, "the edit's passage is in the text");
-
-  return text.replace(passage, replacement);
-};
-
-/**
- * Edit the base item.
- *
- * @param passage - The passage to replace.
- * @param replacement - What replaces it.
- * @returns The base package with the item edited.
- */
-const withItem = (passage: string, replacement: string) => ({
-  ...base,
-  "item.xml": edit(item, passage, replacement),
-});
-
-/**
  * One package that breaks one law: the law it breaks and the rule that law keeps.
  */
 interface LawCase {
@@ -199,6 +66,114 @@ interface LawCase {
   readonly name: string;
   readonly rule: OracleRule;
 }
+
+/**
+ * The breaches of "Feedback outcome type" among a judgment's.
+ *
+ * @param breaches - The breaches.
+ * @returns Those of that law.
+ */
+const testFeedbackTyped = (breaches: readonly Breach[]) =>
+  breaches.filter(({ law }) => law === "Feedback outcome type");
+
+/**
+ * Write a package whose test declares one outcome and names it from a `qti-test-feedback`.
+ *
+ * @param outcome - The outcome's identifier.
+ * @param baseType - The outcome's base type, of single cardinality; null declares no outcome, as a
+ *   built-in session variable's name has none.
+ * @returns The package.
+ */
+const testFeedbackPackage = (outcome: string, baseType: string | null) => ({
+  "imsmanifest.xml": manifestOf(
+    `${itemResource}<resource identifier="RT" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource>`,
+  ),
+  "item.xml": item,
+  "test.xml": edit(
+    edit(
+      test,
+      "</qti-test-part>",
+      `</qti-test-part><qti-test-feedback access="during" outcome-identifier="${outcome}" show-hide="show" identifier="F"><qti-content-body><p>Seen.</p></qti-content-body></qti-test-feedback>`,
+    ),
+    '<qti-test-part identifier="P"',
+    `${baseType === null ? "" : `<qti-outcome-declaration identifier="${outcome}" cardinality="single" base-type="${baseType}"/>`}<qti-test-part identifier="P"`,
+  ),
+});
+
+/**
+ * Write a package whose test declares one outcome, of single cardinality, before its test part.
+ *
+ * @param outcome - The outcome's identifier.
+ * @param baseType - The outcome's base type.
+ * @returns The package.
+ */
+const testOutcomePackage = (outcome: string, baseType: string) => ({
+  "imsmanifest.xml": manifestOf(
+    `${itemResource}<resource identifier="RT" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource>`,
+  ),
+  "item.xml": item,
+  "test.xml": edit(
+    test,
+    '<qti-test-part identifier="P"',
+    `<qti-outcome-declaration identifier="${outcome}" cardinality="single" base-type="${baseType}"/><qti-test-part identifier="P"`,
+  ),
+});
+
+/**
+ * Judge a package whose test declares one outcome, and decide whether "Reserved type" refuses it.
+ *
+ * @param identifier - The outcome's identifier.
+ * @param baseType - The outcome's base type.
+ * @returns Whether a breach of the law is among the judgment's, with every breach for a message.
+ */
+const testOutcome = (identifier: string, baseType: string) =>
+  judged(testOutcomePackage(identifier, baseType)).pipe(
+    Effect.map((judgment) => {
+      const breaches = breachesOf(judgment);
+
+      return {
+        breaches: shown(breaches),
+        held: breaches.some(({ law }) => law === "Reserved type"),
+      };
+    }),
+  );
+
+/**
+ * Write a package whose tests each declare the outcome the section document's rubric names, in the
+ * base type given for them, and reach that document through a section ref; the rubric names it from
+ * a `qti-feedback-inline`.
+ *
+ * @param baseTypes - Each test's base type for the outcome, of single cardinality; null declares no
+ *   outcome, as a built-in session variable's name has none.
+ * @param outcome - The outcome's identifier.
+ * @returns The package.
+ */
+const sectionFeedbackPackage = (baseTypes: readonly (string | null)[], outcome = "FLAG") => ({
+  "imsmanifest.xml": manifestOf(
+    `${itemResource}<resource identifier="RS" type="imsqti_section_xmlv3p0" href="section.xml"><file href="section.xml"/></resource>${baseTypes
+      .map(
+        (_, at) =>
+          `<resource identifier="RT${String(at)}" type="imsqti_test_xmlv3p0" href="test${String(at)}.xml"><file href="test${String(at)}.xml"/></resource>`,
+      )
+      .join("")}`,
+  ),
+  "item.xml": item,
+  "section.xml": `<qti-assessment-section xmlns="${asi}" identifier="SS" title="Shared" visible="true"><qti-rubric-block view="candidate"><qti-content-body><p><qti-feedback-inline outcome-identifier="${outcome}" identifier="ok" show-hide="show">Well done.</qti-feedback-inline></p></qti-content-body></qti-rubric-block><qti-assessment-item-ref identifier="J" href="item.xml"/></qti-assessment-section>`,
+  ...Object.fromEntries(
+    baseTypes.map((baseType, at) => [
+      `test${String(at)}.xml`,
+      edit(
+        edit(
+          test,
+          "</qti-assessment-section>",
+          `<qti-assessment-section-ref identifier="R" href="section.xml"/></qti-assessment-section>`,
+        ),
+        '<qti-test-part identifier="P"',
+        `${baseType === null ? "" : `<qti-outcome-declaration identifier="${outcome}" cardinality="single" base-type="${baseType}"/>`}<qti-test-part identifier="P"`,
+      ),
+    ]),
+  ),
+});
 
 /**
  * The packages that break each law the oracle reads from documents, one case per law.
@@ -505,26 +480,6 @@ const hotspots = (choices: string) =>
   );
 
 /**
- * Judge the base item edited, and decide whether a law refuses it.
- *
- * @param law - The law.
- * @param edits - Each passage of the base item and its replacement, applied in order.
- * @returns Whether a breach of the law is among the judgment's, with every breach for a message.
- */
-const refusedBy = (law: LawName, ...edits: readonly (readonly [string, string])[]) =>
-  Effect.gen(function* refused() {
-    let text = item;
-    for (const [passage, replacement] of edits) {
-      text = edit(text, passage, replacement);
-    }
-
-    const files = { ...base, "item.xml": text };
-    const breaches = breachesOf(yield* judged(files));
-
-    return { breaches: shown(breaches), held: breaches.some((breach) => breach.law === law) };
-  });
-
-/**
  * The base item's choice interaction, as written.
  */
 const choiceInteraction = `<qti-choice-interaction response-identifier="RESPONSE" max-choices="1">
@@ -542,13 +497,13 @@ const graphicGapMatch = (area: string): string =>
   `<qti-graphic-gap-match-interaction response-identifier="RESPONSE"><object data="a.png" type="image/png"/><qti-gap-img identifier="G" match-max="1"><object data="g.png" type="image/png"/></qti-gap-img><qti-associable-hotspot identifier="H" match-max="1" ${area}/></qti-graphic-gap-match-interaction>`;
 
 /**
- * A portable custom interaction that reads one context variable.
+ * A portable custom interaction that passes one template variable to its module (§7.38.1).
  *
- * @param identifier - The context variable it names.
+ * @param identifier - The template variable it names.
  * @returns The interaction.
  */
-const contextPci = (identifier: string): string =>
-  `<qti-portable-custom-interaction response-identifier="RESPONSE" module="m" custom-interaction-type-identifier="t"><qti-interaction-modules><qti-interaction-module id="m" primary-path="m.js"/></qti-interaction-modules><qti-context-variable identifier="${identifier}"/><qti-interaction-markup/></qti-portable-custom-interaction>`;
+const templatePci = (identifier: string): string =>
+  `<qti-portable-custom-interaction response-identifier="RESPONSE" module="m" custom-interaction-type-identifier="t"><qti-interaction-modules><qti-interaction-module id="m" primary-path="m.js"/></qti-interaction-modules><qti-template-variable template-identifier="${identifier}"/><qti-interaction-markup/></qti-portable-custom-interaction>`;
 
 /**
  * The base item's paragraph with inline feedback on an outcome.
@@ -614,10 +569,171 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
         feedback("completionStatus"),
       ]);
 
+      const numAttempts = yield* refusedBy("Feedback outcome type", [
+        `<p id="intro">Pick one.</p>`,
+        feedback("numAttempts"),
+      ]);
+      const duration = yield* refusedBy("Feedback outcome type", [
+        `<p id="intro">Pick one.</p>`,
+        feedback("duration"),
+      ]);
+
       assert.isTrue(float.held, float.breaches);
       assert.isFalse(identifier.held, identifier.breaches);
       assert.isFalse(builtIn.held, builtIn.breaches);
+      // numAttempts and duration stand as responses, which a feedback may not name: "Feedback
+      // reference" alone refuses them, as the import's rows do (built-in-roots.oracle).
+      assert.isFalse(numAttempts.held, numAttempts.breaches);
+      assert.isFalse(duration.held, duration.breaches);
+      assert.include(numAttempts.breaches, "Feedback reference");
+      assert.include(duration.breaches, "Feedback reference");
     }),
+  );
+
+  it.effect(
+    "Reserved type: SCORE and MAXSCORE are a float in an item (§2.2.2.3: 'Items that declare ... SCORE MUST be a float'), of any base type in a test, and PASSED a boolean in both",
+    () =>
+      Effect.gen(function* reservedType() {
+        const score = `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`;
+        const itemOutcome = (identifier: string, baseType: string) =>
+          refusedBy("Reserved type", [
+            score,
+            `<qti-outcome-declaration identifier="${identifier}" cardinality="single" base-type="${baseType}"/>`,
+          ]);
+
+        const itemScore = yield* itemOutcome("SCORE", "integer");
+        const itemMaxScore = yield* itemOutcome("MAXSCORE", "integer");
+        const itemPassed = yield* itemOutcome("PASSED", "integer");
+        const itemFloat = yield* itemOutcome("SCORE", "float");
+        const testScore = yield* testOutcome("SCORE", "integer");
+        const testMaxScore = yield* testOutcome("MAXSCORE", "integer");
+        const testFloat = yield* testOutcome("SCORE", "float");
+        const testPassed = yield* testOutcome("PASSED", "integer");
+        const testBoolean = yield* testOutcome("PASSED", "boolean");
+
+        assert.isTrue(itemScore.held, itemScore.breaches);
+        assert.isTrue(itemMaxScore.held, itemMaxScore.breaches);
+        assert.isTrue(itemPassed.held, itemPassed.breaches);
+        assert.isFalse(itemFloat.held, itemFloat.breaches);
+        assert.isFalse(testScore.held, testScore.breaches);
+        assert.isFalse(testMaxScore.held, testMaxScore.breaches);
+        assert.isFalse(testFloat.held, testFloat.breaches);
+        assert.isTrue(testPassed.held, testPassed.breaches);
+        assert.isFalse(testBoolean.held, testBoolean.breaches);
+      }),
+  );
+
+  it.effect("Feedback outcome type: a test's feedback names an identifier outcome", () =>
+    Effect.gen(function* testFeedbackType() {
+      const float = testFeedbackTyped(
+        breachesOf(yield* judged(testFeedbackPackage("PROGRESS", "float"))),
+      );
+      const identifier = testFeedbackTyped(
+        breachesOf(yield* judged(testFeedbackPackage("FEEDBACK", "identifier"))),
+      );
+
+      const numAttempts = testFeedbackTyped(
+        breachesOf(yield* judged(testFeedbackPackage("numAttempts", null))),
+      );
+      const duration = testFeedbackTyped(
+        breachesOf(yield* judged(testFeedbackPackage("duration", null))),
+      );
+      const completionStatus = testFeedbackTyped(
+        breachesOf(yield* judged(testFeedbackPackage("completionStatus", null))),
+      );
+
+      assert.strictEqual(float.length, 1, shown(float));
+      assert.strictEqual(identifier.length, 0, shown(identifier));
+      assert.strictEqual(numAttempts.length, 0, shown(numAttempts));
+      assert.strictEqual(duration.length, 0, shown(duration));
+      assert.strictEqual(completionStatus.length, 0, shown(completionStatus));
+    }),
+  );
+
+  it.effect(
+    "Feedback outcome type: a section document's feedback names an identifier outcome of each test that reaches it",
+    () =>
+      Effect.gen(function* sectionFeedbackType() {
+        const float = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage(["float"]))),
+        );
+        const identifier = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage(["identifier"]))),
+        );
+        const both = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage(["identifier", "float"]))),
+        );
+
+        const numAttempts = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage([null], "numAttempts"))),
+        );
+        const duration = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage([null], "duration"))),
+        );
+        const completionStatus = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage([null], "completionStatus"))),
+        );
+
+        assert.strictEqual(float.length, 1, shown(float));
+        assert.strictEqual(identifier.length, 0, shown(identifier));
+        assert.strictEqual(both.length, 1, shown(both));
+        assert.strictEqual(numAttempts.length, 0, shown(numAttempts));
+        assert.strictEqual(duration.length, 0, shown(duration));
+        assert.strictEqual(completionStatus.length, 0, shown(completionStatus));
+      }),
+  );
+
+  it.effect(
+    "Template variable type: a choice or template element names an identifier template variable, and a PCI's template variable may name any",
+    () =>
+      Effect.gen(function* templateType() {
+        const outcome = `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`;
+        const declared = (cardinality: string, baseType: string): readonly [string, string] => [
+          outcome,
+          `${outcome}<qti-template-declaration identifier="T" cardinality="${cardinality}" base-type="${baseType}"/>`,
+        ];
+        const choice = [
+          `<qti-simple-choice identifier="A">A</qti-simple-choice>`,
+          `<qti-simple-choice identifier="A" template-identifier="T" show-hide="show">A</qti-simple-choice>`,
+        ] as const;
+        const inline = [
+          `<p id="intro">Pick one.</p>`,
+          `<p id="intro">Pick <qti-template-inline template-identifier="T" identifier="ti" show-hide="show">one</qti-template-inline>.</p>`,
+        ] as const;
+        const pci = [choiceInteraction, `${choiceInteraction}${templatePci("T")}`] as const;
+
+        const integer = yield* refusedBy(
+          "Template variable type",
+          declared("single", "integer"),
+          choice,
+        );
+        const ordered = yield* refusedBy(
+          "Template variable type",
+          declared("ordered", "identifier"),
+          inline,
+        );
+        const single = yield* refusedBy(
+          "Template variable type",
+          declared("single", "identifier"),
+          choice,
+        );
+        const multiple = yield* refusedBy(
+          "Template variable type",
+          declared("multiple", "identifier"),
+          choice,
+        );
+        const variable = yield* refusedBy(
+          "Template variable type",
+          declared("single", "integer"),
+          pci,
+        );
+
+        assert.isTrue(integer.held, integer.breaches);
+        assert.isTrue(ordered.held, ordered.breaches);
+        assert.isFalse(single.held, single.breaches);
+        assert.isFalse(multiple.held, multiple.breaches);
+        assert.isFalse(variable.held, variable.breaches);
+      }),
   );
 
   it.effect(
@@ -1237,24 +1353,31 @@ describe("verdictOf", () => {
 });
 
 /**
- * Shred and fold the base item, as the oracle does.
+ * Shred and fold a document, as the oracle does.
  *
+ * @param text - The document, read as a 3.0.1 item.
  * @returns Its folded rows.
  */
-const foldedItem = Effect.gen(function* foldedItem() {
-  const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(item)));
-  const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
+const foldedText = (text: string) =>
+  Effect.gen(function* folded() {
+    const xml = yield* Effect.orDie(readXml(new TextEncoder().encode(text)));
+    const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammarOf(grammar)));
 
-  return yield* Effect.orDie(
-    Effect.fromResult(
-      fold(
-        tree,
-        (index): NodeId => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
-        foldGrammarOf(grammar),
+    return yield* Effect.orDie(
+      Effect.fromResult(
+        fold(
+          tree,
+          (index): NodeId => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
+          foldGrammarOf(grammar),
+        ),
       ),
-    ),
-  );
-});
+    );
+  });
+
+/**
+ * Shred and fold the base item, as the oracle does.
+ */
+const foldedItem = foldedText(item);
 
 /**
  * Replace the node rows that a test tampers with, keeping every other row.
@@ -1432,6 +1555,110 @@ describe("the foreign namespace classes, every class against every URI", () => {
         }
       }
     }),
+  );
+
+  it.effect(
+    "an open attribute's data- name breaks its law exactly where reading 13's language refuses it: every class and host against every name",
+    () =>
+      // Oracle: the specification as a checker, reading 13: a `data-*` name is `data-` and one or
+      // more lower-case ASCII letters, digits, `_`, `.` or `-` (the information model's pattern,
+      // section 7.11, held with its prose, which bars upper case), and a no-namespace name
+      // beginning `data-` on an element that is not foreign is never `no-namespace`; on a foreign
+      // element it is.
+      // Bound: 2 classes, 2 hosts and 9 names, 36 rows.
+      Effect.gen(function* dataName() {
+        const rows = yield* foldedText(edit(item, `<p id="intro">`, `<p data-x="1" id="intro">`));
+        const target = rows.attributes.find((attribute) => attribute.name === "data-*");
+        const host = rows.nodes.find(({ id }) => id === target?.node);
+        const language = /^data-[a-z0-9_.-]+$/u;
+        const names = [
+          "data-x",
+          "data-é",
+          "data-x·y",
+          "data-1",
+          "data-A",
+          "data-xY",
+          "data-éA",
+          "data-",
+          "x-data",
+        ] as const;
+
+        assert.isDefined(target, "the item carries a data-* attribute");
+        assert.isDefined(host, "the data-* attribute has a host");
+        for (const name of ["data-*", "no-namespace"] as const) {
+          for (const kind of [host?.kind ?? "div", "foreign-element"] as const) {
+            for (const local of names) {
+              const tampered: FoldedRows<Composed> = {
+                ...tamperNodes(
+                  tamperAttributes(rows, (attribute) =>
+                    attribute === target ? { ...attribute, name } : attribute,
+                  ),
+                  (node) => (node === host ? { ...node, kind } : node),
+                ),
+                openNames: rows.openNames.map((open) =>
+                  open.attribute === target?.id ? { ...open, local } : open,
+                ),
+              };
+              const expected =
+                name === "data-*"
+                  ? !language.test(local)
+                  : kind !== "foreign-element" && local.startsWith("data-");
+
+              assert.strictEqual(
+                lawsBroken(tampered).includes("AL4 data name"),
+                expected,
+                `${name} ${local} on ${kind}`,
+              );
+            }
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "an open attribute breaks the declared data name law exactly when a data-* name is one its element declares: every class and host against every name",
+    () =>
+      // Oracle: the specification as a checker, goal part E: a data- name QTI declares on an
+      // element is that attribute, never a custom one; `p` declares `data-catalog-idref` and
+      // `data-ssml`, `qti-assessment-item` declares neither, and a name no element declares is
+      // custom anywhere. Only a `data-*` name is held to it.
+      // Bound: 2 classes, 3 hosts and 4 names, 24 rows.
+      Effect.gen(function* declaredDataName() {
+        const rows = yield* foldedText(edit(item, `<p id="intro">`, `<p data-x="1" id="intro">`));
+        const target = rows.attributes.find((attribute) => attribute.name === "data-*");
+        const host = rows.nodes.find(({ id }) => id === target?.node);
+        const declaredNames = new Set(["data-catalog-idref", "data-ssml"]);
+
+        assert.isDefined(target, "the item carries a data-* attribute");
+        assert.isDefined(host, "the data-* attribute has a host");
+        for (const name of ["data-*", "no-namespace"] as const) {
+          for (const kind of [
+            host?.kind ?? "div",
+            "qti-assessment-item",
+            "foreign-element",
+          ] as const) {
+            for (const local of ["data-catalog-idref", "data-ssml", "data-x", "data-é"] as const) {
+              const tampered: FoldedRows<Composed> = {
+                ...tamperNodes(
+                  tamperAttributes(rows, (attribute) =>
+                    attribute === target ? { ...attribute, name } : attribute,
+                  ),
+                  (node) => (node === host ? { ...node, kind } : node),
+                ),
+                openNames: rows.openNames.map((open) =>
+                  open.attribute === target?.id ? { ...open, local } : open,
+                ),
+              };
+
+              assert.strictEqual(
+                lawsBroken(tampered).includes("AL4 declared data name"),
+                name === "data-*" && kind === host?.kind && declaredNames.has(local),
+                `${name} ${local} on ${kind}`,
+              );
+            }
+          }
+        }
+      }),
   );
 });
 
@@ -1922,8 +2149,8 @@ const withScore = (expression: string) =>
   withItem(`<qti-base-value base-type="float">1</qti-base-value>`, expression);
 
 /**
- * Packages valid under readings 2, 3, 9, 39, 41, 42, 43 and 47, each of which the readings' laws
- * must leave alone: the base package with one valid use of what a law judges.
+ * Packages valid under readings 2, 3, 9, 39, 41, 42, 43, 47, 83 and R7-a, each of which the
+ * readings' laws must leave alone: the base package with one valid use of what a law judges.
  */
 const unownedValid: readonly {
   readonly files: Readonly<Record<string, string>>;
@@ -1992,6 +2219,57 @@ const unownedValid: readonly {
     name: "reading 3: lookup naming its fragment's lexicon",
   },
   {
+    files: withSpeech(["", `<ssml:s><ssml:voice gender="female">hi</ssml:voice></ssml:s>`]),
+    name: "reading 43: a voice inside an s, where no token or w restricts it",
+  },
+  {
+    files: withSpeech(["", `<ssml:s xml:space="preserve">hi</ssml:s>`]),
+    name: "reading 43: xml:space on an s",
+  },
+  {
+    files: withSpeech(["", `<ssml:voice gender="">hi</ssml:voice>`]),
+    name: "reading 43: a voice whose gender is empty, which the XSD's union admits",
+  },
+  {
+    files: withSpeech(["", `<ssml:prosody pitch="10 Hz">hi</ssml:prosody>`]),
+    name: "reading 43: a prosody pitch of a number and a unit, which the XSD's union admits",
+  },
+  {
+    files: withSpeech([
+      "",
+      `<ssml:audio src="https://example.org/a.mp3" maxage="99999999999999999999">hi</ssml:audio>`,
+    ]),
+    name: "reading 43: an audio maxage beyond any machine integer, which its integer domain, unbounded, admits",
+  },
+  ...[
+    ["w", "x:noun", ` xmlns:x="urn:x"`],
+    ["token", "x:noun", ` xmlns:x="urn:x"`],
+    ["token", "noun xml:lang", ""],
+    ["w", "noun", ""],
+    ["token", "  noun \n verb  ", ""],
+  ].map(([tag, role, declaration]) => ({
+    files: withSpeech(["", `<ssml:${tag} role="${role}"${declaration}>hi</ssml:${tag}>`]),
+    name: `reading 83: an ssml:${tag} role of ${JSON.stringify(role)}${declaration === "" ? "" : " with its prefix bound"}, whose prefixes each resolve`,
+  })),
+  ...[
+    ["a valid value", `<p id="intro" data-ssml='{"break":{"strength":"weak"}}'>Pick one.</p>`],
+    [
+      "a name written twice, which RFC 8259 admits",
+      `<p id="intro" data-ssml='{"break":{"strength":"weak"},"break":{"time":"1s"}}'>Pick one.</p>`,
+    ],
+    [
+      "an escaped name and members in any order",
+      `<p id="intro" data-ssml='{ "sub" : {"alias":"a"}, "b\\u0072eak" : {"time":"1s"} }'>Pick one.</p>`,
+    ],
+    [
+      "any text on an li, which does not declare it, so it is a custom data-* attribute",
+      `<p id="intro">Pick one.</p><ul><li data-ssml="not json">a</li></ul>`,
+    ],
+  ].map(([what, body]) => ({
+    files: withItem(`<p id="intro">Pick one.</p>`, body ?? ""),
+    name: `R7-a: data-ssml holding ${what}, which Data-SSML admits`,
+  })),
+  {
     files: withMath(
       `<m:piecewise><m:piece><m:cn>1</m:cn><m:true/></m:piece><m:otherwise><m:cn>2</m:cn></m:otherwise><m:piece><m:cn>3</m:cn><m:false/></m:piece></m:piecewise>`,
     ),
@@ -2023,6 +2301,81 @@ const unownedValid: readonly {
     name: "reading 2: moment of five arguments, as MathML 3 §4.4.8.6's example writes it",
   },
   {
+    files: withMath(
+      `<m:apply><m:log/><m:logbase><m:cn>2</m:cn></m:logbase><m:ci>x</m:ci></m:apply>`,
+    ),
+    name: "R6-head-qualifiers: log with its logbase",
+  },
+  {
+    files: withMath(
+      `<m:apply><m:apply><m:ci>f</m:ci></m:apply><m:degree><m:cn>2</m:cn></m:degree><m:ci>x</m:ci></m:apply>`,
+    ),
+    name: "R6-head-qualifiers: a degree beside an apply, which is no built-in operator",
+  },
+  {
+    files: withMath(
+      `<m:apply><m:int/><m:bvar><m:ci>x</m:ci></m:bvar><m:interval><m:ci>a</m:ci><m:ci>b</m:ci></m:interval><m:condition><m:ci>c</m:ci></m:condition><m:ci>x</m:ci></m:apply>`,
+    ),
+    name: "R6-head-qualifiers: int with the qualifiers every binding application shares",
+  },
+  {
+    files: withMath(`<m:cn type="rational">1<m:sep/>2</m:cn>`),
+    name: "reading 2: a rational cn of two parts",
+  },
+  { files: withMath(`<m:cn base="16">FF</m:cn>`), name: "reading 2: a cn read in base 16" },
+  {
+    files: withMath(`<m:cn type="hexdouble">7ff8000000000000</m:cn>`),
+    name: "R6-hexdouble: a hexdouble of sixteen digits",
+  },
+  {
+    files: withMath(`<m:cn type="constant">&#960;</m:cn>`),
+    name: "reading 2: a cn of type constant, which is text",
+  },
+  {
+    files: withMath(`<m:cn base="40">ZZ</m:cn>`),
+    name: "reading 2: a cn whose base lies beyond the alphabet, where the digits are application specific",
+  },
+  {
+    files: withMath(
+      `<m:maction actiontype="toggle" selection="2"><m:mi>a</m:mi><m:mi>b</m:mi></m:maction>`,
+    ),
+    name: "reading 2: an maction whose selection names its second of two children",
+  },
+  {
+    files: withMath(`<m:maction actiontype="toggle"><m:mi>a</m:mi></m:maction>`),
+    name: "reading 2: an maction with no selection over one child",
+  },
+  {
+    files: withMath(`<m:apply><m:plus/><m:ci id="a">x</m:ci><m:share src="#a"/></m:apply>`),
+    name: "reading 2: a share naming an id beside it, which no element dominates itself through",
+  },
+  {
+    files: withMath(`<m:share src="imsmanifest.xml#a"/>`),
+    name: "reading 103: a share naming a packaged file, which is no fragment of this document",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:maligngroup/><m:mi>a</m:mi></m:mtd></m:mtr></m:mtable>`,
+    ),
+    name: "reading 2: an alignment group first in its cell",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:mrow dir="ltr"><m:maligngroup/><m:mi>a</m:mi></m:mrow></m:mtd></m:mtr></m:mtable>`,
+    ),
+    name: "reading 2: an alignment group under an mrow that changes no direction",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:maction actiontype="toggle"><m:mi>a</m:mi><m:mrow><m:mi>b</m:mi><m:maligngroup/></m:mrow></m:maction></m:mtd></m:mtr></m:mtable>`,
+    ),
+    name: "reading 2: an alignment group in an maction's child that is not selected",
+  },
+  {
+    files: withMath(`<m:mrow><m:maligngroup/><m:mi>a</m:mi></m:mrow>`),
+    name: "reading 2: an alignment group outside a table cell",
+  },
+  {
     files: {
       ...base,
       "item.xml": edit(
@@ -2050,8 +2403,8 @@ const unownedValid: readonly {
 ];
 
 /**
- * Packages that break readings 2, 3, 9, 39, 41, 42, 43 and 47, each named by the law that refuses
- * it and the rule that law keeps.
+ * Packages that break readings 2, 3, 9, 39, 41, 42, 43, 47, 83 and R7-a, each named by the law that
+ * refuses it and the rule that law keeps.
  */
 const unownedBroken: readonly LawCase[] = [
   {
@@ -2211,6 +2564,84 @@ const unownedBroken: readonly LawCase[] = [
     rule: "math-arity",
   },
   {
+    files: withMath(
+      `<m:apply><m:sin/><m:logbase><m:cn>2</m:cn></m:logbase><m:ci>x</m:ci></m:apply>`,
+    ),
+    law: "MathML head qualifier",
+    name: "R6-head-qualifiers: sin with a logbase",
+    rule: "admission",
+  },
+  {
+    files: withMath(`<m:cn type="rational">12</m:cn>`),
+    law: "MathML cn form",
+    name: "reading 2: a rational cn of one part",
+    rule: "attribute-lexical",
+  },
+  {
+    files: withMath(`<m:cn type="hexdouble">7ff8</m:cn>`),
+    law: "MathML cn form",
+    name: "R6-hexdouble: a hexdouble of four digits",
+    rule: "attribute-lexical",
+  },
+  {
+    files: withMath(`<m:cn type="integer">abc</m:cn>`),
+    law: "MathML cn form",
+    name: "reading 2: an integer cn of letters",
+    rule: "attribute-lexical",
+  },
+  {
+    files: withMath(
+      `<m:maction actiontype="toggle" selection="3"><m:mi>a</m:mi><m:mi>b</m:mi></m:maction>`,
+    ),
+    law: "MathML maction selection",
+    name: "reading 2: an maction whose selection names a third of two children",
+    rule: "union-count",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:mfrac><m:mrow><m:maligngroup/><m:mi>a</m:mi></m:mrow><m:mi>b</m:mi></m:mfrac></m:mtd></m:mtr></m:mtable>`,
+    ),
+    law: "MathML align placement",
+    name: "reading 2: an alignment group under an mfrac in a table cell",
+    rule: "admission",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:mrow dir="rtl"><m:maligngroup/><m:mi>a</m:mi></m:mrow></m:mtd></m:mtr></m:mtable>`,
+    ),
+    law: "MathML align placement",
+    name: "reading 2: an alignment group under an mrow that changes the direction",
+    rule: "admission",
+  },
+  {
+    files: withMath(
+      `<m:mtable><m:mtr><m:mtd><m:mi>a</m:mi><m:maligngroup/><m:mi>b</m:mi></m:mtd></m:mtr></m:mtable>`,
+    ),
+    law: "MathML align first",
+    name: "reading 2: a cell whose first complete element is no alignment group",
+    rule: "ordering",
+  },
+  {
+    files: withMath(`<m:share src="#nowhere"/>`),
+    law: "Idref target",
+    name: "reading 2: a share whose fragment names no id of its document",
+    rule: "idref-target",
+  },
+  {
+    files: withMath(`<m:apply id="a"><m:plus/><m:share src="#a"/><m:cn>1</m:cn></m:apply>`),
+    law: "MathML share cycle",
+    name: "reading 2: a share inside the element it names",
+    rule: "document-key",
+  },
+  {
+    files: withMath(
+      `<m:apply id="a"><m:plus/><m:share src="#b"/></m:apply><m:apply id="b"><m:plus/><m:share src="#a"/></m:apply>`,
+    ),
+    law: "MathML share cycle",
+    name: "reading 2: two applies each holding a share of the other",
+    rule: "document-key",
+  },
+  {
     files: withScore(
       `<qti-null ${xsiNamespace} xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:anyType"/>`,
     ),
@@ -2245,8 +2676,10 @@ const unownedBroken: readonly LawCase[] = [
 
 /**
  * Packages whose `xsi:type` breaks XML Schema's clause 4.1 or 4.2 (a value that is no QName in
- * scope, or one that names no type), which shred cannot represent: the codec refuses them before
- * any law reads a row (shred's `type-unresolved` and `type-unknown`).
+ * scope, or one that names no type), or whose SSML `role` item names a prefix nothing binds, which
+ * shred cannot represent: the codec refuses them before any law reads a row (shred's
+ * `type-unresolved`, `type-unknown` and `prefix-unbound`; the reason is shred's own test's to
+ * assert, and the bound twins in the valid cases show the prefix is the cause).
  */
 const unownedCodec: readonly {
   readonly files: Readonly<Record<string, string>>;
@@ -2271,9 +2704,43 @@ const unownedCodec: readonly {
     },
     name: "reading 47: xsi:type on an element of an anonymous type, naming no type (case 130)",
   },
+  ...["w", "token"].flatMap((tag) => [
+    {
+      files: withSpeech(["", `<ssml:${tag} role="x:noun">hi</ssml:${tag}>`]),
+      name: `reading 83: an ssml:${tag} role item whose prefix is unbound`,
+    },
+    {
+      files: withSpeech(["", `<ssml:${tag} role="noun y:verb">hi</ssml:${tag}>`]),
+      name: `reading 83: an ssml:${tag} role whose second item's prefix is unbound`,
+    },
+  ]),
 ];
 
-describe("the unowned readings 2, 3, 9, 39, 41, 42, 43 and 47", () => {
+/**
+ * R7-a's refused values: a closed `data-ssml` that Data-SSML 1.0 does not admit (an unknown name, a
+ * value of the wrong type, a value outside an enumeration, text that is not JSON). The importer
+ * refuses them under `attribute-lexical` and the oracle must agree, the oracle with its own reader
+ * (`src/test/oracle-laws/data-ssml.ts`), written from the schema apart from the importer's
+ * (`src/vocab/data-ssml.ts`), which the purity guard keeps it from reading;
+ * `src/vocab/data-ssml.test.ts` pins the same values.
+ */
+const unownedDataSsml: readonly {
+  readonly files: Readonly<Record<string, string>>;
+  readonly name: string;
+}[] = [
+  ["an unknown name", `{"brk":{}}`],
+  ["a value of the wrong type", `{"break":{"time":2}}`],
+  ["a value outside an enumeration", `{"break":{"strength":"loud"}}`],
+  ["text that is not JSON", `not json`],
+].map(([what, value]) => ({
+  files: withItem(
+    `<p id="intro">Pick one.</p>`,
+    `<p id="intro" data-ssml='${value ?? ""}'>Pick one.</p>`,
+  ),
+  name: `R7-a: data-ssml holding ${what}`,
+}));
+
+describe("the unowned readings 2, 3, 9, 39, 41, 42, 43, 47, 83 and R7-a", () => {
   for (const { files, name } of unownedValid) {
     it.effect(`no law refuses ${name}`, () =>
       Effect.gen(function* valid() {
@@ -2289,6 +2756,20 @@ describe("the unowned readings 2, 3, 9, 39, 41, 42, 43 and 47", () => {
       Effect.gen(function* codec() {
         assert.deepStrictEqual(verdictOf(yield* judged(files)), {
           rule: "unmodeled-vocabulary",
+          verdict: "refused",
+        });
+      }),
+    );
+  }
+
+  for (const { files, name } of unownedDataSsml) {
+    it.effect(`the codec refuses ${name} under attribute-lexical`, () =>
+      Effect.gen(function* dataSsml() {
+        const judgment = yield* judged(files);
+
+        assert.strictEqual(judgment._tag, "CodecRefusal");
+        assert.deepStrictEqual(verdictOf(judgment), {
+          rule: "attribute-lexical",
           verdict: "refused",
         });
       }),
@@ -2457,7 +2938,7 @@ const boundItem = ({ choices, kind, max, min }: BoundCase) => {
 
 /**
  * The binding sites the Binding unique box draws: a choice interaction, which `BindingFit` names,
- * the order interaction, whose class description states no binding (reading 165), and the custom
+ * the order interaction, whose class description states no binding (reading 172), and the custom
  * interaction, which binds any type (reading 75), each binding its response once by its
  * `response-identifier`; a text entry interaction binding it once by its `string-identifier`, its
  * `response-identifier` naming a response of its own; and an extended text interaction binding it
@@ -2510,6 +2991,22 @@ const uniqueInteraction = (site: UniqueSite, at: number, position: number): stri
     "text entry string": `<p><qti-text-entry-interaction response-identifier="T${String(position)}" string-identifier="${response}"/></p>`,
   }[site];
 };
+
+/**
+ * Judge an item of one response declaration and one interaction, and select its fit breaches.
+ *
+ * @param declaration - The response declaration, as written.
+ * @param interaction - The interaction, as written.
+ * @returns Its "BindingFit" and "RecordBindingFit" breaches.
+ */
+const fitBreaches = (declaration: string, interaction: string) =>
+  judged(itemWith(declaration, interaction)).pipe(
+    Effect.map((judgment) =>
+      breachesOf(judgment).filter(
+        (breach) => breach.law === "BindingFit" || breach.law === "RecordBindingFit",
+      ),
+    ),
+  );
 
 /**
  * Reading 18's and 67's bounds, restated from the information model: an order interaction's
@@ -2706,6 +3203,31 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
         ),
       ),
     testTimeoutMs,
+  );
+
+  it.effect(
+    "BindingFit: an order interaction binds a response of any type, a graphic order interaction an ordered identifier",
+    () =>
+      Effect.gen(function* orderBinding() {
+        const order = `<qti-order-interaction response-identifier="R"><qti-simple-choice identifier="A">A</qti-simple-choice><qti-simple-choice identifier="B">B</qti-simple-choice></qti-order-interaction>`;
+        const graphicOrder = `<qti-graphic-order-interaction response-identifier="R"><object data="a.png" type="image/png"/><qti-hotspot-choice identifier="A" shape="rect" coords="0,0,1,1"/><qti-hotspot-choice identifier="B" shape="rect" coords="0,0,1,1"/></qti-graphic-order-interaction>`;
+        const single = `<qti-response-declaration identifier="R" cardinality="single" base-type="string"/>`;
+        const record = `<qti-response-declaration identifier="R" cardinality="record"/>`;
+
+        // Oracle: spec reading 172: the order interaction's class description states no binding
+        // (§5.97), so it binds a single string response and a record alike; the graphic order
+        // interaction's does (§5.61: "a base-type of identifier and ordered cardinality only").
+        assert.deepStrictEqual(yield* fitBreaches(single, order), []);
+        assert.deepStrictEqual(yield* fitBreaches(record, order), []);
+        assert.deepStrictEqual(
+          (yield* fitBreaches(single, graphicOrder)).map(({ law }) => law),
+          ["BindingFit"],
+        );
+        assert.deepStrictEqual(
+          (yield* fitBreaches(record, graphicOrder)).map(({ law }) => law),
+          ["RecordBindingFit"],
+        );
+      }),
   );
 
   it.effect(
@@ -3628,7 +4150,7 @@ describe("reading 117: an included fragment judged in place", () => {
               const expected: Readonly<Record<typeof variant, LawName | undefined>> = {
                 "choice variable": "Choice not variable",
                 cycle: "Inclusion cycle",
-                external: "Include target",
+                external: undefined,
                 "feedback reference": "Feedback reference",
                 "fragment identifier": "Include fragment identifier",
                 "fragment language": "Document lang",

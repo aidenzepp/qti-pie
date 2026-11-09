@@ -105,6 +105,7 @@ interface DeclarationFacts {
  * @param fields.cardinalityLexical - Its `cardinality` as written.
  * @param fields.identifier - Its collapsed identifier, written bare.
  * @param fields.kind - Its kind.
+ * @param fields.parentKind - The kind of its parent, an item unless the case says a test.
  * @returns The facts.
  */
 const declarationRow = (fields: {
@@ -112,8 +113,10 @@ const declarationRow = (fields: {
   readonly cardinalityLexical?: string;
   readonly identifier?: string;
   readonly kind?: string;
+  readonly parentKind?: string;
 }): DeclarationFacts => {
   const kind = fields.kind ?? "qti-outcome-declaration";
+  const parentKind = fields.parentKind ?? "qti-assessment-item";
   const cardinality = fields.cardinality ?? "single";
   const identifier = fields.identifier ?? "A";
 
@@ -132,6 +135,7 @@ const declarationRow = (fields: {
       identifierLexical: identifier,
       identifierTrail: "",
       node: strayNode(1),
+      parentKind,
     },
     name: {
       cardinality,
@@ -139,6 +143,7 @@ const declarationRow = (fields: {
       document: strayDocument,
       identifier,
       node: strayNode(1),
+      parentKind,
     },
     row: {
       declarationKind: kind,
@@ -147,6 +152,7 @@ const declarationRow = (fields: {
       nearest: strayDocument,
       node: strayNode(1),
       parent: strayDocument,
+      parentKind,
       start: 1n,
       version: "3.0.1",
     },
@@ -208,6 +214,7 @@ const declarationFact = (node: number): Addition<typeof Declaration> => ({
   nearest: strayDocument,
   node: strayNode(node),
   parent: strayDocument,
+  parentKind: "qti-assessment-item",
   start: BigInt(node),
   version: "3.0.1",
 });
@@ -233,6 +240,7 @@ const identifierFact = (
   identifierLexical,
   identifierTrail: "",
   node: strayNode(node),
+  parentKind: "qti-assessment-item",
 });
 
 /**
@@ -393,13 +401,16 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a declaration of a built-in session variable of any kind, and admits completion_status and QTI_CONTEXT's record context, by Declaration not reserved",
+        "refuses a declaration of an item's built-in session variable of any kind, and a test's duration alone, and admits completion_status and QTI_CONTEXT's record context, by Declaration not reserved",
         () =>
           // Oracle: the specification as a checker, §2.2.2 and tables 4.5.1, 5.115.1, 5.151.1 with
-          // reading 72: the session variables are reserved in every declaration of every document,
-          // spelled exactly; every other name is no built-in's.
+          // readings 72 and 168: an item's three session variables are reserved in every
+          // declaration of an item, a test's `duration` alone in a declaration of a test, spelled
+          // exactly; every other name, a test's own `numAttempts` and `completionStatus` included,
+          // is no built-in's.
           // Bound: every declaration kind (4) against the session variables (3) and three controls,
-          // `completion_status`, `completion-status` and `SCORE`, 24 cases.
+          // `completion_status`, `completion-status` and `SCORE`, under an item (24 cases) and under
+          // a test (24 cases), 48 cases.
           Effect.gen(function* notReserved() {
             const client = yield* loginSession;
             const check = checkConstraintOf(
@@ -407,26 +418,30 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               DeclarationIdentifier.name,
               "Declaration_not_reserved",
             );
-            for (const kind of declarationKinds) {
-              for (const identifier of [
-                ...sessionVariables,
-                "completion_status",
-                "completion-status",
-                "SCORE",
-              ]) {
-                const refused = sessionVariables.includes(identifier);
-                assertVerdict(
-                  yield* judged(
-                    client,
-                    declared(
-                      declarationRow({ identifier, kind }),
-                      Option.some(identifier === "SCORE" ? "float" : "identifier"),
+            for (const parentKind of ["qti-assessment-item", "qti-assessment-test"]) {
+              for (const kind of declarationKinds) {
+                for (const identifier of [
+                  ...sessionVariables,
+                  "completion_status",
+                  "completion-status",
+                  "SCORE",
+                ]) {
+                  const refused =
+                    sessionVariables.includes(identifier) &&
+                    (parentKind === "qti-assessment-item" || identifier === "duration");
+                  assertVerdict(
+                    yield* judged(
+                      client,
+                      declared(
+                        declarationRow({ identifier, kind, parentKind }),
+                        Option.some(identifier === "SCORE" ? "float" : "identifier"),
+                      ),
                     ),
-                  ),
-                  check,
-                  refused,
-                  `${kind} ${identifier}`,
-                );
+                    check,
+                    refused,
+                    `${parentKind} ${kind} ${identifier}`,
+                  );
+                }
               }
             }
           }).pipe(Effect.scoped),
@@ -438,36 +453,47 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         () =>
           // Oracle: the specification as a checker, §2.2.2.3 ("SCORE MUST be a float", "MAXSCORE
           // MUST be a float", "PASSED MUST be a boolean") of an outcome, and §2.2.2.1's record
-          // context variable QTI_CONTEXT, with reading 74. A typed name's base type is a
-          // containment from its `DeclarationIdentifier` into the `DeclarationBaseType` rows of
-          // the type the specification gives it, whatever its cardinality (spec reading 158), a
-          // deferred foreign key set immediate: 23503 and its name, found by grizzle's comment on
-          // it. QTI_CONTEXT's kind and cardinality are CHECKs on `DeclarationIdentifier` and
-          // `DeclarationName`: 23514 and `Reserved_type`, the identifier's row refusing first.
-          // Bound: each typed outcome name under every declaration kind against every base type
-          // (3 × 4 × 11), so the same name of another kind is the control, then QTI_CONTEXT
-          // against every declaration kind and cardinality (4 × 4), 148 cases.
+          // context variable QTI_CONTEXT, with reading 74. SCORE and MAXSCORE bind an item only
+          // (reading 155, decision 404 (1)): a test declares either of any base type, so the
+          // containment carries `parentKind <> qti-assessment-test`; PASSED binds an item and a
+          // test alike. A typed name's base type is a containment from its `DeclarationIdentifier`
+          // into the `DeclarationBaseType` rows of the type the specification gives it, whatever
+          // its cardinality (spec reading 158), a deferred foreign key set immediate: 23503 and
+          // its name, found by grizzle's comment on it, the one pattern finding the item-only
+          // containments and PASSED's alike. QTI_CONTEXT's kind and cardinality are CHECKs on
+          // `DeclarationIdentifier` and `DeclarationName`: 23514 and `Reserved_type`, the
+          // identifier's row refusing first.
+          // Bound: each typed outcome name under every declaration kind, under an item root and a
+          // test root, against every base type (3 × 2 × 4 × 11), so the same name of another kind
+          // is the control, then QTI_CONTEXT against every declaration kind and cardinality
+          // (4 × 4), 280 cases.
           Effect.gen(function* reservedType() {
             const client = yield* loginSession;
-            for (const { baseType: kept, identifier, kind: typedKind } of reservedBaseTypes) {
+            for (const { baseType: kept, identifier, kind: typedKind, root } of reservedBaseTypes) {
               const typed = yield* constraintDescribed(
                 client,
                 "declaration_identifier",
-                `%"value":"${identifier}"}}, tag DeclarationBaseType.baseType = ${kept}) to DeclarationBaseType(node, baseType)`,
+                `%"value":"${identifier}"}}%, tag DeclarationBaseType.baseType = ${kept}) to DeclarationBaseType(node, baseType)`,
               );
-              for (const kind of declarationKinds) {
-                for (const baseType of BaseType.handles) {
-                  const { refused } = yield* judgedCase(client, {
-                    immediate: [typed],
-                    inserts: declared(declarationRow({ identifier, kind }), Option.some(baseType)),
-                  });
-                  assertVerdict(
-                    refused,
-                    typed,
-                    kind === typedKind && baseType !== kept,
-                    `${kind} ${identifier} ${baseType}`,
-                    "23503",
-                  );
+              for (const parentKind of ["qti-assessment-item", "qti-assessment-test"]) {
+                const bound = root === "any" || parentKind === "qti-assessment-item";
+                for (const kind of declarationKinds) {
+                  for (const baseType of BaseType.handles) {
+                    const { refused } = yield* judgedCase(client, {
+                      immediate: [typed],
+                      inserts: declared(
+                        declarationRow({ identifier, kind, parentKind }),
+                        Option.some(baseType),
+                      ),
+                    });
+                    assertVerdict(
+                      refused,
+                      typed,
+                      bound && kind === typedKind && baseType !== kept,
+                      `${parentKind} ${kind} ${identifier} ${baseType}`,
+                      "23503",
+                    );
+                  }
                 }
               }
             }

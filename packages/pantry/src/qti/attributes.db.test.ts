@@ -253,7 +253,7 @@ const idrefPiece = (at: number, fields: Readonly<Record<string, string>>): State
 
 /**
  * An open name of an attribute that counts one, which no case writes: a name in no namespace on a
- * foreign element, unless the case sets otherwise.
+ * foreign element of version 3.0.1 governed by none, unless the case sets otherwise.
  *
  * @param fields - Its class and whatever else the case sets.
  * @param attribute - Its attribute.
@@ -267,14 +267,33 @@ const openNameOf = (
     at: 0n,
     attribute,
     elementNamespace: "urn:element",
+    governs: "none",
     kind: "foreign-element",
     local: "a",
     node: strayNode,
     uri: "",
+    version: "3.0.1",
     ...fields,
   },
   hidden: ownerCount("Attribute.openName", 1),
   relation: OpenAttributeName,
+});
+
+/**
+ * The fields a closed element's open name copies from it: its namespace and its declared type as
+ * the importer writes it, read from `KindNamespace` and `GoverningOf` at 3.0.1, never `none`.
+ *
+ * @param element - The element's kind.
+ * @returns The fields.
+ */
+const on = (element: string): Stated["fact"] => ({
+  elementNamespace:
+    KindNamespace.rows.find((row) => row.kind === element)?.namespace ??
+    assert.fail(`KindNamespace holds ${element}`),
+  governs:
+    GoverningOf.rows.find((row) => row.kind === element && row.version === "3.0.1")?.governs ??
+    assert.fail(`GoverningOf holds ${element} at 3.0.1`),
+  kind: element,
 });
 
 describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
@@ -759,6 +778,68 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
           true,
           "two open names under one attribute",
         );
+      }).pipe(Effect.scoped),
+    leaseTestTimeoutMs,
+  );
+
+  it.effect(
+    "holds a data-* name to its pattern and to what its element's governor declares",
+    () =>
+      // Oracle: PostgreSQL, OpenAttributeName's AL4_data_name and AL4_declared_data_name checks,
+      // by name (a named check carries no comment to find it by); the pattern is the HTML data-* name (`/^data-[a-z0-9_.-]+$/u`).
+      // Bound: a data-* name with an upper-case and a non-ASCII local (decision 424, the standard's
+      // refusal), a no-namespace name starting data- on a closed element, a declared name on an
+      // element that admits no custom one and on the one whose governor does not declare it, and
+      // a plain data-* name.
+      Effect.gen(function* dataNames() {
+        const client = yield* loginSession;
+        const pattern = "al_4_data_name";
+        const declared = "al_4_declared_data_name";
+        const cases: readonly (readonly [string, Stated, string | undefined])[] = [
+          [
+            "data-* with an upper-case local",
+            openNameOf({ class: "data-*", local: "data-A" }),
+            pattern,
+          ],
+          [
+            "data-* with a non-ASCII local",
+            openNameOf({ class: "data-*", local: "data-é" }),
+            pattern,
+          ],
+          [
+            "no-namespace data-x on p",
+            openNameOf({ class: "no-namespace", ...on("p"), local: "data-x" }),
+            pattern,
+          ],
+          [
+            "data-* data-catalog-idref on p",
+            openNameOf({ class: "data-*", ...on("p"), local: "data-catalog-idref" }),
+            declared,
+          ],
+          [
+            "data-* data-x on p",
+            openNameOf({ class: "data-*", ...on("p"), local: "data-x" }),
+            undefined,
+          ],
+          [
+            "data-* data-catalog-idref on qti-assessment-item",
+            openNameOf({
+              class: "data-*",
+              ...on("qti-assessment-item"),
+              local: "data-catalog-idref",
+            }),
+            undefined,
+          ],
+        ];
+        for (const [label, stated, refusedBy] of cases) {
+          const verdict = yield* judged(client, statedInserts([stated]));
+
+          if (refusedBy === undefined) {
+            assertNoRowLawRefuses(verdict, label);
+          } else {
+            assertVerdict(verdict, refusedBy, true, label);
+          }
+        }
       }).pipe(Effect.scoped),
     leaseTestTimeoutMs,
   );

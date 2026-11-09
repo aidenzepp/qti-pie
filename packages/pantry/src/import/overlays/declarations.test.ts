@@ -177,6 +177,7 @@ interface WalkedSet {
  */
 interface Met {
   readonly child: XdmElement<Composed>;
+  readonly parentKind: string;
   readonly rank: bigint;
   readonly tuple: {
     readonly document: NodeId;
@@ -229,7 +230,10 @@ const minimumByDefault: ReadonlyMap<string, string> = new Map([["3.0.1", "0.0"]]
  * @param met - The declaration's element.
  * @returns What its value sets copy.
  */
-const walkDeclaration = (expected: Expected, { tuple, valueOf }: Met): WalkedDeclaration => {
+const walkDeclaration = (
+  expected: Expected,
+  { parentKind, tuple, valueOf }: Met,
+): WalkedDeclaration => {
   const identifierLexical = valueOf("identifier");
   const baseTypeLexical = valueOf("base-type");
   const cardinalityLexical = valueOf("cardinality");
@@ -240,7 +244,7 @@ const walkDeclaration = (expected: Expected, { tuple, valueOf }: Met): WalkedDec
     baseTypes: Option.isSome(spelled) ? 1n : 0n,
     cardinalities: Option.isSome(cardinality) ? 1n : 0n,
   };
-  expected.Declaration.set(tuple.node, { ...tuple, declarationKind: tuple.kind });
+  expected.Declaration.set(tuple.node, { ...tuple, declarationKind: tuple.kind, parentKind });
   for (const code of Option.toArray(cardinality)) {
     expected.DeclarationCardinality.set(tuple.node, {
       cardinality: code,
@@ -259,6 +263,7 @@ const walkDeclaration = (expected: Expected, { tuple, valueOf }: Met): WalkedDec
       identifierLexical,
       identifierTrail: trail,
       node: tuple.node,
+      parentKind,
     });
     for (const code of Option.toArray(cardinality)) {
       expected.DeclarationName.set(tuple.node, {
@@ -268,6 +273,7 @@ const walkDeclaration = (expected: Expected, { tuple, valueOf }: Met): WalkedDec
         document: tuple.document,
         identifier: name,
         node: tuple.node,
+        parentKind,
       });
     }
   }
@@ -521,6 +527,7 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     const nearest = interactions.has(parent.kind) ? parent.id : parent.nearest;
     const met: Met = {
       child,
+      parentKind: parent.kind,
       rank,
       tuple: { document, kind, nearest, node: id, parent: parent.id, start, version: doc.version },
       valueOf: (name) =>

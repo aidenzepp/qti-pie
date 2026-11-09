@@ -114,8 +114,8 @@ const specified = (
 const plainLetters = ["a", "Z", "0", "-", "_", ".", "é", "x"] as const;
 
 /**
- * The letters after `data-` in the box: those reading 13's pattern admits (`a`, `0`, `-`, `_`,
- * `.`) and those it refuses (`Z`, `é`).
+ * The letters after `data-` in the box: those reading 13's pattern admits (`a`, `0`, `-`, `_`, `.`)
+ * and those it refuses (`Z`, `é`).
  */
 const dataLetters = ["a", "Z", "0", "-", "_", ".", "é"] as const;
 
@@ -182,6 +182,21 @@ const classificationBox =
     (sum, count) => sum + count,
   ) +
   declaredLocals.length;
+
+/**
+ * How the classifier reads a no-namespace attribute name on an element of the ASI namespace.
+ *
+ * @param local - The local name.
+ * @returns The class it is read as, or `refused` and the reason.
+ */
+const readAs = (local: string) =>
+  Result.match(
+    openClassOf(
+      { local, namespace: "", prefix: "", qname: local },
+      { foreign: false, local: "e", namespace: asiNamespace },
+    ),
+    { onFailure: (refused) => `refused ${refused.reason}`, onSuccess: ({ _tag }) => _tag },
+  );
 
 /**
  * Every class and refusal the classification box reaches.
@@ -253,6 +268,24 @@ describe("vocab/open.ts", () => {
         );
       }),
   );
+
+  it("reads a data- name by the information model's pattern and prose: lower-case ASCII letters, digits, `_`, `.` and `-`", () => {
+    for (const local of ["data-a.b-c", "data-0", "data--", "data-_"]) {
+      assert.strictEqual(readAs(local), "data-*", local);
+    }
+
+    for (const local of [
+      "data-A",
+      "data-",
+      "data-é",
+      "data-x·y",
+      "data-éA",
+      "data-a:b",
+      "data-a b",
+    ]) {
+      assert.strictEqual(readAs(local), "refused data-name", local);
+    }
+  });
 
   it("names an open class by a handle no kind declares, so the distinctness mask masks only them", () => {
     const declared = new Set(attributeDeclarations.map(({ name }) => name));
@@ -1346,6 +1379,73 @@ describe("XLink's global attributes (C30)", () => {
           [...admitted.values()].filter((rows) => rows.length !== 10).map((rows) => rows.length),
           [],
         );
+      }),
+    hookTimeoutMs,
+  );
+});
+
+/**
+ * The class `openClassOf` gives an attribute named `zz` in a namespace, on an element of a kind.
+ *
+ * @param kind - The element's kind.
+ * @param namespace - The attribute's namespace, `""` for none.
+ * @param own - The kind's own namespace.
+ * @returns The class's handle.
+ */
+const mathmlAttributeClass = (kind: string, namespace: string, own: string): string =>
+  Result.getOrThrow(
+    openClassOf(
+      {
+        local: "zz",
+        namespace,
+        prefix: namespace === "" ? "" : "p",
+        qname: namespace === "" ? "zz" : "p:zz",
+      },
+      { foreign: isForeignKind(kind), local: kind, namespace: own },
+    ),
+  )._tag;
+
+describe("MathML's attribute wildcards", () => {
+  it.effect(
+    "admit an attribute of a foreign namespace and none in MathML's own namespace or in none, on every (version, kind) of the inventory's `m:` wildcards",
+    () =>
+      // Oracle: the inventory's attribute wildcards, each `##other` with `skip` processing (J6's
+      // `math-foreign-attribute`): `##other` admits a namespace that is neither the kind's own
+      // (MathML's) nor absent, so `xlink:href` on `m:mi` stands and `m:zz` and `zz` do not.
+      // Bound: the `m:` wildcards read from the inventory here, never a pinned count.
+      Effect.gen(function* mathmlAttributeWildcards() {
+        const grammar = yield* Effect.fromResult(composed());
+        const wildcards = attributeWildcards.filter(({ kind }) => kind.startsWith("m:"));
+        const wrong = wildcards.flatMap(({ kind, namespace, versions }) => {
+          const own = Option.match(grammar.kinds.elementName.lookup({ kind }), {
+            onNone: () => "",
+            onSome: (name) => name.namespace,
+          });
+          const cases = [
+            ["foreign", foreignNamespace, true],
+            ["own", own, false],
+            ["absent", "", false],
+          ] as const;
+
+          return versions.flatMap((version) =>
+            cases.flatMap(([label, space, expected]) => {
+              const name = mathmlAttributeClass(kind, space, own);
+              const read = Option.isSome(
+                grammar.attributes.admission.lookup({ kind, name, version }),
+              );
+
+              return read === expected
+                ? []
+                : [
+                    `${version} ${kind} (${namespace}): an undeclared attribute in the ${label} namespace (${name}) is ${read ? "admitted" : "refused"}, not ${expected ? "admitted" : "refused"}`,
+                  ];
+            }),
+          );
+        });
+
+        assert.isAbove(wildcards.length, 0);
+        assert.isTrue(wildcards.every(({ namespace }) => namespace === "##other"));
+        assert.strictEqual(wrong.join("\n"), "");
       }),
     hookTimeoutMs,
   );

@@ -39,14 +39,16 @@
  *   ({@link MappingLookup}), and the declaration a resolving reading's variable reads a row of its
  *   own ({@link ReadingDeclaration}); exactly one reading resolves (M3). Beside them, a template
  *   default's and a variable mapping's declarations in the item their item ref names
- *   ({@link TemplateDefaultTarget}, {@link MappingSourceDeclaration}), and a `section-identifier`'s
- *   name ({@link SectionIdentifier}).
+ *   ({@link TemplateDefaultTarget}, {@link MappingSourceDeclaration}), what a mapping's item ref
+ *   names ({@link MappingItemRef}, {@link MappingItemRefType}), and a `section-identifier`'s name
+ *   ({@link SectionIdentifier}).
  *
  * The laws, each named by its oracle law with spaces written as underscores, and the rule each
  * keeps: `Arity` (P2); `Operand_fit` and `One_base` (P23); `Condition_type` (P21); `Set_type`
  * (P20); `Lookup_type` (P22); `Reference_type` (P24); `Outcome_only` (P25); `Template_reads` (P26);
  * `Mapped_response` (P27); `Weighted_base` (P29); `Variable_declared` (P8, over an item's names and
- * a test's and a section's unprefixed ones); `Literal_lexical` (attribute-lexical);
+ * a test's and a section's unprefixed ones, a braced `pattern` that names none a string value,
+ * reading R15-k); `Literal_lexical` (attribute-lexical);
  * `Prefixed_reference` (prefixed-ref); `Section_identifier_target`; `Template_default_target` and
  * `Template_default_type` (P20); `Variable_mapping_source` and `Variable_mapping_target`; and
  * `E1_derived`, every code the host writes proved from what it is derived from, among them each
@@ -169,6 +171,7 @@ import {
   itemKind,
   itemRefKind,
   itemResourceType,
+  linkResourceTypes,
   Named,
   partKind,
   sectionKind,
@@ -539,10 +542,13 @@ export const placedVariableFamily = counted(
  *
  * `written` says whether the element writes it. A test variables' `base-type`, which it may omit
  * ({@link optionallyTypedKinds}), has a row on every test variables, so one that omits it has one
- * too, unwritten, with an empty lexical form: it is thereby proved `unknown` (M2,
- * `representation-gaps.md` §1: absence as a keyed null object, which the attribute's own copy
- * refutes where it is written). A base value's `base-type` and a math operator's `name` are
- * required, so an element that omits one has no row, and AL3 refuses it alone.
+ * too, unwritten, with an empty lexical form (M2, `representation-gaps.md` §1: absence as a keyed
+ * null object, which the attribute's own copy refutes where it is written). So does its optional
+ * `weight-identifier`, so that "not weighted" is a row too: an unwritten `base-type` is `unknown`
+ * where the weight is unwritten and float where it is written (information model §7.39.5: "When a
+ * weighting is specified the result of the expression always has base-type float"; decision 434). A
+ * base value's `base-type` and a math operator's `name` are required, so an element that omits one
+ * has no row, and AL3 refuses it alone.
  */
 export const ExpressionAttribute = relation(
   "ExpressionAttribute",
@@ -725,6 +731,44 @@ export const MappingSourceDeclaration = relation(
     targetDeclared: pg.boolean,
   },
   ["node"],
+);
+
+/**
+ * A variable mapping's item ref, keyed by the mapping's node (spec reading 110): `itemRef`,
+ * `VariableMapping`'s `parent`, and `types`, drawn: its count of {@link MappingItemRefType} rows, 1
+ * where the item ref has a target and 0 where it has none: it writes no href, which AL3 alone
+ * refuses (spec reading 155), or its href names no resource, which "Item ref target" refuses over
+ * the item ref (`#pantry/qti/tests.ts`). Every mapping has one. A mapping whose item ref names an
+ * LTI link has no item, so no source declaration, and is accepted unchecked; every other, one
+ * under an item ref with no target among them, must have its {@link MappingSourceDeclaration}
+ * ("Variable mapping source").
+ */
+export const MappingItemRef = relation(
+  "MappingItemRef",
+  { itemRef: uuid, node: uuid, types: drawn(natural) },
+  ["node"],
+);
+
+/**
+ * What a variable mapping's item ref names, keyed by the mapping's node, where the item ref has a
+ * target, a counted member of its {@link MappingItemRef}: its item ref (`itemRef`) and `type`, its
+ * `ItemRefTarget`'s, copied from it. A mapping under an item ref with no target has no row, so no
+ * type stands for it (decision 428, as `DeclarationBaseType` holds a declaration's base type only
+ * where it has one).
+ */
+export const MappingItemRefType = relation(
+  "MappingItemRefType",
+  { itemRef: uuid, node: uuid, type: closedId(ResourceType) },
+  ["node"],
+);
+
+/**
+ * Each mapping's item ref's type, counted by `MappingItemRef.types`: one row or none, a mapping's
+ * under an item ref with no target.
+ */
+export const mappingItemRefTypeFamily = counted(
+  on(MappingItemRefType, "node"),
+  fin(MappingItemRef, "types"),
 );
 
 /**
@@ -1050,6 +1094,8 @@ export const ReadingCardinality = relation(
 export const referenceRelations = {
   AssembledReference,
   HeldType,
+  MappingItemRef,
+  MappingItemRefType,
   MappingLookup,
   MappingSourceDeclaration,
   NameLookup,
@@ -1413,6 +1459,35 @@ const referenceDocuments = select(Document, (d) => d.ne(d.rootKind, itemKind));
 const typeAttributes = select(ExpressionAttribute, (x) => x.in(x.attribute, ["base-type", "name"]));
 
 /**
+ * A test variables' `weight-identifier`, written or not: each test variables has one row of it, an
+ * unwritten one where it writes none, the proof that it is not weighted.
+ */
+const weightAttributes = select(ExpressionAttribute, (x) => x.eq(x.attribute, "weight-identifier"));
+
+/**
+ * The `weight-identifier`s a test variables writes: the test variables that are weighted.
+ */
+const writtenWeights = select(ExpressionAttribute, (x) =>
+  x.and(x.eq(x.attribute, "weight-identifier"), x.eq(x.written, true)),
+);
+
+/**
+ * The unwritten `base-type`s whose element is `unknown`, each a test variables' that writes neither
+ * a `base-type` nor, by the containment into {@link weightAttributes}, a `weight-identifier`.
+ */
+const unknownUnwrittenBases = select(ExpressionAttribute, (x) =>
+  x.and(x.eq(x.attribute, "base-type"), x.eq(x.written, false), x.eq(x.baseType, "unknown")),
+);
+
+/**
+ * The unwritten `base-type`s whose element is float, each a test variables' that writes no
+ * `base-type` and, by the containment into {@link writtenWeights}, writes a `weight-identifier`.
+ */
+const floatUnwrittenBases = select(ExpressionAttribute, (x) =>
+  x.and(x.eq(x.attribute, "base-type"), x.eq(x.written, false), x.eq(x.baseType, "float")),
+);
+
+/**
  * The kinds whose type an attribute of their own gives.
  */
 const attributeTypedKinds = ["qti-base-value", "qti-math-operator", "qti-test-variables"] as const;
@@ -1420,7 +1495,8 @@ const attributeTypedKinds = ["qti-base-value", "qti-math-operator", "qti-test-va
 /**
  * The attribute-typed kinds whose typing attribute an element may omit, so that its absence types
  * the element: a test variables' `base-type` (`TestVariablesDType`, `use="optional"`), whose
- * absence matches every variable and types it `unknown`. A base value's `base-type` and a math
+ * absence matches every integer and float variable and types it `unknown`, or float where it is
+ * weighted (spec reading 167). A base value's `base-type` and a math
  * operator's `name` are required (`BaseValueDType` and `MathOperatorDType`, `use="required"`), so
  * an element that omits one is AL3's alone, and holds no typing row.
  */
@@ -1586,6 +1662,16 @@ const itemScoped = (r: ReadingRow) =>
 const itemHeld = (r: ReadingRow) => r.and(itemScoped(r), r.eq(r.resourceType, itemResourceType));
 
 /**
+ * State that a reading's scope is a found item ref that names an LTI link, which has no
+ * declarations and no template variables to resolve a name against (spec reading 110): a name
+ * read through it is accepted unchecked, a recorded limit.
+ *
+ * @param r - The row.
+ * @returns The predicate.
+ */
+const linkHeld = (r: ReadingRow) => r.and(itemScoped(r), r.in(r.resourceType, linkResourceTypes));
+
+/**
  * State that a reading reads its variable in a document's declarations: the test's own, unsplit,
  * or an item ref's item.
  *
@@ -1615,11 +1701,11 @@ const builtInOfScope = (r: ReadingRow) =>
   );
 
 /**
- * State that a reading resolves (spec reading 48): its variable is named, declared, mapped or
- * built in, and, numbered, its item ref can repeat under a selection with replacement and its
- * number is at least 1 (reading 88). A name reading, a `section-identifier`'s, is no variable's,
- * and a setter's prefixed reading resolves nothing: a setter sets its own document's variable
- * (reading 112).
+ * State that a reading resolves (spec reading 48): its variable is named, declared, mapped or built
+ * in, or read through an LTI item ref unchecked ({@link linkHeld}), and, numbered, its item ref can
+ * repeat under a selection with replacement and its number is at least 1 (reading 88). A name
+ * reading, a `section-identifier`'s, is no variable's, and a setter's prefixed reading resolves
+ * nothing: a setter sets its own document's variable (reading 112).
  *
  * @param r - The row.
  * @returns The predicate.
@@ -1627,7 +1713,7 @@ const builtInOfScope = (r: ReadingRow) =>
 const resolves = (r: ReadingRow) =>
   r.and(
     r.ne(r.form, "name"),
-    r.ne(r.source, "none"),
+    r.or(r.ne(r.source, "none"), linkHeld(r)),
     r.or(r.eq(r.form, "unsplit"), r.not(r.in(r.kind, setterKinds))),
     r.or(
       r.ne(r.form, "numbered"),
@@ -1636,10 +1722,89 @@ const resolves = (r: ReadingRow) =>
   );
 
 /**
+ * The variable mappings whose item ref has no target, held as decision 428 has it: it writes no
+ * href (spec reading 155) or its href names nothing the package lists, so it names no LTI link,
+ * and the mapping must have its source's declaration. Its {@link MappingItemRef} has no
+ * {@link MappingItemRefType}, `types` 0.
+ */
+const untargetedMappings = select(MappingItemRef, (m) => m.eq(m.types, 0n));
+
+/**
+ * The variable mappings whose item ref names a resource of the package other than an LTI link: a
+ * mapping under an LTI item ref has no item, so no source declaration, and is accepted unchecked
+ * (spec reading 110). A mapping under an item ref that names an item or a missing document must
+ * have its source's declaration. Only an LTI type is exempt, and it is copied from
+ * `ItemRefTarget`, so it spares only a mapping whose item ref names a link.
+ */
+const heldMappings = select(MappingItemRefType, (m) => m.not(m.in(m.type, linkResourceTypes)));
+
+/**
  * The readings that resolve: a key over them by their reference is "at most one", and the
  * containment of every variable reference into them "at least one" (M3).
  */
 const resolvingReadings = select(Reading, resolves);
+
+/**
+ * A test's prefixed readings of one table reader's `identifier` that resolve to a declared response
+ * variable (decisions 429 and 431, spec reading 166): a split or numbered reading of a
+ * `qti-map-response`'s or a `qti-map-response-point`'s `identifier` whose variable's declaration
+ * ({@link ReadingDeclaration}) is a response declaration. Each reads its declaration's table, the
+ * mapping or the area mapping "which must have been declared" (information model §7.22 and §7.23),
+ * so each is a containment into that table's own row (`Mapping`, `AreaMapping`) by its declaration.
+ * A built-in response has no declaration, so no row here: {@link mapsNoBuiltInResponse} refuses its
+ * reading. A reading that names anything but a response is `Variable kind`'s alone, and one
+ * through an LTI link resolves unchecked (reading 110), its source `none`, with no declaration.
+ *
+ * @param kind - The reader's kind.
+ * @returns The selection.
+ */
+const prefixedTableReaders = (kind: "qti-map-response" | "qti-map-response-point") =>
+  select(ReadingDeclaration, (d) =>
+    d.and(
+      d.eq(d.kind, kind),
+      d.eq(d.attribute, "identifier"),
+      d.in(d.form, ["split", "numbered"]),
+      d.eq(d.declarationKind, "qti-response-declaration"),
+    ),
+  );
+
+/**
+ * The built-in response variables, each with the root it is built into: a numAttempts or duration
+ * of an item, the duration of a test. None has a declaration, so none holds a mapping or an area
+ * mapping (decision 431, spec reading 166).
+ */
+const builtInResponses = builtIns.filter(
+  ({ declaration }) => declaration === "qti-response-declaration",
+);
+
+/**
+ * State that a test's resolving prefixed reading of a `qti-map-response`'s or a
+ * `qti-map-response-point`'s `identifier` reads no built-in response of its scope's root, whose
+ * mapping or area mapping is never declared (decision 431, spec reading 166; information model
+ * §7.22 and §7.23). A built-in reading names no declaration, so it has no
+ * {@link ReadingDeclaration} that {@link prefixedTableReaders} could hold to a table: its built-in
+ * is told by its scope's root and its variable, as {@link builtInScopes} reads them.
+ *
+ * @param r - The row.
+ * @returns The predicate.
+ */
+const mapsNoBuiltInResponse = (r: ReadingRow) =>
+  r.or(
+    r.ne(r.attribute, "identifier"),
+    r.not(r.in(r.kind, ["qti-map-response", "qti-map-response-point"])),
+    r.not(r.in(r.form, ["split", "numbered"])),
+    r.ne(r.source, "builtIn"),
+    r.not(resolves(r)),
+    r.not(
+      r.or(
+        ...builtInScopes.flatMap(([root, inScope]) =>
+          builtInResponses
+            .filter((builtIn) => builtIn.root === root)
+            .map(({ variable }) => r.and(inScope(r), r.eq(r.variable, variable))),
+        ),
+      ),
+    ),
+  );
 
 /**
  * The resolving readings of a declared variable, each with its {@link ReadingDeclaration}.
@@ -1649,9 +1814,12 @@ const declaredReadings = select(Reading, (r) => r.and(resolves(r), r.eq(r.source
 /**
  * The resolving readings of a mapped variable, each with its {@link ReadingDeclaration} where its
  * mapping's source is declared, so one through a mapping whose source its item declares nothing
- * under is refused under the mapping's law.
+ * under is refused under the mapping's law; but for a reading through an LTI item ref, whose
+ * mapping has no source declaration and is accepted unchecked ({@link linkHeld}, spec reading 110).
  */
-const mappedReadings = select(Reading, (r) => r.and(resolves(r), r.eq(r.source, "mapped")));
+const mappedReadings = select(Reading, (r) =>
+  r.and(resolves(r), r.eq(r.source, "mapped"), r.not(linkHeld(r))),
+);
 
 /**
  * The resolving readings' declarations that stand for a literal, by an attribute other than
@@ -1661,6 +1829,28 @@ const mappedReadings = select(Reading, (r) => r.and(resolves(r), r.eq(r.source, 
 const standInDeclarations = select(ReadingDeclaration, (d) =>
   d.and(d.ne(d.attribute, "identifier"), d.eq(d.declCardinalities, 1n)),
 );
+
+/**
+ * State that a reference by `identifier` from a map response or a map response point names no
+ * built-in response variable, whose mapping or area mapping is never declared (decision 431,
+ * information model §7.22 and §7.23). A built-in of another kind is `Variable kind`'s alone.
+ *
+ * @param v - The row, a reference or a placed one.
+ * @returns The predicate.
+ */
+const mapsNoBuiltIn = (v: VariableRefRow | PlacedVariableRefRow) =>
+  v.or(
+    v.ne(v.attribute, "identifier"),
+    v.not(v.in(v.kind, ["qti-map-response", "qti-map-response-point"])),
+    v.ne(v.resolution, "builtIn"),
+    v.not(
+      v.or(
+        ...builtInResponses.map(({ root, variable }) =>
+          v.and(v.eq(v.rootKind, root), v.eq(v.identifier, variable)),
+        ),
+      ),
+    ),
+  );
 
 /**
  * The scope under each root whose built-in variables a reading reads, as {@link builtInOfScope}
@@ -2352,13 +2542,29 @@ export const referenceLawsByName = {
     // lacks is refused here under the law that refuses the item ref itself.
     contained(on(targetedItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
     contained(on(heldItemRefs, "node", "itemDocument"), on(ItemRefDocument, "node", "document")),
+    // MappingItemRef: each mapping's item ref (reading 110), and MappingItemRefType what that names,
+    // a row only where the item ref has a target, its type copied from it. One whose item ref has
+    // no target has no type row (decision 428): AL3 refuses an unwritten href and "Item ref target"
+    // one that names nothing, over the item ref alone, and "Variable mapping source" judges the
+    // mapping, as it judges every mapping but an LTI one.
+    contained(on(VariableMapping, "node", "parent"), on(MappingItemRef, "node", "itemRef")),
+    contained(on(MappingItemRef, "node", "itemRef"), on(VariableMapping, "node", "parent")),
+    mappingItemRefTypeFamily,
+    contained(on(MappingItemRefType, "node", "itemRef"), on(MappingItemRef, "node", "itemRef")),
+    contained(on(MappingItemRefType, "itemRef", "type"), on(ItemRefTarget, "node", "type")),
   ],
   "Prefixed reference": [
     key(on(resolvingReadings, "assembly", "node", "attribute")),
     contained(
       on(
         select(AssembledReference, (a) =>
-          a.and(a.eq(a.role, "variable"), a.not(a.in(a.kind, setterKinds))),
+          a.and(
+            a.eq(a.role, "variable"),
+            a.not(a.in(a.kind, setterKinds)),
+            // A braced reference may have no resolving reading, being then a string value (reading
+            // R15-k); the key over `resolvingReadings` still refuses more than one.
+            a.eq(VariableReference.at("spelling", a.kind, a.attribute), "bare"),
+          ),
         ),
         "assembly",
         "node",
@@ -2467,6 +2673,9 @@ export const referenceLawsByName = {
         r.ne(r.form, "unsplit"),
         Compute.matches(r.identifier, prefixedName),
         r.ne(r.source, "none"),
+        // A braced reference that names no variable is a string value (reading R15-k), a test's as an
+        // item's.
+        r.eq(VariableReference.at("spelling", r.kind, r.attribute), "braced"),
       ),
     ),
   ],
@@ -2495,7 +2704,10 @@ export const referenceLawsByName = {
     check("Variable_kind", Reading, readsAllowedBuiltIn),
   ],
   "Variable mapping source": [
-    contained(on(VariableMapping, "node"), on(MappingSourceDeclaration, "node")),
+    // Every mapping has its source's declaration, but one under an LTI item ref (reading 110): one
+    // whose item ref has no target, and one whose item ref names anything but a link.
+    contained(on(untargetedMappings, "node"), on(MappingSourceDeclaration, "node")),
+    contained(on(heldMappings, "node"), on(MappingSourceDeclaration, "node")),
     contained(
       on(MappingSourceDeclaration, "itemRef", "itemDocument"),
       on(ItemRefDocument, "node", "document"),
@@ -2517,7 +2729,8 @@ export const referenceLawsByName = {
     ),
     // A resolving mapped reading's declaration is its mapping's source's, a row of its own, so a
     // reading through a mapping whose source its item declares nothing under has none, and is
-    // refused under the mapping's law.
+    // refused under the mapping's law; one through an LTI item ref is accepted unchecked (reading
+    // 110).
     contained(
       on(mappedReadings, "assembly", "node", "attribute", "form", "split", "named"),
       on(ReadingDeclaration, "assembly", "node", "attribute", "form", "split", "named"),
@@ -2931,6 +3144,23 @@ export const expressionLawsByName = {
       ),
       on(typeAttributes, "node"),
     ),
+    // A test variables' weight, written or not (decision 434): every test variables has its row,
+    // and an unwritten `base-type` is `unknown` only where the weight is unwritten, float only
+    // where it is written. `E1_derived` below admits no other type for an unwritten one.
+    key(on(weightAttributes, "node")),
+    key(on(writtenWeights, "node")),
+    contained(
+      on(
+        select(Expression, (e) => e.eq(e.kind, "qti-test-variables")),
+        "node",
+      ),
+      on(weightAttributes, "node"),
+    ),
+    contained(
+      on(unknownUnwrittenBases, "node", "written"),
+      on(weightAttributes, "node", "written"),
+    ),
+    contained(on(floatUnwrittenBases, "node"), on(writtenWeights, "node")),
     check("E1_derived", ExpressionAttribute, (x) =>
       x.or(
         x.and(
@@ -2963,10 +3193,12 @@ export const expressionLawsByName = {
         ),
         x.and(
           x.eq(x.written, false),
-          x.eq(x.attribute, "base-type"),
           x.eq(x.kind, "qti-test-variables"),
           x.eq(x.lexical, ""),
-          x.eq(x.baseType, "unknown"),
+          x.or(
+            x.and(x.eq(x.attribute, "base-type"), x.in(x.baseType, ["float", "unknown"])),
+            x.eq(x.attribute, "weight-identifier"),
+          ),
         ),
       ),
     ),
@@ -3052,6 +3284,21 @@ export const expressionLawsByName = {
     ),
   ],
   "Mapped response": [
+    // A test's prefixed map response or map response point of a declared response reads that
+    // response's mapping or area mapping, and one of a built-in response, which declares no table,
+    // is refused (reading 166).
+    contained(
+      on(prefixedTableReaders("qti-map-response"), "declaration"),
+      on(Mapping, "declaration"),
+    ),
+    contained(
+      on(prefixedTableReaders("qti-map-response-point"), "declaration"),
+      on(AreaMapping, "declaration"),
+    ),
+    check("Mapped_response", Reading, mapsNoBuiltInResponse),
+    // An unprefixed one never names a built-in response, which declares no table (reading 166).
+    check("Mapped_response", VariableRef, mapsNoBuiltIn),
+    check("Mapped_response", PlacedVariableRef, mapsNoBuiltIn),
     // A declared map response claims its response's mapping, and a map response point its area
     // mapping of points (§2.11.3.29, §2.11.3.30): its kind reads that table alone (TableReader).
     check("Mapped_response", VariableRefDeclaration, (d) =>
@@ -3179,6 +3426,12 @@ export const expressionLawsByName = {
       v.or(
         v.not(v.in(v.rootKind, [itemKind, testKind])),
         v.ne(v.resolution, "unresolved"),
+        // A braced reference is a string attribute's: where it names no variable it is a string
+        // value, a test's as an item's, not a reference to one nothing declares (reading R15-k;
+        // information model §9.3.4: "if a string appears to be a reference to a template or outcome
+        // variable but there is no variable with the given name it should be treated simply as
+        // string value"). A numeric attribute's stand-in is bare, and an unresolved one stays refused.
+        v.eq(VariableReference.at("spelling", v.kind, v.attribute), "braced"),
         v.and(v.eq(v.rootKind, testKind), Compute.matches(v.identifier, prefixedName)),
       ),
     ),
@@ -3195,7 +3448,12 @@ export const expressionLawsByName = {
       declarationIdentifierRef,
     ),
     check("Variable_declared", PlacedVariableRef, (v) =>
-      v.or(v.ne(v.rootKind, itemKind), v.ne(v.resolution, "unresolved")),
+      v.or(
+        v.ne(v.rootKind, itemKind),
+        v.ne(v.resolution, "unresolved"),
+        // A braced reference that names none is a string value (reading R15-k), as `VariableRef`'s.
+        v.eq(VariableReference.at("spelling", v.kind, v.attribute), "braced"),
+      ),
     ),
   ],
   "Variable kind": [
@@ -3212,7 +3470,11 @@ export const expressionLawsByName = {
   ],
   "Weighted base": [
     check("Weighted_base", ExpressionAttribute, (x) =>
-      x.or(x.ne(x.attribute, "weight-identifier"), x.in(x.baseType, ["float", "unknown"])),
+      x.or(
+        x.ne(x.attribute, "weight-identifier"),
+        x.eq(x.written, false),
+        x.in(x.baseType, ["float", "unknown"]),
+      ),
     ),
   ],
 } as const;

@@ -10,6 +10,7 @@
  * and 3.0.1 XSDs give the same arity rows, which `expression.test.ts` checks over the pinned XSD
  * cache, and the binding and mapping rules are stated once for both versions.
  */
+import { Option } from "effect";
 import type { Array as Arr, Result } from "effect";
 import { closed, idField, int8Max, valueField } from "#pantry/grammar/closed.ts";
 import { maxOccursOf } from "#pantry/grammar/content.ts";
@@ -299,6 +300,10 @@ export const mappableBaseType = (
  * operator class (MathML 3, §4.3.4 Operator Classes), and the qualifiers it takes beside them.
  */
 export interface MathArity {
+  /**
+   * The greatest count, `Infinity` for no greatest (as the importer's `OperatorArity` writes
+   * `int8Max`).
+   */
   readonly max: number;
   readonly min: number;
   /**
@@ -392,15 +397,6 @@ const binaryOrUnary: readonly (readonly [string, string])[] = [
 ];
 
 /**
- * Each operator with a qualifier its syntax table lists: `root` takes `degree` (§4.4.2.11), `log`
- * takes `logbase` (§4.4.7.7). Every other operator here lists none.
- */
-const ownQualifiers: readonly (readonly [operator: string, qualifier: string])[] = [
-  ["m:log", "m:logbase"],
-  ["m:root", "m:degree"],
-];
-
-/**
  * The qualifier kinds of Content MathML's `apply` (`mathml3-content.rnc`, `BvarQ`, `DomainQ` and
  * `Qualifier`), `interval` among them since `DomainQ` admits it: an `m:apply` holding one beside
  * an operator here, other than the operator's own, is a binding or qualified application whose
@@ -420,6 +416,50 @@ export const mathQualifiers: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The operators whose class takes at least a number of arguments and no more: `selector`, class
+ * nary-linalg, "accepts one or more arguments" (MathML 3 §4.4.9.6). Each is its name, least count
+ * and section.
+ */
+const unboundedOperators: readonly (readonly [string, number, string])[] = [
+  ["selector", 1, "4.4.9.6"],
+];
+
+/**
+ * One qualifier an operator's syntax table lists beside its arguments.
+ */
+export interface HeadQualifier {
+  /**
+   * The operator the qualifier stands beside, an `m:` kind.
+   */
+  readonly head: string;
+  /**
+   * The qualifier, an `m:` kind.
+   */
+  readonly qualifier: string;
+  /**
+   * The section of MathML 3 whose syntax table lists it.
+   */
+  readonly section: string;
+}
+
+/**
+ * The head-specific qualifiers of Content MathML, one row per head and qualifier
+ * (R6-head-qualifiers; MathML 3 §4.3.3, "Qualifiers", and each operator's syntax table in §4.4):
+ * `degree` beside `root` (§4.4.2.11), `moment` (§4.4.8.6), `diff` (§4.4.4.2) and `partialdiff`
+ * (§4.4.4.3); `momentabout` beside `moment`; `logbase` beside `log` (§4.4.7.7). The qualifiers
+ * every binding application shares, `bvar` and the limits, are {@link mathQualifiers}; these three
+ * belong to a head, and any other operator that holds one is wrong.
+ */
+export const mathHeadQualifiers: readonly HeadQualifier[] = [
+  { head: "m:root", qualifier: "m:degree", section: "4.4.2.11" },
+  { head: "m:diff", qualifier: "m:degree", section: "4.4.4.2" },
+  { head: "m:partialdiff", qualifier: "m:degree", section: "4.4.4.3" },
+  { head: "m:log", qualifier: "m:logbase", section: "4.4.7.7" },
+  { head: "m:moment", qualifier: "m:degree", section: "4.4.8.6" },
+  { head: "m:moment", qualifier: "m:momentabout", section: "4.4.8.6" },
+];
+
+/**
  * Each Content MathML operator's argument count under `m:apply` (spec reading 2, MathML 3 §4.3.4.5
  * and §4.3.4.6, and §4.1.5: the Class row "indicate[s] how many arguments the operator represented
  * by this element takes"), by its kind.
@@ -431,16 +471,147 @@ export const mathArities: ReadonlyMap<string, MathArity> = new Map(
       ([name, section]) => [`m:${name}`, { max: 2, min: 2, section }] as const,
     ),
     ...binaryOrUnary.map(([name, section]) => [`m:${name}`, { max: 2, min: 1, section }] as const),
+    ...unboundedOperators.map(
+      ([name, min, section]) => [`m:${name}`, { max: Infinity, min, section }] as const,
+    ),
+    ...["partialdiff"].map(
+      (name) => [`m:${name}`, { max: 2, min: 2, section: "4.4.4.3" }] as const,
+    ),
   ].map(([kind, arity]): readonly [string, MathArity] => [
     kind,
     {
       ...arity,
-      qualifiers: ownQualifiers.flatMap(([operator, qualifier]) =>
-        operator === kind ? [qualifier] : [],
-      ),
+      qualifiers: mathHeadQualifiers
+        .filter(({ head }) => head === kind)
+        .map(({ qualifier }) => qualifier),
     },
   ]),
 );
+
+/**
+ * The n-ary and quantifier operators of MathML 3 §4.4 whose syntax tables list none of
+ * `degree`, `momentabout` and `logbase`: the classes nary-arith, nary-logical, nary-reln, nary-set,
+ * nary-stats and nary-functional (§4.3.4.7), and the quantifiers `forall` and `exists` (§4.4.3).
+ * Unary and binary operators are the keys of {@link mathArities}.
+ */
+const unqualifiedOperators: readonly string[] = [
+  "plus",
+  "times",
+  "max",
+  "min",
+  "gcd",
+  "lcm",
+  "compose",
+  "and",
+  "or",
+  "xor",
+  "union",
+  "intersect",
+  "cartesianproduct",
+  "eq",
+  "gt",
+  "lt",
+  "geq",
+  "leq",
+  "mean",
+  "median",
+  "mode",
+  "sdev",
+  "variance",
+  "forall",
+  "exists",
+].map((name) => `m:${name}`);
+
+/**
+ * The operator kinds the head-qualifier law judges (R6-head-qualifiers): every key of
+ * {@link mathArities}, every head of {@link mathHeadQualifiers}, and the n-ary and quantifier
+ * operators that take no head qualifier. A `degree`, `momentabout` or `logbase` beside one of them
+ * is a qualifier its operator does not list.
+ */
+export const mathHeadOperators: ReadonlySet<string> = new Set([
+  ...mathArities.keys(),
+  ...mathHeadQualifiers.map(({ head }) => head),
+  ...unqualifiedOperators,
+]);
+
+/**
+ * The mathematical form a part of a `cn`'s content takes (MathML 3 §4.2.1).
+ */
+export type CnForm = "double" | "hexdouble" | "integer" | "real";
+
+/**
+ * What a `cn`'s `type` implies for its content (MathML 3 §4.2.1; R6-hexdouble): the form of each
+ * part, in order, the parts being separated by `m:sep`. Every other `type`, `constant` among them,
+ * is text and is not listed.
+ */
+export const cnForms: ReadonlyMap<string, readonly CnForm[]> = new Map<string, readonly CnForm[]>([
+  ["complex-cartesian", ["real", "real"]],
+  ["complex-polar", ["real", "real"]],
+  ["double", ["double"]],
+  ["e-notation", ["real", "integer"]],
+  ["hexdouble", ["hexdouble"]],
+  ["integer", ["integer"]],
+  ["rational", ["integer", "integer"]],
+  ["real", ["real"]],
+]);
+
+/**
+ * The `type` of a `cn` that has none (§4.2.1: "If the type attribute is omitted, it defaults to
+ * real").
+ */
+export const cnDefaultType = "real";
+
+/**
+ * The class of the digits of a base from 2 to 36: `0-9` and then the Latin letters in alphabetical
+ * order, case not significant, each with a value below the base.
+ */
+const digitClassOf = (base: number): string => {
+  if (base <= 10) {
+    return `[0-${String(base - 1)}]`;
+  }
+
+  const last = String.fromCodePoint(86 + base);
+
+  return `[0-9a-${last}A-${last.toUpperCase()}]`;
+};
+
+/**
+ * The lexical space of `xs:double` (XML Schema Part 2, §3.2.5.1).
+ */
+const doublePattern = "[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee][+-]?[0-9]+)?|[+-]?INF|NaN";
+
+/**
+ * The pattern of a form over a part's collapsed text, in XML Schema's regular expressions (which
+ * anchor themselves), by the digits of a base (R6-hexdouble; MathML 3 §4.2.1).
+ *
+ * An integer is an optional `-` or `+` and one or more digits. A real is that sign, then digits
+ * with at most one point, one side of which may be empty. A double is the `xs:double` lexical space
+ * and a hexdouble sixteen hex digits, neither of which reads the base.
+ *
+ * @param form - The form a part takes.
+ * @param base - The radix of an integer's and a real's digits.
+ * @returns The pattern, or nothing for an integer or a real whose base is not a whole number from 2
+ *   to 36, where the digits beyond the alphabet are application specific.
+ */
+export const cnPatternOf = (form: CnForm, base: number): Option.Option<string> => {
+  if (form === "double") {
+    return Option.some(doublePattern);
+  }
+
+  if (form === "hexdouble") {
+    return Option.some("[0-9A-Fa-f]{16}");
+  }
+
+  if (!Number.isInteger(base) || base < 2 || base > 36) {
+    return Option.none();
+  }
+
+  const digit = digitClassOf(base);
+
+  return Option.some(
+    form === "integer" ? `[+-]?${digit}+` : `[+-]?(${digit}+(\\.${digit}*)?|\\.${digit}+)`,
+  );
+};
 
 // Expression typing (O4, plan §1.7; the W5 amendment's C6, C16 and C17; Q5.10).
 
@@ -770,9 +941,10 @@ const predicate = fixed("boolean", "single");
  * tables (§6.9 and §6.30, each kind's "sub-expressions" and "result" sentences; §2.11 says the
  * same, and is not normative) and the old checker's P23 table (`docs/goals/qti/phase-3.md` 4.10),
  * which this replaces. A leaf whose table leaves its type open (`qti-null`, `qti-test-variables`
- * with no `base-type`) is typed `unknown`; `expression-spec.oracle.test.ts` holds every leaf to its
- * table. `expression.test.ts` holds its kinds to
- * `OperatorArity`'s, the 64 the ASI XSD's expression group names.
+ * with no `base-type` and no `weight-identifier`) is typed `unknown`, and a weighted
+ * `qti-test-variables` with no `base-type` float (§7.39.5; spec reading 167);
+ * `expression-spec.oracle.test.ts` holds every leaf to its table. `expression.test.ts` holds its
+ * kinds to `OperatorArity`'s, the 64 the ASI XSD's expression group names.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Expr3 | QTI 3.0 information model, §2.11.3 Operators}
  */

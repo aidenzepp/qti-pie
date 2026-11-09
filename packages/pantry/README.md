@@ -48,6 +48,9 @@ $ node src/cli.ts roundtrip ./my-package
 Every input is a path. Nothing is read from standard input. `--dry-run` reads and checks without writing. `export`
 needs `--yes` to replace a directory that already has content. `--output json` prints one JSON value. `--help` is the reference for the flags and the exit codes.
 
+An item ref may name an LTI link instead of an item. pantry accepts it and does not check the variable mappings or the
+item-prefixed names that pass through it, because the package declares nothing the tool reports (spec reading 110).
+
 `scripts/db.sh reset` drops the database and this package's roles, then creates and migrates again.
 
 ## Optional settings

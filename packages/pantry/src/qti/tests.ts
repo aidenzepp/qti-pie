@@ -92,7 +92,7 @@ import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
-import { Entry, hrefPaths } from "#pantry/qti/package.ts";
+import { Entry, hrefPaths, Reference } from "#pantry/qti/package.ts";
 
 /**
  * The test's root kind, the root of an assembly whose names and branch rules resolve.
@@ -252,9 +252,10 @@ export const flagCarriers = [
 export type FlagName = (typeof flagCarriers)[number][0];
 
 /**
- * The nil uuid: the start of an accumulated uuid copy, which every member's owner replaces.
+ * The nil uuid: the start of an accumulated uuid copy, which every member's owner replaces, and the
+ * document the host writes for what no item holds, an LTI link's item.
  */
-const nilUuid = "00000000-0000-0000-0000-000000000000";
+export const nilUuid = "00000000-0000-0000-0000-000000000000";
 
 /**
  * A selection's `select` once its whitespace is split off: an integer's lexical form, which
@@ -499,8 +500,11 @@ export const SectionOrdering = relation(
  * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`, `start`,
  *   `document`, `ancestry`, `documentType`, `governor`, `kind`, `nearest`, `nearestKind`,
  *   `parentKind`, `version`), which also holds its {@link nodeRef} fields but `parent`; `parent`;
- *   and the scope it is placed in, its parent's: `part`, `replaced` (its parent section's
- *   `replacing`), `parentMixes` and `parentLooseChain`.
+ *   `external`, whether its href resolves outside the package, which its href's `Reference` row
+ *   proves (an include's then is stored as written and never fetched, and a section ref's is
+ *   refused under the stated limit "Remote section ref", reading 170); and the scope it is placed
+ *   in, its parent's: `part`, `replaced` (its parent section's `replacing`), `parentMixes` and
+ *   `parentLooseChain`.
  *
  * Its `part` is the test part it sits in: its parent section's under a section, its parent under a
  * test part, and its own document under any other parent (an item's body or processing, a
@@ -519,6 +523,7 @@ export const Site = relation(
     children: natural,
     document: uuid,
     documentType: closedId(DocumentType),
+    external: pg.boolean,
     governor: closedId(Governor),
     kind: closedId(NodeKind),
     nearest: uuid,
@@ -542,10 +547,14 @@ export const Site = relation(
  * `entry`, whether the package holds an entry at that path. A row only where the site writes an
  * href that resolves to a path of the package.
  *
- * - An include may write none (XInclude 1.0 §3.1, the href "absent when parse="xml""), or one that is
- *   external or names its own document, and names no document of the package then, so it has no row
- *   and "Include target" refuses it alone (spec reading 115); a section ref must write one, and AL3
- *   refuses one that does not.
+ * - An include may write none (XInclude 1.0 §3.1, the href "absent when parse="xml""), or one that
+ *   names its own document, and names no document of the package then, so it has no row and
+ *   "Include target" refuses it alone (spec reading 115); one whose href resolves outside the
+ *   package has no row either, and its site is marked `external`, stored as written and never
+ *   fetched; a section ref must write one, and AL3 refuses one that does not. A section ref whose
+ *   href resolves outside the package has no row and is marked `external` as well, and the stated
+ *   limit "Remote section ref" refuses it alone: pantry imports offline and never fetches the
+ *   section it names, which is the test's own content (reading 170).
  * - A path no entry holds is `entry` false, which `File_exists` refuses as the row is inserted,
  *   before any deferred key: an href naming an absent file is refused under "File exists" alone,
  *   whatever its site is, and the site's document laws read only paths an entry holds.
@@ -1119,9 +1128,12 @@ const headDocuments = select(Document, (d) => d.and(d.eq(d.assembled, true), d.e
 export const itemInstances = select(Instance, (i) => i.eq(i.assemblyKind, itemKind));
 
 /**
- * The sites that are section refs, each with its href (information model §7.5).
+ * The sites that are section refs whose href stays in the package, each with its href (information
+ * model §7.5). One whose href resolves outside it is "Remote section ref"'s alone (reading 170).
  */
-const sectionRefSites = select(Site, (s) => s.eq(s.kind, sectionRefKind));
+const sectionRefSites = select(Site, (s) =>
+  s.and(s.eq(s.kind, sectionRefKind), s.eq(s.external, false)),
+);
 
 /**
  * The hrefs of the sites that are section refs whose path an entry holds, each naming a section
@@ -1148,10 +1160,24 @@ const entryPaths = select(SitePath, (s) => s.eq(s.entry, true));
 const sectionRefTargets = select(SiteTarget, (s) => s.eq(s.kind, sectionRefKind));
 
 /**
- * The sites that are includes, each with an href that names a path of the package (spec reading
- * 115).
+ * The sites that are includes whose href stays in the package, each with an href that names a path
+ * of the package (spec reading 115). An include whose href resolves outside it is stored as written
+ * and never fetched, so it names none.
  */
-const includeSites = select(Site, (s) => s.eq(s.kind, includeKind));
+const includeSites = select(Site, (s) => s.and(s.eq(s.kind, includeKind), s.eq(s.external, false)));
+
+/**
+ * The sites marked external, each proven by its href's {@link externalHrefs} row.
+ */
+const externalSites = select(Site, (s) => s.eq(s.external, true));
+
+/**
+ * The `href` references that resolve outside the package, one per element, a constant selection
+ * keyed by its node: the side a site's external mark is proven by (readings 35 and 102).
+ */
+const externalHrefs = select(Reference, (r) =>
+  r.and(r.eq(r.name, "href"), r.eq(r.scope, "external")),
+);
 
 /**
  * The targets of the sites that are includes, each with its {@link Inclusion}.
@@ -1529,12 +1555,16 @@ const flagCopies = flagCarriers.map(flagCopy);
  *   ({@link requiredFold}), their flags and scope; reading 79's `Selection_bound`, `select ≤
  *   members` unless the selection is with replacement, and info §4.2.2's `Selection_required`,
  *   `required ≤ select`;
- * - **the hrefs:** each site that writes one ({@link SitePath}, a row of its own, every section
- *   ref's) has its href's `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`), an entry of the
- *   package, under the stated limit `Href_form`; an item ref's is its target's (below);
+ * - **the hrefs:** each site that writes one ({@link SitePath}, a row of its own, every section ref's
+ *   in the package) has its href's `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`), an entry
+ *   of the package, under the stated limit `Href_form`, but a site whose href resolves outside the
+ *   package, marked `external` as its href's `Reference` proves; an item ref's is its target's
+ *   (below);
  * - **the sites** ({@link Site}, {@link SiteTarget}): each names a document of the package, its
- *   target, a row of its own ("Include target", reading 115), and each section ref and
- *   section-level include names a section document;
+ *   target, a row of its own ("Include target", reading 115), but an external include, stored as
+ *   written and never fetched; each section ref and section-level include names a section document;
+ *   and no section ref is external (`Remote_section_ref`, reading 170: a stated limit of pantry,
+ *   which imports offline and cannot assemble a section it does not hold, not a law of QTI);
  * - **the branch rules** ({@link BranchRule}): each one that names no exit;
  * - **the mappings** ({@link VariableMapping}): no two of one item ref name one target, and none a
  *   session variable (reading 97, `Variable_mapping_target`);
@@ -2084,6 +2114,11 @@ export const testLawsByName = {
     ),
     contained(on(ItemRefDocument, "document"), on(itemDocuments, "node")),
   ],
+  "Remote section ref": [
+    check("Remote_section_ref", Site, (s) =>
+      s.or(s.ne(s.kind, sectionRefKind), s.eq(s.external, false)),
+    ),
+  ],
   "Selection bound": [
     check("Selection_bound", SectionSelection, (s) =>
       s.or(s.eq(s.withReplacement, true), s.le(s.select, Compute.base(s.members))),
@@ -2311,6 +2346,8 @@ export const testLawsByName = {
     contained(on(Site, "node", "parent"), on(Node, "id", "parent")),
     contained(on(SitePath, "node", "kind"), on(Site, "node", "kind")),
     contained(on(SitePath, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
+    key(on(externalHrefs, "node")),
+    contained(on(externalSites, "node"), on(externalHrefs, "node")),
     contained(
       on(
         SiteTarget,

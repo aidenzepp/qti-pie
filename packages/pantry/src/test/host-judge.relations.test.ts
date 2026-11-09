@@ -24,6 +24,10 @@
  * database evaluates (`judgedKinds` of `#pantry/test/predicates.ts`): no side over one decodes,
  * and the oracle's key copies (`copiesOf` of `#pantry/test/key-copies.ts`) skip it
  * (`readsDerived`), since a query stores no text.
+ *
+ * And this host judge judges a check as PostgreSQL holds it, `CHECK ((…) IS TRUE)`: a predicate
+ * unknown over values the row holds breaks the check, and one unknown for a value the host lacks
+ * leaves it unjudged, named by that value (decision 442).
  */
 import {
   check,
@@ -45,7 +49,8 @@ import { Formatter, Option, Result, Schema } from "effect";
 import { lawNameOf, statedLaws } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { evaluatedLaws } from "#pantry/test/gen/genetic/host-laws.ts";
-import { judgedLaws, modelledRelations } from "#pantry/test/host-judge.ts";
+import { judge, judgedLaws, modelledRelations } from "#pantry/test/host-judge.ts";
+import type { HostRow } from "#pantry/test/host-judge.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
 import { copiesOf } from "#pantry/test/key-copies.ts";
 import { isJudged, readsDerived, SideSchema, StatementSchema } from "#pantry/test/predicates.ts";
@@ -277,4 +282,41 @@ describe("the host judge's model of a schema", () => {
       "statements the oracle's key copies cannot read",
     );
   });
+
+  it(
+    "breaks a check whose predicate is unknown over values the row holds, as IS TRUE does",
+    () => {
+      // Oracle: PostgreSQL's CHECK, which grizzle emits as `CHECK ((…) IS TRUE)`, refuses a row
+      // whose predicate is NULL. Bound: one planted check, unknown on every row, over one row that
+      // holds every value it reads, and its control, the same check reading a value the row lacks.
+      const stated = judgedLaws(Qti).find(({ kind }) => kind === "check");
+      assert.isDefined(stated, "Qti states a check the host judges");
+      if (stated === undefined || stated.kind !== "check") {
+        return;
+      }
+
+      const unknown = {
+        ...stated,
+        reads: ["held"],
+        unread: [],
+        // Unknown on the planted row, which holds `held`; false on any other.
+        value: (row: HostRow) => (row["held"] === "x" ? undefined : false),
+      };
+      const rows = new Map([[stated.relation, [{ held: "x" }]]]);
+      const judgment = judge(rows, [unknown]);
+      const lacking = judge(rows, [{ ...unknown, reads: ["lacked"] }]);
+
+      assert.deepStrictEqual(
+        judgment.broken.map(({ law }) => law),
+        [stated.law],
+        "an unknown predicate over held values breaks its check",
+      );
+      assert.deepStrictEqual(
+        lacking.skipped.map(({ absent }) => absent),
+        [[`${stated.relation}.lacked`]],
+        "an unknown predicate for a lacked value leaves its check unjudged, named by the value",
+      );
+    },
+    testTimeoutMs,
+  );
 });

@@ -18,7 +18,7 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
  * - `live`: one live set per roster whose sets a field holds, each beside its bits domain;
- * - `constants`: the closed constants the laws, generated fields and queries read, of the 65 closed
+ * - `constants`: the closed constants the laws, generated fields and queries read, of the closed
  *   relations;
  * - `nodeAxes`: `Node`'s own foreign keys, its families' axes (the owner copy, the predecessor, the
  *   deferred last, and the attribute and namespace stand-ins);
@@ -26,11 +26,15 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  *   selections.
  */
 const measured = {
+  // MERGE-OPEN: recount after the re-drafted _init, and name its grizzle pin above (ours 106, his 117, base 102)
   constants: 106,
   live: 7,
+  // MERGE-OPEN: recount after the re-drafted _init (ours 38, his 43, base 37)
   names: 38,
   nodeAxes: 6,
+  // MERGE-OPEN: recount after the re-drafted _init (ours 41, his 47, base 39)
   nodeKeys: 41,
+  // MERGE-OPEN: recount after the re-drafted _init (ours 230, his 265, base 226)
   tables: 230,
 } as const;
 
@@ -66,6 +70,7 @@ describe("the committed migration", () => {
             enums: held.enums,
             inserts: held.seed.inserts,
             lawFunctions: held.functions.law,
+            laws: held.laws.total,
             policies: held.policies.total,
             repeatedDomains: held.domains.total - held.domains.distinct,
             seedFolders: held.seed.folders,
@@ -77,6 +82,7 @@ describe("the committed migration", () => {
             enums: 0,
             inserts: 0,
             lawFunctions: 0,
+            laws: 0,
             policies: 0,
             repeatedDomains: 0,
             seedFolders: 0,

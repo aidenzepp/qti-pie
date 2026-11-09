@@ -789,12 +789,14 @@ const isSite = (view: View, node: NodeRow<Composed>): boolean =>
 
 /**
  * An item ref's or a site's href, resolved as its `ReferencePath` is: its node and kind, its
- * package, the path it is compared by, and whether that is the entry path it names (`resolved`).
- * An href this representation does not resolve is compared by its path as written, as a manifest
- * href is (`comparedPathOf`, reading 102), and no `ReferencePath` holds it, so "Href form" refuses
- * an item ref's; a site's has no {@link SitePath}.
+ * package, the path it is compared by, whether that is the entry path it names (`resolved`), and
+ * whether it resolves outside the package (`external`), as its `Reference`'s scope says. An href
+ * this representation does not resolve is compared by its path as written, as a manifest href is
+ * (`comparedPathOf`, reading 102), and no `ReferencePath` holds it, so "Href form" refuses an item
+ * ref's; a site's has no {@link SitePath}, and an external one marks its {@link Site} `external`.
  */
 export interface ResolvedHref {
+  readonly external: boolean;
   readonly kind: string;
   readonly node: NodeId;
   readonly package: Uuid;
@@ -823,6 +825,7 @@ const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
             return [
               node.id,
               {
+                external: resolution.scope === "external",
                 kind: node.kind,
                 node: node.id,
                 package: view.ids.package,
@@ -850,14 +853,17 @@ export const itemRefPathsOf = (doc: XdmDocument<Composed>, ids: TestIds): readon
     : [];
 
 /**
- * Write a document's sites, each with the scope it is placed in, whether or not it writes an href.
+ * Write a document's sites, each with the scope it is placed in, whether or not it writes an href,
+ * and `external` where its href resolves outside the package.
  *
  * @param view - The document.
+ * @param hrefs - The document's hrefs.
  * @param scopes - The sections' scopes.
  * @returns The rows, by node.
  */
 const sitesOf = (
   view: View,
+  hrefs: ReadonlyMap<string, ResolvedHref>,
   scopes: ReadonlyMap<NodeId, Scope>,
 ): ReadonlyMap<string, Addition<typeof Site>> =>
   new Map(
@@ -877,6 +883,7 @@ const sitesOf = (
             ancestry: Bits.of(Flag, [...foldAt(view.folds, node.id).ancestry]),
             children: BigInt(childrenOf(view, node.id).length),
             documentType: view.ids.documentType,
+            external: hrefs.get(node.id)?.external ?? false,
             governor: governorOf(node.version, node.kind, node.governs),
             nearestKind: foldAt(view.folds, node.id).nearestKind,
             parentKind,
@@ -893,6 +900,8 @@ const sitesOf = (
 /**
  * Write each site's {@link SitePath}: its href's package and path, and whether the package holds
  * an entry there, a row only where the site writes an href that resolves to a path of the package.
+ * An href that resolves outside the package has none: its site is marked `external`, stored as
+ * written and never fetched (spec reading 115).
  *
  * @param view - The document.
  * @param sites - The document's sites.
@@ -1116,7 +1125,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: TestIds): TestRows => {
   const root = doc.root.kind;
   const sections = sectionsOf(view, flag);
   const hrefs = hrefsOf(view);
-  const sites = sitesOf(view, sections.scopes);
+  const sites = sitesOf(view, hrefs, sections.scopes);
   const paths = sitePathsOf(view, sites, hrefs);
   const targets = siteTargetsOf(view, sites, paths);
 

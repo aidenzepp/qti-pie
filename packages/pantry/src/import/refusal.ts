@@ -88,8 +88,10 @@ import { DayForm, metadataLawsByName, metadataRelations } from "#pantry/qti/meta
 import { Chars, EndCharacter, nodeLawsByName, Prefix } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
 import { installedCdnLawsByName } from "#pantry/qti/cdn.ts";
+import { catalogLawsByName, catalogRelations } from "#pantry/qti/catalog.ts";
 import { htmlLawsByName, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLawsByName } from "#pantry/qti/identity.ts";
+import { mathmlLawsByName, mathmlRelations } from "#pantry/qti/mathml.ts";
 import { operatorLawsByName, operatorRelations } from "#pantry/qti/operators.ts";
 import { HrefParams, packageLawsByName } from "#pantry/qti/package.ts";
 import { queryLawsByName } from "#pantry/qti/queries.ts";
@@ -124,7 +126,9 @@ const codecRules = [
  * href the importer reads no name from (reading 102, `overlays/package.ts` `Limit`), and
  * `fragment-context` the one context an included fragment's rows are judged in (reading 117,
  * `tests.ts` `Fragment_context`): a fragment two includes place in different interactions would
- * need two rows per node.
+ * need two rows per node, and `remote-section` a section ref whose href resolves outside the
+ * package (reading 170, `tests.ts` `Remote_section_ref`): the import is offline and never fetches
+ * the section, which is the test's own content, so it cannot assemble the test.
  *
  * A value over the bound is valid QTI the model cannot key, so its verdict says so by its rule. The
  * import meets it as the bound's pattern law: grizzle's encoder and its family fill check a text's
@@ -137,6 +141,7 @@ export const limitRules = [
   "key-text-bound",
   "href-form",
   "fragment-context",
+  "remote-section",
 ] as const satisfies readonly (typeof precedence)[number][];
 
 /**
@@ -360,7 +365,13 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
   ...namedBy("E1 derived", "ResourceDocument", "ResourceTyped"),
   ...namedBy("File listed", "FileHref"),
   ...namedBy("Href listed", "ResourceFile"),
-  ...namedBy("Reference overlay", "Reference", "ReferencePath"),
+  ...namedBy(
+    "Reference overlay",
+    "Reference",
+    "ReferencePath",
+    "TextReference",
+    "TextReferencePath",
+  ),
   ...namedBy(
     "E1 derived",
     "IdBinding",
@@ -383,6 +394,10 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
     "AssembledLang",
     "PlacedGeneralLang",
     "SsmlAttribute",
+    "BodyXmlLang",
+    "PlacedBodyXmlLang",
+    "CatalogScope",
+    "ShareFragment",
     "SsmlScope",
     "FragmentValue",
     "LomLanguage",
@@ -449,6 +464,8 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
     htmlRelations,
     quotationRelations,
     operatorRelations,
+    catalogRelations,
+    mathmlRelations,
   ),
 ];
 
@@ -692,6 +709,8 @@ export const namedLaws: readonly LawsByName[] = [
   htmlLawsByName,
   quotationLawsByName,
   operatorLawsByName,
+  catalogLawsByName,
+  mathmlLawsByName,
   testLawsByName,
   ...queryLawsByName,
 ];

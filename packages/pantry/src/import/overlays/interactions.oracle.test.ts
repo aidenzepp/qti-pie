@@ -398,6 +398,20 @@ describe("import/overlays/interactions.ts, choices", () => {
                 );
               }
 
+              // A gap's interaction is its choice's copy, and no other choice has one (reading 169).
+              const gaps = owned.filter(({ kind }) => kind === "qti-gap");
+              assert.sameMembers(
+                [...rows.GapInteraction.keys()],
+                gaps.map(({ id }) => id),
+              );
+              for (const gap of gaps) {
+                assert.strictEqual(
+                  rows.GapInteraction.get(gap.id)?.interaction,
+                  gap.nearest,
+                  gap.id,
+                );
+              }
+
               const hottexts = walked.filter(({ kind }) => kind === hottextKind);
               assert.sameMembers(
                 [...rows.Hottext.keys()],
@@ -793,6 +807,7 @@ const scored: Addition<typeof DeclarationIdentifier> = {
   identifierLexical: "SCORED",
   identifierTrail: "",
   node: idOf(1001),
+  parentKind: "qti-assessment-test",
 };
 
 /**
@@ -1102,6 +1117,177 @@ describe("import/overlays/interactions.ts, choice names", () => {
         ),
       ),
   );
+});
+
+/**
+ * A portable custom interaction's `qti-interaction-modules` child, holding one module.
+ */
+const modulesOf = () =>
+  elementOf(
+    "qti-interaction-modules",
+    [],
+    [
+      elementOf(
+        "qti-interaction-module",
+        [
+          ["id", "m"],
+          ["primary-path", "m.js"],
+        ],
+        [],
+      ),
+    ],
+  );
+
+/**
+ * A document holding one portable custom interaction, with each form of its module it writes.
+ *
+ * @param forms - Which forms it writes.
+ * @param forms.attribute - Whether it writes `module`.
+ * @param forms.modules - Whether it writes `qti-interaction-modules`.
+ * @returns The tree.
+ */
+const pciTreeOf = ({
+  attribute,
+  modules,
+}: {
+  readonly attribute: boolean;
+  readonly modules: boolean;
+}): XdmDocument<Composed> => {
+  const pci = elementOf(
+    "qti-portable-custom-interaction",
+    [
+      ["response-identifier", "RESPONSE"],
+      ["custom-interaction-type-identifier", "t"],
+      ...(attribute ? [["module", "m"] as const] : []),
+    ],
+    [...(modules ? [modulesOf()] : []), elementOf("qti-interaction-markup", [], [])],
+  );
+
+  return {
+    ...treeOf([]),
+    root: elementOf(
+      "qti-assessment-item",
+      [["identifier", "item"]],
+      [elementOf("qti-item-body", [], [pci])],
+    ),
+  };
+};
+
+/**
+ * Write an item that declares the single directed pair response `R` and binds it to a gap match
+ * interaction holding one gap text and the gaps given, the first `own` its children and the rest
+ * inside a paragraph of it.
+ *
+ * @param input - The case.
+ * @param input.nested - The gaps inside the paragraph.
+ * @param input.own - The gaps among the interaction's children.
+ * @returns The tree.
+ */
+const gapTreeOf = (input: { readonly nested: number; readonly own: number }) => {
+  const gapsOf = (count: number, from: number) =>
+    Array.from({ length: count }, (_, at) =>
+      elementOf("qti-gap", [["identifier", `G${String(from + at)}`]], []),
+    );
+
+  return {
+    _tag: "document",
+    charset: "UTF-8",
+    declaration: Option.none(),
+    doctype: Option.none(),
+    epilog: [],
+    exportCharset: "UTF-8",
+    prolog: [],
+    root: elementOf(
+      "qti-assessment-item",
+      [["identifier", "item"]],
+      [
+        elementOf(
+          "qti-response-declaration",
+          [
+            ["identifier", "R"],
+            ["cardinality", "single"],
+            ["base-type", "directedPair"],
+          ],
+          [],
+        ),
+        elementOf(
+          "qti-item-body",
+          [],
+          [
+            elementOf(
+              "qti-gap-match-interaction",
+              [["response-identifier", "R"]],
+              [
+                elementOf("qti-gap-text", [["identifier", "T"]], []),
+                ...gapsOf(input.own, 0),
+                elementOf("p", [], gapsOf(input.nested, input.own)),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+    version: "3.0.1",
+  } satisfies XdmDocument<Composed>;
+};
+
+describe("import/overlays/interactions.ts, gaps", () => {
+  it("writes a GapInteraction row for each gap and counts them in its binding's cardinality row", () => {
+    // Oracle: the gaps each case writes by construction, its own and those deeper in its text,
+    // against the builder's read of the tree's flat rows (spec reading 169).
+    for (const own of [0, 1, 2]) {
+      for (const nested of [0, 1, 2]) {
+        const rows = rowsOf(gapTreeOf({ nested, own }), ids);
+        const interaction = [...rows.Interaction.values()].find(
+          ({ kind }) => kind === "qti-gap-match-interaction",
+        );
+        const label = `${String(own)} own and ${String(nested)} nested gaps`;
+        const gaps = [...rows.Choice.values()].filter(({ kind }) => kind === "qti-gap");
+
+        assert.strictEqual(gaps.length, own + nested, label);
+        assert.sameMembers(
+          [...rows.GapInteraction.keys()],
+          gaps.map(({ node }) => node),
+          label,
+        );
+        for (const row of rows.GapInteraction.values()) {
+          assert.strictEqual(row.interaction, interaction?.node, label);
+        }
+
+        assert.deepStrictEqual(
+          [...rows.BindingCardinality.values()].map(({ cardinality, gaps: counted, node }) => ({
+            cardinality,
+            gaps: counted,
+            node,
+          })),
+          [{ cardinality: "single", gaps: BigInt(own + nested), node: interaction?.node }],
+          label,
+        );
+      }
+    }
+  });
+});
+
+describe("import/overlays/interactions.ts, PCI module forms", () => {
+  it("writes a PciModuleForm row for each form of its module a PCI writes, by the PCI's node", () => {
+    // Oracle: the document numbered in document order from the document node's 0 (the item 1, its
+    // body 2, the PCI 3), against the forms each case writes by construction.
+    const pci = idOf(3);
+    const form = (written: boolean) => JSON.stringify([pci, String(written)]);
+    for (const [forms, keys] of [
+      [{ attribute: false, modules: false }, []],
+      [{ attribute: true, modules: false }, [form(false)]],
+      [{ attribute: false, modules: true }, [form(true)]],
+      [{ attribute: true, modules: true }, [form(false), form(true)]],
+    ] as const) {
+      const rows = rowsOf(pciTreeOf(forms), ids).PciModuleForm;
+
+      assert.sameMembers([...rows.keys()], [...keys]);
+      for (const [, row] of rows) {
+        assert.strictEqual(row.node, pci);
+      }
+    }
+  });
 });
 
 /**

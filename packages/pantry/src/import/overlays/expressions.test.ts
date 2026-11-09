@@ -584,7 +584,12 @@ const referenceLawsOnHost: readonly (readonly [
   ["E1_derived", (v, rows) => spells(v) && resolves(v, rows) && claims(v, rows) && copies(v, rows)],
   [
     "Variable_declared",
-    (v) => v.rootKind !== "qti-assessment-item" || v.resolution !== "unresolved",
+    (v) =>
+      v.rootKind !== "qti-assessment-item" ||
+      v.resolution !== "unresolved" ||
+      // Reading R15-k: a braced reference, a string attribute's, that names no variable is a
+      // string value.
+      spellings.get(`${v.kind} ${v.attribute}`) === "braced",
   ],
   [
     "Variable_kind",
@@ -680,10 +685,10 @@ const attributeDerives = (
 ): boolean => {
   if (!x.written) {
     return (
-      x.attribute === "base-type" &&
       x.kind === "qti-test-variables" &&
       x.lexical === "" &&
-      x.baseType === "unknown"
+      ((x.attribute === "base-type" && ["float", "unknown"].includes(x.baseType)) ||
+        x.attribute === "weight-identifier")
     );
   }
 
@@ -740,7 +745,22 @@ const overlayBreaches = (rows: ExpressionRows): ReadonlySet<Law> => {
       broken.add("E1_derived");
     }
 
-    if (x.attribute === "weight-identifier" && !["float", "unknown"].includes(x.baseType)) {
+    // An unwritten base-type is unknown exactly where its weight is unwritten, float exactly where
+    // it is written, and every test variables has its weight's row (decision 434).
+    const weight = rows.ExpressionAttribute.get(JSON.stringify([x.node, "weight-identifier"]));
+    if (
+      x.attribute === "base-type" &&
+      !x.written &&
+      (weight === undefined || weight.written !== (x.baseType === "float"))
+    ) {
+      broken.add("E1_derived");
+    }
+
+    if (
+      x.attribute === "weight-identifier" &&
+      x.written &&
+      !["float", "unknown"].includes(x.baseType)
+    ) {
       broken.add("Weighted_base");
     }
   }
@@ -900,6 +920,81 @@ describe("import/overlays/expressions.ts, the fixtures' verdicts", () => {
         }
       }
     }),
+  );
+});
+
+/**
+ * Shred a document's text and build its rows.
+ *
+ * @param text - The document's text.
+ * @returns Its rows.
+ */
+const rowsOfText = (text: string) =>
+  Effect.gen(function* rowsOfDocument() {
+    const xml = yield* readXml(new TextEncoder().encode(text));
+    const tree = yield* shred(xml, "3.0.0", shredGrammarOf(grammar));
+
+    return rowsOf(tree, { context: ownContext(idOf(0)), idOf });
+  });
+
+/**
+ * An item that declares a string response `RESPONSE` and a float outcome `SCORE`, and sets `SCORE`
+ * under the given condition expression.
+ *
+ * @param condition - The expression of the response processing's one `qti-response-if`.
+ * @returns The item's text.
+ */
+const itemUnder = (condition: string): string =>
+  `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="I" title="I" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-response-processing><qti-response-condition><qti-response-if>${condition}<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value></qti-response-if></qti-response-condition></qti-response-processing></qti-assessment-item>`;
+
+/**
+ * The laws an item's rows break when its response processing sets a score under an expression.
+ *
+ * @param condition - The expression, as written.
+ * @returns The names of the laws broken.
+ */
+const breachesUnder = (condition: string) =>
+  Effect.map(rowsOfText(itemUnder(condition)), (rows) => [...breachesOf(rows)]);
+
+/**
+ * A `qti-pattern-match` of the given `pattern` over a string literal.
+ *
+ * @param pattern - The `pattern`, as written.
+ * @returns The expression's text.
+ */
+const patternMatch = (pattern: string): string =>
+  `<qti-pattern-match pattern="${pattern}"><qti-base-value base-type="string">x</qti-base-value></qti-pattern-match>`;
+
+describe("import/overlays/expressions.ts, a braced pattern that names no variable (reading R15-k)", () => {
+  it.effect(
+    "is a string value in an item, while a name of the wrong kind or base type and an unresolved bare reference stay refused",
+    () =>
+      // Oracle: information model §9.3.4, "if a string appears to be a reference to a template or
+      // outcome variable but there is no variable with the given name it should be treated simply
+      // as string value", and §2.11.3's base type for a name that is one (P24). Bound: the item's
+      // one reference, each of the four spellings.
+      Effect.gen(function* braced() {
+        assert.deepStrictEqual(
+          yield* breachesUnder(patternMatch("{NOSUCH}")),
+          [],
+          "no such variable",
+        );
+        assert.deepStrictEqual(
+          yield* breachesUnder(patternMatch("{RESPONSE}")),
+          ["Reference_type"],
+          "a response variable",
+        );
+        assert.deepStrictEqual(
+          yield* breachesUnder(patternMatch("{SCORE}")),
+          ["Reference_type"],
+          "a float outcome",
+        );
+        assert.deepStrictEqual(
+          yield* breachesUnder(`<qti-is-null><qti-variable identifier="NOSUCH"/></qti-is-null>`),
+          ["Variable_declared"],
+          "an unresolved bare reference",
+        );
+      }),
   );
 });
 
@@ -2039,12 +2134,20 @@ const declarationsInTree = (
 };
 
 describe("import/overlays/expressions.ts, the claims a reference proves", () => {
-  it("types a test variables that writes no base-type unknown, by an unwritten row of its own", () => {
-    // Oracle: the information model's TestVariables (§2.11.4.8: a base-type, where written,
-    // selects the variables matched; none written, every one), read as `E1_derived`'s two arms
-    // over `ExpressionAttribute`: the attribute written, its lexical form and the base type it
-    // spells; unwritten, an empty form and `unknown`. Bound: the attribute written and unwritten.
-    for (const written of [false, true]) {
+  it("types a test variables that writes no base-type unknown, or float where it is weighted, by unwritten rows of its own", () => {
+    // Oracle: the information model's TestVariables (§7.39.6: a base-type, where written,
+    // selects the variables matched and is the result's; none written, every integer and float
+    // one), read as `E1_derived`'s two arms over `ExpressionAttribute`: the attribute written, its
+    // lexical form and the base type it spells; unwritten, an empty form and `unknown`, with no
+    // weight written; float with one written (§7.39.5: "When a weighting is specified the result
+    // of the expression always has base-type float"), the weight's own row written or not.
+    // Bound: the base-type and the weight each written and unwritten.
+    for (const [written, weighted] of [
+      [false, false],
+      [false, true],
+      [true, false],
+      [true, true],
+    ] as const) {
       const tree = documentOfRoot(
         el(
           "qti-assessment-test",
@@ -2068,6 +2171,7 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
                         el("qti-test-variables", [
                           ["variable-identifier", "SCORE"],
                           ...(written ? ([["base-type", "float"]] as const) : []),
+                          ...(weighted ? ([["weight-identifier", "W"]] as const) : []),
                         ]),
                       ],
                     ),
@@ -2082,15 +2186,21 @@ describe("import/overlays/expressions.ts, the claims a reference proves", () => 
       const variables = [...rows.Expression.values()].find(
         ({ kind }) => kind === "qti-test-variables",
       );
-      const typing = rows.ExpressionAttribute.get(JSON.stringify([variables?.node, "base-type"]));
+      const shown = (attribute: string) => {
+        const row = rows.ExpressionAttribute.get(JSON.stringify([variables?.node, attribute]));
+
+        return row === undefined
+          ? undefined
+          : { baseType: row.baseType, lexical: row.lexical, written: row.written };
+      };
+      const baseType = written || weighted ? "float" : "unknown";
 
       assert.deepStrictEqual(
-        typing === undefined
-          ? undefined
-          : { baseType: typing.baseType, lexical: typing.lexical, written: typing.written },
-        written
-          ? { baseType: "float", lexical: "float", written: true }
-          : { baseType: "unknown", lexical: "", written: false },
+        [shown("base-type"), shown("weight-identifier")],
+        [
+          { baseType, lexical: written ? "float" : "", written },
+          { baseType, lexical: weighted ? "W" : "", written: weighted },
+        ],
       );
     }
   });
@@ -2309,6 +2419,15 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
     assert.strictEqual(rows.together.ItemRefDocument.size, 0);
     assert.strictEqual(rows.together.MappingSourceDeclaration.size, 0);
     assert.strictEqual(rows.together.TemplateDefaultTarget.size, 0);
+    // The mapping's item ref names the link, which leaves it unchecked (reading 110).
+    assert.deepStrictEqual(
+      [...rows.together.MappingItemRef.values()].map(({ itemRef }) => itemRef),
+      [...rows.together.MappingItemRefType.values()].map(({ itemRef }) => itemRef),
+    );
+    assert.deepStrictEqual(
+      [...rows.together.MappingItemRefType.values()].map(({ type }) => type),
+      ["imslti_xmlv1p1"],
+    );
     assert.deepStrictEqual(
       [...rows.together.TemplateDefault.values()].map(({ template }) => template),
       ["T"],

@@ -1044,14 +1044,14 @@ type RowOf<Name extends keyof PackageInputs> =
  *
  * `TypedValue`'s `Typed_value` reads the pattern of its base type's domain (Q5.08),
  * `Literal_lexical` its type code's and `ExpressionAttribute`'s `E1_derived` its attribute's and
- * base type's (Q5.10), and `UsageValue`'s `Usage_typed_value` its base type's (spec reading 105). A
- * relation joins this table when a check over it reads a pattern by a field.
+ * base type's (Q5.10), and `UsageValueBaseType`'s `Usage_typed_value` its base type's (spec reading
+ * 105). A relation joins this table when a check over it reads a pattern by a field.
  */
 export const patternInputs = {
   ExpressionAttribute: ["attribute", "baseType"],
   LiteralTyped: ["typeCode"],
   TypedValue: ["baseType"],
-  UsageValue: ["baseType"],
+  UsageValueBaseType: ["baseType"],
 } as const satisfies Partial<Readonly<Record<keyof PackageInputs, readonly string[]>>>;
 
 /**
@@ -1087,7 +1087,10 @@ const patternOrdered = (inputs: PackageInputs) =>
     ),
     LiteralTyped: domainOrdered(inputs.LiteralTyped.values(), patternInputs.LiteralTyped),
     TypedValue: domainOrdered(inputs.TypedValue.values(), patternInputs.TypedValue),
-    UsageValue: domainOrdered(inputs.UsageValue.values(), patternInputs.UsageValue),
+    UsageValueBaseType: domainOrdered(
+      inputs.UsageValueBaseType.values(),
+      patternInputs.UsageValueBaseType,
+    ),
   }) satisfies { readonly [Name in keyof typeof patternInputs]: readonly RowOf<Name>[] };
 
 /**

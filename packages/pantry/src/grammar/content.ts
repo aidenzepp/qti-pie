@@ -67,7 +67,11 @@ import type {
   Source,
   Sources,
 } from "#pantry/vocab/inventory/types.ts";
-import { admitsNamespace, namespaceClassesUnder } from "#pantry/vocab/namespaces.ts";
+import {
+  admitsNamespace,
+  mathmlNamespace,
+  namespaceClassesUnder,
+} from "#pantry/vocab/namespaces.ts";
 import type { NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
 import { automatonOf } from "#pantry/vocab/sequencing.ts";
 import type { Automaton, Position } from "#pantry/vocab/sequencing.ts";
@@ -368,6 +372,11 @@ export const characterKinds = ["text", "ws", "comment", "pi", "entityRef"] as co
  * (XML Schema Part 1 §3.4.4): whitespace, comments and processing instructions in element content,
  * comments and processing instructions alone in empty content, text and entity references too
  * where character data is the content's.
+ *
+ * One exception stands over the XSD: a MathML element of empty content also admits whitespace, as
+ * MathML 3's own RelaxNG does (§2, which matches a whitespace-only text against `empty`; spec
+ * reading 2, operator decision 321 (5): "MathML's own schema wins where QTI's bundled copy is
+ * stricter"). {@link dataOf} applies it; every other empty kind keeps the set below.
  */
 const characterData: Readonly<
   Record<ContentType["_tag"], readonly (typeof characterKinds)[number][]>
@@ -377,6 +386,22 @@ const characterData: Readonly<
   mixed: ["text", "ws", "comment", "pi", "entityRef"],
   simple: ["text", "ws", "comment", "pi", "entityRef"],
 };
+
+/**
+ * The character data a model admits between its children: its content type's, and whitespace too
+ * where the model is empty and its kind is in MathML's namespace (spec reading 2).
+ *
+ * @param content - The model's content type.
+ * @param namespace - The namespace of the model's kind.
+ * @returns The admitted kinds of character data.
+ */
+const dataOf = (
+  content: ContentType,
+  namespace: NamespaceOfKind,
+): readonly (typeof characterKinds)[number][] =>
+  content._tag === "empty" && namespace._tag === "in" && namespace.uri === mathmlNamespace
+    ? ["ws", "comment", "pi"]
+    : characterData[content._tag];
 
 /**
  * A particle tree after an edit, and whether the edit found what it names.
@@ -991,8 +1016,8 @@ export const contentOf = (input: {
     const used = new Set<ModelEdit>();
     for (const model of [...input.models, ...input.facets.flatMap((facet) => facet.models)]) {
       const { content } = model;
-      const data = characterData[content._tag];
       const own = input.namespaceOf(model.kind);
+      const data = dataOf(content, own);
       const particle: Option.Option<Particle> =
         content._tag === "element-only" || content._tag === "mixed"
           ? Option.some(editedBy(content.particle, edits, model.kind, used))

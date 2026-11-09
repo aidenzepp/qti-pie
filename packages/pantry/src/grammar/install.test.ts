@@ -4,6 +4,15 @@ import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Predicate, Schema } from "effect";
+import { committedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
+import { int8Max } from "#pantry/grammar/closed.ts";
+import {
+  cnForms,
+  cnPatternOf,
+  mathArities,
+  mathHeadOperators,
+  mathHeadQualifiers,
+} from "#pantry/grammar/expression.ts";
 import * as install from "#pantry/grammar/install.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
 
@@ -283,6 +292,47 @@ const comparisons: readonly Comparison[] = [
     name: "KindNamespace",
   },
   { expected: () => grammar.operatorArity.rows, name: "OperatorArity" },
+  {
+    expected: () =>
+      [...mathArities].map(([kind, { max, min }]) => ({
+        kind,
+        max: Number.isFinite(max) ? BigInt(max) : int8Max,
+        min: BigInt(min),
+      })),
+    name: "MathArity",
+  },
+  {
+    expected: () => [...mathHeadOperators].map((kind) => ({ kind })),
+    name: "MathHeadOperator",
+  },
+  {
+    expected: () => mathHeadQualifiers.map(({ head, qualifier }) => ({ head, qualifier })),
+    name: "HeadQualifier",
+  },
+  {
+    expected: () =>
+      [...cnForms].flatMap(([type, forms]) =>
+        forms.map((form, part) => ({ form, part: String(part), type })),
+      ),
+    name: "CnForm",
+  },
+  {
+    expected: () => [...cnForms].map(([type, forms]) => ({ parts: BigInt(forms.length), type })),
+    name: "CnParts",
+  },
+  {
+    expected: () =>
+      [...new Set([...cnForms.values()].flat())].flatMap((form) =>
+        Arr.range(2, 36).flatMap((base) =>
+          Option.toArray(cnPatternOf(form, base)).map((pattern) => ({
+            base: String(base),
+            form,
+            pattern: `^(?:${pattern})$`,
+          })),
+        ),
+      ),
+    name: "CnPattern",
+  },
   { expected: () => grammar.bindingFit.rows, name: "BindingFit" },
   { expected: () => grammar.recordBindingFit.rows, name: "RecordBindingFit" },
   { expected: () => grammar.mappableBaseType.rows, name: "MappableBaseType" },
@@ -638,39 +688,108 @@ describe("the installed relations", () => {
   });
 });
 
+describe("the MathML relations", () => {
+  it("state the arity, head qualifier and cn form samples the laws read", () => {
+    const row = (name: string, at: Readonly<Record<string, string | bigint>>) =>
+      Arr.findFirst(relationNamed(name).rows, (candidate) =>
+        Object.entries(at).every(([field, value]) => candidate[field] === value),
+      );
+
+    assert.deepStrictEqual(
+      row("MathArity", { kind: "m:selector" }),
+      Option.some({ kind: "m:selector", max: int8Max, min: 1n }),
+    );
+    assert.isTrue(Option.isSome(row("HeadQualifier", { head: "m:log", qualifier: "m:logbase" })));
+    assert.isTrue(Option.isNone(row("HeadQualifier", { head: "m:sin", qualifier: "m:logbase" })));
+    assert.lengthOf(
+      relationNamed("CnForm").rows.filter(({ type }) => type === "rational"),
+      2,
+    );
+    assert.deepStrictEqual(
+      row("CnParts", { type: "rational" }),
+      Option.some({ parts: 2n, type: "rational" }),
+    );
+    assert.lengthOf(relationNamed("CnPattern").rows, 4 * 35);
+
+    for (const { pattern } of relationNamed("CnPattern").rows) {
+      assert.isTrue(String(pattern).startsWith("^(?:") && String(pattern).endsWith(")$"));
+    }
+
+    // PostgreSQL's `~` searches, so the payload is tried as a search, with no anchors of the test's own.
+    const search = (form: string, base: string, text: string) =>
+      new RegExp(String(Option.getOrThrow(row("CnPattern", { base, form }))["pattern"]), "u").test(
+        text,
+      );
+    assert.isTrue(search("hexdouble", "10", "7ff8000000000000"));
+    assert.isFalse(search("hexdouble", "10", "7F8000000000000000"));
+    assert.isFalse(search("integer", "10", "12abc"));
+  });
+});
+
+/**
+ * A roster's handles as the install declares them: the committed snapshot's live handles in code
+ * order, then the handles new since it, in the grammar's order.
+ *
+ * @param name - The roster's name.
+ * @param handles - The handles as the grammar computes them.
+ * @returns The handles, ordered.
+ */
+const ordered = (name: string, handles: readonly string[]): readonly string[] =>
+  Arr.isReadonlyArrayNonEmpty(handles)
+    ? inCommittedOrder(committedRosters.get(name) ?? [], handles)
+    : handles;
+
 describe("the rosters", () => {
-  it("hold every generator's handles in code order, the null objects where the rulings place them", () => {
-    assert.deepStrictEqual(handlesOf("NodeKind"), grammar.kinds.nodeKind.handles);
-    assert.deepStrictEqual(handlesOf("AttributeName"), grammar.kinds.attributeName.handles);
-    assert.deepStrictEqual(handlesOf("TypeName"), grammar.xsi.typeName.handles);
+  it("hold every generator's handles in the committed codes' order, new handles last, the null objects where the rulings place them", () => {
+    assert.deepStrictEqual(
+      handlesOf("NodeKind"),
+      ordered("NodeKind", grammar.kinds.nodeKind.handles),
+    );
+    assert.deepStrictEqual(
+      handlesOf("AttributeName"),
+      ordered("AttributeName", grammar.kinds.attributeName.handles),
+    );
+    assert.deepStrictEqual(
+      handlesOf("TypeName"),
+      ordered("TypeName", grammar.xsi.typeName.handles),
+    );
     assert.notInclude(handlesOf("TypeName"), "none");
-    assert.deepStrictEqual(handlesOf("SchemaVersion"), grammar.kinds.versions.handles);
-    assert.deepStrictEqual(handlesOf("BaseType"), grammar.baseTypes.handles);
-    assert.deepStrictEqual(handlesOf("Cardinality"), [
-      ...grammar.typedCardinalities.handles,
-      "record",
-    ]);
-    assert.deepStrictEqual(handlesOf("ResourceType"), [
-      "none",
-      ...grammar.package.resourceType.handles,
-    ]);
+    assert.deepStrictEqual(
+      handlesOf("SchemaVersion"),
+      ordered("SchemaVersion", grammar.kinds.versions.handles),
+    );
+    assert.deepStrictEqual(handlesOf("BaseType"), ordered("BaseType", grammar.baseTypes.handles));
+    assert.deepStrictEqual(
+      handlesOf("Cardinality"),
+      ordered("Cardinality", [...grammar.typedCardinalities.handles, "record"]),
+    );
+    assert.deepStrictEqual(
+      handlesOf("ResourceType"),
+      ordered("ResourceType", ["none", ...grammar.package.resourceType.handles]),
+    );
     assert.deepStrictEqual(handlesOf("Position"), grammar.content.positions.handles);
     assert.deepStrictEqual(handlesOf("AttributeSlot"), grammar.attributes.positions.handles);
-    assert.deepStrictEqual(handlesOf("Governor"), [
-      ...grammar.kinds.nodeKind.handles,
-      ...governed.keys(),
-    ]);
+    assert.deepStrictEqual(
+      handlesOf("Governor"),
+      ordered("Governor", [...grammar.kinds.nodeKind.handles, ...governed.keys()]),
+    );
     assert.deepStrictEqual(
       handlesOf("Identity"),
-      grammar.attributes.identity.payload[0].roster.handles,
+      ordered("Identity", grammar.attributes.identity.payload[0].roster.handles),
     );
-    assert.deepStrictEqual(handlesOf("ContentModel"), grammar.content.models.handles);
-    assert.deepStrictEqual(handlesOf("SharedModel"), grammar.content.sharedModels.handles);
+    assert.deepStrictEqual(
+      handlesOf("ContentModel"),
+      ordered("ContentModel", grammar.content.models.handles),
+    );
+    assert.deepStrictEqual(
+      handlesOf("SharedModel"),
+      ordered("SharedModel", grammar.content.sharedModels.handles),
+    );
     assert.notInclude(handlesOf("SharedModel"), "none");
     // Spec reading 118's include model is a model of its own, and names the ignored elements'
     // wildcards at two positions.
-    assert.lengthOf(handlesOf("SharedModel"), 24);
-    assert.lengthOf(handlesOf("ContentModel"), 115);
+    assert.lengthOf(handlesOf("SharedModel"), 25);
+    assert.lengthOf(handlesOf("ContentModel"), 117);
   });
 
   it("spell every handle within a PostgreSQL name, every type and governor among them", () => {

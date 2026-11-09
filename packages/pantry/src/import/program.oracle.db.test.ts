@@ -375,7 +375,8 @@ const metadataVerdicts: readonly (readonly [FixtureName, readonly string[]])[] =
   ["usage3-padded", []],
   ["usage3-float-padded", []],
   ["usage3-feb-30", ["attribute-lexical"]],
-  ["usage3-integer-float", ["typed-copy"]],
+  // Accepted: its `0.87` under `integer` is outside a record, so untyped text (reading 105).
+  ["usage3-integer-float", []],
 ];
 
 describe.skipIf(!hasLease)(
@@ -912,6 +913,64 @@ describe.skipIf(!hasLease)(
         },
         {
           apply: () =>
+            Effect.flatMap(
+              editedSimple("data-name-upper", [inBody(`<p data-note="x">See.</p>`)]),
+              (dir) =>
+                applyEdited(
+                  dir,
+                  editNode(
+                    (node) => node.attributes.some(({ name }) => name === "data-*"),
+                    (node) => ({
+                      ...node,
+                      attributes: node.attributes.map((attribute) =>
+                        attribute.name === "data-*"
+                          ? {
+                              ...attribute,
+                              openName: attribute.openName.map((open) => ({
+                                ...open,
+                                local: "data-A",
+                              })),
+                            }
+                          : attribute,
+                      ),
+                    }),
+                  ),
+                ),
+            ),
+          laws: [checkNamed("OpenAttributeName", "AL4_data_name")],
+          name: "a data-* name with an upper-case local (AL4 data name)",
+        },
+        {
+          apply: () =>
+            Effect.flatMap(
+              editedSimple("data-name-declared", [inBody(`<p data-note="x">See.</p>`)]),
+              (dir) =>
+                applyEdited(
+                  dir,
+                  editNode(
+                    (node) => node.attributes.some(({ name }) => name === "data-*"),
+                    (node) => ({
+                      ...node,
+                      attributes: node.attributes.map((attribute) =>
+                        attribute.name === "data-*"
+                          ? {
+                              ...attribute,
+                              openName: attribute.openName.map((open) => ({
+                                ...open,
+                                local: "data-catalog-idref",
+                              })),
+                            }
+                          : attribute,
+                      ),
+                    }),
+                  ),
+                ),
+            ),
+          laws: [checkNamed("OpenAttributeName", "AL4_declared_data_name")],
+          name: "a data-* name the p element's governor declares (AL4 declared data name)",
+        },
+        {
+          apply: () =>
             Effect.flatMap(materialize("sharedMedia"), (dir) =>
               applyEdited(
                 dir,
@@ -926,6 +985,44 @@ describe.skipIf(!hasLease)(
             ),
           laws: [checkNamed("Attribute", "E1_derived")],
           name: "an IDREF attribute without its tokens (E1 derived, Q5.05)",
+        },
+        {
+          apply: () =>
+            Effect.flatMap(
+              editedSimple("ssml-trim-mark-collapsed", [
+                {
+                  _tag: "InsertAfterLine",
+                  file: "imsmanifest.xml",
+                  line: 66,
+                  text: "                        <imsmd:language>en</imsmd:language>",
+                },
+                inBody(
+                  `<p><ssml:speak xmlns:ssml="http://www.w3.org/2001/10/synthesis" version="1.1" xml:lang="en" startmark="a b"><ssml:mark name="a b"/><ssml:mark name="a  b"/>x</ssml:speak></p>`,
+                ),
+              ]),
+              (dir) => applyEdited(dir),
+            ),
+          laws: [containedIn("SsmlAttribute", "FragmentValue")],
+          name: "a startmark naming two marks that collapse to one name (SSML trim mark, reading 3)",
+        },
+        {
+          apply: () =>
+            Effect.flatMap(
+              editedSimple("ssml-voice-und", [
+                {
+                  _tag: "InsertAfterLine",
+                  file: "imsmanifest.xml",
+                  line: 66,
+                  text: "                        <imsmd:language>en</imsmd:language>",
+                },
+                inBody(
+                  `<p><ssml:speak xmlns:ssml="http://www.w3.org/2001/10/synthesis" version="1.1" xml:lang="en"><ssml:voice languages="und">hi</ssml:voice></ssml:speak></p>`,
+                ),
+              ]),
+              (dir) => applyEdited(dir),
+            ),
+          laws: [checkNamed("Attribute", "value_domain")],
+          name: "a voice whose languages is und (value domain, reading 42)",
         },
         {
           apply: () =>

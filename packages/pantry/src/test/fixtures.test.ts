@@ -6,6 +6,11 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { inject } from "vitest";
 import {
   FIXTURES_VERSION,
+  assemblyNames,
+  catalogNames,
+  catalogNegativeNames,
+  catalogVerdicts,
+  companionNames,
   editBytes,
   fixtureNames,
   hash12,
@@ -14,6 +19,10 @@ import {
   materializePackage,
   materializeSpec,
   negativeNames,
+  pciNames,
+  pciNegativeNames,
+  pciVerdicts,
+  restoredNames,
   specOf,
   transformHash,
 } from "#pantry/test/fixtures.ts";
@@ -23,7 +32,8 @@ import { settings as hostSettings } from "#pantry/test/settings.ts";
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
  * describe: a hang guard, never a budget. Measured 2026-11-07: 53.8 s at a load average of 63 to
- * 73, its slowest test.
+ * 73, its slowest test. Measured 2026-11-07: 13.8 s at a load average of 8.06 to 48.90, its slowest
+ * test with Stage N's fixtures, each of which states this timeout.
  */
 const testTimeoutMs = 180_000;
 
@@ -391,6 +401,533 @@ const negativeRemovals: readonly (readonly [FixtureName, string, string])[] = [
 ];
 
 /**
+ * For each name of `restoredNames` and `assemblyNames`, a file of its package and the text its edit
+ * put there.
+ */
+const restoredAndAssemblyPresent: readonly (readonly [FixtureName, string, string])[] = [
+  ["aria-h1-role-button", "choice.xml", '<h1 role="button">'],
+  [
+    "aria-source-role",
+    "choice.xml",
+    '<source srcset="images/sign.png" type="image/png" role="presentation"/>',
+  ],
+  ["lang-case-mismatch", "choice.xml", 'xml:lang="en-GB"'],
+  ["lang-case-mismatch", "imsmanifest.xml", "<imsmd:language>en-gb</imsmd:language>"],
+  ["pattern-unresolved-item", "choice.xml", '<qti-pattern-match pattern="{NOSUCH}">'],
+  ["pattern-unresolved-test", "rtest13.xml", '<qti-pattern-match pattern="{NOSUCH}">'],
+  ["pattern-unresolved-test", "rtest13.xml", "<qti-outcome-processing>"],
+  [
+    "section-doc-twice",
+    "rtest01.xml",
+    '<qti-assessment-section-ref identifier="S2" href="sections/shared.xml"/>',
+  ],
+  [
+    "section-doc-name-clash",
+    "sections/shared.xml",
+    '<qti-assessment-item-ref identifier="shared" ',
+  ],
+  ["branch-backward-shuffled", "rtest13.xml", '<qti-ordering shuffle="true"/>'],
+  ["branch-backward-shuffled", "rtest13.xml", '<qti-branch-rule target="item347">'],
+  ["branch-to-own-section", "rtest13.xml", '<qti-branch-rule target="sectionB">'],
+  ["select-two-required", "rtest12.xml", 'identifier="item434" href="item434.xml" required="true"'],
+  [
+    "branch-in-twice-placed-section",
+    "rtest01.xml",
+    '<qti-assessment-section-ref identifier="S2" href="sections/shared.xml"/>',
+  ],
+  [
+    "branch-in-twice-placed-section",
+    "sections/shared.xml",
+    '<qti-branch-rule target="shared-item">',
+  ],
+];
+
+/**
+ * The `schemaversion` each catalog positive's manifest declares: 3.0.1 for the cuts of
+ * `BPIG_22April` (and the hand edits of those), 3.0.0 for `catalog-300` and for the four edits of
+ * `simple`.
+ */
+const catalogVersions: readonly (readonly [(typeof catalogNames)[number], "3.0.0" | "3.0.1"])[] = [
+  ["cut-catalog-supports", "3.0.1"],
+  ["cut-catalog-multiple", "3.0.1"],
+  ["cut-catalog-nodes", "3.0.1"],
+  ["cut-catalog-reference", "3.0.1"],
+  ["cut-catalog-rubric", "3.0.1"],
+  ["catalog-300", "3.0.0"],
+  ["catalog-hosts", "3.0.1"],
+  ["card-files", "3.0.0"],
+  ["catalog-padded", "3.0.0"],
+  ["catalog-lang", "3.0.0"],
+  ["card-qti-content", "3.0.1"],
+  ["card-gap-inside", "3.0.1"],
+  ["card-empty", "3.0.1"],
+  ["entry-empty", "3.0.1"],
+];
+
+/**
+ * How many times `needle` occurs in `text`.
+ *
+ * @param text - The text to search.
+ * @param needle - The text to count.
+ * @returns The number of non-overlapping occurrences.
+ */
+const occurrences = (text: string, needle: string): number => text.split(needle).length - 1;
+
+/**
+ * The `schemaversion` each companion positive's manifest declares: 3.0.1 for `companion-301` and
+ * 3.0.0 for the other three, cut from `testWithLti`'s 3.0.0 item.
+ */
+const companionVersions: readonly (readonly [
+  (typeof companionNames)[number],
+  "3.0.0" | "3.0.1",
+])[] = [
+  ["cut-companion", "3.0.0"],
+  ["companion-301", "3.0.1"],
+  ["companion-full", "3.0.0"],
+  ["companion-padded", "3.0.0"],
+];
+
+/**
+ * For each of the catalog positives, a file of its package and the text its edit put there (or, for
+ * a cut, the text the corpus item holds).
+ */
+const catalogPresent: readonly (readonly [(typeof catalogNames)[number], string, string])[] = [
+  ["cut-catalog-supports", "items/CatalogWithMultipleSupports.xml", '<qti-catalog id="catalog1">'],
+  ["cut-catalog-multiple", "items/MultipleCatalogs.xml", '<qti-catalog id="cat123_2">'],
+  ["cut-catalog-nodes", "items/CatalogsAcrossContentNodes.xml", '<qti-catalog id="i123_rb1_cat1">'],
+  ["cut-catalog-reference", "items/ReferencingCatalogContent.xml", 'data-catalog-idref="catalog1"'],
+  ["cut-catalog-rubric", "items/rubric_block.xml", '<qti-catalog id="catchoicedirs">'],
+  ["catalog-300", "items/CatalogWithMultipleSupports.xml", "imsqti_asiv3p0_v1p0.xsd"],
+  ["catalog-hosts", "items/BG007.xml", '<qti-modal-feedback outcome-identifier="FEEDBACK"'],
+  [
+    "catalog-hosts",
+    "items/BG007.xml",
+    '<qti-template-block template-identifier="T" identifier="tb">',
+  ],
+  ["catalog-hosts", "items/BG007.xml", '<qti-rubric-block use="instructions" view="candidate">'],
+  ["card-files", "choice.xml", '<qti-card support="ext:org.example-sign_1">'],
+  ["card-files", "choice.xml", '<qti-card-entry default="1">'],
+  ["card-files", "choice.xml", '<p data-catalog-idref="files1">The sign.</p>'],
+  ["card-files", "imsmanifest.xml", '<file href="video/clip.mp4"/>'],
+  ["catalog-padded", "choice.xml", '<qti-catalog id=" catalog1 ">'],
+  ["catalog-padded", "choice.xml", '<qti-card-entry default=" true ">'],
+  [
+    "catalog-padded",
+    "choice.xml",
+    '<qti-file-href mime-type="image/png"> images/sign.png </qti-file-href>',
+  ],
+  ["catalog-lang", "choice.xml", '<qti-card support="linguistic-guidance" xml:lang="es">'],
+  ["catalog-lang", "choice.xml", '<span xml:lang="fr">exact</span>'],
+  ["catalog-lang", "imsmanifest.xml", "<imsmd:language>en</imsmd:language>"],
+  [
+    "card-qti-content",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-printed-variable identifier="SHOWN"/>',
+  ],
+  [
+    "card-qti-content",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-choice-interaction response-identifier="RESPONSE2"',
+  ],
+  ["card-gap-inside", "items/gap-match-example-1.xml", '<qti-gap identifier="G3"/>'],
+  ["card-empty", "items/CatalogWithMultipleSupports.xml", '<qti-card support="spoken"/>'],
+  ["entry-empty", "items/CatalogWithMultipleSupports.xml", '<qti-card-entry xml:lang="en"/>'],
+];
+
+/**
+ * The `schemaversion` each PCI positive's manifest declares: 3.0.1 for the five that use what 3.0.1
+ * adds (the built-in `QTI_CONTEXT`, a `qti-stylesheet`, a `qti-catalog-info` or a custom
+ * interaction), 3.0.0 for the corpus's own and the three hand-written packages that need no more.
+ */
+const pciVersions: readonly (readonly [(typeof pciNames)[number], "3.0.0" | "3.0.1"])[] = [
+  ["pci-simple", "3.0.0"],
+  ["pci-modules", "3.0.0"],
+  ["pci-configurations", "3.0.0"],
+  ["pci-variables", "3.0.0"],
+  ["pci-3-0-1", "3.0.1"],
+  ["pci-context-3-0-1", "3.0.1"],
+  ["pci-catalog-3-0-1", "3.0.1"],
+  ["pci-markup-content", "3.0.0"],
+  ["template-foreign", "3.0.0"],
+  ["custom-3-0-1", "3.0.1"],
+];
+
+/**
+ * The item of each PCI positive, and the files its package holds beside the manifest, sorted.
+ */
+const pciPackages: readonly (readonly [(typeof pciNames)[number], string, readonly string[]])[] = [
+  [
+    "pci-simple",
+    "measuring_ph.xml",
+    [
+      "ammonia.svg",
+      "baking_soda.svg",
+      "measuring_ph.xml",
+      "modules/module_resolution.js",
+      "modules/tap.js",
+      "vinegar.svg",
+    ],
+  ],
+  [
+    "pci-modules",
+    "fractions_deps.xml",
+    [
+      "fractions_deps.xml",
+      "modules/lib/eve.js",
+      "modules/lib/handlebars.min-latest.js",
+      "modules/shading_deps.js",
+    ],
+  ],
+  [
+    "pci-configurations",
+    "fractions_deps_2.xml",
+    [
+      "fractions_deps_2.xml",
+      "modules/hmh_co_com.js",
+      "modules/hmh_co_com_fallback.json",
+      "modules/lib/eve.js",
+      "modules/lib/jquery-2.2.2.min.js",
+      "modules/shading_deps.js",
+    ],
+  ],
+  ...(
+    [
+      "pci-variables",
+      "pci-3-0-1",
+      "pci-context-3-0-1",
+      "pci-catalog-3-0-1",
+      "pci-markup-content",
+      "template-foreign",
+      "custom-3-0-1",
+    ] as const
+  ).map((name): readonly [(typeof pciNames)[number], string, readonly string[]] => [
+    name,
+    "measuring_ph.xml",
+    [
+      "ammonia.svg",
+      "baking_soda.svg",
+      "measuring_ph.xml",
+      ...(name === "pci-3-0-1" ? ["pci.css"] : []),
+      "modules/module_resolution.js",
+      "modules/tap.js",
+      "vinegar.svg",
+    ].toSorted(),
+  ]),
+];
+
+/**
+ * For each of the PCI positives, a text its item holds, which its edit put there or the corpus
+ * wrote.
+ */
+const pciPresent: readonly (readonly [(typeof pciNames)[number], string])[] = [
+  ["pci-simple", '<qti-portable-custom-interaction response-identifier="RESPONSE" module="tap"'],
+  ["pci-simple", '<div role="grid">'],
+  ["pci-modules", '<qti-interaction-module id="shadingD" primary-path="modules/shading_deps.js"/>'],
+  ["pci-configurations", 'primary-configuration="modules/hmh_co_com.js"'],
+  ["pci-configurations", 'secondary-configuration="modules/hmh_co_com_fallback.json"'],
+  ["pci-variables", '<qti-response-declaration identifier="RECORD" cardinality="record"/>'],
+  [
+    "pci-variables",
+    '<qti-response-declaration identifier="PICKED" cardinality="multiple" base-type="identifier"/>',
+  ],
+  ["pci-variables", "<qti-prompt><p>Tap</p></qti-prompt>"],
+  ["pci-variables", '<qti-template-variable template-identifier="T"/>'],
+  ["pci-variables", '<qti-context-variable identifier="CTX"/>'],
+  ["pci-3-0-1", '<qti-context-variable identifier="QTI_CONTEXT"/>'],
+  ["pci-3-0-1", '<qti-stylesheet href="pci.css" type="text/css"/>'],
+  ["pci-context-3-0-1", '<qti-context-declaration identifier="QTI_CONTEXT" cardinality="record"/>'],
+  ["pci-context-3-0-1", '<qti-context-variable identifier="LEVEL"/>'],
+  ["pci-catalog-3-0-1", '<qti-catalog id="tap-help">'],
+  ["pci-markup-content", '<qti-printed-variable identifier="SCORE"/>'],
+  ["pci-markup-content", "<template/><template/></qti-interaction-markup>"],
+  ["template-foreign", '<template><x:widget xmlns:x="urn:example:widget" size="3"/></template>'],
+  ["custom-3-0-1", '<qti-custom-interaction response-identifier="RESPONSE"/>'],
+];
+
+/**
+ * The item of each PCI negative, the `schemaversion` its manifest declares and a text its edit put
+ * there, in the order of {@link pciNegativeNames}.
+ */
+const pciNegativeRows: readonly (readonly [
+  (typeof pciNegativeNames)[number],
+  string,
+  "3.0.0" | "3.0.1",
+  string,
+])[] = [
+  [
+    "pci-no-module",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-portable-custom-interaction response-identifier="RESPONSE" custom-interaction-type-identifier="urn-fdc-hmhco.com-pci-tapToReveal">',
+  ],
+  [
+    "custom-3-0-0",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-custom-interaction response-identifier="RESPONSE"/>',
+  ],
+  [
+    "pci-context-builtin-3-0-0",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-context-variable identifier="QTI_CONTEXT"/>',
+  ],
+  [
+    "pci-context-undeclared",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-context-variable identifier="CTX"/>',
+  ],
+  [
+    "pci-context-undeclared-3-0-1",
+    "measuring_ph.xml",
+    "3.0.1",
+    '<qti-context-variable identifier="LEVEL"/>',
+  ],
+  [
+    "pci-template-undeclared",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-template-variable template-identifier="T"/>',
+  ],
+  [
+    "pci-no-type",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-portable-custom-interaction response-identifier="RESPONSE" module="tap">',
+  ],
+  [
+    "pci-two-modules",
+    "measuring_ph.xml",
+    "3.0.0",
+    "</qti-interaction-modules><qti-interaction-modules>",
+  ],
+  ["pci-modules-empty", "measuring_ph.xml", "3.0.0", "<qti-interaction-modules/>"],
+  [
+    "pci-no-markup",
+    "measuring_ph.xml",
+    "3.0.0",
+    'custom-interaction-type-identifier="urn-fdc-hmhco.com-pci-tapToReveal"></qti-portable-custom-interaction>',
+  ],
+  [
+    "pci-two-markups",
+    "measuring_ph.xml",
+    "3.0.0",
+    "</qti-interaction-markup><qti-interaction-markup>",
+  ],
+  [
+    "pci-markup-order",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-template-variable template-identifier="T"/><qti-interaction-markup>',
+  ],
+  [
+    "pci-modules-after-markup",
+    "measuring_ph.xml",
+    "3.0.0",
+    "</qti-interaction-markup><qti-interaction-modules>",
+  ],
+  ["pci-prompt-late", "measuring_ph.xml", "3.0.0", "</qti-interaction-markup><qti-prompt>"],
+  [
+    "pci-markup-text",
+    "measuring_ph.xml",
+    "3.0.0",
+    "<qti-interaction-markup>Tap</qti-interaction-markup>",
+  ],
+  [
+    "pci-stylesheet-3-0-0",
+    "measuring_ph.xml",
+    "3.0.0",
+    '<qti-stylesheet href="pci.css" type="text/css"/>',
+  ],
+  ["pci-catalog-info-3-0-0", "measuring_ph.xml", "3.0.0", '<qti-catalog id="tap-help">'],
+  [
+    "template-outside",
+    "measuring_ph.xml",
+    "3.0.0",
+    "</qti-interaction-markup><template/></qti-portable-custom-interaction>",
+  ],
+  ["pci-nested", "measuring_ph.xml", "3.0.0", '<qti-response-declaration identifier="INNER"'],
+  ["pci-type-malformed", "measuring_ph.xml", "3.0.0", 'custom-interaction-type-identifier="a%zz"'],
+  ["pci-path-malformed", "measuring_ph.xml", "3.0.0", 'primary-path="modules/ta%zzp.js"'],
+  ["pci-module-malformed", "measuring_ph.xml", "3.0.0", 'module="1shading"'],
+  ["pci-module-id-malformed", "measuring_ph.xml", "3.0.0", '<qti-interaction-module id="1shading"'],
+  ["custom-attribute", "measuring_ph.xml", "3.0.1", 'xmlns:x="urn:example:widget" x:mode="draw"'],
+  [
+    "pci-items-fallback",
+    "fractions_deps_2.xml",
+    "3.0.0",
+    'fallback-configuration="modules/hmh_co_com_fallback.json"',
+  ],
+  ["pci-items-unlisted", "fractions_deps.xml", "3.0.0", '<qti-interaction-module id="raphael"'],
+  ["pci-items-missing", "fractions_deps.xml", "3.0.0", '<qti-interaction-module id="raphael"'],
+  [
+    "pci-configuration-missing",
+    "fractions_deps_2.xml",
+    "3.0.0",
+    'primary-configuration="modules/hmh_co_comXX.js"',
+  ],
+];
+
+/**
+ * The files the package of a hand-written PCI negative holds beside the manifest.
+ */
+const pciNegativeStandard = [
+  "ammonia.svg",
+  "baking_soda.svg",
+  "measuring_ph.xml",
+  "modules/module_resolution.js",
+  "modules/tap.js",
+  "vinegar.svg",
+] as const;
+
+/**
+ * The files the cuts of `fractions_deps_2.xml` hold beside the manifest, which are
+ * `pci-configurations`' files.
+ */
+const pciConfigurationsHeld = [
+  "fractions_deps_2.xml",
+  "modules/hmh_co_com.js",
+  "modules/hmh_co_com_fallback.json",
+  "modules/lib/eve.js",
+  "modules/lib/jquery-2.2.2.min.js",
+  "modules/shading_deps.js",
+] as const;
+
+/**
+ * The files the cuts of `fractions_deps.xml` hold beside the manifest, which are `pci-modules`'
+ * files.
+ */
+const pciModulesHeld = [
+  "fractions_deps.xml",
+  "modules/lib/eve.js",
+  "modules/lib/handlebars.min-latest.js",
+  "modules/shading_deps.js",
+] as const;
+
+/**
+ * The files each PCI negative's package holds beside the manifest, when they are not the standard
+ * ones, and the files its manifest lists, when they are not the files it holds: the corpus cuts
+ * break the pairing in one file each (`pci-items-unlisted` holds the handlebars file its manifest
+ * does not list, `pci-items-missing` lists `raphael.js` with no file behind it).
+ */
+const pciNegativeFiles: Readonly<
+  Partial<
+    Record<
+      (typeof pciNegativeNames)[number],
+      { readonly held: readonly string[]; readonly listed?: readonly string[] }
+    >
+  >
+> = {
+  "pci-configuration-missing": { held: pciConfigurationsHeld },
+  "pci-items-fallback": { held: pciConfigurationsHeld },
+  "pci-items-missing": {
+    held: pciModulesHeld,
+    listed: [...pciModulesHeld, "modules/lib/raphael.js"].toSorted(),
+  },
+  "pci-items-unlisted": {
+    held: pciModulesHeld,
+    listed: pciModulesHeld.filter((file) => file !== "modules/lib/handlebars.min-latest.js"),
+  },
+  "pci-stylesheet-3-0-0": { held: [...pciNegativeStandard, "pci.css"].toSorted() },
+};
+
+/**
+ * For each XML-path negative, a file of its package and the text its edit put there.
+ */
+const catalogNegativePresent: readonly (readonly [
+  (typeof catalogNegativeNames)[number],
+  string,
+  string,
+])[] = [
+  [
+    "support-twice",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-card support="keyword-translation"><qti-html-content>Read aloud.',
+  ],
+  [
+    "default-twice",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-card-entry xml:lang="de" default="1">',
+  ],
+  [
+    "idref-html",
+    "items/CatalogWithMultipleSupports.xml",
+    '<span id="html1" data-catalog-idref="html1">',
+  ],
+  ["idref-missing", "items/CatalogWithMultipleSupports.xml", 'data-catalog-idref="nowhere"'],
+  [
+    "catalog-id-twice",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-catalog id="catalog1"><qti-card support="spoken">',
+  ],
+  [
+    "catalog-no-id",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-catalog><qti-card support="spoken">',
+  ],
+  ["card-file-no-type", "choice.xml", "<qti-file-href>images/sign.png</qti-file-href>"],
+  ["info-empty", "choice.xml", "<qti-catalog-info/>"],
+  ["catalog-empty", "choice.xml", '<qti-catalog id="c1"></qti-catalog>'],
+  [
+    "card-mixed",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-card support="spoken"><qti-html-content>Read aloud.</qti-html-content><qti-card-entry',
+  ],
+  [
+    "html-twice",
+    "items/CatalogWithMultipleSupports.xml",
+    "</qti-html-content><qti-html-content>Read it twice.",
+  ],
+  [
+    "card-file-first",
+    "choice.xml",
+    '<qti-file-href mime-type="image/png">images/sign.png</qti-file-href><qti-html-content>',
+  ],
+  [
+    "physical-first",
+    "elements.xml",
+    "<qti-companion-materials-info><qti-physical-material>Scratch paper</qti-physical-material>",
+  ],
+  [
+    "calculator-no-description",
+    "elements.xml",
+    "<qti-calculator-type>basic</qti-calculator-type></qti-calculator>",
+  ],
+  ["two-infos", "elements.xml", "</qti-calculator-info><qti-calculator-info>"],
+  ["rule-both-systems", "elements.xml", "</qti-rule-system-si><qti-rule-system-us>"],
+  ["default-default", "items/CatalogWithMultipleSupports.xml", 'default="yes"'],
+  ["support-case", "items/CatalogWithMultipleSupports.xml", '<qti-card support="Spoken">'],
+  ["support-ext-empty", "items/CatalogWithMultipleSupports.xml", '<qti-card support="ext:">'],
+  ["calculator-Basic", "elements.xml", "<qti-calculator-type>Basic</qti-calculator-type>"],
+  ["unit-case", "elements.xml", '<qti-major-increment unit="meter">'],
+  ["increment-text", "elements.xml", '<qti-major-increment unit="Meter">one</qti-major-increment>'],
+  ["rule-system-SI", "elements.xml", "<qti-rule-system-SI>"],
+  ["card-file-missing", "choice.xml", "images/absent.png</qti-file-href>"],
+  ["icon-missing", "choice.xml", "<qti-resource-icon>images/absent.svg</qti-resource-icon>"],
+  ["card-file-undescribed", "choice.xml", "images/unlisted.png</qti-file-href>"],
+  [
+    "card-interaction-in-modal",
+    "items/BG007.xml",
+    '<p>Done: <qti-text-entry-interaction response-identifier="RESPONSE2"/></p>',
+  ],
+  ["card-gap-outside", "items/CatalogWithMultipleSupports.xml", '<qti-gap identifier="G1"/>'],
+  ["body-lang", "choice.xml", '<p xml:lang="es" data-catalog-idref="catalog1">'],
+];
+
+/**
+ * The negatives whose package deliberately lists a file it lacks (`missing`) or holds a file its
+ * manifest does not list (`undescribed`), each with that file's path.
+ */
+const catalogNegativeFiles = {
+  missing: [
+    ["card-file-missing", "images/absent.png"],
+    ["icon-missing", "images/absent.svg"],
+  ],
+  undescribed: [["card-file-undescribed", "images/unlisted.png"]],
+} as const;
+
+/**
  * The paths a manifest lists as `file`s, each once.
  *
  * @param manifest - A manifest's text.
@@ -684,6 +1221,35 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
       Effect.gen(function* cutDrawing() {
         const fs = yield* FileSystem.FileSystem;
         const dir = yield* materialize("cut-drawing");
+
+        assert.isTrue(yield* fs.exists(`${dir}/items/images/anglePQR.svg`), "anglePQR.svg kept");
+        assert.include(
+          yield* fs.readFileString(`${dir}/imsmanifest.xml`),
+          "items/images/anglePQR.svg",
+          "manifest lists anglePQR.svg",
+        );
+      }),
+    ),
+  );
+
+  it.effect("a cut keeps the file only an altimg names, and its manifest lists it", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* cutAltimg() {
+        const fs = yield* FileSystem.FileSystem;
+        const spec: FixtureSpec = {
+          ...specOf("cut-drawing"),
+          edits: [
+            {
+              _tag: "ReplaceText",
+              file: "items/drawing-interaction-1.xml",
+              replacement: 'altimg="images/anglePQR.svg"',
+              search: 'srcset="images/anglePQR.svg"',
+            },
+            ...specOf("cut-drawing").edits,
+          ],
+          name: "cut-altimg",
+        };
+        const dir = yield* materializeSpec(spec);
 
         assert.isTrue(yield* fs.exists(`${dir}/items/images/anglePQR.svg`), "anglePQR.svg kept");
         assert.include(
@@ -1183,5 +1749,851 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
         assert.include(record, '<string xml:lang="en">Mathematics</string>');
       }),
     ),
+  );
+
+  it.effect(
+    "the restored-check and assembly names are the brief's lists, each in the fixture table",
+    () =>
+      Effect.sync(() => {
+        assert.deepStrictEqual(
+          [...restoredNames],
+          [
+            "aria-h1-role-button",
+            "aria-source-role",
+            "lang-case-mismatch",
+            "pattern-unresolved-item",
+            "pattern-unresolved-test",
+          ],
+        );
+        assert.deepStrictEqual(
+          [...assemblyNames],
+          [
+            "section-doc-twice",
+            "section-doc-name-clash",
+            "branch-backward-shuffled",
+            "branch-to-own-section",
+            "select-two-required",
+            "branch-in-twice-placed-section",
+          ],
+        );
+        assert.strictEqual(new Set(restoredNames).size, 5);
+        assert.strictEqual(new Set(assemblyNames).size, 6);
+        assert.includeMembers([...fixtureNames], [...restoredNames, ...assemblyNames]);
+
+        for (const name of [...restoredNames, ...assemblyNames]) {
+          assert.notInclude([...negativeNames], name);
+          assert.notInclude(
+            positiveVersions.map(([positive]) => positive),
+            name,
+          );
+        }
+
+        assert.strictEqual(
+          new Set([...negativeNames, ...restoredNames, ...assemblyNames]).size,
+          negativeNames.length + restoredNames.length + assemblyNames.length,
+        );
+      }),
+  );
+
+  it.effect(
+    "each restored-check and assembly fixture materializes, lists every packaged file, holds QTI documents that parse and carries its edit",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* restoredAndAssemblyFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const name of [...restoredNames, ...assemblyNames]) {
+            const dir = yield* materialize(name);
+            const files = yield* filesOf(dir);
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml"),
+              listedFilesOf(manifest),
+              name,
+            );
+
+            for (const file of files) {
+              if (file.endsWith(".xml") && file !== "imsmanifest.xml") {
+                const document = yield* readXml(yield* fs.readFile(`${dir}/${file}`));
+
+                assert.strictEqual(document.root.namespace, qtiNamespace, `${name}/${file}`);
+              }
+            }
+          }
+
+          for (const [name, file, needle] of restoredAndAssemblyPresent) {
+            const dir = yield* materialize(name);
+
+            assert.include(yield* fs.readFileString(`${dir}/${file}`), needle, `${name}: ${file}`);
+          }
+        }),
+      ),
+    testTimeoutMs,
+  );
+
+  it.effect("the pattern fixtures name a variable that no document of the package declares", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* unresolvedPatterns() {
+        const fs = yield* FileSystem.FileSystem;
+
+        for (const name of ["pattern-unresolved-item", "pattern-unresolved-test"] as const) {
+          const dir = yield* materialize(name);
+
+          for (const file of yield* filesOf(dir)) {
+            if (file.endsWith(".xml")) {
+              assert.notInclude(
+                yield* fs.readFileString(`${dir}/${file}`),
+                'identifier="NOSUCH"',
+                `${name}: ${file}`,
+              );
+            }
+          }
+        }
+
+        const item = yield* fs.readFileString(
+          `${yield* materialize("pattern-unresolved-item")}/choice.xml`,
+        );
+
+        assert.notInclude(item, "match_correct.xml");
+        assert.include(item, '<qti-set-outcome-value identifier="SCORE">');
+      }),
+    ),
+  );
+
+  it.effect("the assembly fixtures hold their edits where their brief says", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* assemblyEdits() {
+        const fs = yield* FileSystem.FileSystem;
+        const twice = yield* materialize("section-doc-twice");
+        const placed = yield* fs.readFileString(`${twice}/rtest01.xml`);
+        const clash = yield* fs.readFileString(
+          `${yield* materialize("section-doc-name-clash")}/sections/shared.xml`,
+        );
+        const selection = yield* fs.readFileString(
+          `${yield* materialize("select-two-required")}/rtest12.xml`,
+        );
+        const inDocument = yield* fs.readFileString(
+          `${yield* materialize("branch-in-twice-placed-section")}/sections/shared.xml`,
+        );
+
+        assert.strictEqual(placed.split('href="sections/shared.xml"').length, 3);
+        assert.notInclude(clash, 'identifier="shared-item"');
+        assert.include(clash, "<qti-assessment-section ");
+        assert.include(clash, 'identifier="shared" title="shared"');
+        assert.notInclude(selection, "item365");
+        assert.strictEqual(selection.split('required="true"').length - 1, 3);
+        assert.isAbove(
+          inDocument.indexOf('identifier="shared-item"'),
+          inDocument.indexOf('<qti-branch-rule target="shared-item">'),
+        );
+      }),
+    ),
+  );
+
+  it.effect(
+    "the catalog names are the brief's list, each in the fixture table and no negative",
+    () =>
+      Effect.sync(() => {
+        assert.deepStrictEqual(
+          [...catalogNames],
+          [
+            "cut-catalog-supports",
+            "cut-catalog-multiple",
+            "cut-catalog-nodes",
+            "cut-catalog-reference",
+            "cut-catalog-rubric",
+            "catalog-300",
+            "catalog-hosts",
+            "card-files",
+            "catalog-padded",
+            "catalog-lang",
+            "card-qti-content",
+            "card-gap-inside",
+            "card-empty",
+            "entry-empty",
+          ],
+        );
+        assert.strictEqual(new Set(catalogNames).size, 14);
+        assert.deepStrictEqual(
+          catalogVersions.map(([name]) => name),
+          [...catalogNames],
+        );
+        assert.includeMembers([...fixtureNames], [...catalogNames]);
+
+        for (const name of catalogNames) {
+          assert.notInclude([...negativeNames, ...restoredNames, ...assemblyNames], name);
+        }
+      }),
+  );
+
+  it.effect(
+    "each catalog positive materializes under 2 MB, lists every packaged file, holds QTI documents that parse and carries its edit",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* catalogFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, version] of catalogVersions) {
+            const dir = yield* materialize(name);
+            const entries = yield* fs.readDirectory(dir, { recursive: true });
+            const files: string[] = [];
+            let size = 0;
+
+            for (const entry of entries) {
+              const info = yield* fs.stat(`${dir}/${entry}`);
+
+              if (info.type === "File") {
+                files.push(entry);
+                size += Number(info.size);
+              }
+            }
+
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+            assert.include(manifest, `<schemaversion>${version}</schemaversion>`, name);
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml").toSorted(),
+              listedFilesOf(manifest),
+              name,
+            );
+            assert.isBelow(size, 2 * 1024 * 1024, name);
+
+            for (const file of files) {
+              if (file.endsWith(".xml") && file !== "imsmanifest.xml") {
+                const document = yield* readXml(yield* fs.readFile(`${dir}/${file}`));
+
+                assert.strictEqual(document.root.namespace, qtiNamespace, `${name}/${file}`);
+              }
+            }
+          }
+
+          for (const [name, file, needle] of catalogPresent) {
+            const dir = yield* materialize(name);
+
+            assert.include(yield* fs.readFileString(`${dir}/${file}`), needle, `${name}: ${file}`);
+          }
+        }),
+      ),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "the companion names are the brief's list, each in the fixture table and no negative",
+    () =>
+      Effect.sync(() => {
+        assert.deepStrictEqual(
+          [...companionNames],
+          ["cut-companion", "companion-301", "companion-full", "companion-padded"],
+        );
+        assert.deepStrictEqual(
+          companionVersions.map(([name]) => name),
+          [...companionNames],
+        );
+        assert.includeMembers([...fixtureNames], [...companionNames]);
+
+        for (const name of companionNames) {
+          assert.notInclude(
+            [...negativeNames, ...restoredNames, ...assemblyNames, ...catalogNames],
+            name,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "each companion positive materializes under 2 MB, keeps the digital material's file and icon, lists every packaged file and carries its edit",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* companionFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, version] of companionVersions) {
+            const dir = yield* materialize(name);
+            const entries = yield* fs.readDirectory(dir, { recursive: true });
+            const files: string[] = [];
+            let size = 0;
+
+            for (const entry of entries) {
+              const info = yield* fs.stat(`${dir}/${entry}`);
+
+              if (info.type === "File") {
+                files.push(entry);
+                size += Number(info.size);
+              }
+            }
+
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+            const item = yield* fs.readFileString(`${dir}/elements.xml`);
+
+            assert.include(manifest, `<schemaversion>${version}</schemaversion>`, name);
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml").toSorted(),
+              ["elements.xml", "links/periodicTable.xml", "links/table.svg"],
+              name,
+            );
+            assert.deepStrictEqual(listedFilesOf(manifest), [
+              "elements.xml",
+              "links/periodicTable.xml",
+              "links/table.svg",
+            ]);
+            assert.isBelow(size, 2 * 1024 * 1024, name);
+            assert.include(
+              item,
+              '<qti-digital-material label="The Periodic Table" mime-type="text/html">',
+              name,
+            );
+            assert.include(item, "<qti-file-href>links/periodicTable.xml</qti-file-href>", name);
+            assert.include(item, "<qti-resource-icon>links/table.svg</qti-resource-icon>", name);
+            assert.notInclude(item, "tool-name", name);
+            assert.include(
+              item,
+              version === "3.0.1" ? "imsqti_asiv3p0p1_v1p0.xsd" : "imsqti_asiv3p0_v1p0.xsd",
+              name,
+            );
+
+            const document = yield* readXml(yield* fs.readFile(`${dir}/elements.xml`));
+
+            assert.strictEqual(document.root.namespace, qtiNamespace, name);
+          }
+        }),
+      ),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "companion-full holds every kind of material, every calculator type and every unit value, and companion-padded pads its values",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* companionContent() {
+          const fs = yield* FileSystem.FileSystem;
+          const read = (name: (typeof companionNames)[number]) =>
+            materialize(name).pipe(
+              Effect.flatMap((dir) => fs.readFileString(`${dir}/elements.xml`)),
+            );
+          const full = yield* read("companion-full");
+          const padded = yield* read("companion-padded");
+
+          for (const type of ["basic", "standard", "scientific", "graphing"]) {
+            assert.strictEqual(
+              occurrences(full, `<qti-calculator-type>${type}</qti-calculator-type>`),
+              1,
+            );
+          }
+
+          assert.strictEqual(occurrences(full, "<qti-calculator-info>"), 1);
+          assert.strictEqual(occurrences(full, "<qti-resource-icon>"), 2);
+          assert.strictEqual(occurrences(full, "<qti-rule-system-si>"), 3);
+          assert.strictEqual(occurrences(full, "<qti-rule-system-us>"), 3);
+          assert.strictEqual(occurrences(full, "<qti-increment-si>"), 2);
+          assert.strictEqual(occurrences(full, "<qti-increment-us>"), 2);
+          assert.strictEqual(occurrences(full, "<qti-physical-material>"), 2);
+          assert.strictEqual(occurrences(full, "<qti-digital-material"), 2);
+          assert.strictEqual(occurrences(full, "<qti-digital-material>"), 1);
+
+          for (const unit of [
+            "Millimeter",
+            "Centimeter",
+            "Meter",
+            "Kilometer",
+            "Inch",
+            "Foot",
+            "Yard",
+            "Mile",
+            "Radian",
+            "Degree",
+            "Minute",
+            "Second",
+          ]) {
+            assert.include(full, `unit="${unit}"`, unit);
+          }
+
+          assert.strictEqual(occurrences(full, "<qti-minor-increment"), 6);
+          assert.include(padded, '<qti-major-increment unit="Meter"> 1.5 </qti-major-increment>');
+          assert.include(padded, "<qti-minimum-length> 30 </qti-minimum-length>");
+          assert.include(padded, "A ruler&#9;of one metre");
+        }),
+      ),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "the XML-path negative names are the spec's 29, with a verdict row each, and the empty card and entry are no negatives",
+    () =>
+      Effect.sync(() => {
+        assert.strictEqual(catalogNegativeNames.length, 29);
+        assert.strictEqual(new Set(catalogNegativeNames).size, 29);
+        assert.deepStrictEqual(
+          catalogVerdicts.map(([name]) => name),
+          [...catalogNegativeNames],
+        );
+        assert.deepStrictEqual(
+          [...new Set(catalogNegativePresent.map(([name]) => name))],
+          [...catalogNegativeNames],
+        );
+        assert.includeMembers([...fixtureNames], [...catalogNegativeNames]);
+
+        for (const [name, rules] of catalogVerdicts) {
+          assert.isAbove(rules.length, 0, name);
+          assert.strictEqual(new Set(rules).size, rules.length, name);
+        }
+
+        for (const name of catalogNegativeNames) {
+          assert.notInclude(
+            [
+              ...negativeNames,
+              ...restoredNames,
+              ...assemblyNames,
+              ...catalogNames,
+              ...companionNames,
+            ],
+            name,
+          );
+        }
+
+        assert.notInclude([...catalogNegativeNames], "card-empty");
+        assert.notInclude([...catalogNegativeNames], "entry-empty");
+        assert.includeMembers([...catalogNames], ["card-empty", "entry-empty"]);
+      }),
+  );
+
+  it.effect(
+    "each XML-path negative materializes under 2 MB, holds XML documents that parse, carries its edit and breaks nothing the manifest lists beyond its own file",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* catalogNegatives() {
+          const fs = yield* FileSystem.FileSystem;
+          const missing = new Map<string, string>(catalogNegativeFiles.missing);
+          const undescribed = new Map<string, string>(catalogNegativeFiles.undescribed);
+
+          for (const name of catalogNegativeNames) {
+            const dir = yield* materialize(name);
+            const files = yield* filesOf(dir);
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+            const listed = listedFilesOf(manifest);
+            const packaged = files.filter((file) => file !== "imsmanifest.xml");
+            let size = 0;
+
+            for (const file of files) {
+              size += Number((yield* fs.stat(`${dir}/${file}`)).size);
+
+              if (file.endsWith(".xml") && file !== "imsmanifest.xml") {
+                const document = yield* readXml(yield* fs.readFile(`${dir}/${file}`));
+
+                if (!file.startsWith("links/")) {
+                  assert.strictEqual(document.root.namespace, qtiNamespace, `${name}/${file}`);
+                }
+              }
+            }
+
+            assert.isBelow(size, 2 * 1024 * 1024, name);
+            assert.deepStrictEqual(
+              packaged,
+              [
+                ...listed.filter((file) => file !== missing.get(name)),
+                ...(undescribed.has(name) ? [undescribed.get(name) ?? ""] : []),
+              ].toSorted(),
+              name,
+            );
+
+            const absent = missing.get(name);
+            const unlisted = undescribed.get(name);
+
+            if (absent !== undefined) {
+              assert.include(listed, absent, name);
+              assert.notInclude(packaged, absent, name);
+            }
+
+            if (unlisted !== undefined) {
+              assert.notInclude(listed, unlisted, name);
+              assert.include(packaged, unlisted, name);
+            }
+          }
+
+          for (const [name, file, needle] of catalogNegativePresent) {
+            const dir = yield* materialize(name);
+
+            assert.include(yield* fs.readFileString(`${dir}/${file}`), needle, `${name}: ${file}`);
+          }
+        }),
+      ),
+    testTimeoutMs,
+  );
+
+  it.effect("the empty card and the empty entry are cut-catalog-supports with one card more", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* emptyCards() {
+        const fs = yield* FileSystem.FileSystem;
+        const item = "items/CatalogWithMultipleSupports.xml";
+        const base = yield* fs.readFileString(
+          `${yield* materialize("cut-catalog-supports")}/${item}`,
+        );
+        const card = yield* fs.readFileString(`${yield* materialize("card-empty")}/${item}`);
+        const entry = yield* fs.readFileString(`${yield* materialize("entry-empty")}/${item}`);
+
+        assert.strictEqual(base.split("<qti-card ").length - 1, 2);
+        assert.strictEqual(
+          card,
+          base.replace("</qti-catalog>", '<qti-card support="spoken"/></qti-catalog>'),
+        );
+        assert.strictEqual(
+          entry,
+          base.replace(
+            "</qti-catalog>",
+            '<qti-card support="spoken"><qti-card-entry xml:lang="en"/></qti-card></qti-catalog>',
+          ),
+        );
+      }),
+    ),
+  );
+
+  it.effect("the catalog positives put their catalogs in every host and name each one", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* catalogHosts() {
+        const fs = yield* FileSystem.FileSystem;
+        const hosts = yield* fs.readFileString(
+          `${yield* materialize("catalog-hosts")}/items/BG007.xml`,
+        );
+        const rubric = yield* fs.readFileString(
+          `${yield* materialize("cut-catalog-rubric")}/items/rubric_block.xml`,
+        );
+        const files = yield* fs.readFileString(`${yield* materialize("card-files")}/choice.xml`);
+
+        for (const id of [
+          "cat-feedback",
+          "cat-template",
+          "cat-template-feedback",
+          "cat-rubric-template",
+          "cat-modal",
+        ]) {
+          assert.strictEqual(hosts.split(`<qti-catalog id="${id}">`).length, 2, id);
+          assert.strictEqual(hosts.split(`data-catalog-idref="${id}"`).length, 2, id);
+        }
+
+        assert.strictEqual(hosts.split("<qti-catalog-info>").length - 1, 5);
+        assert.include(rubric, "asl/ss_choice_directions.m4v");
+        assert.strictEqual(files.split("<qti-file-href ").length - 1, 4);
+      }),
+    ),
+  );
+
+  it.effect(
+    "card-files names only files its package holds, and catalog-padded the one it has",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* cardFiles() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const name of ["card-files", "catalog-padded"] as const) {
+            const dir = yield* materialize(name);
+            const text = yield* fs.readFileString(`${dir}/choice.xml`);
+
+            for (const match of text.matchAll(
+              /<qti-file-href [^>]*>(?<href>[^<]*)<\/qti-file-href>/gu,
+            )) {
+              assert.isTrue(
+                yield* fs.exists(`${dir}/${(match.groups?.["href"] ?? "").trim()}`),
+                name,
+              );
+            }
+          }
+        }),
+      ),
+  );
+
+  it.effect("the PCI names are the brief's list, each in the fixture table and no negative", () =>
+    Effect.sync(() => {
+      assert.deepStrictEqual(
+        [...pciNames],
+        [
+          "pci-simple",
+          "pci-modules",
+          "pci-configurations",
+          "pci-variables",
+          "pci-3-0-1",
+          "pci-context-3-0-1",
+          "pci-catalog-3-0-1",
+          "pci-markup-content",
+          "template-foreign",
+          "custom-3-0-1",
+        ],
+      );
+      assert.strictEqual(new Set(pciNames).size, 10);
+      assert.deepStrictEqual(
+        pciVersions.map(([name]) => name),
+        [...pciNames],
+      );
+      assert.deepStrictEqual(
+        pciPackages.map(([name]) => name),
+        [...pciNames],
+      );
+      assert.includeMembers([...fixtureNames], [...pciNames]);
+
+      for (const name of pciNames) {
+        assert.notInclude(
+          [
+            ...negativeNames,
+            ...restoredNames,
+            ...assemblyNames,
+            ...catalogNames,
+            ...companionNames,
+            ...catalogNegativeNames,
+          ],
+          name,
+        );
+      }
+    }),
+  );
+
+  it.effect(
+    "each PCI positive materializes under 2 MB, holds the files its row lists, lists every one, carries its edit and no custom data attribute",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, version] of pciVersions) {
+            const dir = yield* materialize(name);
+            const entries = yield* fs.readDirectory(dir, { recursive: true });
+            const files: string[] = [];
+            let size = 0;
+
+            for (const entry of entries) {
+              const info = yield* fs.stat(`${dir}/${entry}`);
+
+              if (info.type === "File") {
+                files.push(entry);
+                size += Number(info.size);
+              }
+            }
+
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+            const held = files.filter((file) => file !== "imsmanifest.xml").toSorted();
+
+            assert.include(manifest, `<schemaversion>${version}</schemaversion>`, name);
+            assert.deepStrictEqual(held, listedFilesOf(manifest), name);
+            assert.deepStrictEqual(held, pciPackages.find(([row]) => row === name)?.[2], name);
+            assert.isBelow(size, 2 * 1024 * 1024, name);
+
+            const item = pciPackages.find(([row]) => row === name)?.[1] ?? "";
+            const text = yield* fs.readFileString(`${dir}/${item}`);
+            const document = yield* readXml(yield* fs.readFile(`${dir}/${item}`));
+
+            assert.strictEqual(document.root.namespace, qtiNamespace, name);
+            assert.notMatch(text, /\sdata-(?!catalog-idref)/u, name);
+
+            for (const [row, needle] of pciPresent) {
+              if (row === name) {
+                assert.include(text, needle, `${name}: ${needle}`);
+              }
+            }
+          }
+        }),
+      ),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "pci-modules holds two PCIs of the same four modules, whitespace-only markup, the listed handlebars file and no raphael",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciModules() {
+          const fs = yield* FileSystem.FileSystem;
+          const dir = yield* materialize("pci-modules");
+          const text = yield* fs.readFileString(`${dir}/fractions_deps.xml`);
+          const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+          assert.strictEqual(occurrences(text, "<qti-portable-custom-interaction "), 2);
+          assert.strictEqual(occurrences(text, "<qti-interaction-modules>"), 2);
+          assert.strictEqual(occurrences(text, "<qti-interaction-module "), 8);
+
+          for (const id of ["jquery", "eve", "raphael", "shadingD"]) {
+            assert.strictEqual(occurrences(text, `<qti-interaction-module id="${id}" `), 2, id);
+          }
+
+          assert.match(
+            text,
+            /<qti-interaction-markup>\s*<\/qti-interaction-markup>[\s\S]*<qti-interaction-markup>\s*<\/qti-interaction-markup>/u,
+          );
+          assert.include(manifest, '<file href="modules/lib/handlebars.min-latest.js"/>');
+          assert.notInclude(manifest, "raphael");
+          assert.isFalse(yield* fs.exists(`${dir}/modules/lib/raphael.js`));
+        }),
+      ),
+  );
+
+  it.effect(
+    "pci-configurations names two configuration files its package holds and lists, one PCI with both module forms and three shapes of module",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciConfigurations() {
+          const fs = yield* FileSystem.FileSystem;
+          const dir = yield* materialize("pci-configurations");
+          const text = yield* fs.readFileString(`${dir}/fractions_deps_2.xml`);
+          const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+          assert.notInclude(text, "fallback-configuration");
+
+          for (const file of ["modules/hmh_co_com.js", "modules/hmh_co_com_fallback.json"]) {
+            assert.isTrue(yield* fs.exists(`${dir}/${file}`), file);
+            assert.include(manifest, `<file href="${file}"/>`, file);
+          }
+
+          assert.strictEqual(occurrences(text, "<qti-portable-custom-interaction "), 2);
+          assert.include(text, '        module="shadingD"\n        response-identifier="EXAMPLE">');
+          assert.include(text, '<qti-interaction-module id="eve"/>');
+          assert.include(
+            text,
+            '<qti-interaction-module id="raphael" fallback-path="modules/lib/raphael.js"/>',
+          );
+          assert.include(
+            text,
+            '<qti-interaction-module id="shadingD" primary-path="modules/shading_depsXX.js" fallback-path="modules/shading_deps.js"/>',
+          );
+        }),
+      ),
+  );
+
+  it.effect(
+    "the PCI positives self-close every template and custom interaction but template-foreign's",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciSelfClosed() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const name of pciNames) {
+            const dir = yield* materialize(name);
+            const item = pciPackages.find(([row]) => row === name)?.[1] ?? "";
+            const text = yield* fs.readFileString(`${dir}/${item}`);
+            const opened = occurrences(text, "<template") - occurrences(text, "<template-");
+
+            if (name === "template-foreign") {
+              assert.strictEqual(opened, 1);
+              assert.include(text, "</template>");
+            } else {
+              assert.notInclude(text, "</template>", name);
+              assert.notInclude(text, "</qti-custom-interaction>", name);
+              assert.strictEqual(opened, occurrences(text, "<template/>"), name);
+            }
+          }
+        }),
+      ),
+  );
+
+  it.effect(
+    "the PCI negative names are the spec's 28, with a verdict row each, apart from every other list and from phase 5's 60",
+    () =>
+      Effect.sync(() => {
+        assert.strictEqual(pciNegativeNames.length, 28);
+        assert.strictEqual(new Set(pciNegativeNames).size, 28);
+        assert.strictEqual(negativeNames.length, 60);
+        assert.deepStrictEqual(
+          pciVerdicts.map(([name]) => name),
+          [...pciNegativeNames],
+        );
+        assert.deepStrictEqual(
+          pciNegativeRows.map(([name]) => name),
+          [...pciNegativeNames],
+        );
+        assert.includeMembers([...fixtureNames], [...pciNegativeNames]);
+
+        for (const [name, rules] of pciVerdicts) {
+          assert.isAbove(rules.length, 0, name);
+          assert.strictEqual(new Set(rules).size, rules.length, name);
+        }
+
+        for (const name of pciNegativeNames) {
+          assert.notInclude(
+            [
+              ...negativeNames,
+              ...restoredNames,
+              ...assemblyNames,
+              ...catalogNames,
+              ...companionNames,
+              ...catalogNegativeNames,
+              ...pciNames,
+            ],
+            name,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "each PCI negative materializes under 2 MB at its version, holds the files its row lists, carries its edit and no custom data attribute",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciNegatives() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, item, version, needle] of pciNegativeRows) {
+            const dir = yield* materialize(name);
+            const files = yield* filesOf(dir);
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+            let size = 0;
+
+            for (const file of files) {
+              size += Number((yield* fs.stat(`${dir}/${file}`)).size);
+            }
+
+            assert.include(manifest, `<schemaversion>${version}</schemaversion>`, name);
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml"),
+              [...(pciNegativeFiles[name]?.held ?? pciNegativeStandard)],
+              name,
+            );
+            assert.deepStrictEqual(
+              listedFilesOf(manifest),
+              [
+                ...(pciNegativeFiles[name]?.listed ??
+                  pciNegativeFiles[name]?.held ??
+                  pciNegativeStandard),
+              ],
+              name,
+            );
+            assert.isBelow(size, 2 * 1024 * 1024, name);
+
+            const text = yield* fs.readFileString(`${dir}/${item}`);
+            const document = yield* readXml(yield* fs.readFile(`${dir}/${item}`));
+
+            assert.strictEqual(document.root.namespace, qtiNamespace, name);
+            assert.notMatch(text, /\sdata-(?!catalog-idref)/u, name);
+            assert.include(text, needle, `${name}: ${needle}`);
+          }
+        }),
+      ),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "the PCI negatives that start from a positive differ from it in the one edit their row names",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciNegativeAgainstPositive() {
+          const fs = yield* FileSystem.FileSystem;
+          const textOf = Effect.fn("textOf")(function* textOf(name: FixtureName, item: string) {
+            return yield* fs.readFileString(`${yield* materialize(name)}/${item}`);
+          });
+          const positive = yield* textOf("pci-configurations", "fractions_deps_2.xml");
+          const fallback = yield* textOf("pci-items-fallback", "fractions_deps_2.xml");
+          const missing = yield* textOf("pci-configuration-missing", "fractions_deps_2.xml");
+          const modules = yield* textOf("pci-modules", "fractions_deps.xml");
+
+          assert.strictEqual(
+            fallback,
+            positive.replace('secondary-configuration="', 'fallback-configuration="'),
+          );
+          assert.strictEqual(
+            missing,
+            positive.replace(
+              'primary-configuration="modules/hmh_co_com.js"',
+              'primary-configuration="modules/hmh_co_comXX.js"',
+            ),
+          );
+          assert.strictEqual(yield* textOf("pci-items-unlisted", "fractions_deps.xml"), modules);
+          assert.strictEqual(yield* textOf("pci-items-missing", "fractions_deps.xml"), modules);
+        }),
+      ),
+    testTimeoutMs,
   );
 });
