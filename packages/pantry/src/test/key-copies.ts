@@ -24,7 +24,7 @@
  * schema of its own), over the fields the oracle knows of a row ({@link attributeFields},
  * {@link nodeFields}).
  */
-import type { Law, LawSide } from "@bjornpagen/grizzle";
+import type { Law, LawSide, Statement } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Predicate, Result, Schema } from "effect";
 import {
   closedOf,
@@ -32,6 +32,7 @@ import {
   fieldsOf,
   forcedBy,
   lawSideOf,
+  readsDerived,
   selectedBy,
   sourceOf,
   StatementSchema,
@@ -528,19 +529,21 @@ const statementCopies = (statement: StoredStatement, at: number): readonly Draft
 
 /**
  * Read every copy a schema's statements make of a document's text into a key text, in their order.
+ * A statement over a derived relation, a rule over a query, makes none: a query stores no text, and
+ * the database alone judges the rule (`#pantry/test/predicates.ts` `readsDerived`).
  *
  * @param statements - The schema's statements.
  * @returns Each copy, or why it cannot be counted.
  */
 export const copiesOf = (
-  statements: typeof Qti.statements,
+  statements: readonly Statement[],
 ): readonly Result.Result<KeyCopy, UnreadCopy>[] =>
   statements.flatMap((statement, at) => {
     const kind = Option.getOrElse(
       Option.map(Schema.decodeUnknownOption(KindSchema)(statement), (read) => read.kind),
       () => "",
     );
-    if (!copyKinds.has(kind)) {
+    if (!copyKinds.has(kind) || readsDerived(statement)) {
       return [];
     }
 

@@ -290,6 +290,35 @@ export const isJudged = (relations: AnySchema["relations"], name: string): boole
   Schema.is(Schema.Struct({ kind: Schema.Literals(judgedKinds) }))(relations[name]);
 
 /**
+ * A derived relation as a statement's side or check holds it: grizzle's `derived(name, query)`,
+ * by its kind.
+ */
+const DerivedSchema = Schema.Struct({ kind: Schema.Literal("derived") });
+
+/**
+ * A side whose source is a derived relation, whole or selected.
+ */
+const DerivedSideSchema = Schema.Struct({
+  source: Schema.Union([DerivedSchema, Schema.Struct({ relation: DerivedSchema })]),
+});
+
+/**
+ * Whether a statement reads a derived relation, a rule over a query, which the database alone
+ * judges ({@link judgedKinds}): a side of a containment or a mirrors, a key's side, or a check's
+ * relation. A family, a tree and a fold read tables only (grizzle README, "Rules over queries").
+ * A reader of the schema's statements skips such a statement by this, rather than failing on the
+ * side {@link SideSchema} does not decode.
+ */
+export const readsDerived = Schema.is(
+  Schema.Union([
+    Schema.Struct({ left: DerivedSideSchema }),
+    Schema.Struct({ right: DerivedSideSchema }),
+    Schema.Struct({ side: DerivedSideSchema }),
+    Schema.Struct({ relation: DerivedSchema }),
+  ]),
+);
+
+/**
  * A side of a statement as grizzle keeps it: a selection with the predicate its desc holds, or a
  * whole relation, stored or closed ({@link judgedKinds}), and its terms, each a field's name or a
  * `pred` one as an object over its field. A side over a derived relation does not decode. Every

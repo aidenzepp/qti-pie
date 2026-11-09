@@ -21,7 +21,9 @@
  * containments only as its laws.
  *
  * And neither judges a statement over a derived relation, a rule over a query, whose query only the
- * database evaluates (`judgedKinds` of `#pantry/test/predicates.ts`): no side over one decodes.
+ * database evaluates (`judgedKinds` of `#pantry/test/predicates.ts`): no side over one decodes,
+ * and the oracle's key copies (`copiesOf` of `#pantry/test/key-copies.ts`) skip it
+ * (`readsDerived`), since a query stores no text.
  */
 import {
   check,
@@ -39,13 +41,14 @@ import {
 } from "@bjornpagen/grizzle";
 import type { Law } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Formatter, Option, Schema } from "effect";
+import { Formatter, Option, Result, Schema } from "effect";
 import { lawNameOf, statedLaws } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { evaluatedLaws } from "#pantry/test/gen/genetic/host-laws.ts";
 import { judgedLaws, modelledRelations } from "#pantry/test/host-judge.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
-import { isJudged, SideSchema, StatementSchema } from "#pantry/test/predicates.ts";
+import { copiesOf } from "#pantry/test/key-copies.ts";
+import { isJudged, readsDerived, SideSchema, StatementSchema } from "#pantry/test/predicates.ts";
 
 /**
  * The timeout, in milliseconds, of this file's tests that compile Qti's law model: a hang guard,
@@ -258,6 +261,20 @@ describe("the host judge's model of a schema", () => {
       ],
       [false, false, true, false, false, false, false, true],
       "the query level's statements, which the host leaves to the database",
+    );
+    assert.deepStrictEqual(
+      [...Object.values(stored), ...Object.values(queried)].map((statement) =>
+        readsDerived(statement),
+      ),
+      [false, false, false, false, true, true, true, true],
+      "the statements that read the query",
+    );
+    assert.deepStrictEqual(
+      copiesOf(level.statements).flatMap((copy) =>
+        Result.isFailure(copy) ? [Formatter.format(copy.failure)] : [],
+      ),
+      [],
+      "statements the oracle's key copies cannot read",
     );
   });
 });
