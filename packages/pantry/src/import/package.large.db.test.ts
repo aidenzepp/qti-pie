@@ -38,7 +38,6 @@ import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { AuthorApp } from "#pantry/qti/own-login.ts";
-import { Package } from "#pantry/qti/package.ts";
 import { authorRole, loginSession, qtiSchema, rowsOf } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
@@ -140,7 +139,7 @@ describe.skipIf(!hasLease)(
             const client = yield* authorSession;
             const record = yield* recordTransactions(client, id);
 
-            assert.isTrue(Option.isSome(yield* db.get(Package, { id })), id);
+            assert.isTrue(Option.isSome(yield* db.workload.packageOf.get({ id })), id);
             assert.deepStrictEqual(record, {
               entries: entries.size,
               ours: entries.size,

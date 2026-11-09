@@ -22,7 +22,6 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { writeZip } from "#pantry/package/zip.ts";
 import type { ZipEntry } from "#pantry/package/zip.ts";
 import { AuthorApp } from "#pantry/qti/own-login.ts";
-import { Package } from "#pantry/qti/package.ts";
 import type { Author } from "#pantry/qti/own-login.ts";
 import type { EncodeError } from "@qti-pie/crust/errors.ts";
 
@@ -92,7 +91,7 @@ export const exportEntries = Effect.fn("export.exportEntries")(function* exportE
   yield* Effect.annotateCurrentSpan({ packageId, pageSize: size });
 
   const db = yield* Db.open(AuthorApp.roles.author, {});
-  if (Option.isNone(yield* db.get(Package, { id: packageId }))) {
+  if (Option.isNone(yield* db.workload.packageOf.get({ id: packageId }))) {
     return yield* new PackageNotFound({ packageId });
   }
 

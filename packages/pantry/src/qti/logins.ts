@@ -38,7 +38,10 @@ const noInputsOf = (qti: QtiSchema): PackageInputs =>
  *
  * - **the export's reads**: one document's ordered scan, the documents of a package and a package's
  *   record (`#pantry/export/scan.ts` `exportQueriesOf`), each compiled once when the login's
- *   `DbLayer` is built, its access paths earning their indexes (the W5 amendment's C20);
+ *   `DbLayer` is built, its access paths earning their indexes (the W5 amendment's C20), and
+ *   `packageOf`, the `Package` row by its key, a key member whose handle's `get` the export reads
+ *   to refuse an id no package has and the import reads back after a commit with no answer, so
+ *   every read pantry runs is a member of the workload;
  * - **the import's write program**: `changeSetOf`'s ChangeSet with no rows. grizzle compiles a
  *   ChangeSet from its Description, which names each insert and none of its rows, so this is the
  *   program every package's import compiles. It is declared to be compiled, never run: the schema's
@@ -64,7 +67,12 @@ export const authorAppOf = (qti: QtiSchema) => {
 
   return login(qti, "author_app", [author], {
     workload: [
-      workload(author, { documentScan: paged(documentScan), documentsOf, entriesOf }),
+      workload(author, {
+        documentScan: paged(documentScan),
+        documentsOf,
+        entriesOf,
+        packageOf: qti.relations.Package,
+      }),
       workload(author, { importWrite: changeSetOf(author, noInputsOf(qti)) }),
     ],
   });

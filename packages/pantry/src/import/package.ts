@@ -24,7 +24,6 @@ import { readProgram } from "#pantry/import/program.ts";
 import { refusalOf } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import { AuthorApp } from "#pantry/qti/own-login.ts";
-import { Package } from "#pantry/qti/package.ts";
 import type { Author } from "#pantry/qti/own-login.ts";
 import type { ImportRefused } from "#pantry/import/rules.ts";
 
@@ -215,7 +214,7 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
   const db = yield* retried("Db.open", Db.open(AuthorApp.roles.author, {}), schedule);
   const [elapsed, outcome] = yield* retried("db.apply", wrap(db.apply(changes, {})), schedule).pipe(
     Effect.catchTag("CommitUnknown", (commit) =>
-      settleCommitUnknown(commit, packageId, db.get(Package, { id: packageId })),
+      settleCommitUnknown(commit, packageId, db.workload.packageOf.get({ id: packageId })),
     ),
     Effect.timed,
   );

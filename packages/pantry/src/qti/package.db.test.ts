@@ -313,7 +313,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 failure.reason.bound.bytes > flightMaxBytes.value,
               failure.message,
             );
-            assert.isTrue(Option.isNone(yield* db.get(Package, { id })), id);
+            assert.isTrue(Option.isNone(yield* db.workload.packageOf.get({ id })), id);
           }),
         { timeout: 600_000 },
       );

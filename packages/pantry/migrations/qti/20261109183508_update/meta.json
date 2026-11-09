@@ -1,0 +1,15 @@
+{
+	"meta": {
+		"declared": {
+			"drops": [],
+			"renames": []
+		},
+		"files": [],
+		"kind": "drafted",
+		"schema": "qti",
+		"schemaName": "Qti",
+		"source": "78ff71268200ecf7ee497572c6f78d3db99fa37945c8fea6b2a612dcc940249c",
+		"target": "c8520679df395b154564298447d1bfa6ade305b1d4afa9ee41ee859c32c08c10"
+	},
+	"seal": "4c24caf2ff5986a6487c665fcf184e501450a9ee375488eef05a67c2d0a62c1a"
+}
