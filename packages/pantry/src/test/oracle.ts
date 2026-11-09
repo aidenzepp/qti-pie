@@ -3803,11 +3803,11 @@ const lomForbidden: ReadonlySet<string> = new Set(["exam", "self assessment"]);
 
 /**
  * The types of the documents a package's records are read from, as {@link documentTypeOf} types
- * them: the package's own manifest (`none`) and an external record file, whose root is a `lom:lom`
- * (`resourcemetadata/xml`, reading 81). A `cp:metadata` of any other document describes no part of
- * the package, so its `lom:*` elements are no record's (ruling `170356bd`).
+ * them: the package's own manifest (`manifest`) and an external record file, whose root is a
+ * `lom:lom` (`resourcemetadata/xml`, reading 81). A `cp:metadata` of any other document describes
+ * no part of the package, so its `lom:*` elements are no record's (ruling `170356bd`).
  */
-const recordTypes: ReadonlySet<string> = new Set(["none", "resourcemetadata/xml"]);
+const recordTypes: ReadonlySet<string> = new Set(["manifest", "resourcemetadata/xml"]);
 
 /**
  * The kinds of an item whose `label` is text for a reader and asks for no tool (spec reading 128):
