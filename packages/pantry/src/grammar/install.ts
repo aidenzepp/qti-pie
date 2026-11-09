@@ -13,11 +13,11 @@
  * `grizzle check` decodes, the one form grizzle writes (README, "Closed relations"); a generator
  * builds the rows and the generators' tests review them.
  *
- * `FollowSetOf` and `Last` are keyed by their automaton ({@link ContentModel}), `FollowMember`
- * by its follow set ({@link FollowSet}), and `Symbol` by its shared model ({@link SharedModel}), as
- * the content grammar generates them (`content.ts`): a family reads its model through
- * {@link ContentModelOf} or {@link SharedModelOf}, and a state its set through {@link FollowSetOf},
- * so each is stated one to one.
+ * `FollowSetOf`, which states `Last` as its `ends`, is keyed by its automaton
+ * ({@link ContentModel}), `FollowMember` by its follow set ({@link FollowSet}), and `Symbol` by its
+ * shared model ({@link SharedModel}), as the content grammar generates them (`content.ts`): a
+ * family reads its model through {@link ContentModelOf} or {@link SharedModelOf}, and a state its
+ * set through {@link FollowSetOf}, so each is stated one to one.
  *
  * Where grizzle's surface differs from the generators' shapes, the declaration restates the
  * relation and says why:
@@ -531,6 +531,15 @@ export const ChildGrammar = closed.relation(
 );
 
 /**
+ * The states, as `model state`, at which a family of a content model may end: the content grammar's
+ * `Last`, 0 where a family may be empty. Each is a state of its model, so `FollowSetOf`, keyed by
+ * every state, states it as its `ends` payload, and no relation of its own repeats the keys.
+ */
+const endingStates: ReadonlySet<string> = new Set(
+  grammar.content.last.rows.map(({ model, position }) => `${model} ${position}`),
+);
+
+/**
  * The `FollowSet` roster: every distinct follow set of a content model's state, numbered from 0
  * (`content.ts`): `FollowSetOf` names one per state, and `FollowMember` holds each set's positions
  * once, however many states of however many models share it.
@@ -541,16 +550,28 @@ export const FollowSet = closed(
 );
 
 /**
- * `FollowSetOf`: (model, from) → set, total over each content model's states, `from` 0 the start:
- * the set of the positions a child may take after one at `from`, in the model's automaton. N5 reads
+ * `FollowSetOf`: (model, from) → (set, ends), total over each content model's states, `from` 0 the
+ * start: the set of the positions a child may take after one at `from`, in the model's automaton,
+ * and whether a family may end at `from` (the content grammar's `Last`). N5 reads
  * `FollowMember.row(FollowSetOf.at("set", model, was))`, which holds exactly the positions the
- * automaton's transitions from `was` reach.
+ * automaton's transitions from `was` reach, and N7 `FollowSetOf.at("ends", model, lastState)`,
+ * which holds exactly where `Last` held `(model, lastState)`.
  */
 export const FollowSetOf = closed.relation(
   "FollowSetOf",
-  { from: familyPosition, model: closedId(ContentModel), set: closedId(FollowSet) },
+  {
+    ends: pg.boolean,
+    from: familyPosition,
+    model: closedId(ContentModel),
+    set: closedId(FollowSet),
+  },
   ["model", "from"],
-  grammar.content.followSetOf.rows.map(({ from, model, set }) => ({ from, model, set })),
+  grammar.content.followSetOf.rows.map(({ from, model, set }) => ({
+    ends: endingStates.has(`${model} ${from}`),
+    from,
+    model,
+    set,
+  })),
 );
 
 /**
@@ -562,17 +583,6 @@ export const FollowMember = closed.relation(
   { set: closedId(FollowSet), to: closedId(Position) },
   ["set", "to"],
   grammar.content.followMember.rows.map(({ set, to }) => ({ set, to })),
-);
-
-/**
- * `Last`: the set of (model, position) where a family of the content model may end, 0 when it may
- * be empty.
- */
-export const Last = closed.relation(
-  "Last",
-  { model: closedId(ContentModel), position: familyPosition },
-  ["model", "position"],
-  grammar.content.last.rows.map(({ model, position }) => ({ model, position })),
 );
 
 /**

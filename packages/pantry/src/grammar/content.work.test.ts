@@ -43,7 +43,6 @@ const contentRelations = [
   "ModelPositions",
   "FollowSetOf",
   "FollowMember",
-  "Last",
   "SharedModelOf",
   "SharedPositions",
   "Symbol",

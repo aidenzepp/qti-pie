@@ -70,7 +70,6 @@ import {
   Governor,
   interactionKinds,
   KindGovernor,
-  Last,
   Needs,
   NodeKind,
   nonElementKinds,
@@ -292,8 +291,8 @@ const element = (n: NodeRow) => n.not(n.in(n.kind, nonElementKinds));
 
 /**
  * State that a row's kind has a content model: an element, or the document node. Every such
- * (version, kind) has a `ContentModelOf` model that ends somewhere in `Last`, and every other kind
- * holds no child.
+ * (version, kind) has a `ContentModelOf` model that ends at some state (`FollowSetOf`'s `ends`),
+ * and every other kind holds no child.
  *
  * @param n - The row.
  * @returns The predicate.
@@ -690,9 +689,9 @@ const stringValueFold = fold(
  *   the governor its type gives ({@link typeGovernorOf}), the row's copy of its node's. A foreign
  *   element's governor is `chardata.ts`'s, over its `OpenElementType`.
  * - **N6:** no banned flag above a node, and every flag it needs.
- * - **N7:** the last-slot copy, riding the last axis; `N7_Last`, its own model's `Last` holds every
- *   modeled node's last state; and the counted and barred positions' bounds, each on the owner,
- *   each vacuous where its position is 0.
+ * - **N7:** the last-slot copy, riding the last axis; `N7_Last`, its own model's `FollowSetOf` ends
+ *   at every modeled node's last state (the content grammar's `Last`); and the counted and barred
+ *   positions' bounds, each on the owner, each vacuous where its position is 0.
  * - **N8:** a member's nearest interaction is its parent where the parent is one, else its parent's.
  * - **N12:** each vocabulary element whose kind declares a named type has an {@link ElementType}, and
  *   each type is one its kind may name in `xsi:type`; an element of an anonymous declared type has
@@ -836,10 +835,7 @@ export const nodeLawsByName = {
       n.or(
         n.not(modeled(n)),
         n.eq(
-          Compute.subset(
-            Compute.singleton(n.lastState),
-            Last.row(ContentModelOf.at("model", n.version, n.kind)),
-          ),
+          FollowSetOf.at("ends", ContentModelOf.at("model", n.version, n.kind), n.lastState),
           true,
         ),
       ),

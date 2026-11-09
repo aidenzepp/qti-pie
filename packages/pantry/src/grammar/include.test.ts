@@ -15,7 +15,6 @@ import {
   grammar,
   IncludeParentKind,
   IncludeRoot,
-  Last,
   SharedModelOf,
   Symbol as ContentSymbol,
 } from "#pantry/grammar/install.ts";
@@ -58,7 +57,9 @@ const precedes = Map.groupBy(transitions, (row) => `${row.model} ${row.to}`);
 /**
  * Each model's last positions, as `model position`.
  */
-const lasts = new Set(Last.rows.map((row) => `${row.model} ${row.position}`));
+const lasts = new Set(
+  FollowSetOf.rows.filter(({ ends }) => ends).map((row) => `${row.model} ${row.from}`),
+);
 
 /**
  * Each shared model's positions of a kind, as `model kind`.

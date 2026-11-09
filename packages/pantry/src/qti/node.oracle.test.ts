@@ -123,7 +123,6 @@ const scratchSchema = () =>
       GoverningOf: install.GoverningOf,
       Governor: install.Governor,
       KindGovernor: install.KindGovernor,
-      Last: install.Last,
       ModelPositions: install.ModelPositions,
       Needs: install.Needs,
       Node,
@@ -705,10 +704,11 @@ const orderingCases: readonly [OrderingCase, ...OrderingCase[]] = (() => {
 })();
 
 /**
- * `Last`'s rows as installed, each `<model> <position>`.
+ * The states `FollowSetOf` marks a family may end at, as installed, each `<model> <position>`: the
+ * content grammar's `Last`.
  */
 const last: ReadonlySet<string> = new Set(
-  install.Last.rows.map(({ model, position }) => `${model} ${position}`),
+  install.FollowSetOf.rows.filter(({ ends }) => ends).map(({ from, model }) => `${model} ${from}`),
 );
 
 /**
@@ -1164,9 +1164,9 @@ const memberships: readonly Membership[] = [
   {
     field: "lastState",
     held: new Set(
-      install.Last.rows
-        .filter(({ model }) => model === sharedFamily.model)
-        .map(({ position }) => position),
+      install.FollowSetOf.rows
+        .filter(({ ends, model }) => ends && model === sharedFamily.model)
+        .map(({ from }) => from),
     ),
     law: "N7 Last",
     meets: nodeCheck("N7 Last"),

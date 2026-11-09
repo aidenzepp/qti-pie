@@ -212,9 +212,23 @@ const comparisons: readonly Comparison[] = [
       })),
     name: "ModelPositions",
   },
-  { expected: () => grammar.content.followSetOf.rows, name: "FollowSetOf" },
+  {
+    // `Last` is no relation of its own: each of its (model, state) rows is the `ends` of that
+    // state's `FollowSetOf` row, and no other state's, so the installed `ends` are exactly the
+    // generator's `Last`.
+    expected: () => {
+      const ending = new Set(
+        grammar.content.last.rows.map(({ model, position }) => `${model} ${position}`),
+      );
+
+      return grammar.content.followSetOf.rows.map((row) => ({
+        ...row,
+        ends: ending.has(`${row.model} ${row.from}`),
+      }));
+    },
+    name: "FollowSetOf",
+  },
   { expected: () => grammar.content.followMember.rows, name: "FollowMember" },
-  { expected: () => grammar.content.last.rows, name: "Last" },
   { expected: () => grammar.content.sharedModelOf.rows, name: "SharedModelOf" },
   {
     expected: () =>
