@@ -15,8 +15,8 @@
  *   `ItemRefDocument` and `Declaration`, their CHECKs, a mapped reading's declaration (its
  *   mapping's source's), `VariableMapping`'s key and session check, and what each item ref names:
  *   its `ItemRefHref`, and its `ItemRefTarget` and `ItemRefDocument`, each a row only where the
- *   package holds it. Each law carries the name `src/import/refusal.ts` gives the schema's statement
- *   of it ({@link hostLaws}, held to `statedLaws` by the first test).
+ *   package holds it. Each law carries the name `src/import/refusal.ts` gives the schema's
+ *   statement of it ({@link hostLaws}, held to `statedLaws` by the first test).
  *
  * The two must name the same breaches, but one residual the schema states on purpose: the declared
  * half of `Variable mapping target` is judged on a mapping's `MappingSourceDeclaration`, so a

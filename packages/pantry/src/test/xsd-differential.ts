@@ -25,7 +25,6 @@ import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { fragmentRoots } from "#pantry/grammar/facets.ts";
 import { isForeignKind } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { noType } from "#pantry/grammar/xsi.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
@@ -1853,7 +1852,7 @@ export const foreignNamesOf = Effect.fn("test.foreignNamesOf")(function* foreign
     const namespace = boundBy(node, prefix);
 
     return (
-      (isForeignKind(node.kind) && node.governs === noType) ||
+      (isForeignKind(node.kind) && Option.isNone(node.governs)) ||
       namespace === undefined ||
       (namespace !== xsNamespace && !set.has(namespace))
     );

@@ -1388,7 +1388,16 @@ export const fixed: readonly Known[] = [
         kind: "contained",
         to: {
           relation: "IdBinding",
-          selection: { conjuncts: [] },
+          selection: {
+            conjuncts: [
+              {
+                kind: "compare",
+                left: { field: "admitted", kind: "field" },
+                op: "eq",
+                right: { kind: "literal", type: undefined, value: true },
+              },
+            ],
+          },
           terms: [
             { field: "document", kind: "field" },
             { field: "id", kind: "field" },
@@ -2192,8 +2201,11 @@ export const fixed: readonly Known[] = [
 <qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section><qti-assessment-item-ref href="item.xml"/></qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
       ],
     ],
-    fix: 'decision 454: an item ref whose path only a resource of an unread type names has an ItemRefHref with no ItemRefTarget, contained in UnreadTypePath, so "Item ref target" asks it for no target, as the law oracle names none; the package is R-O6, and its type="bogus" twin and m0 (type="imsqti_item_xmlv2p2", unread) showed the same class',
+    fix: 'decision 454: an item ref whose path only a resource of an unread type names has an ItemRefHref with no ItemRefTarget, contained in UnreadTypeHref, so "Item ref target" asks it for no target, as the law oracle names none; the package is R-O6, and its type="bogus" twin and m0 (type="imsqti_item_xmlv2p2", unread) showed the same class',
     owner: "genetic-repair gr-5b",
+    // His key, "contained Attribute(node) in ItemRefTarget(node)", is the law this fix split: an
+    // item ref's href is held to its ItemRefHref, and its ItemRefHref, counted, to its targets. Its
+    // class, an item ref href the rows leave unheld, is the href's containment in ItemRefHref.
     signature: {
       kind: "import-only-law",
       law: {
@@ -2202,15 +2214,15 @@ export const fixed: readonly Known[] = [
           selection: {
             conjuncts: [
               {
+                arg: { field: "kind", kind: "field" },
+                kind: "in",
+                values: ["qti-assessment-item-ref"],
+              },
+              {
                 kind: "compare",
                 left: { field: "name", kind: "field" },
                 op: "eq",
                 right: { kind: "literal", type: undefined, value: "href" },
-              },
-              {
-                arg: { field: "kind", kind: "field" },
-                kind: "in",
-                values: ["qti-assessment-item-ref"],
               },
             ],
           },

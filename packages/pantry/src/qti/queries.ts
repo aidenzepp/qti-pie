@@ -76,12 +76,7 @@ import {
 } from "#pantry/qti/metadata.ts";
 import { integerKeyPattern, itemPattern, MapKeyItems, MapKeyType } from "#pantry/qti/mapping.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
-import {
-  ResourceDocument,
-  ResourceHref,
-  ResourceTyped,
-  spelledResourceTypePattern,
-} from "#pantry/qti/package.ts";
+import { ResourceDocument, ResourceHref, ResourceTyped } from "#pantry/qti/package.ts";
 import {
   AssembledName,
   InstanceName,
@@ -128,12 +123,15 @@ export const queriesOf = (base: QtiBase) => {
   /**
    * The href of a resource whose `type` is written and spells no `ResourceType` handle, by the
    * resource's node: its {@link ResourceHref}'s package and path, where the resource's manifest
-   * `type` is nonempty and spells no handle (`spelledResourceTypePattern`), so the resource has no
-   * {@link ResourceTyped} (spec reading 67: AL1's value domain refuses the `type` alone). A resource that writes no `type` has none (AL3 refuses it
-   * alone), and neither has one that writes no `href`, which names no path. Its rows are a join no
-   * table stores, which "Item ref target" reads: an item ref whose href names nothing the importer
-   * reads names a path one of these names, or is refused (the oracle's `itemRefTargetOf` names no
-   * target there).
+   * `type` is nonempty and the resource has no {@link ResourceTyped}, whose rows are exactly the
+   * resources whose `type` spells a handle (spec reading 67: AL1's value domain refuses the `type`
+   * alone). The two conditions are two filters: grizzle states a rule over a query whose relational
+   * negation stands alone as a filter, never inside a conjunction, and reads no pattern over the
+   * attribute's unbounded lexical form in a query. A resource that writes no `type` has none (AL3
+   * refuses it alone), and neither has one that writes no `href`, which names no path. Its rows are
+   * a join no table stores, which "Item ref target" reads: an item ref whose href names nothing the
+   * importer reads names a path one of these names, or is refused (the oracle's `itemRefTargetOf`
+   * names no target there).
    */
   const UnreadTypeHref = derived(
     "UnreadTypeHref",
@@ -143,8 +141,15 @@ export const queriesOf = (base: QtiBase) => {
 
       return r
         .match(ResourceHref, { node, package: pkg, path })
-        .match(Attribute, { documentType: "manifest", kind: "cp:resource", lexical, name: "type", node })
-        .where(r.and(r.ne(lexical, ""), Compute.not(Compute.matches(lexical, spelledResourceTypePattern))))
+        .match(Attribute, {
+          documentType: "manifest",
+          kind: "cp:resource",
+          lexical,
+          name: "type",
+          node,
+        })
+        .where(r.ne(lexical, ""))
+        .where(r.not(ResourceTyped, { node }))
         .find({ node, package: pkg, path });
     }),
   );

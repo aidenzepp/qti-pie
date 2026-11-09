@@ -630,16 +630,6 @@ const nodesOf = (kind: "cp:dependency" | "cp:file" | "cp:manifest" | "cp:resourc
 const spelledResourceTypes = ResourceTypeLexical.rows.map(({ lexical }) => lexical);
 
 /**
- * A resource `type` that spells a `ResourceType` handle, as a pattern over its lexical form: one of
- * {@link spelledResourceTypes}, each as written, its regex characters escaped. The query
- * `UnreadTypeHref` (`#pantry/qti/queries.ts`) reads its complement as a field test, since a rule
- * over a query may not negate a relation inside a condition.
- */
-export const spelledResourceTypePattern = Compute.pattern<string>(
-  `^(?:${spelledResourceTypes.map((lexical) => lexical.replaceAll(/[$()*+.?[\\\]^{|}]/gu, "\\$&")).join("|")})$`,
-);
-
-/**
  * The `type` of each `cp:resource` that spells a `ResourceType` handle, as written: each is its
  * {@link ResourceTyped}'s `typeLexical`.
  */
