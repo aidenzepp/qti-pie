@@ -7,8 +7,63 @@ operator ruling. A new reading lands here by pull request, and a package that ne
 
 ## Validity
 
-1. **Nothing valid is refused.** Content that is valid QTI 3.0, including every language QTI embeds, is accepted.
-   There are no exceptions. Content that is not valid is refused. (2026-10-30, restated without exceptions 2026-11-03.)
+1. **Nothing valid is refused, except under a stated limit listed here.** Content that is valid QTI 3.0, including
+   every language QTI embeds, is accepted, and content that is not valid is refused. The only exceptions are the
+   stated limits below, each with its cause and the reading that states it, and reading 91 has each say what would
+   lift it. A limit not on this list is not one: a package that refuses valid content, or accepts invalid content, for
+   a reason this list does not give breaks this reading. A case that is both outlandish and absent from 1EdTech's
+   official example packages may sit on the list, with a sensible default recorded plainly rather than built for. The
+   list licenses neither accepting what QTI bans nor refusing ordinary valid content: each limit is narrow, refusing
+   only what a package cannot represent or accepting only what it cannot check, for the cause it names.
+
+   Limits that refuse valid content:
+   - **Key-text bound** (`key-text-bound`): a text a key holds is at most 2,587 UTF-8 bytes, what a PostgreSQL B-tree
+     entry leaves it beside the widest key's other columns (reading 133, with its copies in readings 2 and 60).
+   - **Element depth** (`element-depth`): at most 256 elements are open at once, the bound `@qti-pie/crust`'s reader
+     keeps for pantry and plate alike (`defaultElementDepth`, as in `xmllint`). XML and QTI set no depth; the bound
+     protects the recursive walks over a read tree, and nesting that deep is outlandish and absent from the official
+     packages (decision 445, stated here).
+   - **Href form** (`href-form`): an href the importer reads no name from, such as a `%` that starts no
+     percent-encoding, since the representation states no path for it (reading 102).
+   - **Remote section ref** (`remote-section`): a section ref whose href is external, since the import is offline and
+     never fetches the section the test is built from (reading 170).
+   - **Fragment context** (`fragment-context`): a fragment two includes place under different nearest interactions,
+     since each written element is one row, judged in one context (reading 117).
+   - **Include root**: an include whose parent admits only a kind the composition splits by context, such as a
+     template inside a rubric block, since a fragment's root is read by its name alone (reading 116).
+   - **Idref target** beside an external include: an IDREF naming an ID only the unfetched resource could hold, since
+     pantry cannot tell an ID that resource holds from one it lacks (reading 115).
+   - Admissions by version: a wildcard reads an element or an attribute as a declaration of any schema set its kind's
+     documents use, and an `xsi:type` as a type of any schema its version pins, not only its own document's set, so
+     such an element is judged, and may be refused, where XML Schema would not assess it, since the grammar is keyed
+     by version and not by schema set (readings 81 and 60).
+
+   Limits that accept content without a check:
+   - MathML prose rules no structural law reads, such as the definition a `definitionURL` names, and the importer's
+     `cn` and row checks that stop short of the law oracle's, where no row carries what the oracle reads (reading 2).
+   - A complex `xsi:type` under a wildcard, which needs a general XML Schema validator, and `xs:ENTITY`, which needs
+     the DTD's unparsed entities (reading 50); plate's text under a wildcard, open for plate's own goal (reading 60).
+   - A branch rule's order under a shuffle that `fixed` would hold, since `fixed` is not read (reading 87).
+   - A variable mapping and a prefixed reference through an item ref that names an LTI link, since the package states
+     no declaration to check them against (readings 106 and 110).
+   - An external include's content, which pantry never fetches (reading 115), and a fragment's `xml:lang` forms and a
+     rule fragment's types, read in its own document until each is stated in place (reading 117).
+   - An `xi:fallback` in wildcard content, until a law holds a fallback to its parent (reading 118).
+   - A URL's syntax and a `srcset`'s candidates beyond a file reference, since the URL and HTML Standards are living
+     documents that no pinned source holds (reading 124).
+   - A `’` that closes a quote around a `q`, since it is as often an apostrophe (reading 127).
+   - A language tag's validity and a MIME type's registration, since IANA's registries are dated datasets that no
+     pinned source holds (readings 129 and 135).
+   - A `data-ssml` stored without the importer, since no pattern grizzle admits fits its language (reading 137).
+   - A test's prefixed `qti-variable` and an unweighted `qti-test-variables` with no `base-type`, typed `unknown` until
+     an expression is typed once per assembly (reading 167, decision 435).
+
+   One limit changes no verdict, only the rule it is named by: where a manifest's path breaks two laws, the refusal
+   names the CHECK PostgreSQL judges first (reading 162).
+
+   (2026-10-30, restated without exceptions 2026-11-03. Amended under the operator's ruling of 2026-11-07, register
+   D1, to defer to this list; the element-depth limit added by decision 445.)
+
 2. **MathML validity is the MathML 3 Recommendation**: its RelaxNG schema and its prose rules, not only the MathML XSD
    that QTI's schema imports. MathML that breaks a rule of the Recommendation, such as an operator applied to the wrong
    number of arguments or a piecewise expression with two `otherwise` parts, is invalid even when the QTI XSD accepts it.
@@ -3259,8 +3314,8 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      formula starts at `ltr`, so the `mrow`'s `rtl` changes direction and the group cannot pass it; a formula meant to
      run right to left writes `dir="rtl"` on its `m:math`. A `dir` that spells neither `ltr` nor `rtl` changes no
      direction (MathML 3 lists only those two; the value domain refuses another on a MathML element). This binds pantry
-     and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on
-     audit e8db90e1's F6, under the operator's standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
+     and plate alike. This is not a case of documents in conflict. (Proposed by the Mind (audit e8db90e1's F6), for
+     the operator's acceptance; 2026-11-07, decision 416.)
 165. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
      first one listed.** A string mapping whose entries leave `case-sensitive` at its default writes `York` (mapped to 2)
      and `york` (mapped to 1); the document is accepted, and the response `york` matches both. The standard bans
