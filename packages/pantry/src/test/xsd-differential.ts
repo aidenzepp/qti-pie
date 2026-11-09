@@ -915,6 +915,19 @@ export const generatedRecorded: readonly Recorded[] = [
   {
     class: "content",
     detail:
+      /^N6 ancestry at \S*\/qti-modal-feedback\[\d+\]\/\S*: \S+ sits in \{[^}]*\bmodal\b[^}]*\}: Banned holds \{[^}]*\bmodal\b[^}]*\}/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_ModalFeedback (§5.93, info.txt:35232 and info-v3p0p1.txt:35686: 'The content of the modalFeedback must not contain any interactions')",
+      why: "a modal feedback holds no interaction at any depth; the XSD admits one its content body's HTML holds",
+    },
+    rule: "ancestry-ban",
+  },
+  {
+    class: "content",
+    detail:
       /^N7 Counted at \S*\/lom:[\w.]+(?:\[\d+\])?: \d+ children at position \d+, which Counted bounds to \d+ to \d+$/u,
     direction: "oracle-only",
     reason: {
