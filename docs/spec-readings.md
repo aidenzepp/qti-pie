@@ -55,7 +55,13 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    - A variable mapping and a prefixed reference through an item ref that names an LTI link, since the package states
      no declaration to check them against (readings 106 and 110).
    - An external include's content, which pantry never fetches (reading 115), and a fragment's `xml:lang` forms and a
-     rule fragment's types, read in its own document until each is stated in place (reading 117).
+     rule fragment's other types, read in its own document until each is stated in place (reading 117). A rule
+     fragment's map response ("Mapped response", P27) and a reference that is itself a condition ("Condition type",
+     P21) are stated in place, typed in each item that places it. Its composite expressions (P20 to P29), a condition
+     reference to a record, which has no base type, and its processing language are not. The composites and the record
+     reference move a verdict: the import accepts a type error there that the law oracle, typing the fragment in its
+     item, refuses. Absent from the official packages, none of which includes a rules fragment; lifted by typing an
+     expression once per placement, planned as its own goal (decisions 465 and 466, stated here).
    - An `xi:fallback` in wildcard content, until a law holds a fallback to its parent (reading 118).
    - A URL's syntax and a `srcset`'s candidates beyond a file reference, since the URL and HTML Standards are living
      documents that no pinned source holds (reading 124).
@@ -2237,16 +2243,27 @@ against it. A reading that is not an information-model-over-XSD case says which 
      A fragment's nodes are one written element each, one row each, so a fragment is judged under one nearest
      interaction: two includes that place it inside different interactions, or one inside an interaction and one
      outside every interaction, are refused under "Fragment context", a limit of the representation, not a law of the
-     specification; no corpus document places a fragment inside an interaction. Until each is stated in place, these
-     laws read a fragment's content in its own document alone, each a known under-refusal and never an over-refusal: the
-     `xml:lang` forms of a fragment a section document or a test places, listed by the test's records; and a rule
-     fragment's types and language, the type laws over its references
-     and expressions (P20 to P29) and the processing language its rules are written in (O4), which read its variables
-     untyped and its language as none. This binds pantry and plate alike. This is not a case of documents in conflict.
+     specification; no corpus document places a fragment inside an interaction. A rule fragment's references are
+     typed in each item that places it, once per placement, where the reference is the whole expression a law types: a
+     map response or map response point names a declaration of that item that holds a mapping or an area mapping
+     ("Mapped response", P27), and a `qti-variable`, `qti-correct` or `qti-default` that is itself a condition names a
+     boolean single declaration of that item ("Condition type", P21); a reference read through an LTI link stays
+     unchecked (reading 110). Until each is stated in place, these laws read a fragment's content in its own document
+     alone, each a known under-refusal and never an over-refusal: the `xml:lang` forms of a fragment a section document
+     or a test places, listed by the test's records; a rule fragment's other types, the type laws over its composite
+     expressions (P20 to P29), such as a `qti-sum` of its variables under a `qti-response-if`, which read its variables
+     untyped; a condition reference to a declaration with no base type, a record, which writes no placed type and so is
+     not typed; and the processing language its rules are written in (O4), which reads as none. The composites and the
+     record reference move a verdict: the import accepts a package whose fragment holds such a type error, which the
+     law oracle, typing the fragment in its item, refuses. Typing an expression once per placement is planned as its
+     own goal. This binds pantry and plate alike. This is not a case of documents in conflict.
      (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins. Amended
      2026-11-07 by the Mind, decision 416, on audit e8db90e1's F2, and decision 417, on its F3. Amended 2026-11-07 by
      the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-ASM: the content references of
-     a fragment a section document or a test places resolve in the test, reading 145.)
+     a fragment a section document or a test places resolve in the test, reading 145. Amended 2026-11-09 by the Mind,
+     decision 463, on research aeced65a's O18 and O38: a placed reference's mapping and its type as a condition, typed
+     in its item; and decisions 465 and 466: a rule fragment's composite expressions and its condition references to a
+     record, stated as a limit that moves a verdict.)
 
 118. **An include holds at most one fallback, and its `accept` and `accept-language` hold header characters alone,
      though `XInclude.xsd` admits more.** XInclude says "The children property of the xi:include element may include a
