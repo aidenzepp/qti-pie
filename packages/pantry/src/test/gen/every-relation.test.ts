@@ -19,6 +19,7 @@ import {
   everyRelationPackage,
   scopedPackage,
   memberCounts,
+  refusedOnly,
 } from "#pantry/test/gen/every-relation.ts";
 import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
 
@@ -28,20 +29,6 @@ import { oracleVerdict } from "#pantry/test/oracle-verdict.ts";
  * under V8 coverage, its slowest test.
  */
 const testTimeoutMs = 300_000;
-
-/**
- * The stored relations of `Qti` whose rows only a refused package writes, each with the reading
- * that refuses the package (decision 453 of the genetic repair): no package the law oracle accepts
- * writes one, so the coverage requirement leaves them out. Every other stored relation stays
- * required.
- *
- * - `UnreadTypeHref` and `UnreadTypePath`: a resource's `type` that is written and spells no
- *   `ResourceType` handle, which AL1's value domain refuses (spec reading 67).
- */
-const refusedOnly: ReadonlyMap<string, string> = new Map([
-  ["UnreadTypeHref", "reading 67, AL1"],
-  ["UnreadTypePath", "reading 67, AL1"],
-]);
 
 /**
  * The situations the box reaches: a count past its least.
