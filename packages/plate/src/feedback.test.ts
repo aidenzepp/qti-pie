@@ -26,6 +26,7 @@ import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { corpusRoot, readCorpusFile } from "#plate/document/corpus.ts";
+import { h } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import {
   acceptedItem,
@@ -319,6 +320,34 @@ describe("the BPIG feedback examples", { tags: ["corpus"] }, () => {
         ]);
         assert.deepStrictEqual(shownBy(accepted, configuration, begun(accepted)).modal, []);
         assert.deepStrictEqual(shownBy(accepted, configuration).modal, []);
+      }),
+  );
+
+  it.effect(
+    "[I-10] Example01-modalFeedback shows the same modal feedback in answering as in review, and through a host's own part for it",
+    () =>
+      Effect.gen(function* modalModesAndPart() {
+        const configuration = yield* configure({});
+        const accepted = yield* openCorpusItem(bpig.modal);
+        const right = scoredBy(accepted, { RESPONSE: identifier("true") });
+        const redacted = redact(accepted, right.record, configuration);
+        const answering = yield* Effect.fromResult(
+          render(redacted, configuration, { instance, values: right.values }),
+        );
+        const swapped = yield* Effect.fromResult(
+          render(redacted, configuration, {
+            instance,
+            mode: "review",
+            parts: { item: { modalFeedback: (props, children) => h("aside", props, children) } },
+            values: right.values,
+          }),
+        );
+        const [part] = slotted(parseHtml(answering.html), modalSlot);
+        const [aside] = slotted(parseHtml(swapped.html), modalSlot);
+
+        assert.strictEqual(part === undefined ? "" : contentOf(part), "correct");
+        assert.strictEqual(aside?.tag, "aside");
+        assert.strictEqual(aside === undefined ? "" : contentOf(aside), "correct");
       }),
   );
 

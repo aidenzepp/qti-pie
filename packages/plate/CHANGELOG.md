@@ -9,6 +9,83 @@ changes. [`docs/spec-readings.md`](../../docs/spec-readings.md) numbers the read
 The first entry lists the surface of M1 and M2, and what M3 adds to it. plate is not published,
 and both of its entry points are unstable until M3.
 
+### Feedback (M3)
+
+- `render(redact(accepted, record, configuration), configuration, options)` shows an item's
+  `qti-modal-feedback`, `qti-feedback-block` and `qti-feedback-inline` by the outcomes of the
+  attempt the record holds. No function or option is new: after `score`, pass the record `restore`
+  gives to `redact`, and render in `review` with its `values`. The README's
+  [Feedback](README.md#feedback) section has the example and the rule.
+- A block or inline shows when its outcome's value is its `identifier`, or a multiple value holds
+  it, under `show-hide="show"`, and unless it does under `show-hide="hide"`. Once `score` has
+  processed an attempt (`attempt` `submitted`) the record's outcomes decide it. Before, under
+  `begin`'s record or with no record, each outcome's default decides it, the one template
+  processing set where it set one. With no record, an item whose template processing runs shows a
+  notice in place of each block and inline, and so does a record that holds no value of the
+  outcome.
+- Modal feedback shows only once `score` has processed an attempt, after the body inside the item
+  Root, each one a `section` with `data-slot="item-modal-feedback"` and its `title` as
+  `aria-label`. The part is `item.modalFeedback` in `parts`, so a host can swap it. One whose
+  outcome the record holds no value of shows only a notice.
+- Hidden feedback never reaches the page, the HTML or the redacted item. An interaction inside it
+  is hidden as inside hidden template content: `postings` lists none for its response,
+  `checkResponses` ignores it, and `score` keeps the record's value. `Redacted`'s `responses` and
+  `notices` leave out what only hidden feedback holds.
+- `Redacted`, and its JSON form, gains `modalFeedback`, each modal feedback shown with its content
+  and its `title`. `decodeRedacted` refuses JSON whose body holds a feedback block or inline, or
+  whose modal feedback holds an interaction.
+- The record `redact` and `checkResponses` read gains `attempt` and `defaults`: pass
+  `Restored["record"]` as before. A record built by hand needs both, such as
+  `{ attempt: "submitted", defaults: {}, outcomes, templates: {} }`. `checkResponses` now takes the
+  same record type as `redact`.
+- `ItemView` gains `page`, the record to pass to `redact` and `checkResponses` in a test: the
+  item's `record`, except for a closed item whose `show-feedback` is false, which shows no feedback
+  (ItemSessionControl, section 7.19.2). Pass `shown.page` where you passed `shown.record`.
+- An Inline Choice whose choice holds a `qti-feedback-inline` shows its notice, as one holding a
+  `qti-template-inline` does, since an `option` shows only text. A Choice's choice shows it.
+
+### How plate reads feedback (2026-11-09)
+
+- A feedback element's outcome matches its `identifier` when its value holds a single
+  `identifier` equal to it, the value itself or a member, and `show-hide` shows or hides it by
+  that match (the information model's FeedbackBlock, section 5.49.3, FeedbackInline 5.52.3 and
+  ModalFeedback 5.93.2). Before response processing the body is "the version of the qti-item-body
+  displayed to the candidate at the start of each attempt", "with the visibility of any integrated
+  feedback determined by the default values of the outcome variables" (7.19.3). Modal feedback
+  "is shown to the candidate directly following response processing" (5.93).
+- `open` refuses a feedback element whose `outcome-identifier` names no outcome of base type
+  `identifier`, single or multiple, the built-in `completionStatus` included, with
+  `undeclared-variable` for a name nothing declares and `expression-type` otherwise, as pantry does
+  (reading 77, the laws `Feedback reference` and `Feedback outcome type`). No corpus document is
+  newly refused.
+- The verdict no longer marks `qti-modal-feedback` nor shows `qti-feedback-block` or
+  `qti-feedback-inline` as a notice. These 36 corpus items are now `accepted`, each also as its
+  copy inside its folder's zip (`BPIG_22April.zip`, `basicFeedbackTest.zip`, `BBQsTest.zip`,
+  `ccPackage.zip`, `feedbackTest.zip`, `interactionMixSaxonyV3.zip` or `items.zip`). They were
+  `accepted-with-unsupported` for those features alone.
+  - `QTI3_BPIG_Examples/items/Example01-modalFeedback.xml` and `Example02-feedbackInline.xml`
+  - `qtiv3-examples/packaging/items/Example01-modalFeedback.xml` and `Example02-feedbackInline.xml`
+  - `qtiv3-examples/packaging/basicFeedbackTest/` and `qtiv3-examples/packaging/feedbackTest/`:
+    each one's `Example01-modalFeedback.xml` and `Example02-feedbackInline.xml`
+  - `qtiv3-examples/packaging/BBQsTest/`: `SineRule-002-maths.xml`, `jumble-inlineChoice.xml`,
+    `MultipleAnswer-choice-materials.xml`, `Likert-choice-questionSet.xml`,
+    `QuizBowl-multi-geometry.xml`, `TF-choice.xml`, `text_entry-calculus.xml`,
+    `text_entry-Lycidas.xml` and `TheAnswer-001.xml`
+  - `qtiv3-examples/packaging/ccPackage/testitems/`: `QUE_102010.xml`, `QUE_102011.xml`,
+    `QUE_102012.xml`, `QUE_102013.xml`, `QUE_102015.xml`, `QUE_102016.xml`, `QUE_104045.xml`,
+    `QUE_104047.xml`, `QUE_104048.xml`, `QUE_104049.xml` and `QUE_104051.xml`
+  - `qtiv3-examples/packaging/interactionMixSaxonyV3/`: `Choicemultiple_2014410822.xml`,
+    `Choicemultiple_871212949.xml`, `Choicesingle_853928446.xml`,
+    `Choicetruefalse_176040516.xml`, `TextEntry_883368511.xml`, `TextEntrynumeric_2040297025.xml`,
+    `TextEntrynumeric_770468849.xml` and `TextEntrysubset_806481421.xml`
+- 21 other corpus items, each also with its zip copy, lose those marks and notices and stay
+  `accepted-with-unsupported` for features plate does not render, such as `adaptive="true"`, End
+  Attempt, Match, Order, Gap Match, Hotspot, Hottext and Select Point. Among them are
+  `Example05-feedbackBlock-adaptive.xml`, `adaptiveTemplate.xml`, `adaptive.xml` and `hint.xml`.
+  Every copy of `Example03-feedbackBlock-solution.xml` and `Example04-feedbackBlock-templateBlock.xml`
+  stays `unchecked` for its MathML. No package's verdict moves: `feedbackTest.zip` stays refused with
+  `item-ref-unresolved`, for refs its test names that its zip lacks.
+
 ### Record answers and `qti-field-value` (M3)
 
 - A Text Entry or Extended Text bound to a `record` response renders as one text control. Before,

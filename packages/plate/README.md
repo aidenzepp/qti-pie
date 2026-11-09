@@ -11,7 +11,8 @@ plate is a library of parts and pure functions. Only a value you leave out is ra
 document, `render` writes an item as HTML with native form controls, and `score` scores the
 responses that come back. `openPackage` checks a content package, and a test session takes a
 candidate through a test's items. plate renders choice, inline choice, text entry and extended
-text interactions, and each verdict names the features that plate does not render. plate has no
+text interactions, and an item's modal, block and inline feedback, and each verdict names the
+features that plate does not render. plate has no
 form, submit control, submission flow or store. The host page owns those. plate reads XML through
 [crust](../crust/README.md), never depends on pantry, and is pre-release.
 
@@ -84,7 +85,7 @@ if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsuppo
       const instance = `s-${crypto.randomUUID()}`;
       const session = yield* startTest(test, items, configuration, { instance, now: new Date() });
       const shown = yield* itemView(test, session, configuration, 1);
-      const redacted = redact(items.get(shown.ref)!, shown.record, shown.configuration);
+      const redacted = redact(items.get(shown.ref)!, shown.page, shown.configuration);
       const item = yield* render(redacted, shown.configuration, {
         instance: shown.instance,
         values: shown.values,
@@ -295,7 +296,7 @@ export const step = (
     const responses: Record<string, ResponseValue> = {};
     if (shown.kind === "item") {
       const { own } = partition(entries, shown.instance);
-      const item = redact(items.get(shown.ref)!, shown.record, shown.configuration);
+      const item = redact(items.get(shown.ref)!, shown.page, shown.configuration);
       for (const { binding, identifier, options } of postings(item, shown.instance)) {
         responses[identifier] = yield* decode(own, binding, options);
       }
@@ -348,7 +349,9 @@ Both records are server data. An item's record holds the seed that keys every va
 processing draws, and its template values and correct responses can give the answers away. Keep
 both where only your server reads them, never in a hidden field, a cookie or the browser's
 storage. `ItemView`, the item that `current` gives, and `restore`'s `Restored` each carry the
-record, so they are server data too.
+record, so they are server data too. Pass `ItemView`'s `page` to `redact` and `checkResponses`: it
+is the item's `record`, except for a closed item whose `show-feedback` is false, where it reads as
+an attempt no response processing has run in, so the item shows no feedback.
 
 `restore(document, record)` gives an item's decoded record and its values back from its
 `StoredRecord`. In a test, `itemView` gives them. plate exports no `ItemRecord` type: the record's
@@ -483,6 +486,7 @@ build the container from that variable.
 | An operand of a type its expression does not take | `expression-type` | P23 |
 | A reference attribute, such as `qti-index`'s `n`, that names a variable other than a single template or outcome variable of the attribute's base type | `expression-type` | P24 |
 | A reference attribute that names no declared variable | `undeclared-variable` | P8 |
+| A `qti-feedback-block`, `qti-feedback-inline` or `qti-modal-feedback` whose `outcome-identifier` names no outcome variable of base type `identifier`, single or multiple (the built-in `completionStatus` counts) | `undeclared-variable` or `expression-type` | Feedback reference, Feedback outcome type |
 | The built-in `duration`, read in an item that is not time dependent | `undeclared-variable` | `item-duration` |
 | A `qti-lookup-outcome-value` that sets the built-in `completionStatus` | `undeclared-variable` | P9 |
 | A `qti-variable` with a `weight-identifier`, which only a test's outcome processing may hold | `expression-placement` | P12 |
@@ -544,6 +548,64 @@ item's `StoredRecord` holds it among the outcomes.
 The verdict marks an adaptive item `adaptive="true"`, and its processing runs as a non-adaptive
 item's. Each attempt starts from the declared defaults, so outcomes do not add up across attempts
 until M5.
+
+## Feedback
+
+plate shows an item's feedback by the outcome values of the attempt the page shows, so a host
+shows a candidate's feedback by rendering the item again from the record `score` returned. No
+function or option is feedback's own. In review, after a submit:
+
+```ts
+import { Result } from "effect";
+import { redact, render, restore, score } from "@qti-pie/plate";
+
+const page = Result.gen(function* review() {
+  const stored = yield* score(accepted, responses, record);
+  const { record: scored, values } = yield* restore(accepted, stored);
+  const shown = redact(accepted, scored, configuration);
+  return (yield* render(shown, configuration, { instance, mode: "review", values })).html;
+});
+```
+
+Store `stored` as you store any record. `mode: "review"` shows the candidate's answers, which
+`values` holds, in controls they cannot edit. The feedback follows the record whatever the mode,
+so a host that lets the candidate try again renders in `answering` with the same record.
+
+A `qti-feedback-block`, a `qti-feedback-inline` and a `qti-modal-feedback` each name an outcome in
+`outcome-identifier`, an `identifier` and `show-hide`. The outcome matches the element when its
+value is the identifier, for a single outcome, or holds it, for a multiple one. NULL matches
+nothing. `show-hide="show"`, a block's and an inline's default, shows the element only when the
+outcome matches, and `show-hide="hide"` shows it unless the outcome matches. `open` refuses an
+`outcome-identifier` that names no outcome of base type `identifier`, single or multiple.
+
+Which values decide it:
+
+- Once `score` has processed an attempt, the record's `attempt` is `submitted`, and feedback reads
+  the outcomes that processing set.
+- Before, under `begin`'s record or with no record, the page is the body as an attempt starts, so
+  feedback reads each outcome's default, the one template processing set where it set one.
+- With no record, an item whose template processing runs shows a notice in place of each feedback
+  block and inline, as it does for its template content. So does a record that holds no value of
+  the outcome a feedback element names.
+- In a test, `ItemView`'s `page` decides it, as [Records](#records) says.
+
+What the page gets:
+
+- A shown block or inline leaves its content in its place, with no wrapper element and without its
+  `id`, `class` or `lang`. A hidden one leaves nothing. Its content is in neither the HTML nor the
+  redacted item, so hidden feedback never reaches the page.
+- Modal feedback shows only after `score` has processed an attempt, never under `begin`'s record or
+  with no record, even with `show-hide="hide"`. Each one shown is a `section` with
+  `data-slot="item-modal-feedback"`, after the body inside the item Root, in document order, with
+  its `title` as its `aria-label`. A record that holds no value of its outcome shows the section
+  with only a notice in it. Swap the part through `parts: { item: { modalFeedback } }` for your own
+  flow container, such as an `aside`, or a custom element that opens it as a dialog.
+- An interaction inside hidden feedback, which only an adaptive item may hold, is hidden too, as
+  inside hidden template content: `postings` lists none for its response, `checkResponses` ignores
+  it, and `score` keeps the record's value whatever is posted. A notice inside hidden feedback is
+  not among the redacted item's `notices`.
+- An `option` shows only text, so an Inline Choice whose choice holds a feedback inline shows a
+  notice in its place. A Choice's choice shows its feedback inline.
 
 ## Template processing
 

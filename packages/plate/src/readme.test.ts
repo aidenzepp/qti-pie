@@ -51,8 +51,8 @@ const opening = [
 const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
 
 /**
- * The README's sections: the eleven it had before M2, the four M2 adds, the one M3.b-2 adds and
- * the one M3.b-3 adds.
+ * The README's sections: the eleven it had before M2, the four M2 adds, the one M3.b-2 adds, the
+ * one M3.b-3 adds and Feedback.
  */
 const headings = [
   "## Install",
@@ -63,6 +63,7 @@ const headings = [
   "## Results",
   "## Interactions",
   "## Scoring",
+  "## Feedback",
   "## Template processing",
   "## Outcome processing",
   "## Server and browser",
@@ -539,17 +540,33 @@ describe("README.md", () => {
     );
   });
 
-  it("passes the session item's record and configuration to redact in Start's test and the server action", () => {
+  it("passes the session item's page and configuration to redact in Start's test and the server action", () => {
     for (const heading of ["## Start", "### A plain server action"]) {
       const scripts = codeBlocks(sectionOf(heading)).map(scriptOf);
 
       assert.isTrue(
         scripts.some((script) =>
-          /redact\(items\.get\(shown\.ref\)!, shown\.record, shown\.configuration\)/u.test(script),
+          /redact\(items\.get\(shown\.ref\)!, shown\.page, shown\.configuration\)/u.test(script),
         ),
-        `${heading} passes shown.record and shown.configuration to redact`,
+        `${heading} passes shown.page and shown.configuration to redact`,
       );
     }
+  });
+
+  it("[I-10] shows feedback in Feedback's example by score, restore, redact by the restored record, then render in review", () => {
+    const [script = "", ...others] = codeBlocks(sectionOf("## Feedback")).map(scriptOf);
+    const calls = ["score(", "restore(accepted, stored)", "redact(accepted, scored", "render("];
+    const at = calls.map((call) => script.indexOf(call));
+
+    assert.lengthOf(others, 0, "Feedback holds one code block");
+    assert.notInclude(at, -1, `the example calls ${calls.join(", ")}`);
+    assert.deepStrictEqual(
+      at,
+      at.toSorted((left, right) => left - right),
+      "in that order",
+    );
+    assert.include(script, 'mode: "review"');
+    assert.include(flatSectionOf("## Feedback"), "Modal feedback shows only after `score`");
   });
 
   it("names the navigation API and says its parts are plain buttons with no submit semantics", () => {
