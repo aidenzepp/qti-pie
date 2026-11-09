@@ -4,18 +4,22 @@
 #   scripts/db.sh create    create the database from grizzle_template, owned by the migration identity
 #   scripts/db.sh migrate   grizzle migrate, then give each of this package's logins its local password
 #   scripts/db.sh reset     drop, then create and migrate again
-#   scripts/db.sh drop      drop the database, this package's PostgreSQL roles and the password directory
-#   scripts/db.sh check-clear  list roles and gr8des_qti databases this one does not own; exit 1 if any, else 0
+#   scripts/db.sh drop      drop the database, the PostgreSQL roles the config installs and the password directory
+#   scripts/db.sh check-clear  list the config's roles left on the cluster and gr8des_qti databases other than this
+#                              one; exit 1 if any, else 0
 #
-# Roles are cluster-wide, so drop removes the roles of every schema under the config's migrations/ along with the
-# database.
+# Roles are cluster-wide, so drop removes the config's roles along with the database. Each role is named by grizzle's
+# roleNameOf over the config's logins and their roles, the installer's own naming, which names a login by the level of
+# the installation it is over: one name per role the config installs, never a pattern over a schema's name. A role an
+# earlier installation made for a login the config no longer names (one renamed or removed while the migrations were
+# regenerated from zero) is not found: grizzle lists no installation's roles on the cluster.
 # GR8DES_PG_DATABASE must match ^[a-z_][a-z0-9_]{0,62}$ (lowercase, at most 63 bytes), or every command exits 2.
 # GR8DES_PG_PASSWORD_COMMAND, when set and not empty, names an executable that prints a role's password: every
 # connection runs it, without a shell, with the role's name as its one argument, and reads its output, trimmed, as
 # src/db/connection.ts does. It then replaces the migration identity's password file, and migrate gives no login a local
 # password, since every login's comes from the command too.
-# GR8DES_GRIZZLE_CONFIG names the grizzle config migrate runs (grizzle.config.ts by default), whose migrations
-# directory is the folder migrations/ beside it.
+# GR8DES_GRIZZLE_CONFIG names the grizzle config migrate runs (grizzle.config.ts by default), whose logins name every
+# role the other commands find.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -32,7 +36,6 @@ cd "$(dirname "$0")/.."
 : "${GR8DES_PG_MIGRATION_ROLE:=grizzle_dev}"
 export GRIZZLE_PG_STATE GR8DES_PG_HOST GR8DES_PG_PORT GR8DES_PG_DATABASE GR8DES_PG_SECRETS GR8DES_PG_CA GR8DES_PG_MIGRATION_ROLE
 config="${GR8DES_GRIZZLE_CONFIG:-grizzle.config.ts}"
-migrations="$(dirname "$config")/migrations"
 
 if ! [[ $GR8DES_PG_DATABASE =~ ^[a-z_][a-z0-9_]{0,62}$ ]]; then
 	echo "GR8DES_PG_DATABASE is '$GR8DES_PG_DATABASE'; use 1 to 63 lowercase letters, digits or underscores, not starting with a digit (create folds an unquoted name to lowercase, but migrate connects as written)." >&2
@@ -70,9 +73,25 @@ as_owner() {
 		"host=$GR8DES_PG_HOST port=$GR8DES_PG_PORT dbname=$db user=$owner sslmode=verify-full sslrootcert=$ca" "$@"
 }
 
-# The snake_case schema names the config installs, one per folder under its migrations/.
-schemas() {
-	find "$migrations" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | sort
+# Prints the PostgreSQL role of each login the config installs, one per line, and with "all" each role a login reaches
+# as well: the names grizzle's roleNameOf gives them, read from the config's own logins, as `grizzle migrate` reads
+# them. Loading the config reads the cluster's CA and connects nowhere.
+# Usage: installed_roles logins|all
+installed_roles() {
+	node --input-type=module -e '
+		import { pathToFileURL } from "node:url";
+		import { roleNameOf } from "@bjornpagen/grizzle";
+		const [file, which] = process.argv.slice(1);
+		const { default: config } = await import(pathToFileURL(file).href);
+		for (const login of config.logins) {
+			console.log(roleNameOf(login));
+			if (which === "all") {
+				for (const { role } of Object.values(login.roles)) {
+					console.log(roleNameOf(role));
+				}
+			}
+		}
+	' "$(realpath "$config")" "$1"
 }
 
 create() {
@@ -97,24 +116,22 @@ migrate() {
 	GR8DES_PG_MIGRATION_PASSWORD="$password" pnpm exec grizzle migrate "$config"
 	mkdir -p "$GR8DES_PG_SECRETS"
 	chmod 700 "$GR8DES_PG_SECRETS"
-	local schema login file
-	for schema in $(schemas); do
-		for login in $(as_owner postgres -c "SELECT rolname FROM pg_roles WHERE rolcanlogin AND rolname LIKE '${schema}\_\_%' ORDER BY 1"); do
-			file="$GR8DES_PG_SECRETS/$login.password"
-			[[ -f "$file" ]] || (umask 077 && openssl rand -hex 24 > "$file")
-			as_owner postgres -c "ALTER ROLE $login PASSWORD '$(cat "$file")'"
-			echo "$login: password in $file"
-		done
+	local logins login file
+	logins="$(installed_roles logins)"
+	for login in $logins; do
+		file="$GR8DES_PG_SECRETS/$login.password"
+		[[ -f "$file" ]] || (umask 077 && openssl rand -hex 24 > "$file")
+		as_owner postgres -c "ALTER ROLE $login PASSWORD '$(cat "$file")'"
+		echo "$login: password in $file"
 	done
 }
 
 drop() {
+	local roles role
+	roles="$(installed_roles all)"
 	as_owner postgres -c "DROP DATABASE IF EXISTS $GR8DES_PG_DATABASE WITH (FORCE)"
-	local schema role
-	for schema in $(schemas); do
-		for role in $(as_owner postgres -c "SELECT rolname FROM pg_roles WHERE rolname LIKE '${schema}\_\_%' ORDER BY rolcanlogin DESC, 1"); do
-			as_owner postgres -c "DROP ROLE $role"
-		done
+	for role in $roles; do
+		as_owner postgres -c "DROP ROLE IF EXISTS $role"
 	done
 	rm -rf "$GR8DES_PG_SECRETS"
 }
@@ -127,13 +144,14 @@ reset() {
 
 # Prints each leftover as "role: <name>" or "database: <name>"; exits 1 if any were found.
 check_clear() {
-	local schema where="rolname LIKE 'qti\_\_%'"
-	for schema in $(schemas); do
-		where="$where OR rolname LIKE '${schema}\_\_%'"
+	local roles role names=""
+	roles="$(installed_roles all)"
+	for role in $roles; do
+		names="${names:+$names, }'$role'"
 	done
 	local found
 	found="$(
-		as_owner postgres -c "SELECT 'role: ' || rolname FROM pg_roles WHERE $where ORDER BY rolname"
+		as_owner postgres -c "SELECT 'role: ' || rolname FROM pg_roles WHERE rolname IN ($names) ORDER BY rolname"
 		as_owner postgres -c "SELECT 'database: ' || datname FROM pg_database WHERE datname LIKE 'gr8des_qti%' AND datname <> '$GR8DES_PG_DATABASE' ORDER BY datname"
 	)"
 	if [[ -n "$found" ]]; then
