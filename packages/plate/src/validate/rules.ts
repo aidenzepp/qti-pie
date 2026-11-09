@@ -1650,22 +1650,36 @@ const mappingNeedOf = (
  *
  * An expression that names no response declaration is not judged here: an undeclared variable is
  * its own refusal, and this rule refuses a declared response that lacks what it needs. A built-in
- * response, `numAttempts` or `duration`, is one such an expression may name (reading 111, "a
- * processing element's `identifier` names a variable of the kind the element reads or sets"), and
- * no declaration may take its name, so it has no mapping or area mapping: it is refused here, with
- * the detail a declared response that lacks both would get. The qti package refuses the same by
- * its `Mapped response` law, which a built-in breaks for want of the table.
- * Template processing is not judged here either: every response this rule could judge there is a
- * read template processing may not make, {@link templateReads}' refusal (P26) alone, so it is
- * refused once. The qti package states the two as separate laws, `Template reads` (P26) and
- * `Mapped response` (P27), and names a refusal by its most specific law in one fixed order
- * (`precedence` in `packages/pantry/src/vocab/laws.ts`).
+ * response is one such an expression may name (reading 111, "a processing element's `identifier`
+ * names a variable of the kind the element reads or sets"): an item's `numAttempts` or `duration`,
+ * and a test's `duration`, with the `numAttempts` plate keeps for a test that declares none
+ * ({@link testProcessingBuiltIns}, as ruled, B4). No declaration may take its name, so it has no
+ * mapping or area mapping: it is refused here, with the detail a declared response that lacks both
+ * would get. Reading 166 says so: "An unprefixed `qti-map-response` or `qti-map-response-point`
+ * that names a built-in response variable, an item's `numAttempts` or `duration` or a test's
+ * `duration`, is refused under 'Mapped response' too: a built-in has no declaration, so no mapping
+ * or area mapping has been declared". The qti package refuses the same by its `Mapped response`
+ * law, which a built-in breaks for want of the table. A name a test declares is no built-in there
+ * (reading 168, "A test may declare a variable named `numAttempts` or `completionStatus`";
+ * {@link testProcessingScope}), so a mapping expression of a declared outcome `numAttempts` keeps
+ * {@link undeclaredVariable}'s refusal, never this one.
+ *
+ * In an item only response processing is judged. Template processing is not: every response this
+ * rule could judge there is a read template processing may not make, {@link templateReads}'
+ * refusal (P26) alone, so it is refused once. The qti package states the two as separate laws,
+ * `Template reads` (P26) and `Mapped response` (P27), and names a refusal by its most specific law
+ * in one fixed order (`precedence` in `packages/pantry/src/vocab/laws.ts`). In a test, and in a
+ * section document under a test that reaches it ({@link processingRefusals}), every processing is
+ * judged: outcome processing, a pre-condition, a branch rule and a template default, the four
+ * contexts the qti package judges. A section document on its own holds no built-in, so nothing is
+ * refused there.
  *
  * @param source The document.
  * @param visit The element's visit.
- * @param context The item's declarations and the parents the walk has met.
+ * @param context The document's declarations, its built-ins and the parents the walk has met.
  * @returns The refusal at the expression's path when its response lacks what it needs; none for any
- *   other element and for one outside response processing.
+ *   other element, and for one outside the processing judged: an item's response processing, or
+ *   any processing of a test or a section.
  */
 const mapResponseRequirements = (
   source: SourceDocument,
@@ -1673,11 +1687,11 @@ const mapResponseRequirements = (
   context: Context,
 ): readonly Refusal[] => {
   const name = Option.flatMap(attributeOf(visit.element, "identifier"), nameOf);
-  if (
-    visit.element.namespace !== qtiNamespace ||
-    Option.isNone(name) ||
-    !liesIn(context, visit.element, "response")
-  ) {
+  const judged =
+    context.declarer === "test"
+      ? inProcessing(context, visit.element)
+      : liesIn(context, visit.element, "response");
+  if (visit.element.namespace !== qtiNamespace || Option.isNone(name) || !judged) {
     return [];
   }
 
@@ -5156,8 +5170,16 @@ const processingScope = (
  *   types of `expression-type` (P23, {@link operandTypes}; P24, {@link attributeReferences}), in a
  *   `qti-outcome-processing`, a `qti-pre-condition`, a `qti-branch-rule` and a
  *   `qti-template-default`. A test declares no response, so an unprefixed `qti-map-response` or
- *   `qti-map-response-point` names none and is refused `undeclared-variable`, where the qti package
- *   reports P27 (its `Mapped response` law); a prefixed one is a package's to judge.
+ *   `qti-map-response-point` of a name that is no built-in response names none and is refused
+ *   `undeclared-variable`, where the qti package reports P27 (its `Mapped response` law); a
+ *   prefixed one is a package's to judge.
+ * - `template-requirements` (P27, {@link mapResponseRequirements}) in the same four: an unprefixed
+ *   `qti-map-response` or `qti-map-response-point` of a built-in response the scope holds, a test's
+ *   `duration`, and `numAttempts` where the test declares none, has no mapping or area mapping
+ *   (reading 166, "An unprefixed `qti-map-response` or `qti-map-response-point` that names a
+ *   built-in response variable, an item's `numAttempts` or `duration` or a test's `duration`, is
+ *   refused under 'Mapped response' too"). A test that declares `numAttempts` (reading 168) holds
+ *   no such built-in, so its mapping expression of the name keeps the refusal above.
  * - What a `qti-set-outcome-value` sets (P20, {@link setType}) and a `qti-lookup-outcome-value`'s
  *   table and operand (P22, {@link lookupTableRequirements}, {@link lookupOperandType}) in outcome
  *   processing, and what a `qti-template-default` sets (P20) where `templateDefaultType` types its
@@ -5253,6 +5275,7 @@ export const processingRefusals = (
 
     refusals.push(
       ...literalValueType(source, visit, context),
+      ...mapResponseRequirements(source, visit, context),
       ...undeclaredVariable(source, visit, context),
       ...attributeReferences(source, visit, context),
       ...setType(source, visit, context),

@@ -5894,6 +5894,62 @@ const integerInto = (target: "ALL" | "SUM") => [
   },
 ];
 
+/**
+ * What one refusal reduces to in these tests: its rule, its path and its detail.
+ */
+type Judged = ReturnType<typeof judged>[number];
+
+/**
+ * Check a document whole, as `open` does, and reduce a refusing verdict's refusals as
+ * {@link judged} does. A test's declarations are judged by the test model's builder, which no rule
+ * of `processingRefusals` runs, so only the whole check reaches a test outcome's default value.
+ *
+ * @param source The document.
+ * @returns The refusals, reduced; empty for an accepting verdict.
+ */
+const verdictRefusals = (source: SourceDocument): readonly Judged[] => {
+  const verdict = check(source, tables, Option.none());
+  assert.notStrictEqual(verdict.verdict, "unchecked");
+
+  return verdict.verdict === "refused"
+    ? verdict.refusals.map((refusal) => ({
+        detail: refusal.detail,
+        path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
+        rule: refusal.rule,
+      }))
+    : [];
+};
+
+/**
+ * Construct a {@link ruledTest} that declares a float `SCORE` and an integer outcome
+ * `numAttempts`, which takes the built-in's place (reading 168), and sets `SCORE` to an
+ * expression.
+ *
+ * @param expression The expression.
+ * @returns The test as a source document.
+ */
+const numAttemptsDeclaringTest = (expression: SourceElement): SourceDocument =>
+  ruledTest([outcome("SCORE"), outcome("numAttempts", "integer")], [setScore(expression)]);
+
+/**
+ * The refusal a {@link numAttemptsDeclaringTest} gets for a response read of its outcome
+ * `numAttempts`: `undeclared-variable` expecting a response, with the kind that declares the name.
+ *
+ * @param element The reading expression's local name, the child of the `SCORE` rule.
+ * @returns The refusal, reduced.
+ */
+const declaredNumAttemptsRead = (element: string) => ({
+  detail: {
+    declared: "outcome",
+    declarer: "test",
+    element,
+    expected: "response",
+    identifier: "numAttempts",
+  },
+  path: `${outcomeRulePath("qti-set-outcome-value")}/${element}`,
+  rule: "undeclared-variable",
+});
+
 describe("processingRefusals", () => {
   it("[T-9] judges a template default against the template variable it sets where the caller types it, and judges none it is not given (pantry P20, templateOf)", () => {
     assert.deepStrictEqual(
@@ -6104,6 +6160,176 @@ describe("processingRefusals", () => {
           },
         ],
         [],
+      ],
+    );
+  });
+
+  it("align-54 r11 test map response E22a: refuses a test's unprefixed qti-map-response of duration, its qti-map-response-point of duration and its qti-map-response of the numAttempts it does not declare, as template-requirements: a built-in declares no mapping or area mapping (reading 166)", () => {
+    const setPath = outcomeRulePath("qti-set-outcome-value");
+
+    assert.deepStrictEqual(
+      [
+        processed(scoringTest(variable("duration", "qti-map-response")), unknownTyping),
+        processed(scoringTest(mapPoint("duration")), unknownTyping),
+        processed(scoringTest(variable("numAttempts", "qti-map-response")), unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response",
+              identifier: "duration",
+            },
+            path: `${setPath}/qti-map-response`,
+            rule: "template-requirements",
+          },
+        ],
+        [
+          {
+            detail: {
+              baseType: "point",
+              child: "qti-area-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response-point",
+              identifier: "duration",
+            },
+            path: `${setPath}/qti-map-response-point`,
+            rule: "template-requirements",
+          },
+        ],
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response",
+              identifier: "numAttempts",
+            },
+            path: `${setPath}/qti-map-response`,
+            rule: "template-requirements",
+          },
+        ],
+      ],
+    );
+  });
+
+  it("align-54 r11 test map response E22a: refuses through check a test whose outcome processing maps duration, maps duration as a point, or maps the numAttempts it does not declare (reading 166)", () => {
+    const mappings = [
+      scoringTest(variable("duration", "qti-map-response")),
+      scoringTest(mapPoint("duration")),
+      scoringTest(variable("numAttempts", "qti-map-response")),
+    ];
+
+    assert.deepStrictEqual(
+      mappings.map((source) => [
+        check(source, tables, Option.none()).verdict,
+        verdictRefusals(source).map((refused) => refused.rule),
+      ]),
+      [
+        ["refused", ["template-requirements"]],
+        ["refused", ["template-requirements"]],
+        ["refused", ["template-requirements"]],
+      ],
+    );
+  });
+
+  it("align-54 r11 test map response E22a: refuses a qti-map-response of duration in a section document's pre-condition under a test that reaches it, and judges none in the section on its own, which holds no built-in (reading 166; reading 5)", () => {
+    const condition = el(
+      "qti-gt",
+      [],
+      [variable("duration", "qti-map-response"), baseValue("float", "1")],
+    );
+    const reaching = scoringTest(baseValue("float", "1"));
+
+    assert.deepStrictEqual(
+      [
+        processed(conditionedSection(condition), unknownTyping, undefined, reaching),
+        processed(conditionedSection(condition), unknownTyping),
+      ],
+      [
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response",
+              identifier: "duration",
+            },
+            path: "qti-assessment-section/qti-pre-condition/qti-gt/qti-map-response",
+            rule: "template-requirements",
+          },
+        ],
+        [],
+      ],
+    );
+  });
+
+  it("align-54 r11 test map response E22a: keeps a test that declares the outcome numAttempts to the refusals it gave before, undeclared-variable expecting a response with declared outcome, alone and through check (reading 168)", () => {
+    const mapsOutcome = numAttemptsDeclaringTest(variable("numAttempts", "qti-map-response"));
+    const pointMapsOutcome = numAttemptsDeclaringTest(mapPoint("numAttempts"));
+
+    assert.deepStrictEqual(
+      [
+        processed(mapsOutcome, unknownTyping),
+        processed(pointMapsOutcome, unknownTyping),
+        verdictRefusals(mapsOutcome),
+        verdictRefusals(pointMapsOutcome),
+      ],
+      [
+        [declaredNumAttemptsRead("qti-map-response")],
+        [declaredNumAttemptsRead("qti-map-response-point")],
+        [declaredNumAttemptsRead("qti-map-response")],
+        [declaredNumAttemptsRead("qti-map-response-point")],
+      ],
+    );
+  });
+
+  it("align-54 r11 test map response E22a: leaves an item as it was, its response processing's qti-map-response of duration refused as template-requirements and its template processing's refused as the template read alone (reading 166; P26)", () => {
+    assert.deepStrictEqual(
+      [
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [processing(undefined, [setScore(variable("duration", "qti-map-response"))])],
+          ),
+        ),
+        judged(
+          item(
+            [
+              outcome("SCORE"),
+              declaration("qti-template-declaration", "F", "single", "float"),
+              templateProcessing(setTemplate("F", variable("duration", "qti-map-response"))),
+            ],
+            [],
+          ),
+        ),
+      ],
+      [
+        [
+          {
+            detail: {
+              child: "qti-mapping",
+              declaration: "qti-response-declaration",
+              element: "qti-map-response",
+              identifier: "duration",
+            },
+            path: "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-map-response",
+            rule: "template-requirements",
+          },
+        ],
+        [
+          templateRead(
+            "qti-assessment-item/qti-template-processing/qti-set-template-value/qti-map-response",
+            {
+              element: "qti-map-response",
+              identifier: "duration",
+              variableKind: "built-in",
+            },
+          ),
+        ],
       ],
     );
   });
@@ -6423,32 +6649,6 @@ describe("processingRefusals", () => {
     );
   });
 });
-
-/**
- * What one refusal reduces to in these tests: its rule, its path and its detail.
- */
-type Judged = ReturnType<typeof judged>[number];
-
-/**
- * Check a document whole, as `open` does, and reduce a refusing verdict's refusals as
- * {@link judged} does. A test's declarations are judged by the test model's builder, which no rule
- * of `processingRefusals` runs, so only the whole check reaches a test outcome's default value.
- *
- * @param source The document.
- * @returns The refusals, reduced; empty for an accepting verdict.
- */
-const verdictRefusals = (source: SourceDocument): readonly Judged[] => {
-  const verdict = check(source, tables, Option.none());
-  assert.notStrictEqual(verdict.verdict, "unchecked");
-
-  return verdict.verdict === "refused"
-    ? verdict.refusals.map((refusal) => ({
-        detail: refusal.detail,
-        path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
-        rule: refusal.rule,
-      }))
-    : [];
-};
 
 /**
  * Construct a rule that sets the boolean outcome `PASSED` to a `qti-base-value` of base type
