@@ -490,6 +490,10 @@ CREATE INDEX "__open_element_name_ix_parent_beba_3_avbja_parent_xrpkgh2egm" ON "
 
 CREATE INDEX "__open_element_name_ix_parent_parent_kind_6p3wnbjbjh" ON "qti"."open_element_name" USING btree ("parent", "parent_kind");
 
+CREATE INDEX "__pci_module_form_ix_node_itpy_7_ns_7_w_5_t2fzjjgic5" ON "qti"."pci_module_form" USING btree ("__node_itpy7ns7w5");
+
+CREATE INDEX "__pci_module_form_ix_node_zkko_65_kuex_elv36nmskz" ON "qti"."pci_module_form" USING btree ("__node_zkko65kuex");
+
 CREATE INDEX "__placed_binding_ix_node_nqyr_3_apalb_ymanobq2y7" ON "qti"."placed_binding" USING btree ("__node_nqyr3apalb");
 
 CREATE INDEX "__placed_binding_ix_assembly_adaptive_b5l6dykr6c" ON "qti"."placed_binding" USING btree ("assembly", "adaptive");
@@ -783,6 +787,8 @@ CREATE INDEX "__test_token_ix_node_fhyljg_3_ztm_rh65lv2f3s" ON "qti"."test_token
 CREATE INDEX "__test_token_ix_node_l_7_omvxv_2_od_tskzgdxw2x" ON "qti"."test_token" USING btree ("__node_l7omvxv2od");
 
 CREATE INDEX "__text_idref_ix_document_token_r43v6t4zvp" ON "qti"."text_idref" USING btree ("document", "token");
+
+CREATE INDEX "__text_reference_ix_node_rx_3_smqszrv_document_5_cau_m4tt5whv7z" ON "qti"."text_reference" USING btree ("__node_rx3smqszrv", "__document_5cau2dspow", "__kind_3plysbbxy5");
 
 CREATE INDEX "__text_reference_path_ix_document_package_fj2vzkfhas" ON "qti"."text_reference_path" USING btree ("document", "package");
 

@@ -2452,7 +2452,6 @@ export const testLawsByName = {
     contained(on(Site, "node", "parent"), on(Node, "id", "parent")),
     contained(on(SitePath, "node", "kind"), on(Site, "node", "kind")),
     contained(on(SitePath, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
-    key(on(externalHrefs, "node")),
     contained(on(externalSites, "node"), on(externalHrefs, "node")),
     contained(
       on(

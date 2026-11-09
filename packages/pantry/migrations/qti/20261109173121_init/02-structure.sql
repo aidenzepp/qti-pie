@@ -4283,10 +4283,6 @@ ALTER TABLE "qti"."expression_attribute" ADD COLUMN "__node_zjgiyb7nr7" "pg_cata
 
 ALTER TABLE "qti"."expression_attribute" ADD COLUMN "__node_j2c273zmua" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "attribute" = 122::smallint AND "base_type" = 12::smallint AND "written" = false THEN "node" END) STORED;
 
-ALTER TABLE "qti"."expression_attribute" ADD COLUMN "__node_gyptgprpk7" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "attribute" = 117::smallint THEN "node" END) STORED;
-
-ALTER TABLE "qti"."expression_attribute" ADD COLUMN "__node_l66firaakd" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "attribute" = 117::smallint AND "written" = true THEN "node" END) STORED;
-
 ALTER TABLE "qti"."expression_attribute" ADD COLUMN "__node_cmhaiwbl5v" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "written" = true THEN "node" END) STORED;
 
 ALTER TABLE "qti"."expression_attribute" ADD COLUMN "__written_xr2xcpx7cp" boolean GENERATED ALWAYS AS (CASE WHEN "attribute" = 122::smallint AND "base_type" = 12::smallint AND "written" = false THEN "written" END) STORED;
@@ -5489,8 +5485,6 @@ ALTER TABLE "qti"."reference" ADD COLUMN "__name_55zdbs4rpu" smallint GENERATED 
 
 ALTER TABLE "qti"."reference" ADD COLUMN "__node_6rmfntt35j" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 110::smallint AND "name" = 103::smallint AND "scope" <> 1::smallint THEN "node" END) STORED;
 
-ALTER TABLE "qti"."reference" ADD COLUMN "__node_scx2hiwvjr" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "name" = 103::smallint AND "scope" = 1::smallint THEN "node" END) STORED;
-
 ALTER TABLE "qti"."reference" ADD COLUMN "__node_rx3smqszrv" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "scope" = 0::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."reference_document" ADD COLUMN "__pred_references_6abcllx5dz" bigint GENERATED ALWAYS AS (CASE WHEN "references" > 0::bigint THEN "references"::numeric - (1::bigint)::numeric END) STORED;
@@ -6185,10 +6179,6 @@ ALTER TABLE "qti"."expression" ADD CONSTRAINT "__expression_key_parent_base_type
 
 ALTER TABLE "qti"."expression_attribute" ADD CONSTRAINT "__expression_attribute_key_node_4luij2w6d5" UNIQUE NULLS DISTINCT ("__node_i526ocw66z");
 
-ALTER TABLE "qti"."expression_attribute" ADD CONSTRAINT "__expression_attribute_key_node_emltek4plt" UNIQUE NULLS DISTINCT ("__node_gyptgprpk7");
-
-ALTER TABLE "qti"."expression_attribute" ADD CONSTRAINT "__expression_attribute_key_node_s4lcb7r25q" UNIQUE NULLS DISTINCT ("__node_l66firaakd");
-
 ALTER TABLE "qti"."file" ADD CONSTRAINT "__file_key_package_scope_path_index_files_awqrwzp4b4" UNIQUE NULLS DISTINCT ("package", "scope", "path", "__index_files_earwgeketo");
 
 ALTER TABLE "qti"."file" ADD CONSTRAINT "__file_key_resource_scope_path_index_files_ur5ftttz4q" UNIQUE NULLS DISTINCT ("resource", "scope", "path", "__index_files_kktz5hqsbq");
@@ -6307,10 +6297,6 @@ ALTER TABLE "qti"."operand" ADD CONSTRAINT "__operand_key_operator_index_operand
 
 ALTER TABLE "qti"."pci_module_form" ADD CONSTRAINT "__pci_module_form_key_node_index_module_forms_jiezeqce2t" UNIQUE NULLS DISTINCT ("node", "__index_module_forms_tmquryp4pi");
 
-ALTER TABLE "qti"."pci_module_form" ADD CONSTRAINT "__pci_module_form_key_node_nrpdftegvy" UNIQUE NULLS DISTINCT ("__node_zkko65kuex");
-
-ALTER TABLE "qti"."pci_module_form" ADD CONSTRAINT "__pci_module_form_key_node_splfudugs3" UNIQUE NULLS DISTINCT ("__node_itpy7ns7w5");
-
 ALTER TABLE "qti"."placed_binding" ADD CONSTRAINT "__placed_binding_key_instance_index_bindings_6qpolevqar" UNIQUE NULLS DISTINCT ("instance", "__index_bindings_5owmd3qqo2");
 
 ALTER TABLE "qti"."placed_body_xml_lang" ADD CONSTRAINT "__placed_body_xml_lang_key_assembly_lang_index_mp7ljzv423" UNIQUE NULLS DISTINCT ("assembly", "lang", "__index_carriers_ww54mq3ipt");
@@ -6352,8 +6338,6 @@ ALTER TABLE "qti"."reading" ADD CONSTRAINT "__reading_key_assembly_node_attribut
 ALTER TABLE "qti"."reading" ADD CONSTRAINT "__reading_key_assembly_node_attribute_kind_53zhel5qei" UNIQUE NULLS DISTINCT ("__assembly_q3v2k6t2si", "__node_2s4xhychqf", "__attribute_dyqmhlbea5", "__kind_ascctyfsjd");
 
 ALTER TABLE "qti"."record_field" ADD CONSTRAINT "__record_field_key_parent_index_fields_n4yb7e2ila" UNIQUE NULLS DISTINCT ("parent", "__index_fields_c7s2eeri5r");
-
-ALTER TABLE "qti"."reference" ADD CONSTRAINT "__reference_key_node_3jgv6f5ia4" UNIQUE NULLS DISTINCT ("__node_scx2hiwvjr");
 
 ALTER TABLE "qti"."reference_segment" ADD CONSTRAINT "__reference_segment_key_assembly_node_attribute_at_sfbcqrtewp" UNIQUE NULLS DISTINCT ("assembly", "node", "attribute", "at", "__after_segments_0_iq3t4pwpun", "after");
 
@@ -6400,8 +6384,6 @@ ALTER TABLE "qti"."table_header" ADD CONSTRAINT "__table_header_key_table_id_zjv
 ALTER TABLE "qti"."test_document" ADD CONSTRAINT "__test_document_key_package_path_z7p5cuus5s" UNIQUE NULLS DISTINCT ("__package_wmb66a5rru", "__path_3zs6iyyad2");
 
 ALTER TABLE "qti"."test_reference" ADD CONSTRAINT "__test_reference_key_document_index_references_tze47p2elx" UNIQUE NULLS DISTINCT ("document", "__index_references_nou4xiiupr");
-
-ALTER TABLE "qti"."text_reference" ADD CONSTRAINT "__text_reference_key_node_crsbkqx6xo" UNIQUE NULLS DISTINCT ("__node_rx3smqszrv");
 
 ALTER TABLE "qti"."usage_value" ADD CONSTRAINT "__usage_value_key_node_base_type_lexical_o4cwubtrum" UNIQUE NULLS DISTINCT ("__node_uazzjek2gb", "__base_type_lexical_ch24no2osx");
 

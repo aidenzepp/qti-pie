@@ -4403,14 +4403,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"expression_attribute\" ADD COLUMN \"__node_gyptgprpk7\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"attribute\" = 117::smallint THEN \"node\" END) STORED"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"expression_attribute\" ADD COLUMN \"__node_l66firaakd\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"attribute\" = 117::smallint AND \"written\" = true THEN \"node\" END) STORED"
-					},
-					{
-						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"expression_attribute\" ADD COLUMN \"__node_cmhaiwbl5v\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"written\" = true THEN \"node\" END) STORED"
 					},
 					{
@@ -6815,10 +6807,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"reference\" ADD COLUMN \"__node_scx2hiwvjr\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"name\" = 103::smallint AND \"scope\" = 1::smallint THEN \"node\" END) STORED"
-					},
-					{
-						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"reference\" ADD COLUMN \"__node_rx3smqszrv\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"scope\" = 0::smallint THEN \"node\" END) STORED"
 					},
 					{
@@ -8207,14 +8195,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"expression_attribute\" ADD CONSTRAINT \"__expression_attribute_key_node_emltek4plt\" UNIQUE NULLS DISTINCT (\"__node_gyptgprpk7\")"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"expression_attribute\" ADD CONSTRAINT \"__expression_attribute_key_node_s4lcb7r25q\" UNIQUE NULLS DISTINCT (\"__node_l66firaakd\")"
-					},
-					{
-						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"file\" ADD CONSTRAINT \"__file_key_package_scope_path_index_files_awqrwzp4b4\" UNIQUE NULLS DISTINCT (\"package\", \"scope\", \"path\", \"__index_files_earwgeketo\")"
 					},
 					{
@@ -8451,14 +8431,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"pci_module_form\" ADD CONSTRAINT \"__pci_module_form_key_node_nrpdftegvy\" UNIQUE NULLS DISTINCT (\"__node_zkko65kuex\")"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"pci_module_form\" ADD CONSTRAINT \"__pci_module_form_key_node_splfudugs3\" UNIQUE NULLS DISTINCT (\"__node_itpy7ns7w5\")"
-					},
-					{
-						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"placed_binding\" ADD CONSTRAINT \"__placed_binding_key_instance_index_bindings_6qpolevqar\" UNIQUE NULLS DISTINCT (\"instance\", \"__index_bindings_5owmd3qqo2\")"
 					},
 					{
@@ -8540,10 +8512,6 @@
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"record_field\" ADD CONSTRAINT \"__record_field_key_parent_index_fields_n4yb7e2ila\" UNIQUE NULLS DISTINCT (\"parent\", \"__index_fields_c7s2eeri5r\")"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"reference\" ADD CONSTRAINT \"__reference_key_node_3jgv6f5ia4\" UNIQUE NULLS DISTINCT (\"__node_scx2hiwvjr\")"
 					},
 					{
 						"kind": "statement",
@@ -8636,10 +8604,6 @@
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"test_reference\" ADD CONSTRAINT \"__test_reference_key_document_index_references_tze47p2elx\" UNIQUE NULLS DISTINCT (\"document\", \"__index_references_nou4xiiupr\")"
-					},
-					{
-						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"text_reference\" ADD CONSTRAINT \"__text_reference_key_node_crsbkqx6xo\" UNIQUE NULLS DISTINCT (\"__node_rx3smqszrv\")"
 					},
 					{
 						"kind": "statement",
@@ -15092,6 +15056,14 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "CREATE INDEX \"__pci_module_form_ix_node_itpy_7_ns_7_w_5_t2fzjjgic5\" ON \"qti\".\"pci_module_form\" USING btree (\"__node_itpy7ns7w5\")"
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE INDEX \"__pci_module_form_ix_node_zkko_65_kuex_elv36nmskz\" ON \"qti\".\"pci_module_form\" USING btree (\"__node_zkko65kuex\")"
+					},
+					{
+						"kind": "statement",
 						"statement": "CREATE INDEX \"__placed_binding_ix_node_nqyr_3_apalb_ymanobq2y7\" ON \"qti\".\"placed_binding\" USING btree (\"__node_nqyr3apalb\")"
 					},
 					{
@@ -15677,6 +15649,10 @@
 					{
 						"kind": "statement",
 						"statement": "CREATE INDEX \"__text_idref_ix_document_token_r43v6t4zvp\" ON \"qti\".\"text_idref\" USING btree (\"document\", \"token\")"
+					},
+					{
+						"kind": "statement",
+						"statement": "CREATE INDEX \"__text_reference_ix_node_rx_3_smqszrv_document_5_cau_m4tt5whv7z\" ON \"qti\".\"text_reference\" USING btree (\"__node_rx3smqszrv\", \"__document_5cau2dspow\", \"__kind_3plysbbxy5\")"
 					},
 					{
 						"kind": "statement",
@@ -24358,14 +24334,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"expression_attribute\".\"__node_gyptgprpk7\" IS 'node where {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"weight-identifier\"}}'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"expression_attribute\".\"__node_l66firaakd\" IS 'node where {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"weight-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"written\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":true}}'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"expression_attribute\".\"__node_cmhaiwbl5v\" IS 'node where {\"kind\":\"compare\",\"left\":{\"field\":\"written\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":true}}'"
 					},
 					{
@@ -26770,10 +26738,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON COLUMN \"qti\".\"reference\".\"__node_scx2hiwvjr\" IS 'node where {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"href\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"scope\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"external\"}}'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"reference\".\"__node_rx3smqszrv\" IS 'node where {\"kind\":\"compare\",\"left\":{\"field\":\"scope\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"entry\"}}'"
 					},
 					{
@@ -28162,14 +28126,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__expression_attribute_key_node_emltek4plt\" ON \"qti\".\"expression_attribute\" IS 'key ExpressionAttribute(node where {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"weight-identifier\"}})'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__expression_attribute_key_node_s4lcb7r25q\" ON \"qti\".\"expression_attribute\" IS 'key ExpressionAttribute(node where {\"kind\":\"compare\",\"left\":{\"field\":\"attribute\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"weight-identifier\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"written\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":true}})'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__file_key_package_scope_path_index_files_awqrwzp4b4\" ON \"qti\".\"file\" IS 'key File(package, scope, path, the index of the family FileHref.files)'"
 					},
 					{
@@ -28406,14 +28362,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__pci_module_form_key_node_nrpdftegvy\" ON \"qti\".\"pci_module_form\" IS 'key PciModuleForm(node where {\"kind\":\"compare\",\"left\":{\"field\":\"element\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":false}})'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__pci_module_form_key_node_splfudugs3\" ON \"qti\".\"pci_module_form\" IS 'key PciModuleForm(node where {\"kind\":\"compare\",\"left\":{\"field\":\"element\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":true}})'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__placed_binding_key_instance_index_bindings_6qpolevqar\" ON \"qti\".\"placed_binding\" IS 'key PlacedBinding(instance, the index of the family Instance.bindings)'"
 					},
 					{
@@ -28495,10 +28443,6 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__record_field_key_parent_index_fields_n4yb7e2ila\" ON \"qti\".\"record_field\" IS 'key RecordField(parent, the index of the family ValueSet.fields)'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__reference_key_node_3jgv6f5ia4\" ON \"qti\".\"reference\" IS 'key Reference(node where {\"kind\":\"compare\",\"left\":{\"field\":\"name\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"href\"}} and {\"kind\":\"compare\",\"left\":{\"field\":\"scope\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"external\"}})'"
 					},
 					{
 						"kind": "statement",
@@ -28591,10 +28535,6 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__test_reference_key_document_index_references_tze47p2elx\" ON \"qti\".\"test_reference\" IS 'key TestReference(document, the index of the family ReferenceDocument.references)'"
-					},
-					{
-						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__text_reference_key_node_crsbkqx6xo\" ON \"qti\".\"text_reference\" IS 'key TextReference(node where {\"kind\":\"compare\",\"left\":{\"field\":\"scope\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"entry\"}})'"
 					},
 					{
 						"kind": "statement",
@@ -34038,6 +33978,14 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__pci_module_form_ix_node_itpy_7_ns_7_w_5_t2fzjjgic5\" IS 'btree index PciModuleForm(__node_itpy7ns7w5)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__pci_module_form_ix_node_zkko_65_kuex_elv36nmskz\" IS 'btree index PciModuleForm(__node_zkko65kuex)'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON INDEX \"qti\".\"__placed_binding_ix_node_nqyr_3_apalb_ymanobq2y7\" IS 'btree index PlacedBinding(__node_nqyr3apalb)'"
 					},
 					{
@@ -34623,6 +34571,10 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON INDEX \"qti\".\"__text_idref_ix_document_token_r43v6t4zvp\" IS 'btree index TextIdref(document, token)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON INDEX \"qti\".\"__text_reference_ix_node_rx_3_smqszrv_document_5_cau_m4tt5whv7z\" IS 'btree index TextReference(__node_rx3smqszrv, __document_5cau2dspow, __kind_3plysbbxy5)'"
 					},
 					{
 						"kind": "statement",
@@ -35475,7 +35427,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "f9ad291b6fb76264456bfb9f9a7ac9ab3581ddbfc7f2181a3b6e22961ea38b1b",
-		"target": "ab7dc8f99293a4cb206a084ededc7e2dbfe64cbb46f3e1bd1e198c917c04d885"
+		"target": "78ff71268200ecf7ee497572c6f78d3db99fa37945c8fea6b2a612dcc940249c"
 	},
-	"seal": "0c4365a9b7b1366879347773346959b88f281fef848b7e74f275df25e595d108"
+	"seal": "ef809f4e7335ed0790f7894d772c6280580b3b423d8215b8ef2b0c77f2d2f9ff"
 }

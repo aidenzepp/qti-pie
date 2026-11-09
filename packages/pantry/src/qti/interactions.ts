@@ -2857,8 +2857,6 @@ export const interactionLawsByName = {
       on(Binding, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
-    key(on(attributeForms, "node")),
-    key(on(elementForms, "node")),
     key(on(moduleElements, "parent")),
     contained(on(moduleAttributes, "node"), on(attributeForms, "node")),
     contained(on(attributeForms, "node"), on(moduleAttributes, "node")),

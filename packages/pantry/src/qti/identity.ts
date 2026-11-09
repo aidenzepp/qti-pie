@@ -1189,8 +1189,6 @@ export const identityLawsByName = {
       on(BodyXmlLang, "node", "document", "lang"),
     ),
     contained(on(BodyXmlLang, "node"), on(bodyLangs, "node")),
-    key(on(bodyLangs, "node")),
-    key(on(bodyPlacedLangs, "instance", "node")),
     contained(
       on(bodyPlacedLangs, "instance", "node", "assembly", "document", "lang"),
       on(PlacedBodyXmlLang, "instance", "node", "assembly", "document", "lang"),

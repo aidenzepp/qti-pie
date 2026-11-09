@@ -2791,8 +2791,6 @@ export const expressionLawsByName = {
     // A test variables' weight, written or not (decision 434): every test variables has its row,
     // and an unwritten `base-type` is `unknown` only where the weight is unwritten, float only
     // where it is written. `E1_derived` below admits no other type for an unwritten one.
-    key(on(weightAttributes, "node")),
-    key(on(writtenWeights, "node")),
     contained(
       on(
         select(Expression, (e) => e.eq(e.kind, "qti-test-variables")),

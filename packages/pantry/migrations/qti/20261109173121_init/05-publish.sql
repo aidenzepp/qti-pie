@@ -4169,10 +4169,6 @@ COMMENT ON COLUMN "qti"."expression_attribute"."__node_zjgiyb7nr7" IS 'node wher
 
 COMMENT ON COLUMN "qti"."expression_attribute"."__node_j2c273zmua" IS 'node where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"base-type"}} and {"kind":"compare","left":{"field":"baseType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"unknown"}} and {"kind":"compare","left":{"field":"written","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}}';
 
-COMMENT ON COLUMN "qti"."expression_attribute"."__node_gyptgprpk7" IS 'node where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"weight-identifier"}}';
-
-COMMENT ON COLUMN "qti"."expression_attribute"."__node_l66firaakd" IS 'node where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"weight-identifier"}} and {"kind":"compare","left":{"field":"written","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
-
 COMMENT ON COLUMN "qti"."expression_attribute"."__node_cmhaiwbl5v" IS 'node where {"kind":"compare","left":{"field":"written","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}';
 
 COMMENT ON COLUMN "qti"."expression_attribute"."__written_xr2xcpx7cp" IS 'written where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"base-type"}} and {"kind":"compare","left":{"field":"baseType","kind":"field"},"op":"eq","right":{"kind":"literal","value":"unknown"}} and {"kind":"compare","left":{"field":"written","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}}';
@@ -5375,8 +5371,6 @@ COMMENT ON COLUMN "qti"."reference"."__name_55zdbs4rpu" IS 'name where {"kind":"
 
 COMMENT ON COLUMN "qti"."reference"."__node_6rmfntt35j" IS 'node where {"kind":"compare","left":{"field":"kind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section-ref"}} and {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"href"}} and {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"ne","right":{"kind":"literal","value":"external"}}';
 
-COMMENT ON COLUMN "qti"."reference"."__node_scx2hiwvjr" IS 'node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"href"}} and {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"external"}}';
-
 COMMENT ON COLUMN "qti"."reference"."__node_rx3smqszrv" IS 'node where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}}';
 
 COMMENT ON COLUMN "qti"."reference_document"."__pred_references_6abcllx5dz" IS 'pred(references)';
@@ -6071,10 +6065,6 @@ COMMENT ON CONSTRAINT "__expression_key_parent_base_type_cardinality_5nysfcbnev"
 
 COMMENT ON CONSTRAINT "__expression_attribute_key_node_4luij2w6d5" ON "qti"."expression_attribute" IS 'key ExpressionAttribute(node where {"arg":{"field":"attribute","kind":"field"},"kind":"in","values":["base-type","name"]})';
 
-COMMENT ON CONSTRAINT "__expression_attribute_key_node_emltek4plt" ON "qti"."expression_attribute" IS 'key ExpressionAttribute(node where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"weight-identifier"}})';
-
-COMMENT ON CONSTRAINT "__expression_attribute_key_node_s4lcb7r25q" ON "qti"."expression_attribute" IS 'key ExpressionAttribute(node where {"kind":"compare","left":{"field":"attribute","kind":"field"},"op":"eq","right":{"kind":"literal","value":"weight-identifier"}} and {"kind":"compare","left":{"field":"written","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
-
 COMMENT ON CONSTRAINT "__file_key_package_scope_path_index_files_awqrwzp4b4" ON "qti"."file" IS 'key File(package, scope, path, the index of the family FileHref.files)';
 
 COMMENT ON CONSTRAINT "__file_key_resource_scope_path_index_files_ur5ftttz4q" ON "qti"."file" IS 'key File(resource, scope, path, the index of the family ResourceFile.files)';
@@ -6193,10 +6183,6 @@ COMMENT ON CONSTRAINT "__operand_key_operator_index_operands_after_operands_jzu4
 
 COMMENT ON CONSTRAINT "__pci_module_form_key_node_index_module_forms_jiezeqce2t" ON "qti"."pci_module_form" IS 'key PciModuleForm(node, the index of the family Interaction.moduleForms)';
 
-COMMENT ON CONSTRAINT "__pci_module_form_key_node_nrpdftegvy" ON "qti"."pci_module_form" IS 'key PciModuleForm(node where {"kind":"compare","left":{"field":"element","kind":"field"},"op":"eq","right":{"kind":"literal","value":false}})';
-
-COMMENT ON CONSTRAINT "__pci_module_form_key_node_splfudugs3" ON "qti"."pci_module_form" IS 'key PciModuleForm(node where {"kind":"compare","left":{"field":"element","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}})';
-
 COMMENT ON CONSTRAINT "__placed_binding_key_instance_index_bindings_6qpolevqar" ON "qti"."placed_binding" IS 'key PlacedBinding(instance, the index of the family Instance.bindings)';
 
 COMMENT ON CONSTRAINT "__placed_body_xml_lang_key_assembly_lang_index_mp7ljzv423" ON "qti"."placed_body_xml_lang" IS 'key PlacedBodyXmlLang(assembly, lang, the index of the family AssembledLang.carriers)';
@@ -6238,8 +6224,6 @@ COMMENT ON CONSTRAINT "__reading_key_assembly_node_attribute_form_split_2sa5bx2j
 COMMENT ON CONSTRAINT "__reading_key_assembly_node_attribute_kind_53zhel5qei" ON "qti"."reading" IS 'key Reading(assembly where {"args":[{"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-lookup-outcome-value","qti-set-correct-response","qti-set-default-value","qti-set-outcome-value","qti-set-template-value"]},"kind":"not"},{"kind":"compare","left":{"field":"form","kind":"field"},"op":"eq","right":{"kind":"literal","value":"unsplit"}}],"kind":"or"} and {"args":[{"args":[{"args":[{"field":"number","kind":"field"},{"kind":"literal","value":"^[0-9]*[1-9][0-9]*$"}],"fn":"matches","kind":"compute"},{"kind":"compare","left":{"field":"replaced","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}],"kind":"and"},{"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"numbered"}}],"kind":"or"} and {"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"name"}} and {"kind":"compare","left":{"field":"source","kind":"field"},"op":"ne","right":{"kind":"literal","value":"none"}}, node where {"args":[{"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-lookup-outcome-value","qti-set-correct-response","qti-set-default-value","qti-set-outcome-value","qti-set-template-value"]},"kind":"not"},{"kind":"compare","left":{"field":"form","kind":"field"},"op":"eq","right":{"kind":"literal","value":"unsplit"}}],"kind":"or"} and {"args":[{"args":[{"args":[{"field":"number","kind":"field"},{"kind":"literal","value":"^[0-9]*[1-9][0-9]*$"}],"fn":"matches","kind":"compute"},{"kind":"compare","left":{"field":"replaced","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}],"kind":"and"},{"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"numbered"}}],"kind":"or"} and {"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"name"}} and {"kind":"compare","left":{"field":"source","kind":"field"},"op":"ne","right":{"kind":"literal","value":"none"}}, attribute where {"args":[{"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-lookup-outcome-value","qti-set-correct-response","qti-set-default-value","qti-set-outcome-value","qti-set-template-value"]},"kind":"not"},{"kind":"compare","left":{"field":"form","kind":"field"},"op":"eq","right":{"kind":"literal","value":"unsplit"}}],"kind":"or"} and {"args":[{"args":[{"args":[{"field":"number","kind":"field"},{"kind":"literal","value":"^[0-9]*[1-9][0-9]*$"}],"fn":"matches","kind":"compute"},{"kind":"compare","left":{"field":"replaced","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}],"kind":"and"},{"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"numbered"}}],"kind":"or"} and {"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"name"}} and {"kind":"compare","left":{"field":"source","kind":"field"},"op":"ne","right":{"kind":"literal","value":"none"}}, kind where {"args":[{"arg":{"arg":{"field":"kind","kind":"field"},"kind":"in","values":["qti-lookup-outcome-value","qti-set-correct-response","qti-set-default-value","qti-set-outcome-value","qti-set-template-value"]},"kind":"not"},{"kind":"compare","left":{"field":"form","kind":"field"},"op":"eq","right":{"kind":"literal","value":"unsplit"}}],"kind":"or"} and {"args":[{"args":[{"args":[{"field":"number","kind":"field"},{"kind":"literal","value":"^[0-9]*[1-9][0-9]*$"}],"fn":"matches","kind":"compute"},{"kind":"compare","left":{"field":"replaced","kind":"field"},"op":"eq","right":{"kind":"literal","value":true}}],"kind":"and"},{"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"numbered"}}],"kind":"or"} and {"kind":"compare","left":{"field":"form","kind":"field"},"op":"ne","right":{"kind":"literal","value":"name"}} and {"kind":"compare","left":{"field":"source","kind":"field"},"op":"ne","right":{"kind":"literal","value":"none"}})';
 
 COMMENT ON CONSTRAINT "__record_field_key_parent_index_fields_n4yb7e2ila" ON "qti"."record_field" IS 'key RecordField(parent, the index of the family ValueSet.fields)';
-
-COMMENT ON CONSTRAINT "__reference_key_node_3jgv6f5ia4" ON "qti"."reference" IS 'key Reference(node where {"kind":"compare","left":{"field":"name","kind":"field"},"op":"eq","right":{"kind":"literal","value":"href"}} and {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"external"}})';
 
 COMMENT ON CONSTRAINT "__reference_segment_key_assembly_node_attribute_at_sfbcqrtewp" ON "qti"."reference_segment" IS 'key ReferenceSegment(assembly, node, attribute, at, the accumulator after plane 0 of the fold __assembled_reference_segments_count_fold_zly3pfbpup over the family AssembledReference.segments, after)';
 
@@ -6286,8 +6270,6 @@ COMMENT ON CONSTRAINT "__table_header_key_table_id_zjvfdq3rsz" ON "qti"."table_h
 COMMENT ON CONSTRAINT "__test_document_key_package_path_z7p5cuus5s" ON "qti"."test_document" IS 'key TestDocument(package where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}}, path where {"kind":"compare","left":{"field":"rootKind","kind":"field"},"op":"eq","right":{"kind":"literal","value":"qti-assessment-section"}})';
 
 COMMENT ON CONSTRAINT "__test_reference_key_document_index_references_tze47p2elx" ON "qti"."test_reference" IS 'key TestReference(document, the index of the family ReferenceDocument.references)';
-
-COMMENT ON CONSTRAINT "__text_reference_key_node_crsbkqx6xo" ON "qti"."text_reference" IS 'key TextReference(node where {"kind":"compare","left":{"field":"scope","kind":"field"},"op":"eq","right":{"kind":"literal","value":"entry"}})';
 
 COMMENT ON CONSTRAINT "__usage_value_key_node_base_type_lexical_o4cwubtrum" ON "qti"."usage_value" IS 'key UsageValue(node where {"arg":{"field":"baseTypeLexical","kind":"field"},"kind":"in","values":["boolean","directedPair","duration","file","float","identifier","integer","pair","point","string","uri"]}, baseTypeLexical where {"arg":{"field":"baseTypeLexical","kind":"field"},"kind":"in","values":["boolean","directedPair","duration","file","float","identifier","integer","pair","point","string","uri"]})';
 
@@ -9009,6 +8991,10 @@ COMMENT ON INDEX "qti"."__open_element_name_ix_parent_beba_3_avbja_parent_xrpkgh
 
 COMMENT ON INDEX "qti"."__open_element_name_ix_parent_parent_kind_6p3wnbjbjh" IS 'btree index OpenElementName(parent, parentKind)';
 
+COMMENT ON INDEX "qti"."__pci_module_form_ix_node_itpy_7_ns_7_w_5_t2fzjjgic5" IS 'btree index PciModuleForm(__node_itpy7ns7w5)';
+
+COMMENT ON INDEX "qti"."__pci_module_form_ix_node_zkko_65_kuex_elv36nmskz" IS 'btree index PciModuleForm(__node_zkko65kuex)';
+
 COMMENT ON INDEX "qti"."__placed_binding_ix_node_nqyr_3_apalb_ymanobq2y7" IS 'btree index PlacedBinding(__node_nqyr3apalb)';
 
 COMMENT ON INDEX "qti"."__placed_binding_ix_assembly_adaptive_b5l6dykr6c" IS 'btree index PlacedBinding(assembly, adaptive)';
@@ -9302,6 +9288,8 @@ COMMENT ON INDEX "qti"."__test_token_ix_node_fhyljg_3_ztm_rh65lv2f3s" IS 'btree 
 COMMENT ON INDEX "qti"."__test_token_ix_node_l_7_omvxv_2_od_tskzgdxw2x" IS 'btree index TestToken(__node_l7omvxv2od)';
 
 COMMENT ON INDEX "qti"."__text_idref_ix_document_token_r43v6t4zvp" IS 'btree index TextIdref(document, token)';
+
+COMMENT ON INDEX "qti"."__text_reference_ix_node_rx_3_smqszrv_document_5_cau_m4tt5whv7z" IS 'btree index TextReference(__node_rx3smqszrv, __document_5cau2dspow, __kind_3plysbbxy5)';
 
 COMMENT ON INDEX "qti"."__text_reference_path_ix_document_package_fj2vzkfhas" IS 'btree index TextReferencePath(document, package)';
 

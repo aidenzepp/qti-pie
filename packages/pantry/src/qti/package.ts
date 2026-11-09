@@ -695,8 +695,8 @@ const entryReferences = select(Reference, (r) => r.eq(r.scope, "entry"));
 
 /**
  * The elements of the text census (`textReferenceKinds`, spec reading R9-b): each a
- * {@link TextReference}'s copy (C18). The key over its `id`, true since `Node` is keyed by it,
- * serves the copy's reverse probe, so no index holds the string value.
+ * {@link TextReference}'s copy (C18). `Node`'s own key over `id` keys it, so the copy's reverse
+ * probe reads that key, and no index holds the string value.
  */
 const textReferenceNodes = select(Node, (n) =>
   n.in(
@@ -961,7 +961,6 @@ export const packageLawsByName = {
       on(ResourceId, "package", "identifier", "node"),
     ),
   ],
-  "Node key": [key(on(textReferenceNodes, "id"))],
   "Reference overlay": [
     contained(
       on(censusAttributes, "node", "name", "lexical", "document", "kind"),
@@ -982,7 +981,6 @@ export const packageLawsByName = {
       on(TextReference, "node", "document", "kind", "lexical"),
     ),
     contained(on(TextReference, "node"), on(textReferenceNodes, "id")),
-    key(on(entryTextReferences, "node")),
     contained(
       on(entryTextReferences, "node", "document", "kind"),
       on(TextReferencePath, "node", "document", "kind"),
