@@ -37,7 +37,8 @@
  *
  * Beside them: an item ref's variable mappings ({@link VariableMapping}, reading 97) and an item's
  * stimulus refs ({@link StimulusRef}), each keyed by its node with its law a key, and the item each
- * item ref names ({@link ItemRefTarget} and {@link ItemRefDocument}, B2 and B3).
+ * item ref names ({@link ItemRefHref}, {@link ItemRefTarget} and {@link ItemRefDocument}, B2 and
+ * B3).
  *
  * Every attribute value a law compares is copied from `Attribute` (C18) beside the key over its
  * selection that keeps its lexical form out of every index (the addendum's "Text in keys"), and
@@ -93,7 +94,7 @@ import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
-import { Entry, hrefPaths, NamedHref, Reference } from "#pantry/qti/package.ts";
+import { Entry, hrefPaths, NamedHref, Reference, UnreadTypePath } from "#pantry/qti/package.ts";
 
 /**
  * The test's root kind, the root of an assembly whose names and branch rules resolve.
@@ -946,9 +947,12 @@ export const linkResourceTypes: readonly (typeof ResourceType.handles)[number][]
  * target" judges: the URI an item ref holds is "the URI used to refer to the item's file (e.g.,
  * elsewhere in the same content package)" (information model §5.6.5, `href`), so it names an item
  * of the package, or an LTI link (R36). It is a row only where a resource of the package names the
- * path, so an item ref whose href names none has no target, which the containment over the item
- * refs' hrefs refuses, and one that writes no href has none, which AL3 alone refuses (spec reading
- * 155). An item it names is an {@link ItemRefDocument} row of its own.
+ * path with a type the importer reads, a counted member of its item ref's {@link ItemRefHref}, so
+ * an item ref whose href names none has no target, which "Item ref target" refuses unless a
+ * resource of an unread type names the path, and one that writes no href has none, which AL3 alone
+ * refuses (spec reading 155). Where a resource of an unread type names the path and none of the
+ * item type or an LTI type does, the item ref names nothing a law could judge, and it has no
+ * target either. An item it names is an {@link ItemRefDocument} row of its own.
  *
  * In the corpus, feedbackTest's item ref `Example03-feedbackBlock-solution/...` names no file of
  * its package, and testWithLti's two item refs name LTI links; both packages are refused at the
@@ -957,6 +961,23 @@ export const linkResourceTypes: readonly (typeof ResourceType.handles)[number][]
 export const ItemRefTarget = relation(
   "ItemRefTarget",
   { node: uuid, package: uuid, path: keyText, type: closedId(ResourceType) },
+  ["node"],
+);
+
+/**
+ * The href of an item ref that writes one, keyed by the item ref's node: its href's `package` and
+ * `path`, as {@link ItemRefTarget}'s, and `targets`, drawn, its count of {@link ItemRefTarget}
+ * rows: 1 where a resource of the package names the path with a type the importer reads, and 0
+ * where none does. An item ref with no target is judged by no other statement of "Item ref
+ * target", so its path must be one a resource of an unread type names
+ * (`#pantry/qti/package.ts` `UnreadTypePath`, spec reading 67): the type of what it names is
+ * unread, so the law oracle names it no target to judge (its `itemRefTargetOf`). An unread type is
+ * itself a refusal, AL1's value domain, so this narrows the law set, never a verdict. An item ref
+ * that writes no href has none, which AL3 alone refuses (spec reading 155).
+ */
+export const ItemRefHref = relation(
+  "ItemRefHref",
+  { node: uuid, package: uuid, path: keyText, targets: drawn(natural) },
   ["node"],
 );
 
@@ -985,6 +1006,7 @@ export const testRelations = {
   Instance,
   InstanceName,
   ItemRefDocument,
+  ItemRefHref,
   ItemRefTarget,
   Named,
   Section,
@@ -1555,6 +1577,16 @@ const itemDocuments = select(Document, (d) => d.eq(d.rootKind, itemKind));
 const itemTargets = select(ItemRefTarget, (t) => t.eq(t.type, itemResourceType));
 
 /**
+ * Each item ref's target, counted by `ItemRefHref.targets`: one row or none.
+ */
+export const itemRefTargetFamily = counted(on(ItemRefTarget, "node"), fin(ItemRefHref, "targets"));
+
+/**
+ * The item refs whose href names no resource of a type the importer reads.
+ */
+const untargetedItemRefs = select(ItemRefHref, (h) => h.eq(h.targets, 0n));
+
+/**
  * The token attributes {@link TestToken} copies, each attribute's key and its two copies.
  */
 const tokenCopies = [
@@ -1606,8 +1638,9 @@ const flagCopies = flagCarriers.map(flagCopy);
  *   element once per test, and the key `(assembly, identifier)` (reading 86);
  * - **the jumps** ({@link BranchResolution}, {@link BranchTarget}, {@link BranchShuffle}): each
  *   resolution's target, `Branch_target` and `Branch_forward` (reading 87);
- * - **the items** ({@link ItemRefTarget}, {@link ItemRefDocument}): each item ref's href names an
- *   item document of the package or an LTI link (B2, B3, "Item ref target").
+ * - **the items** ({@link ItemRefHref}, {@link ItemRefTarget}, {@link ItemRefDocument}): each item
+ *   ref's href names an item document of the package or an LTI link, unless only a resource of an
+ *   unread type names it (B2, B3, "Item ref target").
  *
  * The statements by the laws they state:
  *
@@ -1654,10 +1687,12 @@ const flagCopies = flagCarriers.map(flagCopy);
  * and the two elements it reads, its own `Branch_forward` that it orders the two.
  *
  * The statements of B2's and B3's law, "Item ref target": each item ref that writes an href has
- * one {@link ItemRefTarget}, its href's path, named by a resource of the package of the item type
- * or an LTI type, and no other element has one; and each that names an item has its
- * {@link ItemRefDocument}, the document there, whose root is an item. An item ref that writes no
- * href names nothing, and AL3 alone refuses it (spec reading 155), named or not (reading 147).
+ * one {@link ItemRefHref}, its href's path, and no other element has one; each has one
+ * {@link ItemRefTarget}, named by a resource of the package of the item type or an LTI type,
+ * unless a resource of an unread type names its path, where it may have none; and each that names
+ * an item has its {@link ItemRefDocument}, the document there, whose root is an item. An item ref
+ * that writes no href names nothing, and AL3 alone refuses it (spec reading 155), named or not
+ * (reading 147).
  */
 export const testLawsByName = {
   "Branch forward": [
@@ -2130,7 +2165,11 @@ export const testLawsByName = {
   ],
   "Item ref target": [
     contained(on(ItemRefTarget, "node"), on(nodesOf(itemRefKind), "id")),
-    contained(on(attributesOf("href", [itemRefKind]), "node"), on(ItemRefTarget, "node")),
+    contained(on(ItemRefHref, "node"), on(nodesOf(itemRefKind), "id")),
+    contained(on(attributesOf("href", [itemRefKind]), "node"), on(ItemRefHref, "node")),
+    contained(on(ItemRefHref, "node", "package", "path"), on(hrefPaths, "node", "package", "path")),
+    itemRefTargetFamily,
+    contained(on(untargetedItemRefs, "package", "path"), on(UnreadTypePath, "package", "path")),
     contained(
       on(ItemRefTarget, "package", "path", "type"),
       on(NamedHref, "package", "path", "type"),

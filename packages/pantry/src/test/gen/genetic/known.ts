@@ -993,6 +993,42 @@ export const fixed = {
     fix: "NS4: the import and the law oracle read a path two resource types name once, as the first type, so the fragment is judged where item2.xml splices it, and the second type's href names no document of its type, Document entry alone (reading 93)",
     owner: "S-ORACLE",
   },
+  "import-only-law: Item ref target, check Item_ref_target on ItemRefTarget": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="bogus" href="item.xml"/><resource type="webcontent" href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section><qti-assessment-item-ref href="item.xml"/></qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: "decision 454: where a resource of an unread type names an item ref's path and none of the item type or an LTI type does, the importer writes no ItemRefTarget of the other read type beside it, as the law oracle names none (main's m0 class)",
+    owner: "genetic-repair gr-5b",
+  },
+  "import-only-law: Item ref target, contained Attribute(node) in ItemRefTarget(node)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="resourceextmetadata/xml " href="item.xml"/><resource type="imsqti_test_xmlv3p0" href="test.xml"/></resources></manifest>`,
+      ],
+      [
+        "test.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-test-part><qti-assessment-section><qti-assessment-section><qti-assessment-item-ref href="item.xml"/></qti-assessment-section></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+      ],
+    ],
+    fix: 'decision 454: an item ref whose path only a resource of an unread type names has an ItemRefHref with no ItemRefTarget, contained in UnreadTypePath, so "Item ref target" asks it for no target, as the law oracle names none; the package is R-O6, and its type="bogus" twin and m0 (type="imsqti_item_xmlv2p2", unread) showed the same class',
+    owner: "genetic-repair gr-5b",
+  },
   "import-only-law: Item ref target, contained Node(id) in ItemRefTarget(node)": {
     files: [
       [
