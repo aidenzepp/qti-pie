@@ -65,7 +65,7 @@ import {
   vocabularyNamespacePattern,
 } from "#pantry/grammar/install.ts";
 import { keyTextBytes, namespaceBytes, prefixBytes } from "#pantry/qti/limits.ts";
-import { Node, nodeRef, typeGovernorOf } from "#pantry/qti/node.ts";
+import { Chars, Node, nodeRef, typeGovernorOf } from "#pantry/qti/node.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
@@ -314,7 +314,7 @@ export const NamespaceUri = str.regex(`^${uriReference}$`);
  *
  * Exported for `src/import/refusal.ts`, which names its pattern law.
  */
-export const ForeignNamespace = str.bytes(namespaceBytes, str.regex(`^[${xmlChar}]*$`));
+export const ForeignNamespace = str.bytes(namespaceBytes, Chars);
 
 /**
  * An NCName: a foreign element's local name.
