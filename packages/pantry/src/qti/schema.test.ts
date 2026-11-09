@@ -17,6 +17,8 @@ import * as catalog from "#pantry/qti/catalog.ts";
 import { catalogLaws } from "#pantry/qti/catalog.ts";
 import * as chardata from "#pantry/qti/chardata.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
+import * as dataSsml from "#pantry/qti/data-ssml.ts";
+import { dataSsmlLaws } from "#pantry/qti/data-ssml.ts";
 import * as declarations from "#pantry/qti/declarations.ts";
 import { declarationLaws } from "#pantry/qti/declarations.ts";
 import * as expressionTypes from "#pantry/qti/expression-types.ts";
@@ -68,6 +70,7 @@ const composedLaws: readonly (readonly [string, readonly Statement[]])[] = [
   ["src/qti/operators.ts operatorLaws", operatorLaws],
   ["src/qti/mathml.ts mathmlLaws", mathmlLaws],
   ["src/qti/catalog.ts catalogLaws", catalogLaws],
+  ["src/qti/data-ssml.ts dataSsmlLaws", dataSsmlLaws],
   [
     "src/qti/own.ts builtLawsByName, the policy's and the queries' built with Qti",
     builtLawsByName.flatMap((byName: Readonly<Partial<Record<string, readonly Statement[]>>>) =>
@@ -99,6 +102,7 @@ const composedModules = [
   ["src/qti/operators.ts", operators],
   ["src/qti/mathml.ts", mathml],
   ["src/qti/catalog.ts", catalog],
+  ["src/qti/data-ssml.ts", dataSsml],
 ] as const;
 
 /**
