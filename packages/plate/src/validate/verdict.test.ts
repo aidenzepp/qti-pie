@@ -2011,6 +2011,182 @@ describe("check, align-54 Data-SSML everywhere: a data-ssml value is Data-SSML J
 });
 
 /**
+ * Construct a Portable Custom Interaction bound to `RESPONSE` that names its module by a `module`
+ * attribute or by neither form.
+ *
+ * @param module Whether it carries a `module`.
+ * @returns The interaction.
+ */
+const portableInteraction = (module: boolean): SourceElement =>
+  el(
+    "qti-portable-custom-interaction",
+    [
+      attr("custom-interaction-type-identifier", "urn:example:pci"),
+      ...(module ? [attr("module", "pci")] : []),
+      attr("response-identifier", "RESPONSE"),
+    ],
+    [el("qti-interaction-markup", [], [el("div")])],
+  );
+
+/**
+ * Construct a Choice bound to `RESPONSE` holding one simple choice.
+ *
+ * @param identifier The choice's `identifier`.
+ * @returns The interaction.
+ */
+const oneChoice = (identifier: string): SourceElement =>
+  el(
+    "qti-choice-interaction",
+    [attr("response-identifier", "RESPONSE")],
+    [el("qti-simple-choice", [attr("identifier", identifier)], [text("Yes")])],
+  );
+
+/**
+ * The content a stimulus and an item share in the stimulus prose rule cases, each with the
+ * declaration the item binds it to, if any, and the one refusal it earns: a `td` whose `headers`
+ * names no header of its table (reading 126, E29), a `q` a quotation mark stands against (reading
+ * 127, E30), a Choice whose two choices are both `A` (reading 104, E19), and a PCI that names its
+ * module by neither form (R10-a, F6). Each `path` is under the body.
+ */
+const stimulusProse = [
+  {
+    content: el("table", [], [el("tr", [], [el("td", [attr("headers", "zz")], [text("x")])])]),
+    declarations: [],
+    name: "E29",
+    refusal: {
+      detail: {
+        attribute: "headers",
+        check: "headers",
+        element: "td",
+        reading: "126",
+        token: "zz",
+        value: "zz",
+      },
+      path: "table/tr/td/@headers",
+      rule: "attribute-type",
+    },
+  },
+  {
+    content: el("p", [], [text("“"), el("q", [], [text("hi")]), text("”")]),
+    declarations: [],
+    name: "E30",
+    refusal: {
+      detail: { check: "quotation", element: "q", mark: "“", reading: "127", side: "before" },
+      path: "p/q",
+      rule: "text-not-allowed",
+    },
+  },
+  {
+    content: el(
+      "div",
+      [],
+      [
+        el(
+          "qti-choice-interaction",
+          [attr("response-identifier", "RESPONSE")],
+          [
+            el("qti-simple-choice", [attr("identifier", "A")], [text("Yes")]),
+            el("qti-simple-choice", [attr("identifier", "A")], [text("No")]),
+          ],
+        ),
+      ],
+    ),
+    declarations: [response("identifier", "single")],
+    name: "E19",
+    refusal: {
+      detail: { class: "qti-simple-choice", identifier: "A", reading: "104" },
+      path: "div/qti-choice-interaction/qti-simple-choice[2]/@identifier",
+      rule: "duplicate-identifier",
+    },
+  },
+  {
+    content: el("div", [], [portableInteraction(false)]),
+    declarations: [response("string", "single")],
+    name: "F6",
+    refusal: {
+      detail: {
+        attribute: "module",
+        check: "pci-module-source",
+        element: "qti-portable-custom-interaction",
+        source: "info.txt:37583",
+      },
+      path: "div/qti-portable-custom-interaction",
+      rule: "missing-attribute",
+    },
+  },
+] as const;
+
+describe("check, align-54 r11 stimulus prose rules: a stimulus's choices, table headers, quotations and PCIs are judged as an item's are (readings 104, 126 and 127; R10-a)", () => {
+  it.each(stimulusProse)(
+    "align-54 r11 stimulus prose rules $name: refuses the stimulus holding it, with the refusal the item holding it earns",
+    ({ content, refusal }) => {
+      const verdict = verdictOf(stimulus([content]));
+
+      assert.strictEqual(verdict.kind, "stimulus");
+      assert.deepStrictEqual(refusedFacts(verdict), [
+        { ...refusal, path: `qti-assessment-stimulus/qti-stimulus-body/${refusal.path}` },
+      ]);
+    },
+  );
+
+  it.each(stimulusProse)(
+    "align-54 r11 stimulus prose rules $name: the item holding it keeps exactly its refusal (control)",
+    ({ content, declarations, refusal }) => {
+      const verdict = verdictOf(item([...declarations, body([content])]));
+
+      assert.strictEqual(verdict.kind, "item");
+      assert.deepStrictEqual(refusedFacts(verdict), [
+        { ...refusal, path: `${bodyPath}/${refusal.path}` },
+      ]);
+    },
+  );
+
+  it("align-54 r11 stimulus prose rules E19: refuses each of a stimulus's faults in document order, the choices pooled across its interactions", () => {
+    const verdict = verdictOf(
+      stimulus([
+        el("div", [], [oneChoice("A")]),
+        el("p", [], [el("q", [], [text("“hi”")])]),
+        el("div", [], [oneChoice("A")]),
+      ]),
+    );
+
+    assert.deepStrictEqual(refusedFacts(verdict), [
+      {
+        detail: { check: "quotation", element: "q", mark: "“", reading: "127", side: "start" },
+        path: "qti-assessment-stimulus/qti-stimulus-body/p/q",
+        rule: "text-not-allowed",
+      },
+      {
+        detail: { class: "qti-simple-choice", identifier: "A", reading: "104" },
+        path: "qti-assessment-stimulus/qti-stimulus-body/div[2]/qti-choice-interaction/qti-simple-choice/@identifier",
+        rule: "duplicate-identifier",
+      },
+    ]);
+  });
+
+  it("align-54 r11 stimulus prose rules E29: accepts a stimulus whose cells name their table's headers, whose q stands clear of marks, whose choices differ and whose PCI names its module, marked as a stimulus root (control)", () => {
+    const verdict = verdictOf(
+      stimulus([
+        el(
+          "table",
+          [],
+          [
+            el("tr", [], [el("th", [attr("id", "h")], [text("Head")])]),
+            el("tr", [], [el("td", [attr("headers", "h")], [text("x")])]),
+          ],
+        ),
+        el("p", [], [text("She said "), el("q", [], [text("hi")]), text(".")]),
+        el("div", [], [choiceInteraction()]),
+        el("div", [], [portableInteraction(true)]),
+      ]),
+    );
+
+    assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+    assert.strictEqual(verdict.kind, "stimulus");
+  });
+});
+
+/**
  * Construct an item whose paragraph holds an Inline Choice bound to `RESPONSE`: a choice `A` of
  * text, then a choice `B` of the given content.
  *
@@ -4587,6 +4763,61 @@ describe("describeRefusal", () => {
       );
       assert.notInclude(sentence, `declare \`${identifier}\``, element);
     }
+  });
+
+  it("words a test's or a section's map-response or map-response-point of a built-in with the fix of a response an item declares, read through its item ref, never one the item declares (reading 166)", () => {
+    const places = [
+      [testLocation, "qti-assessment-test/qti-outcome-processing/qti-set-outcome-value"],
+      ["section.xml", "qti-assessment-section/qti-pre-condition/qti-gte"],
+    ] as const;
+    const cases = [
+      ["qti-map-response", "duration", { child: "qti-mapping" }, "with a `qti-mapping`"],
+      [
+        "qti-map-response-point",
+        "numAttempts",
+        { baseType: "point", child: "qti-area-mapping" },
+        "of base type `point` with a `qti-area-mapping`",
+      ],
+    ] as const;
+
+    for (const [document, parent] of places) {
+      for (const [element, identifier, needs, lacks] of cases) {
+        const sentence = describeRefusal(
+          refusalAt(
+            "template-requirements",
+            document,
+            { kind: "path", path: `${parent}/${element}` },
+            { ...needs, declaration: "qti-response-declaration", element, identifier },
+          ),
+        );
+
+        assert.include(
+          sentence,
+          `\`${element}\` needs a \`qti-response-declaration\` ${lacks}, and names the built-in \`${identifier}\`, which has no declaration.`,
+          `${document} ${element}`,
+        );
+        assert.include(
+          sentence,
+          `To make it valid: name a response an item declares in a \`qti-response-declaration\` ${lacks}, through its item ref, written \`ITEMREF.RESPONSE\`.`,
+          `${document} ${element}`,
+        );
+        assert.notInclude(sentence, "a response the item declares", `${document} ${element}`);
+      }
+    }
+  });
+
+  it("keeps an item's sentence for a map-response of a built-in byte for byte (reading 166, control)", () => {
+    assert.strictEqual(
+      describeRefusal(
+        refusalOf("template-requirements", {
+          child: "qti-mapping",
+          declaration: "qti-response-declaration",
+          element: "qti-map-response",
+          identifier: "numAttempts",
+        }),
+      ),
+      "**`item.xml`, at `qti-assessment-item`: refused.** `qti-map-response` needs a `qti-response-declaration` with a `qti-mapping`, and names the built-in `numAttempts`, which has no declaration. Rule `template-requirements`. To make it valid: name a response the item declares in a `qti-response-declaration` with a `qti-mapping`.",
+    );
   });
 
   it.each(m2Wordings)("writes the author facts of $name in code spans", ({ args, spans }) => {
