@@ -118,8 +118,8 @@ const localCluster = Config.all({
  * startup and authentication), so the bound stands well above a reachable server's answer, and a
  * server that never answers fails the command within seconds rather than holding it.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/0c2154c75d173f20b8f2198bffc2a626f5ea431f/packages/grizzle/src/adapter/types/layer.ts#L61-L78
- * @see https://github.com/bjornpagen/grizzle/blob/0c2154c75d173f20b8f2198bffc2a626f5ea431f/README.md#connecting
+ * @see https://github.com/bjornpagen/grizzle/blob/999facc69571db35dc9878d47f2d82ba95c41456/packages/grizzle/src/adapter/types/layer.ts#L61-L78
+ * @see https://github.com/bjornpagen/grizzle/blob/999facc69571db35dc9878d47f2d82ba95c41456/README.md#connecting
  */
 const connectTimeoutMs = 5000;
 

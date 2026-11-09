@@ -51,8 +51,8 @@ const authorAppRole = "qti__author_app";
  * a new connection attempt; any other closes 5,000 ms after its last use, so a process between
  * calls holds one session of the server.
  *
- * @see https://github.com/bjornpagen/grizzle/blob/0c2154c75d173f20b8f2198bffc2a626f5ea431f/packages/grizzle/src/adapter/types/layer.ts#L80-L95
- * @see https://github.com/bjornpagen/grizzle/blob/0c2154c75d173f20b8f2198bffc2a626f5ea431f/README.md#connecting
+ * @see https://github.com/bjornpagen/grizzle/blob/999facc69571db35dc9878d47f2d82ba95c41456/packages/grizzle/src/adapter/types/layer.ts#L80-L95
+ * @see https://github.com/bjornpagen/grizzle/blob/999facc69571db35dc9878d47f2d82ba95c41456/README.md#connecting
  */
 const authorAppPool: PoolBounds = { idleTimeoutMs: 5000, max: 10, min: 1 };
 

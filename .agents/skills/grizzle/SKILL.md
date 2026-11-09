@@ -54,9 +54,16 @@ export default defineConfig({
 
 - Every key is required, and nothing else is configurable: an unknown key is refused.
 - Always `export default defineConfig({ ... })`. A plain object is refused.
-- Every role is in exactly one login. The config refuses a login over a schema `schemas` doesn't list (or over another
-  version of it), and two logins or roles of one schema whose names convert alike. A login missing from `logins` is
-  not installed, nor are its roles, so `Db.open` refuses them: their PostgreSQL roles don't exist.
+- `schemas` lists each installation once, by its top level: `schema.extend(Qti, "Ledger", ...)` listed as `[Ledger]`
+  installs `Qti` and `Ledger` together, each level in its own PostgreSQL schema, under one migrations directory named
+  by the root, `migrations/qti/`. Listing `Qti` beside `Ledger`, or two schemas over one root, is refused.
+- Every role is in exactly one login. A login may be over any level of a listed installation (`login(Qti, ...)` beside
+  `login(Ledger, ...)`). The config refuses a login over a schema no listed installation holds (or over another
+  version of it), and two logins or roles of one installation whose names convert alike. A login missing from `logins`
+  is not installed, nor are its roles, so `Db.open` refuses them: their PostgreSQL roles don't exist.
+- A level reaches the levels below it only by a containment of plain fields into a key, or through a rule over a
+  query; any other law over a lower relation is `LevelRefused` when the schema is built. A process over a lower level
+  opens the installation's snapshot, and a refusal by a law above it is `{ kind: "above", level, law }`.
 - A login owns its workloads: `login(Blog, "web", [AnonBlog, MemberBlog], { workload: [anonReads, memberReads] })`.
   A workload, `workload(schemaOrRole, { name: program })`, is over the login's base, a level of it, or one of its
   roles, and names queries, ordered queries, ChangeSets and relation keys. Two programs of one name across a login's
@@ -118,12 +125,14 @@ Commands: `grizzle generate <config> [--name <name>] [--schema <schema>] [--rena
 or `--flag=value`. A name is lowercase words joined by `_` or `-`, at most 240 characters, so that the folder
 `<timestamp>_<name>` fits one file name (NAME_MAX, 255 bytes). Without `--name`, a drafted folder is named after its
 change (`init`, `add_task_note`, `<first change>_and_more`); a custom one needs `--name`. `--schema` is accepted only
-when the config lists several schemas; there it is required with `--custom`, `--rename` or `--drop`. Exit codes: 0 ok, 1
+when the config lists several installations, each by its top level's name; there it is required with `--custom`,
+`--rename` or `--drop`. Exit codes: 0 ok, 1
 refused, 2 usage error, 130 interrupted.
 
 ## Reading a draft
 
-`migrations/<schema>/<UTC timestamp>_<name>/` holds `NN-<phase>.sql` files and `meta.json`. Each file is one
+`migrations/<root>/<UTC timestamp>_<name>/` holds `NN-<phase>.sql` files and `meta.json`, `<root>` the PostgreSQL schema
+of the installation's root level; one migration spans every level. Each file is one
 transaction, so a migration is several small files, in order. A migration is plain ordered SQL: what the schema no
 longer has is dropped in the same migration, as declared, and a declared rename or a type change happens in place. A
 breaking change may briefly break older application instances that are still running.
@@ -146,10 +155,13 @@ breaking change may briefly break older application instances that are still run
   grizzle fills on every write, are each their own `ADD COLUMN` (`__index_<count>_…`, `__copy_<count>_…`,
   `__before_<count>_<plane>_…`, `__after_<count>_<plane>_…`, `__predecessor_<count>_…`), and each CHECK over them its
   own `ADD CONSTRAINT`. A family new to a table that may hold rows is backfilled here: its columns are added under
-  placeholder defaults, SQL over the stored rows draws each index, count, fold value and interval (window functions, and
-  one recursive step for a tree), each default is dropped, and only then are the constraints that read them added, `NOT
-  VALID`, for Validate to prove the values. A family whose values the stored rows alone don't give is refused, naming
-  it. A roster whose names changed has its domain's CHECK dropped and added `NOT VALID` against the new names constant,
+  placeholder defaults, `SET CONSTRAINTS ALL IMMEDIATE`, SQL over the stored rows draws each index, count, fold value
+  and interval (window functions, and one recursive step for a tree), each default is dropped, and only then are the
+  constraints that read them added, `NOT VALID`, for Validate to prove the values. A field whose filler changed (its
+  fold steps over another field, its copy reads another field, its family's group or order changed) is dropped and
+  backfilled the same way: `snapshot.json` records what fills each drawn or accumulated field. A fold added to or
+  changed on a tree that holds rows is drawn in the tree's stored sibling order. A family whose values the stored rows
+  alone don't give is refused, naming it: copies that read each other, or a fold over a copy. A roster whose names changed has its domain's CHECK dropped and added `NOT VALID` against the new names constant,
   validated in Validate; a set over a roster that grew is converted to the new size's domain by its cast, the new
   handles absent. A table CHECK or generated field over a changed closed relation is replaced the same way, or takes its
   new expression (`SET EXPRESSION`). A field whose type changes is converted in place, `ALTER COLUMN ... TYPE ... USING`
@@ -170,7 +182,11 @@ breaking change may briefly break older application instances that are still run
   that becomes the primary key) is dropped here once the new key is attached, and the foreign keys over those fields
   are added after it, so each depends on the new key. A roster domain's VALIDATE refuses every row that still holds a
   removed handle's code, naming the table and column, never the row: change or delete those rows in a data step
-  before it.
+  before it. A rule over a query (a side over a derived relation) that is new, or whose rule or definition changed,
+  is checked here once every row the migration writes is written: a DO block running its violation query over the
+  stored rows, raising 23000 with the rule's name where a row breaks it. Its functions and its deferred constraint
+  triggers, one on each table its query reads, are created or replaced here too, and a renamed table's trigger is
+  created again.
 - **publish**: the refined constants' casts to their domains, so each is judged by the target's CHECK (one it refuses
   rolls the whole file back); the worlds: logins and roles, their memberships and settings, each role's schema of
   views (a security-barrier view for a query entry, a plain one for a whole entry, each closed id followed by its
@@ -209,9 +225,17 @@ What a declaration drafts:
 - **A relation or roster renamed** is renamed in place in Setup, first aside and then to its new name, with its
   constraints, so its rows stay where they are, and a swap (`A=B` and `B=A`) or a chain (`A=B` and `B=C`) is free of the
   names it moves into. A name a rename takes ends its previous holder, which is dropped as declared.
-- **A field renamed** is renamed in place, through its own aside name, and what is built over it (its indexes, keys,
-  CHECKs and foreign keys) is built again as the schema declares it. A new field of a table with rows takes a
-  placeholder, and a field whose type changed is converted in place, as any field is.
+- **A field renamed** is renamed in place, through its own aside name. PostgreSQL carries the rename into what is built
+  over it, and each key, index, statistics object, CHECK and foreign key over it, or on a renamed relation, or
+  referencing one, that the schema declares by the same definition is renamed to the name the schema gives it
+  (`RENAME CONSTRAINT`, `ALTER INDEX ... RENAME TO`), never built or validated again; what the schema declares otherwise
+  is built again. A new field of a table with rows takes a placeholder, and a field whose type changed is converted in
+  place, as any field is.
+- **A family's hidden columns** (`__copy_…`, `__index_…`, `__parent_start_…`, `__before_…`, `__after_…`,
+  `__predecessor_…`, `__pred_…`) are named by the laws whose values they hold, so a rename of the owner, the member, the
+  count, or a roster or handle a fold's or a side's selection reads, a swap or a chain among them included, renames
+  them in place too, `ALTER TABLE ... RENAME COLUMN` through an aside name: no backfill, no table rewrite, every drawn
+  value kept. A column whose law the migration changes otherwise is a new column, drawn again.
 - **A handle renamed** keeps its code, so every row holding it holds the new name: the migration installs the
   roster's new names constant and points its domain at it.
 - **A handle dropped** leaves a hole: its code is never reused, and the roster's domain, validated against the new names
@@ -269,6 +293,8 @@ as PostgreSQL's scanner reads it: whitespace, comments and the case of unquoted 
   or each statement alone with -- grizzle: no-transaction, and never controls the transaction itself.
 - The violation check of a rule over closed relations alone, at the start of Setup: without it the migration installs
   closed rows that break the rule, and no later statement checks them again.
+- The violation check of a rule over a query, in Validate: its triggers judge only the writes after it, so without it
+  the migration installs a rule the stored rows already break.
 - `CONCURRENTLY` turned into a plain build: a plain build blocks every write to the table while it runs.
 
 ## Custom migrations
@@ -431,15 +457,27 @@ The command line's own refusals, by stage:
   and a server's error by its `sqlstate` and the fields it names, never by its words, which follow `lc_messages`.
   Retry only `TransientFailure`, and `Db.open`'s `OpenError` whose reason is `AdmissionTransient`, with `Effect.retry`
   and your own `Schedule`; after `CommitUnknown`, read back before running the call again.
+- In a test, build a failure or an outcome with grizzle's own constructors, never a cast or an object literal in a
+  class's place: every error and reason class is exported as a value, the class grizzle builds it with
+  (`new ReadFailure({ reason: new InputTooLarge({ bound }) })`); a server's report is `new ServerError({ sqlstate,
+  message, constraint, schema, table, column, dataType, detail, hint })`, each field stated, its `sqlstate` from
+  `Sqlstate.parse(code)`, which is `undefined` for a code that is no SQLSTATE; and `ApplyOutcome.committed(counts,
+  reads)`, `invariantRejected(refused, witness)` and `outsideWorld(relation)` build what `db.apply` answers.
 - A broken rule is an outcome of `db.apply`, never an error. `invariant-rejected` carries `refused`,
   `{ kind: "every" | "first" | "some", laws }`, whose `laws` are the laws as the schema states them, never empty, such
   as `[{ kind: "check", relation: "Grant", name: "WithinGrant" }]`: match on them directly, never on a constraint's
-  name. A pattern's law names its field, `{ kind: "pattern", relation, field, source, flags }`, spelled as that field
-  spells its pattern, so two fields of one pattern are two laws. `patternLawsOf(schema)` lists every pattern law a
-  schema states, one per stored field, and none for a pattern every text matches, which grizzle drops, or for a
-  contract's pattern, whose law is the contract's: compare refusals against it with `sameLaw`, never keep that list
-  by hand. `every` names every law grizzle decides the write broke. `first` names the laws of the CHECK
-  PostgreSQL tried first, where grizzle cannot decide a row's checks on the host (a row only PostgreSQL computes, such
+  name. A pattern's law names its field, `{ kind: "pattern", relation, field, patterns }`, each `{ source, flags }`
+  spelled as that field spells it, every pattern of a `str.and` in order and one law for the field all the same, so two
+  fields of one pattern are two laws. `lawsOf(schema)` lists every law a schema states,
+  each once, as an outcome names it: each table's primary key, each statement's laws, each contract's, each stored
+  field's pattern law and each generated field's law, none for a pattern every text matches, which grizzle drops, or
+  for a contract's pattern, whose law is the contract's. Compare refusals against it with `sameLaw`, and never keep a
+  list of laws by hand. For one statement's laws, bind `const lawsOfStatement = lawsByStatement(schema)` once, which
+  compiles, then look each statement up with `lawsOfStatement(statement)`: its laws from lawsOf's list, in its order, a
+  mirrors' two containments, an alternatives' containments, none for `mutable`, a law two statements state each
+  one's; a statement no level of the schema states throws `CompileError`. `every` names every law grizzle
+  decides the write broke. `first` names the laws of the CHECK PostgreSQL tried first, where grizzle cannot decide a
+  row's checks on the host (a row only PostgreSQL computes, such
   as a query's, or a check that reads a value grizzle does not hold, such as a count or an end a put keeps from the
   stored row): the row may break other checks too, and another version of grizzle may name another of them. `some`
   names two laws or more of one PostgreSQL object, a family's merged foreign key or a domain several fields share,
@@ -483,6 +521,11 @@ The command line's own refusals, by stage:
   is UnrepresentableKey. The step may be any text, a generated piece at a byte bound among them,
   `generated(T, Compute.concat(…))` for a refined `T`: a generated field and each accumulator is of its type but for
   its own pattern and byte bound, which its domain checks, refusing a write whose value lies outside it.
+- Join patterns a text must all match, XML Schema's pattern facets among them, with
+  `str.and(str.regex(p), str.regex(q))`, never one regex you intersect by hand: each pattern is held to PostgreSQL's
+  limits alone and its domain tests each in turn, so a conjunction costs the sum of its patterns, never their product,
+  and its host type is theirs intersected. Inside `Compute.when(Compute.matches(x, p), …)` the subject is text of its
+  own patterns and `p` together, so nested matches prove a cast into a conjunction.
 - Write a `str.regex` or `Compute.matches` pattern in JavaScript's syntax under `u`, with no lookahead or lookbehind,
   `\p{…}` or `\P{…}`, `\s` or `\S`, `\b` or `\B`, backreference, named group, inline modifier, lazy quantifier or
   repetition bound above 255, and with some text it matches. TypeScript accepts each of these, but the relation,
@@ -511,18 +554,30 @@ The command line's own refusals, by stage:
   a mean or an operation's numeric result carries the digits its computation proves, and one past 131,072 integer
   digits is `ResourceBound`. Convert an integer, money or a float to numeric with `Compute.numeric(x)`, never a cast to
   a typmod you do not mean.
-- Each login is a PostgreSQL role, `<schema>__<login>`, and each world a role that cannot log in, `<schema>__<role>`.
-  The migration that adds a login creates it; the operator gives it a password, or, for an RDS IAM login, `GRANT
-  rds_iam TO <login> WITH INHERIT TRUE, SET FALSE`. grizzle never sets either. A login holds only USAGE on the
+- Parse an `xs:decimal` text with `Compute.parseDecimal(x)`, the exact numeric of any digits, never a cast into the
+  widest `pg.numeric(p, s)` with a lexical form, whose form ends at 256 integer and 255 fraction digits. Its text is
+  `decimalText` within `decimalTextMaxBytes` (16,384) bytes: type it `str.bytes(16384, str.regex(decimalText))`, or
+  guard it, `Compute.when(Compute.matches(x, decimalText), (x) => Compute.when(Compute.within(Compute.octetLength(x),
+  0, 16384), () => Compute.parseDecimal(x), otherwise), otherwise)`. A double's text of any digits is
+  `Compute.parseDouble(x)` over `doubleText`. Never make an `otherwise` stand for a value, an infinity or a sentinel:
+  a rule over it then passes on a text that does not parse. State what the rule holds of such a text in the rule.
+  Parse a padded value as XML Schema reads it, collapsed first:
+  `Compute.when(Compute.matches(Compute.collapse(x), doubleText), (x) => Compute.parseDouble(x), otherwise)`.
+- Each login is a PostgreSQL role, `roleNameOf(login)`, and each role a PostgreSQL role that cannot log in,
+  `roleNameOf(role)`, with its schema of views, `schemaNameOf(role)`; the schema's own is `schemaNameOf(schema)`. Take
+  every one from there, never spell or rebuild one: each is the name the installation creates, and each throws
+  CompileError for a name the installation refuses. The migration that adds a login creates its role; the operator
+  gives it a password, or, for an RDS IAM login, `GRANT rds_iam TO <role> WITH INHERIT TRUE, SET FALSE`, and the IAM
+  signer's user name is `roleNameOf(login)`. grizzle never sets either. A login holds only USAGE on the
   schema, SELECT on the ledger and EXECUTE on the snapshot guard, the lock and the check Db.open and every transaction
   take; everything else it does as one of its roles, one per transaction. Db.open and drift admit a membership beyond
   the login's roles only with SET FALSE and no ADMIN, and only while the login's effective privileges on the
   installation stay exactly those three: `rds_iam` holds nothing there, so it is admitted, and a membership handing
   the login any privilege or ownership is refused. This has not been run against RDS.
 - A role is over a schema and is no schema itself: `role`, `login`, `schema.extend`, `wholeEntriesOf`,
-  `writableNamesOf` and `lawsOf` take a schema, and a role passed to one is a type error; `query`, `ChangeSet.empty`
-  and `workload` take either. A role's `write` names each entry once: a name listed twice is a type error, and
-  `RoleRefused` (`writeTwice`) for a JavaScript caller.
+  `writableNamesOf`, `lawsOf` and `lawsByStatement` take a schema, and a role passed to one is a type error; `query`,
+  `ChangeSet.empty` and `workload` take either. A role's `write` names each entry once: a name listed twice is a type
+  error, and `RoleRefused` (`writeTwice`) for a JavaScript caller.
 - A role's `write` lists a query entry only when the entry is writable (README's Writing through a role); otherwise
   `role(...)` is refused as `RoleRefused`, its rule `writeUnwritable` naming the `entry` and the `why`. An entry over a
   family's owner writes the owner as a write of its table does: grizzle draws the owner's counts and ends, so no row
@@ -530,15 +585,18 @@ The command line's own refusals, by stage:
   one, or the `why` is `filterReadsFamily` or `keyHoldsFamily`, naming the field: filter the owner by the fields its
   caller writes. A family's members are written from an array or a `Stream`, never from a query or through a query
   entry.
-- A direct SQL writer logs in as a login, runs `SET ROLE <role>` for one of its roles, and, for a role whose
-  relations read a context, sets the claims in the transaction:
+- A direct SQL writer logs in as a login's role, runs `SET ROLE` to `roleNameOf(role)` for one of its roles, reads
+  the role's views in `schemaNameOf(role)`, and, for a role whose relations read a context, sets the claims in the
+  transaction:
   `SELECT set_config('grizzle.claims', '{"Session":{"sub":"user_123"}}', true)`. A login holder can set any claims:
   the login is the boundary, so give each trust domain its own. A world role holds no privilege on a sequence: an
   identity default needs none, and a writer inserting explicit serial values (`OVERRIDING SYSTEM VALUE`) calls the
-  field's advance function, `SELECT <schema>.<advance function>(<largest value inserted>)`, in the same transaction.
+  field's advance function, `SELECT <schema>.<advance function>(<largest value inserted>)`, `<schema>` being
+  `schemaNameOf(schema)`, in the same transaction.
 - Every installed object is named from what it is. Declared names are snake_case: the schema, tables, derived
   relations, rosters, contracts, columns, row checks and a role's views keep their converted names, a contract's CHECK
-  is `check`, and a role's schema is its role's name. `constraintNameOf(law)` gives a row check's installed name from
+  is `check`, and a login's or role's role and a role's schema join the schema's name and their own (roleNameOf,
+  schemaNameOf). `constraintNameOf(law)` gives a row check's installed name from
   its law, `constraintNameOf({ kind: "check", relation: "Grant", name: "WithinGrant" })` is `"within_grant"`: a direct
   writer or a test that matches a refusal's constraint takes it from there, never spelling it. Two declared names that
   convert alike are one name (two fields of a relation, two head fields of a derived relation or a role's query, two
