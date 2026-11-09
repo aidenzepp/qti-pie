@@ -596,6 +596,19 @@ const integerKeys = [
 type IntegerPairSituation = "one key" | "one integer" | "two integers" | "no integer";
 
 /**
+ * An integer key's value as the host reads `Compute.parseDecimal` of it (`numericNamed`): its
+ * digits, a selected key having no point; none for a key `integerKeyPattern` does not select.
+ *
+ * @param key - The key.
+ * @returns Its value.
+ */
+const integerValueOf = (key: string): bigint | undefined => {
+  const numeric = integerKey.test(key) ? numericNamed(key) : undefined;
+
+  return numeric?.kind === "finite" ? numeric.digits : undefined;
+};
+
+/**
  * Whether the schema holds two keys of one integer mapping apart, read as its statements state it:
  * the lexical key over `MapKey(mapping, key)`, and the key over the query `MapKeyInteger`
  * (`#pantry/qti/queries.ts`), whose rows are the keys `integerKeyPattern` selects, each valued by
@@ -608,14 +621,9 @@ type IntegerPairSituation = "one key" | "one integer" | "two integers" | "no int
  * @returns Whether the two repeat.
  */
 const integersRepeat = (left: string, right: string): boolean => {
-  const valueOf = (key: string): bigint | undefined => {
-    const parsed = integerKey.test(key) ? numericNamed(key) : undefined;
+  const value = integerValueOf(left);
 
-    return parsed?.kind === "finite" ? parsed.digits : undefined;
-  };
-  const value = valueOf(left);
-
-  return left === right || (value !== undefined && value === valueOf(right));
+  return left === right || (value !== undefined && value === integerValueOf(right));
 };
 
 describe("qti/mapping.ts, an integer key's typed value", { timeout: searchTimeout }, () => {
@@ -742,7 +750,10 @@ const keyOf = (written: string): string => written.replaceAll("&#9;", "\t");
  * @param key - The key.
  * @returns The value's text.
  */
-const twoItemValueOf = (baseType: "directedPair" | "pair" | "point", key: string) => {
+const twoItemValueOf = (
+  baseType: "directedPair" | "pair" | "point",
+  key: string,
+): string | undefined => {
   const runs = runsOf(key);
   if (runs === undefined) {
     return undefined;
@@ -750,9 +761,9 @@ const twoItemValueOf = (baseType: "directedPair" | "pair" | "point", key: string
 
   if (baseType === "point") {
     const integers = runs.map((run) => {
-      const parsed = integerKey.test(run) ? numericNamed(run) : undefined;
+      const numeric = integerKey.test(run) ? numericNamed(run) : undefined;
 
-      return parsed?.kind === "finite" ? String(parsed.digits) : undefined;
+      return numeric?.kind === "finite" ? String(numeric.digits) : undefined;
     });
 
     return integers.every((integer) => integer !== undefined) ? integers.join(" ") : undefined;

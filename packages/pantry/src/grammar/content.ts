@@ -537,8 +537,18 @@ const edited = (particle: Particle, edit: ModelEdit): Particle => {
       }
     }
   };
+
   return walk(particle);
 };
+
+/**
+ * The kinds a model's leaves name: each element leaf's kinds, and none of a wildcard's.
+ *
+ * @param leaves - The model's leaves.
+ * @returns The kinds, each once.
+ */
+const kindsNamed = (leaves: readonly Exclude<Particle, { readonly _tag: "group" }>[]) =>
+  new Set(leaves.flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : [])));
 
 /**
  * Whether a spec reading's edit finds what it names in its parent's model, as the particle stands
@@ -553,11 +563,9 @@ const edited = (particle: Particle, edit: ModelEdit): Particle => {
  * @returns Whether it finds what it names.
  */
 export const finds = (particle: Particle, edit: ModelEdit): boolean => {
-  const named = (leaves: readonly Exclude<Particle, { readonly _tag: "group" }>[]) =>
-    new Set(leaves.flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : [])));
   switch (edit._tag) {
     case "first": {
-      const occurring = named(
+      const occurring = kindsNamed(
         leavesOf(particle).filter(({ occurs }) => !Option.contains(occurs.max, 0)),
       );
 
@@ -567,15 +575,15 @@ export const finds = (particle: Particle, edit: ModelEdit): boolean => {
       return true;
     }
     case "ends": {
-      const held = named(leavesOf(particle));
+      const held = kindsNamed(leavesOf(particle));
 
       return edit.kinds.some((kind) => held.has(kind));
     }
     case "cap": {
-      return named(leavesOf(particle)).has(edit.kind);
+      return kindsNamed(leavesOf(particle)).has(edit.kind);
     }
     case "beside": {
-      return named(leavesOf(particle)).has(edit.with);
+      return kindsNamed(leavesOf(particle)).has(edit.with);
     }
     default: {
       return edit satisfies never;
@@ -593,8 +601,20 @@ export const finds = (particle: Particle, edit: ModelEdit): boolean => {
  * @param kind - The model's kind.
  * @returns The edited particle.
  */
-export const editedBy = (particle: Particle, edits: readonly ModelEdit[], kind: string): Particle =>
-  edits.reduce((tree, edit) => (edit.parent === kind ? edited(tree, edit) : tree), particle);
+export const editedBy = (
+  particle: Particle,
+  edits: readonly ModelEdit[],
+  kind: string,
+): Particle => {
+  let tree = particle;
+  for (const edit of edits) {
+    if (edit.parent === kind) {
+      tree = edited(tree, edit);
+    }
+  }
+
+  return tree;
+};
 
 /**
  * The endings a kind's readings state.

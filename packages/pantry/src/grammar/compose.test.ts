@@ -3,7 +3,7 @@ import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { array, element as choice, int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Option, Result } from "effect";
+import { Duration, Effect, Formatter, Option, Predicate, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { faultOf, indexed, repeatOf } from "#pantry/grammar/closed.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
@@ -82,8 +82,9 @@ const isRoster = (value: unknown): value is Roster<string> =>
  * @param seen - The records walked already.
  * @returns The rosters, each once.
  */
-const rostersIn = (value: unknown, seen: Set<object> = new Set()): readonly Roster<string>[] => {
-  if (typeof value !== "object" || value === null || Array.isArray(value) || seen.has(value)) {
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A grammar's records hold values of every type, which this walks.
+const rostersIn = (value: unknown, seen = new Set<object>()): readonly Roster<string>[] => {
+  if (!Predicate.isObject(value) || seen.has(value)) {
     return [];
   }
 
@@ -93,7 +94,7 @@ const rostersIn = (value: unknown, seen: Set<object> = new Set()): readonly Rost
     ? [value]
     : Object.entries(value).flatMap(([name, held]: readonly [string, unknown]) =>
         (name === "key" || name === "payload") && Array.isArray(held)
-          ? held.flatMap((field: unknown) => rostersIn(field, seen))
+          ? held.flatMap((field) => rostersIn(field, seen))
           : rostersIn(held, seen),
       );
 };
@@ -106,8 +107,9 @@ const rostersIn = (value: unknown, seen: Set<object> = new Set()): readonly Rost
  * @param seen - The records walked already.
  * @returns The relations, each once.
  */
-const relationsIn = (value: unknown, seen: Set<object> = new Set()): readonly Relation[] => {
-  if (typeof value !== "object" || value === null || Array.isArray(value) || seen.has(value)) {
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A grammar's records hold values of every type, which this walks.
+const relationsIn = (value: unknown, seen = new Set<object>()): readonly Relation[] => {
+  if (!Predicate.isObject(value) || seen.has(value)) {
     return [];
   }
 
@@ -115,7 +117,7 @@ const relationsIn = (value: unknown, seen: Set<object> = new Set()): readonly Re
 
   return isRelation(value)
     ? [value]
-    : Object.values(value).flatMap((held: unknown) => relationsIn(held, seen));
+    : Object.values(value).flatMap((held) => relationsIn(held, seen));
 };
 
 describe("the composition", () => {
@@ -703,7 +705,7 @@ describe("spec reading 109, wild IDs", () => {
                     !uses.has(name) &&
                     identity
                       .lookup({ domain })
-                      .pipe(Option.exists(({ identity }) => identity === "ID")),
+                      .pipe(Option.exists(({ identity: kind }) => kind === "ID")),
                 );
 
                 assert.deepStrictEqual(declaresId ? wild.map(({ name }) => name) : [], [], at);

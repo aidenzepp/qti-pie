@@ -840,9 +840,9 @@ describe("qti/metadata.ts, the rows an overlay row stands on", { timeout: testTi
       // parent no LomTitle holds.
       Effect.gen(function* standingRows() {
         const { inputs } = yield* readProgram(yield* materialize("simple"));
-        const laws = judgedLaws(Qti);
+        const qtiLaws = judgedLaws(Qti);
         const brokenBy = (rows: typeof inputs): readonly Law[] =>
-          judgeRows(hostRowsOf(rows), laws).broken.map(({ law }) => law);
+          judgeRows(hostRowsOf(rows), qtiLaws).broken.map(({ law }) => law);
         const titleString = Option.getOrUndefined(Arr.head([...inputs.LomTitleString.values()]));
         assert.isDefined(titleString, "simple's record has a title string");
 

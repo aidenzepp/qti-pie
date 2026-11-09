@@ -1114,6 +1114,19 @@ const endedToy = (model: ContentModel, ending: readonly [string, ...string[]]) =
     },
   ]);
 
+/**
+ * A toy ending of `p`'s families at some kinds.
+ *
+ * @param kinds - The kinds its families end with.
+ * @returns The edit.
+ */
+const endingOf = (kinds: readonly [string, ...string[]]): ModelEdit => ({
+  _tag: "ends",
+  kinds,
+  parent: "p",
+  source: "a toy ending",
+});
+
 describe("MathML 3 §3.6.5.1: mscarries is never the last element of an mstack or mlongdiv", () => {
   it.effect(
     "refuses a package whose mstack ends in an mscarries, under N7 Last and child-set",
@@ -1270,12 +1283,6 @@ describe("the ending edit, which lambda's restatement reads (content.ts, endedBy
         ? mixed.content.particle
         : assert.fail("the toy model holds a particle"),
     );
-    const endingOf = (kinds: readonly [string, ...string[]]): ModelEdit => ({
-      _tag: "ends",
-      kinds,
-      parent: "p",
-      source: "a toy ending",
-    });
 
     assert.deepStrictEqual(
       mixedEndingsOf(automaton, [endingOf(["a"])], "p").map(({ kinds }) => kinds),

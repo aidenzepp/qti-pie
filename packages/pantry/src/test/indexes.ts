@@ -162,14 +162,14 @@ export const admits = (sets: AncestrySets, parent: Ancestry, kind: string): bool
  * rows they state, ChildGrammar's once: each family's map (`ContentModelOf`'s `admission`) with
  * each of its children (`AdmissionIn`).
  *
- * @param contentModelOf - `ContentModelOf`, as installed.
- * @param contentModelOf.rows - Its rows.
+ * @param models - `ContentModelOf`, as installed.
+ * @param models.rows - Its rows.
  * @param admissionIn - `AdmissionIn`, as installed.
  * @param admissionIn.rows - Its rows.
  * @returns The rows, by family in `ContentModelOf`'s order.
  */
 export const admittedOf = <Parent extends string, Child extends string, Version extends string>(
-  contentModelOf: {
+  models: {
     readonly rows: readonly {
       readonly admission: string;
       readonly parent: Parent;
@@ -191,7 +191,7 @@ export const admittedOf = <Parent extends string, Child extends string, Version 
 }[] => {
   const members = Map.groupBy(admissionIn.rows, ({ map }) => map);
 
-  return contentModelOf.rows.flatMap(({ admission, parent, version }) =>
+  return models.rows.flatMap(({ admission, parent, version }) =>
     rowsAt(members, admission).map(({ child, position }) => ({ child, parent, position, version })),
   );
 };

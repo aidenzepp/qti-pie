@@ -203,13 +203,13 @@ describe("the host judge's model of a schema", () => {
         ["the genetic search", evaluatedLaws],
       ] as const;
 
-      for (const [judge, laws] of judges) {
+      for (const [label, laws] of judges) {
         const held = new Set(laws.map((law) => Formatter.format(law)));
 
         assert.deepStrictEqual(
           stated.filter((law) => !held.has(law)),
           [],
-          `laws Qti states that ${judge} judges not`,
+          `laws Qti states that ${label} judges not`,
         );
       }
     },

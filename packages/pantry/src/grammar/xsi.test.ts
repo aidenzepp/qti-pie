@@ -105,7 +105,7 @@ describe("XsiType", () => {
             suite: "grammar/xsi/model",
           },
           (declared, c) =>
-            Effect.gen(function* model() {
+            Effect.sync(() => {
               // Oracle: §3.3.4 clause 4 read over the toy derivations by hand: an element may name
               // its declared type or a type derived from it, and nothing for an anonymous type.
               const kinds = roster("NodeKind", ["k0", "k1", "k2"]);

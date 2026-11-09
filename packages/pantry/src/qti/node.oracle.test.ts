@@ -106,13 +106,13 @@ const scratchSchema = () =>
   schema(
     "NodeScratch",
     {
+      AdmissionIn: install.AdmissionIn,
+      AdmissionMap: install.AdmissionMap,
       AnonymousType: install.AnonymousType,
       AttributeSlot: install.AttributeSlot,
       Banned: install.Banned,
       BarredOf: install.BarredOf,
       Capped: install.Capped,
-      AdmissionIn: install.AdmissionIn,
-      AdmissionMap: install.AdmissionMap,
       ContentModel: install.ContentModel,
       ContentModelOf: install.ContentModelOf,
       CountedOf: install.CountedOf,

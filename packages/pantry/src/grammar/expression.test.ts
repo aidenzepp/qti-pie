@@ -619,7 +619,7 @@ describe("OperatorArity's occurrence arithmetic against a naive count set", () =
 
 describe("MappableBaseType", () => {
   it.effect("holds every base type but the two with no map key, duration and file (spec 4.3)", () =>
-    Effect.gen(function* mappable() {
+    Effect.sync(() => {
       const relation = mappableBaseType(roster("BaseType", baseTypes));
 
       assert.deepStrictEqual(

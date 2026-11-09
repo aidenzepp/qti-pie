@@ -29,7 +29,7 @@ describe("the names a document is written under", () => {
       // The names module reads them without composing, so this test is where the two would part.
       Effect.gen(function* sameNames() {
         const { kinds } = yield* grammar;
-        const rows = kinds.elementName.rows;
+        const { rows } = kinds.elementName;
 
         assert.isAbove(rows.length, 0);
         assert.deepStrictEqual(

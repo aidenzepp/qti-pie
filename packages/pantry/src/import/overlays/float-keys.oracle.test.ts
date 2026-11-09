@@ -694,6 +694,7 @@ const judged = ({ keys }: KeyPair, note: (situation: Situation) => void) =>
       entries.map(({ key }) => key),
       [first, second],
     );
+
     // The query's rows, read on the host by its selection over the `MapKeyType` rows it reads.
     const typedNodes = new Set(
       [...rows.MapKeyType.values()].flatMap(({ baseType, key, node }) =>

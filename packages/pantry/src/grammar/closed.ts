@@ -16,7 +16,7 @@
  * closed id or an open-typed value, the latter coded by its active domain within the relation in
  * value order (fin.md §17, "Codes").
  */
-import { Array as Arr, Option, Schema } from "effect";
+import { Array as Arr, Option, Predicate, Schema } from "effect";
 import type { Source, Sources } from "#pantry/vocab/inventory/types.ts";
 
 /**
@@ -499,7 +499,7 @@ type KeyOf<Key extends readonly AnyKeyField[]> = {
  * @param row - The row, or a lookup's key.
  * @returns The key's text.
  */
-const keyTextOf = (key: readonly AnyKeyField[], row: Readonly<Record<string, unknown>>): string =>
+const keyTextOf = (key: readonly AnyKeyField[], row: AnyRow): string =>
   key.map(({ name }) => String(row[name])).join("\u0000");
 
 /**
@@ -545,14 +545,14 @@ const holds = (
 ): boolean => {
   switch (field._tag) {
     case "id": {
-      return typeof value === "string" && field.roster.has(value);
+      return Predicate.isString(value) && field.roster.has(value);
     }
     case "value": {
       return field.values.some((held) => held === value);
     }
     case "dependent": {
       return (
-        typeof value === "string" &&
+        Predicate.isString(value) &&
         Option.exists(field.roster.codeOf(value), (code) => code < field.sizeOf(prefix))
       );
     }

@@ -257,6 +257,28 @@ const exportedModules: readonly string[] = Object.values(
   ).exports,
 ).flatMap((target) => (target.startsWith("./src/") ? [target.slice("./src/".length)] : []));
 
+/**
+ * The modules of the source folder that call a builder, but the tests, the test support and the
+ * builder's own module.
+ *
+ * @param builder - A call of the builder.
+ * @param own - The builder's own module, by its path under the source folder.
+ * @returns The callers, by their paths under the source folder.
+ */
+const callers = (builder: RegExp, own: string): readonly string[] =>
+  readdirSync(sourceRoot, { recursive: true, withFileTypes: true }).flatMap((entry) => {
+    const module = path.relative(sourceRoot, path.join(entry.parentPath, entry.name));
+
+    return entry.isFile() &&
+      module.endsWith(".ts") &&
+      !module.endsWith(".test.ts") &&
+      !module.startsWith("test/") &&
+      module !== own &&
+      builder.test(readFileSync(path.join(sourceRoot, module), "utf-8"))
+      ? [module]
+      : [];
+  });
+
 describe("qti/own.ts and qti/own-login.ts, this package's own install", () => {
   it("is loaded by no module an install outside this package loads, so loading one builds no schema", () => {
     // Bound: every module the exports map lists, and every module each loads.
@@ -272,20 +294,6 @@ describe("qti/own.ts and qti/own-login.ts, this package's own install", () => {
   it("builds the schema this process opens, and its login, once: no other module of the package builds one", () => {
     // Bound: every module of the source folder but the tests, the test support and the builders'
     // own modules, read for a call of each builder.
-    const callers = (builder: RegExp, own: string): readonly string[] =>
-      readdirSync(sourceRoot, { recursive: true, withFileTypes: true }).flatMap((entry) => {
-        const module = path.relative(sourceRoot, path.join(entry.parentPath, entry.name));
-
-        return entry.isFile() &&
-          module.endsWith(".ts") &&
-          !module.endsWith(".test.ts") &&
-          !module.startsWith("test/") &&
-          module !== own &&
-          builder.test(readFileSync(path.join(sourceRoot, module), "utf-8"))
-          ? [module]
-          : [];
-      });
-
     assert.deepStrictEqual(callers(/\bqti(?:LevelsOf|Schema)\(/u, "qti/schema.ts"), ["qti/own.ts"]);
     assert.deepStrictEqual(callers(/\bauthorAppOf\(/u, "qti/logins.ts"), ["qti/own-login.ts"]);
   });

@@ -1814,6 +1814,29 @@ const refusal = (model: ContentModel, capped: string): string =>
     onSuccess: () => "composed",
   });
 
+/**
+ * A toy cap of one kind in `p`'s model.
+ *
+ * @param kind - The kind it caps.
+ * @returns The edit.
+ */
+const capOf = (kind: string): ModelEdit => ({
+  _tag: "cap",
+  kind,
+  parent: "p",
+  source: "a toy cap",
+});
+
+/**
+ * A toy model's particle.
+ *
+ * @param model - The model, which holds element-only content.
+ * @param model.content - Its content.
+ * @returns Its particle.
+ */
+const particleOf = ({ content }: ContentModel) =>
+  content._tag === "element-only" ? content.particle : assert.fail("a toy model's particle");
+
 describe("the cap edit, which spec reading 130's LOM caps read (content.ts, cappedBy)", () => {
   it.effect(
     "holds a capped kind to one child of its family, beside the automaton, every family of at most 4 over 3 kinds, each cap of 1 or 2 kinds",
@@ -1878,14 +1901,6 @@ describe("the cap edit, which spec reading 130's LOM caps read (content.ts, capp
     assert.strictEqual(refusal(twice, "a"), "UncountedCap");
     // A cap of a kind the model names nowhere leaves the model as it is; `finds` is the tests'
     // check, which the composition's test runs over every edit.
-    const capOf = (kind: string): ModelEdit => ({
-      _tag: "cap",
-      kind,
-      parent: "p",
-      source: "a toy cap",
-    });
-    const particleOf = ({ content }: ContentModel) =>
-      content._tag === "element-only" ? content.particle : assert.fail("a toy model's particle");
     assert.isFalse(finds(particleOf(without), capOf("c")));
     assert.isTrue(finds(particleOf(without), capOf("a")));
     assert.strictEqual(refusal(without, "c"), "composed");
