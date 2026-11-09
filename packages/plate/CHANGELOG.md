@@ -377,7 +377,13 @@ M3.
     such processing ran, and `advance` or `startTest` failed with `UnknownIdentifierError` when the
     name's one resolving reading was a section document's item ref, such as `a.b`. The test
     document cannot tell that case from `a`'s item declaring `b.SCORE`, so such a read is marked in
-    both. A test with no section ref is unchanged. Corpus: none.
+    both. `openPackage`, which reads the items, also marks a name whose one counting reading reads
+    through a section document's item ref though a reading through the test's own one counts in
+    the test document alone: `a.2.SCORE` beside an own `a` that a selection with replacement can
+    repeat, whose item declares no `SCORE`, and a section document's `a.2`; and `x.y.SCORE` beside
+    an own `x.y` whose item declares no `SCORE`, and a section document's `x` whose item declares
+    `y.SCORE`. Before, such processing ran, and `advance` or `startTest` failed with
+    `UnknownIdentifierError`. A test with no section ref is unchanged. Corpus: none.
   - In a test's processing, and in a section document's under a test that reaches it, a
     `qti-map-response` or `qti-map-response-point` of the test's `duration`, or of the `numAttempts`
     plate keeps for a test that declares none, is refused `template-requirements`, as an item's of

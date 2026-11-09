@@ -3378,6 +3378,214 @@ describe("a package whose test reads a dotted name through its own prefix and a 
 });
 
 /**
+ * The item `i1` of the counting reading cases below, which declares the single float outcome
+ * `OTHER`, defaulting to 1, and no `SCORE`.
+ */
+const unscoredItemXml = [
+  `<qti-assessment-item xmlns="${qtiNamespace}" identifier="i1" title="i1" adaptive="false" time-dependent="false">`,
+  '<qti-outcome-declaration identifier="OTHER" cardinality="single" base-type="float">',
+  "<qti-default-value><qti-value>1</qti-value></qti-default-value></qti-outcome-declaration>",
+  "<qti-item-body><p>Read this passage.</p></qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
+ * One case N1's residual names: a name the test reads whose reading through the test's own item
+ * ref counts in the test document alone, though that ref's item, {@link unscoredItemXml}, declares
+ * no `SCORE`, so the name's one counting reading is the section document's item ref, which names
+ * `i2`, which the session does not deliver.
+ */
+interface CountingCase {
+  /**
+   * What `i2` declares after its `SCORE`, as written.
+   */
+  readonly declarations: string;
+  /**
+   * The name read.
+   */
+  readonly name: string;
+  /**
+   * The test's own item ref, as written, which names `i1`.
+   */
+  readonly own: string;
+  /**
+   * The identifier of the section document's item ref.
+   */
+  readonly placed: string;
+}
+
+/**
+ * R1, `a.2.SCORE` beside an own `a` a selection with replacement can repeat and a section
+ * document's `a.2`, and R2, `x.y.SCORE` beside an own `x.y` and a section document's `x`, whose
+ * item declares `y.SCORE`.
+ */
+const countingCases: readonly CountingCase[] = [
+  {
+    declarations: "",
+    name: "a.2.SCORE",
+    own: [
+      '<qti-assessment-section identifier="drawn" title="Drawn" visible="true">',
+      '<qti-selection select="1" with-replacement="true"/>',
+      refXml("a", "i1.xml"),
+      "</qti-assessment-section>",
+    ].join(""),
+    placed: "a.2",
+  },
+  {
+    declarations: [
+      '<qti-outcome-declaration identifier="y.SCORE" cardinality="single" base-type="float">',
+      "<qti-default-value><qti-value>7</qti-value></qti-default-value></qti-outcome-declaration>",
+    ].join(""),
+    name: "x.y.SCORE",
+    own: refXml("x.y", "i1.xml"),
+    placed: "x",
+  },
+];
+
+/**
+ * The items of a counting reading case: `i1`, {@link unscoredItemXml}; `i2`, whose `SCORE`
+ * defaults to 7, with the case's further declarations; and `i3`, which declares the float template
+ * variable `T` with no default.
+ *
+ * @param declarations What `i2` declares after its `SCORE`, as written.
+ * @returns The items, each its file name and its text.
+ */
+const countingItems = (
+  declarations: string,
+): readonly (readonly [file: string, text: string])[] => [
+  ["i1.xml", unscoredItemXml],
+  ["i2.xml", scoredItemXml("i2", "7", declarations)],
+  [
+    "i3.xml",
+    scoredItemXml(
+      "i3",
+      "0",
+      '<qti-template-declaration identifier="T" cardinality="single" base-type="float"/>',
+    ),
+  ],
+];
+
+describe("a package whose test reads a name whose one counting reading is a section document's", () => {
+  it.effect(
+    "align-54 r12 counting reading in a section document N1: outcome processing that sets TOTAL from a.2.SCORE beside an own repeatable a whose item declares no SCORE, or from x.y.SCORE beside an own x.y whose item declares no SCORE, read through a section document's a.2 or x alone, is marked by name, and end-part leaves TOTAL at its default 0",
+    () =>
+      Effect.gen(function* marksCountingReads() {
+        for (const { declarations, name, own, placed } of countingCases) {
+          const { closed, delivery, verdict } = yield* numberedRun({
+            items: countingItems(declarations),
+            section: moreSectionXml(placed),
+            test: numberedTestXml(
+              own + moreRefXml,
+              `<qti-set-outcome-value identifier="TOTAL">${read(name)}</qti-set-outcome-value>`,
+            ),
+          });
+
+          assert.strictEqual(verdict, "accepted-with-unsupported", name);
+          assert.deepStrictEqual(delivery.test.test.outcomeProcessing, { kind: "marked" }, name);
+          assert.include(markedFeatures(delivery), `variable:${name}`, name);
+          assert.deepStrictEqual(closed.outcomes["TOTAL"], float(0), name);
+          assert.strictEqual(closed.status, "closed", name);
+        }
+      }),
+  );
+
+  it.effect(
+    "align-54 r12 counting reading in a section document N1: item ref c's template default of T that reads such a name is marked by name and left out, so startTest succeeds on a fresh session, in a nonlinear part, which end-part closes, and in a linear one that presents c first, which next closes",
+    () =>
+      Effect.gen(function* leavesCountingDefaults() {
+        const configuration = yield* configure({});
+        for (const { declarations, name, own, placed } of countingCases) {
+          const reading = refXml("c", "i3.xml", defaultXml("T", read(name)));
+          for (const [navigation, body, intents] of [
+            ["nonlinear", own + reading + moreRefXml, ["end-part"]],
+            ["linear", reading + own + moreRefXml, ["next", "next"]],
+          ] as const) {
+            const label = `${name} in a ${navigation} part`;
+            const verdict = yield* numberedVerdict({
+              items: countingItems(declarations),
+              section: moreSectionXml(placed),
+              test: numberedTestXml(body, "", navigation),
+            });
+            const delivery = packagedDelivery(verdict);
+            const session = started(delivery, configuration, "counting");
+            let closed = session;
+            for (const [index, kind] of intents.entries()) {
+              closed = Result.getOrElse(
+                advance(
+                  delivery.test,
+                  delivery.items,
+                  closed,
+                  { intent: { kind } },
+                  configuration,
+                  { now: after(1000 * (index + 1)) },
+                ),
+                (failure) => assert.fail(`${kind} refused: ${failure._tag}: ${failure.message}`),
+              );
+            }
+            const presented = session.items.find((item) => item.ref === "c");
+
+            assert.strictEqual(verdict.verdict, "accepted-with-unsupported", label);
+            assert.include(markedFeatures(delivery), `variable:${name}`, label);
+            assert.deepStrictEqual(presented?.templateDefaults, Option.none(), label);
+            assert.strictEqual(closed.status, "closed", label);
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "align-54 r12 counting reading in a section document N1: the controls: beside a section document, own item refs a and a.b set TOTAL and T from a.b.SCORE, 7, and through an own a a selection with replacement can repeat, whose item declares SCORE, a.2.SCORE runs unmarked",
+    () =>
+      Effect.gen(function* keepsOwnCountingReads() {
+        const configuration = yield* configure({});
+        const ownAB = yield* numberedRun({
+          items: scoredItems,
+          section: moreSectionXml("other"),
+          test: numberedTestXml(
+            refXml("a", "i1.xml") + refXml("a.b", "i2.xml") + moreRefXml,
+            `<qti-set-outcome-value identifier="TOTAL">${read("a.b.SCORE")}</qti-set-outcome-value>`,
+          ),
+        });
+        const defaulted = packagedDelivery(
+          yield* numberedVerdict({
+            items: templatedItems,
+            section: moreSectionXml("other"),
+            test: numberedTestXml(
+              refXml("a", "i1.xml") +
+                refXml("a.b", "i2.xml") +
+                refXml("c", "i3.xml", defaultXml("T", read("a.b.SCORE"))) +
+                moreRefXml,
+              "",
+            ),
+          }),
+        );
+        const repeatable = yield* numberedRun({
+          items: scoredItems,
+          section: moreSectionXml("other"),
+          test: numberedTestXml(
+            `<qti-selection select="1" with-replacement="true"/>${refXml("a", "i1.xml")}${moreRefXml}`,
+            totalOfA2,
+          ),
+        });
+
+        assert.strictEqual(ownAB.delivery.test.test.outcomeProcessing.kind, "runs");
+        assert.notInclude(markedFeatures(ownAB.delivery), "variable:a.b.SCORE");
+        assert.deepStrictEqual(ownAB.closed.outcomes["TOTAL"], float(7));
+        assert.notInclude(markedFeatures(defaulted), "variable:a.b.SCORE");
+        assert.deepStrictEqual(
+          templatesAt(
+            presentedAt(defaulted, started(defaulted, configuration, "counting"), 3, after(1000)),
+            3,
+          )["T"],
+          float(7),
+        );
+        assert.strictEqual(repeatable.delivery.test.test.outcomeProcessing.kind, "runs");
+        assert.notInclude(markedFeatures(repeatable.delivery), "variable:a.2.SCORE");
+        assert.strictEqual(repeatable.closed.status, "closed");
+      }),
+  );
+});
+
+/**
  * The text of the hand-built item `I1` whose `record` response `R` a Text Entry binds, with no
  * processing of its own, so a test reads `R` through its item ref as the record the item holds.
  */

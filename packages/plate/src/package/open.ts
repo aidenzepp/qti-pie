@@ -5459,9 +5459,11 @@ interface TestJudgement {
  * variable the item declares in a `qti-context-declaration`, directly or in the numbered form, the
  * built-in `QTI_CONTEXT` (reading 106, "a prefixed reference reaches every built-in variable its
  * item ref's item holds, `QTI_CONTEXT` among them"), or any variable through an item ref that names
- * an LTI link, which no session delivers. The engine holds no value of any of them, so the
- * delivered test marks the processing that reads it. A read in a reached section document is left
- * alone: a session delivers none of its items, and the test model marks a read through one.
+ * an LTI link, which no session delivers, or any variable through an item ref, part or section a
+ * reached section document writes, whose items no session delivers. The engine holds no value of
+ * any of them, so the delivered test marks the processing that reads it, where the test model,
+ * which reads no item, would hold it. A read in a reached section document is left alone: a
+ * session delivers none of its items.
  *
  * @param source The test's source.
  * @param testPath The test's path.
@@ -5767,11 +5769,20 @@ const judgeTest = (
   const branches = notHeld(judgeBranches(branching, test, true), ownRefusals(documents, testPath));
 
   /**
-   * Report whether a name the test's processing reads names, through an item ref, a variable the
-   * engine holds no value of: the test does not hold it whole, and its one counting reading reads a
-   * context variable, one its item declares in a `qti-context-declaration` or the built-in
-   * `QTI_CONTEXT` (reading 106), or reads through an item ref that names an LTI link, whose
-   * variables no session holds.
+   * Report whether a name the test's processing reads names, through an item ref, part or section,
+   * a variable the engine holds no value of: the test does not hold it whole, and its one counting
+   * reading reads a context variable, one its item declares in a `qti-context-declaration` or the
+   * built-in `QTI_CONTEXT` (reading 106), reads through an item ref that names an LTI link, whose
+   * variables no session holds, or reads through a prefix a section document writes, whose items
+   * no session delivers.
+   *
+   * The test model reads no item, so it holds a name whose reading through the test's own part,
+   * section or item ref counts in the test document alone (`isPrefixedHeld` in
+   * `#plate/model/test.ts`): `a.2.SCORE` through an own `a` a selection with replacement can
+   * repeat, or `x.y.SCORE` through an own `x.y`. Where that ref's item declares no such variable,
+   * the package counts only the section document's `a.2` or `x`, so the engine would find no
+   * reading of it. A name the test model already marks, as it marks `I1.SCORE` through a section
+   * document's `I1`, is marked once ({@link withUnheldReads}).
    *
    * @param name The name.
    * @returns Whether it does.
@@ -5787,7 +5798,9 @@ const judgeTest = (
       return (
         only !== undefined &&
         others.length === 0 &&
-        (only.variable.kind === "context" || itemRefs.get(only.prefix)?.link === true)
+        (only.variable.kind === "context" ||
+          itemRefs.get(only.prefix)?.link === true ||
+          (written.get(only.prefix)?.document ?? testPath) !== testPath)
       );
     }).includes(true);
   };
