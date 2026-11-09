@@ -58,6 +58,9 @@ and each of its entry points is unstable until M3.
   (ItemSessionControl, section 7.19.2). Pass `shown.page` where you passed `shown.record`.
 - An Inline Choice whose choice holds a `qti-feedback-inline` shows its notice, as one holding a
   `qti-template-inline` does, since an `option` shows only text. A Choice's choice shows it.
+- The default theme gives a Choice row in `review` and `solution` the muted surface a readonly
+  text Control takes there, and the default cursor, so every interaction shows one locked look.
+  The selected row keeps its border and its filled Indicator.
 
 ### How plate reads feedback (2026-11-09)
 

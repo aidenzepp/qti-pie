@@ -829,6 +829,31 @@ const dimmedModes = (
 };
 
 /**
+ * Find the modes in which a Choice row has no locked look: no rule reaches the row under a Choice
+ * Root in that mode, whatever its `data-disabled`, and gives it the muted surface a readonly text
+ * Control takes, `--muted`, and the default cursor, without dimming it.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each such mode of {@link readingModes}.
+ */
+const unlockedModes = (sheet: Sheet): readonly string[] =>
+  readingModes.filter(
+    (mode) =>
+      !sheet.rules.some(
+        (rule) =>
+          reaches(rule, marker.choice) &&
+          Option.contains(tokenName(rule, "background-color"), "--muted") &&
+          declares(rule, "cursor", "default") &&
+          Option.isNone(declared(rule, "opacity")) &&
+          holdsAnywhere(
+            rule,
+            (compound) =>
+              holdsSlot(compound, marker.choiceRoot) && holdsEquals(compound, "data-mode", mode),
+          ),
+      ),
+  );
+
+/**
  * Find the Controls no rule gives the refused look: no rule whose subject compound holds the
  * Control's marker and `[aria-invalid="true"]` takes its `border-color` from `--destructive`.
  *
@@ -1567,6 +1592,16 @@ layer(Stylesheet.layer)("styles.css", (test) => {
           dimmedModes(sheet, { part: marker.choice, root: marker.choiceRoot }),
           [],
         );
+      }),
+  );
+
+  test.effect(
+    "[Q-2] gives a Choice row in review and solution the locked look a readonly text Control has: the muted surface, a default cursor, undimmed",
+    () =>
+      Effect.gen(function* lockedChoice() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(unlockedModes(sheet), []);
       }),
   );
 

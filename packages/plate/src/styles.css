@@ -639,6 +639,21 @@
   opacity: 1;
 }
 
+/*
+ * A Choice row in review or solution: the muted surface a readonly text Control takes there, so
+ * every interaction shows one locked look, and the default cursor, since its Control takes no
+ * click. The selected row keeps its --primary border and its filled Indicator, so the answer shown
+ * still reads at full contrast.
+ */
+:where(
+  [data-slot="choice-interaction"][data-mode="review"] [data-slot="choice-interaction-choice"],
+  [data-slot="choice-interaction"][data-mode="solution"] [data-slot="choice-interaction-choice"]
+) {
+  background-color: var(--muted, oklch(0.97 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+  cursor: default;
+}
+
 /* Focus on a Choice row, by its Control: shadcn's 3px ring at half strength. */
 :where(
   [data-slot="choice-interaction-choice"]:has(
