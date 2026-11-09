@@ -93,7 +93,9 @@
  *   a file the package holds or the manifest lists, or it is `package-file-missing` with `check:
  *   "reference"` at the attribute (reading 103, "an xml:base is a base, resolved and never a file
  *   reference"). An item ref's `href` is one of them, so one that names no such file is refused
- *   both ways, `item-ref-unresolved` and `package-file-missing`.
+ *   both ways, `item-ref-unresolved` and `package-file-missing`. The text of a card's or card
+ *   entry's `qti-file-href` and of a `qti-resource-icon` is one too, refused at the element (R9-b,
+ *   "Card files and resource icons are file references").
  *
  * A resource with no `href` names no document (reading 93), so nothing of it is read. A document
  * resource whose `href` leads outside the package is refused by the manifest's own rules
@@ -1013,9 +1015,95 @@ const censusOf = (element: SourceElement): readonly FileReference[] => {
 };
 
 /**
+ * One element whose text names a file of the package (R9-b, "Card files and resource icons are
+ * file references"): how its text is read, by its type, and the line of QTI's information model
+ * whose sentence settles it, which its refusal cites as `source`.
+ */
+interface TextReference {
+  readonly source: string;
+  readonly space: ReferenceSpace;
+}
+
+/**
+ * The QTI elements whose `qti-file-href` names a file of the package: a card and a card entry.
+ */
+const cardHolders: ReadonlySet<string> = new Set(["qti-card", "qti-card-entry"]);
+
+/**
+ * Give the census entry of an element whose text names a file of the package, read as reading
+ * 102 reads an `href` (R9-b, "Card files and resource icons are file references").
+ *
+ * The entries are a card's or a card entry's `qti-file-href`, a `FileHrefCardDType`, whose content
+ * is an `xs:anyURI` (section 6.6, CardSelection, "these files MUST be contained in the
+ * corresponding QTI content package", `info.txt:21151`), and every `qti-resource-icon`, a
+ * `URLDType`, an `xs:normalizedString` (section 5.80.4, "This file MUST be contained within the
+ * correponding QTI content package", `info.txt:33266`). The `qti-file-href` of a calculator's
+ * `qti-calculator-info` or of a `qti-digital-material`, an `ItemFileInfoDType`, is left out, as
+ * R9-b leaves it out.
+ *
+ * @param element The element.
+ * @param parent Its parent, none for a root.
+ * @returns The census entry, none for an element whose text the census does not read.
+ */
+const textCensusOf = (
+  element: SourceElement,
+  parent: Option.Option<SourceElement>,
+): Option.Option<TextReference> => {
+  if (element.namespace !== qtiNamespace) {
+    return Option.none();
+  }
+
+  switch (element.local) {
+    case "qti-file-href": {
+      return Option.exists(parent, (holder) => isQti(holder, cardHolders))
+        ? Option.some({ source: "info.txt:21151", space: "collapse" })
+        : Option.none();
+    }
+    case "qti-resource-icon": {
+      return Option.some({ source: "info.txt:33266", space: "replace" });
+    }
+    default: {
+      return Option.none();
+    }
+  }
+};
+
+/**
+ * Give an element's simple content: its text children joined.
+ *
+ * @param element The element.
+ * @returns Its text; none when it holds an unexpanded entity reference, whose value is unknown, or
+ *   an element, which a simple type does not allow and the document's own verdict refuses.
+ */
+const simpleTextOf = (element: SourceElement): Option.Option<string> => {
+  let text = "";
+  for (const child of element.children) {
+    if (child.kind !== "text") {
+      return Option.none();
+    }
+
+    text += child.text;
+  }
+
+  return Option.some(text);
+};
+
+/**
  * A carriage return, a line feed or a tab, each of which an `xs:normalizedString` reads as a space.
  */
 const replacedWhitespace = /[\t\n\r]/gu;
+
+/**
+ * Read a file reference's value by its whitespace class, before it is resolved (reading 102).
+ *
+ * @param space How the value is read.
+ * @param value The value, as written.
+ * @returns The value as read, the whitespace around it set aside.
+ */
+const readReference = (space: ReferenceSpace, value: string): string =>
+  space === "collapse"
+    ? collapse(value)
+    : trimXmlSpace(space === "replace" ? value.replaceAll(replacedWhitespace, " ") : value);
 
 /**
  * Give the references one census attribute's value makes, each read by the attribute's whitespace
@@ -1031,12 +1119,7 @@ const replacedWhitespace = /[\t\n\r]/gu;
  * @returns The references, none empty.
  */
 const referencesIn = (reference: FileReference, value: string): readonly string[] => {
-  const read =
-    reference.space === "collapse"
-      ? collapse(value)
-      : trimXmlSpace(
-          reference.space === "replace" ? value.replaceAll(replacedWhitespace, " ") : value,
-        );
+  const read = readReference(reference.space, value);
 
   return reference.srcset
     ? read.split(",").flatMap((candidate) => {
@@ -1061,6 +1144,14 @@ const referencesIn = (reference: FileReference, value: string): readonly string[
  * `attribute`, the `path` and the `reading`. A path the manifest lists that the package does not
  * hold is `package-file-missing` at its listing already (`checkFiles`), so it is not given again.
  *
+ * The text of each element {@link textCensusOf} names, a card's or card entry's `qti-file-href`
+ * and a `qti-resource-icon`, is one reference too (R9-b, "Card files and resource icons are file
+ * references"), read by its type's whitespace class ({@link readReference}) and resolved through
+ * the base in scope for that element exactly as an attribute's. Its refusal is at the element, its
+ * detail the `element` in place of the `attribute` and the information model's line as `source`
+ * in place of the `reading`. A text holding an unexpanded entity reference is not read
+ * ({@link simpleTextOf}).
+ *
  * Only a written attribute is read: `qti-interaction-modules@primary-configuration`'s schema
  * default, `modules/module_resolution.js`, names no file a document wrote, and is not looked for
  * (rule `db2ef322`, a limit recorded here; no official package leaves it unwritten without the
@@ -1084,18 +1175,26 @@ const checkReferences = (
     const visits = [...walk(source.success)];
     const bases = basesOf(visits, path);
 
-    return visits.flatMap(({ element, path: at }) =>
-      censusOf(element).flatMap((reference) =>
-        Option.toArray(attributeOf(element, reference.local)).flatMap((value) =>
-          referencesIn(reference, value).flatMap((written) => {
-            const target =
-              withoutQuery(written) === ""
-                ? Option.none()
-                : resolveReference(bases.get(element) ?? Option.none(), written);
+    return visits.flatMap(({ element, parent, path: at }) => {
+      /**
+       * Give the path a reference written on the element names when the package neither holds nor
+       * lists it.
+       *
+       * @param written The reference, as read.
+       * @returns The path; none for one that names its own document, an external file, or a file
+       *   the package holds or lists.
+       */
+      const missing = (written: string): Option.Option<string> =>
+        (withoutQuery(written) === ""
+          ? Option.none()
+          : resolveReference(bases.get(element) ?? Option.none(), written)
+        ).pipe(Option.filter((named) => !held.has(named) && !listed.has(named)));
 
-            return Option.toArray(target)
-              .filter((named) => !held.has(named) && !listed.has(named))
-              .map((named) =>
+      return [
+        ...censusOf(element).flatMap((reference) =>
+          Option.toArray(attributeOf(element, reference.local)).flatMap((value) =>
+            referencesIn(reference, value).flatMap((written) =>
+              Option.toArray(missing(written)).map((named) =>
                 refuse(
                   source.success.location,
                   "package-file-missing",
@@ -1108,11 +1207,25 @@ const checkReferences = (
                     reading: "103",
                   },
                 ),
-              );
-          }),
+              ),
+            ),
+          ),
         ),
-      ),
-    );
+        ...Option.toArray(textCensusOf(element, parent)).flatMap(({ source: line, space }) =>
+          Option.toArray(simpleTextOf(element)).flatMap((text) =>
+            Option.toArray(missing(readReference(space, text))).map((named) =>
+              refuse(source.success.location, "package-file-missing", at, {
+                check: "reference",
+                document: path,
+                element: element.local,
+                path: named,
+                source: line,
+              }),
+            ),
+          ),
+        ),
+      ];
+    });
   });
 
 /**
