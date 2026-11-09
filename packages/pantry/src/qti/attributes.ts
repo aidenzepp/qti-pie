@@ -87,6 +87,7 @@ import {
   closedId,
   Compute,
   contained,
+  doubleText,
   drawn,
   fin,
   fold,
@@ -101,7 +102,6 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
-import { doubleText } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import {
   AttributeCountOf,

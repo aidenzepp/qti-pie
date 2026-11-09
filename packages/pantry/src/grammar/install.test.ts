@@ -204,7 +204,7 @@ const comparisons: readonly Comparison[] = [
     // Each family's admission map is the installed one: the map's own rows are held to
     // `Admission`'s by the admission test below.
     expected: () => {
-      const installed = new Map(
+      const admissions = new Map(
         install.ContentModelOf.rows.map(({ admission, parent, version }) => [
           `${version} ${parent}`,
           admission,
@@ -213,7 +213,7 @@ const comparisons: readonly Comparison[] = [
 
       return grammar.content.contentModelOf.rows.map((row) => ({
         ...row,
-        admission: installed.get(`${row.version} ${row.parent}`),
+        admission: admissions.get(`${row.version} ${row.parent}`),
       }));
     },
     name: "ContentModelOf",
