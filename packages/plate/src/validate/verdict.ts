@@ -1739,6 +1739,10 @@ const dataSsmlProblems: ReadonlyMap<string, string> = new Map([
 /**
  * Word an `attribute-type` refusal, by the `check` its detail names.
  *
+ * - `catalog-reference` (R9-a, "The catalog sentences of the information model hold as written";
+ *   F3b): `element`'s `data-catalog-idref` whose `value` is the `id` of an element, `target`, that
+ *   is not a `qti-catalog`, where a catalog's `id` "locate[s] the catalog from a
+ *   data-catalog-idref" (`info.txt:21437`).
  * - `data-ssml` (the operator's P3): a `data-ssml` value that is not Data-SSML JSON, by the `problem`
  *   its decoding names ({@link dataSsmlProblems}).
  * - `headers` (reading 126, E29): a cell's `headers` whose `token` is not the `id` of a `th` of the
@@ -1772,6 +1776,15 @@ const attributeType = (refusal: Refusal): string => {
   const value = code(fact(refusal, "value", ""));
 
   switch (fact(refusal, "check", "")) {
+    case "catalog-reference": {
+      const catalog = code("qti-catalog");
+
+      return sentence(
+        refusal,
+        `${code(element)}'s attribute ${code(attribute)} is ${value}, the ${code("id")} of the element ${code(fact(refusal, "target", ""))}, not of a ${catalog}, and a ${code("data-catalog-idref")} names a ${catalog} of its own document${settled(refusal)}.`,
+        `name in ${code(attribute)} the ${code("id")} of a ${catalog} of the document`,
+      );
+    }
     case "data-ssml": {
       const problem = dataSsmlProblems.get(fact(refusal, "problem", "")) ?? "is not Data-SSML JSON";
 
@@ -2300,6 +2313,10 @@ const countRange = (refusal: Refusal): string => {
 /**
  * Word a `duplicate-identifier` refusal, by the `check` its detail names.
  *
+ * - `card-support` (R9-a, "The catalog sentences of the information model hold as written"; F3a): a
+ *   `qti-card` whose `support` an earlier card of the same catalog, `catalog`, names, where the
+ *   information model says "Use only one card for any particular named support in a catalog"
+ *   (`info.txt:21097`).
  * - `choice-variable` (reading 104, E19): a choice of the `class` the detail names whose `identifier`
  *   is also an item variable's or a built-in's.
  * - `field` (B7): a record value that writes one `field` twice.
@@ -2315,6 +2332,16 @@ const duplicateIdentifier = (refusal: Refusal): string => {
   const identifier = code(fact(refusal, "identifier", ""));
 
   switch (fact(refusal, "check", "")) {
+    case "card-support": {
+      const card = code("qti-card");
+      const support = code(fact(refusal, "support", ""));
+
+      return sentence(
+        refusal,
+        `A ${card} names the support ${support}, as an earlier card of the catalog ${code(fact(refusal, "catalog", ""))} does, and a catalog holds one card per support${settled(refusal)}.`,
+        `remove the repeated ${card}, or merge its entries into the catalog's first card for ${support}`,
+      );
+    }
     case "choice-variable": {
       const choice = code(fact(refusal, "class", "choice"));
 
@@ -2604,8 +2631,24 @@ const wordings = {
   "attribute-type": attributeType,
   binding: interactionBinding,
   "branch-target": branchTarget,
+  /**
+   * An element that holds too few or too many of a kind of child, and a `qti-card` that holds more
+   * than one entry designated default (`check: "card-default"`, R9-a, "The catalog sentences of the
+   * information model hold as written"; F3a): "Only one of the CardEntry instances can have a
+   * default designation" (`info.txt:21284`), its detail the card's `support` and the `count` of
+   * such entries.
+   */
   "child-count": (refusal) => {
     const { element } = named(refusal);
+
+    if (fact(refusal, "check", "") === "card-default") {
+      return sentence(
+        refusal,
+        `The ${code(element)} for the support ${code(fact(refusal, "support", ""))} holds ${fact(refusal, "count", "")} entries that designate themselves default, and a card holds at most one default entry${settled(refusal)}.`,
+        `keep ${code('default="true"')} on one ${code("qti-card-entry")} of the card, and remove it from the others`,
+      );
+    }
+
     const required = fact(refusal, "required", "the required number of");
     const child = fact(refusal, "child", "children");
     const source = Option.match(optionalFact(refusal, "source"), {
@@ -2772,9 +2815,23 @@ const wordings = {
    * An item that labels a body element, or a QTI 3.0.1 item whose root carries a label
    * (`check: "label-tool"`, reading 128, E31), lacks the tool attributes its `attribute` lists,
    * space-separated; `labelled` is the labelled element's path.
+   *
+   * A PCI that carries no `module` and holds no `qti-interaction-modules`
+   * (`check: "pci-module-source"`, R10-a, "A PCI names its module by `module`, by
+   * `qti-interaction-modules`, or by both"; F6) names its module by neither (`info.txt:37583`).
    */
   "missing-attribute": (refusal) => {
     const { attribute, element } = named(refusal);
+
+    if (fact(refusal, "check", "") === "pci-module-source") {
+      const modules = code("qti-interaction-modules");
+
+      return sentence(
+        refusal,
+        `${code(element)} carries no ${code(attribute)} and holds no ${modules}, and a PCI names its module by ${code("module")}, by ${modules}, or by both${settled(refusal)}.`,
+        `add a ${code(attribute)} to ${code(element)}, or a ${modules} inside it`,
+      );
+    }
 
     if (fact(refusal, "check", "") === "label-tool") {
       const tools = allOf(attribute, code);
@@ -2832,18 +2889,22 @@ const wordings = {
   },
   /**
    * A document's file reference (`check: "reference"`, reading 103, E18) names its `document`, the
-   * `attribute` that holds the reference and the `path` it resolves to.
+   * `path` it resolves to, and what holds the reference: the `attribute`, or, for a reference an
+   * element's text makes (a card's or card entry's `qti-file-href`, a `qti-resource-icon`; R9-b,
+   * "Card files and resource icons are file references"), the `element` in its place.
    */
   "package-file-missing": (refusal) => {
     const path = code(fact(refusal, "path", ""));
 
     if (fact(refusal, "check", "") === "reference") {
-      const attribute = code(fact(refusal, "attribute", ""));
+      const holder = code(
+        Option.getOrElse(optionalFact(refusal, "attribute"), () => fact(refusal, "element", "")),
+      );
 
       return sentence(
         refusal,
-        `The document ${code(fact(refusal, "document", ""))} names the file ${path} in its ${attribute}, and the package's manifest lists no such file${settled(refusal)}.`,
-        `add ${path} to the package and list it in a ${code("file")} entry, or correct the ${attribute}`,
+        `The document ${code(fact(refusal, "document", ""))} names the file ${path} in its ${holder}, and the package's manifest lists no such file${settled(refusal)}.`,
+        `add ${path} to the package and list it in a ${code("file")} entry, or correct the ${holder}`,
       );
     }
 
@@ -2874,9 +2935,12 @@ const wordings = {
       `add the package's manifest at its root, named ${code("imsmanifest.xml")}`,
     ),
   /**
-   * An entry key with a backslash or a drive prefix (`check: "entry-key"`, reading 138, E36), and a
+   * An entry key with a backslash or a drive prefix (`check: "entry-key"`, reading 138, E36), a
    * document resource's `href` that leads outside the package (`check: "document-entry"`, reading
-   * 102, E17), are worded by their `check`.
+   * 102, E17), and a section ref whose `href` leads outside it (`check: "remote-section"`, reading
+   * 170, "A section ref whose href is external is refused under the stated limit 'Remote section
+   * ref'"; C), are worded by their `check`. A remote section ref breaks no rule of QTI: plate never
+   * fetches a section, so its sentence states the limit.
    */
   "package-path-outside": (refusal) => {
     const path = code(fact(refusal, "path", ""));
@@ -2896,6 +2960,15 @@ const wordings = {
           refusal,
           `The package's entry ${path} holds a backslash or begins with a drive letter, so it names no path inside the package${settled(refusal)}.`,
           "rename the entry with forward slashes and no drive letter",
+        );
+      }
+      case "remote-section": {
+        const href = code("href");
+
+        return sentence(
+          refusal,
+          `The section ref's ${href} is ${code(fact(refusal, "href", ""))}, which leads outside the package; plate assembles a test from its package's documents and never fetches a section, so a remote section ref is refused, a stated limit and not a rule of QTI${settled(refusal)}.`,
+          `put the section document in the package and point the ${href} at its path inside the package`,
         );
       }
       default: {
