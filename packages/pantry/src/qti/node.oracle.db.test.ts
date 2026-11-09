@@ -1335,8 +1335,9 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
         () =>
           // Oracle: the specification as a checker, spec reading 117 and node.ts's N1: a document
           // node's ancestry is its document's context, which its `Document` row states through
-          // `nodeContext`, the containment `Document(node, nodeChildren, context, …) to Node(id,
-          // children, ancestry, …)`, set immediate. N1 pins no ancestry, and a flag carried down
+          // its document node's fixed target (`#pantry/qti/chardata.ts`), the containment
+          // `Document(node, nodeChildren, context, …) to Node(id, children, ancestry, …)`, set
+          // immediate. N1 pins no ancestry, and a flag carried down
           // the tree keeps E1 (ancestry is parentAncestry with Enters) and N6 (the flag is one no
           // kind of the item bans), so the containment is the one law the edit breaks: 23503 on
           // its key.
