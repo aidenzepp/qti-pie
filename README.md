@@ -41,6 +41,18 @@ $ node src/cli.ts import ./my-package
 
 `node src/cli.ts --help` lists the commands.
 
+## Stated limits
+
+pantry refuses valid QTI 3.0 content, or accepts content that is not valid, only under a stated limit. Reading 1 in
+[`docs/spec-readings.md`](docs/spec-readings.md#validity) lists each limit with its cause and what would lift it. A
+refusal or acceptance that reading 1 does not list is a bug.
+
+Open fixes are tracked as issues [#65](https://github.com/aidenzepp/qti-pie/issues/65) to
+[#71](https://github.com/aidenzepp/qti-pie/issues/71). [#70](https://github.com/aidenzepp/qti-pie/issues/70) is
+composite typing in an included rules fragment, where the import can accept a type error in the item that places it.
+[#71](https://github.com/aidenzepp/qti-pie/issues/71) tracks the outlandish packages that pantry's randomized
+differential test keeps finding, which pantry and its reference oracle both refuse while naming different broken rules.
+
 ## Development
 
 ```bash
