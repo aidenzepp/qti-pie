@@ -10,7 +10,7 @@ import type {
 import { buildItem } from "#plate/model/item.ts";
 import type { Rule } from "#plate/model/expression.ts";
 import type { UnsupportedFeature } from "#plate/model/item.ts";
-import { absentControl, buildTest } from "#plate/model/test.ts";
+import { absentControl, buildTest, withLtiLinks } from "#plate/model/test.ts";
 import type {
   MarkedFeature,
   Section,
@@ -1374,6 +1374,35 @@ describe("buildTest's template defaults", () => {
         assert.deepStrictEqual(built.unsupported, [
           mark("qti-assessment-section-ref", sectionRefPath),
         ]);
+      }),
+  );
+});
+
+describe("withLtiLinks", () => {
+  it.effect(
+    "align-54 LTI item ref E21: leaves each item ref that names an LTI link out of the tree, a nested section's included, and marks it lti-link at its path after the test's own marks, once each; with none it gives the test back",
+    () =>
+      Effect.gen(function* linkedItemRefs() {
+        const built = yield* buildTest(twoParts);
+        const nested = `${root}/qti-test-part[1]/qti-assessment-section/qti-assessment-section/qti-assessment-item-ref`;
+        const second = `${root}/qti-test-part[2]/qti-assessment-section/qti-assessment-item-ref`;
+        const linked = withLtiLinks(built, [
+          { identifier: "I2", path: nested },
+          { identifier: "I4", path: second },
+          { identifier: "I2", path: nested },
+        ]);
+
+        assert.deepStrictEqual(
+          linked.parts.map((testPart) => testPart.children.map(outline)),
+          [[["S1", ["I1", ["S1a", []], "I3"]]], [["S2", []]]],
+        );
+        assert.deepStrictEqual(linked.unsupported, [
+          ...built.unsupported,
+          mark("lti-link", nested),
+          mark("lti-link", second),
+        ]);
+        assert.deepStrictEqual(linked.outcomeProcessing, built.outcomeProcessing);
+        assert.strictEqual(withLtiLinks(built, []), built);
       }),
   );
 });
