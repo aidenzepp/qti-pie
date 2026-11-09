@@ -3,6 +3,7 @@ import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { corpusRoot, readCorpusFile } from "#plate/document/corpus.ts";
+import { directoryOf, pathOf, resolveIn, resolveInside } from "#plate/document/href.ts";
 import { readSource } from "#plate/document/read.ts";
 import { readManifest } from "#plate/package/manifest.ts";
 import { acceptPackageForTest, itemRefs, openPackage } from "#plate/package/open.ts";
@@ -2174,6 +2175,158 @@ const namingPackage = (
 const opening = (files: ReadonlyMap<string, Uint8Array>) => (): void => {
   Effect.runSync(openPackage(location, files));
 };
+
+/**
+ * The `a/` segments of the deep `xml:base` in the smaller growth check of a shared base. The
+ * brief's 1,000 segments and 200 images took only some 19 times as long on 8 times both when every
+ * image copied its base, as the rest of opening the package outweighed the copies; from these sizes
+ * a copy for every image takes some 48 times as long, and a shared base some 7.
+ */
+const fewerBaseSegments = 8000;
+
+/**
+ * The images under the deep `xml:base` in the smaller growth check of a shared base.
+ */
+const fewerBasedImages = 800;
+
+/**
+ * The `a/` segments of the deep `xml:base` in the hostile-size case of a shared base, the size the
+ * gate's review measured at 3.6 s against 0.19 s.
+ */
+const hostileBaseSegments = 50_000;
+
+/**
+ * The images under the deep `xml:base` in the hostile-size case of a shared base.
+ */
+const hostileBasedImages = 5000;
+
+/**
+ * The most the hostile-size case of a shared base may take, as a multiple of the thread CPU of the
+ * same images under an `xml:base` of one segment: a copy of the base for every image took some 19
+ * times as long, and a shared base leaves only each image's own share.
+ */
+const basesCpuLimit = 2;
+
+/**
+ * The `a/` segments of the deep `xml:base` whose refusals' verdict must serialise: at this size
+ * every image's whole path totalled some 4×10⁹ characters, past the longest string a host can
+ * make.
+ */
+const serialisedBaseSegments = 200_000;
+
+/**
+ * The images under the deep `xml:base` whose refusals' verdict must serialise.
+ */
+const serialisedBasedImages = 10_000;
+
+/**
+ * How the images of a deep-base package take their base: all under the one `xml:base`, or each in a
+ * `span` that writes an `xml:base` of its own, `b/`, resolved against it.
+ */
+type Basing = "a base of its own" | "one base";
+
+/**
+ * Write the images of a deep-base package, each naming `x.png`, which the package does not hold.
+ *
+ * @param images How many images there are.
+ * @param basing How each takes its base.
+ * @returns The images' text.
+ */
+const basedImagesXml = (images: number, basing: Basing): string =>
+  (basing === "one base"
+    ? '<img src="x.png" alt=""/>'
+    : '<span xml:base="b/"><img src="x.png" alt=""/></span>'
+  ).repeat(images);
+
+/**
+ * The files of a package whose one item, at `items/a.xml`, holds a `div` that writes an `xml:base`
+ * of `a/` a number of times and holds a number of images, each naming `x.png`, which the package
+ * does not hold, so each is refused `package-file-missing`.
+ *
+ * @param segments How many times the `xml:base` writes `a/`.
+ * @param images How many images the `div` holds.
+ * @param basing How each image takes its base.
+ * @returns The package's files.
+ */
+const deepBasePackage = (
+  segments: number,
+  images: number,
+  basing: Basing = "one base",
+): ReadonlyMap<string, Uint8Array> =>
+  packageOf({
+    "items/a.xml": bodyItemXml(
+      `<div xml:base="${"a/".repeat(segments)}"><p>${basedImagesXml(images, basing)}</p></div>`,
+    ),
+    [manifestFile]: manifestXml(resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml")),
+  });
+
+/**
+ * Write the item `a` whose body's one `div` writes an `xml:base` and holds images in a `p`.
+ *
+ * @param base The `xml:base`, as written.
+ * @param sources Each image's `src`, as written.
+ * @returns The item's text.
+ */
+const basedItemXml = (base: string, ...sources: readonly string[]): string =>
+  bodyItemXml(
+    `<div xml:base="${base}"><p>${sources.map((src) => `<img src="${src}" alt=""/>`).join("")}</p></div>`,
+  );
+
+/**
+ * The path of an image of {@link basedItemXml}'s item, as a refusal at it is located.
+ *
+ * @param position The image's 1-based position.
+ * @returns Its path.
+ */
+const basedImageAt = (position: number): string => `${itemBody}/div/p/img[${position}]`;
+
+/**
+ * Bound a fact as a refusal's detail bounds it, written out here so the case does not read the code
+ * it checks: past 1,024 characters, its first 512 and its last 511 around one `…`.
+ *
+ * @param fact The fact.
+ * @returns The fact, bounded.
+ */
+const boundedAs = (fact: string): string =>
+  fact.length <= 1024 ? fact : `${fact.slice(0, 512)}…${fact.slice(-511)}`;
+
+/**
+ * The resources each package of the smaller growth check of a document's root lists, every one
+ * naming the same item.
+ */
+const fewerRootResources = 250;
+
+/**
+ * The attributes the item's root writes before its `identifier` and `title` in the smaller growth
+ * check of a document's root. With {@link fewerRootResources}, three reads of the root's attributes
+ * for every resource that names it took some 40 times as long on 8 times both, and one read some 10.
+ */
+const fewerRootAttributes = 32_000;
+
+/**
+ * The files of a package of item resources `R<n>` that all name one item at `items/a.xml`, each
+ * whose own LOM `general` gives the identifier `a` and the title `a`, which the item matches, and
+ * whose root writes a number of `data-` attributes before its `identifier` and `title` and no
+ * `xml:lang`, so each read of one of them passes every attribute.
+ *
+ * @param resources How many resources name the item.
+ * @param attributes How many `data-` attributes its root writes.
+ * @returns The package's files.
+ */
+const rootPackage = (resources: number, attributes: number): ReadonlyMap<string, Uint8Array> =>
+  packageOf({
+    "items/a.xml": `<qti-assessment-item xmlns="${qti}"${Array.from({ length: attributes }, (_, index) => ` data-a${index}="a"`).join("")} identifier="a" title="a" adaptive="false" time-dependent="false"><qti-item-body><p>a</p></qti-item-body></qti-assessment-item>`,
+    [manifestFile]: manifestXml(
+      ...Array.from({ length: resources }, (_, index) =>
+        describedXml(
+          `R${index}`,
+          "imsqti_item_xmlv3p0",
+          "items/a.xml",
+          `${lomIdentifiers("a")}${lomTitle("a")}`,
+        ),
+      ),
+    ),
+  });
 
 describe("package/open.ts", () => {
   describe("openPackage", () => {
@@ -5244,6 +5397,182 @@ describe("package/open.ts", () => {
               `2,000 resources ${described} took ${(manyMs / oneMs).toFixed(1)} times the CPU of one`,
             );
           }
+        }),
+      growthTimeoutMs,
+    );
+  });
+
+  describe("openPackage, a deep xml:base", () => {
+    it.effect(
+      "align-54 r11 bases shared finding 13b: resolveIn names, against a document's directory, the path resolveInside names against the document's path, for every reference of a table of dot segments, a last dot segment, empty segments, escaped dots, slashes and spaces, a query and a fragment, a path from a host's root and a climb above the package's root (reading 102)",
+      () =>
+        Effect.sync(() => {
+          const bases = ["a.xml", "items/a.xml", "items/sub/a.xml", "items/a//b.xml"];
+          const references = [
+            "x.png",
+            "./x.png",
+            "../x.png",
+            "../../x.png",
+            "../../../x.png",
+            "sub/../x.png",
+            "a/b/c/../../d.png",
+            "sub/",
+            "sub/.",
+            "sub/..",
+            "./",
+            "../",
+            ".",
+            "..",
+            "",
+            "a//b.png",
+            "%2E%2E/x.png",
+            "%2e/x.png",
+            "a%2Fb.png",
+            "a%20b.png",
+            "%E0%A4%A.png",
+            "x.png?q=1#f",
+            "?q",
+            "#f",
+            "/x.png",
+          ];
+          for (const base of bases) {
+            for (const reference of references) {
+              assert.deepStrictEqual(
+                Option.map(resolveIn(directoryOf(base), reference), pathOf),
+                Option.map(resolveInside(base.split("/"), reference), (segments) =>
+                  segments.join("/"),
+                ),
+                `${reference} against ${base}`,
+              );
+            }
+          }
+        }),
+    );
+
+    it.effect(
+      "align-54 r11 bases shared finding 13b: under a deep xml:base an image naming a held file is accepted, through a .. too, and one naming no file is refused package-file-missing with its path bounded: a path of 1,024 characters is given whole, and one of 1,025 or 4,011 keeps its first 512 and its last 511 characters around one … (U+2026)",
+      () =>
+        Effect.gen(function* boundedPaths() {
+          const deep = "a/".repeat(2000);
+          const deepPath = `items/${deep}x.png`;
+
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openReferencing(basedItemXml(deep, "held.png", "../up.png", "x.png"), {
+                [`items/${deep}held.png`]: "a",
+                [`items/${"a/".repeat(1999)}up.png`]: "a",
+              }),
+            ),
+            [missingReference(basedImageAt(3), "src", boundedAs(deepPath))],
+          );
+          assert.lengthOf(boundedAs(deepPath), 1024);
+          assert.include(boundedAs(deepPath), "…");
+
+          const edge = "a/".repeat(506);
+          assert.deepStrictEqual(
+            refusalsOf(yield* openReferencing(basedItemXml(edge, "xy.png", "xyz.png"))),
+            [
+              missingReference(basedImageAt(1), "src", `items/${edge}xy.png`),
+              missingReference(basedImageAt(2), "src", boundedAs(`items/${edge}xyz.png`)),
+            ],
+          );
+          assert.lengthOf(`items/${edge}xy.png`, 1024);
+          assert.notInclude(boundedAs(`items/${edge}xy.png`), "…");
+          assert.include(boundedAs(`items/${edge}xyz.png`), "…");
+        }),
+    );
+
+    it.effect(
+      "align-54 r11 bases shared finding 13b: 8 times the segments of a deep xml:base and 8 times the images under it open in under 32 times the time, whether the images share the one base or each resolves a base of its own against it, as each reference resolves against its base's directory without copying it",
+      () =>
+        Effect.gen(function* sharedBaseGrowth() {
+          const basings: readonly Basing[] = ["one base", "a base of its own"];
+          for (const basing of basings) {
+            const fewer = deepBasePackage(fewerBaseSegments, fewerBasedImages, basing);
+            const more = deepBasePackage(
+              fewerBaseSegments * growthFactor,
+              fewerBasedImages * growthFactor,
+              basing,
+            );
+            assert.lengthOf(refusalsOf(yield* openPackage(location, fewer)), fewerBasedImages);
+
+            const growth = yield* growthRatio(opening(fewer), opening(more));
+            assert.isBelow(
+              growth,
+              growthLimit,
+              `8 times the segments and images under ${basing} took ${growth.toFixed(1)} times as long`,
+            );
+          }
+        }),
+      growthTimeoutMs,
+    );
+
+    it.effect(
+      "align-54 r11 bases shared finding 13b: 5,000 images under an xml:base of 50,000 segments open in under twice the thread CPU of 5,000 images under an xml:base of one",
+      () =>
+        Effect.gen(function* sharedBaseHostile() {
+          const shallow = deepBasePackage(1, hostileBasedImages);
+          const deep = deepBasePackage(hostileBaseSegments, hostileBasedImages);
+          assert.lengthOf(refusalsOf(yield* openPackage(location, shallow)), hostileBasedImages);
+          assert.lengthOf(refusalsOf(yield* openPackage(location, deep)), hostileBasedImages);
+
+          let shallowMs = Number.POSITIVE_INFINITY;
+          let deepMs = Number.POSITIVE_INFINITY;
+          for (let run = 0; run < growthRuns; run += 1) {
+            shallowMs = Math.min(shallowMs, yield* cpuMillis(opening(shallow)));
+            deepMs = Math.min(deepMs, yield* cpuMillis(opening(deep)));
+          }
+
+          assert.isBelow(
+            deepMs,
+            basesCpuLimit * shallowMs,
+            `the deep base took ${(deepMs / shallowMs).toFixed(1)} times the CPU of the shallow one`,
+          );
+        }),
+      growthTimeoutMs,
+    );
+
+    it.effect(
+      "align-54 r11 bases shared finding 13b: the verdict on 10,000 images under an xml:base of 200,000 segments serialises, every refusal's path at most 1,024 characters and holding the …",
+      () =>
+        Effect.gen(function* serialisedRefusals() {
+          const verdict = yield* openPackage(
+            location,
+            deepBasePackage(serialisedBaseSegments, serialisedBasedImages),
+          );
+          const named = refusalsOf(verdict).map(({ detail }) => detail["path"] ?? "");
+
+          assert.isString(JSON.stringify(verdict));
+          assert.lengthOf(named, serialisedBasedImages);
+          assert.deepStrictEqual(
+            new Set(named),
+            new Set([boundedAs(`items/${"a/".repeat(serialisedBaseSegments)}x.png`)]),
+          );
+          for (const text of named) {
+            assert.isAtMost(text.length, 1024);
+            assert.include(text, "…");
+          }
+        }),
+      growthTimeoutMs,
+    );
+
+    it.effect(
+      "align-54 r11 bases shared finding 13c, a document's root read once: 8 times the resources naming an item whose root writes 8 times the attributes open in under 32 times the time, as the root's identifier, title and language are read once for the item, not once for each resource whose LOM record compares them",
+      () =>
+        Effect.gen(function* rootGrowth() {
+          const fewer = rootPackage(fewerRootResources, fewerRootAttributes);
+          const more = rootPackage(
+            fewerRootResources * growthFactor,
+            fewerRootAttributes * growthFactor,
+          );
+          assert.deepStrictEqual(refusalsOf(yield* openPackage(location, fewer)), []);
+
+          const growth = yield* growthRatio(opening(fewer), opening(more));
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `8 times the resources and attributes took ${growth.toFixed(1)} times as long`,
+          );
         }),
       growthTimeoutMs,
     );
