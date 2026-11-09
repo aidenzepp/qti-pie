@@ -2549,3 +2549,35 @@ cutover, writing the metadata naming rules over queries. The three sites below a
 - **Class.** A grizzle defect, sent to grizzle-c5 by the coordinator on 2026-11-08 with the reproduction. Until its fix
   is vendored, a pantry query states such a constant as a condition, `.where(r.eq(field, value))`, the control's form,
   and goes back to the literal match once it is.
+
+## A rule over a query is refused where its containment joins two text patterns a foreign key joins (grizzle defect, open at `4b0d45e`; lane E)
+
+Found at grizzle `4b0d45e`, the vendored commit, and unchanged on trunk `76c27633` (2026-11-08), when the first query,
+`TypedHref`, and the rules over it joined `Qti`'s level of queries.
+
+- **What happens.** `grizzle generate` refuses a schema with a containment whose one side is a derived relation and
+  whose paired fields are two text types of one base and different patterns: `UnsupportedOperation at contained
+  ResourceDocument(package, path, type) in TypedHref(package, path, type) … relational negation correlating columns of
+  different refinement or typmod, path and t1`. The same two fields joined as a stored containment, a foreign key, are
+  admitted, compared as text.
+- **Cause.** A rule over a query is held by its violation probe, a negation of the query (README, "Rules over
+  queries"), and the checker's `#correlatedBinding` (`packages/engine/src/check/checker.ts:3299-3320`) requires a
+  negated column and the column it is correlated with to be of one value type, refinement included, after `compatible`
+  has admitted them. Two regex refinements of text are compatible, as `SidesCompatible` admits the sides, and fail the
+  second test. A parameter of another refinement is bound through a filter in the negated region (`:3274-3291`); a
+  correlated column has no such path.
+- **Reproduction.** `~/.cache/gr8des/integration/grizzle-repros/rule-negation-refinement/`, run from any directory that
+  resolves `@bjornpagen/grizzle`: `Base` holds `Listed { id, path: str.bytes(100, str.regex("^[^/].*$")) }` and `Href
+  { id, path: str.bytes(100, str.regex("^.*$")) }`; `Top` extends it with `Hrefs`, a live derived relation over
+  `Href`, and `contained(on(Listed, "path"), on(Hrefs, "path"))`. `grizzle generate defect.config.ts` is refused as
+  above. Two controls generate: the same rule with one pattern on both sides (`control.config.ts`), and a stored
+  foreign key between the two patterns (`stored.config.ts`). Verbatim output in `output.txt`.
+- **Fix.** Correlate a refined text column with another of its base as its base, as the foreign key compares them, or
+  equate them by a filter in the negated region, as a parameter of another refinement is.
+- **Where it costs pantry.** Every rule over a query that pairs an `EntryPath` field (`Entry.path`, `Document.path`,
+  `ResourceDocument.path`) with a key text: `RootOfType`'s `ResourceDocument` into `TypedHref`, and "Document entry"'s
+  document-typed hrefs into `Entry` and `ResourceDocument`, each a foreign key into a stored copy before the cutover.
+  Retyping `ResourceDocument.path` as a key text would dodge two of them, a representation change made only for the
+  defect, which pantry does not make.
+- **Status.** Sent to grizzle-c5 with the full role's finding above. pantry holds no workaround: R1 waits for the
+  repin.
