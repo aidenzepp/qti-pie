@@ -136,7 +136,7 @@ describe("the composition", () => {
       // relations `install.ts` declares, a closed id outside its roster and a second row of a key
       // when it declares one and a slot past its owner's count when it packs one, so this test is
       // where a generator or a facet that states a fault fails, in a relation only the host reads
-      // (`Kinds.byName`, `resolve`'s) as in any other.
+      // (`StrictlyHeld`, the include sets) as in any other.
       Effect.gen(function* faultless() {
         const relations = relationsIn(yield* grammar);
         const faults = relations.flatMap((relation) =>
@@ -145,6 +145,40 @@ describe("the composition", () => {
 
         assert.isAtLeast(relations.length, 45);
         assert.deepStrictEqual(faults, []);
+      }),
+    testTimeoutMs,
+  );
+
+  it.effect(
+    "admits under each parent at most one element kind of each expanded name, its versions together, so a name resolves under a parent to one kind",
+    () =>
+      // Oracle: XML Schema's Element Declarations Consistent (Part 1, §3.8.6): the element
+      // declarations of one name a content model holds are one declaration, so a parent admits one
+      // kind of each name. `resolve` reads a name's kinds in code order and takes the first its
+      // parent admits in any version (`kinds.ts`, `resolution`), so this test is where a model or a
+      // facet that admits two kinds of one name under one parent fails, in any versions.
+      Effect.gen(function* consistent() {
+        const { content, kinds } = yield* grammar;
+        const members = Map.groupBy(content.admissionIn.rows, ({ map }) => map);
+        const named = new Map<string, Set<string>>();
+        for (const { admission, parent } of content.contentModelOf.rows) {
+          for (const { child } of members.get(admission) ?? []) {
+            for (const { local, namespace } of Option.toArray(
+              kinds.elementName.lookup({ kind: child }),
+            )) {
+              named
+                .getOrInsertComputed(`${parent} {${namespace}}${local}`, () => new Set())
+                .add(child);
+            }
+          }
+        }
+
+        const twice = [...named].flatMap(([at, held]) =>
+          held.size > 1 ? [`${at}: ${[...held].join(" ")}`] : [],
+        );
+
+        assert.isAbove(named.size, 0);
+        assert.deepStrictEqual(twice.slice(0, 20), []);
       }),
     testTimeoutMs,
   );

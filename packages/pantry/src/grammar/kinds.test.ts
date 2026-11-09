@@ -7,15 +7,7 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
-import {
-  closed,
-  faultOf,
-  idField,
-  indexed,
-  repeatOf,
-  roster as rosterOf,
-} from "#pantry/grammar/closed.ts";
-import type { Roster } from "#pantry/grammar/closed.ts";
+import { faultOf, repeatOf } from "#pantry/grammar/closed.ts";
 import {
   fixedKinds,
   generate,
@@ -23,7 +15,7 @@ import {
   openClasses,
   resolution,
 } from "#pantry/grammar/kinds.ts";
-import type { KindByNameUnder, KindOf, Vocabulary } from "#pantry/grammar/kinds.ts";
+import type { Vocabulary } from "#pantry/grammar/kinds.ts";
 import { namespaceNameOf } from "#pantry/vocab/namespaces.ts";
 
 /**
@@ -181,21 +173,12 @@ describe("the kinds generator against a naive model", () => {
                 reasons.add("RepeatedValue");
               }
 
-              const named = elements.flatMap(({ local, parents }) =>
-                parents.map((above) => `${local} ${above}`),
-              );
-              if (
-                new Set(named).size !== named.length ||
-                new Set(list.interactions).size !== list.interactions.length
-              ) {
+              if (new Set(list.interactions).size !== list.interactions.length) {
                 reasons.add("KeyCollision");
               }
 
               const roster = new Set([...fixedKinds, ...handles]);
-              if (
-                elements.some(({ parents }) => parents.some((above) => !roster.has(above))) ||
-                list.interactions.some((kind) => !roster.has(kind))
-              ) {
+              if (list.interactions.some((kind) => !roster.has(kind))) {
                 reasons.add("OutsideCodeSpace");
               }
 
@@ -224,18 +207,23 @@ describe("the kinds generator against a naive model", () => {
                 c.note("layer name shared");
               }
 
+              const admitted = new Set(
+                all.flatMap(({ handle, parents }) =>
+                  parents.map((parent) => `${parent} ${handle}`),
+                ),
+              );
               const kinds = resolution(
                 generate({ interactions: list.interactions, layer: list.layer, vocabularies }),
-                all.flatMap(({ handle, parents }) =>
-                  parents.map((parent) => ({ child: handle, parent })),
-                ),
+                (parent, kind) => admitted.has(`${parent} ${kind}`),
               );
               // The generators refuse nothing: a handle a roster lists twice is the roster's fault
               // (`repeatOf`), and a row outside its code space or a key stated twice the rows'
-              // (`faultOf`), which the tests find and grizzle refuses.
+              // (`faultOf`), which the tests find and grizzle refuses. A name two kinds a parent
+              // admits share resolves to the first in code order, as the model's `find` reads it:
+              // Element Declarations Consistent keeps production's models from it (`compose.test.ts`).
               const outcome = Option.match(
                 Option.orElse(Arr.findFirst([kinds.nodeKind, kinds.attributeName], repeatOf), () =>
-                  Arr.findFirst([kinds.interaction, kinds.byName], faultOf),
+                  Arr.findFirst([kinds.interaction], faultOf),
                 ),
                 { onNone: () => "generated", onSome: ({ _tag }) => _tag },
               );
@@ -266,56 +254,4 @@ describe("the kinds generator against a naive model", () => {
         ),
       ),
   );
-});
-
-describe("KindByNameUnder's kind payload", () => {
-  it("ranges over the NodeKind roster, so a relation whose kind payload is any string is not one", () => {
-    const vocabularies = [
-      {
-        attributes: [],
-        kinds: [{ handle: "k1", local: "a" }],
-        namespace: namespaceNameOf("urn:toy"),
-      },
-    ] as const;
-    const rosters = generate({ interactions: [], layer: [], vocabularies });
-    const anyKind: Roster<string> = rosters.nodeKind;
-    const relationOver = <K extends string>(kinds: Roster<K>, kind: K) =>
-      indexed(
-        closed({
-          key: [
-            idField("namespace", rosterOf("Namespace", ["urn:toy"])),
-            idField("local", rosterOf("LocalName", ["a"])),
-            idField("parent", anyKind),
-          ],
-          name: "KindByNameUnder",
-          payload: [idField("kind", kinds)],
-          rows: [{ kind, local: "a", namespace: "urn:toy", parent: "document" }],
-        }),
-      );
-    const narrow: KindByNameUnder<KindOf<typeof vocabularies>> = relationOver(
-      rosters.nodeKind,
-      "k1",
-    );
-    // @ts-expect-error -- A kind payload over every string holds kinds outside NodeKind, which
-    // `resolve` would have to filter out; the type refuses the relation instead.
-    const widened: KindByNameUnder<KindOf<typeof vocabularies>> = relationOver(anyKind, "k1");
-
-    assert.deepStrictEqual(
-      [narrow, widened].map((relation) =>
-        Option.map(
-          relation.lookup({ local: "a", namespace: "urn:toy", parent: "document" }),
-          ({ kind }) => kind,
-        ),
-      ),
-      [Option.some("k1"), Option.some("k1")],
-    );
-    assert.deepStrictEqual(
-      resolution(rosters, [{ child: "k1", parent: "document" }]).resolve(
-        "urn:toy",
-        "a",
-        "document",
-      ),
-      Option.some("k1"),
-    );
-  });
 });

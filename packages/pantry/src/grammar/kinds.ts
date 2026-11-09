@@ -1,14 +1,16 @@
 /**
  * The kinds generator: the `NodeKind` and `AttributeName` rosters, the `IsElement` and
- * `Interaction` sets over `NodeKind`, and the closed relations between an element's XML name and
- * its kind, as rows of handles (fin.md §17), from a list of vocabularies.
+ * `Interaction` sets over `NodeKind`, and the closed relation between an element kind and its XML
+ * name (`ElementName`), as rows of handles (fin.md §17), from a list of vocabularies, with the
+ * resolution of a name under a parent that reads it.
  *
  * Each relation is fixed when the schema compiles. The rosters and the two sets erase to the
  * constants the document layer reads (`Node.elements` and `Node.parentIsInteraction` derive from
- * the sets, plan §1.3). The name relations are the host's, for shredding an element into its kind
- * and rendering a kind back into its name; no law reads them, so none is installed.
+ * the sets, plan §1.3). The names are the host's, for shredding an element into its kind and
+ * rendering a kind back into its name; no law reads them, so they are not installed.
  */
-import { Option } from "effect";
+import { Array as Arr } from "effect";
+import type { Option } from "effect";
 import { closed, idField, indexed, roster, valueField } from "#pantry/grammar/closed.ts";
 import { spelledNamespace } from "#pantry/vocab/namespaces.ts";
 import type { Nameless, NamespaceClass, NamespaceName } from "#pantry/vocab/namespaces.ts";
@@ -161,12 +163,6 @@ export interface Kinds<Kind extends string, Name extends string> {
    * names in composition order, a name listed twice held once, at its first.
    */
   readonly attributeName: Roster<Name>;
-  /**
-   * `KindByNameUnder`: (namespace, local, parent) → kind, each element kind a parent admits by its
-   * name, which {@link Kinds.resolve} reads. It is the host's alone: no law reads it, so grizzle
-   * never declares it, and the tests over a composition check its rows (`faultOf`).
-   */
-  readonly byName: KindByNameUnder<Kind>;
   /**
    * `ElementName`: the namespace name and local name each element kind is written with, as crust's
    * tree spells them (`spelledNamespace`), since the codec reads and writes names against them.
@@ -349,87 +345,53 @@ export const generate = <const V extends readonly Vocabulary[]>(source: {
 };
 
 /**
- * The kind relations of a vocabulary list before the content grammar: every one but `byName` and
- * the `resolve` that reads it, which read what each parent admits ({@link resolution}).
+ * The kind relations of a vocabulary list before the content grammar: every one but `resolve`,
+ * which reads what each parent admits ({@link resolution}).
  */
 export type KindRosters<Kind extends string, Name extends string> = Omit<
   Kinds<Kind, Name>,
-  "byName" | "resolve"
+  "resolve"
 >;
 
 /**
- * `KindByNameUnder`: (namespace, local, parent) → kind, the relation {@link resolution} reads a
- * name's kind from. Its kind payload is an id field over the `NodeKind` roster, so `closed` refuses
- * a row whose kind is outside it, and a row's kind is a `Kind` by its type.
- */
-export type KindByNameUnder<Kind extends string> = Indexed<
-  readonly [IdField<"namespace", string>, IdField<"local", string>, IdField<"parent", string>],
-  readonly [IdField<"kind", Kind>]
->;
-
-/**
- * Add name resolution to a composition's kinds: `KindByNameUnder`, (namespace, local, parent) →
- * kind, for every element kind each parent admits.
+ * Add name resolution to a composition's kinds: `resolve`, from an element's expanded name and its
+ * parent's kind to the element kind the parent admits with that name.
  *
  * A name resolves by locality (XML Schema Part 1, §3.3.2, §3.10.4): an element particle of the
  * parent's model declares it, or a wildcard of the model finds its top-level declaration, and
  * either way the parent admits that kind. So resolution is read off admission: a name resolves
- * under a parent to the element kind the parent admits with that name, and to none where it
- * admits none, as for an element no declaration names there. The root's parent is the document
- * node, whose model names the root kinds.
+ * under a parent to the element kind of that name the parent admits, and to none where it admits
+ * none, as for an element no declaration names there. The root's parent is the document node,
+ * whose model names the root kinds. A name's kinds are few, so `resolve` reads its candidates, the
+ * element kinds `ElementName` writes with it, and asks the parent's admission of each, in
+ * `NodeKind` code order; no relation of (name, parent) is built. A parent admits at most one kind
+ * of a name, as XML Schema's Element Declarations Consistent requires of a content model
+ * (§3.8.6), which the composition's tests hold (`compose.test.ts`).
  *
  * @param kinds - The composition's kinds.
- * @param admitted - Each parent and a kind it admits, in any version.
- * @returns The kinds with `resolve`, and the relation it reads. Two kinds of one name that one
- *   parent admits, and a parent the roster lacks, are faults of
- *   `KindByNameUnder`'s rows (`faultOf`), which the tests find: grizzle never sees the relation,
- *   which is the host's alone.
+ * @param admits - Whether a parent admits a kind as a child in some version: the content
+ *   grammar's admission maps.
+ * @returns The kinds with `resolve`.
  */
 export const resolution = <Kind extends string, Name extends string>(
   kinds: KindRosters<Kind, Name>,
-  admitted: readonly { readonly child: string; readonly parent: string }[],
+  admits: (parent: string, kind: Kind) => boolean,
 ): Kinds<Kind, Name> => {
-  const anyKind: Roster<string> = kinds.nodeKind;
-  // The child is read back from its `ElementName` row, whose key is a `NodeKind` handle, so each
-  // row's kind is a `Kind` by its type, as the payload below needs.
-  const named = [
-    ...new Map(
-      admitted.flatMap(({ child, parent }) =>
-        Option.toArray(kinds.elementName.lookup({ kind: child })).map(
-          ({ kind, local, namespace }) =>
-            [
-              `${namespace} ${local} ${parent} ${kind}`,
-              { kind, local, namespace, parent },
-            ] as const,
-        ),
-      ),
-    ).values(),
-  ];
-  // The payload ranges over the `NodeKind` roster itself, so a resolved kind is a `Kind` by
-  // construction and `resolve` needs no test of it. The annotation is the guard: a payload over
-  // a wider roster (`anyKind`) is no `KindByNameUnder<Kind>`, and `tsc` refuses it.
-  const under: KindByNameUnder<Kind> = indexed(
-    closed({
-      key: [
-        idField(
-          "namespace",
-          roster("Namespace", [...new Set(named.map(({ namespace }) => namespace))]),
-        ),
-        idField("local", roster("LocalName", [...new Set(named.map(({ local }) => local))])),
-        idField("parent", anyKind),
-      ],
-      name: "KindByNameUnder",
-      payload: [idField("kind", kinds.nodeKind)],
-      rows: named,
-    }),
-  );
+  // Each expanded name's element kinds, by namespace and then local name, in code order. The kind
+  // is `ElementName`'s key, a `NodeKind` handle, so a resolved kind is a `Kind` by its type.
+  const candidates = new Map<string, Map<string, Kind[]>>();
+  for (const { kind, local, namespace } of kinds.elementName.rows) {
+    candidates
+      .getOrInsertComputed(namespace, () => new Map())
+      .getOrInsertComputed(local, () => [])
+      .push(kind);
+  }
 
   return {
     ...kinds,
-    byName: under,
     resolve: (namespaceName: string, localName: string, parentKind: Kind) =>
-      under
-        .lookup({ local: localName, namespace: namespaceName, parent: parentKind })
-        .pipe(Option.map(({ kind }) => kind)),
+      Arr.findFirst(candidates.get(namespaceName)?.get(localName) ?? [], (kind) =>
+        admits(parentKind, kind),
+      ),
   };
 };

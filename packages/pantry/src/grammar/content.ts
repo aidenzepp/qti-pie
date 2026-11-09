@@ -177,11 +177,30 @@ type FamilyKey = readonly [IdField<"version", SchemaVersion>, IdField<"parent", 
  */
 export interface ContentGrammar {
   /**
-   * `ContentModelOf`: (version, parent) → model, total, the automaton the family's children
-   * follow; a family no content model holds reads the model of one position that nothing follows
-   * and nothing ends at.
+   * `AdmissionIn`: (map, child) → position, each admission map's children at their positions in
+   * their parent's content model, 0 for character data, for a kind several positions name and for
+   * a triple a vocabulary states beside its models. A family that admits no child holds the empty
+   * map, which holds no row.
    */
-  readonly contentModelOf: Indexed<FamilyKey, readonly [IdField<"model", string>]>;
+  readonly admissionIn: Indexed<
+    readonly [IdField<"map", string>, IdField<"child", string>],
+    readonly [IdField<"position", string>]
+  >;
+  /**
+   * The `AdmissionMap` roster: every distinct admission map of a family, the children it admits
+   * at their positions, numbered from 0 in the order of the first family, in (version, parent)
+   * code order, that holds it (rule 0: identical facts are one fact): 1,288 families hold 190.
+   */
+  readonly admissionMaps: Roster<string>;
+  /**
+   * `ContentModelOf`: (version, parent) → (model, admission), total: the automaton the family's
+   * children follow, and the family's admission map. A family no content model holds reads the
+   * model of one position that nothing follows and nothing ends at.
+   */
+  readonly contentModelOf: Indexed<
+    FamilyKey,
+    readonly [IdField<"model", string>, IdField<"admission", string>]
+  >;
   /**
    * `Counted`: the positions whose count is a law beside the automaton, with their bounds, each
    * sourced to the particle whose bound it is, or to the reading that caps it at one.
@@ -996,6 +1015,8 @@ export const maxOccursOf = (occurs: Occurs): number =>
  * @param input.globalKinds - The kinds a `lax` or `strict` wildcard of a parent reads as their
  *   global declarations in a version: those a schema set of the parent's documents declares.
  * @param input.namespaceOf - The namespace of each kind's elements.
+ * @param input.stated - The triples the vocabularies state beside their models, each admitted at
+ *   position 0 in its family's admission map.
  * @returns The content grammar and the admitted triples with their positions, or the first model or
  *   reading that has none.
  */
@@ -1006,6 +1027,7 @@ export const contentOf = (input: {
   readonly kinds: Roster<string>;
   readonly models: readonly ContentModel[];
   readonly namespaceOf: (kind: string) => NamespaceOfKind;
+  readonly stated: readonly AdmittedChild[];
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<
   {
@@ -1323,6 +1345,46 @@ export const contentOf = (input: {
     // and `StrictlyHeld`'s among them.
     const admittedBy = installed.map((entry) => ({ entry, rows: admittedOf(entry) }));
     const admitted = admittedBy.flatMap(({ rows }) => rows);
+    // Each family's admitted children at their positions, the models' and then the triples the
+    // vocabularies state beside them, at 0; then each family's children, by kind, as its
+    // admission map, each distinct map numbered once in the order of the first family, in
+    // (version, parent) code order, that holds it (rule 0).
+    const admittedAt = new Map<string, { readonly child: string; readonly position: string }[]>();
+    for (const { entry, rows } of admittedBy) {
+      admittedAt
+        .getOrInsertComputed(`${entry.version} ${entry.parent}`, () => [])
+        .push(...rows.map(({ child, position: at }) => ({ child, position: String(at) })));
+    }
+
+    for (const { child, parent: held, version: in_ } of input.stated) {
+      admittedAt.getOrInsertComputed(`${in_} ${held}`, () => []).push({ child, position: "0" });
+    }
+
+    const mapOf = new Map<string, string>();
+    const mapMembers: {
+      readonly child: string;
+      readonly map: string;
+      readonly position: string;
+    }[] = [];
+    const familyModels = contentModels.families.map((family) => {
+      const children = rowsAt(admittedAt, `${family.version} ${family.parent}`).toSorted(
+        (left, right) => (left.child < right.child ? -1 : 1),
+      );
+      const admission = mapOf.getOrInsertComputed(
+        children.map(({ child, position: at }) => `${child}:${at}`).join(" "),
+        () => {
+          const fresh = String(mapOf.size);
+          mapMembers.push(
+            ...children.map(({ child, position: at }) => ({ child, map: fresh, position: at })),
+          );
+
+          return fresh;
+        },
+      );
+
+      return { ...family, admission };
+    });
+    const admissionMap = idField("admission", roster("AdmissionMap", [...mapOf.values()]));
     // A bound of 2…n the automaton relaxes is the particle's; a cap is its reading's, at most one
     // child where the model's enclosing group repeats the particle.
     const countedRows = installed.flatMap(
@@ -1385,12 +1447,21 @@ export const contentOf = (input: {
     return {
       admitted,
       content: {
+        admissionIn: indexed(
+          closed({
+            key: [idField("map", admissionMap.roster), idField("child", input.kinds)],
+            name: "AdmissionIn",
+            payload: [idField("position", positions)],
+            rows: mapMembers,
+          }),
+        ),
+        admissionMaps: admissionMap.roster,
         contentModelOf: indexed(
           closed({
             key: [version, parent],
             name: "ContentModelOf",
-            payload: [model],
-            rows: contentModels.families,
+            payload: [model, admissionMap],
+            rows: familyModels,
           }),
         ),
         counted: sourced({

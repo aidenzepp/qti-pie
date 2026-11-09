@@ -718,6 +718,7 @@ export const compose = <const V extends readonly Vocabulary[]>(
       base.nodeKind.handles.map((kind) => [kind, namespaceOfKind(base, kind)]),
     );
     const namespaceOf = (kind: string): NamespaceOfKind => kindNamespaces.get(kind) ?? nameless;
+    const stating = list.flatMap((entry) => entry.admission);
     const installed = yield* contentOf({
       facets: stated.map((facet) => facet.content),
       foreignRoots: open.foreignRoots,
@@ -735,10 +736,18 @@ export const compose = <const V extends readonly Vocabulary[]>(
       kinds: base.nodeKind,
       models: list.flatMap((entry) => entry.models),
       namespaceOf,
+      stated: stating,
       versions: base.versions,
     });
-    const stating = list.flatMap((entry) => entry.admission);
-    const kinds = resolution(base, [...installed.admitted, ...stating]);
+    // A parent admits a kind where its family's admission map holds the kind in some version.
+    const { admissionIn, contentModelOf } = installed.content;
+    const kinds = resolution(base, (parent, kind) =>
+      base.versions.handles.some((version) =>
+        Option.exists(contentModelOf.lookup({ parent, version }), ({ admission: map }) =>
+          Option.isSome(admissionIn.lookup({ child: kind, map })),
+        ),
+      ),
+    );
     // A child the models admit carries its position's particle, or its model's at 0; a triple a
     // vocabulary states beside them carries its own source.
     const admission = indexedSourced(

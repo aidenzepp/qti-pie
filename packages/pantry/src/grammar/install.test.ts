@@ -202,24 +202,9 @@ const comparisons: readonly Comparison[] = [
   { expected: () => grammar.content.strictlyHeld.rows, name: "StrictlyHeld" },
   // The content grammar is keyed by automaton where it is generated, so each relation is its
   // generator's rows one to one, and nothing regroups families into models here.
-  {
-    // Each family's admission map is the installed one: the map's own rows are held to
-    // `Admission`'s by the admission test below.
-    expected: () => {
-      const admissions = new Map(
-        install.ContentModelOf.rows.map(({ admission, parent, version }) => [
-          `${version} ${parent}`,
-          admission,
-        ]),
-      );
-
-      return grammar.content.contentModelOf.rows.map((row) => ({
-        ...row,
-        admission: admissions.get(`${row.version} ${row.parent}`),
-      }));
-    },
-    name: "ContentModelOf",
-  },
+  // Each family's admission map's rows are held to `Admission`'s by the admission test below.
+  { expected: () => grammar.content.contentModelOf.rows, name: "ContentModelOf" },
+  { expected: () => grammar.content.admissionIn.rows, name: "AdmissionIn" },
   { expected: () => grammar.content.symbolSetOf.rows, name: "SymbolSetOf" },
   { expected: () => grammar.content.symbolMember.rows, name: "SymbolMember" },
   {
@@ -620,15 +605,25 @@ describe("the installed relations", () => {
     searchTimeout,
   );
 
-  it("state Admission, ChildGrammar once, as each family's admission map and each map's children: every (version, parent, child) at its position, and no other", () => {
-    // Oracle: the generator's `Admission` rows, against the installed `ContentModelOf.admission`
-    // and `AdmissionIn` spelled out (`admittedOf`). N5 reads `AdmissionIn` at the family's map
-    // where it read ChildGrammar at the family, so the two agree exactly when these sets do.
+  it("state Admission, ChildGrammar once, as each family's admission map and each map's children, in the grammar and as installed: every (version, parent, child) at its position, and no other", () => {
+    // Oracle: the generator's `Admission` rows, against the content grammar's and the installed
+    // `ContentModelOf.admission` and `AdmissionIn`, each spelled out (`admittedOf`). N5 reads
+    // `AdmissionIn` at the family's map where it read ChildGrammar at the family, and `resolve`
+    // asks it of a name's kinds, so they agree exactly when these sets do.
     const key = ["version", "parent", "child"];
+    const admission = keyedSet("Admission", key, grammar.admission.rows);
 
     assert.deepStrictEqual(
+      keyedSet(
+        "the grammar's admission maps",
+        key,
+        admittedOf(grammar.content.contentModelOf, grammar.content.admissionIn),
+      ),
+      admission,
+    );
+    assert.deepStrictEqual(
       keyedSet("the admission maps", key, admittedOf(install.ContentModelOf, install.AdmissionIn)),
-      keyedSet("Admission", key, grammar.admission.rows),
+      admission,
     );
     assert.isBelow(install.AdmissionIn.rows.length, grammar.admission.rows.length);
   });

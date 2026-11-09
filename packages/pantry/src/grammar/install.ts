@@ -451,51 +451,18 @@ export const SharedModel = closed(
 );
 
 /**
- * Each family's admission map, the children `Admission` gives it at their positions (`compose.ts`),
- * each distinct map stated once (rule 0: identical facts are one fact), numbered from 0 in the
- * order of the first family, in (version, parent) code order, that holds it: its 1,276 families
- * hold 189 maps. `ContentModelOf` names each family's map, and `AdmissionIn` each map's children,
- * so the (version, parent, child) → position function `Admission` is, ChildGrammar once, is read as
+ * The `AdmissionMap` roster: every distinct admission map of a family, as the content grammar
+ * numbers them (`#pantry/grammar/content.ts`): the children a family admits at their positions,
+ * each distinct map stated once (rule 0: identical facts are one fact), so its 1,288 families hold
+ * 190 maps. `ContentModelOf` names each family's map, and `AdmissionIn` each map's children, so
+ * the (version, parent, child) → position function `Admission` is, ChildGrammar once, is read as
  * `AdmissionIn(ContentModelOf.admission(version, parent), child)`. A family that admits no child
  * holds the empty map, which `AdmissionIn` holds no row of.
  */
-const admissionMaps = (() => {
-  const byFamily = Map.groupBy(
-    grammar.admission.rows,
-    ({ parent, version }) => `${version} ${parent}`,
-  );
-  const mapOf = new Map<string, string>();
-  const members: { readonly child: Kind; readonly map: string; readonly position: string }[] = [];
-  const families = grammar.content.contentModelOf.rows.map(({ model, parent, version }) => {
-    const admitted = rowsAt(byFamily, `${version} ${parent}`).toSorted((left, right) =>
-      left.child < right.child ? -1 : 1,
-    );
-    const admission = mapOf.getOrInsertComputed(
-      admitted.map(({ child, position }) => `${child}:${position}`).join(" "),
-      () => {
-        const fresh = String(mapOf.size);
-        members.push(
-          ...admitted.map(({ child, position }) => ({
-            child: memberOf(grammar.kinds.nodeKind, child),
-            map: fresh,
-            position,
-          })),
-        );
-
-        return fresh;
-      },
-    );
-
-    return { admission, model, parent: memberOf(grammar.kinds.nodeKind, parent), version };
-  });
-
-  return { families, handles: [...mapOf.values()], members };
-})();
-
-/**
- * The `AdmissionMap` roster: every distinct admission map of a family ({@link admissionMaps}).
- */
-export const AdmissionMap = closed("AdmissionMap", nonEmpty("AdmissionMap", admissionMaps.handles));
+export const AdmissionMap = closed(
+  "AdmissionMap",
+  nonEmpty("AdmissionMap", grammar.content.admissionMaps.handles),
+);
 
 /**
  * `ContentModelOf`: (version, parent) → (model, admission), total, the automaton a parent's
@@ -512,7 +479,12 @@ export const ContentModelOf = closed.relation(
     version: closedId(SchemaVersion),
   },
   ["version", "parent"],
-  admissionMaps.families,
+  grammar.content.contentModelOf.rows.map(({ admission, model, parent, version }) => ({
+    admission,
+    model,
+    parent: memberOf(grammar.kinds.nodeKind, parent),
+    version,
+  })),
 );
 
 // The count relations a slot's fin reads.
@@ -542,13 +514,17 @@ const familyPosition = slot(closedId(Position), fin(ModelPositions, "positions")
 /**
  * `AdmissionIn`: (map, child) → position, each admission map's children at their positions in
  * their parent's content model, 0 for character data and for a kind several positions name: the
- * function `Admission` states per family (`compose.ts`), stated per map ({@link admissionMaps}).
+ * function `Admission` states per family (`compose.ts`), stated per map ({@link AdmissionMap}).
  */
 export const AdmissionIn = closed.relation(
   "AdmissionIn",
   { child: closedId(NodeKind), map: closedId(AdmissionMap), position: closedId(Position) },
   ["map", "child"],
-  admissionMaps.members,
+  grammar.content.admissionIn.rows.map(({ child, map, position }) => ({
+    child: memberOf(grammar.kinds.nodeKind, child),
+    map,
+    position,
+  })),
 );
 
 /**
