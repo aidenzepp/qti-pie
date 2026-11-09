@@ -12,9 +12,9 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
 
 /**
  * The committed migration's measured counts (the `_init` drafted from zero on grizzle `450d098`,
- * after the merge of Sterling's genetic repair rounds 1 to 3 and the deletion of the nine keys a
- * wider key holds), as a ratchet: a change that moves one fails here until the count is measured
- * again. A regeneration updates them here, and only here.
+ * after the composition's restated include, symbol and admission sets and the author login's
+ * package read, which move none of them), as a ratchet: a change that moves one fails here until
+ * the count is measured again. A regeneration updates them here, and only here.
  *
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
