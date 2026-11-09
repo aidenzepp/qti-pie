@@ -32,10 +32,10 @@
  * Every copy of an attribute into an overlay follows C18 the other way round, as `identity.ts`
  * states it: from `select(Attribute, φ)` into the overlay, beside a key over the same selection
  * whose UNIQUE serves the copy's reverse probe, but a `th`'s `id`: it lies inside the ID values
- * (`namingIdAttributes` of `#pantry/qti/identity.ts`), whose key holds it to one per element, and
- * the copy back from its {@link TableHeader} meets them at the `th` kind
- * ({@link namingIdAttributesOf}). Every copied text that takes part in a cross-row
- * equality is `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
+ * (`namingIdAttributes` of `#pantry/qti/identity.ts`), which the key over the ID-typed attributes
+ * holds to one per element, and the copy back from its {@link TableHeader} meets them at the `th`
+ * kind ({@link namingIdAttributesOf}). Every copied text that takes part in a cross-row equality is
+ * `keyText` (`#pantry/qti/limits.ts`). Every check is named by its oracle law
  * (`#pantry/test/oracle.ts` `LawName`) with spaces written as underscores.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_Source | QTI 3.0 information model, §5.135 Source}

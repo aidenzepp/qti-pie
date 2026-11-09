@@ -1486,8 +1486,9 @@ const shuffled = (b: ShuffleRow) =>
   );
 
 /**
- * The documents whose root is an item, the targets an item ref may name: a constant selection,
- * keyed by its node.
+ * The documents whose root is an item, the targets an item ref may name: the documents whose
+ * `rootKind`, a field beyond the target's terms, is fixed to an item, so `Document`'s key holds it
+ * (grizzle's fixed target, at `3cc8fbd`) and it needs no key of its own.
  */
 const itemDocuments = select(Document, (d) => d.eq(d.rootKind, itemKind));
 
@@ -2072,7 +2073,6 @@ export const testLawsByName = {
     check("Item_ref_target", ItemRefTarget, (t) =>
       t.in(t.type, [itemResourceType, ...linkResourceTypes]),
     ),
-    key(on(itemTargets, "node")),
     contained(
       on(itemTargets, "node", "package", "path"),
       on(ItemRefDocument, "node", "package", "path"),
@@ -2085,7 +2085,6 @@ export const testLawsByName = {
       on(ItemRefDocument, "document", "package", "path"),
       on(Document, "node", "package", "path"),
     ),
-    key(on(itemDocuments, "node")),
     contained(on(ItemRefDocument, "document"), on(itemDocuments, "node")),
   ],
   "Selection bound": [
@@ -2094,9 +2093,7 @@ export const testLawsByName = {
     ),
   ],
   "Selection required": [
-    key(on(requiredFlags, "node")),
     contained(on(requiredMembers, "node"), on(requiredFlags, "node")),
-    key(on(requiredMembers, "node")),
     contained(on(requiredParts, "node"), on(requiredMembers, "node")),
     requiredFold,
     check("Selection_required", SectionSelection, (s) => s.le(Compute.base(s.required), s.select)),

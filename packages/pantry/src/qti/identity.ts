@@ -717,9 +717,11 @@ export const idAttributes = select(Attribute, idTyped);
 
 /**
  * The ID-typed attributes whose value is one of their document's IDs: those whose lexical form
- * names something once collapsed ({@link namingPattern}), each the source of a {@link DocumentId},
- * with a key of its own over `node` that the copy's reverse probe reads (C18), and that each copy
- * back into it meets: a {@link DocumentId}'s, and a `th`'s `TableHeader`'s at its kind
+ * names something once collapsed ({@link namingPattern}), each the source of a {@link DocumentId}.
+ * Its conditions include every one of {@link idAttributes}', whose key over `node` holds it to one
+ * per element, so it needs no key of its own: grizzle keys a containment's target by a key whose
+ * selection's conditions are all the target's (README, "Keys"), and installs the UNIQUE each copy
+ * back into it references, a {@link DocumentId}'s and a `th`'s `TableHeader`'s at its kind
  * (`#pantry/qti/html.ts`).
  */
 export const namingIdAttributes = select(Attribute, (a) =>
@@ -729,8 +731,8 @@ export const namingIdAttributes = select(Attribute, (a) =>
 /**
  * The ID values of one element kind: the {@link namingIdAttributes} of that kind, which a `th`'s
  * `TableHeader` copies back into (`#pantry/qti/html.ts`). Its conditions include every one of
- * {@link namingIdAttributes}', whose key over `node` holds it, and its kind is a field it fixes to
- * a value beyond its terms, so it needs no key of its own (grizzle's fixed target, at `3cc8fbd`).
+ * {@link idAttributes}', whose key over `node` holds it, and its kind is a field it fixes to a value
+ * beyond its terms, so it needs no key of its own (grizzle's fixed target, at `3cc8fbd`).
  *
  * @param kind - The element kind.
  * @returns The selection.
@@ -994,10 +996,11 @@ export const ssmlLexiconReference = contained(
  * Every statement over the identity overlays, each `check` named by its oracle law:
  *
  * - **DocumentId:** at most one ID-typed attribute per element (the key over its selection), each
- *   whose value is an NCName copied into its row and each attribute row such an attribute's (C18,
- *   with the key over that selection); each ID-typed text whose value is an NCName copied into its
- *   row, bound to the element's parent, and each text row such a text's; the value set apart from
- *   its outer whitespace (`E1_derived`);
+ *   whose value is an NCName copied into its row and each attribute row such an attribute's (C18),
+ *   the way back keyed by that key, since its selection lies within the key's; each ID-typed text
+ *   whose value is an NCName copied into its row, bound to the element's parent, and each text row
+ *   such a text's, the way back keyed by `IdentityText`'s own; the value set apart from its outer
+ *   whitespace (`E1_derived`);
  * - **IdBinding:** the projection's counted family, each binding carried, and "DocumentId key";
  * - **IdentityText:** each element whose text is of an identity type copied into its row with its
  *   string value and its parent, and each row such an element's, its IDREF tokens concatenating to
@@ -1053,7 +1056,6 @@ export const identityLawsByName = {
   ],
   "DocumentId key": [
     key(on(idAttributes, "node")),
-    key(on(namingIdAttributes, "node")),
     contained(
       on(namingIdAttributes, "node", "document", "lexical"),
       on(DocumentId, "node", "document", "lexical"),
@@ -1064,7 +1066,6 @@ export const identityLawsByName = {
       on(DocumentId, "node", "document", "owner", "lexical"),
     ),
     contained(on(textIds, "node"), on(idTexts, "node")),
-    key(on(idTexts, "node")),
     idBindingFamily,
     key(on(IdBinding, "document", "id")),
     key(on(AssembledId, "assembly", "id")),
@@ -1236,7 +1237,6 @@ export const identityLawsByName = {
     contained(on(ManifestId, "node"), on(manifestIdAttributes("cp:manifest"), "node")),
     contained(on(ResourceId, "node"), on(manifestIdAttributes("cp:resource"), "node")),
   ],
-  "Node key": [key(on(identityNodes, "id")), key(on(lomLanguages, "id"))],
   "SSML lexicon reference": [ssmlLexiconReference],
   "SSML trim mark": [ssmlTrimMark],
 } as const;

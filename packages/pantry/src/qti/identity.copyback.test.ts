@@ -5,8 +5,8 @@
  *
  * Each of these overlays' way back to its attribute was a containment into a selection of
  * `Attribute` with a key of its own over `node`, which a wider key already implied: an element
- * holds at most one ID-typed attribute (`idAttributes` and `namingIdAttributes` of
- * `#pantry/qti/identity.ts`). Each is now stated into a target whose conditions are the wider
+ * holds at most one ID-typed attribute (`idAttributes` of `#pantry/qti/identity.ts`, whose key
+ * holds `namingIdAttributes` too). Each is now stated into a target whose conditions are the wider
  * selection's and whose key is the wider selection's, the target fixing what the narrower selection
  * read beyond it to a value outside its terms (grizzle's fixed target, `#fixedTarget` of
  * `laws/model/plan.ts:1394-1444` at `3cc8fbd`):
@@ -17,7 +17,7 @@
  *   manifest, held by `idAttributes`' key;
  * - **ResourceId:** the same over `cp:resource`;
  * - **TableHeader:** `TableHeader(node) ⊆ headerIds(node)`, each `th`'s `id` that is an ID value, is
- *   now `TableHeader(node) ⊆ namingIdAttributesOf("th")(node)`, held by `namingIdAttributes`' key.
+ *   now `TableHeader(node) ⊆ namingIdAttributesOf("th")(node)`, held by `idAttributes`' key.
  *
  * A containment from a row at a node holds where some attribute at that node is in its target, so
  * the two laws are one exactly where the narrower selection holds an attribute row if and only if
