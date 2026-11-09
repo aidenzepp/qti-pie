@@ -77,12 +77,11 @@ const databaseSide = [
  * Where the sides meet: the PostgreSQL side's modules the XML side may import, pantry's `exports`
  * of §2.1 at today's paths. They are the schema's builders and this package's own install's schema
  * (`qti/own.ts`, which holds what `qti/schema.ts` held before it built nothing at load), which will
- * hold `PackageRows`, the installed
- * constants and rosters, the inventory data, the scan, and the database layer the command line
- * provides. S10 adds `ingest` when it splits it out of `import/package.ts`. The terms the schema and
- * the row builders both read (`vocab/terms/`) and the representation's stated limits
- * (`qti/limits.ts`) are here too: each builds no relation, so the row builders read them without
- * evaluating the schema.
+ * hold `PackageRows`, the installed constants and rosters, the inventory data, the scan, and the
+ * database layer the command line provides. S10 adds `ingest` when it splits it out of
+ * `import/package.ts`. The terms the schema and the row builders both read (`vocab/terms/`) and the
+ * representation's stated limits (`qti/limits.ts`) are here too: each builds no relation, so the
+ * row builders read them without evaluating the schema.
  *
  * `vocab/open.ts` is not here: S10 splits it into its generator and the reader that shred runs.
  * Nor is `vocab/derive/`, which runs offline.
@@ -241,9 +240,6 @@ const crossings: ByStep = [
       "import/overlays/tests.ts: #pantry/grammar/compose.ts",
       "import/overlays/tests.ts: #pantry/qti/tests.ts",
       "import/record.ts: #pantry/qti/package.ts",
-      "import/roster.ts: #pantry/qti/chardata.ts",
-      "import/roster.ts: #pantry/qti/node.ts",
-      "import/roster.ts: #pantry/qti/package.ts",
       "import/write.ts: #pantry/grammar/kinds.ts",
       "import/write.ts: #pantry/qti/attributes.ts",
       "import/write.ts: #pantry/qti/chardata.ts",

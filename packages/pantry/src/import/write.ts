@@ -321,7 +321,7 @@ export type NodeRoot = NodeMember & { readonly document: Addition<typeof Node>["
 export type DocumentLayerRows = {
   readonly [Name in keyof typeof documentLayer]: ReadonlyMap<
     string,
-    Addition<(typeof documentLayer)[Name]>
+    Addition<QtiSchema["relations"][Name]>
   >;
 };
 

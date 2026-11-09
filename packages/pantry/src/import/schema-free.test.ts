@@ -32,8 +32,6 @@ const dataModules: ReadonlySet<string> = new Set(["#pantry/qti/limits.ts"]);
  * module that starts importing one fails the test, and so does an entry whose import is gone, until
  * the entry goes too.
  *
- * - `import/roster.ts` reads the written relations off the composed `Qti` (its `insertableNamesOf`
- *   and its relations by name) and the document layer's relations.
  * - `import/refusal.ts` names a database refusal by the schema's statements and law model, and the
  *   read reaches it for the reader's refusal rules (`ruleOfError`).
  */
@@ -56,10 +54,6 @@ const pendingReads: readonly string[] = [
   "import/refusal.ts: #pantry/qti/package.ts",
   "import/refusal.ts: #pantry/qti/quotation.ts",
   "import/refusal.ts: #pantry/qti/tests.ts",
-  "import/roster.ts: #pantry/qti/chardata.ts",
-  "import/roster.ts: #pantry/qti/node.ts",
-  "import/roster.ts: #pantry/qti/own.ts",
-  "import/roster.ts: #pantry/qti/package.ts",
 ];
 
 /**

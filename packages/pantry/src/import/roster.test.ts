@@ -1,18 +1,19 @@
 /**
- * The relations an import writes, as `#pantry/import/roster.ts` reads them from the schema, held to
- * what the builders and the writer do with a real package: every relation a builder writes is one
- * the roster names, every relation the roster names is one a builder writes, and the ChangeSet
- * inserts each once. These are the facts the hand-written records of `mergedOf` and `changeSetOf`
- * stated before the roster was derived.
+ * The relations an import writes, as `#pantry/import/roster.ts` commits them, held to the schema
+ * and to what the builders and the writer do with a real package: the list is exactly grizzle's
+ * `insertableNamesOf(Qti)`, every relation a builder writes is one the roster names, every relation
+ * the roster names is one a builder writes, and the ChangeSet inserts each once.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
+import { insertableNamesOf } from "@bjornpagen/grizzle";
 import { Effect, Schema } from "effect";
 import { overlayPartsOf } from "#pantry/import/overlays/index.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { documentLayerNames, overlayNames, writtenNames } from "#pantry/import/roster.ts";
 import { changeSetOf, documentRowsOf } from "#pantry/import/write.ts";
 import { Author } from "#pantry/qti/own-login.ts";
+import { Qti } from "#pantry/qti/own.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 
 /**
@@ -59,7 +60,25 @@ const everyRelation = Effect.gen(function* everyRelation() {
   return { layers, parts, program };
 });
 
-layer(NodeServices.layer)("the derived roster", (it) => {
+layer(NodeServices.layer)("the roster", (it) => {
+  it.effect(
+    "lists exactly the relations insertAll takes over Qti, so none is missing and none is stale",
+    () =>
+      // Oracle: grizzle's `insertableNamesOf` over the composed schema, the list the roster read off
+      // `Qti` before it was committed. Bound: every stored relation of `Qti`; the document layer's
+      // names are held to be among them, so a renamed layer relation fails here too.
+      Effect.sync(() => {
+        const insertable = sortedNames(insertableNamesOf(Qti));
+
+        assert.deepStrictEqual(
+          [...writtenNames],
+          insertable,
+          "The import's committed roster (src/import/roster.ts writtenRelations) differs from the relations insertAll takes over Qti: list each name the schema adds and delete each it no longer has.",
+        );
+        assert.includeMembers([...insertable], [...documentLayerNames]);
+      }),
+  );
+
   it.effect(
     "names exactly the relations the overlay builders write, so none is dropped or left unwritten",
     () =>
