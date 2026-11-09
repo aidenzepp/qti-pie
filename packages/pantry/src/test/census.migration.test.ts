@@ -23,9 +23,12 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  * and moves no count (its data step's UPDATEs insert nothing), and by genetic repair round 3's
  * migration, GEN-S8, which moves "Document entry"'s first containment from a `Site` selection to a
  * `Reference` selection (one generated column, foreign key and index off `Site`, one onto
- * `Reference`), adds no data step and moves no count, on grizzle `1.0.0-beta.1`), as a ratchet: a
- * change that moves one fails here
- * until the count is measured again. A regeneration updates them here, and only here.
+ * `Reference`), adds no data step and moves no count, and by genetic repair round 4's migration,
+ * GEN-S9, which adds one table (`PlacedReferenceType`), two containments on
+ * `PlacedVariableRefDeclaration` (a generated column, a tag and a foreign key each) and a changed
+ * `Reading` check, and adds no data step, on grizzle `1.0.0-beta.1`), as a ratchet: a change that
+ * moves one fails here until the count is measured again. A regeneration updates them here, and
+ * only here.
  *
  * - `tables`: one per stored relation;
  * - `names`: one names constant per roster;
@@ -43,7 +46,7 @@ const measured = {
   names: 43,
   nodeAxes: 6,
   nodeKeys: 47,
-  tables: 268,
+  tables: 269,
 } as const;
 
 /**

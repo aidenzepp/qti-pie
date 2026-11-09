@@ -37,6 +37,17 @@ operator ruling. A new reading lands here by pull request, and a package that ne
      documents use, and an `xsi:type` as a type of any schema its version pins, not only its own document's set, so
      such an element is judged, and may be refused, where XML Schema would not assess it, since the grammar is keyed
      by version and not by schema set (readings 81 and 60).
+   - **Astral identifiers**: an identifier holding a character from U+10000 up, such as U+1D538, is outside
+     `xs:NCName` and refused by "value domain" on both sides. XML 1.0 Fifth Edition admits characters from U+10000 up
+     in names, so this refusal rests on our reading 94 (XML Schema 1.0's NCName) and is a stated limit of ours, not a
+     ban in the standard. The import still writes the derived row or the key such an identifier would have, so it also
+     breaks "E1 derived" on a section identifier, "Section identifier target" or "Choice identifier key", which the law
+     oracle does not raise, and the rule named first may differ. Outlandish and absent from the official packages;
+     lifted by reading names from XML 1.0 Fifth Edition (reading 94), or by writing no row for a value outside its
+     domain (decision 463, stated here).
+   - **Include content**: the importer still assesses an element a resolving include holds outside its `xi:fallback`,
+     laxly, and can refuse it, though XInclude ignores that content (reading 118). No corpus package holds such
+     content; lifted by the importer ignoring it, as the law oracle does (issue #66; decision 470, stated here).
 
    Limits that accept content without a check:
    - MathML prose rules no structural law reads, such as the definition a `definitionURL` names, and the importer's
@@ -47,7 +58,13 @@ operator ruling. A new reading lands here by pull request, and a package that ne
    - A variable mapping and a prefixed reference through an item ref that names an LTI link, since the package states
      no declaration to check them against (readings 106 and 110).
    - An external include's content, which pantry never fetches (reading 115), and a fragment's `xml:lang` forms and a
-     rule fragment's types, read in its own document until each is stated in place (reading 117).
+     rule fragment's other types, read in its own document until each is stated in place (reading 117). A rule
+     fragment's map response ("Mapped response", P27) and a reference that is itself a condition ("Condition type",
+     P21) are stated in place, typed in each item that places it. Its composite expressions (P20 to P29), a condition
+     reference to a record, which has no base type, and its processing language are not. The composites and the record
+     reference move a verdict: the import accepts a type error there that the law oracle, typing the fragment in its
+     item, refuses. Absent from the official packages, none of which includes a rules fragment; lifted by typing an
+     expression once per placement, planned as its own goal (decisions 465 and 466, stated here).
    - An `xi:fallback` in wildcard content, until a law holds a fallback to its parent (reading 118).
    - A URL's syntax and a `srcset`'s candidates beyond a file reference, since the URL and HTML Standards are living
      documents that no pinned source holds (reading 124).
@@ -66,10 +83,12 @@ operator ruling. A new reading lands here by pull request, and a package that ne
      manifest's resources alone, while the record that resource owns is still read, and is held to a `LomResource`.
      A learning resource type the LOM vocabulary forbids in that record also breaks "LOM learning resource type",
      which the law oracle does not raise either: it reads a type only in a record's document, and a record file whose
-     root is a `cp:manifest` is none (reading 122). "RootOfType" refuses the file on both sides, since such a file's
-     root is a `lom:lom`, so the rule stays "RootOfType". Outlandish and absent from the official packages; lifted by
-     reading no record a record file's `cp:resource` owns (decision 449, stated here; decision 460, on the learning
-     resource type).
+     root is a `cp:manifest` is none (reading 122). The record read so also breaks "E1 derived" on its general object
+     and "LomObjectIdentifier" on its identifier, which the law oracle does not raise either. "RootOfType" refuses the
+     file on both sides, since such a file's root is a `lom:lom`, though the import can name the refusal
+     `lom-identifier` where the law oracle names `root-type-reverse`. Outlandish and absent from the official packages;
+     lifted by reading no record a record file's `cp:resource` owns (decision 449, stated here; decision 460, on the
+     learning resource type; decision 463, on the general object, the identifier and the rule named).
    - An inclusion cycle closed only by an include that may not stand for its target's root breaks "Inclusion cycle"
      in the law oracle and not in the import: XInclude still recurses through such an include (reading 85), but the
      import places a child instance only at a site that places its target. Both refuse the package under "Include
@@ -82,10 +101,70 @@ operator ruling. A new reading lands here by pull request, and a package that ne
      which refuses the package on both sides, so the refusal can be named "DocumentId key", which ranks first, where
      the law oracle names another rule. Outlandish and absent from the official packages; lifted by binding only an
      ID whose every ancestor the grammar admits (decision 452, stated here).
+   - An empty value, such as an item ref's or a metadata object's `identifier=""` or a branch rule's `target=""`,
+     still writes its derived row in the import, which then breaks "E1 derived" (an object identifier, a test token)
+     or "Branch target", which the law oracle does not raise: it leaves the value to "value domain". An LTI resource
+     type written in a 3.0.0 package, outside 3.0.0's domain, is the same shape the other way: the import reads it as
+     an LTI link and the law oracle as no type, so the oracle alone raises "Prefixed reference" on a reference through
+     it. "Value domain" refuses each on both sides, though the rule named first may differ. Outlandish and absent from
+     the official packages; lifted by writing no derived row for a value outside its domain, and by both sides reading
+     an out-of-domain resource type alike (decision 463, stated here).
+   - Two identifiers outside their domain that share a value, such as two resources' or two hottexts'
+     `identifier="0"`, are keyed by the import, which then breaks "DocumentId key" or "Choice identifier key", while
+     the law oracle reads each as no identifier. "Value domain" refuses the package on both sides, though the rule
+     named first may differ. Outlandish and absent from the official packages; lifted by keying only identifiers inside
+     their domain, as decision 457 (2) does for one key (decision 463, stated here).
+   - A required attribute or child left unwritten, such as a selection's `select`, a variable mapping's source or
+     target, a template default's expression, or a slider's lower or upper bound, writes no row in the import, while a
+     containment wants one per node, so the import breaks "Test overlay", "Template default target" or "E1 derived",
+     which the law oracle does not raise. "AL3 required" refuses the package on both sides, though the rule named first
+     may differ. It is kin to lane NIL's "(6) the absence defaults": an absent required attribute writes no row.
+     Outlandish and absent from the official packages; lifted by a law that wants the row only where the attribute or
+     child is written (decision 463, stated here).
+   - A second child the content model forbids, such as two expressions under a template default or two mappings under
+     one declaration, also breaks a per-parent key ("E1 derived") or a typing law ("Template default type") in the
+     import, which the law oracle does not raise. The reverse holds for a record's repeated field whose values write no
+     base type: the law oracle raises "Record field key", while the import writes no field row. "Arity", "N7 Last" or
+     "Value cardinality" refuses the package on both sides, though the rule named first may differ. Outlandish and
+     absent from the official packages; lifted by keying or typing only the child the content model admits (decision
+     463, stated here).
+   - A document whose root its type refuses, such as a section resource rooted at response processing or at a response
+     condition, or an item document typed as a section, is still read by the import as its type's. Its references
+     break "Variable declared", "Variable kind" or "Prefixed reference", and an item so placed twice breaks "Choice
+     identifier key" on its placed choices, none of which the law oracle raises: it reads no references there.
+     "RootOfType" refuses the package on both sides, though the rule named first may differ. It is decision 449's kin,
+     for section and item documents. Outlandish and absent from the official packages; lifted by reading no references
+     in a document whose root its type refuses (decision 463, stated here).
+   - Under an inclusion cycle or a banned ancestor, one side reads less than the other. The law oracle drops content
+     the import still reads: a test that places itself as a section loses its sections, so the oracle alone raises
+     "Section identifier target", and a fragment that includes itself has its identifiers held to "value domain" by
+     the import alone. A forbidden 3.0.1 `cpx:variant`'s `identifierref` is still checked under "Idref target" by the
+     import, though the oracle drops the forbidden subtree (decision 452's limit above). The reverse holds for a
+     context variable in a section document, which stands only in a PCI in a rubric, where "N6 ancestry" bans the PCI:
+     the import writes no reference for it, and the oracle alone raises "Context variable reference". "Inclusion
+     cycle", "N5 admitted" or "N6 ancestry" refuses the package on both sides, though the rule named first may differ.
+     It is kin to decisions 451 and 452. Outlandish and absent from the official packages; lifted by the import
+     dropping that content as the law oracle does, and by the import writing a section document's context references
+     as the oracle reads them (decision 463, stated here).
+   - One fragment placed in two items, once inside feedback and once outside, breaks "Adaptive feedback" in the
+     import, which the law oracle does not raise: the import judges an interaction's feedback context per written node,
+     not per placement, as in reading 117's fragment-context limit. "Binding declared" refuses the package on both
+     sides, though the rule named first may differ. Outlandish and absent from the official packages; lifted by judging
+     a fragment's feedback context per placement (decision 463, stated here).
+   - `xml:base` on a `cp:resource` makes the import and the law oracle attach the resource's LOM record differently,
+     so one side raises "LomObjectTitle" where the other does not. Any `xml:base` on a `cp:resource` breaks "Href
+     listed" on both sides, which refuses the package, though the rule named first may differ. Outlandish and absent
+     from the official packages; lifted by resolving a resource's `xml:base` alike on both sides (decision 463, stated
+     here).
+   - Two documents that fail the codec differently, such as a binary file typed as a fragment beside a document whose
+     root has no namespace, are refused on both sides, and each side names the first in manifest order, so the rule
+     named moves with resource order. Outlandish and absent from the official packages; lifted by a codec precedence
+     that names one rule whatever the order (decision 463, stated here).
 
    (2026-10-30, restated without exceptions 2026-11-03. Amended under the operator's ruling of 2026-11-07, register
    D1, to defer to this list; the element-depth limit added by decision 445; the three limits that change no verdict
-   after reading 162's added by decisions 449, 451 and 452.)
+   after reading 162's added by decisions 449, 451 and 452; the limits added by decision 463; the rule fragment limit
+   that moves a verdict stated by decisions 465 and 466; the include content limit stated by decision 470.)
 
 2. **MathML validity is the MathML 3 Recommendation**: its RelaxNG schema and its prose rules, not only the MathML XSD
    that QTI's schema imports. MathML that breaks a rule of the Recommendation, such as an operator applied to the wrong
@@ -2168,16 +2247,27 @@ against it. A reading that is not an information-model-over-XSD case says which 
      A fragment's nodes are one written element each, one row each, so a fragment is judged under one nearest
      interaction: two includes that place it inside different interactions, or one inside an interaction and one
      outside every interaction, are refused under "Fragment context", a limit of the representation, not a law of the
-     specification; no corpus document places a fragment inside an interaction. Until each is stated in place, these
-     laws read a fragment's content in its own document alone, each a known under-refusal and never an over-refusal: the
-     `xml:lang` forms of a fragment a section document or a test places, listed by the test's records; and a rule
-     fragment's types and language, the type laws over its references
-     and expressions (P20 to P29) and the processing language its rules are written in (O4), which read its variables
-     untyped and its language as none. This binds pantry and plate alike. This is not a case of documents in conflict.
+     specification; no corpus document places a fragment inside an interaction. A rule fragment's references are
+     typed in each item that places it, once per placement, where the reference is the whole expression a law types: a
+     map response or map response point names a declaration of that item that holds a mapping or an area mapping
+     ("Mapped response", P27), and a `qti-variable`, `qti-correct` or `qti-default` that is itself a condition names a
+     boolean single declaration of that item ("Condition type", P21); a reference read through an LTI link stays
+     unchecked (reading 110). Until each is stated in place, these laws read a fragment's content in its own document
+     alone, each a known under-refusal and never an over-refusal: the `xml:lang` forms of a fragment a section document
+     or a test places, listed by the test's records; a rule fragment's other types, the type laws over its composite
+     expressions (P20 to P29), such as a `qti-sum` of its variables under a `qti-response-if`, which read its variables
+     untyped; a condition reference to a declaration with no base type, a record, which writes no placed type and so is
+     not typed; and the processing language its rules are written in (O4), which reads as none. The composites and the
+     record reference move a verdict: the import accepts a package whose fragment holds such a type error, which the
+     law oracle, typing the fragment in its item, refuses. Typing an expression once per placement is planned as its
+     own goal. This binds pantry and plate alike. This is not a case of documents in conflict.
      (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins. Amended
      2026-11-07 by the Mind, decision 416, on audit e8db90e1's F2, and decision 417, on its F3. Amended 2026-11-07 by
      the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-ASM: the content references of
-     a fragment a section document or a test places resolve in the test, reading 145.)
+     a fragment a section document or a test places resolve in the test, reading 145. Amended 2026-11-09 by the Mind,
+     decision 463, on research aeced65a's O18 and O38: a placed reference's mapping and its type as a condition, typed
+     in its item; and decisions 465 and 466: a rule fragment's composite expressions and its condition references to a
+     record, stated as a limit that moves a verdict.)
 
 118. **An include holds at most one fallback, and its `accept` and `accept-language` hold header characters alone,
      though `XInclude.xsd` admits more.** XInclude says "The children property of the xi:include element may include a
@@ -2186,13 +2276,20 @@ against it. A reading that is not an information-model-over-XSD case says which 
      containing characters outside the range #x20 through #x7E must be flagged as fatal errors" (XInclude 1.0 Second
      Edition, section 3.1). `XInclude.xsd`'s `includeType` admits any number of `xi:fallback` children, and types the
      two attributes `xs:string`. So `xi:include`'s content model is restated as the elements it ignores, of another
-     namespace or of none, with at most one `xi:fallback` among them, and the two attributes take the pattern
-     `[ -~]*`. XInclude also says "It is a fatal error for an xi:fallback element to appear in a document anywhere other
-     than as the direct child of the xi:include" (section 3.2). The pinned XSDs name `xi:fallback` only under
-     `xi:include`, but a wildcard reads XInclude's globals as their kinds, so a fallback in wildcard content is read as
-     XInclude's element and not refused: a known under-refusal, until a law holds a fallback to its parent. No corpus
-     document holds an include. This binds pantry and plate alike. This is not a case of documents in conflict.
-     (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     namespace or of none, with at most one `xi:fallback` among them, and the two attributes take the pattern `[ -~]*`.
+     Of the rest XInclude says "Other content (text, processing instructions, comments, elements not in the XInclude
+     namespace, descendants of child elements) is not constrained by this specification and is ignored by the XInclude
+     processor, that is, it has no effect on include processing" (section 3.1), and no QTI text bans it, so the content
+     of a resolving include other than its `xi:fallback` is ignored: never assessed laxly, as `XInclude.xsd`'s wildcard
+     would assess it, and never refused (reading 1 lists the importer's remaining departure). XInclude also says "It is
+     a fatal error for an xi:fallback element to appear in a document anywhere other than as the direct child of the
+     xi:include" (section 3.2). The pinned XSDs name `xi:fallback` only under `xi:include`, but a wildcard reads
+     XInclude's globals as their kinds, so a fallback in wildcard content is read as XInclude's element and not refused:
+     a known under-refusal, until a law holds a fallback to its parent. No corpus document holds an include. This binds
+     pantry and plate alike. This is not a case of documents in conflict.
+     (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins. Amended
+     2026-11-09 by the operator under delegation, decision 470: the content of a resolving include other than its
+     fallback is ignored, not assessed laxly.)
 119. **A rounding operator's integer `figures` is at least 1 under significant figures and at least 0 under decimal
      places.** The information model says of EqualRounded's `figures` "If roundingMode= 'significantFigures', the
      value of figures must be a non-zero positive integer. If roundingMode='decimalPlaces', the value of figures must

@@ -10,7 +10,12 @@
  *
  * - Each known entry's package (`#pantry/test/gen/genetic/known.ts`) must still show its class, so an
  *   entry its owner's fix closed fails as stale until the fix's commit deletes it, and each fixed
- *   entry's must never show its class again;
+ *   entry's must never show its class again, under its plain key or under any stated limit; an
+ *   entry that names a noise is judged beside its package's noised twin, as the search judges it,
+ *   since a noise's class shows only there;
+ * - No signature is a key of both tables: a known class whose plain signature is a fixed entry's is
+ *   keyed by the stated limit it falls under (`#pantry/test/gen/genetic/judge.ts` `limitOf`), so
+ *   the fixed entry keeps guarding the cause it closed;
  * - Each known and fixed entry's signature names only relations and fields `Qti` has, since one that
  *   names a relation or a field a later commit removed can never show, and a fixed entry keyed by
  *   it guards nothing;
@@ -45,9 +50,11 @@ import { corpusOf } from "#pantry/test/gen/genetic/corpus.ts";
 import { residualsOf } from "#pantry/test/gen/genetic/engine.ts";
 import type { Budget } from "#pantry/test/gen/genetic/engine.ts";
 import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
+import { noised } from "#pantry/test/gen/genetic/noise.ts";
 import {
   familyOf,
   judgeOne,
+  movedBy,
   shownDisagreement,
   signatureOf,
 } from "#pantry/test/gen/genetic/judge.ts";
@@ -303,7 +310,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       "still shows every known disagreement, and no fixed one",
       (ctx) =>
         // Oracle: a second implementation, the law oracle, against readProgram's refusal and the
-        // laws its rows hold on the host. Bound: each known and fixed entry's package, judged once.
+        // laws its rows hold on the host. Bound: each known and fixed entry's package, judged once,
+        // and beside its noised twin where the entry names a noise.
         searched(
           ctx,
           Effect.gen(function* knownRuns() {
@@ -330,8 +338,22 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                   assert.isDefined(held, `no known entry ${String(at)}`);
                   if (held !== undefined) {
                     const { entry, shows, signature } = held;
-                    const judged = yield* judgeOne(yield* genomeOf(knownEntries(entry)), bench, at);
-                    const signatures = judged.disagreements.map(signatureOf);
+                    const genome = yield* genomeOf(knownEntries(entry));
+                    const judged = yield* judgeOne(genome, bench, at);
+                    const moved =
+                      entry.noised === undefined
+                        ? []
+                        : movedBy(
+                            judged,
+                            yield* judgeOne(
+                              noised(genome, entry.noised.noise, entry.noised.salt),
+                              bench,
+                              at,
+                            ),
+                            entry.noised.noise,
+                            entry.noised.salt,
+                          );
+                    const signatures = [...judged.disagreements, ...moved].map(signatureOf);
                     if (shows) {
                       assert.include(
                         signatures,
@@ -339,9 +361,12 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                         `stale: ${signature} no longer shows, which waits on ${entry.owner}'s fix (${entry.fix}); delete its entry from #pantry/test/gen/genetic/known.ts in the fix's commit, or move it to fixed`,
                       );
                     } else {
-                      assert.notInclude(
-                        signatures,
-                        signature,
+                      assert.deepStrictEqual(
+                        signatures.filter(
+                          (shown) =>
+                            shown === signature || shown.startsWith(`${signature} (under `),
+                        ),
+                        [],
                         `${signature} shows again, which ${entry.owner}'s fix (${entry.fix}) closed`,
                       );
                     }
@@ -398,6 +423,17 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           }).pipe(Effect.scoped),
         ),
       testTimeoutMs,
+    );
+
+    it.effect("keys no signature in both the known and the fixed table", () =>
+      // Oracle: the two tables' keys. Bound: every known and fixed entry's signature.
+      Effect.sync(() => {
+        assert.deepStrictEqual(
+          Object.keys(known).filter((signature) => Object.hasOwn(fixed, signature)),
+          [],
+          "these signatures key a known entry and a fixed one, so the known entry hides the fixed cause if it shows again; key the known class by the stated limit it falls under (#pantry/test/gen/genetic/judge.ts limitOf), or move it",
+        );
+      }),
     );
 
     it.effect("names only relations and fields Qti has in every known and fixed signature", () =>

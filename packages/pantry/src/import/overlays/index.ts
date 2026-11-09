@@ -364,8 +364,16 @@ export const overlayPartsOf = (
       assembled.Instance.values(),
     ),
     placedVariableRowsOf({
+      baseTypes: built.flatMap(({ rows }) => [...rows.declarations.DeclarationBaseType.values()]),
+      cardinalities: built.flatMap(({ rows }) => [
+        ...rows.declarations.DeclarationCardinality.values(),
+      ]),
       declarations: built.flatMap(({ rows }) => [
         ...rows.declarations.DeclarationIdentifier.values(),
+      ]),
+      elements: built.flatMap(({ rows }) => [
+        ...rows.expressions.Expression.values(),
+        ...rows.expressions.Processing.values(),
       ]),
       instances: assembled.Instance.values(),
       references: built.flatMap(({ rows }) => [...rows.expressions.VariableRef.values()]),
