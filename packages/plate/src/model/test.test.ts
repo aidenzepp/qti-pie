@@ -1384,6 +1384,114 @@ describe("buildTest's template defaults", () => {
   );
 
   it.effect(
+    "align-54 r12 own prefix through a section document N1: in a test that holds a section ref, a.b.SCORE, a.SCORE.SCORE and a.0.SCORE through an own a, S1.x.SCORE through an own section and P1.x.SCORE through an own part, each with no own longer prefix, are marked by name at the processing",
+    () =>
+      Effect.gen(function* marksDottedRests() {
+        const names = ["a.b.SCORE", "a.SCORE.SCORE", "a.0.SCORE", "S1.x.SCORE", "P1.x.SCORE"];
+        const document = referring(
+          "a",
+          names.map((name) => setting("qti-set-outcome-value", "SCORE", variable(name))),
+        );
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(built.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-assessment-section-ref", sectionRefPath),
+          ...names.map((name) => mark(`variable:${name}`, processingPath)),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "align-54 r12 own prefix through a section document N1: in a test that holds a section ref, a template default that reads a.b.SCORE, S1.x.SCORE, P1.x.SCORE or a.SCORE.SCORE through an own prefix is marked by name at its path and left out, and the one that reads no variable stays",
+    () =>
+      Effect.gen(function* leavesDottedRestDefaults() {
+        const names = ["a.b.SCORE", "S1.x.SCORE", "P1.x.SCORE", "a.SCORE.SCORE"];
+        const document = referring(
+          "a",
+          [setting("qti-set-outcome-value", "SCORE", baseValue("float", "1"))],
+          [
+            ...names.map((name, index) => templateDefault(`T${String(index + 1)}`, variable(name))),
+            templateDefault("T5", baseValue("integer", "2")),
+          ],
+        );
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(nodeNamed(built, "a", "item-ref").templateDefaults, [
+          { expression: integerValue(2n), templateIdentifier: "T5" },
+        ]);
+        assert.deepStrictEqual(built.unsupported, [
+          ...names.map((name, index) =>
+            mark(
+              `variable:${name}`,
+              `${firstPart}/qti-assessment-section/qti-assessment-item-ref/qti-template-default[${String(index + 1)}]`,
+            ),
+          ),
+          mark("qti-assessment-section-ref", sectionRefPath),
+        ]);
+        assert.strictEqual(built.outcomeProcessing.kind, "runs");
+      }),
+  );
+
+  it.effect(
+    "align-54 r12 own prefix through a section document N1: the controls: beside a section ref, own a and a.b hold a.b.SCORE; through an a a selection with replacement can repeat, a.2.SCORE stays held where a.b.SCORE and a.2.b.SCORE do not; with no section ref, every dotted rest runs as before",
+    () =>
+      Effect.gen(function* keepsOwnReads() {
+        const sectionRef = el("qti-assessment-section-ref", [
+          attr("href", "sections/more.xml"),
+          attr("identifier", "R1"),
+        ]);
+        const withSection = (
+          body: readonly SourceChild[],
+          names: readonly string[],
+        ): SourceDocument =>
+          test([
+            outcome("SCORE", "float", [defaultValue("0")]),
+            part("P1", "linear", "individual", [section("S1", body), sectionRef]),
+            el(
+              "qti-outcome-processing",
+              [],
+              names.map((name) => setting("qti-set-outcome-value", "SCORE", variable(name))),
+            ),
+          ]);
+        const ownAB = withSection(
+          [itemRef("a", "items/one.xml"), itemRef("a.b", "items/two.xml")],
+          ["a.b.SCORE"],
+        );
+        const repeatable = withSection(
+          [replacingSelection("true"), itemRef("a", "items/one.xml")],
+          ["a.2.SCORE", "a.b.SCORE", "a.2.b.SCORE"],
+        );
+        const apart = processed(
+          ["I1.b.SCORE", "I1.SCORE.SCORE", "I1.0.SCORE", "S1.x.SCORE", "P1.x.SCORE"].map((name) =>
+            setting("qti-set-outcome-value", "SCORE", variable(name)),
+          ),
+        );
+        const ownBuilt = yield* buildTest(ownAB);
+        const repeatableBuilt = yield* buildTest(repeatable);
+        const apartBuilt = yield* buildTest(apart);
+
+        for (const document of [ownAB, repeatable, apart]) {
+          assert.deepStrictEqual(checkStructure(document, tables), []);
+        }
+        assert.strictEqual(ownBuilt.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(ownBuilt.unsupported, [
+          mark("qti-assessment-section-ref", sectionRefPath),
+        ]);
+        assert.deepStrictEqual(repeatableBuilt.unsupported, [
+          mark("qti-selection", `${firstPart}/qti-assessment-section/qti-selection`),
+          mark("qti-assessment-section-ref", sectionRefPath),
+          mark("variable:a.b.SCORE", processingPath),
+          mark("variable:a.2.b.SCORE", processingPath),
+        ]);
+        assert.strictEqual(apartBuilt.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(apartBuilt.unsupported, []);
+      }),
+  );
+
+  it.effect(
     "[T-9] an outcome-only kind beside a section ref marks the outcome processing: qti-test-variables and qti-number-selected each at its own path",
     () =>
       Effect.gen(function* marksBesideSectionRef() {

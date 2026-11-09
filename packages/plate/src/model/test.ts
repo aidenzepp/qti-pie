@@ -781,7 +781,7 @@ interface ProcessingNames {
   /**
    * Whether the test holds a `qti-assessment-section-ref` under one of its parts or sections. A
    * section document it references holds parts of the test the engine does not deliver, so a dotted
-   * name that resolves only through it is not held ({@link isPrefixedHeld}), and an outcome-only
+   * name that may resolve through it is not held ({@link isPrefixedHeld}), and an outcome-only
    * expression, which would count only the test document's own items, marks the outcome processing
    * ({@link outcomeOnlyMarks}).
    */
@@ -919,13 +919,23 @@ const readsStructureDuration = (names: ProcessingNames, prefix: string, rest: st
 
 /**
  * Report whether a reading of a dotted name, split at one of its dots, counts as a read of the
- * test's own structure: its prefix is an identifier of it, and its rest is not in the numbered form
- * `N.VAR` ({@link occurrenceOf}) or its prefix is an item reference a selection with replacement
- * can repeat. A numbered reading counts only through such an item reference (reading 88, "a
- * numbered reference such as `Q01.2.SCORE` names an instance of an item ref that a selection with
- * replacement can repeat, and nothing else"), as the package counts it (`isCounted` in
- * `#plate/package/open.ts`) and the test scope resolves it (`prefixedVariable` in
- * `#plate/engine/scope.ts`).
+ * test's own structure: its prefix is an identifier of that structure, and the variable its rest
+ * names holds no dot. Through an item reference a selection with replacement can repeat, a rest in
+ * the numbered form `N.VAR` ({@link occurrenceOf}) names `VAR`; through any other prefix the rest
+ * is the variable whole, so a numbered rest holds a dot and does not count. A numbered reading
+ * counts only through such an item reference (reading 88, "a numbered reference such as
+ * `Q01.2.SCORE` names an instance of an item ref that a selection with replacement can repeat, and
+ * nothing else"), as the package counts it (`isCounted` in `#plate/package/open.ts`) and the test
+ * scope resolves it (`prefixedVariable` in `#plate/engine/scope.ts`).
+ *
+ * A variable whose name holds a dot does not count, though reading 37 lets an identifier hold one.
+ * The test model reads no item, so it cannot tell `a.b.SCORE` read through the test's own `a`,
+ * whose item declares `b.SCORE`, from the same name whose one resolving reading is a section
+ * document's item ref `a.b`, which the engine does not deliver. A reading whose rest holds no dot
+ * is the name's longest split, and its prefix, given once across the test's reach, is no section
+ * document's. A numbered reading through a repeatable item reference has a longer split, as `a.2`
+ * is of `a.2.SCORE`; where a section document gives that prefix and both items declare the
+ * variable, both readings count, and the package refuses the name `ambiguous-reference`.
  *
  * @param names What the processing resolves a name against.
  * @param prefix The part before the dot.
@@ -934,7 +944,7 @@ const readsStructureDuration = (names: ProcessingNames, prefix: string, rest: st
  */
 const readsOwnStructure = (names: ProcessingNames, prefix: string, rest: string): boolean =>
   names.structure.has(prefix) &&
-  (occurrenceOf(rest).variable === rest || names.repeatable.has(prefix));
+  !(names.repeatable.has(prefix) ? occurrenceOf(rest).variable : rest).includes(".");
 
 /**
  * Report whether the engine holds what a dotted name the test does not declare whole reads, judged
@@ -944,14 +954,24 @@ const readsOwnStructure = (names: ProcessingNames, prefix: string, rest: string)
  * readsStructureDuration}; G-R3, pending: the engine holds no part's, section's or item reference's
  * `duration`, the occurrence form included). In a test that references a section document, it is
  * not held when no reading counts as a read of the test's own structure ({@link
- * readsOwnStructure}): it can resolve only through the section document, whose items the engine
- * does not deliver. A rest in the numbered form after an own item reference no selection with
- * replacement can repeat does not count: its numbered reading names nothing, and read whole it
- * names a variable whose identifier starts with a digit, which nothing declares. So `a.2.SCORE`,
- * with an own `a` that is not repeatable, reads only a section document's `a.2` and is not held, as
- * `b.SCORE` through one is not; with an own `a.2` it stays held. A read that counts as one of the
- * test's own structure stays held there; an outcome-only expression in such a test is marked on its
- * own ({@link outcomeOnlyMarks}). Otherwise it is held, the test scope's to resolve.
+ * readsOwnStructure}): it may resolve only through the section document, whose items the engine
+ * does not deliver. A reading through the test's own prefix whose variable holds a dot does not
+ * count. One is a numbered rest after an own item reference no selection with replacement can
+ * repeat: its numbered reading names nothing, and read whole it names a variable whose identifier
+ * starts with a digit, which nothing declares. Another is a rest that is itself dotted, which the
+ * test model cannot tell from a section document's longer prefix. So `a.2.SCORE`, with an own `a`
+ * that is not repeatable, reads only a section document's `a.2` and is not held, as `b.SCORE`
+ * through one is not; nor is `a.b.SCORE` with an own `a` and no own `a.b`, `a.SCORE.SCORE` with an
+ * own `a` and no own `a.SCORE`, or `S.x.SCORE` with an own section or part `S` and no own `S.x`.
+ * With an own `a.2` or `a.b`, each stays held. A read that counts as one of the test's own
+ * structure stays held there; an outcome-only expression in such a test is marked on its own
+ * ({@link outcomeOnlyMarks}). Otherwise it is held, the test scope's to resolve.
+ *
+ * A limit stays (rule `db2ef322`): the test model reads no item, so it holds a name whose own
+ * reading counts whether or not that item declares the variable. Where it does not, and a section
+ * document's item reference resolves the name, as a section document's `a.2` resolves `a.2.SCORE`
+ * beside an own repeatable `a` whose item declares no `SCORE`, the package counts that reading
+ * alone and accepts the name, the processing stays held, and the engine finds no reading of it.
  *
  * @param names What the processing resolves a name against.
  * @param name The dotted name.
@@ -979,9 +999,9 @@ const isPrefixedHeld = (names: ProcessingNames, name: string): boolean => {
  * prefixed read, which the test scope resolves, held as {@link isPrefixedHeld} judges it: not when
  * it reads a part's, a section's or an item reference's `duration`, directly or in the occurrence
  * form, nor, in a test that references a section document, when no reading of it counts as a read
- * of the test's own structure, a numbered one counting only through a repeatable item reference.
- * Any other name is held only when it is the test's own `duration`: `numAttempts`,
- * `completionStatus` and `QTI_CONTEXT` are not.
+ * of the test's own structure, one whose variable holds no dot, a numbered one counting only
+ * through a repeatable item reference. Any other name is held only when it is the test's own
+ * `duration`: `numAttempts`, `completionStatus` and `QTI_CONTEXT` are not.
  *
  * @param names What the processing resolves a name against.
  * @param name The name.

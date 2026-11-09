@@ -365,9 +365,19 @@ M3.
   - A session counts a numbered name such as `a.2.SCORE` as `openPackage` does, only through an
     item ref that a selection with replacement can repeat (reading 88). With item refs `a` and `a.2`
     and no such selection, outcome processing and a template default read item ref `a.2`'s `SCORE`.
-    Through a section document's `a.2`, the processing is marked, as other reads through a section
-    document are. `Test` and `TestScope` gain an optional `repeatable`, the identifiers of those
-    item refs, which `buildTest` always gives. Corpus: none.
+    Through a section document's `a.2`, the processing is marked. `Test` and `TestScope` gain an
+    optional `repeatable`, the identifiers of those item refs, which `buildTest` always gives.
+    Corpus: none.
+  - In a test that holds a section ref, a dotted name counts as a read of the test's own structure
+    only where, after the test's own part, section or item ref, its variable name holds no dot; an
+    occurrence number may come first after an item ref that a selection with replacement can
+    repeat. So `a.b.SCORE` and `a.SCORE.SCORE` through the test's own item ref `a`, and
+    `S.x.SCORE` through its own section or part `S`, mark the outcome processing, or leave out the
+    template default, that reads them, as `I1.SCORE` through a section document's `I1` does. Before,
+    such processing ran, and `advance` or `startTest` failed with `UnknownIdentifierError` when the
+    name's one resolving reading was a section document's item ref, such as `a.b`. The test
+    document cannot tell that case from `a`'s item declaring `b.SCORE`, so such a read is marked in
+    both. A test with no section ref is unchanged. Corpus: none.
   - In a test's processing, and in a section document's under a test that reaches it, a
     `qti-map-response` or `qti-map-response-point` of the test's `duration`, or of the `numAttempts`
     plate keeps for a test that declares none, is refused `template-requirements`, as an item's of
@@ -416,9 +426,12 @@ M3.
   - These hostile shapes no longer take time that grows faster than their size: many sibling `q`
     elements, many default hotspots before trailing text, many resources that name one large
     document, many references under a deep `xml:base`, a section document that many parts place,
-    many refusals across a test's placements, a long inclusion chain, and branch rules whose target
-    many section documents write. On each, the time now grows about as the input does. No verdict,
-    refusal or sentence moves.
+    many refusals across a test's placements, a long inclusion chain, branch rules whose target
+    many section documents write, many names read through the section documents that one section
+    document places when many parts place it (reading 86), and many branch rules at the end of a
+    long chain of section documents, each to a target that a document placed twice writes. On each,
+    the time now grows about as the input does, and the last two no longer hold memory that grows
+    faster than their size. No verdict, refusal or sentence moves.
 
 ### Record answers and `qti-field-value` (M3)
 
