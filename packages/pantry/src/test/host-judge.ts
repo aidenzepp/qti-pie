@@ -10,6 +10,11 @@
  * it, since it judges the import's own rows by the schema's own statements
  * (`src/grammar/purity.test.ts`).
  *
+ * It is a fast pre-filter, never the judge (the owner's Q4 ruling): a verdict of its counts only
+ * where PostgreSQL gives the same one. A statement over a derived relation, a rule over a query,
+ * it leaves unjudged ({@link readElsewhere}, `#pantry/test/predicates.ts` `judgedKinds`), since
+ * only the database evaluates the query.
+ *
  * A program writes each row without the values grizzle fills, and nests a sequence's members under
  * their owner (`#pantry/import/write.ts`). {@link hostRowsOf} restores what grizzle's README says
  * it fills ("Families"), from the statements alone:
@@ -43,6 +48,7 @@ import {
   evaluate,
   fieldsOf,
   floatDatum,
+  isJudged,
   lawSideOf,
   selectedBy,
   SideSchema,
@@ -106,11 +112,14 @@ const writingOf = (descriptor: unknown): Option.Option<string> =>
 
 /**
  * The kinds of schema member the host reads elsewhere than as a stored relation, each with why: a
- * roster and a closed relation are constants, read by {@link closedRows}.
+ * roster and a closed relation are constants, read by {@link closedRows}, and a derived relation is
+ * a query no table stores, whose rules the database alone judges (`#pantry/test/predicates.ts`
+ * `judgedKinds`), so no side over one decodes and its statements go unjudged here.
  */
 const readElsewhere: ReadonlyMap<string, string> = new Map([
   ["closed", "a roster, whose handles a closed relation's rows hold"],
   ["closedRelation", "a closed relation, read by closedRows"],
+  ["derived", "a derived relation, a query whose rules the database alone judges"],
 ]);
 
 /**
@@ -294,11 +303,16 @@ export const judgedSideOf = (side: StoredSide): JudgedSide => ({
  * conjunction of its selection's conjuncts as its predicate, none where it has none.
  *
  * @param side - The side.
- * @returns Its relation and predicate, or none where a conjunct does not decode as a stored term,
- *   which leaves its law unjudged, as a statement that does not decode is.
+ * @returns Its relation and predicate, or none where the host holds no row of its relation, a
+ *   derived one ({@link isJudged}), or where a conjunct does not decode as a stored term: each
+ *   leaves its law unjudged, as a statement that does not decode is.
  */
-const lawSourceOf = (side: LawSide): Option.Option<Source> =>
-  Arr.isReadonlyArrayNonEmpty(side.selection.conjuncts)
+const lawSourceOf = (side: LawSide): Option.Option<Source> => {
+  if (!isJudged(Qti.relations, side.relation)) {
+    return Option.none();
+  }
+
+  return Arr.isReadonlyArrayNonEmpty(side.selection.conjuncts)
     ? Option.map(
         Schema.decodeUnknownOption(StoredTermSchema)({
           args: side.selection.conjuncts,
@@ -307,6 +321,7 @@ const lawSourceOf = (side: LawSide): Option.Option<Source> =>
         (conjunction) => ({ name: side.relation, predicate: Option.some(termOf(conjunction)) }),
       )
     : Option.some({ name: side.relation, predicate: Option.none() });
+};
 
 /**
  * An `alternatives` statement as grizzle keeps it: its kind alone, since it holds no side, and

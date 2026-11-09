@@ -23,20 +23,28 @@
  * selection or the check reads holds every field it reads, and the predicate is of the part of
  * grizzle's language this module reads (fields, literals, comparisons, `in`, `and`, `or`, `not`).
  * Anything else leaves the statement unknown, so a law is held on the host only where every
- * statement and every check of it was evaluated and held.
+ * statement and every check of it was evaluated and held. A statement over a derived relation, a
+ * rule over a query, is never evaluated here, since only the database evaluates the query: it is
+ * unknown, so its law is never held on the host and never found broken, and the genetic search
+ * counts it unjudged, never a disagreement.
+ *
+ * This is a fast pre-filter, never the judge (the owner's Q4 ruling): a disagreement it reports
+ * becomes a known entry (`#pantry/test/gen/genetic/known.ts`) only once it reproduces on
+ * PostgreSQL.
  *
  * The rows also must name no uuid the program did not mint: a row's uuid field that names no id of
  * the program names no row PostgreSQL can hold, as a sentinel standing for an absent target does.
  */
 import { Array as Arr, Formatter, Option, pipe, Predicate, Schema } from "effect";
 import { sameLaw } from "@bjornpagen/grizzle";
-import type { Law, LawSide } from "@bjornpagen/grizzle";
+import type { AnySchema, Law, LawSide } from "@bjornpagen/grizzle";
 import { lawNameOf, lawOfCheck, statedLaws, statementLawsOf } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { identityOf, keyTextFields } from "#pantry/test/key-copies.ts";
+import { judgedKinds } from "#pantry/test/predicates.ts";
 
 /**
  * One field's value as a row holds it: a text, a number, a natural, a flag or a set of handles.
@@ -291,14 +299,17 @@ const termOf: TermReader = (stored) =>
 
 /**
  * The schema of a stored side: a selection with its predicate, or a whole relation, and its terms.
+ * Its relation is one whose rows the host holds, a stored or a closed one
+ * (`#pantry/test/predicates.ts` `judgedKinds`): a side over a derived relation, a query whose
+ * rules the database alone judges, does not decode, so its statement goes unevaluated.
  */
 const StoredSide = Schema.Struct({
   source: Schema.Union([
     Schema.Struct({
       desc: Schema.Struct({ predicate: StoredTermSchema }),
-      relation: Schema.Struct({ name: Schema.String }),
+      relation: Schema.Struct({ kind: Schema.Literals(judgedKinds), name: Schema.String }),
     }),
-    Schema.Struct({ name: Schema.String }),
+    Schema.Struct({ kind: Schema.Literals(judgedKinds), name: Schema.String }),
   ]),
   terms: Schema.NonEmptyArray(
     Schema.Union([
@@ -311,7 +322,7 @@ const StoredSide = Schema.Struct({
 /**
  * The schema of the stored statements this module evaluates: a key, a containment or a mirrors,
  * an alternatives, which holds no side and states its containments only as its laws, and a check
- * whose predicate it reads.
+ * whose predicate it reads, each over relations whose rows the host holds ({@link StoredSide}).
  */
 const StoredStatement = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("key"), side: StoredSide }),
@@ -324,7 +335,7 @@ const StoredStatement = Schema.Union([
   Schema.Struct({
     desc: Schema.Struct({ name: Schema.String, predicate: StoredTermSchema }),
     kind: Schema.Literal("check"),
-    relation: Schema.Struct({ name: Schema.String }),
+    relation: Schema.Struct({ kind: Schema.Literals(judgedKinds), name: Schema.String }),
   }),
 ]);
 
@@ -391,23 +402,25 @@ const sideOf = (side: typeof StoredSide.Type): ReadSide => {
 
 /**
  * Read a law side as grizzle's `lawsOf` names it as a stored side ({@link StoredSide}): a selection
- * whose predicate is the conjunction of its selection's conjuncts, or a whole relation where it has
- * none, and its terms as a stored side holds them.
+ * of its relation whose predicate is the conjunction of its selection's conjuncts, or the whole
+ * relation where it has none, and its terms as a stored side holds them.
  *
  * @param side - The side.
- * @returns The stored side, or none where a conjunct does not decode, which leaves its law
- *   unevaluated, as a statement that does not decode is.
+ * @returns The stored side, or none where its relation is no stored or closed relation of `Qti`
+ *   or a conjunct does not decode, which leaves its law unevaluated, as a statement that does not
+ *   decode is.
  */
-const storedSideOf = (side: LawSide): Option.Option<typeof StoredSide.Type> =>
-  Schema.decodeUnknownOption(StoredSide)({
+const storedSideOf = (side: LawSide): Option.Option<typeof StoredSide.Type> => {
+  const relations: AnySchema["relations"] = Qti.relations;
+  const relation = relations[side.relation];
+
+  return Schema.decodeUnknownOption(StoredSide)({
     source: Arr.isReadonlyArrayNonEmpty(side.selection.conjuncts)
-      ? {
-          desc: { predicate: { args: side.selection.conjuncts, kind: "and" } },
-          relation: { name: side.relation },
-        }
-      : { name: side.relation },
+      ? { desc: { predicate: { args: side.selection.conjuncts, kind: "and" } }, relation }
+      : relation,
     terms: side.terms.map((term) => (term.kind === "field" ? term.field : term)),
   });
+};
 
 /**
  * A statement this module evaluates, with its law as grizzle's `lawsOf` names it: a key's, a

@@ -12,6 +12,9 @@
  * class showing elsewhere keeps the entry, with a package that still shows it. A signature is a
  * class some package can show, a law the host judges or a uuid field it holds to the mint, which
  * the replay's guard holds every entry to.
+ *
+ * The host's judge is a fast pre-filter (`#pantry/test/gen/genetic/host-laws.ts`, the owner's Q4
+ * ruling): a class it reports becomes an entry only once its package reproduces it on PostgreSQL.
  */
 import type { PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import type { Signature } from "#pantry/test/gen/genetic/judge.ts";

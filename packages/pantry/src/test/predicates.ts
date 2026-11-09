@@ -118,18 +118,43 @@ export const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
 });
 
 /**
+ * The kinds of relation whose rows the host holds, so a side over one is judged here: a stored
+ * relation, whose rows the import writes, and a closed relation, whose rows the schema fixes. A
+ * derived relation is a query, grizzle's `derived(name, query)`, which stores nothing: a rule over
+ * one is a deferred constraint trigger that runs its definition at COMMIT (README, "Rules over
+ * queries"), so the database alone judges it. The host reads no definition, since evaluating the
+ * queries here would restate what the database states (gap G5), so a statement with a side over a
+ * derived relation decodes as none and goes unjudged, its law's verdict unknown on the host.
+ */
+export const judgedKinds = ["relation", "closedRelation"] as const;
+
+/**
+ * Whether the host holds a relation's rows, so a law side over it is judged: a stored or a closed
+ * relation of the schema's members ({@link judgedKinds}), never a derived one, and never a name no
+ * member bears.
+ *
+ * @param relations - The schema's `relations`.
+ * @param name - The relation's name.
+ * @returns Whether the host judges a side over it.
+ */
+export const isJudged = (relations: AnySchema["relations"], name: string): boolean =>
+  Object.hasOwn(relations, name) &&
+  Schema.is(Schema.Struct({ kind: Schema.Literals(judgedKinds) }))(relations[name]);
+
+/**
  * A side of a statement as grizzle keeps it: a selection with the predicate its desc holds, or a
- * whole relation, stored or closed, and its terms, each a field's name or a `pred` one as an object
- * over its field. Every side reads a field at each term: grizzle `3cc8fbd` removed `constant(v)`,
- * and a target fixes a field beyond its terms by its selection instead (README, "Rules").
+ * whole relation, stored or closed ({@link judgedKinds}), and its terms, each a field's name or a
+ * `pred` one as an object over its field. A side over a derived relation does not decode. Every
+ * side reads a field at each term: grizzle `3cc8fbd` removed `constant(v)`, and a target fixes a
+ * field beyond its terms by its selection instead (README, "Rules").
  */
 export const SideSchema = Schema.Struct({
   source: Schema.Union([
     Schema.Struct({
       desc: Schema.Struct({ predicate: StoredTermSchema }),
-      relation: Schema.Struct({ name: Schema.String }),
+      relation: Schema.Struct({ kind: Schema.Literals(judgedKinds), name: Schema.String }),
     }),
-    Schema.Struct({ kind: Schema.String, name: Schema.String }),
+    Schema.Struct({ kind: Schema.Literals(judgedKinds), name: Schema.String }),
   ]),
   terms: Schema.NonEmptyArray(
     Schema.Union([Schema.String, Schema.Struct({ field: Schema.String })]),
@@ -143,7 +168,8 @@ export type StoredSide = typeof SideSchema.Type;
 
 /**
  * The statements whose sides and predicates the host reads, as grizzle keeps them: a containment or
- * a mirrors, a fold, and a check with its predicate.
+ * a mirrors, a fold, and a check with its predicate, each over relations whose rows the host holds
+ * ({@link judgedKinds}), so a statement over a derived relation decodes as none.
  */
 export const StatementSchema = Schema.Union([
   Schema.Struct({
@@ -163,7 +189,7 @@ export const StatementSchema = Schema.Union([
   Schema.Struct({
     desc: Schema.Struct({ name: Schema.String, predicate: StoredTermSchema }),
     kind: Schema.Literal("check"),
-    relation: Schema.Struct({ name: Schema.String }),
+    relation: Schema.Struct({ kind: Schema.Literals(judgedKinds), name: Schema.String }),
   }),
 ]);
 

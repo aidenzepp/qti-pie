@@ -15,23 +15,125 @@
  * selection went unnamed (6caa20ef).
  *
  * And both host judges, this one and the genetic search's (`evaluatedLaws` of
- * `#pantry/test/gen/genetic/host-laws.ts`), read every containment and key `Qti` states, whatever
- * kind of statement states it, so a law never drops out of either judge with its statement's kind:
- * an `alternatives`, which holds no side, states its containments only as its laws.
+ * `#pantry/test/gen/genetic/host-laws.ts`), read every containment and key `Qti` states over the
+ * relations whose rows the host holds, whatever kind of statement states it, so a law never drops
+ * out of either judge with its statement's kind: an `alternatives`, which holds no side, states its
+ * containments only as its laws.
+ *
+ * And neither judges a statement over a derived relation, a rule over a query, whose query only the
+ * database evaluates (`judgedKinds` of `#pantry/test/predicates.ts`): no side over one decodes.
  */
+import {
+  check,
+  contained,
+  derived,
+  key,
+  on,
+  query,
+  relation,
+  schema,
+  select,
+  str,
+  uuid,
+  v,
+} from "@bjornpagen/grizzle";
+import type { Law } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Formatter, Option } from "effect";
+import { Formatter, Option, Schema } from "effect";
 import { lawNameOf, statedLaws } from "#pantry/import/refusal.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { evaluatedLaws } from "#pantry/test/gen/genetic/host-laws.ts";
 import { judgedLaws, modelledRelations } from "#pantry/test/host-judge.ts";
 import { containmentsOf } from "#pantry/test/judged-laws.ts";
+import { isJudged, SideSchema, StatementSchema } from "#pantry/test/predicates.ts";
 
 /**
  * The timeout, in milliseconds, of this file's tests that compile Qti's law model: a hang guard,
  * never a budget. Measured 2026-11-08: 79 s at a load average of 74 to 80, its slowest test.
  */
 const testTimeoutMs = 300_000;
+
+/**
+ * A two-level scratch schema in grizzle's own shape for rules over queries (README, "Rules over
+ * queries"): a stored level of four relations, and a level over it whose derived relation joins
+ * two of them. Each level states a check, a containment into a relation, one from a selection and a
+ * key, the query level's each over the query, the stored level's the control.
+ */
+const twoLevel = (() => {
+  const Path = str.regex("^[a-z]{1,8}$");
+  const Resource = relation("Resource", { id: uuid }, ["id"]);
+  const ResourceHref = relation("ResourceHref", { path: Path, resource: uuid }, ["resource"]);
+  const ResourceTyped = relation("ResourceTyped", { resource: uuid, type: Path }, ["resource"]);
+  const Catalog = relation("Catalog", { path: Path, resource: uuid, type: Path }, ["resource"]);
+  const stored = {
+    check: check("Catalog_typed", Catalog, (c) => c.ne(c.type, "x")),
+    into: contained(on(ResourceHref, "resource"), on(Resource, "id")),
+    key: key(on(Catalog, "path")),
+    selected: contained(
+      on(
+        select(ResourceTyped, (t) => t.eq(t.type, "item")),
+        "resource",
+      ),
+      on(Resource, "id"),
+    ),
+  };
+  const Content = schema("Content", { Catalog, Resource, ResourceHref, ResourceTyped }, [
+    stored.check,
+    stored.into,
+    stored.key,
+    stored.selected,
+  ]);
+  const TypedHref = derived(
+    "TypedHref",
+    query(Content).rule((r) => {
+      const { path, resource } = v(ResourceHref, "href");
+      const { type } = v(ResourceTyped, "typed");
+
+      return r
+        .match(ResourceHref, { path, resource })
+        .match(ResourceTyped, { resource, type })
+        .find({ path, resource, type });
+    }),
+  );
+  const queried = {
+    check: check("Typed_href", TypedHref, (t) => t.ne(t.type, "x")),
+    into: contained(
+      on(Catalog, "resource", "path", "type"),
+      on(TypedHref, "resource", "path", "type"),
+    ),
+    key: key(on(TypedHref, "path")),
+    selected: contained(
+      on(
+        select(TypedHref, (t) => t.eq(t.type, "item")),
+        "resource",
+      ),
+      on(Resource, "id"),
+    ),
+  };
+
+  return {
+    level: schema.extend(Content, "Packaged", { TypedHref }, [
+      queried.check,
+      queried.into,
+      queried.key,
+      queried.selected,
+    ]),
+    queried,
+    stored,
+  };
+})();
+
+/**
+ * Whether the host judges a containment or a key `Qti` states: every side of it reads a relation
+ * whose rows the host holds ({@link isJudged}). A rule over a query is the database's alone.
+ *
+ * @param law - The law, as grizzle's `lawsOf` lists it.
+ * @returns Whether the host judges it.
+ */
+const judged = (law: Law): boolean =>
+  law.kind === "contained"
+    ? isJudged(Qti.relations, law.from.relation) && isJudged(Qti.relations, law.to.relation)
+    : law.kind === "key" && isJudged(Qti.relations, law.side.relation);
 
 /**
  * The members planted beside the schema's, each one the host cannot read.
@@ -87,9 +189,7 @@ describe("the host judge's model of a schema", () => {
       // Oracle: the laws Qti states, as the refusal names them (`statedLaws`, from grizzle's
       // `lawsOf`). Bound: every containment and key of every statement of Qti, an alternatives'
       // among them.
-      const stated = statedLaws().flatMap(([law]) =>
-        law.kind === "contained" || law.kind === "key" ? [Formatter.format(law)] : [],
-      );
+      const stated = statedLaws().flatMap(([law]) => (judged(law) ? [Formatter.format(law)] : []));
       const judges = [
         ["the host judge", judgedLaws(Qti).map(({ law }) => law)],
         ["the genetic search", evaluatedLaws],
@@ -114,5 +214,50 @@ describe("the host judge's model of a schema", () => {
         modelledRelations([...Object.values(Qti.relations), member]);
       }, member.name);
     }
+  });
+
+  it("reads a derived relation as no stored relation, and decodes no statement over one, a check, a containment either way or a key", () => {
+    // Oracle: grizzle's own two-level shape (README, "Rules over queries"): a rule over a derived
+    // relation is the database's alone, so the host reads no side over one and no statement with
+    // such a side. Bound: a rule of each kind over the query, a selection of it among them, each
+    // beside its control over stored relations, which the host reads.
+    const { level, queried, stored } = twoLevel;
+    const modelled = modelledRelations(Object.values(level.relations));
+    const decodes = Schema.is(StatementSchema);
+    const side = Schema.is(SideSchema);
+
+    assert.isFalse(modelled.has("TypedHref"), "a derived relation modelled as stored");
+    assert.isTrue(modelled.has("Catalog"), "a stored relation the host does not model");
+    assert.deepStrictEqual(
+      [isJudged(level.relations, "TypedHref"), isJudged(level.relations, "Catalog")],
+      [false, true],
+    );
+    assert.deepStrictEqual(
+      [
+        decodes(stored.check),
+        decodes(stored.into),
+        side(stored.into.left),
+        side(stored.into.right),
+        side(stored.key.side),
+        decodes(stored.selected),
+        side(stored.selected.left),
+      ],
+      [true, true, true, true, true, true, true],
+      "the stored level's statements, which the host reads",
+    );
+    assert.deepStrictEqual(
+      [
+        decodes(queried.check),
+        decodes(queried.into),
+        side(queried.into.left),
+        side(queried.into.right),
+        side(queried.key.side),
+        decodes(queried.selected),
+        side(queried.selected.left),
+        side(queried.selected.right),
+      ],
+      [false, false, true, false, false, false, false, true],
+      "the query level's statements, which the host leaves to the database",
+    );
   });
 });
