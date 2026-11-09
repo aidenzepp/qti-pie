@@ -166,7 +166,7 @@ const oracleDataModules: ReadonlySet<string> = new Set([
  *   owed an oracle-side derivation.
  */
 const oracleStatementReads: readonly string[] = [
-  "test/key-copies.ts: #pantry/qti/schema.ts",
+  "test/key-copies.ts: #pantry/qti/own.ts",
   "test/oracle.ts: #pantry/vocab/open.ts",
 ];
 
