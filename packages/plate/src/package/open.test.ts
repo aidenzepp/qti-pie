@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import { memoryUsage } from "node:process";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { corpusRoot, readCorpusFile } from "#plate/document/corpus.ts";
@@ -2887,6 +2888,153 @@ const targetsRefusals = (documents: number, targets: Targets, rulesIn: RulesIn):
           ),
         );
   }).flat();
+
+/**
+ * The test parts of {@link hubPackage}, each placing the hub that places every section document,
+ * so each document has as many placements, one under each part.
+ */
+const hubParts = 64;
+
+/**
+ * The section documents, and the reads through them, of the smaller growth check of a test that
+ * reads through every document a hub places.
+ */
+const fewerHubDocuments = 125;
+
+/**
+ * The section documents, and the reads through them, of the hostile-size case of a test that reads
+ * through every document a hub places, some 940 KB, the size the gate's re-review measured at 18.0
+ * s and 5.4 GB of heap against 0.88 s for the same package reading the test's own outcome, past
+ * the default heap.
+ */
+const hostileHubDocuments = 2000;
+
+/**
+ * The most the hostile-size case of a test that reads through every document a hub places may
+ * take, as a multiple of the thread CPU of the same package reading the test's own outcome: a walk
+ * of every placement for each document read took many times as long, and deciding each document's
+ * views from the placements above the one judged leaves only each read's own share.
+ */
+const hubCpuLimit = 2;
+
+/**
+ * The most the heap may grow by while the hostile-size case's package opens, in bytes. A set of
+ * every placement kept for each document read, 128,064 placements for each of 2,000 documents,
+ * exhausted the default heap of some 4 GB; without them the opening holds about what the package
+ * reading the test's own outcome holds.
+ */
+const hubHeapLimit = 512 * 2 ** 20;
+
+/**
+ * What the outcome processing of {@link hubPackage} sums, once for each section document:
+ * `I<n>.N`, through the item ref of the `n`th document, or the test's own `TOTAL`.
+ */
+type HubReads = "each document's item" | "the test's own";
+
+/**
+ * The files of a package whose test `T` declares `TOTAL` and holds {@link hubParts} test parts
+ * `P<p>`, each placing the section document `sections/h.xml` through a section ref of its own. Its
+ * section `HUB` places the section documents `sections/s<n>.xml`, each of whose sections `X<n>`
+ * holds the item ref `I<n>` to `items/b.xml` ({@link otherItemXml}), so each is placed once under
+ * each part. The test's outcome processing sets `TOTAL` to a sum of one read for each document.
+ *
+ * @param documents How many section documents the hub places.
+ * @param reads What each read of the sum reads.
+ * @returns The package's files.
+ */
+const hubPackage = (documents: number, reads: HubReads): ReadonlyMap<string, Uint8Array> => {
+  const indices = Array.from({ length: documents }, (_, index) => index);
+  const sum = indices
+    .map((index) => variableXml(reads === "the test's own" ? "TOTAL" : `I${index}.N`))
+    .join("");
+  const parts = Array.from({ length: hubParts }, (_, part) =>
+    partXml(`P${part}`, sectionRefXml(`H${part}`, "sections/h.xml")),
+  ).join("");
+
+  return packageOf({
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("H", "imsqti_section_xmlv3p0", "sections/h.xml"),
+      ...indices.map((index) =>
+        resourceXml(`S${index}`, "imsqti_section_xmlv3p0", `sections/s${index}.xml`),
+      ),
+    ),
+    "sections/h.xml": sectionDocumentXml(
+      "HUB",
+      indices.map((index) => sectionRefXml(`R${index}`, `s${index}.xml`)).join(""),
+    ),
+    ...Object.fromEntries(
+      indices.map((index) => [
+        `sections/s${index}.xml`,
+        sectionDocumentXml(`X${index}`, itemRefXml(`I${index}`, "../items/b.xml")),
+      ]),
+    ),
+    "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/>${parts}<qti-outcome-processing><qti-set-outcome-value identifier="TOTAL"><qti-sum>${sum}</qti-sum></qti-set-outcome-value></qti-outcome-processing></qti-assessment-test>`,
+  });
+};
+
+/**
+ * The refusals of a package of {@link hubPackage} that reads each document's item: each read
+ * `ambiguous-reference` at the test, as the test reads each document from outside it and every
+ * part places it (reading 86).
+ *
+ * @param documents How many section documents the hub places.
+ * @returns The refusals' facts, in order.
+ */
+const hubRefusals = (documents: number): readonly Seen[] =>
+  Array.from({ length: documents }, (_, index) => ({
+    detail: {
+      firstPrefix: `I${index}`,
+      firstVariable: "N",
+      reading: "86",
+      reference: `I${index}.N`,
+      secondPrefix: `I${index}`,
+      secondVariable: "N",
+    },
+    document: fileLocation(location, "test.xml"),
+    location: {
+      kind: "path",
+      path: `qti-assessment-test/qti-outcome-processing/qti-set-outcome-value/qti-sum/qti-variable[${index + 1}]/@identifier`,
+    },
+    rule: "ambiguous-reference",
+  }));
+
+/**
+ * The files of a package whose test `T` places the section document `S0` at `sections/s0.xml`
+ * twice in its part `P`, once in the section `SA`, which draws its order, and once in `SB`, which
+ * does not, so under two contexts. `S0` holds the item ref `I0` to `items/a.xml` and a section ref
+ * to `U` at `sections/u.xml`, whose item ref's pre-condition reads `I0.SCORE`, so both placements
+ * of `S0` place the one placement of `U`, which more section refs of the part may place too.
+ *
+ * @param more What the part holds after `SA` and `SB`, as written.
+ * @returns The package's files.
+ */
+const aroundFiles = (more: string): ReadonlyMap<string, Uint8Array> =>
+  packageOf({
+    "items/a.xml": reachedItemXml,
+    "items/b.xml": otherItemXml,
+    [manifestFile]: manifestXml(
+      resourceXml("T", "imsqti_test_xmlv3p0", "test.xml"),
+      resourceXml("I0", "imsqti_item_xmlv3p0", "items/b.xml"),
+      resourceXml("I1", "imsqti_item_xmlv3p0", "items/a.xml"),
+      resourceXml("S0", "imsqti_section_xmlv3p0", "sections/s0.xml"),
+      resourceXml("U", "imsqti_section_xmlv3p0", "sections/u.xml"),
+    ),
+    "sections/s0.xml": sectionDocumentXml(
+      "S0",
+      `${itemRefXml("I0", "../items/a.xml")}${sectionRefXml("RU", "u.xml")}`,
+    ),
+    "sections/u.xml": sectionDocumentXml(
+      "U",
+      itemRefXml("IU", "../items/a.xml", preConditionXml(greaterXml("I0.SCORE"))),
+    ),
+    "test.xml": referringTestXml(
+      "",
+      `<qti-assessment-section identifier="SA" title="SA" visible="true"><qti-ordering shuffle="true"/>${sectionRefXml("R1", "sections/s0.xml")}</qti-assessment-section><qti-assessment-section identifier="SB" title="SB" visible="true">${sectionRefXml("R2", "sections/s0.xml")}</qti-assessment-section>${more}`,
+    ),
+  });
 
 describe("package/open.ts", () => {
   describe("openPackage", () => {
@@ -6471,6 +6619,96 @@ describe("package/open.ts", () => {
               `with the rules in ${rulesIn}, a target of its own for each rule took ${(eachMs / oneMs).toFixed(1)} times the CPU of one target for all`,
             );
           }
+        }),
+      growthTimeoutMs,
+    );
+  });
+
+  describe("openPackage, a test that reads through every document a hub places", () => {
+    it.effect(
+      'align-54 r12 views without per-path sets: a section document U that S0 places, its pre-condition reading I0.SCORE through S0\'s item ref, reads S0 from inside when the part places S0 twice, under a drawn order and not, and the test reaches U only through one of the two, accepted; placed by the part directly too, or through a section of its own, U is reached through neither, so it reads S0 from outside as well and is refused ambiguous-reference at U (reading 86 ("a section document a test places twice is written once"))',
+      () =>
+        Effect.gen(function* viewsAround() {
+          const ambiguous: Seen = {
+            detail: {
+              firstPrefix: "I0",
+              firstVariable: "SCORE",
+              reading: "86",
+              reference: "I0.SCORE",
+              secondPrefix: "I0",
+              secondVariable: "SCORE",
+            },
+            document: fileLocation(location, "sections/u.xml"),
+            location: {
+              kind: "path",
+              path: "qti-assessment-section/qti-assessment-item-ref/qti-pre-condition/qti-gt/qti-variable/@identifier",
+            },
+            rule: "ambiguous-reference",
+          };
+
+          acceptedOf(yield* openPackage(location, aroundFiles("")));
+          for (const more of [
+            sectionRefXml("R3", "sections/u.xml"),
+            `<qti-assessment-section identifier="SC" title="SC" visible="true">${sectionRefXml("R3", "sections/u.xml")}</qti-assessment-section>`,
+          ]) {
+            assert.deepStrictEqual(refusalsOf(yield* openPackage(location, aroundFiles(more))), [
+              ambiguous,
+            ]);
+          }
+        }),
+    );
+
+    it.effect(
+      "align-54 r12 views without per-path sets: 8 times the section documents a hub places under each of 64 parts, each read through by the test's outcome processing, open in under 32 times the time, as whether the test reaches the placement judged through no placement of a document is decided from the placements above it, not from a set of every placement kept for each document read",
+      () =>
+        Effect.gen(function* hubGrowth() {
+          const fewer = hubPackage(fewerHubDocuments, "each document's item");
+          const more = hubPackage(fewerHubDocuments * growthFactor, "each document's item");
+          assert.deepStrictEqual(
+            refusalsOf(yield* openPackage(location, fewer)),
+            hubRefusals(fewerHubDocuments),
+          );
+
+          const growth = yield* growthRatio(opening(fewer), opening(more));
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `8 times the documents and reads took ${growth.toFixed(1)} times as long`,
+          );
+        }),
+      growthTimeoutMs,
+    );
+
+    it.effect(
+      "align-54 r12 views without per-path sets: 2,000 section documents a hub places under each of 64 parts, each read through by the test's outcome processing, open in under twice the thread CPU of the same package reading the test's own outcome, each read refused ambiguous-reference, and the heap grows by under 512 MiB while it opens",
+      () =>
+        Effect.gen(function* hubHostile() {
+          const own = hubPackage(hostileHubDocuments, "the test's own");
+          const each = hubPackage(hostileHubDocuments, "each document's item");
+          acceptedOf(yield* openPackage(location, own));
+
+          const before = memoryUsage().heapUsed;
+          const verdict = yield* openPackage(location, each);
+          const grown = memoryUsage().heapUsed - before;
+          assert.deepStrictEqual(refusalsOf(verdict), hubRefusals(hostileHubDocuments));
+          assert.isBelow(
+            grown,
+            hubHeapLimit,
+            `the heap grew by ${(grown / 2 ** 20).toFixed(0)} MiB while the package opened`,
+          );
+
+          let ownMs = Number.POSITIVE_INFINITY;
+          let eachMs = Number.POSITIVE_INFINITY;
+          for (let run = 0; run < growthRuns; run += 1) {
+            ownMs = Math.min(ownMs, yield* cpuMillis(opening(own)));
+            eachMs = Math.min(eachMs, yield* cpuMillis(opening(each)));
+          }
+
+          assert.isBelow(
+            eachMs,
+            hubCpuLimit * ownMs,
+            `reading each document's item took ${(eachMs / ownMs).toFixed(1)} times the CPU of reading the test's own outcome`,
+          );
         }),
       growthTimeoutMs,
     );

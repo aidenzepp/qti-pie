@@ -4680,14 +4680,17 @@ const reachBudget = 64;
  * @param below The placement.
  * @param from A placement on every way down to it, not in the set.
  * @param avoided The set.
+ * @param budget The most section refs it reads, {@link reachBudget} unless given; with no bound,
+ *   it always settles.
  * @returns Whether a way up from `below` through placements outside the set reaches `from`, none
- *   when it read {@link reachBudget} section refs without settling it.
+ *   when it read `budget` section refs without settling it.
  */
 const reachesAbove = (
   graph: PlacementGraph,
   below: Placement,
   from: Placement,
   avoided: ReadonlySet<Placement>,
+  budget = reachBudget,
 ): Option.Option<boolean> => {
   const met = new Set<Placement>([below]);
   // The walk's way up, each placement with the index of the next placement above it to read.
@@ -4698,7 +4701,7 @@ const reachesAbove = (
       return Option.some(true);
     }
 
-    if (read === reachBudget) {
+    if (read === budget) {
       return Option.none();
     }
 
@@ -4714,6 +4717,49 @@ const reachesAbove = (
   }
 
   return Option.some(false);
+};
+
+/**
+ * Report whether the test reaches a placement through none of some placements that lie above it,
+ * as a placement reads another document from outside it (reading 86). It does not when one of them
+ * lies on every way down to it ({@link dominanceOf}), as the placement itself and the test's own
+ * placement do. Otherwise it does when there is only one, and, with more, when a way up from the
+ * placement through none of them reaches the deepest placement on every way down to it and to each
+ * of them, which the test reaches through none of them, since none lies above that one
+ * ({@link reachesAbove}). That walk reads only placements above the placement and below that one,
+ * and keeps nothing once it settles, so it needs no budget and no walk of every placement: it reads
+ * no more placements than lie above the placement.
+ *
+ * @param graph The assembly's placements.
+ * @param dominance Which placements lie on every way down to which.
+ * @param placement The placement.
+ * @param lying The placements avoided, every one the placement or above it.
+ * @returns Whether the test reaches the placement through none of them.
+ */
+const reachedAround = (
+  graph: PlacementGraph,
+  { deepestCommon, dominates }: Dominance,
+  placement: Placement,
+  lying: readonly Placement[],
+): boolean => {
+  if (lying.some((one) => dominates(one, placement))) {
+    return false;
+  }
+
+  if (lying.length <= 1) {
+    return true;
+  }
+
+  let from = placement;
+  for (const one of lying) {
+    from = deepestCommon(from, one);
+  }
+
+  // With no budget the walk always settles.
+  return Option.getOrElse(
+    reachesAbove(graph, placement, from, new Set(lying), Number.POSITIVE_INFINITY),
+    () => false,
+  );
 };
 
 /**
@@ -5398,7 +5444,7 @@ interface TestJudgement {
  * outside it, each placement, so a reference from outside a section document placed twice reads it
  * twice and is `ambiguous-reference` (reading 86; pantry refuses a reading through a name two
  * placements give wherever the reference stands, `Prefixed_reference`, an agreement difference).
- * Which of these a placement reads from is one reachability over the placements (`viewsAt` within
+ * Which of these a placement reads from is read from the placements above it (`viewsAt` within
  * it), and a placement that stands for several chains of documents is judged each way they give,
  * once for each answer those ways give (`waysOf`), never once for each way, so a name read through
  * many documents costs what its readings do. Another document's placements are counted up to 2,
@@ -5516,8 +5562,11 @@ const judgeTest = (
   const mappingRefusals = judgeMappings(source.location, own.visits, variablesFor);
   const defaults = judgeTemplateDefaults(source.location, own.visits, variablesFor);
   const whole = wholeOf(source);
-  const avoiding = new Map<string, ReadonlySet<Placement>>();
   const reachers = new Map<Placement, ReadonlySet<Placement>>();
+  // Each placement's views of each other document it reads ({@link viewsAt}), by path.
+  const viewsBy = new Map<Placement, Map<string, readonly DocumentView[]>>();
+  // Which placements lie on every way down to which, built when a view first needs it.
+  let dominance: Dominance | undefined;
   // The placement being judged, the test's first, and the view each reading takes of each document
   // it reads for one way that placement may read them ({@link waysOf}): the scope reads both, so it
   // is read only while that placement is judged.
@@ -5527,29 +5576,56 @@ const judgeTest = (
   // each other document took ({@link viewsAt}), by path, in the order first taken; else none.
   let taken: Map<string, readonly DocumentView[]> | undefined;
   /**
+   * Give the views the placement being judged takes of another document's placements
+   * ({@link viewsAt}), from the placements above it.
+   *
+   * @param path The document's path.
+   * @param above The placements above the placement being judged, it included.
+   * @returns The views, at least one.
+   */
+  const viewsFrom = (path: string, above: ReadonlySet<Placement>): readonly DocumentView[] => {
+    const there = placedAt.get(path) ?? [];
+    // The document's placements above this one, read from the smaller side.
+    const lying =
+      above.size < there.length
+        ? [...above].filter((one) => one.path === path)
+        : there.filter((one) => above.has(one));
+    let outside = lying.length === 0;
+    if (!outside) {
+      const known = dominance ?? dominanceOf(graph);
+      dominance = known;
+      outside = reachedAround(graph, known, here, lying);
+    }
+
+    return [
+      ...(outside ? [{ from: "outside" } as const] : []),
+      ...[false, true]
+        .filter((replaced) => lying.some((one) => one.replaced === replaced))
+        .map((replaced) => ({ from: "inside", replaced }) as const),
+    ];
+  };
+  /**
    * Give the ways the placement being judged may read the placements of another document (reading
    * 86): from inside each placement of it that lies above this one, by its replacement, and from
    * outside it when the test reaches this placement through no placement of it. Once loops are
-   * refused the placements form no cycle, so each is one reachability over them: the placements of
-   * the document removed, is this one still reached, and which of them reach this one.
+   * refused the placements form no cycle, so both read only the placements above this one
+   * ({@link reachingAny}, once for each placement), the document's among them: the test reaches
+   * this one through none of those unless they lie across every way down to it, which they alone
+   * decide ({@link reachedAround}), with no walk of every placement for each document read. Each
+   * placement's views of a document are found once.
    *
    * @param path The document's path.
    * @returns The views, at least one.
    */
   const viewsAt = (path: string): readonly DocumentView[] => {
-    const there = placedAt.get(path) ?? [];
-    const outside = avoiding.get(path) ?? reachedAvoiding(graph, new Set(there));
-    avoiding.set(path, outside);
-
     const above = reachers.get(here) ?? reachingAny(graph, [here]);
     reachers.set(here, above);
 
-    const views = [
-      ...(outside.has(here) ? [{ from: "outside" } as const] : []),
-      ...[false, true]
-        .filter((replaced) => there.some((one) => one.replaced === replaced && above.has(one)))
-        .map((replaced) => ({ from: "inside", replaced }) as const),
-    ];
+    const byPath = viewsBy.get(here) ?? new Map<string, readonly DocumentView[]>();
+    viewsBy.set(here, byPath);
+
+    const views = byPath.get(path) ?? viewsFrom(path, above);
+    byPath.set(path, views);
     taken?.set(path, views);
 
     return views;
