@@ -59,6 +59,9 @@ Each is the local cluster's when unset or empty. `scripts/db.sh` reads them as `
 - `GR8DES_PG_CA` names the PEM file a connection verifies the server against, in place of `tls/ca.crt` in grizzle's
   state folder (`GRIZZLE_PG_STATE`).
 - `GR8DES_PG_MIGRATION_ROLE` names the role `grizzle migrate` connects as, in place of `grizzle_dev`.
+- `GR8DES_PG_PASSWORD_COMMAND` names an executable that prints a role's password. Every connection attempt runs it,
+  without a shell, with the role's name as its one argument, in place of `GR8DES_PG_MIGRATION_PASSWORD` and the logins'
+  password files.
 
 ## Development
 

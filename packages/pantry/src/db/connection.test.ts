@@ -23,7 +23,13 @@ import {
   Result,
 } from "effect";
 import pg from "pg";
-import { ClusterConfigError, loginConnection, migrationConnection } from "#pantry/db/connection.ts";
+import {
+  ClusterConfigError,
+  loginConnection,
+  migrationConnection,
+  PasswordCommandFailed,
+  PasswordCommandSilent,
+} from "#pantry/db/connection.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -303,6 +309,47 @@ const environmentOf = (settings: Settings, scratch: Scratch): Environment => {
 
   return environment;
 };
+
+/**
+ * The password commands a case names, by what each does: print a role's password with whitespace
+ * around it, exit 3, print only whitespace, or print one from a path that holds a space and a
+ * semicolon, which a shell would split; and two settings that name no executable.
+ */
+const commandScripts = [
+  { file: "failing.sh", text: "#!/bin/sh\nprintf 'partial'\nexit 3\n", variant: "failing" },
+  {
+    file: "printing.sh",
+    text: "#!/bin/sh\nprintf '  password of %s  \\n' \"$1\"\n",
+    variant: "printing",
+  },
+  { file: "silent.sh", text: "#!/bin/sh\nprintf '   \\n'\n", variant: "silent" },
+  {
+    file: "pass word; echo shell.sh",
+    text: "#!/bin/sh\nprintf 'spaced password of %s' \"$1\"\n",
+    variant: "spaced",
+  },
+] as const;
+
+/**
+ * Each variant of `GR8DES_PG_PASSWORD_COMMAND`: unset or empty, which leave the local passwords,
+ * one of {@link commandScripts}, a path no file is at, and shell text, which names no executable.
+ */
+const commandVariants = [
+  "unset",
+  "empty",
+  "printing",
+  "failing",
+  "silent",
+  "spaced",
+  "missing",
+  "shell text",
+] as const;
+
+/**
+ * What a password command case reaches: a local password, a command's password, or each way a
+ * command fails.
+ */
+type CommandReached = "command" | "exited" | "local" | "not run" | "silent";
 
 /**
  * The password a connection authenticates with, as grizzle reads it for one attempt.
@@ -618,6 +665,132 @@ layer(NodeServices.layer)("db/connection.ts, under scripts/db.sh's settings", (i
 
                 assert.strictEqual(built.success.migration.role, Option.getOrThrow(role.value));
                 assert.notProperty(built.success.login, "role");
+              }),
+          ),
+        );
+      }),
+  );
+  it.effect(
+    "runs GR8DES_PG_PASSWORD_COMMAND, never a shell, with the role as its one argument at each connection attempt of either connection, its output trimmed the password, in place of both local passwords, and fails the attempt with CredentialError when it exits otherwise than 0, prints no password or names no executable: every variant, exhausted",
+    (ctx) =>
+      Effect.gen(function* passwordCommands() {
+        const fs = yield* FileSystem.FileSystem;
+        const scratch = yield* scratchFolders;
+        for (const { file, text } of commandScripts) {
+          yield* fs.writeFileString(`${scratch.secrets}/${file}`, text);
+          yield* fs.chmod(`${scratch.secrets}/${file}`, 0o755);
+        }
+
+        return yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: "every variant of the password command, for the migration identity and for the login",
+              caseHang: Duration.seconds(10),
+              coverage: requiredInSpace<CommandReached>([
+                "command",
+                "exited",
+                "local",
+                "not run",
+                "silent",
+              ]),
+              generator: (source) => ({
+                side: source.draw(element(["migration", "login"] as const)),
+                variant: source.draw(element(commandVariants)),
+              }),
+              limit: commandVariants.length * 2,
+              literal: Formatter.format,
+              oracle: {
+                kind: "specification",
+                name: "GR8DES_PG_PASSWORD_COMMAND as scripts/db.sh and the edullm sign-in run it",
+              },
+              suite: "db/connection/password-command",
+            },
+            ({ side, variant }, c) =>
+              Effect.gen(function* oneCase() {
+                const environment: Environment & { GR8DES_PG_PASSWORD_COMMAND?: string } = {
+                  GR8DES_PG_MIGRATION_PASSWORD: migrationPassword,
+                  GR8DES_PG_SECRETS: scratch.secrets,
+                  HOME: scratch.home,
+                };
+                const role = side === "migration" ? "grizzle_dev" : login;
+                if (variant === "empty") {
+                  environment.GR8DES_PG_PASSWORD_COMMAND = "";
+                }
+
+                if (variant === "missing") {
+                  environment.GR8DES_PG_PASSWORD_COMMAND = `${scratch.secrets}/no-such-command`;
+                }
+
+                if (variant === "shell text") {
+                  environment.GR8DES_PG_PASSWORD_COMMAND = `echo ${role}`;
+                }
+
+                const script = commandScripts.find((named) => named.variant === variant);
+                if (script !== undefined) {
+                  environment.GR8DES_PG_PASSWORD_COMMAND = `${scratch.secrets}/${script.file}`;
+                }
+
+                const provider = ConfigProvider.layer(ConfigProvider.fromUnknown(environment));
+                const password =
+                  side === "migration"
+                    ? (yield* migrationConnection.pipe(Effect.provide(provider))).password
+                    : (yield* loginConnection(login).pipe(Effect.provide(provider))).password;
+                const read = yield* passwordText(password).pipe(
+                  Effect.result,
+                  Effect.provide(provider),
+                );
+
+                if (variant === "unset" || variant === "empty") {
+                  c.note("local");
+                  assert.deepStrictEqual(
+                    read,
+                    Result.succeed(side === "migration" ? migrationPassword : secretsPassword),
+                  );
+
+                  return;
+                }
+
+                if (variant === "printing" || variant === "spaced") {
+                  c.note("command");
+                  assert.deepStrictEqual(
+                    read,
+                    Result.succeed(
+                      variant === "printing" ? `password of ${role}` : `spaced password of ${role}`,
+                    ),
+                  );
+
+                  return;
+                }
+
+                const failure = Result.isFailure(read) ? read.failure : undefined;
+
+                assert.strictEqual(failure?._tag, "CredentialError", variant);
+
+                const cause: unknown = failure?.cause;
+                if (variant === "failing") {
+                  c.note("exited");
+                  assert.instanceOf(cause, PasswordCommandFailed);
+                  assert.deepStrictEqual(
+                    cause instanceof PasswordCommandFailed
+                      ? { exitCode: cause.exitCode, role: cause.role }
+                      : undefined,
+                    { exitCode: 3, role },
+                  );
+
+                  return;
+                }
+
+                if (variant === "silent") {
+                  c.note("silent");
+                  assert.instanceOf(cause, PasswordCommandSilent);
+
+                  return;
+                }
+
+                c.note("not run");
+                assert.notInstanceOf(cause, PasswordCommandFailed);
+                assert.notInstanceOf(cause, PasswordCommandSilent);
               }),
           ),
         );
