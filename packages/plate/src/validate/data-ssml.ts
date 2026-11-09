@@ -32,17 +32,28 @@ const enumeration = <const Values extends readonly [string, ...string[]]>(values
 };
 
 /**
+ * The Schema of a property the binding types NormalizedString: a string that holds no tab, line
+ * feed or carriage return, as JSON decodes it, so the escape `\t` is a tab.
+ *
+ * R7-a (a `data-ssml` value is Data-SSML JSON): "`time` and `rate` are any normalized string … so
+ * no tab, line feed or carriage return in their decoded value". A filter, as an
+ * {@link enumeration}'s refinement is, so a string holding one fails as `value` and a value of
+ * another JSON type still fails as the string it is not.
+ */
+const normalizedString = Schema.String.pipe(Schema.check(Schema.isPattern(/^[^\t\n\r]*$/u)));
+
+/**
  * The Schema of `BreakDType` (§3.4.5.1): a pause, by `strength` or by `time`.
  *
- * `time` is a NormalizedString the binding writes in CSS's time format (`250ms`, `3s`); its JSON
- * Schema types it a string, and a string is all this checks, so neither the normalized string's
- * lexical space nor the time format is judged (a documented limit, rule `db2ef322`).
+ * `time` is a NormalizedString the binding writes in CSS's time format (`250ms`, `3s`). The
+ * normalized string's whitespace is judged ({@link normalizedString}); the time format is not (a
+ * documented limit, rule `db2ef322`), since the binding's JSON Schema types `time` a string.
  */
 const Break = Schema.Struct({
   strength: Schema.optionalKey(
     enumeration(["medium", "none", "strong", "weak", "x-strong", "x-weak"]),
   ),
-  time: Schema.optionalKey(Schema.String),
+  time: Schema.optionalKey(normalizedString),
 });
 
 /**
@@ -58,12 +69,12 @@ const Phoneme = Schema.Struct({
 /**
  * The Schema of `ProsodyDType` (§3.4.5.4): a speaking `rate`.
  *
- * The binding's JSON Schema gives `rate` as any of six words or a NormalizedString, so any string
- * is a `rate`; the percentage its description names is not judged (a documented limit, rule
- * `db2ef322`).
+ * The binding's JSON Schema gives `rate` as any of six words or a NormalizedString, so any
+ * normalized string is a `rate`: its whitespace is judged ({@link normalizedString}), and the
+ * percentage its description names is not (a documented limit, rule `db2ef322`).
  */
 const Prosody = Schema.Struct({
-  rate: Schema.optionalKey(Schema.String),
+  rate: Schema.optionalKey(normalizedString),
 });
 
 /**
@@ -104,7 +115,8 @@ export const DataSsml = Schema.Struct({
  * - `type`: a value is not of the JSON type its place takes, or an object lacks a property it
  *   requires: the value as a whole is not an object, a property holds a number where it takes a
  *   string or a string where it takes an object, or `sub` has no `alias`.
- * - `value`: a string is not one of the values its property's enumeration lists.
+ * - `value`: a string is not one of the values its property's enumeration lists, or a
+ *   NormalizedString property (`time`, `rate`) holds a tab, line feed or carriage return.
  */
 export type DataSsmlProblem = "json" | "name" | "type" | "value";
 
@@ -115,7 +127,7 @@ const problemTexts: Readonly<Record<DataSsmlProblem, string>> = {
   json: "is not JSON",
   name: "holds a property Data-SSML does not define",
   type: "holds a value of a JSON type Data-SSML does not allow there, or lacks a property it requires",
-  value: "holds a value its property's list does not include",
+  value: "holds a value outside what its property allows",
 };
 
 /**
@@ -138,9 +150,9 @@ export class InvalidDataSsml extends Data.TaggedError("InvalidDataSsml")<{
  *
  * The decoder reports the first issue only, so each composite holds one path down to it.
  * `Encoding` is the JSON parse's own failure, above every leaf the parsed value can give; a
- * `Filter` is an {@link enumeration}'s refinement. `AnyOf`, `OneOf` and `Forbidden` arise from no
- * input under {@link DataSsml}, which holds no union and no forbidden key; they are named with the
- * leaves they resemble so the mapping is total.
+ * `Filter` is an {@link enumeration}'s refinement or {@link normalizedString}'s check. `AnyOf`,
+ * `OneOf` and `Forbidden` arise from no input under {@link DataSsml}, which holds no union and no
+ * forbidden key; they are named with the leaves they resemble so the mapping is total.
  *
  * @param issue The issue.
  * @returns The problem.
@@ -191,6 +203,11 @@ const decodeJson = Schema.decodeUnknownResult(Schema.fromJsonString(DataSsml), {
  *
  * Every serialization the binding allows (§4.1: single quotes around the attribute, or its double
  * quotes written as entities) reaches here as the same text, so none is preferred.
+ *
+ * A documented limit (rule `db2ef322`; no corpus document holds `data-ssml`): R7-a accepts a name
+ * written twice in one object and judges each of its values, but `fromJsonString` parses with
+ * `JSON.parse`, which keeps the last, so only the last value is judged here. Lifting it needs a
+ * JSON reader that keeps duplicate names.
  *
  * @param value The attribute's value.
  * @returns The decoded value, or {@link InvalidDataSsml} naming the first problem found.

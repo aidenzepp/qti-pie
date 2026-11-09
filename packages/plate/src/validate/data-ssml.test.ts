@@ -94,4 +94,27 @@ describe("decodeDataSsml", () => {
       ["value", "value", "value", "value", "value"],
     );
   });
+
+  it("align-54 R3 SSML whitespace F10: names a tab, line feed or carriage return in break.time or prosody.rate value", () => {
+    assert.deepStrictEqual(
+      [
+        '{"break":{"time":"1\\ts"}}',
+        '{"break":{"time":"1\\ns"}}',
+        '{"break":{"time":"1\\rs"}}',
+        '{"prosody":{"rate":"fast\\n"}}',
+      ].map(problemOf),
+      ["value", "value", "value", "value"],
+    );
+  });
+
+  it("align-54 R3 SSML whitespace F10: decodes a time and a rate that hold no tab, line feed or carriage return", () => {
+    assert.deepStrictEqual(
+      [
+        '{"break":{"time":"250ms"}}',
+        '{"prosody":{"rate":"x-slow"}}',
+        '{"prosody":{"rate":"120%"}}',
+      ].map(problemOf),
+      ["none", "none", "none"],
+    );
+  });
 });
