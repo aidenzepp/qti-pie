@@ -28,7 +28,6 @@ import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { DocumentId, IdBinding } from "#pantry/qti/identity.ts";
 import { Node } from "#pantry/qti/node.ts";
-import { NamedHref, TypedHref } from "#pantry/qti/package.ts";
 import { accumulatorOf, columnKeys, pinned, statedInserts } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
 
@@ -101,24 +100,6 @@ const chain: readonly Stated[] = [
 ];
 
 /**
- * A typed resource's href with its owner, the (path, type) pair it names, as package.db's
- * containment cases state it.
- */
-const href: readonly Stated[] = [
-  { fact: { package: "P", path: "item.xml", type: "imsqti_item_xmlv3p0" }, relation: NamedHref },
-  {
-    fact: {
-      node: "S",
-      package: "P",
-      path: "item.xml",
-      scope: "entry",
-      type: "imsqti_item_xmlv3p0",
-    },
-    relation: TypedHref,
-  },
-];
-
-/**
  * One id twice under one parent, as identity.db states it: the document, the id's binding, and
  * the two IDs that carry it, each a member of the binding's family and the document's.
  */
@@ -142,8 +123,8 @@ const tablesOf = (stated: readonly Stated[]) => statedInserts(stated).map(({ tab
 describe("the direct writer's order and slots", () => {
   it("writes every owner before its members, whatever order the facts are stated in", () => {
     // Oracle: the schema's own family statements (each member after its owner) and the hand
-    // order expressions.db and package.db kept before the writer derived it.
-    // Bound: every permutation of the reference chain (120) and of the href's (2).
+    // order expressions.db kept before the writer derived it.
+    // Bound: every permutation of the reference chain (120).
     for (const order of permutations(chain)) {
       const tables = tablesOf(order);
 
@@ -151,18 +132,12 @@ describe("the direct writer's order and slots", () => {
       assert.isBelow(tables.indexOf("test_reference"), tables.indexOf("assembled_reference"));
       assert.isBelow(tables.indexOf("assembled_reference"), tables.indexOf("reading"));
     }
-
-    for (const order of permutations(href)) {
-      const tables = tablesOf(order);
-
-      assert.isBelow(tables.indexOf("named_href"), tables.indexOf("typed_href"));
-    }
   });
 
   it("fills each owner's counts and each member's index and copy from its family", () => {
-    // Oracle: the values expressions.db and package.db wrote by hand before the writer derived
+    // Oracle: the values expressions.db wrote by hand before the writer derived
     // them, each family's comment as grizzle installs it.
-    // Bound: the reference chain and the href, stated in order.
+    // Bound: the reference chain, stated in order.
     const inserts = statedInserts(chain);
 
     assert.strictEqual(inserts[0]?.row["references"], "1");
@@ -177,10 +152,6 @@ describe("the direct writer's order and slots", () => {
         "the owner's count of the family AssembledReference.readings": 3,
       })),
     );
-    assert.deepStrictEqual(statedInserts(href)[1]?.hidden, {
-      "the index of the family NamedHref.names": 0,
-      "the owner's count of the family NamedHref.names": 1,
-    });
   });
 
   it("gives two members of two counted families distinct slots under each owner, whatever order they are stated in", () => {

@@ -42,7 +42,6 @@ import {
   FileHref,
   ManifestIdSpace,
   manifestPath,
-  NamedHref,
   Package,
   Reference,
   ReferencePath,
@@ -50,9 +49,9 @@ import {
   ResourceFile,
   ResourceHref,
   ResourceTyped,
-  TypedHref,
 } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   codeOf,
@@ -63,6 +62,7 @@ import {
   statedInserts,
 } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
+import { checkConstraintOf } from "#pantry/test/judged-laws.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -321,8 +321,8 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
 
       it.effect("refuses a projection row no member names, by its count above 0", () =>
         // Oracle: PostgreSQL, each projection's count CHECK: a FileHref no file names breaks "File
-        // listed", a ResourceFile no file names "Href listed", a NamedHref no resource href names
-        // "RootOfType". grizzle draws each count from the members, 0 here.
+        // listed", a ResourceFile no file names "Href listed". grizzle draws each count from the
+        // members, 0 here.
         // Bound: one row of each projection, each alone.
         Effect.gen(function* emptyProjections() {
           const db = yield* Db.open(AuthorApp.roles.author, {});
@@ -340,13 +340,6 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               ]),
               law: checkNamed("ResourceFile", "Href_listed"),
               name: "ResourceFile",
-            },
-            {
-              changes: ChangeSet.empty(Author).insert(NamedHref, [
-                { package: stray, path: "a.xml", type: "imsqti_item_xmlv3p0" },
-              ]),
-              law: checkNamed("NamedHref", "RootOfType"),
-              name: "NamedHref",
             },
           ] as const;
           for (const { changes, law, name } of cases) {
@@ -474,7 +467,6 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           //   reads no name from, and a srcset of two candidates or with a descriptor whatever
           //   its scope, external, or resolved in the package as the importer resolves every
           //   srcset, as one href;
-          // - Document_entry: a document-typed resource href outside the package;
           // - Self_dependency: a dependency whose identifierref names its own resource, its target
           //   (CP 1.2 §6.11.5 B ii).
           // Bound: one row per case.
@@ -506,7 +498,6 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               package: stray,
               path: "a.xml",
               scope: "entry",
-              typeLexical: "webcontent",
             } as const;
             const fileOf = (path: string, scope: "entry" | "unresolved") =>
               ChangeSet.empty(Author)
@@ -533,26 +524,6 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                   ChangeSet.empty(Author).insert(ResourceHref, [
                     { ...resourceHref, href: "a%zz.xml", path: "a%zz.xml", scope: "unresolved" },
                   ]),
-                  {},
-                ),
-              },
-              {
-                law: checkNamed("TypedHref", "Document_entry"),
-                name: "document-typed resource href outside the package",
-                outcome: db.apply(
-                  ChangeSet.empty(Author)
-                    .insert(NamedHref, [
-                      { package: stray, path: "http://x.org/a.xml", type: "imsqti_item_xmlv3p0" },
-                    ])
-                    .insert(TypedHref, [
-                      {
-                        node: stray,
-                        package: stray,
-                        path: "http://x.org/a.xml",
-                        scope: "external",
-                        type: "imsqti_item_xmlv3p0",
-                      },
-                    ]),
                   {},
                 ),
               },
@@ -680,8 +651,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           // Oracle: PostgreSQL, each containment's foreign key, set immediate alone: 23503 on it.
           // - href-listed: a resource href's (scope, path) no file of its resource lists (CP 1.2
           //   §6.6.2, reading 102);
-          // - entry-kind: a document-typed href that is no document of its type (reading 93), and a
-          //   document-typed href, and a document, that is no entry of the record;
+          // - entry-kind: a document that is no entry of the record;
           // - a dependency whose identifierref names no resource of its package (CP 1.2 §6.11.5 B);
           // - file-exists: a file whose href resolves in the package, and a resolved reference, each
           //   naming no entry (CP 1.2 InterchangePackage (b) and (d));
@@ -689,9 +659,8 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           //   (information model §7.6, the UP audit's B5).
           // Bound: one stray row per containment, written to its table with every column a direct
           // writer fills (README, "Direct SQL access"), after the owners its families' owner axes
-          // read, which PostgreSQL judges at the member's INSERT: a typed href's NamedHref, a
-          // file's FileHref and ResourceFile, each lawful on its own CHECKs and counting the one
-          // member.
+          // read, which PostgreSQL judges at the member's INSERT: a file's FileHref and
+          // ResourceFile, each lawful on its own CHECKs and counting the one member.
           Effect.gen(function* containments() {
             const client = yield* loginSession;
             const itemHref: readonly Stated[] = [
@@ -702,25 +671,8 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                   package: stray,
                   path: "item.xml",
                   scope: "entry",
-                  typeLexical: "imsqti_item_xmlv3p0",
                 },
                 relation: ResourceHref,
-              },
-            ];
-            const typedItemHref: readonly Stated[] = [
-              {
-                fact: { package: stray, path: "item.xml", type: "imsqti_item_xmlv3p0" },
-                relation: NamedHref,
-              },
-              {
-                fact: {
-                  node: stray,
-                  package: stray,
-                  path: "item.xml",
-                  scope: "entry",
-                  type: "imsqti_item_xmlv3p0",
-                },
-                relation: TypedHref,
               },
             ];
             const cases = [
@@ -729,11 +681,6 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                   "foreign key ResourceHref(node, scope, path) to ResourceFile(resource, scope, path)",
                 inserts: itemHref,
                 table: "resource_href",
-              },
-              {
-                comment: "foreign key TypedHref(package where",
-                inserts: typedItemHref,
-                table: "typed_href",
               },
               {
                 comment: "foreign key Document(package, path) to Entry(package, path)",
@@ -847,6 +794,53 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 assert.strictEqual(refused?.constraint, key, comment);
               }
             }
+          }).pipe(Effect.scoped),
+        { timeout: leaseTestTimeoutMs },
+      );
+
+      it.effect(
+        "refuses a document-typed resource href outside the package, by the rule over its typed href",
+        () =>
+          // Oracle: PostgreSQL, "Document entry"'s check over the query `TypedHref`
+          // (`src/qti/queries.ts`; README, "Rules over queries"): a deferred constraint trigger on
+          // each table the query reads, under the check's own name, set immediate alone, which
+          // raises 23514 under that name for a typed href of a document type outside the package
+          // (reading 93).
+          // Bound: one resource href, external, beside its resource's item type, each row lawful
+          // on its own CHECKs.
+          Effect.gen(function* typedHrefOutside() {
+            const client = yield* loginSession;
+            const rule = checkConstraintOf(Qti, "TypedHref", "Document_entry");
+            const refused = Option.getOrUndefined(
+              yield* judged(
+                client,
+                statedInserts([
+                  {
+                    fact: {
+                      href: "http://x.org/a.xml",
+                      node: stray,
+                      package: stray,
+                      path: "http://x.org/a.xml",
+                      scope: "external",
+                    },
+                    relation: ResourceHref,
+                  },
+                  {
+                    fact: {
+                      node: stray,
+                      package: stray,
+                      type: "imsqti_item_xmlv3p0",
+                      typeLexical: "imsqti_item_xmlv3p0",
+                    },
+                    relation: ResourceTyped,
+                  },
+                ]),
+                [rule],
+              ),
+            );
+
+            assert.strictEqual(refused?.code, "23514", rule);
+            assert.strictEqual(refused?.constraint, rule);
           }).pipe(Effect.scoped),
         { timeout: leaseTestTimeoutMs },
       );

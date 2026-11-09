@@ -33,7 +33,6 @@ import type {
   FileHref,
   ManifestId,
   ManifestIdSpace,
-  NamedHref,
   Reference,
   ReferencePath,
   Resource,
@@ -41,7 +40,6 @@ import type {
   ResourceHref,
   ResourceId,
   ResourceTyped,
-  TypedHref,
 } from "#pantry/qti/package.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
@@ -69,13 +67,11 @@ export interface PackageRows {
   readonly FileHref: ReadonlyMap<string, Addition<typeof FileHref>>;
   readonly ManifestId: ReadonlyMap<string, Addition<typeof ManifestId>>;
   readonly ManifestIdSpace: ReadonlyMap<string, Addition<typeof ManifestIdSpace>>;
-  readonly NamedHref: ReadonlyMap<string, Addition<typeof NamedHref>>;
   readonly Resource: ReadonlyMap<string, Addition<typeof Resource>>;
   readonly ResourceFile: ReadonlyMap<string, Addition<typeof ResourceFile>>;
   readonly ResourceHref: ReadonlyMap<string, Addition<typeof ResourceHref>>;
   readonly ResourceId: ReadonlyMap<string, Addition<typeof ResourceId>>;
   readonly ResourceTyped: ReadonlyMap<string, Addition<typeof ResourceTyped>>;
-  readonly TypedHref: ReadonlyMap<string, Addition<typeof TypedHref>>;
 }
 
 /**
@@ -92,13 +88,11 @@ export const noPackageRows: PackageRows = {
   FileHref: new Map(),
   ManifestId: new Map(),
   ManifestIdSpace: new Map(),
-  NamedHref: new Map(),
   Resource: new Map(),
   ResourceFile: new Map(),
   ResourceHref: new Map(),
   ResourceId: new Map(),
   ResourceTyped: new Map(),
-  TypedHref: new Map(),
 };
 
 /**
@@ -735,23 +729,14 @@ const dependencyTargetsOf = (
 };
 
 /**
- * The `type` a `cp:resource` that writes none is held under, `Resource`'s and `ResourceHref`'s
- * `typeLexical` (`#pantry/qti/package.ts`): the empty form, which spells no handle, as an unspelled
- * written form does, so no `ResourceTyped` or `TypedHref` row stands for it and AL3 refuses the
- * resource alone. It is a field of both rows rather than a row of its own because a typed
- * resource's href is required to have its `TypedHref` without a join of the two optional parts.
- */
-const unwrittenType = "";
-
-/**
  * Build the overlay rows of a package's manifest.
  *
  * An element's identifier is a row only where it is written: a `cp:manifest`'s is its
  * `ManifestId`, a `cp:resource`'s its `ResourceId`, each beside its row of the package's
  * identifier space (`ManifestIdSpace`). A row whose existence an attribute's copy proves is left
  * out where the attribute is absent (a `cp:file`'s `href`, a `cp:dependency`'s `identifierref`),
- * and a resource's `href` is a row only where it is written; AL3 refuses an absent required
- * attribute. A resource's absent `type` is held as {@link unwrittenType}.
+ * and a resource's `href` and its `type`'s code are each a row only where it is written and, for
+ * the code, spelled; AL3 refuses an absent required attribute.
  *
  * A dependency names the resource whose identifier its `identifierref` is, its own where its own
  * resource's is (`DependencyTarget`), and none where no resource's is.
@@ -786,13 +771,11 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
   const fileHrefs = new Map<string, Addition<typeof FileHref>>();
   const idSpace = new Map<string, Addition<typeof ManifestIdSpace>>();
   const manifests = new Map<string, Addition<typeof ManifestId>>();
-  const namedHrefs = new Map<string, Addition<typeof NamedHref>>();
   const resources = new Map<string, Addition<typeof Resource>>();
   const resourceFiles = new Map<string, Addition<typeof ResourceFile>>();
   const resourceHrefs = new Map<string, Addition<typeof ResourceHref>>();
   const resourceIds = new Map<string, Addition<typeof ResourceId>>();
   const resourceTypes = new Map<string, Addition<typeof ResourceTyped>>();
-  const typedHrefs = new Map<string, Addition<typeof TypedHref>>();
   const spaceOf = (identifier: string, kind: "cp:manifest" | "cp:resource"): void => {
     idSpace.set(headingKey([ids.package, identifier, kind]), {
       identifier,
@@ -815,54 +798,32 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
     }
 
     if (node.kind === "cp:resource") {
-      const typeLexical = Option.getOrElse(valueOf(node, "type"), () => unwrittenType);
-      const type = typeOf(typeLexical);
-
-      resources.set(node.id, {
-        ...tupleOf(node),
-        package: ids.package,
-        parent: node.parent,
-        typeLexical,
-      });
+      resources.set(node.id, { ...tupleOf(node), package: ids.package, parent: node.parent });
       for (const identifier of Option.toArray(valueOf(node, "identifier"))) {
         resourceIds.set(node.id, { identifier, node: node.id, package: ids.package });
         spaceOf(identifier, "cp:resource");
       }
 
-      for (const code of Option.toArray(type)) {
-        resourceTypes.set(node.id, {
-          node: node.id,
-          package: ids.package,
-          type: code,
-          typeLexical,
-        });
+      for (const typeLexical of Option.toArray(valueOf(node, "type"))) {
+        for (const code of Option.toArray(typeOf(typeLexical))) {
+          resourceTypes.set(node.id, {
+            node: node.id,
+            package: ids.package,
+            type: code,
+            typeLexical,
+          });
+        }
       }
 
       for (const href of Option.toArray(valueOf(node, "href"))) {
         const resolution = resolve(node.id, href);
-        const path = comparedPathOf(resolution, href);
         resourceHrefs.set(node.id, {
           href,
           node: node.id,
           package: ids.package,
-          path,
+          path: comparedPathOf(resolution, href),
           scope: resolution.scope,
-          typeLexical,
         });
-        for (const code of Option.toArray(type)) {
-          typedHrefs.set(node.id, {
-            node: node.id,
-            package: ids.package,
-            path,
-            scope: resolution.scope,
-            type: code,
-          });
-          namedHrefs.set(headingKey([ids.package, path, code]), {
-            package: ids.package,
-            path,
-            type: code,
-          });
-        }
       }
     }
 
@@ -905,15 +866,46 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
     FileHref: fileHrefs,
     ManifestId: manifests,
     ManifestIdSpace: idSpace,
-    NamedHref: namedHrefs,
     Resource: resources,
     ResourceFile: resourceFiles,
     ResourceHref: resourceHrefs,
     ResourceId: resourceIds,
     ResourceTyped: resourceTypes,
-    TypedHref: typedHrefs,
   };
 };
+
+/**
+ * A typed href as the host reads it: a resource's `ResourceHref` beside its `ResourceTyped`'s code.
+ */
+export type TypedHrefRow = Pick<
+  Addition<typeof ResourceHref>,
+  "node" | "package" | "path" | "scope"
+> &
+  Pick<Addition<typeof ResourceTyped>, "type">;
+
+/**
+ * Read the typed hrefs of a manifest's rows: each resource's href beside the code its `type`
+ * spells, the rows of the query `TypedHref` (`#pantry/qti/queries.ts`), which no table stores. The
+ * importer reads them on the host before it writes a row, to name the documents it reads
+ * ({@link namedDocuments}) and the resources an item ref names; the database reads the same join
+ * where a rule over the query judges the rows written.
+ *
+ * @param rows - The manifest's overlay rows.
+ * @returns The typed hrefs, in the manifest's order: none for a resource with no href, or whose
+ *   `type` spells no handle.
+ */
+export const typedHrefsOf = (
+  rows: Pick<PackageRows, "ResourceHref" | "ResourceTyped">,
+): readonly TypedHrefRow[] =>
+  [...rows.ResourceHref.values()].flatMap(({ node, package: pkg, path, scope }) =>
+    Option.toArray(Option.fromUndefinedOr(rows.ResourceTyped.get(node))).map(({ type }) => ({
+      node,
+      package: pkg,
+      path,
+      scope,
+      type,
+    })),
+  );
 
 /**
  * Name the documents a manifest's resources name (reading 93): each pair of the entry path an href
@@ -931,7 +923,7 @@ export const namedDocuments = (
   rows: PackageRows,
 ): ReadonlyMap<string, { readonly path: string; readonly type: ResourceTypeHandle }> =>
   new Map(
-    [...rows.TypedHref.values()].flatMap(({ path, scope, type }) =>
+    typedHrefsOf(rows).flatMap(({ path, scope, type }) =>
       scope === "entry" && documentTyped.has(type)
         ? [[headingKey([path, type]), { path, type }] as const]
         : [],

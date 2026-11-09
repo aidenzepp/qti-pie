@@ -442,7 +442,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     93,
     {
       owner:
-        "P2 and P3 over `ResourceHref` and `NamedHref` (`src/qti/package.ts`): a document-typed resource names the document at its href, and every document but the manifest is one a resource names; the importer reads documents through `namedDocuments` (`src/import/overlays/package.ts`)",
+        "P2 and P3 over the query `TypedHref` (`src/qti/queries.ts`): a document-typed resource names the document at its href, and every document but the manifest is one a resource names; the importer reads documents through `namedDocuments` (`src/import/overlays/package.ts`)",
       status: "G",
     },
   ],

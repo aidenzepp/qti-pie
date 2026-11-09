@@ -205,7 +205,6 @@ import {
   HrefScope,
   ManifestId,
   ManifestIdSpace,
-  NamedHref,
   Package,
   packageLaws,
   Reference,
@@ -216,7 +215,6 @@ import {
   ResourceHref,
   ResourceId,
   ResourceTyped,
-  TypedHref,
 } from "#pantry/qti/package.ts";
 import { quotationLaws, quotationRelations } from "#pantry/qti/quotation.ts";
 import { testLaws, testRelations } from "#pantry/qti/tests.ts";
@@ -361,7 +359,6 @@ const packageRelations = {
   HrefScope,
   ManifestId,
   ManifestIdSpace,
-  NamedHref,
   Package,
   Reference,
   ReferencePath,
@@ -371,7 +368,6 @@ const packageRelations = {
   ResourceHref,
   ResourceId,
   ResourceTyped,
-  TypedHref,
 };
 
 /**

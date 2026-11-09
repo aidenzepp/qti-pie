@@ -320,9 +320,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                   const hrefNodes = new Set(hrefs.map(({ node }) => node));
                   const files = [...inputs.File.values()];
-                  const typed = [...inputs.ResourceTyped.values()];
-                  const bare = [...inputs.Resource.values()].filter(
-                    ({ node, typeLexical }) => typeLexical === "webcontent" && !hrefNodes.has(node),
+                  const bare = [...inputs.ResourceTyped.values()].filter(
+                    ({ node, type }) => type === "webcontent" && !hrefNodes.has(node),
                   );
                   assert.lengthOf(bare, hrefless(of).length, said);
                   for (const resource of bare) {
@@ -330,37 +329,19 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                       files,
                       ({ resource: owner }) => owner === resource.node,
                     );
-                    const type = Arr.findFirst(typed, ({ node }) => node === resource.node);
                     assert.isTrue(Option.isSome(file), `${said}: the resource's file`);
-                    assert.isTrue(Option.isSome(type), `${said}: the resource's type`);
-                    if (Option.isSome(file) && Option.isSome(type)) {
-                      // The href a writer plants is its resource's own file's, and, as the import
-                      // writes a typed resource's href, its TypedHref and its (path, type) pair.
+                    if (Option.isSome(file)) {
+                      // The href a writer plants is its resource's own file's; its typed href is
+                      // the query `TypedHref`'s, which no row stores.
                       const { href, path, scope } = file.value;
-                      const pair = { package: resource.package, path, type: type.value.type };
                       const planted: PackageInputs = {
                         ...inputs,
-                        NamedHref: new Map([
-                          ...inputs.NamedHref,
-                          [JSON.stringify([pair.package, pair.path, pair.type]), pair],
-                        ]),
                         ResourceHref: new Map([
                           ...inputs.ResourceHref,
                           [
                             resource.node,
-                            {
-                              href,
-                              node: resource.node,
-                              package: resource.package,
-                              path,
-                              scope,
-                              typeLexical: resource.typeLexical,
-                            },
+                            { href, node: resource.node, package: resource.package, path, scope },
                           ],
-                        ]),
-                        TypedHref: new Map([
-                          ...inputs.TypedHref,
-                          [resource.node, { ...pair, node: resource.node, scope }],
                         ]),
                       };
                       const broken = newlyBroken(planted, inputs, minted);

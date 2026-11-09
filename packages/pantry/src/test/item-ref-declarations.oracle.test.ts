@@ -802,6 +802,15 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
   const hrefs = [...inputs.Reference.values()].filter(
     ({ kind, name }) => kind === "qti-assessment-item-ref" && name === "href",
   );
+  // The (path, type) pairs the package's resources name: each resource's href beside its type's
+  // code, where it has both.
+  const named = [...inputs.ResourceHref.values()].flatMap(({ node, package: held, path }) =>
+    Option.toArray(Option.fromUndefinedOr(inputs.ResourceTyped.get(node))).map(({ type }) => ({
+      package: held,
+      path,
+      type,
+    })),
+  );
   const found = [...inputs.NameLookup.values()].filter(
     ({ found: held, kind, resourceType }) =>
       held && kind === "qti-assessment-item-ref" && resourceType !== "none",
@@ -812,7 +821,7 @@ const itemRefBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
     ...targets.flatMap((target) => [
       ...unless(itemTypes.has(target.type), law, ""),
       ...unless(
-        [...inputs.NamedHref.values()].some(
+        named.some(
           ({ package: held, path, type }) =>
             held === target.package && path === target.path && type === target.type,
         ),

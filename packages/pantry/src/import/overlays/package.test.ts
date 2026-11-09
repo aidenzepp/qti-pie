@@ -33,6 +33,7 @@ import {
   referencePiecesOf,
   referenceRowsOf,
   rowsOf,
+  typedHrefsOf,
 } from "#pantry/import/overlays/package.ts";
 import type {
   DocumentIds,
@@ -79,9 +80,10 @@ const TestLayer = NodeChildProcessSpawner.layer.pipe(
 const ids: ManifestIds = { idOf, package: "00000000-0000-4000-8000-0000000000aa" };
 
 /**
- * One overlay row as the walk expects it: its relation and its fields.
+ * One overlay row as the walk expects it: its relation and its fields, and the typed hrefs
+ * (`typedHrefsOf`), which no relation stores, by the resource's node.
  */
-type Expected = { readonly [Relation in keyof PackageRows]: Map<string, object> };
+type Expected = { readonly [Relation in keyof PackageRows | "TypedHref"]: Map<string, object> };
 
 /**
  * The text of a projection's key: its heading's values as a JSON array.
@@ -108,17 +110,15 @@ const manifestHrefOf = (href: string, bases: readonly string[]) => {
 
 /**
  * Expect a resource's `href` rows: its `ResourceHref`, resolved by the oracle; and where its type
- * spells a handle, its `TypedHref` and the `NamedHref` of its compared path and type.
+ * spells a handle, its typed href, of its compared path and type.
  *
  * @param expected - The walk's rows so far.
- * @param resource - The resource's href, node, package, type and its lexical form, and the bases
- *   in scope.
+ * @param resource - The resource's href, node, package and type, and the bases in scope.
  * @param resource.bases - The `xml:base` values in scope, its own last.
  * @param resource.href - Its href.
  * @param resource.node - Its node.
  * @param resource.pkg - Its package.
  * @param resource.type - The handle its type spells, none where it spells none.
- * @param resource.typeLexical - Its type as written.
  */
 const expectHref = (
   expected: Expected,
@@ -128,15 +128,13 @@ const expectHref = (
     readonly node: NodeId;
     readonly pkg: string;
     readonly type: Option.Option<string>;
-    readonly typeLexical: string;
   },
 ): void => {
-  const { bases, href, node, pkg, type, typeLexical } = resource;
+  const { bases, href, node, pkg, type } = resource;
   const { path: at, scope } = manifestHrefOf(href, bases);
-  expected.ResourceHref.set(node, { href, node, package: pkg, path: at, scope, typeLexical });
+  expected.ResourceHref.set(node, { href, node, package: pkg, path: at, scope });
   for (const code of Option.toArray(type)) {
     expected.TypedHref.set(node, { node, package: pkg, path: at, scope, type: code });
-    expected.NamedHref.set(heading([pkg, at, code]), { package: pkg, path: at, type: code });
   }
 };
 
@@ -145,32 +143,37 @@ const expectHref = (
  * its href's rows where it writes one ({@link expectHref}).
  *
  * @param expected - The walk's rows so far.
- * @param resource - The resource's row, its href if written, the bases in scope and the spelled
- *   types.
+ * @param resource - The resource's row, its href and its type if written, the bases in scope and
+ *   the spelled types.
  * @param resource.bases - The `xml:base` values in scope, its own last.
  * @param resource.href - Its href, none where unwritten.
  * @param resource.row - Its `Resource` row.
  * @param resource.spelled - The lexical forms a handle spells.
+ * @param resource.typeLexical - Its type as written, none where unwritten.
  */
 const expectResource = (
   expected: Expected,
   resource: {
     readonly bases: readonly string[];
     readonly href: string | undefined;
-    readonly row: { readonly node: NodeId; readonly package: string; readonly typeLexical: string };
+    readonly row: { readonly node: NodeId; readonly package: string };
     readonly spelled: ReadonlySet<string>;
+    readonly typeLexical: string | undefined;
   },
 ): void => {
-  const { bases, href, row, spelled } = resource;
-  const { node, package: pkg, typeLexical } = row;
-  const type = spelled.has(typeLexical) ? Option.some(typeLexical) : Option.none();
+  const { bases, href, row, spelled, typeLexical } = resource;
+  const { node, package: pkg } = row;
+  const type =
+    typeLexical !== undefined && spelled.has(typeLexical)
+      ? Option.some(typeLexical)
+      : Option.none();
   expected.Resource.set(node, row);
   for (const code of Option.toArray(type)) {
-    expected.ResourceTyped.set(node, { node, package: pkg, type: code, typeLexical });
+    expected.ResourceTyped.set(node, { node, package: pkg, type: code, typeLexical: code });
   }
 
   if (href !== undefined) {
-    expectHref(expected, { bases, href, node, pkg, type, typeLexical });
+    expectHref(expected, { bases, href, node, pkg, type });
   }
 };
 
@@ -190,7 +193,6 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     FileHref: new Map(),
     ManifestId: new Map(),
     ManifestIdSpace: new Map(),
-    NamedHref: new Map(),
     Resource: new Map(),
     ResourceFile: new Map(),
     ResourceHref: new Map(),
@@ -243,14 +245,15 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     }
 
     if (kind === "cp:resource") {
-      const row = {
-        ...tuple,
-        package: pkg,
-        parent: parent.id,
-        typeLexical: valueOf("type") ?? "",
-      };
+      const row = { ...tuple, package: pkg, parent: parent.id };
 
-      expectResource(expected, { bases, href: valueOf("href"), row, spelled });
+      expectResource(expected, {
+        bases,
+        href: valueOf("href"),
+        row,
+        spelled,
+        typeLexical: valueOf("type"),
+      });
       if (identifier !== undefined) {
         named.push({ identifier, node: id });
         expected.ResourceId.set(id, { identifier, node: id, package: pkg });
@@ -327,11 +330,11 @@ const relationNames = [
   "FileHref",
   "ManifestId",
   "ManifestIdSpace",
-  "NamedHref",
   "Resource",
   "ResourceFile",
   "ResourceHref",
   "ResourceId",
+  "ResourceTyped",
 ] as const satisfies readonly (keyof PackageRows)[];
 
 /**
@@ -344,7 +347,8 @@ const sortedEntries = (map: ReadonlyMap<string, object>): readonly (readonly [st
   [...map].toSorted(([left], [right]) => left.localeCompare(right));
 
 /**
- * Compare the builder's keyed sets with the walk's: every relation's keys and rows alike.
+ * Compare the builder's keyed sets with the walk's: every relation's keys and rows alike, and the
+ * typed hrefs the host reads of them (`typedHrefsOf`), by the resource's node.
  *
  * @param rows - The builder's rows.
  * @param expected - The walk's.
@@ -358,6 +362,12 @@ const assertRows = (rows: PackageRows, expected: Expected, label: string): void 
       `${label} ${relation}`,
     );
   }
+
+  assert.deepStrictEqual(
+    sortedEntries(new Map(typedHrefsOf(rows).map((typed) => [typed.node, typed] as const))),
+    sortedEntries(expected.TypedHref),
+    `${label} TypedHref`,
+  );
 };
 
 /**

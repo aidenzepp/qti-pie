@@ -65,6 +65,7 @@ import {
   rowsOf as packageRowsOf,
   referenceCensus,
   referenceRowsOf,
+  typedHrefsOf,
 } from "#pantry/import/overlays/package.ts";
 import type { PackageRows, ReferenceRows } from "#pantry/import/overlays/package.ts";
 import { rowsOf as quotationRowsOf } from "#pantry/import/overlays/quotation.ts";
@@ -278,7 +279,7 @@ export const overlayPartsOf = (
       tree: document.listed.tree,
     })),
     assembled,
-    built.flatMap(({ rows }) => [...rows.package.TypedHref.values()]),
+    built.flatMap(({ rows }) => typedHrefsOf(rows.package)),
   );
 
   return [

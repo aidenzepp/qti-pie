@@ -247,11 +247,11 @@ describe("the oracle's key-text list", () => {
 
   it("leaves out only the copies whose source is no document row, each bounded where it is written", () => {
     // Oracle: the law table's copies into a keyText field from a relation the oracle has no rows
-    // of, each bounded by its own type where its row is written: a resource's document's path, its
-    // `Document`'s copy, and an entry's are `EntryPath`, which the oracle bounds as
-    // `Document.path`, and a float map key's typed
-    // value mirrors `MapKeyType.key`, the key beside its mapping's base type where it has one
-    // (reading 153), which copies `MapKey.key`, which copies the attribute.
+    // of, each bounded by its own type where its row is written: an entry's path is `EntryPath`,
+    // which the oracle bounds as `Document.path`, and a float map key's typed value mirrors
+    // `MapKeyType.key`, the key beside its mapping's base type where it has one (reading 153),
+    // which copies `MapKey.key`, which copies the attribute. A resource's document's path meets a
+    // typed href in a rule over the query `TypedHref`, which copies no text.
     // Bound: every law the schema states that is no check.
     assert.deepStrictEqual(
       [
@@ -261,11 +261,7 @@ describe("the oracle's key-text list", () => {
             .map(({ copy, source }) => `${source} → ${copy.split(" → ")[1] ?? ""}`),
         ),
       ].toSorted(),
-      [
-        "Entry.path → FileHref.path",
-        "MapKeyFloat.key → MapKeyType.key",
-        "ResourceDocument.path → NamedHref.path",
-      ],
+      ["Entry.path → FileHref.path", "MapKeyFloat.key → MapKeyType.key"],
     );
   });
 });

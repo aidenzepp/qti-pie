@@ -16,7 +16,18 @@
  * relation of this level (grizzle's `admitExtend`), so a definition several queries share is a
  * query of its own over `QtiBase`, such as {@link namingRecords}, which each of them matches.
  */
-import { Compute, contained, derived, mirrors, on, query, v } from "@bjornpagen/grizzle";
+import {
+  check,
+  Compute,
+  contained,
+  derived,
+  mirrors,
+  on,
+  query,
+  select,
+  v,
+} from "@bjornpagen/grizzle";
+import { documentTypes } from "#pantry/grammar/install.ts";
 import { QtiBase } from "#pantry/qti/base.ts";
 import { GeneralObject } from "#pantry/qti/identity.ts";
 import {
@@ -34,6 +45,77 @@ import {
   resourceMetadata,
 } from "#pantry/qti/metadata.ts";
 import { ResourceDocument, ResourceHref, ResourceTyped } from "#pantry/qti/package.ts";
+import { ItemRefTarget } from "#pantry/qti/tests.ts";
+
+/**
+ * The href of a resource that has a type, by the resource's node: its {@link ResourceHref}'s
+ * package, path and scope beside its {@link ResourceTyped}'s code, so a document-typed resource's
+ * href is judged as the document it names. A resource with an href and no type, or a type and no
+ * href, has no typed href, so no rule over one asks anything of it.
+ *
+ * Its rows are a join no table stores and no write keeps, which the importer reads on the host
+ * before it writes a row, to name the documents it reads (`#pantry/import/overlays/package.ts`
+ * `typedHrefsOf`).
+ */
+export const TypedHref = derived(
+  "TypedHref",
+  query(QtiBase).rule((r) => {
+    const { node, package: pkg, path, scope } = v(ResourceHref, "href");
+    const { type } = v(ResourceTyped, "typed");
+
+    return r
+      .match(ResourceHref, { node, package: pkg, path, scope })
+      .match(ResourceTyped, { node, type })
+      .find({ node, package: pkg, path, scope, type });
+  }),
+);
+
+/**
+ * The typed hrefs whose type `RootOfType` maps: each names a document of that type.
+ */
+const documentHrefs = select(TypedHref, (h) => h.in(h.type, documentTypes));
+
+/**
+ * Every rule over a typed href, each `check` named by its oracle law with spaces written as
+ * underscores, the halves of P2 and P3 that `#pantry/qti/package.ts` states over the tables:
+ *
+ * - **P3 `entry-kind` ("Document entry"):** every document-typed href resolves in the package and
+ *   names the one document at its path, of the href's type (reading 93). That document is an entry
+ *   by `ResourceDocument`'s copy of its `Document` and the `Document`'s containment into `Entry`,
+ *   so no rule here restates it.
+ * - **P2 `root-type-reverse` ("RootOfType"):** every document a resource lists is at the path of a
+ *   typed href of its type (spec reading 167).
+ * - **B2 and B3 ("Item ref target"):** an item ref's target is a (path, type) pair a typed href of
+ *   its package names.
+ */
+export const packageQueryLawsByName = {
+  "Document entry": [
+    check("Document_entry", TypedHref, (h) =>
+      h.or(h.not(h.in(h.type, documentTypes)), h.eq(h.scope, "entry")),
+    ),
+    contained(
+      on(documentHrefs, "package", "path", "type"),
+      on(ResourceDocument, "package", "path", "type"),
+    ),
+  ],
+  "Item ref target": [
+    contained(
+      on(ItemRefTarget, "package", "path", "type"),
+      on(TypedHref, "package", "path", "type"),
+    ),
+  ],
+  RootOfType: [
+    contained(
+      on(ResourceDocument, "package", "path", "type"),
+      on(TypedHref, "package", "path", "type"),
+    ),
+  ],
+} as const;
+
+/**
+ * {@link packageQueryLawsByName}'s rules in one list.
+ */
+const packageQueryLaws = Object.values(packageQueryLawsByName).flat();
 
 /**
  * The records that name a document, each with that document (spec reading 62): a `lom:lom` of a
@@ -206,12 +288,17 @@ export const queryRelations = {
   MatchedIdentifier,
   MatchedTitle,
   NamingGeneral,
+  TypedHref,
 };
 
 /**
  * Each domain's rules over the queries, grouped by the law each states, one record per domain.
  */
-export const queryLawsByName = [identityQueryLawsByName, metadataQueryLawsByName] as const;
+export const queryLawsByName = [
+  packageQueryLawsByName,
+  identityQueryLawsByName,
+  metadataQueryLawsByName,
+] as const;
 
 /**
  * One rule over a query, as its domain states it: the union of each domain's statement types, each
@@ -220,9 +307,16 @@ export const queryLawsByName = [identityQueryLawsByName, metadataQueryLawsByName
  * a statement typed `any` types every statement of `Qti` `any` with it, so that grizzle can tell no
  * nested member's count apart (`#pantry/qti/schema.ts` holds this type to no `any`).
  */
-type QueryStatement = (typeof identityQueryLaws)[number] | (typeof metadataQueryLaws)[number];
+type QueryStatement =
+  | (typeof packageQueryLaws)[number]
+  | (typeof identityQueryLaws)[number]
+  | (typeof metadataQueryLaws)[number];
 
 /**
  * Every rule over a query, each domain's list spread in {@link queryLawsByName}'s order.
  */
-export const queryLaws: readonly QueryStatement[] = [...identityQueryLaws, ...metadataQueryLaws];
+export const queryLaws: readonly QueryStatement[] = [
+  ...packageQueryLaws,
+  ...identityQueryLaws,
+  ...metadataQueryLaws,
+];

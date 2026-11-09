@@ -49,11 +49,14 @@ const resource = (identifier: string, type: string, href: string): Edit => ({
 
 /**
  * One case of the box: its edits of `simple`; the laws the law oracle finds broken; the verdict,
- * the specification's, which the oracle and PostgreSQL each give; and the (path, type) pairs the
- * typed resources name, which `NamedHref` holds.
+ * the specification's, which the oracle and PostgreSQL each give; the (path, type) pairs the typed
+ * resources name, the query `TypedHref`'s; and `byQuery`, whether the one law the case breaks is a
+ * rule over that query, which the host's judge leaves to the database (`#pantry/test/predicates.ts`
+ * `readsDerived`), so the import's rows judged on the host break nothing.
  */
 export interface ResourceTypeCase {
   readonly broken: readonly string[];
+  readonly byQuery: boolean;
   readonly edits: readonly Edit[];
   readonly label: string;
   readonly named: readonly (readonly [string, string])[];
@@ -67,12 +70,13 @@ export interface ResourceTypeCase {
 /**
  * The seven cases: the box's six, and one path under two types with the stimulus listed first. The
  * document is typed by the listing its item root bears out in either order (reading 162), so
- * Document entry breaks alone, and the verdict never turns on the order the resources are listed
- * in.
+ * Document entry breaks alone, in its rule over the typed hrefs (the other type's href names no
+ * document of its type), and the verdict never turns on the order the resources are listed in.
  */
 export const resourceTypeCases: readonly ResourceTypeCase[] = [
   {
     broken: [],
+    byQuery: false,
     edits: [],
     label: "one type, one path",
     named: [["choice.xml", itemType]],
@@ -82,6 +86,7 @@ export const resourceTypeCases: readonly ResourceTypeCase[] = [
   },
   {
     broken: [],
+    byQuery: false,
     edits: [
       { _tag: "copyFile", from: "choice.xml", to: "choice2.xml" },
       resource("choice2", itemType, "choice2.xml"),
@@ -97,6 +102,7 @@ export const resourceTypeCases: readonly ResourceTypeCase[] = [
   },
   {
     broken: ["Document entry"],
+    byQuery: true,
     edits: [resource("stim", stimulusType, "choice.xml")],
     label: "two types, one path",
     named: [
@@ -109,6 +115,7 @@ export const resourceTypeCases: readonly ResourceTypeCase[] = [
   },
   {
     broken: ["Document entry"],
+    byQuery: true,
     edits: [
       {
         _tag: "ReplaceText",
@@ -128,6 +135,7 @@ export const resourceTypeCases: readonly ResourceTypeCase[] = [
   },
   {
     broken: [],
+    byQuery: false,
     edits: [
       { _tag: "addFile", path: "stim.xml", source: { text: stimulus } },
       resource("stim", stimulusType, "stim.xml"),
@@ -143,6 +151,7 @@ export const resourceTypeCases: readonly ResourceTypeCase[] = [
   },
   {
     broken: ["value domain"],
+    byQuery: false,
     edits: [
       {
         _tag: "ReplaceText",
@@ -159,6 +168,7 @@ export const resourceTypeCases: readonly ResourceTypeCase[] = [
   },
   {
     broken: ["value domain"],
+    byQuery: false,
     edits: [
       { _tag: "addFile", path: "stim.xml", source: { text: stimulus } },
       resource("stim", `${stimulusType} `, "stim.xml"),

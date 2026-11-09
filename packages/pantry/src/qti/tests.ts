@@ -92,7 +92,7 @@ import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeContext, nodeRef } from "#pantry/qti/node.ts";
-import { Entry, hrefPaths, NamedHref } from "#pantry/qti/package.ts";
+import { Entry, hrefPaths } from "#pantry/qti/package.ts";
 
 /**
  * The test's root kind, the root of an assembly whose names and branch rules resolve.
@@ -926,13 +926,14 @@ export const linkResourceTypes: readonly (typeof ResourceType.handles)[number][]
 /**
  * What an item ref names, keyed by the item ref's node (the UP audit's B2 and B3): its href's
  * `package` and `path` (its `ReferencePath`, `#pantry/qti/package.ts` `hrefPaths`), and `type`, the
- * type of the resource of the package whose href's path that is (`NamedHref`), which "Item ref
- * target" judges: the URI an item ref holds is "the URI used to refer to the item's file (e.g.,
- * elsewhere in the same content package)" (information model §5.6.5, `href`), so it names an item
- * of the package, or an LTI link (R36). It is a row only where a resource of the package names the
- * path, so an item ref whose href names none has no target, which the containment over the item
- * refs' hrefs refuses, and one that writes no href has none, which AL3 alone refuses (spec reading
- * 155). An item it names is an {@link ItemRefDocument} row of its own.
+ * type of the resource of the package whose href's path that is (`TypedHref`, a rule over that
+ * query in `#pantry/qti/queries.ts`), which "Item ref target" judges: the URI an item ref holds is
+ * "the URI used to refer to the item's file (e.g., elsewhere in the same content package)"
+ * (information model §5.6.5, `href`), so it names an item of the package, or an LTI link (R36). It
+ * is a row only where a resource of the package names the path, so an item ref whose href names
+ * none has no target, which the containment over the item refs' hrefs refuses, and one that writes
+ * no href has none, which AL3 alone refuses (spec reading 155). An item it names is an
+ * {@link ItemRefDocument} row of its own.
  *
  * In the corpus, feedbackTest's item ref `Example03-feedbackBlock-solution/...` names no file of
  * its package, and testWithLti's two item refs name LTI links; both packages are refused at the
@@ -2066,10 +2067,6 @@ export const testLawsByName = {
   "Item ref target": [
     contained(on(ItemRefTarget, "node"), on(nodesOf(itemRefKind), "id")),
     contained(on(attributesOf("href", [itemRefKind]), "node"), on(ItemRefTarget, "node")),
-    contained(
-      on(ItemRefTarget, "package", "path", "type"),
-      on(NamedHref, "package", "path", "type"),
-    ),
     check("Item_ref_target", ItemRefTarget, (t) =>
       t.in(t.type, [itemResourceType, ...linkResourceTypes]),
     ),
