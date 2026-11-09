@@ -76,7 +76,7 @@ import {
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import type { Kind, Name } from "#pantry/grammar/compose.ts";
-import { booleanTruePattern } from "#pantry/grammar/domains.ts";
+import { booleanTruePattern, namingPattern } from "#pantry/grammar/domains.ts";
 import {
   AttributeName,
   Flag,
@@ -344,10 +344,12 @@ export const TestFlag = relation(
 );
 
 /**
- * A test part, section, section ref or item ref that writes an identifier, keyed by its node: the
- * elements whose identifiers are one namespace across the assembled test (reading 86), and among
- * which branch rules jump. One that writes none names nothing and has no row: AL3 refuses it alone
- * (reading 147).
+ * A test part, section, section ref or item ref whose identifier names something, keyed by its
+ * node: the elements whose identifiers are one namespace across the assembled test (reading 86),
+ * and among which branch rules jump. One that writes none names nothing and has no row: AL3 refuses
+ * it alone (reading 147). One whose identifier is no NCName once collapsed ({@link namingPattern})
+ * names nothing either and has no row: its value domain refuses it alone (spec reading 152,
+ * decision 457 (2)).
  *
  * - **the host's:** its {@link nodeRef} tuple; `end`, its node's; `parentKind`, its parent's kind;
  *   `identifier`, its collapsed identifier ({@link TestToken}); and its scope in its own document:
@@ -1269,6 +1271,20 @@ const nodesOf = (kind: Kind) => select(Node, (n) => n.eq(n.kind, kind));
  */
 const attributesOf = (name: Name, kinds: readonly Kind[]) =>
   select(Attribute, (a) => a.and(a.eq(a.name, name), a.in(a.kind, kinds)));
+
+/**
+ * The `identifier` of each test part, section, section ref and item ref ({@link namedKinds}) that
+ * names something once collapsed ({@link namingPattern}): each such structure, and only it, has its
+ * {@link Named} row. These identifiers are `xs:NCName`s, so any other names nothing, and its value
+ * domain refuses it alone (spec reading 152, decision 457 (2)).
+ */
+const namingIdentifiers = select(Attribute, (a) =>
+  a.and(
+    a.eq(a.name, "identifier"),
+    a.in(a.kind, namedKinds),
+    Compute.matches(a.lexical, namingPattern),
+  ),
+);
 
 /**
  * Select the tokens of one name, a constant selection.
@@ -2278,7 +2294,7 @@ export const testLawsByName = {
     ),
     contained(on(Named, "node", "end"), on(Node, "id", "end")),
     contained(on(Named, "parent", "parentKind"), on(Node, "id", "kind")),
-    contained(on(attributesOf("identifier", namedKinds), "node"), on(Named, "node")),
+    contained(on(namingIdentifiers, "node"), on(Named, "node")),
     contained(on(Named, "node", "identifier"), on(tokensOf("identifier"), "node", "value")),
     contained(
       on(

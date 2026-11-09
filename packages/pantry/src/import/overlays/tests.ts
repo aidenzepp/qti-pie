@@ -25,7 +25,7 @@ import { Array as Arr, Option } from "effect";
 import { Bits } from "@bjornpagen/grizzle";
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import type { Kind } from "#pantry/grammar/compose.ts";
-import { booleanOf } from "#pantry/grammar/domains.ts";
+import { booleanOf, isNcName } from "#pantry/grammar/domains.ts";
 import { Flag, grammar } from "#pantry/grammar/install.ts";
 import { isSiteKind } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
@@ -662,9 +662,11 @@ const sectionsOf = (view: View, flag: FlagOf): Sections => {
 };
 
 /**
- * Write a document's names: each test part, section, section ref and item ref that writes an
- * identifier, with its collapsed identifier and its scope in the document. One that writes none
- * names nothing, so it has no row, and AL3 refuses it alone (spec reading 147).
+ * Write a document's names: each test part, section, section ref and item ref whose identifier
+ * names something, with its collapsed identifier and its scope in the document. One that writes
+ * none names nothing, so it has no row, and AL3 refuses it alone (spec reading 147). One whose
+ * collapsed identifier is no NCName ({@link isNcName}) names nothing either, so it has no row, and
+ * its value domain refuses it alone (spec reading 152, decision 457 (2)).
  *
  * @param view - The document.
  * @param token - Each node's tokens.
@@ -680,7 +682,7 @@ const namedOf = (
     view.rows.nodes
       .filter(({ kind }) => among(namedKinds, kind))
       .flatMap((node) =>
-        Option.toArray(token(node, "identifier")).map((identifier) => {
+        Option.toArray(Option.filter(token(node, "identifier"), isNcName)).map((identifier) => {
           const above = aboveOf(view, scopes, node);
           const isPart = node.kind === partKind;
           // A section's own order and loose chain; every other kind's are false (`Named`).
