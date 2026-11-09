@@ -882,7 +882,7 @@ describe("package/manifest.ts", () => {
 
   describe("resourceLom", () => {
     it.effect(
-      "gives each resource the identifier entries and title strings of its own LOM's general, as written, with where the first of each is (reading 62)",
+      "gives each resource the identifier entries, title strings and languages of its own LOM's general, as written, with where the general and the first of each are (reading 62, \"an item's or test's identifier and title are those its package's LOM metadata gives it\")",
       () =>
         Effect.gen(function* ownLom() {
           const general =
@@ -913,10 +913,14 @@ describe("package/manifest.ts", () => {
           assert.deepStrictEqual(lomOf.get(resourceOf(manifest, "a").location), [
             {
               identifier: Option.some<LomValues>({
+                languages: [Option.none(), Option.none()],
                 location: `${generalOf("a")}/${lom}identifier[1]`,
                 values: [" a ", "other"],
               }),
+              languages: [],
+              location: generalOf("a"),
               title: Option.some<LomValues>({
+                languages: [Option.some("en"), Option.some("de")],
                 location: `${generalOf("a")}/${lom}title`,
                 values: ["Item  A", "Aufgabe A"],
               }),
@@ -925,7 +929,10 @@ describe("package/manifest.ts", () => {
           assert.deepStrictEqual(lomOf.get(resourceOf(manifest, "b").location), [
             {
               identifier: Option.none(),
+              languages: [],
+              location: generalOf("b"),
               title: Option.some<LomValues>({
+                languages: [Option.none()],
                 location: `${generalOf("b")}/${lom}title`,
                 values: ["Item B"],
               }),
@@ -933,6 +940,37 @@ describe("package/manifest.ts", () => {
           ]);
           assert.deepStrictEqual(lomOf.get(resourceOf(manifest, "c").location), []);
           assert.strictEqual(lomOf.size, 3);
+        }),
+    );
+    it.effect(
+      "align-54 LOM languages E34: gives each general's languages and each title string's language as written, padding and an empty language kept, every identifier entry with none",
+      () =>
+        Effect.gen(function* lomLanguages() {
+          const general =
+            '<lom:general><lom:identifier><lom:entry>a</lom:entry></lom:identifier><lom:title><lom:string language=" EN-gb ">Item A</lom:string><lom:string language="">Item A</lom:string><lom:string>Item A</lom:string></lom:title><lom:language>en</lom:language><lom:language> de </lom:language><lom:language/></lom:general>';
+          const source = yield* readSource(
+            location,
+            new TextEncoder().encode(
+              manifestXml(
+                "3.0.0",
+                `<resource identifier="a" type="imsqti_item_xmlv3p0" href="items/a.xml"><metadata><lom:lom>${general}</lom:lom></metadata><file href="items/a.xml"/></resource>`,
+              ),
+            ),
+          );
+          const manifest = manifestOf(readManifest(source));
+          const generalPath = `${resourceOf(manifest, "a").location}/${cp}metadata/${lom}lom/${lom}general`;
+          const [read] = resourceLom(source).get(resourceOf(manifest, "a").location) ?? [];
+
+          assert.deepStrictEqual(read?.languages, ["en", " de ", ""]);
+          assert.strictEqual(read?.location, generalPath);
+          assert.deepStrictEqual(
+            read?.identifier.pipe(Option.map((values) => values.languages)),
+            Option.some([Option.none()]),
+          );
+          assert.deepStrictEqual(
+            read?.title.pipe(Option.map((values) => values.languages)),
+            Option.some([Option.some(" EN-gb "), Option.some(""), Option.none()]),
+          );
         }),
     );
   });

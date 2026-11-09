@@ -75,9 +75,13 @@
  *     `qti-context-declaration` or the built-in `QTI_CONTEXT`, is found: the engine holds no value of
  *     it, and the delivered test marks the processing that reads it (see below);
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
- *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
- *   62), every such resource that names the path, whatever type its document is read as (reading
- *   162);
+ *   one equal to its document's `identifier` and, in the document's language, its `title`
+ *   (`lom-identifier` and `lom-title`, reading 62, "an item's or test's identifier and title are
+ *   those its package's LOM metadata gives it"), a document that writes neither having none to
+ *   match (reading 148), and each general category of that metadata lists every language the
+ *   document's `xml:lang` forms state (`document-lang`, reading 134, "an item's or a test's
+ *   languages are listed by its records' general categories, compared as language tags"), every
+ *   such resource that names the path, whatever type its document is read as (reading 162);
  * - Each file reference of each document read as a type plate judges, an attribute reading 103's
  *   census names, that resolves through the `xml:base` in scope to a path inside the package names
  *   a file the package holds or the manifest lists, or it is `package-file-missing` with `check:
@@ -94,7 +98,9 @@
  * ref or processing the package marks (see below), and `accepted` otherwise. Only an accepting
  * package's documents are delivered. A test is delivered with the model its document's own verdict
  * holds, except that each of its item refs that names an LTI link is marked `lti-link` at it and
- * left out, since plate launches no LTI link, and one whose processing reads, through an item ref,
+ * left out, since plate launches no LTI link, its outcome processing then `marked` with each
+ * outcome-only expression in it marked by its name, since such an expression would count the
+ * delivered items alone, and one whose processing reads, through an item ref,
  * an item's context variable or any variable of an LTI link is delivered with that processing
  * marked, `variable:<name>` at it: its outcome processing `marked`, and each template default that
  * reads one left out, so its template variable starts at its declared default. The test document's
@@ -143,7 +149,7 @@ import { kindRules } from "#plate/model/expressions/read.ts";
 import { itemRefsIn, occurrenceOf } from "#plate/model/item-refs.ts";
 import { withLtiLinks, withUnheldReads } from "#plate/model/test.ts";
 import type { LtiLink, UnheldRead } from "#plate/model/test.ts";
-import { isNcName, trimXmlSpace } from "#plate/model/values.ts";
+import { isLanguageTag, isNcName, trimXmlSpace } from "#plate/model/values.ts";
 import { readManifest, resourceLom } from "#plate/package/manifest.ts";
 import type { LomGeneral, LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
 import { checkFiles, fileLocation, manifestFile, packageFiles } from "#plate/package/store.ts";
@@ -444,13 +450,15 @@ const qti2Namespaces: ReadonlySet<string> = new Set(
 );
 
 /**
- * The resource types whose document reading 62 ties to the resource's LOM metadata: an item and a
- * test.
+ * The resource types whose document reading 62 ("an item's or test's identifier and title are
+ * those its package's LOM metadata gives it") and reading 134 tie to the resource's LOM metadata:
+ * an item and a test.
  */
 const lomBoundTypes: ReadonlySet<string> = new Set(["imsqti_item_xmlv3p0", "imsqti_test_xmlv3p0"]);
 
 /**
- * The roots of the documents reading 62 ties to a resource's LOM metadata: the roots of
+ * The roots of the documents reading 62 ("an item's or test's identifier and title are those its
+ * package's LOM metadata gives it") ties to a resource's LOM metadata: the roots of
  * {@link lomBoundTypes}, an item's and a test's.
  */
 const lomBoundRoots: ReadonlySet<string> = new Set(
@@ -1318,27 +1326,166 @@ const checkRoots = (
 };
 
 /**
- * Compare each item and test resource's own LOM metadata with its document's `identifier` and
- * `title` (reading 62), every item and test resource that names a path, whatever type its document
- * is read as (reading 162, "the records of each item or test resource that names the path still
- * describe the document").
+ * The reading the identifier and title rules cite: reading 62, "an item's or test's identifier and
+ * title are those its package's LOM metadata gives it", or, for a root that writes no `identifier`
+ * or `title` beside a record that gives one, reading 148, "an assessment item or test that writes
+ * no `identifier` or no `title` has none for its LOM record to match".
+ */
+const lomReading = { unwritten: "148", written: "62" } as const;
+
+/**
+ * The XML line-break and tab characters, each of which an `xs:normalizedString` reads as a space.
+ */
+const normalizedBreak = /[\t\n\r]/gu;
+
+/**
+ * Read a value as an `xs:normalizedString`, the value space of a title: each tab, line feed and
+ * carriage return a space, and nothing else changed, so spaces stay as written (reading 62, "a
+ * tab, line feed or carriage return on either side reads as a space and nothing else changes").
  *
- * Each `general` of the resource's LOM that gives identifier entries must give one equal to the
- * document's `identifier`, or the resource is `lom-identifier` at the `general`'s first
- * `identifier`; one that gives title strings must give one equal to its `title`, or it is
- * `lom-title` at its first `title`. Both sides are compared with their whitespace collapsed. The
- * detail names the `resource`, the document's `path`, its `identifier` or `title`, the first LOM
- * value as `metadata`, how many other values there are as `others` when there are any, and the
- * `reading`, each value collapsed. A `general` that gives neither is outside the rule, and so is a
- * document the reader cannot read, one whose root is no item's or test's ({@link lomBoundRoots};
- * `checkRoots` refuses a resource whose type it does not bear out) and one that lacks the attribute
- * (its own verdict refuses it).
+ * @param value The value as written.
+ * @returns The value, normalized.
+ */
+const normalizedString = (value: string): string => value.replaceAll(normalizedBreak, " ");
+
+/**
+ * An ASCII capital letter, the one kind of character a language tag's comparison folds.
+ */
+const asciiCapital = /[A-Z]/gu;
+
+/**
+ * Fold a language tag's ASCII capitals to small letters, as tags are compared: RFC 5646 says
+ * "language tags and their subtags ... are to be treated as case insensitive" (section 2.1.1). No
+ * other character changes, so a tag padded with spaces stays padded and matches no tag.
+ *
+ * @param tag The tag.
+ * @returns The tag, folded.
+ */
+const foldedTag = (tag: string): string =>
+  tag.replaceAll(asciiCapital, (capital) => capital.toLowerCase());
+
+/**
+ * Give the `xml:lang` an element writes, as written.
+ *
+ * @param element The element.
+ * @returns The attribute's value, none when the element writes none.
+ */
+const xmlLangOf = (element: SourceElement): Option.Option<string> =>
+  Option.fromUndefinedOr(
+    element.attributes.find(
+      (attribute) => attribute.namespace === xmlNamespace && attribute.local === "lang",
+    )?.value,
+  );
+
+/**
+ * Give the language a document's root states for its title: its `xml:lang` collapsed, as an
+ * `xs:language` is, when that is a well-formed BCP 47 tag, and none otherwise.
+ *
+ * A root that writes no `xml:lang` states none, and so does one whose form lies outside its value
+ * domain, the empty form, one of whitespace alone and an ill-formed tag such as `en_GB` alike
+ * (reading 151, "an item's `xml:lang` outside its value domain states no language, so `lom-title`
+ * judges the record's title without one"). AL1 refuses such a form under its own rule.
+ *
+ * @param root The document's root.
+ * @returns The language, collapsed and as written otherwise, none when the root states none.
+ */
+const titleLanguage = (root: SourceElement): Option.Option<string> =>
+  xmlLangOf(root).pipe(Option.map(collapse), Option.filter(isLanguageTag));
+
+/**
+ * Report whether a LOM title string is one in its document's language: reading 62 reads it as "a
+ * string whose `language` is the root's `xml:lang`, compared as a language tag without regard to
+ * case, or a string with no `language`; and any string where the root states no `xml:lang`". An
+ * empty `language` states none, as an empty `xml:lang` does (XML 1.0, section 2.12).
+ *
+ * @param language The string's `language`, as written, none when it writes none.
+ * @param stated The language the root states ({@link titleLanguage}).
+ * @returns Whether the string is in the document's language.
+ */
+const inDocumentLanguage = (
+  language: Option.Option<string>,
+  stated: Option.Option<string>,
+): boolean =>
+  Option.isNone(stated) ||
+  Option.match(language, {
+    onNone: () => true,
+    onSome: (written) => written === "" || foldedTag(written) === foldedTag(stated.value),
+  });
+
+/**
+ * Give the languages a document's elements state, in document order: each `xml:lang` collapsed, as
+ * an `xs:language` is, once for each language, compared as a tag ({@link foldedTag}), with the
+ * first form that states it. None that collapses to nothing is given, since an empty `xml:lang`
+ * states no language (XML 1.0, section 2.12) and one of whitespace alone is refused by AL1 before
+ * reading 134 reads it.
+ *
+ * The forms are the document's own: an XInclude `include` is not performed, so a fragment it would
+ * splice in is not read, and its `xml:lang` forms ask for no listing. A document holding one is
+ * `unchecked` (E23), and this is the limit that leaves.
+ *
+ * @param source The document.
+ * @returns The forms, collapsed.
+ */
+const languageForms = (source: SourceDocument): readonly string[] => {
+  const forms = new Map<string, string>();
+  for (const { element } of walk(source)) {
+    const form = Option.getOrElse(Option.map(xmlLangOf(element), collapse), () => "");
+    if (form !== "" && !forms.has(foldedTag(form))) {
+      forms.set(foldedTag(form), form);
+    }
+  }
+
+  return [...forms.values()];
+};
+
+/**
+ * Compare each item and test resource's own LOM metadata with its document (reading 62, "an item's
+ * or test's identifier and title are those its package's LOM metadata gives it", with readings 134
+ * and 148), every item and test resource that names a path, whatever type its document is read as
+ * (reading 162, "the records of each item or test resource that names the path still describe the
+ * document").
+ *
+ * Each `general` of the resource's LOM is judged three ways, in this order:
+ *
+ * - One that gives identifier entries must give one equal to the document's `identifier`, both
+ *   collapsed, as an identifier's value is, or the resource is `lom-identifier` at the `general`'s
+ *   first `identifier`;
+ * - One that gives title strings must give one in the document's language
+ *   ({@link inDocumentLanguage}) equal to its `title`, both read as an `xs:normalizedString`
+ *   ({@link normalizedString}), so spaces stay and a tab or line break reads as a space, or it is
+ *   `lom-title` at its first `title`;
+ * - It must list, among its `language` elements, each language the document's elements state
+ *   ({@link languageForms}), the `xml:lang` collapsed and the listed language as written, each
+ *   folded ({@link foldedTag}), or it is `document-lang` at the `general` for each language it does
+ *   not list (reading 134, "an item's or a test's languages are listed by its records' general
+ *   categories, compared as language tags"), the detail naming the `document`'s path, the
+ *   `language` and the languages it `listed`, space-separated, as written.
+ *
+ * A mismatch's detail names the `resource`, the document's `path`, its `identifier` or `title`, the
+ * first LOM value as `metadata` (of a title, the first string in the document's language, or the
+ * first string when none is), how many other values there are as `others` when there are any, the
+ * language the root states as `language` when it states one (of a title), and the `reading`. Each
+ * value is given collapsed, as an identifier's is, whichever way it is compared, so a refusal's
+ * facts do not depend on the comparison; a title that differs from its string only in spacing so
+ * shows the two alike, and the sentence's `xs:normalizedString` says why they differ.
+ *
+ * A root that writes no `identifier` or no `title` has none for a record to match, the empty one
+ * included (reading 148, "an assessment item or test that writes no `identifier` or no `title` has
+ * none for its LOM record to match"), so a `general` that gives entries or strings for it makes the
+ * resource
+ * `lom-identifier` or `lom-title` with `check: "unwritten"` at the document's root, its detail the
+ * `attribute`, the `resource`, the document's `path` and the `reading`; the manifest's walk admits
+ * one `lom` in a resource's `metadata` and one `general` in a `lom`, so each is given once. A
+ * `general` that gives none is outside each rule, and so is a document the reader cannot read and
+ * one whose root is no item's or test's ({@link lomBoundRoots}; `checkRoots` refuses a resource
+ * whose type it does not bear out).
  *
  * @param manifest The manifest.
  * @param lom Each resource's LOM generals, keyed by its location.
  * @param documents The package's documents.
- * @param manifestLocation The manifest's location, which each refusal carries.
- * @returns The refusals, in the manifest's order, each `general`'s identifier before its title.
+ * @param manifestLocation The manifest's location, which each refusal of a `general` carries.
+ * @returns The refusals, in the manifest's order, each `general`'s identifier, then its title, then
+ *   its languages.
  */
 const checkLom = (
   manifest: Manifest,
@@ -1363,35 +1510,59 @@ const checkLom = (
       return [];
     }
 
+    const stated = titleLanguage(root);
+    const forms = languageForms(source.success);
+
     /**
      * Refuse the values one LOM `general` gives for an attribute when none equals the document's.
      *
      * @param rule The rule a mismatch breaks.
      * @param attribute The document's attribute the values describe.
      * @param given The values the `general` gives, none when it gives none.
-     * @returns The refusal, or none when a value matches, the `general` gives none or the
-     *   document has no such attribute.
+     * @param read How a value and the attribute are compared: collapsed or normalized.
+     * @param candidates Which values may name the document, the title strings in its language.
+     * @returns The refusal, or none when a value matches or the `general` gives none.
      */
     const compare = (
       rule: "lom-identifier" | "lom-title",
       attribute: "identifier" | "title",
       given: Option.Option<LomValues>,
+      read: (value: string) => string,
+      candidates: (values: LomValues) => readonly string[],
     ): readonly Refusal[] => {
-      const own = Option.getOrUndefined(Option.map(attributeOf(root, attribute), collapse));
       const values = Option.getOrUndefined(given);
-      if (
-        own === undefined ||
-        values === undefined ||
-        values.values.some((value) => collapse(value) === own)
-      ) {
+      if (values === undefined) {
         return [];
       }
 
+      const written = Option.getOrUndefined(attributeOf(root, attribute));
+      if (written === undefined) {
+        return [
+          refuse(source.success.location, rule, root.local, {
+            attribute,
+            check: "unwritten",
+            path,
+            reading: lomReading.unwritten,
+            resource: resource.identifier,
+          }),
+        ];
+      }
+
+      const named = candidates(values);
+      if (named.some((value) => read(value) === read(written))) {
+        return [];
+      }
+
+      const stating = Option.match(attribute === "title" ? stated : Option.none<string>(), {
+        onNone: () => ({}),
+        onSome: (language) => ({ language }),
+      });
       const facts = {
-        [attribute]: own,
-        metadata: collapse(values.values[0]),
+        ...stating,
+        [attribute]: collapse(written),
+        metadata: collapse(named[0] ?? values.values[0]),
         path,
-        reading: "62",
+        reading: lomReading.written,
         resource: resource.identifier,
       };
       const others = values.values.length - 1;
@@ -1406,10 +1577,30 @@ const checkLom = (
       ];
     };
 
-    return (lom.get(resource.location) ?? []).flatMap((general) => [
-      ...compare("lom-identifier", "identifier", general.identifier),
-      ...compare("lom-title", "title", general.title),
-    ]);
+    return (lom.get(resource.location) ?? []).flatMap((general) => {
+      const listed = new Set(general.languages.map(foldedTag));
+
+      return [
+        ...compare("lom-identifier", "identifier", general.identifier, collapse, (values) => [
+          ...values.values,
+        ]),
+        ...compare("lom-title", "title", general.title, normalizedString, (values) =>
+          values.values.filter((_, index) =>
+            inDocumentLanguage(values.languages[index] ?? Option.none(), stated),
+          ),
+        ),
+        ...forms
+          .filter((form) => !listed.has(foldedTag(form)))
+          .map((form) =>
+            refuse(manifestLocation, "document-lang", general.location, {
+              document: path,
+              language: form,
+              listed: general.languages.join(" "),
+              reading: "134",
+            }),
+          ),
+      ];
+    });
   });
 
 /**
@@ -4563,9 +4754,11 @@ const byDocument = <A>(
  *
  * Each test is delivered as its document's own verdict accepted it, unless one of its item refs
  * names an LTI link or its processing reads, through an item ref, a variable the engine holds no
- * value of. Each such item ref is then marked `lti-link` and left out (`withLtiLinks` in
- * `#plate/model/test.ts`), and each such processing marked (`withUnheldReads`), the outcome
- * processing `marked` and each template default that reads one left out.
+ * value of. Each such item ref is then marked `lti-link` and left out, with each expression of its
+ * outcome processing that counts over the test's items marked and that processing `marked`
+ * (`withLtiLinks` in `#plate/model/test.ts`, read from the test's document, which every judged
+ * document holds), and each such processing marked (`withUnheldReads`), the outcome processing
+ * `marked` and each template default that reads one left out.
  *
  * @param manifest The manifest.
  * @param documents The package's documents, every judged one accepted.
@@ -4618,9 +4811,13 @@ const contentsOf = (
     tests: byDocument(
       pathsOfType(manifest, "imsqti_test_xmlv3p0"),
       (path) =>
-        verdictAt(documents, path).pipe(
-          Option.flatMap(acceptedTest),
-          Option.map((test): PackageTest => {
+        Option.all([
+          verdictAt(documents, path).pipe(Option.flatMap(acceptedTest)),
+          Option.fromUndefinedOr(documents.get(path)).pipe(
+            Option.flatMap((document) => Result.getSuccess(document.source)),
+          ),
+        ]).pipe(
+          Option.map(([test, source]): PackageTest => {
             const links = tests.get(path)?.links ?? [];
             const reads = tests.get(path)?.reads ?? [];
 
@@ -4636,7 +4833,10 @@ const contentsOf = (
               test:
                 links.length === 0 && reads.length === 0
                   ? test
-                  : acceptMarkedTest(test, withUnheldReads(withLtiLinks(test.test, links), reads)),
+                  : acceptMarkedTest(
+                      test,
+                      withUnheldReads(withLtiLinks(test.test, links, source), reads),
+                    ),
             };
           }),
         ),

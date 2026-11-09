@@ -1386,11 +1386,15 @@ describe("withLtiLinks", () => {
         const built = yield* buildTest(twoParts);
         const nested = `${root}/qti-test-part[1]/qti-assessment-section/qti-assessment-section/qti-assessment-item-ref`;
         const second = `${root}/qti-test-part[2]/qti-assessment-section/qti-assessment-item-ref`;
-        const linked = withLtiLinks(built, [
-          { identifier: "I2", path: nested },
-          { identifier: "I4", path: second },
-          { identifier: "I2", path: nested },
-        ]);
+        const linked = withLtiLinks(
+          built,
+          [
+            { identifier: "I2", path: nested },
+            { identifier: "I4", path: second },
+            { identifier: "I2", path: nested },
+          ],
+          twoParts,
+        );
 
         assert.deepStrictEqual(
           linked.parts.map((testPart) => testPart.children.map(outline)),
@@ -1402,7 +1406,74 @@ describe("withLtiLinks", () => {
           mark("lti-link", second),
         ]);
         assert.deepStrictEqual(linked.outcomeProcessing, built.outcomeProcessing);
-        assert.strictEqual(withLtiLinks(built, []), built);
+        assert.strictEqual(withLtiLinks(built, [], twoParts), built);
+      }),
+  );
+
+  it.effect(
+    "align-54 LOM languages E21: a test whose processing counts over its items, with an LTI ref left out, marks each outcome-only expression at its own path and the processing, as a section ref does, once each",
+    () =>
+      Effect.gen(function* linkedCounts() {
+        const document = processed(
+          [
+            setting(
+              "qti-set-outcome-value",
+              "N",
+              el("qti-sum", [], [el("qti-number-presented", [])]),
+            ),
+            ...aggregating,
+          ],
+          counters,
+        );
+        const built = yield* buildTest(document);
+        const ref = `${root}/qti-test-part/qti-assessment-section/qti-assessment-item-ref`;
+        const linked = withLtiLinks(
+          {
+            ...built,
+            unsupported: [
+              mark(
+                "qti-number-selected",
+                `${processingPath}/qti-set-outcome-value[3]/qti-number-selected`,
+              ),
+            ],
+          },
+          [{ identifier: "I1", path: ref }],
+          document,
+        );
+
+        assert.strictEqual(built.outcomeProcessing.kind, "runs");
+        assert.deepStrictEqual(linked.outcomeProcessing, { kind: "marked" });
+        assert.deepStrictEqual(linked.unsupported, [
+          mark(
+            "qti-number-selected",
+            `${processingPath}/qti-set-outcome-value[3]/qti-number-selected`,
+          ),
+          mark("lti-link", ref),
+          mark(
+            "qti-number-presented",
+            `${processingPath}/qti-set-outcome-value[1]/qti-sum/qti-number-presented`,
+          ),
+          mark(
+            "qti-test-variables",
+            `${processingPath}/qti-set-outcome-value[2]/qti-sum/qti-test-variables`,
+          ),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "align-54 LOM languages E21, control: a test whose processing counts over no items keeps it running when an LTI ref is left out",
+    () =>
+      Effect.gen(function* linkedNoCounts() {
+        const document = processed([
+          setting("qti-set-outcome-value", "SCORE", variable("I1.SCORE")),
+        ]);
+        const built = yield* buildTest(document);
+        const ref = `${root}/qti-test-part/qti-assessment-section/qti-assessment-item-ref`;
+        const linked = withLtiLinks(built, [{ identifier: "I1", path: ref }], document);
+
+        assert.deepStrictEqual(linked.outcomeProcessing, built.outcomeProcessing);
+        assert.deepStrictEqual(linked.unsupported, [mark("lti-link", ref)]);
       }),
   );
 });

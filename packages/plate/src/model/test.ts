@@ -1095,6 +1095,8 @@ const outcomeOnlyKinds: ReadonlySet<string> = new Set(
  * ruling: mark, do not narrow. The engine delivers no section document's item, so such an
  * expression would count the test document's own items alone, and its result would be a wrong
  * score reported without saying so. Every one is marked, whatever its `section-identifier` names.
+ * A package's test whose item refs name an LTI link takes them too ({@link withLtiLinks}), since
+ * the delivered test leaves those item refs out.
  *
  * @param build The build.
  * @param element The `qti-outcome-processing` element.
@@ -1696,17 +1698,29 @@ const ltiLinkMark: TestMark = "lti-link";
  * link, and an LTI link holds no item a session could deliver.
  *
  * Each item ref of an identifier a link names is left out of its section, a nested section's
- * included, and each link is the mark `lti-link` at its path, the marks following the test's own in
- * `unsupported`, each once per path. The item ref's identifier stays a name of the test's
- * structure, so the test's own reads through it stay as the test model read them; a package marks
- * each read through it that the engine holds no value of ({@link withUnheldReads}). A test with no
+ * included, and each link is the mark `lti-link` at its path. The item ref's identifier stays a
+ * name of the test's structure, so the test's own reads through it stay as the test model read
+ * them; a package marks each read through it that the engine holds no value of ({@link
+ * withUnheldReads}). Each outcome-only expression of the test's outcome processing, which counts or
+ * collects over the test's items, is then marked by its name at its own path, and the processing is
+ * `marked`, as a test that references a section document marks it ({@link outcomeOnlyMarks}): the
+ * delivered test holds no item a link names, so the expression would count the delivered items
+ * alone, and its result would be a wrong score reported without saying so. The marks follow the
+ * test's own in `unsupported`, the links' first, each once per feature and path. A test with no
  * links is returned unchanged.
  *
  * @param test The test model, as {@link buildTest} gives it.
  * @param links The test document's item refs that name an LTI link, in document order.
- * @returns The test without them, each marked.
+ * @param source The test document the model was built from, where each outcome-only expression is
+ *   found.
+ * @returns The test without them, each marked, and its processing marked where it counts over
+ *   the test's items.
  */
-export const withLtiLinks = (test: Test, links: readonly LtiLink[]): Test => {
+export const withLtiLinks = (
+  test: Test,
+  links: readonly LtiLink[],
+  source: SourceDocument,
+): Test => {
   if (links.length === 0) {
     return test;
   }
@@ -1730,10 +1744,16 @@ export const withLtiLinks = (test: Test, links: readonly LtiLink[]): Test => {
     }),
   });
 
+  const build: ModelWalk = { builder: "buildTest", document: source, paths: pathsOf(source) };
+  const counting = childrenNamed(source.root, "qti-outcome-processing").flatMap((element) =>
+    outcomeOnlyMarks(build, element),
+  );
   const marked = new Set(test.unsupported.map(markKey));
   const added: MarkedFeature[] = [];
-  for (const { path } of links) {
-    const mark: MarkedFeature = { feature: ltiLinkMark, path, shown: "mark" };
+  for (const mark of [
+    ...links.map(({ path }): MarkedFeature => ({ feature: ltiLinkMark, path, shown: "mark" })),
+    ...counting,
+  ]) {
     if (!marked.has(markKey(mark))) {
       marked.add(markKey(mark));
       added.push(mark);
@@ -1742,6 +1762,10 @@ export const withLtiLinks = (test: Test, links: readonly LtiLink[]): Test => {
 
   return {
     ...test,
+    outcomeProcessing:
+      test.outcomeProcessing.kind === "runs" && counting.length > 0
+        ? { kind: "marked" }
+        : test.outcomeProcessing,
     parts: test.parts.map((part) => ({ ...part, children: part.children.map(unlinked) })),
     unsupported: [...test.unsupported, ...added],
   };

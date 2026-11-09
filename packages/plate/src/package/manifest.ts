@@ -18,8 +18,9 @@
  * walk's refusals, the counts' and the rules' are reported together, in that order. What needs the
  * package's files or documents, which files exist and what each document's root is, belongs to the
  * package reader. {@link resourceLom} reads what each resource's own LOM metadata gives as its
- * object's identifier and title, which the package reader compares with the object's document
- * (reading 62).
+ * object's identifier, title and languages, which the package reader compares with the object's
+ * document (reading 62, "an item's or test's identifier and title are those its package's LOM
+ * metadata gives it", and reading 134).
  *
  * The readings the manifest binds: `qtiMetadata` is admitted as a `cp:metadata` child or inside
  * `lom` (reading 32), a `controlfile` resource and a packaged XSD listed as a file are admitted
@@ -98,9 +99,16 @@ export interface ManifestResource {
 
 /**
  * What one LOM `general` gives as its object's identifier or its title: each value as written, in
- * document order, and where the first element holding one is.
+ * document order, with the language each states, and where the first element holding one is.
  */
 export interface LomValues {
+  /**
+   * The `language` each value's `string` writes, as written, one for each of `values` in its order:
+   * none for a `string` that writes none, and for every `identifier` entry, which states no
+   * language. A title string is compared in its document's language by it (reading 62, "an item's
+   * or test's identifier and title are those its package's LOM metadata gives it").
+   */
+  readonly languages: readonly Option.Option<string>[];
   /**
    * The path of the first `identifier`, or `title`, of the `general` that holds a value, where a
    * refusal of the values points.
@@ -113,11 +121,21 @@ export interface LomValues {
 }
 
 /**
- * The identifier and title one LOM `general` in a resource's own metadata gives the object its
- * document is, each none when the `general` gives none.
+ * The identifier, languages and title one LOM `general` in a resource's own metadata gives the
+ * object its document is, the identifier and title each none when the `general` gives none, and
+ * where the `general` is.
  */
 export interface LomGeneral {
   readonly identifier: Option.Option<LomValues>;
+  /**
+   * The text of each of the `general`'s `language` elements, as written, in document order: the
+   * languages its object uses, which reading 134 compares with its document's `xml:lang` forms.
+   */
+  readonly languages: readonly string[];
+  /**
+   * The `general`'s path in the manifest, where a refusal of its languages points.
+   */
+  readonly location: string;
   readonly title: Option.Option<LomValues>;
 }
 
@@ -1051,43 +1069,57 @@ export const readManifest = (
 
 /**
  * Gather the values a LOM `general` gives through its children of one name: the text of each of
- * their children of another name, as written.
+ * their children of another name, as written, each with the `language` it writes.
+ *
+ * Only a title's `string`, a LOM `LanguageString`, carries a `language`, an `xs:string` kept as
+ * written (`imsmd_loose_v1p3p2.xsd`); an identifier's `entry` is a `CharacterString` and states
+ * none.
  *
  * @param general The `general`.
  * @param holder The local name of the children that hold the values, `identifier` or `title`.
  * @param value The local name of each value's element, `entry` or `string`.
  * @param paths Each element's path, as the walk spells it.
- * @returns The values with the path of the first holder that holds one, none when none does.
+ * @returns The values and their languages with the path of the first holder that holds one, none
+ *   when none does.
  */
 const lomValues = (
   general: SourceElement,
-  holder: string,
-  value: string,
+  holder: "identifier" | "title",
+  value: "entry" | "string",
   paths: ReadonlyMap<SourceElement, string>,
 ): Option.Option<LomValues> => {
   const [first, ...rest] = lomChildren(general, holder).flatMap((element) =>
-    lomChildren(element, value).map(
-      (child) => [element, child.children.map((part) => writtenText(part)).join("")] as const,
-    ),
+    lomChildren(element, value).map((child) => ({
+      holder: element,
+      language:
+        value === "string"
+          ? Option.map(attributeOf(child, "language"), (attribute) => attribute.value)
+          : Option.none<string>(),
+      text: child.children.map((part) => writtenText(part)).join(""),
+    })),
   );
 
   return first === undefined
     ? Option.none()
     : Option.some({
-        location: paths.get(first[0]) ?? "",
-        values: [first[1], ...rest.map(([, text]) => text)],
+        languages: [first.language, ...rest.map(({ language }) => language)],
+        location: paths.get(first.holder) ?? "",
+        values: [first.text, ...rest.map(({ text }) => text)],
       });
 };
 
 /**
- * Read the LOM `general` of each resource's own metadata, which reading 62 compares with the
+ * Read the LOM `general` of each resource's own metadata, which reading 62 ("an item's or test's
+ * identifier and title are those its package's LOM metadata gives it") and reading 134 ("an item's
+ * or a test's languages are listed by its records' general categories") compare with the
  * resource's document.
  *
  * Every resource of the manifest's `resources` is keyed by its location, the path its
  * {@link ManifestResource} holds as `location`, with each `general` of each `lom` its `metadata`
  * holds, in document order, none when it holds no LOM. The manifest's own metadata and a file's are
- * not read: the metadata binding ties only a resource's to the object its document is. Values stay
- * as written; comparing them is the package reader's.
+ * not read: the metadata binding ties only a resource's to the object its document is. Values,
+ * their languages and the `general`'s own languages stay as written; comparing them is the package
+ * reader's.
  *
  * @param source A manifest {@link readManifest} read.
  * @returns Each resource's LOM generals, keyed by its location.
@@ -1105,6 +1137,10 @@ export const resourceLom = (source: SourceDocument): ReadonlyMap<string, readonl
               lomChildren(metadata, "lom").flatMap((lom) =>
                 lomChildren(lom, "general").map((general): LomGeneral => ({
                   identifier: lomValues(general, "identifier", "entry", paths),
+                  languages: lomChildren(general, "language").map((language) =>
+                    language.children.map((part) => writtenText(part)).join(""),
+                  ),
+                  location: paths.get(general) ?? "",
                   title: lomValues(general, "title", "string", paths),
                 })),
               ),
