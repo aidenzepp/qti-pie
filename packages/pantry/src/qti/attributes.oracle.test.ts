@@ -121,7 +121,6 @@ describe("qti/attributes.ts, declared", () => {
       "AL5 attribute count",
       "Attribute prefix",
       "Double bound",
-      "Double value",
       "E1 derived",
       "Foreign attribute class",
       "TextDomain",

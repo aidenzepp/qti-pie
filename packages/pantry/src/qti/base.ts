@@ -109,11 +109,9 @@ import {
 import {
   Attribute,
   AttributeEntity,
-  DoubleValue,
   attributeLaws,
   Idref,
   OpenAttributeName,
-  TextDoubleValue,
 } from "#pantry/qti/attributes.ts";
 import {
   Comment,
@@ -364,16 +362,14 @@ const chardataRelations = {
 };
 
 /**
- * `attributes.ts`'s relations: every attribute, its IDREF tokens, its entity references, its open
- * name and its typed value.
+ * `attributes.ts`'s relations: every attribute, its IDREF tokens, its entity references and its
+ * open name.
  */
 const attributeRelations = {
   Attribute,
   AttributeEntity,
-  DoubleValue,
   Idref,
   OpenAttributeName,
-  TextDoubleValue,
 };
 
 /**

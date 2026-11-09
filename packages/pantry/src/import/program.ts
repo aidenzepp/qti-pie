@@ -303,11 +303,9 @@ export const rowCountsOf = (program: ImportProgram): ReadonlyMap<string, number>
   for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
     add("Node", 1);
     add("Namespace", node.namespaces.length);
-    add("TextDoubleValue", node.doubleValue.length);
     add("Attribute", node.attributes.length);
     for (const attribute of node.attributes) {
       add("AttributeEntity", attribute.entities.length);
-      add("DoubleValue", attribute.doubleValue.length);
       add("Idref", attribute.idrefs.length);
       add("OpenAttributeName", attribute.openName.length);
     }

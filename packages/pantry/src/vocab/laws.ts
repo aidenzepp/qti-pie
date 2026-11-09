@@ -398,11 +398,6 @@ export const lawTable = {
     source:
       "XML Schema Part 2's minInclusive and minExclusive on a double's value (XML Schema 1.1 Part 2 §3.3.5.2, doubleLexicalMap: a literal rounds to its IEEE value, a magnitude below 2^-1075 to a zero of its sign, and -0 equals 0): NonNegativeDoubleDType's minInclusive 0.0 (imsqti_asiv3p0_v1p0.xsd:24034-24038, imsqti_asiv3p0p1_v1p0.xsd:24120-24124) and reading 16's minExclusive 0 for normal-maximum; reading 144",
   },
-  "Double value": {
-    rule: "attribute-lexical",
-    source:
-      "reading 144: a bounded double's value is a row of its own, DoubleValue, where its lexical form is in xs:double's lexical space (XML Schema 1.0 Part 2 §3.2.5.1, reading 71's edition), read once by the import (write.ts doubleOf)",
-  },
   "E1 derived": {
     rule: "derived",
     source:

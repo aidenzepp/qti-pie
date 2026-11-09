@@ -875,7 +875,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     144,
     {
       owner:
-        "the grammar's `DoubleBound` and `BoundFacet` (`src/grammar/domains.ts`, `src/grammar/install.ts`: a double's or a float's one lower bound, its pattern the lexical space less NaN); the import's `DoubleValue` and `TextDoubleValue` (`src/qti/attributes.ts`, read by `doubleOf` in `src/import/write.ts`) under laws Double value and Double bound (rule `attribute-lexical`); the oracle's Double bound, held by `src/qti/double-bound.oracle.test.ts` against XML Schema's value bound",
+        "the grammar's `DoubleBound` and `BoundFacet` (`src/grammar/domains.ts`, `src/grammar/install.ts`: a double's or a float's one lower bound, its pattern the lexical space less NaN); the schema's `Double_bound` checks on `Attribute` and `Node` (`src/qti/attributes.ts`), the value grizzle's `Compute.parseDouble` of the collapsed form, under law Double bound (rule `attribute-lexical`); the oracle's Double bound, held by `src/qti/double-bound.oracle.test.ts` against XML Schema's value bound",
       status: "G",
     },
   ],

@@ -27,21 +27,18 @@
 import { Bits, ChangeSet } from "@bjornpagen/grizzle";
 import type { Addition, InsertAllRowsOf, Uuid } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Order, Struct } from "effect";
-import { patternFlags } from "#pantry/grammar/domains.ts";
 import {
   attributeRows,
   AttributeSlot,
-  boundedDomains,
   Flag,
   KindNamespace,
   openElementClasses,
   Position,
-  ValueDomainOf,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { contextsOf } from "#pantry/import/context.ts";
-import { foldAt, foldOf, governorOf, textDomainOf } from "#pantry/import/fold.ts";
+import { foldAt, foldOf, governorOf } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import type { documentLayer } from "#pantry/import/roster.ts";
@@ -59,10 +56,8 @@ import type {
 import type {
   Attribute,
   AttributeEntity,
-  DoubleValue,
   Idref,
   OpenAttributeName,
-  TextDoubleValue,
 } from "#pantry/qti/attributes.ts";
 import type { Document, Namespace } from "#pantry/qti/chardata.ts";
 import type { Node } from "#pantry/qti/node.ts";
@@ -279,21 +274,10 @@ export type IdrefInsert = Omit<Addition<typeof Idref>, "attribute" | "node">;
 export type OpenNameInsert = Omit<Addition<typeof OpenAttributeName>, "attribute" | "node">;
 
 /**
- * A bounded attribute's typed value, as its attribute's family nests it.
- */
-export type DoubleValueInsert = Omit<Addition<typeof DoubleValue>, "attribute" | "node">;
-
-/**
- * A bounded text's typed value, as its element's family nests it.
- */
-export type TextDoubleValueInsert = Omit<Addition<typeof TextDoubleValue>, "node">;
-
-/**
  * An attribute as its element's family nests it: its written fields but the `node` the nesting
- * supplies, and its four families at their count fields.
+ * supplies, and its three families at their count fields.
  */
 export type AttributeInsert = Omit<Addition<typeof Attribute>, "node"> & {
-  readonly doubleValue: readonly DoubleValueInsert[];
   readonly entities: readonly EntityInsert[];
   readonly idrefs: readonly IdrefInsert[];
   readonly openName: readonly OpenNameInsert[];
@@ -317,7 +301,6 @@ export type NodeFields = Omit<Addition<typeof Node>, "document" | "parent">;
 export type NodeMember = NodeFields & {
   readonly attributes: readonly AttributeInsert[];
   readonly children: readonly NodeMember[];
-  readonly doubleValue: readonly TextDoubleValueInsert[];
   readonly namespaces: readonly NamespaceInsert[];
 };
 
@@ -425,24 +408,12 @@ const positionHandle = (state: number): PositionHandle => {
 };
 
 /**
- * The domains a bound judges ({@link boundedDomains}), each with its lexical space as the host
- * reads it: its pattern, read with {@link patternFlags} as AL1 reads it.
- */
-const boundedPatterns: ReadonlyMap<string, RegExp> = new Map(
-  ValueDomainOf.rows
-    .filter(({ domain }) => boundedDomains.some((bounded) => bounded === domain))
-    .map(({ domain, pattern }) => [domain, new RegExp(pattern, patternFlags)] as const),
-);
-
-/**
  * What the host writes of an attribute its governor admits, read once from the attribute grammar
  * (`AttributeGrammar`, `AttributeSlotOf`) and its domain's rows: its slot's position, whether its
- * domain is an `xs:IDREF` or `xs:IDREFS` (`ValueIdentity`), so it holds its IDREF pieces, and its
- * domain's lexical space where a bound judges the domain ({@link boundedPatterns}).
+ * domain is an `xs:IDREF` or `xs:IDREFS` (`ValueIdentity`), so it holds its IDREF pieces.
  */
 interface AdmittedAttribute {
   readonly idrefs: boolean;
-  readonly lexicalSpace: Option.Option<RegExp>;
   readonly position: (typeof attributeRows)[number]["position"];
 }
 
@@ -456,44 +427,11 @@ const attributeGrammarAt: ReadonlyMap<string, AdmittedAttribute> = new Map(
         keyOf(version, governor, name),
         {
           idrefs: idrefDomains.has(domain),
-          lexicalSpace: Option.fromUndefinedOr(boundedPatterns.get(domain)),
           position,
         },
       ] as const,
   ),
 );
-
-/**
- * The whitespace `xs:double`'s `collapse` reads around a value: XML's `S`.
- */
-const doubleSpace = /^[\t\n\r ]+|[\t\n\r ]+$/gu;
-
-/**
- * The values of `xs:double`'s three special literals in XML Schema 1.0, the edition QTI 3.0's XSDs
- * are written in (spec reading 71): `INF`, `-INF` and `NaN`. `+INF` is XML Schema 1.1's, outside
- * 1.0's lexical space, so the domain's pattern refuses it and no value of it is read.
- */
-const specialDoubles: ReadonlyMap<string, number> = new Map([
-  ["INF", Number.POSITIVE_INFINITY],
-  ["-INF", Number.NEGATIVE_INFINITY],
-  ["NaN", Number.NaN],
-]);
-
-/**
- * Read an `xs:double` literal's value, the reader of an attribute's or a text's double (a map key's
- * is grizzle's `Compute.parseDouble`, the query `MapKeyFloat` of `#pantry/qti/queries.ts`): its
- * whitespace collapsed, then a special literal's value, else the IEEE double nearest the decimal it
- * writes, which JavaScript's `Number` rounds to as XML Schema 1.1 Part 2 §3.3.5.2 does, a magnitude
- * below 2^-1075 rounding to a zero of its sign.
- *
- * @param lexical - The literal, in `xs:double`'s lexical space after collapsing.
- * @returns Its value.
- */
-export const doubleOf = (lexical: string): number => {
-  const text = lexical.replaceAll(doubleSpace, "");
-
-  return specialDoubles.get(text) ?? Number(text);
-};
 
 /**
  * The whitespace an IDREFS value separates its tokens by, XML's `S`.
@@ -628,9 +566,8 @@ interface GatheredAttribute {
 /**
  * A node below the document node as the walk gathers it: its row; its attributes and namespace
  * declarations, in slot order; its characters, `chars`, a text or whitespace node's own and an
- * entity reference's `&name;`, empty for a node that holds none; `text`, its children's characters
- * in document order, its string value where its text is checked, which a bounded text's typed value
- * is read from; and its namespace name where it is a foreign element.
+ * entity reference's `&name;`, empty for a node that holds none; and its namespace name where it is
+ * a foreign element.
  */
 interface Gathered {
   readonly attributes: GatheredAttribute[];
@@ -638,7 +575,6 @@ interface Gathered {
   foreignNamespace: Option.Option<string>;
   readonly namespaces: FlatRows<Composed>["namespaces"][number][];
   readonly node: NodeRow<Composed>;
-  text: string;
 }
 
 /**
@@ -664,7 +600,6 @@ const gatheredOf = (rows: FlatRows<Composed>): Iterable<Gathered> => {
                 foreignNamespace: Option.none(),
                 namespaces: [],
                 node,
-                text: "",
               },
             ] as const,
           ],
@@ -701,12 +636,6 @@ const gatheredOf = (rows: FlatRows<Composed>): Iterable<Gathered> => {
     ownerIn(nodes, node, "an open element name").foreignNamespace = Option.some(namespace);
   }
 
-  for (const { chars, node } of nodes.values()) {
-    if (node.parent !== self) {
-      ownerIn(nodes, node.parent, `node ${node.id}, its child`).text += chars;
-    }
-  }
-
   return nodes.values();
 };
 
@@ -717,8 +646,8 @@ const gatheredOf = (rows: FlatRows<Composed>): Iterable<Gathered> => {
  * @param element - Its element, gathered: its version, kind, governing type and namespace name.
  * @returns The attribute: its slot under its element's governor (empty for a name the governor
  *   does not admit, which AL1 refuses), its IDREF pieces where its domain is an `xs:IDREF` or
- *   `xs:IDREFS`, its typed value where its domain is bounded and its lexical form is in the
- *   domain's lexical space, its entity references and its open name.
+ *   `xs:IDREFS`, its entity references and its open name. A bounded value has no row: the
+ *   database reads it from the lexical form (`Double_bound`, `#pantry/qti/attributes.ts`).
  */
 const attributeOf = (attribute: GatheredAttribute, element: Gathered): AttributeInsert => {
   const { row } = attribute;
@@ -726,12 +655,8 @@ const attributeOf = (attribute: GatheredAttribute, element: Gathered): Attribute
   const admitted = Option.fromUndefinedOr(
     attributeGrammarAt.get(keyOf(version, governorOf(version, kind, governs), row.name)),
   );
-  const lexicalSpace = admitted.pipe(Option.flatMap((admits) => admits.lexicalSpace));
 
   return {
-    doubleValue: Option.exists(lexicalSpace, (space) => space.test(row.lexical))
-      ? [{ value: doubleOf(row.lexical) }]
-      : [],
     entities: attribute.entities.map(({ name, offset }) => ({ name, offset })),
     id: row.id,
     idrefs: Option.exists(admitted, ({ idrefs }) => idrefs) ? idrefPiecesOf(row.lexical) : [],
@@ -778,9 +703,6 @@ const memberOf = (
   const ends = endsOf(gathered.chars);
   const children: NodeMember[] = [];
   const governor = governorOf(version, kind, node.governs);
-  const textSpace = Option.flatMap(textDomainOf(version, governor), (domain) =>
-    Option.fromUndefinedOr(boundedPatterns.get(domain)),
-  );
 
   return {
     children,
@@ -790,9 +712,6 @@ const memberOf = (
       chars: gathered.chars,
       children,
       documentType,
-      doubleValue: Option.exists(textSpace, (space) => space.test(gathered.text))
-        ? [{ value: doubleOf(gathered.text) }]
-        : [],
       first: ends.first,
       governor,
       id: node.id,
@@ -851,7 +770,6 @@ export const rootInsertOf = (
     children: rootChildren,
     document: self,
     documentType,
-    doubleValue: [],
     first: "",
     governor: "document",
     id: self,

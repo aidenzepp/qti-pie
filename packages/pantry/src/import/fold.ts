@@ -27,7 +27,6 @@ import {
   interactionKinds,
   NodeKind,
   nonElementKinds,
-  TextDomain,
 } from "#pantry/grammar/install.ts";
 import type { Flag } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
@@ -108,13 +107,6 @@ export const governorOf = (version: string, kind: string, governs: Option.Option
   );
 
 /**
- * The installed `TextDomain`, by `version governor`.
- */
-const textDomainAt: ReadonlyMap<string, string> = new Map(
-  TextDomain.rows.map(({ domain, governor, version }) => [keyOf(version, governor), domain]),
-);
-
-/**
  * Read the installed `Enters` as the flags each node kind enters for its descendants: every kind
  * of the `NodeKind` roster a key, so a kind that enters none holds no flag rather than no entry.
  *
@@ -170,16 +162,6 @@ const interactions: ReadonlySet<string> = new Set(interactionKinds);
  * The kinds that are no element, which the element counts step over.
  */
 const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
-
-/**
- * Read the domain an element reads its text in: `TextDomain` under its governor.
- *
- * @param version - The element's version.
- * @param governor - Its governor ({@link governorOf}).
- * @returns The domain, none where `TextDomain` holds no row.
- */
-export const textDomainOf = (version: string, governor: string): Option.Option<string> =>
-  Option.fromNullishOr(textDomainAt.get(keyOf(version, governor)));
 
 /**
  * The state a family's automaton starts in, before its first member: position 0, the family's

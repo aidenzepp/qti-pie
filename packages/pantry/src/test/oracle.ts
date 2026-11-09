@@ -7156,10 +7156,6 @@ const ownLaws = {
     explain: (keys) =>
       `${field(keys, "lexical")} is a double whose value lies outside its domain's ${field(keys, "facet")} ${field(keys, "bound")}`,
   },
-  "Double value": {
-    explain: () =>
-      "a bounded double's typed value is written where its lexical form is in xs:double's lexical space",
-  },
   "E1 derived": {
     explain: (keys) =>
       `holds state ${field(keys, "state")}, ${field(keys, "elements")} elements, ancestry ${inBraces(membersOf(keys["ancestry"]))}, string value ${JSON.stringify(field(keys, "stringValue"))} and first and last characters ${JSON.stringify(field(keys, "first"))} and ${JSON.stringify(field(keys, "last"))}, where the closed relations, its children and its own characters derive state ${field(keys, "derivedState")}, ${field(keys, "derivedElements")} elements, ancestry ${inBraces(membersOf(keys["derivedAncestry"]))}, ${JSON.stringify(field(keys, "derivedStringValue"))} and ${JSON.stringify(field(keys, "derivedFirst"))} and ${JSON.stringify(field(keys, "derivedLast"))}`,

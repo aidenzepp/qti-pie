@@ -2862,12 +2862,13 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      pattern states the lexical space alone, XML Schema 1.0's (reading 71's edition, in which `+INF` is outside it)
      less `NaN`, since a datatype's lexical space is "the prescribed set of strings which the lexical mapping for that
      datatype maps to values of that datatype" (XML Schema 1.1 Part 2 §2.3) and NaN meets no bound, so it is no value
-     of the bounded type; the value is a row of its own: the import reads the double once from the lexical form or the
-     text (`DoubleValue`, `TextDoubleValue`), where the form is in the lexical space, and the bound is a check on that
-     value (`Double bound`), read from the domain's `DoubleBound`. grizzle stores a `float8` with one zero, `-0` as 0,
-     which no bound tells apart. G1-2 found the database accepting `min-time="-1"`, `step="-1"` and
-     `normal-maximum="0"` while the law oracle refused them: the bound had been an unread `facets` column. (Decided
-     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-G12.)
+     of the bounded type; the database reads the value from the lexical form or the text, collapsed, by grizzle's
+     `Compute.parseDouble`, where the form is in the lexical space, and the bound is a check on that value
+     (`Double bound`) on the attribute or the element itself, read from the domain's `DoubleBound`; no row holds the
+     value (Bjorn, 2026-11-09). PostgreSQL's `float8` orders `-0` equal to 0, so no bound tells them apart. G1-2 found
+     the database accepting `min-time="-1"`, `step="-1"` and `normal-maximum="0"` while the law oracle refused them: the
+     bound had been an unread `facets` column. (Decided 2026-11-07 by the coordinator, under the operator's standing
+     ruling of 2026-11-05, from seat FIX-G12.)
 145. **A fragment a test or a section document splices is judged in the test that places it, once per placement: its
      content references name the test's variables, and a rule fragment's variable references are the test's own.**
      Reading 117 reads an included fragment as XInclude's result holds it, "in the context of the item in which it is

@@ -54,12 +54,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
           const program = yield* readProgram(dir);
           const flats = program.documents.map(({ ids, listed }) => flatten(listed.tree, ids.idOf));
           const { Instance: instances, Node: roots, Package: records, ...flat } = program.inputs;
-          const members = { DoubleValue: 0, Idref: 0, TextDoubleValue: 0 };
+          const members = { Idref: 0 };
           const stack: NodeMember[] = [...roots.values()];
           for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
-            members.TextDoubleValue += node.doubleValue.length;
-            for (const { doubleValue, idrefs } of node.attributes) {
-              members.DoubleValue += doubleValue.length;
+            for (const { idrefs } of node.attributes) {
               members.Idref += idrefs.length;
             }
 
@@ -85,7 +83,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
             ],
             ["CellLeaf", sumOf(flat.MathCell, ({ leaves }) => leaves.length)],
             ["Entry", program.files.length],
-            ["DoubleValue", members.DoubleValue],
             ["HeaderToken", sumOf(flat.CellHeaders, ({ tokens }) => tokens.length)],
             ["Idref", members.Idref],
             ["Instance", instanceRows],
@@ -94,7 +91,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
             ["OpenAttributeName", flats.reduce((sum, rows) => sum + rows.openNames.length, 0)],
             ["Package", records.size],
             ["ReferenceSegment", sumOf(flat.AssembledReference, ({ segments }) => segments.length)],
-            ["TextDoubleValue", members.TextDoubleValue],
             ["TextIdref", sumOf(flat.IdentityText, ({ idrefs }) => idrefs.length)],
             ["ToleranceToken", sumOf(flat.Tolerance, ({ tokens }) => tokens.length)],
             ...Object.entries(flat).map(([relation, rows]) => [relation, rows.size] as const),

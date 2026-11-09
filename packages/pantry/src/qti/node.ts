@@ -160,8 +160,7 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  *   elsewhere: the string value fold's step), and `first` and `last` (the first and last code
  *   points of its `chars`, empty where `chars` is);
  * - **the tree's group:** `parent`, which the nesting supplies and the root holds as its own id;
- * - **drawn:** `at`, `children`, `start`, `end`, and the attribute, namespace and typed text
- *   (`doubleValue`, `TextDoubleValue` of `#pantry/qti/attributes.ts`) family counts;
+ * - **drawn:** `at`, `children`, `start`, `end`, and the attribute and namespace family counts;
  * - **accumulated** by grizzle along the tree's axes: the parent copies (`parentParentKind` the
  *   parent's own `parentKind`, so a member's string value can be selected by its grandparent, as
  *   {@link copiedTitleText} is), `was` and `lastState`, and each fold's values: `elementsWas`,
@@ -186,7 +185,6 @@ export const Node = relation(
     countedChildren: accumulated(natural, 0n),
     document: uuid,
     documentType: closedId(DocumentType),
-    doubleValue: drawn(natural),
     elementChildren: accumulated(natural, 0n),
     elements: accumulated(natural, 0n),
     elementsWas: accumulated(natural, 0n),

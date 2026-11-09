@@ -338,7 +338,6 @@ export const keyNames: readonly (readonly [string, LawName])[] = [
   ...namedBy("AL4 open names", "OpenAttributeName"),
   ...namedBy("E1 derived", "Idref"),
   ...namedBy("AttributeEntity owner", "AttributeEntity"),
-  ...namedBy("Double value", "DoubleValue", "TextDoubleValue"),
   ...namedBy("Package key", "Package"),
   ...namedBy("Entry family", "Entry"),
   ...namedBy(

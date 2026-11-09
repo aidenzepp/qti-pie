@@ -156,7 +156,7 @@ describe("the host judge's model of a schema", () => {
   it("reads every member of the schema, its stored relations by name", () => {
     const modelled = modelledRelations(Object.values(Qti.relations));
 
-    for (const name of ["Attribute", "DoubleValue", "Node", "TextDoubleValue"]) {
+    for (const name of ["Attribute", "Idref", "Node", "OpenAttributeName"]) {
       assert.isTrue(modelled.has(name), name);
     }
   });

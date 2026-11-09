@@ -1,8 +1,9 @@
 /**
- * A bounded double's lower bound, judged on its typed value three ways alike: the law oracle's own
- * reading (`boundBroken` of `#pantry/test/oracle.ts`, through its `numberOf`), and the import's
- * rows, its one reader `doubleOf` writing the `DoubleValue` a host judge holds to `Double_bound`
- * and `Double_value`; the database holds the same rows to the same laws in the database tier.
+ * A bounded double's lower bound, judged on its typed value two ways alike: the law oracle's own
+ * reading (`boundBroken` of `#pantry/test/oracle.ts`, through its `numberOf`), and the schema's
+ * `Double_bound` checks over the import's rows, which read the value by grizzle's
+ * `Compute.parseDouble` of the collapsed form, here by the host judge's reading of that parse;
+ * the database holds the same rows to the same checks in the database tier.
  *
  * Oracle: XML Schema's value bound as a table (`expected`): a literal is in its domain when it is
  * in `xs:double`'s lexical space (XML Schema 1.0, the edition of spec reading 71, so `+INF` is
@@ -162,10 +163,9 @@ const manifest = `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imsc
 </manifest>`;
 
 /**
- * The laws a bound breaks, by the oracle's names: the lexical half of AL1, and the typed value's
- * two laws.
+ * The laws a bound breaks, by the oracle's names: the lexical half of AL1, and the bound.
  */
-const boundLaws = new Set(["value domain", "Double bound", "Double value"]);
+const boundLaws = new Set(["value domain", "Double bound"]);
 
 /**
  * The laws a bounded text breaks, by the oracle's names: TextDomain's pattern, and the bound.
@@ -175,7 +175,7 @@ const textLaws = new Set(["TextDomain", "Double bound"]);
 /**
  * The same laws as the schema names its checks.
  */
-const boundChecks = new Set(["value_domain", "TextDomain", "Double_bound", "Double_value"]);
+const boundChecks = new Set(["value_domain", "TextDomain", "Double_bound"]);
 
 /**
  * A case's files.
