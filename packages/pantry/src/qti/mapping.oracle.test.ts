@@ -779,8 +779,12 @@ describe("qti/mapping.ts, a two-item key's typed value", { timeout: searchTimeou
     // when the file typechecks, and the entry's node keeps two entries of one value two rows.
     // Bound: the three relations.
     const { MapKeyDirectedPair, MapKeyPair, MapKeyPoint } = Qti.relations;
+    const x: "numeric" = MapKeyPoint.heading.x.sql;
+    const y: "numeric" = MapKeyPoint.heading.y.sql;
+
+    assert.deepStrictEqual([x, y], ["numeric", "numeric"]);
     for (const [relation, heading] of [
-      [MapKeyPoint, ["mapping", "node", "value"]],
+      [MapKeyPoint, ["mapping", "node", "x", "y"]],
       [MapKeyPair, ["mapping", "node", "value"]],
       [MapKeyDirectedPair, ["mapping", "node", "value"]],
     ] as const) {

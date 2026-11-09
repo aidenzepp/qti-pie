@@ -591,7 +591,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               point: yield* typedKeyRule(
                 client,
                 MapKeyItems.name,
-                `${Qti.relations.MapKeyPoint.name}(mapping, value)`,
+                `${Qti.relations.MapKeyPoint.name}(mapping, x, y)`,
               ),
             };
             for (const { baseType, keys, refused } of [

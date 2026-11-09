@@ -916,21 +916,25 @@ export const queriesOf = (base: QtiBase) => {
   );
 
   /**
-   * A point map key's value, one row per entry of a point mapping whose key splits into two runs
-   * ({@link MapKeyItems}) that are each in `xs:integer`'s lexical space: its entry's `node`, its
-   * `mapping`, and `value`, the split's `ordered` text, its two runs with one space between, so
-   * a probe of the key over `(mapping, value)` reads one key text (mapping 16 and value 2,591
-   * bytes, under PostgreSQL's 2,704). It is no canonical point: `1 2` and `01 +2` are two values
-   * here, where the law oracle reads one point, a regression owed a single-text canonical form
-   * that no `Compute` term builds from the runs.
+   * A point map key's typed value, one row per entry of a point mapping whose key splits into two
+   * runs ({@link MapKeyItems}) that are each in `xs:integer`'s lexical space: its entry's `node`,
+   * its `mapping`, and `x` and `y`, the integers its two runs name, each PostgreSQL's
+   * `Compute.parseDecimal` of the run's text, as `MapKeyInteger` reads one. A point is "an
+   * integer tuple" (information model §8.13), so the key over `(mapping, x, y)` is uniqueness by
+   * typed value: `1 2`, `01 +2` and `1`, a tab, `2` are one point.
+   *
+   * The key's probe compares the parses, which no index holds (grizzle indexes a rule's probe on
+   * fields alone, `physical/ddl/rules.ts`), so no index pairs the two runs, each a key text, past
+   * PostgreSQL's 2,704-byte entry. The `where` selects by the matches the parses need as their
+   * guards, restated, so no row holds a `Compute.when`'s third argument.
    */
   const MapKeyPoint = derived(
     "MapKeyPoint",
     query(base).rule((r) => {
-      const { first, mapping, node, ordered, second } = v(MapKeyItems, "items");
+      const { first, mapping, node, second } = v(MapKeyItems, "items");
 
       return r
-        .match(MapKeyItems, { first, mapping, node, ordered, second })
+        .match(MapKeyItems, { first, mapping, node, second })
         .match(MapKeyType, { baseType: "point", node })
         .where(
           r.and(
@@ -938,7 +942,20 @@ export const queriesOf = (base: QtiBase) => {
             Compute.matches(second, integerKeyPattern),
           ),
         )
-        .find({ mapping, node, value: ordered });
+        .find({
+          mapping,
+          node,
+          x: Compute.when(
+            Compute.matches(first, integerKeyPattern),
+            (integer) => Compute.parseDecimal(integer),
+            0n,
+          ),
+          y: Compute.when(
+            Compute.matches(second, integerKeyPattern),
+            (integer) => Compute.parseDecimal(integer),
+            0n,
+          ),
+        });
     }),
   );
 
@@ -995,7 +1012,7 @@ export const queriesOf = (base: QtiBase) => {
     "Map key": [
       key(on(MapKeyInteger, "mapping", "value")),
       key(on(MapKeyFloat, "mapping", "value")),
-      key(on(MapKeyPoint, "mapping", "value")),
+      key(on(MapKeyPoint, "mapping", "x", "y")),
       key(on(MapKeyPair, "mapping", "value")),
       key(on(MapKeyDirectedPair, "mapping", "value")),
     ],
