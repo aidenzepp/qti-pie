@@ -26,7 +26,13 @@ import type {
   SourceElement,
 } from "#plate/document/source.ts";
 import { packageTables } from "#plate/package/tables.ts";
-import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
+import {
+  cpuMillis,
+  growthFactor,
+  growthLimit,
+  growthRatio,
+  growthRuns,
+} from "#plate/test/growth.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { checkStructure, governingTables } from "#plate/validate/structure.ts";
 import { tables as generatedTables } from "#plate/validate/tables.ts";
@@ -1535,6 +1541,66 @@ const defaultHotspot = (local: string, context: string) => ({
   element: local,
   reading: "80",
 });
+
+/**
+ * The default hotspot choices of the smaller interaction the default hotspot growth check reads,
+ * and the text runs after them; the larger holds {@link growthFactor} times as many of each.
+ */
+const fewerDefaultHotspots = 1000;
+
+/**
+ * The hotspot choices, and the text runs after them, of the hostile-size default hotspot case: the
+ * size at which a scan of the interaction's children per default hotspot took over a second.
+ */
+const hostileDefaultHotspots = 16_000;
+
+/**
+ * The default hotspot growth check and hostile-size case check interactions of up to 16,000
+ * hotspot choices and 16,000 text runs several times each. A scan of the children per default
+ * hotspot took several seconds of that, past vitest's default of 5 s, and a failing case should
+ * report its ratio, not a timeout.
+ */
+const hotspotGrowthTimeoutMs = 60_000;
+
+/**
+ * Construct a whole item whose hotspot interaction holds, after its image, a run of hotspot
+ * choices of one shape and then as many text runs, each a line break. The reader keeps text that
+ * comments keep apart as separate runs, so the runs are what a line break and a comment, repeated,
+ * read as: no element follows the last hotspot, and every text run follows every hotspot.
+ *
+ * @param hotspots The hotspot choices, and the text runs after them.
+ * @param geometry Each hotspot choice's `shape`, as written.
+ * @returns The item as a source document.
+ */
+const crowdedHotspots = (hotspots: number, geometry: string): SourceDocument =>
+  wholeItem([
+    el(
+      "qti-item-body",
+      [],
+      [
+        el(
+          "qti-hotspot-interaction",
+          [attr("response-identifier", "RESPONSE")],
+          [
+            picture,
+            ...Array.from({ length: hotspots }, (_, index) =>
+              hotspot("qti-hotspot-choice", `H${index + 1}`, geometry),
+            ),
+            ...Array.from({ length: hotspots }, () => text("\n")),
+          ],
+        ),
+      ],
+    ),
+  ]);
+
+/**
+ * The path of a hotspot choice of {@link crowdedHotspots}'s interaction.
+ *
+ * @param position Its 1-based position among the interaction's hotspot choices.
+ * @returns Its location.
+ */
+const crowdedHotspot = (position: number): Location =>
+  at(`qti-assessment-item/qti-item-body/qti-hotspot-interaction/qti-hotspot-choice[${position}]`);
 
 /**
  * Construct a whole item whose body holds a position object stage with one position object
@@ -4786,6 +4852,71 @@ describe("checkStructure", () => {
           );
         }),
       formatGrowthTimeoutMs,
+    );
+  });
+
+  describe("align-54 r11 default hotspot position: a default hotspot's place is read once per interaction (reading 80)", () => {
+    it.effect(
+      "align-54 r11 default hotspot position finding 13 (b): refuses every default hotspot choice but the last of a hotspot interaction that ends in text as misplaced-element, and checks 8 times the hotspots and text in under 32 times the time (reading 80)",
+      () =>
+        Effect.gen(function* checksDefaultHotspotsInLinearTime() {
+          const more = fewerDefaultHotspots * growthFactor;
+          const fewerSource = crowdedHotspots(fewerDefaultHotspots, "default");
+          const moreSource = crowdedHotspots(more, "default");
+          const refused = judged(moreSource);
+          assert.strictEqual(refused.length, more - 1);
+          assert.deepStrictEqual(refused[0], [
+            "misplaced-element",
+            crowdedHotspot(1),
+            defaultHotspot("qti-hotspot-choice", "qti-hotspot-interaction"),
+          ]);
+          assert.deepStrictEqual(refused.at(-1)?.[1], crowdedHotspot(more - 1));
+
+          const growth = yield* growthRatio(
+            () => {
+              checkStructure(fewerSource, generatedTables);
+            },
+            () => {
+              checkStructure(moreSource, generatedTables);
+            },
+          );
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `8 times the hotspots and text took ${growth.toFixed(1)} times as long`,
+          );
+        }),
+      hotspotGrowthTimeoutMs,
+    );
+
+    it.effect(
+      "align-54 r11 default hotspot position finding 13 (b): checks a hotspot interaction of 16,000 default hotspot choices and then 16,000 text runs in under twice the thread CPU of the same interaction with rect hotspot choices (reading 80)",
+      () =>
+        Effect.gen(function* checksHostileHotspotsPromptly() {
+          const defaults = crowdedHotspots(hostileDefaultHotspots, "default");
+          const rects = crowdedHotspots(hostileDefaultHotspots, "rect");
+          assert.strictEqual(judged(defaults).length, hostileDefaultHotspots - 1);
+          assert.deepStrictEqual(judged(rects), []);
+
+          let defaultsMs = Number.POSITIVE_INFINITY;
+          let rectsMs = Number.POSITIVE_INFINITY;
+          for (let run = 0; run < growthRuns; run += 1) {
+            const defaultsRun = yield* cpuMillis(() => {
+              checkStructure(defaults, generatedTables);
+            });
+            const rectsRun = yield* cpuMillis(() => {
+              checkStructure(rects, generatedTables);
+            });
+            defaultsMs = Math.min(defaultsMs, defaultsRun);
+            rectsMs = Math.min(rectsMs, rectsRun);
+          }
+          assert.isBelow(
+            defaultsMs,
+            2 * rectsMs,
+            `the default hotspots took ${defaultsMs.toFixed(0)} ms, the rect ones ${rectsMs.toFixed(0)} ms`,
+          );
+        }),
+      hotspotGrowthTimeoutMs,
     );
   });
 

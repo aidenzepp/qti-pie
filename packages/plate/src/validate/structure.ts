@@ -2998,16 +2998,42 @@ const lastDefaultHotspot: ReadonlySet<string> = new Set([
 const lookupTables: ReadonlySet<string> = new Set(["qti-interpolation-table", "qti-match-table"]);
 
 /**
+ * Each parent's last element child, found once per parent: {@link checkStructure} keeps one for the
+ * document it checks, so an interaction of many default hotspots and much text after them is
+ * scanned once, not once per hotspot.
+ */
+type LastElements = Map<SourceElement, SourceElement>;
+
+/**
  * Report whether an element is its parent's last element child. Text, whitespace and entity
  * references after it do not count, nor do comments and processing instructions, which the shared
- * reader does not keep.
+ * reader does not keep. The parent's children are scanned the first time one of them asks, and the
+ * answer is kept in `lastElements` for the others.
  *
  * @param element The element.
  * @param parent Its parent.
+ * @param lastElements The last element child of each parent already scanned.
  * @returns Whether no element follows it in its parent.
  */
-const isLastElement = (element: SourceElement, parent: SourceElement): boolean =>
-  parent.children.findLast((child) => child.kind === "element") === element;
+const isLastElement = (
+  element: SourceElement,
+  parent: SourceElement,
+  lastElements: LastElements,
+): boolean => {
+  const known = lastElements.get(parent);
+  if (known !== undefined) {
+    return known === element;
+  }
+
+  const last = parent.children.findLast(
+    (child): child is SourceElement => child.kind === "element",
+  );
+  if (last !== undefined) {
+    lastElements.set(parent, last);
+  }
+
+  return last === element;
+};
 
 /**
  * Check a hotspot's place by reading 80 ("a default hotspot is the last hotspot choice of its
@@ -3025,6 +3051,7 @@ const isLastElement = (element: SourceElement, parent: SourceElement): boolean =
  * @param element The element.
  * @param path The element's path.
  * @param parent The element's parent, if it was walked.
+ * @param lastElements The last element child of each parent already scanned.
  * @returns Its `misplaced-element` refusal, or none.
  */
 const checkDefaultHotspot = (
@@ -3032,13 +3059,14 @@ const checkDefaultHotspot = (
   element: SourceElement,
   path: string,
   parent: SourceElement | undefined,
+  lastElements: LastElements,
 ): readonly Refusal[] =>
   element.namespace === qtiNamespace &&
   parent?.namespace === qtiNamespace &&
   isDefaultHotspot(element) &&
   ((element.local === "qti-hotspot-choice" &&
     lastDefaultHotspot.has(parent.local) &&
-    !isLastElement(element, parent)) ||
+    !isLastElement(element, parent, lastElements)) ||
     (element.local === "qti-associable-hotspot" &&
       parent.local === "qti-graphic-gap-match-interaction"))
     ? [
@@ -3250,6 +3278,8 @@ const namedType = (
  * @param parents Each walked element's parent, for the declaration a padded value reads and the
  *   namespace declarations in scope.
  * @param schemas The tables by namespace, for the derivations an `xsi:type` follows.
+ * @param lastElements The last element child of each parent already scanned, which a default
+ *   hotspot's place reads.
  * @returns The element's refusals: its placements, missing attributes, its `xsi:type` and `xsi:nil`,
  *   then each other attribute's in document order, then its text, then its child counts.
  */
@@ -3261,11 +3291,12 @@ const checkElement = (
   governed: Governed,
   parents: ReadonlyMap<SourceElement, SourceElement>,
   schemas: Schemas,
+  lastElements: LastElements,
 ): readonly Refusal[] => {
   const { table } = governed;
   const refusals: Refusal[] = [
     ...checkPlacement(source, element, path, parents),
-    ...checkDefaultHotspot(source, element, path, parents.get(element)),
+    ...checkDefaultHotspot(source, element, path, parents.get(element), lastElements),
     ...checkLookupTable(source, element, path, parents.get(element)),
   ];
   const label = elementName(element);
@@ -4430,13 +4461,23 @@ export const checkStructure = (
   const { governing, parents, steps } = walkTables(source, schemas);
   const misordered = misorderedOf(governing);
   const identified = checkIds(source, steps);
+  const lastElements: LastElements = new Map();
 
   return steps.flatMap((step): readonly Refusal[] => {
     const { element, parent, path } = step.visit;
     if (step.kind === "check") {
       return [
         ...checkOrder(source, element, path, parent, misordered),
-        ...checkElement(source, element, path, step.name, step.governed, parents, schemas),
+        ...checkElement(
+          source,
+          element,
+          path,
+          step.name,
+          step.governed,
+          parents,
+          schemas,
+          lastElements,
+        ),
         ...(identified.get(element) ?? []),
       ];
     }
