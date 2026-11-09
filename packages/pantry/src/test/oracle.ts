@@ -5969,11 +5969,16 @@ const packageBreaches = (
           node: pathOf(manifest, resource.node.id),
         }),
       ),
+    // A dependency's `identifierref` (`xs:IDREF`) and its resource's `identifier` (`xs:ID`) are
+    // whiteSpace collapse types, so they compare collapsed: `identifierref=" W"` names `W`
+    // (decision 457 (3); IMS Content Packaging 1.2 §6.11.5 B ii).
     ...manifest.members.flatMap((member) => {
       const resource = manifest.byId.get(member.parent);
-      const ref = valueOf(manifest, member.id, "identifierref");
+      const ref = collapsedValueOf(manifest, member.id, "identifierref");
       const own =
-        resource === undefined ? Option.none() : valueOf(manifest, resource.id, "identifier");
+        resource === undefined
+          ? Option.none()
+          : collapsedValueOf(manifest, resource.id, "identifier");
 
       return member.kind === "cp:dependency" &&
         Option.isSome(ref) &&
