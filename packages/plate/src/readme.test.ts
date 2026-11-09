@@ -1108,6 +1108,54 @@ describe("README.md", () => {
     }
   });
 
+  it("align-54 r11 docs M1: the Limits table holds the item duration, says what stays unchecked under an LTI link and what the walk never visits, and no longer holds the numbered reading", () => {
+    const limits = flatSectionOf("## Limits");
+
+    for (const fragment of [
+      "or marks processing it cannot run, for the cause the row names.",
+      "| plate holds no item's `duration` for processing, so processing that reads one, timed or not, is marked and does not run: an item's own, and a test's through an item ref, such as `ITEM1.duration` (reading 150) | The engine holds no measured item duration | An engine given the session's measured item durations by its host |",
+      "a variable mapping's source and a name read through the ref are accepted unchecked (readings 106 and 110). The mapping's target is judged by reading 97 |",
+      "a QTI root or a manifest nested in lax content (reading 6); and content a complex `xsi:type` keeps unchecked (reading 50). There an `xml:lang` is not checked (reading 129), an `xml:id` takes no part in the ID table, and an IDREF that names the `id` of a MathML or SSML element is not refused |",
+    ]) {
+      assert.include(limits, fragment);
+    }
+    for (const gone of [
+      "The engine counts every numbered reading",
+      "a session counts the numbered reading too",
+      "a variable mapping and a name read through the ref are accepted unchecked",
+    ]) {
+      assert.notInclude(limits, gone);
+    }
+  });
+
+  it("align-54 r11 docs 2, 6, 7, 12 and 13b: Documents and packages names a stimulus's choices, every document's headers and q, a custom interaction in lax content, a mapping's target under an LTI link and the bounded refusal facts", () => {
+    const documents = flatSectionOf("## Documents and packages");
+
+    for (const fragment of [
+      "A choice's identifier is used by no other choice of its item or stimulus, of any class, a `qti-gap` among them. In an item it names no item variable or built-in",
+      "Like the `data-ssml` rule, both hold in every document: an item, a stimulus, a test's or a section's rubric block, and a test's feedback.",
+      "One inside lax wildcard content is not refused: the XSD gives it no global declaration, so the walk does not check it as QTI there",
+      "are at most 1,024 characters: a longer one keeps its first 512 and its last 511 characters around one `…`.",
+      "A variable mapping's source under the ref is not checked. Its target is judged by [reading 97](../../docs/spec-readings.md)",
+      "are refused `duplicate-identifier`. A name read through the ref is accepted",
+    ]) {
+      assert.include(documents, fragment);
+    }
+    assert.notInclude(documents, "No rule judges a variable mapping under the ref.");
+  });
+
+  it("align-54 r11 docs 4, 6 and 9: Outcome processing names a test's map response of a built-in, a mapping's target under an LTI link and every section document the manifest lists", () => {
+    const outcomes = flatSectionOf("## Outcome processing");
+
+    for (const fragment of [
+      "| A `qti-map-response` or `qti-map-response-point` of a test's built-in `duration`, or of `numAttempts` where the test declares none (reading 166): a built-in declares no mapping | `template-requirements` | P27 |",
+      "Under an item ref that names an LTI link, the second mapping and a target that names `completionStatus`, `numAttempts` or `duration` other than its own source | `duplicate-identifier` | `variable-mapping-target` |",
+      "`openPackage` refuses the item refs, section refs, variable mappings and template defaults of every section document the manifest lists as it refuses the test's, whether or not a test reaches it, and judges its expressions under each test that reaches it.",
+    ]) {
+      assert.include(outcomes, fragment);
+    }
+  });
+
   it.effect("runs the plain server action on a base-16 Text Entry, which scores ff as 255", () =>
     Effect.gen(function* runsServerAction() {
       const step = yield* serverAction();

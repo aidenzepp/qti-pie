@@ -815,6 +815,7 @@ and can change.
 | A `qti-set-outcome-value` whose value is not of its outcome's type, or a `qti-lookup-outcome-value` whose value its outcome's table does not take | `expression-type` | P20, P22 |
 | A `qti-lookup-outcome-value` of a dotted name whose value is not a single `integer`, `float` or `duration` | `expression-type` | P22 |
 | A `qti-lookup-outcome-value` whose outcome holds no lookup table | `template-requirements` | P22 |
+| A `qti-map-response` or `qti-map-response-point` of a test's built-in `duration`, or of `numAttempts` where the test declares none (reading 166): a built-in declares no mapping | `template-requirements` | P27 |
 | A `qti-outcome-if` or `qti-outcome-else-if` whose condition is not a single `boolean` | `expression-type` | P21 |
 | A `qti-base-value` whose text is not of its base type | `value-type` | `attribute-lexical` |
 | A `qti-test-variables` with a `weight-identifier` and a `base-type` other than `float` | `expression-type` | P29 |
@@ -846,7 +847,7 @@ and nothing else").
 | A name read from outside a section document that the test places twice, through that document | `ambiguous-reference` | `prefixed-ref` |
 | A dotted read whose variable's type breaks a rule of the table above, a braced name in a string attribute such as `pattern="{ITEM1.N}"` among them, or a template default whose value is not of its variable's type | `expression-type` | P20 to P24 |
 | A `qti-variable-mapping` whose `source-identifier` names no outcome its item declares | `undeclared-variable` | `variable-mapping-source` |
-| A `qti-variable-mapping` whose `target-identifier` names another variable of its item or a built-in, or a second mapping on one item ref with the same `target-identifier` | `duplicate-identifier` | `variable-mapping-target` |
+| A `qti-variable-mapping` whose `target-identifier` names another variable of its item or a built-in, or a second mapping on one item ref with the same `target-identifier`. Under an item ref that names an LTI link, the second mapping and a target that names `completionStatus`, `numAttempts` or `duration` other than its own source | `duplicate-identifier` | `variable-mapping-target` |
 | A `qti-template-default` whose `template-identifier` names no template variable of its item | `undeclared-variable` | `template-default-target` |
 | A part, section or item ref identifier given twice across a test and the section documents it reaches, refused at the second | `duplicate-identifier` | `structure-identifier` |
 | A section ref that leads back to a section document already on its chain | `inclusion-cycle` | `inclusion-cycle` |
@@ -862,10 +863,11 @@ response variable").
 
 `openPackage` reads a section document that a test reaches through a `qti-assessment-section-ref`
 as if it were inline in that test ([reading 5](../../docs/spec-readings.md)). The test's dotted
-names resolve through the section document's item refs. `openPackage` refuses the section
-document's variable mappings and template defaults as it refuses the test's, and judges its
-expressions under each test that reaches it. A session delivers only the items of the test
-document's own item refs, so the verdict marks a dotted name that reads through a section document.
+names resolve through the section document's item refs. `openPackage` refuses the item refs,
+section refs, variable mappings and template defaults of every section document the manifest lists
+as it refuses the test's, whether or not a test reaches it, and judges its expressions under each
+test that reaches it. A session delivers only the items of the test document's own item refs, so the
+verdict marks a dotted name that reads through a section document.
 
 A section ref whose `href`, through the `xml:base` in scope, leads outside the package is refused
 `package-path-outside` with the check `remote-section`, in the test and in each section document it
@@ -883,10 +885,10 @@ its `rule`, and its `detail` names the `check` where a rule has several. The
 - A document that holds MathML, SSML, an unexpanded entity reference or an `xi:include` is
   `unchecked`, whatever its root, and plate gives no accepted document for it. plate never fetches
   an included fragment, so it cannot judge the document that places one.
-- A choice's identifier is used by no other choice of its item, of any class, a `qti-gap` among
-  them, and names no item variable or built-in ([reading 104](../../docs/spec-readings.md), "a
-  choice's identifier is used by no other choice of any class in its document, and names no item
-  variable").
+- A choice's identifier is used by no other choice of its item or stimulus, of any class, a
+  `qti-gap` among them. In an item it names no item variable or built-in
+  ([reading 104](../../docs/spec-readings.md), "a choice's identifier is used by no other choice of
+  any class in its document, and names no item variable").
 - On an element that the Schematron's extension-attribute lists cover, an attribute the XSD does not
   declare is refused unless it is a `data-` attribute ([reading 90](../../docs/spec-readings.md),
   "an attribute its XSD does not declare is a `data-` attribute, or the document is refused"). The
@@ -899,11 +901,20 @@ its `rule`, and its `detail` names the `check` where a rule has several. The
   by both (R10-a, "a PCI names its module by `module`, by `qti-interaction-modules`, or by both").
 - A `data-ssml` value is Data-SSML JSON in every document, as the operator ruled, or the document is
   refused `attribute-type`, the check `data-ssml` naming the problem.
+- Each token of a table cell's `headers` names a `th` of the cell's own table
+  ([reading 126](../../docs/spec-readings.md), "each token of a `td`'s or a `th`'s `headers` is the
+  `id` of a `th` of the cell's own table"), and no quotation mark stands immediately before, after
+  or inside a `q` ([reading 127](../../docs/spec-readings.md), "no quotation punctuation stands
+  immediately before, after or inside a `q`"). Like the `data-ssml` rule, both hold in every
+  document: an item, a stimulus, a test's or a section's rubric block, and a test's feedback.
 
 In a package, the manifest's QTI version decides three more rules, which a document you `open` alone
 does not meet, since plate cannot know its version. Under 3.0.0, an item that holds a
 `qti-custom-interaction` is refused `unknown-element`, as the operator ruled, since 3.0.0 deprecates
-it for a PCI. Under 3.0.1, an item whose root carries a `label` carries `tool-name` and
+it for a PCI. One inside lax wildcard content is not refused: the XSD gives it no global
+declaration, so the walk does not check it as QTI there ([reading 57](../../docs/spec-readings.md),
+"in lax wildcard content, every prose rule judges the QTI elements the structural walk checks
+there"). Under 3.0.1, an item whose root carries a `label` carries `tool-name` and
 `tool-version` ([reading 128](../../docs/spec-readings.md), "a `label` asks for the tool that
 labelled it where its own characteristic's description says so"). Also under 3.0.1, an outcome that
 writes no `normal-minimum` has the minimum 0.0, which `qti-outcome-minimum`, a `mastery-value` and
@@ -933,27 +944,37 @@ verdict, `openPackage` refuses:
   `package-path-outside`. A `cp:file` or another resource's `href` that leads outside is an external
   link, and is not refused.
 
+The `path` of a file reference's `package-file-missing` and of an `item-ref-unresolved`, and the
+`chain` of an `inclusion-cycle`, are at most 1,024 characters: a longer one keeps its first 512 and
+its last 511 characters around one `…`.
+
 An item ref may name an LTI link in place of an item ([reading 110](../../docs/spec-readings.md),
 "under an item ref that names an LTI link a variable mapping is accepted unchecked, a recorded
 limit, and a template default is refused"). `openPackage` delivers the test with the ref marked
-`lti-link` and left out, since plate launches no LTI link. No rule judges a variable mapping under
-the ref. A name read through it is accepted, and the processing that reads it is marked and does not
-run. The package also marks outcome processing that counts over the test's items, which would count
-only the delivered items. A template default under the ref is refused `undeclared-variable`.
+`lti-link` and left out, since plate launches no LTI link. A variable mapping's source under the ref
+is not checked. Its target is judged by [reading 97](../../docs/spec-readings.md) ("a variable
+mapping's target names no other variable its item ref's item holds"): a second mapping with the
+same target, and a target that names `completionStatus`, `numAttempts` or `duration` other than the
+mapping's own source, are refused `duplicate-identifier`. A name read through the ref is accepted,
+and the processing that reads it is marked and does not run. The package also marks outcome
+processing that counts over the test's items, which would count only the delivered items. A template
+default under the ref is refused `undeclared-variable`.
 
 ## Limits
 
 Each row is a limit of plate's own, not a rule of QTI. In each, plate refuses valid content it
-cannot represent, or accepts content it cannot check, for the cause the row names.
+cannot represent, accepts content it cannot check, or marks processing it cannot run, for the cause
+the row names.
 
 | Limit | Cause | What would lift it |
 | --- | --- | --- |
 | A document nested deeper than 256 elements is refused `reader-refused`, its `readerRule` `element-depth`, as crust refuses it. XML and QTI set no depth | The bound protects the recursive walks over a read document | Walks that keep their own stack, then a higher bound in crust's reader |
 | A section ref whose `href` leads outside the package is refused `package-path-outside`, check `remote-section` (reading 170) | plate never fetches a section, so it cannot assemble the test | Fetching the section when the package is opened |
 | A document that holds an `xi:include` is `unchecked`. A loop through includes is not seen, and the `xml:lang` of an included fragment asks for no LOM listing | plate never fetches an included fragment | Fetching each fragment and judging it in place |
-| Under an item ref that names an LTI link, a variable mapping and a name read through the ref are accepted unchecked (readings 106 and 110) | The package declares nothing that a link reports | A source that lists the outcomes a link reports |
+| Under an item ref that names an LTI link, a variable mapping's source and a name read through the ref are accepted unchecked (readings 106 and 110). The mapping's target is judged by reading 97 | The package declares nothing that a link reports | A source that lists the outcomes a link reports |
+| plate holds no item's `duration` for processing, so processing that reads one, timed or not, is marked and does not run: an item's own, and a test's through an item ref, such as `ITEM1.duration` (reading 150) | The engine holds no measured item duration | An engine given the session's measured item durations by its host |
 | Text that an `xsi:type` types with a simple type, under a wildcard, is accepted unchecked (reading 60), and an ID such text carries takes no part in the ID table | plate does not check simply typed text | A check of XML Schema's simple types on text |
-| Under a `strict` wildcard, an element of a namespace plate holds no tables for, such as MathML in an item or XLink in a manifest, is not walked, nor is what a `skip` wildcard admits. An `xml:lang` there is not checked (reading 129), and an IDREF that names an `id` there is not refused | plate holds no tables for those namespaces | Tables for each namespace the schemas import |
+| The walk never visits four kinds of content, or anything below them: what a `skip` wildcard admits; an element of a namespace plate holds no tables for, such as MathML in an item or XLink in a manifest, that its parent's table names or a `strict` wildcard admits; a QTI root or a manifest nested in lax content (reading 6); and content a complex `xsi:type` keeps unchecked (reading 50). There an `xml:lang` is not checked (reading 129), an `xml:id` takes no part in the ID table, and an IDREF that names the `id` of a MathML or SSML element is not refused | plate holds no tables for those namespaces, and readings 6 and 50 keep the rest foreign | A walk that visits every element, with tables for each namespace the schemas import |
 | An IDREF is not refused in a document that includes a fragment, or where an ID's value holds an unexpanded entity reference | The document's IDs are not all known | Fetching fragments and expanding entities |
 | A manifest's IDs and IDREFs are not judged by the ID table | The manifest's own rules already refuse a dependency that names no resource (`dependency-unresolved`) | Applying the content-packaging XSD's ID types |
 | A default hotspot whose interaction's type an `xsi:type` gives, under another element name, is not judged | No official package has one | Judging hotspots by their governing type |
@@ -962,7 +983,6 @@ cannot represent, or accepts content it cannot check, for the cause the row name
 | A `data-ssml` name written twice in one JSON object is judged by its last value | plate's JSON reader keeps the last value | A JSON reader that keeps every value |
 | A test's or a section's `data-catalog-idref` that names a catalog of a section document it places is refused `attribute-type`, check `idref-target` | plate judges each document's IDs alone | Judging catalog references over the assembled test |
 | `a%2Fb.xml` and `a%252Fb.xml` name one file, the one whose name is spelled `a%2Fb.xml` | A package keys a file by one text, which holds no `/` inside a segment | Keys that keep a segment's escapes |
-| With item refs `a` and `a.2` and no selection with replacement, `openPackage` accepts `a.2.SCORE` through its split reading, but a session counts the numbered reading too and reads nothing | The engine counts every numbered reading | Counting a numbered reading only through an item ref a selection with replacement can repeat, as `openPackage` does |
 | A fragment, LOM metadata or usage-data document is read for its root alone. A QTI 2 root is refused, and nothing else of it is judged | plate models none of these documents | Judging each document, usage data's values among them |
 | Where resources name an included fragment's path as two types of document, any element in QTI's namespace but a root no include stands for bears out the fragment's type. The choice moves no verdict, only which resource is refused | plate holds no table of what an include stands for | That table |
 | A `srcset` URL that holds a comma not followed by whitespace is split at the comma | plate splits a `srcset` at its commas | HTML's `srcset` parsing algorithm |

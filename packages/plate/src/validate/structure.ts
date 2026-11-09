@@ -933,14 +933,16 @@ const printfPiece = /%(?:%|[#0 +-]*(?:[1-9][0-9]*)?(?:\.[0-9]*)?[EefGgrRioXxd])/
 
 /**
  * Report whether a printed variable's `format` is a printf format string, as reading 132 reads the
- * information model's syntax (§2.3.4) and reading 161 its count: any text but `%`, the escape `%%`,
- * and conversion specifiers ({@link printfPiece}), any number of them, none included. So `%d`,
- * `%d %d`, `%i of %i`, `Score: %.1f`, `100%%` and a format of text alone are formats, and `%q`,
- * `%u` and a trailing `%`, which ends in no code, are not (the operator's B2c).
+ * information model's syntax (§2.3.4), reading 161 its count and reading 171 its codes: any text
+ * but `%`, the escape `%%`, and conversion specifiers ({@link printfPiece}), any number of them,
+ * none included. So `%d`, `%d %d`, `%i of %i`, `Score: %.1f`, `100%%` and a format of text alone
+ * are formats, and `%q`, `%u` and a trailing `%`, which ends in no code, are not (the operator's
+ * B2c).
  *
  * Every escape and specifier is removed, left to right; a `%` left over begins neither. Pantry's
- * `printfFormat` grammar (`packages/pantry/src/grammar/attributes.ts`) is the same over the
- * information model's codes alone, without `d`.
+ * `printfFormat` grammar (`packages/pantry/src/grammar/attributes.ts`) admits the same formats,
+ * over the information model's codes and `d` (reading 171, "a printed variable's `format` may use
+ * `d` as a conversion code").
  *
  * @param lexical The `format`, its tabs and line breaks replaced.
  * @returns Whether every `%` in it begins an escape or a conversion specifier.

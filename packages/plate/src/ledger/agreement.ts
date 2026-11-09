@@ -20,7 +20,7 @@
  * provenance only, so re-pointing the copy at a commit with the same rows keeps it.
  *
  * The run sees only the corpus, so a difference no corpus package shows has no row. Each such
- * difference known is recorded here instead:
+ * difference known is recorded here instead, pantry's side read from its source, not from a run:
  *
  * - A reference from inside a section document a test places twice, through a name one of its
  *   placements gives, reads the placement that holds it and is accepted (reading 86, "a section
@@ -28,6 +28,40 @@
  *   `Prefixed_reference` (`packages/pantry/src/qti/expressions.ts`) refuses any reading through a
  *   name two placements give, wherever the reference stands. No corpus package holds a section
  *   ref.
+ * - Under an item ref that names an item, a variable mapping whose `target-identifier` is
+ *   `QTI_CONTEXT` is refused `duplicate-identifier`, since every item holds that built-in (reading
+ *   97, "a variable mapping's target names no other variable its item ref's item holds", with
+ *   reading 106's built-ins). Pantry's `Variable_mapping_target`
+ *   (`packages/pantry/src/qti/tests.ts`) holds a target outside the three session variables only,
+ *   so it accepts the mapping where the item writes no declaration of `QTI_CONTEXT`.
+ * - Under an item ref that names an LTI link, a variable mapping whose target is its own source, such
+ *   as source and target `duration`, is accepted: reading 97 says "a mapping whose target is its
+ *   own source maps nothing away and is valid". Pantry's `Variable_mapping_target`
+ *   (`packages/pantry/src/qti/tests.ts`) refuses a session variable as any mapping's target, its
+ *   own source included.
+ * - An href that reading 102 reads and pantry reads no name from is accepted: `a%zz.png`, `a%FF.png`,
+ *   `a%00.png`, `1:a.png` and `a%2Fb.png`, and a `srcset` of two candidates
+ *   (`#plate/document/href.ts`). Pantry refuses each under its stated limit `Href_form`
+ *   (`packages/pantry/src/qti/package.ts`).
+ * - A file key with a `..` segment that does not climb out of the package, such as `a/../b.xml`, is
+ *   accepted, as reading 138 refuses only a backslash and a drive prefix. Pantry's
+ *   `unsafeEntryPath` (`packages/pantry/src/package/zip.ts`) refuses every `..` segment.
+ * - A LOM, usage-data or fragment document whose root is not its type's, or that cannot be read, is
+ *   accepted: plate reads these documents for their root alone and refuses only a QTI 2 root, a
+ *   limit the README records. Pantry refuses both: a root that its closed relation `RootOfType`
+ *   (`packages/pantry/src/grammar/install.ts`) does not pair with the resource's type, and a
+ *   document it cannot read.
+ * - Through an item ref `lti` that names an LTI link, `lti.1.SCORE` is read as a numbered reading and
+ *   refused (reading 88, "a numbered reference such as `Q01.2.SCORE` names an instance of an item
+ *   ref that a selection with replacement can repeat, and nothing else"). Pantry resolves its split
+ *   reading through the link unchecked (`packages/pantry/src/qti/expressions.ts`) and accepts it.
+ *   Which reading holds is a question for the shared readings.
+ * - A gap match interaction of one gap bound to an `ordered` or a `record` response is accepted:
+ *   plate holds a gap match's binding only to reading 169, which counts two or more gaps. Pantry's
+ *   `BindingFit` (`packages/pantry/src/grammar/facets.ts`) admits `single` and `multiple` alone.
+ * - A section ref whose `href` names no section document, such as the test itself, an item, a
+ *   webcontent file, an empty `href` or `#x`, is accepted and judged no further. Pantry refuses it
+ *   by its law `Document_entry` (`packages/pantry/src/qti/package.ts`).
  *
  * @module
  */
