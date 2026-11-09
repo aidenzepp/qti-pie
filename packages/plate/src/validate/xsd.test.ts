@@ -1384,6 +1384,149 @@ const derived = (
 ): SourceElement =>
   complexType(name, xs("complexContent", [], [xs(derivation, [attr("base", base)], [content])]));
 
+/**
+ * Schematron's namespace, in which the ASI XSD's annotations state its rules.
+ */
+const schematronNamespace = "http://purl.oclc.org/dsdl/schematron";
+
+/**
+ * Construct an element in Schematron's namespace, as the ASI XSD's `xs:appinfo` holds it.
+ *
+ * @param local The construct's local name, such as `pattern`.
+ * @param attributes The construct's attributes, none by default.
+ * @param children The construct's children, none by default.
+ * @returns The Schematron element.
+ */
+const sch = (
+  local: string,
+  attributes: readonly SourceAttribute[] = [],
+  children: readonly SourceChild[] = [],
+): SourceElement => el(local, attributes, children, schematronNamespace);
+
+/**
+ * Construct a top-level `xs:annotation` whose `xs:appinfo` holds the given Schematron elements.
+ *
+ * @param rules The Schematron elements.
+ * @returns The annotation.
+ */
+const appinfo = (...rules: readonly SourceElement[]): SourceElement =>
+  xs("annotation", [], [xs("appinfo", [], rules)]);
+
+/**
+ * Construct a Schematron pattern with one rule per context, each asserting nothing that matters
+ * here: the generator reads the contexts alone.
+ *
+ * @param id The pattern's `id`.
+ * @param contexts Its rules' contexts, such as `//qti:box`.
+ * @returns The pattern.
+ */
+const extensionPattern = (id: string, ...contexts: readonly string[]): SourceElement =>
+  sch(
+    "pattern",
+    [attr("abstract", "false"), attr("id", id)],
+    contexts.map((context) =>
+      sch(
+        "rule",
+        [attr("abstract", "false"), attr("context", context)],
+        [sch("assert", [attr("test", "starts-with(name(@*[1]), 'data-')")])],
+      ),
+    ),
+  );
+
+/**
+ * The annotation that binds the Schematron prefix `qti` to QTI's namespace, as the ASI XSD's does.
+ */
+const qtiPrefix = appinfo(sch("ns", [attr("uri", qtiNamespace), attr("prefix", "qti")]));
+
+/**
+ * Wrap Schematron annotations in a schema that declares the elements `box`, `crate` and `plain`, of
+ * one type with an `id`.
+ *
+ * @param annotations The annotations.
+ * @returns The fragment as a source document.
+ */
+const boxesWith = (...annotations: readonly SourceElement[]): SourceDocument =>
+  schema(
+    ...annotations,
+    complexType("BoxDType", attribute({ name: "id", type: "xs:NCName" })),
+    element("box", "BoxDType"),
+    element("crate", "BoxDType"),
+    element("plain", "BoxDType"),
+  );
+
+describe("generateTables: the Schematron's extension lists (reading 90)", () => {
+  it.effect(
+    "align-54 extension lists E10: marks extensionCovered on each element a rule of the three extension patterns names, and on no other",
+    () =>
+      Effect.gen(function* covered() {
+        const tables = yield* generateTables(
+          boxesWith(
+            qtiPrefix,
+            appinfo(
+              extensionPattern("RULESET_ROOTELEMENT_DATAEXTENSIONRULES", "//qti:box"),
+              extensionPattern("RULESET_GLOBALELEMENT_DATAEXTENSIONRULES", "//qti:crate"),
+              extensionPattern(
+                "RULESET_LOCALELEMENT_DATAEXTENSIONRULES",
+                "//qti:box",
+                "//qti:crate",
+              ),
+              extensionPattern("RULE_SET_ARIA_ROLES_1", "//qti:plain"),
+            ),
+          ),
+        );
+
+        assert.isTrue(tables.elements["box"]?.extensionCovered);
+        assert.isTrue(tables.elements["crate"]?.extensionCovered);
+        assert.notProperty(tables.elements["plain"], "extensionCovered");
+        assert.deepStrictEqual(Schema.encodeSync(Tables)(tables).elements["box"], {
+          attributes: [{ local: "id", namespace: "", type: builtin("NCName"), use: "optional" }],
+          children: [],
+          extensionCovered: true,
+          global: true,
+          text: false,
+          types: [qti("BoxDType")],
+        });
+      }),
+  );
+
+  it.effect("align-54 extension lists E10: a schema with no extension pattern covers nothing", () =>
+    Effect.gen(function* uncovered() {
+      const tables = yield* generateTables(boxesWith(qtiPrefix));
+
+      for (const name of ["box", "crate", "plain"]) {
+        assert.notProperty(tables.elements[name], "extensionCovered", name);
+      }
+    }),
+  );
+
+  it.effect(
+    "align-54 extension lists E10: fails with TableGenerationError naming sch:rule for a context not of the form //prefix:name, a prefix no sch:ns binds to the target namespace, or an element the XSD does not declare",
+    () =>
+      Effect.gen(function* refused() {
+        const mathPrefix = appinfo(sch("ns", [attr("uri", mathmlNamespace), attr("prefix", "m")]));
+        for (const [annotations, context] of [
+          [[qtiPrefix], "qti:box"],
+          [[qtiPrefix], "//qti:box/qti:crate"],
+          [[qtiPrefix], "//box"],
+          [[qtiPrefix], "//qti:box[@id]"],
+          [[qtiPrefix, mathPrefix], "//m:box"],
+          [[], "//qti:box"],
+          [[qtiPrefix], "//qti:missing"],
+        ] as const) {
+          const error = yield* generateTables(
+            boxesWith(
+              ...annotations,
+              appinfo(extensionPattern("RULESET_GLOBALELEMENT_DATAEXTENSIONRULES", context)),
+            ),
+          ).pipe(Effect.flip);
+
+          assert.strictEqual(error._tag, "TableGenerationError", context);
+          assert.strictEqual(error.construct, "sch:rule", context);
+        }
+      }),
+  );
+});
+
 describe("generateOccurrences", () => {
   it.effect("a sequence adds a child's counts, and a particle's occurs scale its content", () =>
     Effect.gen(function* sequenceCounts() {

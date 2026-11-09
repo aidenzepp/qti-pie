@@ -1,11 +1,12 @@
 /**
  * The QTI XSD as tables: for every element the XSD declares, the attributes it admits with their
  * types and its attribute wildcard, the children it admits, its element wildcard, whether it holds
- * text, whether it is declared globally and the types it is declared with; and for every named
- * type, what it derives from and how, and its own table of the same attributes, children,
- * wildcards and text. {@link generateTables} builds them from the XSD's source view; structural
- * validation reads them and never the XSD itself. {@link generateOccurrences} gives, for the same
- * elements and types, how many times each one's content model admits each child it names.
+ * text, whether it is declared globally, the types it is declared with and whether the
+ * Schematron's extension rules cover it; and for every named type, what it derives from and how,
+ * and its own table of the same attributes, children, wildcards and text. {@link generateTables}
+ * builds them from the XSD's source view; structural validation reads them and never the XSD
+ * itself. {@link generateOccurrences} gives, for the same elements and types, how many times each
+ * one's content model admits each child it names.
  *
  * @module
  */
@@ -184,10 +185,12 @@ export type ContentTable = typeof ContentTable.Type;
  * `types` holds each distinct named type a declaration of the name gives, sorted by namespace then
  * local name: its `type`, or `xs:anyType` for a declaration with no type. `anonymousType` is
  * present, and `true`, when some declaration defines its type inline; no `xsi:type` can name that
- * type, and `types` holds no name for it.
+ * type, and `types` holds no name for it. `extensionCovered` is present, and `true`, when one of
+ * the Schematron's extension patterns the XSD embeds has a rule for the element's name: reading 90
+ * then admits, beside what the XSD declares, only a `data-` attribute.
  *
- * A missing wildcard or inline type is an absent key, never `null` or `false`, so a table writes to
- * JSON as plain data.
+ * A missing wildcard, inline type or extension rule is an absent key, never `null` or `false`, so
+ * a table writes to JSON as plain data.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `ElementTable` is the Schema and the type of an element's table under one name, as section 0.5 of the phase-1 slice list names it.
 export const ElementTable = Schema.Struct({
@@ -196,6 +199,7 @@ export const ElementTable = Schema.Struct({
   anyElement: ContentTable.fields.anyElement,
   attributes: ContentTable.fields.attributes,
   children: ContentTable.fields.children,
+  extensionCovered: Schema.optionalKey(Schema.Literal(true)),
   global: Schema.Boolean,
   text: ContentTable.fields.text,
   types: Schema.Array(ChildName),
@@ -2626,6 +2630,101 @@ const schemaContext = Effect.fnUntraced(function* schemaContext(
 });
 
 /**
+ * Schematron's namespace, in which the ASI XSD's annotations state its rules.
+ */
+const schematronNamespace = "http://purl.oclc.org/dsdl/schematron";
+
+/**
+ * The ids of the Schematron patterns that list, element by element, the attributes it may carry:
+ * those of QTI's ASI binding's section 5.2, The Constrained Namespace Extension Rule Definitions,
+ * which reading 90 reads ("on an element the Schematron's extension-attribute lists cover, an
+ * attribute its XSD does not declare is a `data-` attribute, or the document is refused").
+ */
+const extensionPatterns: ReadonlySet<string> = new Set([
+  "RULESET_GLOBALELEMENT_DATAEXTENSIONRULES",
+  "RULESET_LOCALELEMENT_DATAEXTENSIONRULES",
+  "RULESET_ROOTELEMENT_DATAEXTENSIONRULES",
+]);
+
+/**
+ * A Schematron rule's context in the one form the extension patterns write: every element of one
+ * name, `//<prefix>:<local>`.
+ */
+const everyElementNamed = /^\/\/(?<prefix>[^/:]+):(?<local>[^/:]+)$/u;
+
+/**
+ * List an element's children in Schematron's namespace with one local name, in document order.
+ *
+ * @param element The element.
+ * @param local The children's local name, such as `rule`.
+ * @returns Those children.
+ */
+const schematronChildren = (element: SourceElement, local: string): readonly SourceElement[] =>
+  element.children.filter(
+    (child): child is SourceElement =>
+      child.kind === "element" && child.namespace === schematronNamespace && child.local === local,
+  );
+
+/**
+ * Read the names of the elements the schema's extension patterns cover ({@link extensionPatterns}):
+ * the local name each rule's context selects, in the target namespace.
+ *
+ * The patterns sit in the `xs:appinfo` of the schema's top-level `xs:annotation`s, and their
+ * contexts' prefixes are bound by the `sch:ns` there. Only the patterns' contexts are read, never
+ * their assertions: which attributes an element declares is the XSD's to say, and reading 90 makes
+ * every other attribute an extension. A schema with no such pattern covers nothing.
+ *
+ * @param root The `xs:schema` element.
+ * @param target The schema's target namespace.
+ * @returns The covered elements' local names, or {@link TableGenerationError} for a context not of
+ *   the form `//<prefix>:<local>`, or whose prefix no `sch:ns` binds to the target namespace.
+ */
+const extensionCovered = Effect.fnUntraced(function* extensionCovered(
+  root: SourceElement,
+  target: string,
+): Effect.fn.Return<ReadonlySet<string>, TableGenerationError> {
+  const appinfo = xsdChildren(root)
+    .filter((child) => child.local === "annotation")
+    .flatMap((annotation) => xsdChildren(annotation).filter((child) => child.local === "appinfo"));
+  const prefixes = new Map(
+    appinfo.flatMap((info) =>
+      schematronChildren(info, "ns").map(
+        (ns) => [valueOf(ns, "prefix") ?? "", valueOf(ns, "uri") ?? ""] as const,
+      ),
+    ),
+  );
+  const covered = new Set<string>();
+  for (const pattern of appinfo.flatMap((info) => schematronChildren(info, "pattern"))) {
+    const id = valueOf(pattern, "id") ?? "";
+    if (!extensionPatterns.has(id)) {
+      continue;
+    }
+
+    for (const rule of schematronChildren(pattern, "rule")) {
+      const context = valueOf(rule, "context") ?? "";
+      const { local = "", prefix = "" } = everyElementNamed.exec(context)?.groups ?? {};
+      if (!isNcName(prefix) || !isNcName(local)) {
+        return yield* failure(
+          "sch:rule",
+          `the context ${JSON.stringify(context)} in ${id} is not //<prefix>:<name>`,
+        );
+      }
+
+      if (prefixes.get(prefix) !== target) {
+        return yield* failure(
+          "sch:rule",
+          `the prefix ${prefix} of the context ${context} in ${id} is not bound to the target namespace ${target} by an sch:ns`,
+        );
+      }
+
+      covered.add(local);
+    }
+  }
+
+  return covered;
+});
+
+/**
  * Generate the tables of an XSD from its source view.
  *
  * Every `xs:element` with a `name`, global or local, gets the table of its type, and a name
@@ -2635,9 +2734,11 @@ const schemaContext = Effect.fnUntraced(function* schemaContext(
  * flatten into the children an element admits, through group references, with no order or counts;
  * {@link generateOccurrences} gives the counts.
  * Every named type gets its {@link TypeEntry}: its derivation, and the table an element declared
- * with it alone gets. The XSD is recorded as written; readings that set part of it aside are
- * applied over the tables by structural validation. Imported schemas are never read: an element
- * referenced from one is a child by name only.
+ * with it alone gets. Each element the schema's Schematron extension patterns cover is marked
+ * `extensionCovered` ({@link extensionCovered}), by its name, whatever its declarations. The XSD
+ * is recorded as written; readings that set part of it aside are applied over the tables by
+ * structural validation. Imported schemas are never read: an element referenced from one is a
+ * child by name only.
  *
  * An XSD that sets `nillable` or `abstract` true, or any `block`, `final`, `blockDefault`,
  * `finalDefault` or `substitutionGroup`, is refused, since the tables do not record them.
@@ -2645,7 +2746,7 @@ const schemaContext = Effect.fnUntraced(function* schemaContext(
  * @param xsd The XSD, whose root is `xs:schema`.
  * @returns The tables, elements and types sorted by name, attributes, children and declared types
  *   by namespace then local name, or {@link TableGenerationError} naming the first construct with
- *   no table form.
+ *   no table form, or an extension pattern's rule that names an element the XSD does not declare.
  */
 export const generateTables = Effect.fn("generateTables")(function* generateTables(
   xsd: SourceDocument,
@@ -2661,6 +2762,18 @@ export const generateTables = Effect.fn("generateTables")(function* generateTabl
     });
     const seen = tables.get(name);
     tables.set(name, seen === undefined ? table : yield* unionTables(context.target, seen, table));
+  }
+
+  for (const name of yield* extensionCovered(xsd.root, context.target)) {
+    const table = tables.get(name);
+    if (table === undefined) {
+      return yield* failure(
+        "sch:rule",
+        `an extension pattern's rule covers ${name}, an element the XSD does not declare`,
+      );
+    }
+
+    tables.set(name, { ...table, extensionCovered: true });
   }
 
   return {
