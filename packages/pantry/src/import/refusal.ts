@@ -19,7 +19,7 @@
  *   grammar's rows; for a content-order law it names the positions `Follow` allows next, each with
  *   its XSD particle. There is no catalog of messages.
  */
-import { lawsOf, patternLawsOf, sameLaw } from "@bjornpagen/grizzle";
+import { lawsOf, sameLaw } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, RegexText, Statement, Witness } from "@bjornpagen/grizzle";
 import {
   Array as Arr,
@@ -433,14 +433,26 @@ const fieldTypeOf = (
   );
 
 /**
+ * Every law a schema states, as grizzle's `lawsOf` lists them, each once and in its canonical
+ * order: the primary keys, the statements' laws, the pattern laws and the generated fields' laws
+ * (grizzle `3ba13e38`, `program/laws.ts`).
+ *
+ * `lawsOf` compiles the schema's law model, which takes seconds, so this is memoized by the
+ * schema's identity: the pattern laws this module names when it loads ({@link patternLaws}) and
+ * every later reader share one compile per process.
+ */
+export const schemaLawsOf = Fn.memoize((schema: AnySchema): readonly Law[] => lawsOf(schema));
+
+/**
  * Name each pattern law a schema states by its field's type's row.
  *
- * The laws are grizzle's (`patternLawsOf`), the ones its installation lists its text domains'
- * CHECKs with: one per stored field whose patterns state a law, spelled as the field declares its
- * patterns (one for `str.regex`, each joined one in order for `str.and`), by relation name, each
- * relation's fields in declared order. A tautology, a contract's pattern and a closed relation's
- * payload state none. Two fields of one language share one domain and are two laws, so a refusal
- * names the field whose value broke it, and each field's law takes its own type's name.
+ * The laws are grizzle's, the pattern laws its `lawsOf` lists ({@link schemaLawsOf}), the ones
+ * its installation lists its text domains' CHECKs with: one per stored field whose patterns state a
+ * law, spelled as the field declares its patterns (one for `str.regex`, each joined one in order
+ * for `str.and`), by relation name, each relation's fields in declared order. A tautology, a
+ * contract's pattern and a closed relation's payload state none. Two fields of one language share
+ * one domain and are two laws, so a refusal names the field whose value broke it, and each field's
+ * law takes its own type's name.
  *
  * @param built - The schema.
  * @param names - Each text type, by its identity, with the law its patterns state.
@@ -453,14 +465,16 @@ export const namedPatternLaws = (
   const byType: ReadonlyMap<unknown, LawName> = names;
 
   return Result.all(
-    patternLawsOf(built).map((law) =>
-      pipe(
-        fieldTypeOf(built.relations, law),
-        Option.flatMap((type) => Option.fromUndefinedOr(byType.get(type))),
-        Option.map((name) => [law, name] as const),
-        Result.fromOption(() => ({ field: law.field, relation: law.relation })),
+    schemaLawsOf(built)
+      .flatMap((law) => (law.kind === "pattern" ? [law] : []))
+      .map((law) =>
+        pipe(
+          fieldTypeOf(built.relations, law),
+          Option.flatMap((type) => Option.fromUndefinedOr(byType.get(type))),
+          Option.map((name) => [law, name] as const),
+          Result.fromOption(() => ({ field: law.field, relation: law.relation })),
+        ),
       ),
-    ),
   );
 };
 

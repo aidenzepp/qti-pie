@@ -11,14 +11,14 @@
  * casts them, before any row CHECK, and the outcome names that field's law alone, which the refusal
  * names by its type's row: both types are "XML production", two laws of one class.
  */
-import { Db, patternLawsOf, sameLaw } from "@bjornpagen/grizzle";
+import { Db, sameLaw } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Array as Arr, Effect, Formatter, Layer, Option } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { lawNameOf } from "#pantry/import/refusal.ts";
+import { lawNameOf, schemaLawsOf } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import type { NodeMember, PackageInputs } from "#pantry/import/write.ts";
@@ -125,13 +125,14 @@ describe.skipIf(!hasLease)("import/pattern-laws.db.test.ts, on the lease", () =>
         `refuses ${relation}.${field}, broken in every value, by its own pattern law, which the refusal names ${name}`,
         () =>
           // Oracle: PostgreSQL, the shared domain's CHECK as the statement casts each value, and
-          // grizzle's `patternLawsOf`, the field's law its installation lists the domain's CHECK
+          // grizzle's pattern law (`lawsOf`), the field's law its installation lists the domain's CHECK
           // with, named by its type's row of `textLaws`. Bound: every value of the field in the
           // every-relation package, broken.
           Effect.gen(function* ownLaw() {
             const law = Arr.findFirst(
-              patternLawsOf(Qti),
-              (stated) => stated.relation === relation && stated.field === field,
+              schemaLawsOf(Qti),
+              (stated) =>
+                stated.kind === "pattern" && stated.relation === relation && stated.field === field,
             ).pipe(
               Option.getOrThrowWith(() => new Error(`${relation}.${field} states no pattern law`)),
             );

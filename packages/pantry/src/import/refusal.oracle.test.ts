@@ -20,7 +20,6 @@ import {
   natural,
   on,
   ordered,
-  patternLawsOf,
   pg,
   pred,
   relation,
@@ -64,6 +63,7 @@ import {
   refusalOfLaws,
   ruleOfError,
   ruleOfLaws,
+  schemaLawsOf,
   statedLaws,
   textLaws,
 } from "#pantry/import/refusal.ts";
@@ -1625,7 +1625,7 @@ const statementLawsOf = Fn.memoize((built: AnySchema): readonly Law[] =>
 
 describe("the pattern laws, one per field", () => {
   it("names each law grizzle states by its field's own type's row, a generated field's included, and refuses a law whose field's type no row holds", () => {
-    // Oracle: grizzle's `patternLawsOf`, one pattern law per stored field whose pattern states
+    // Oracle: grizzle's pattern laws (`lawsOf`), one pattern law per stored field whose pattern states
     // one, by relation name and declared field order, a tautology's field none. Live: two types of
     // one pattern under two names, a generated field of one of them, a tautology's field, which
     // states no law, so no row names it. Wild: a field whose type no row holds.
@@ -1718,13 +1718,13 @@ describe("the census of the composed Qti schema", () => {
     () =>
       // Oracle: the schema read here apart from grizzle's reading, one pattern law per text field
       // of a stored relation, a generated or accumulated field included, but a field of
-      // `tautologies`, held both ways to grizzle's `patternLawsOf` and to the laws the table
+      // `tautologies`, held both ways to grizzle's pattern laws (`lawsOf`) and to the laws the table
       // names, so a law either drops or invents fails here.
       Effect.gen(function* patterns() {
         const Qti = yield* composedQti;
         const fields = textFields(Qti.relations);
         const owed = fields.flatMap(({ law, type }) => (tautologies.has(type) ? [] : [law]));
-        const granted = patternLawsOf(Qti);
+        const granted = schemaLawsOf(Qti).filter((law) => law.kind === "pattern");
         const stated = statedLaws().flatMap(([law]) => (law.kind === "pattern" ? [law] : []));
         const typed: ReadonlySet<unknown> = new Set(
           fields.flatMap(({ type }) => (tautologies.has(type) ? [] : [type])),
