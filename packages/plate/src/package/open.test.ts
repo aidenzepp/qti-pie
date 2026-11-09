@@ -1632,6 +1632,107 @@ const openNamingManifest = (type: string) =>
     }),
   );
 
+/**
+ * Write the item `a` whose body holds the given content, after the given head.
+ *
+ * @param body The content of `qti-item-body`.
+ * @param head What comes before the body: declarations, a stylesheet.
+ * @returns The item's text.
+ */
+const bodyItemXml = (body: string, head = ""): string =>
+  `<qti-assessment-item xmlns="${qti}" identifier="a" title="a" adaptive="false" time-dependent="false">${head}<qti-item-body>${body}</qti-item-body></qti-assessment-item>`;
+
+/**
+ * Open a package whose one resource, the item `A` at `items/a.xml`, lists its document and each
+ * further file, which the package holds.
+ *
+ * @param item The item's text.
+ * @param more Each further file's text, keyed by its path.
+ * @returns The package's verdict.
+ */
+const openReferencing = (item: string, more: Readonly<Record<string, string>> = {}) =>
+  openPackage(
+    location,
+    packageOf({
+      "items/a.xml": item,
+      ...more,
+      [manifestFile]: manifestXml(
+        `<resource identifier="A" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/>${Object.keys(
+          more,
+        )
+          .map((file) => `<file href="${file}"/>`)
+          .join("")}</resource>`,
+      ),
+    }),
+  );
+
+/**
+ * The refusal of a file reference that names a file the package neither holds nor lists (E18).
+ *
+ * @param at The path of the element that holds the reference.
+ * @param attribute The attribute that holds it.
+ * @param target The path it resolves to.
+ * @param document The path of the document that holds it.
+ * @returns The refusal's facts.
+ */
+const missingReference = (
+  at: string,
+  attribute: string,
+  target: string,
+  document = "items/a.xml",
+): Seen => ({
+  detail: { attribute, check: "reference", document, path: target, reading: "103" },
+  document: fileLocation(location, document),
+  location: { kind: "path", path: `${at}/@${attribute}` },
+  rule: "package-file-missing",
+});
+
+/**
+ * The path of the item `a`'s body, as a refusal inside it is located.
+ */
+const itemBody = "qti-assessment-item/qti-item-body";
+
+/**
+ * Write an item whose portable custom interaction's modules name a primary configuration.
+ *
+ * @param configuration The `primary-configuration`.
+ * @returns The item's text.
+ */
+const configuredItemXml = (configuration: string): string =>
+  bodyItemXml(
+    `<qti-portable-custom-interaction response-identifier="RESPONSE" module="m" custom-interaction-type-identifier="urn:example:m"><qti-interaction-modules primary-configuration="${configuration}"><qti-interaction-module id="m" primary-path="modules/m"/></qti-interaction-modules><qti-interaction-markup><p>m</p></qti-interaction-markup></qti-portable-custom-interaction>`,
+    '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="string"/>',
+  );
+
+/**
+ * Open a package whose test `tests/t.xml` holds one part with the given attributes, whose one
+ * section holds the item refs `a` and `b` with the given `href`s, beside the items `A` and `B` at
+ * `items/a.xml` and `items/b.xml`.
+ *
+ * @param part The test part's further attributes, such as an `xml:base`.
+ * @param hrefs The `href` of `a`, then of `b`.
+ * @param held The items the package holds and lists, by path.
+ * @returns The package's verdict.
+ */
+const openBasedTest = (
+  part: string,
+  hrefs: readonly [string, string],
+  held: readonly string[] = ["items/a.xml", "items/b.xml"],
+) =>
+  openPackage(
+    location,
+    packageOf({
+      ...Object.fromEntries(held.map((file, index) => [file, itemXml(index === 0 ? "a" : "b")])),
+      [manifestFile]: manifestXml(
+        resourceXml("T", "imsqti_test_xmlv3p0", "tests/t.xml"),
+        ...held.map((file, index) =>
+          resourceXml(index === 0 ? "A" : "B", "imsqti_item_xmlv3p0", file),
+        ),
+      ),
+      "tests/t.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T"><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"${part}><qti-assessment-section identifier="S" title="S" visible="true"><qti-assessment-item-ref identifier="a" href="${hrefs[0]}"/><qti-assessment-item-ref identifier="b" href="${hrefs[1]}"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+    }),
+  );
+
 describe("package/open.ts", () => {
   describe("openPackage", () => {
     it.effect(
@@ -3059,7 +3160,15 @@ describe("package/open.ts", () => {
                 ),
               ),
             ),
-            [unread("I1.SCORE")],
+            [
+              unread("I1.SCORE"),
+              missingReference(
+                "qti-assessment-test/qti-test-part/qti-assessment-section-ref",
+                "href",
+                "sections/none.xml",
+                "test.xml",
+              ),
+            ],
           );
         }),
     );
@@ -3548,6 +3657,12 @@ describe("package/open.ts", () => {
         assert.deepStrictEqual(refusalsOf(verdict), [
           unresolvedRef(2, { href: "items/b.xml", identifier: "b", path: "tests/items/b.xml" }),
           unresolvedRef(3, { href: "https://example.org/c.xml", identifier: "c" }),
+          missingReference(
+            "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref[2]",
+            "href",
+            "tests/items/b.xml",
+            "tests/test.xml",
+          ),
         ]);
       }),
     );
@@ -4031,6 +4146,174 @@ describe("package/open.ts", () => {
           acceptedOf(yield* openNamingManifest("webcontent"));
         }),
     );
+
+    it.effect(
+      'align-54 file references E18: an item whose img src names no file the package holds is refused package-file-missing, check reference, at the src, whose path is resolved through the xml:base in scope; one naming a held file, an absolute URI, a path from a host\'s root, one that climbs out of the package or one that names its own document is accepted (reading 103 ("each one that resolves within the package names a file the manifest describes; an xml:base is a base"))',
+      () =>
+        Effect.gen(function* imageReferences() {
+          const image = '<p><img src="images/a.png" alt="a"/></p>';
+
+          assert.deepStrictEqual(refusalsOf(yield* openReferencing(bodyItemXml(image))), [
+            missingReference(`${itemBody}/p/img`, "src", "items/images/a.png"),
+          ]);
+          acceptedOf(yield* openReferencing(bodyItemXml(image), { "items/images/a.png": "a" }));
+          acceptedOf(
+            yield* openReferencing(
+              bodyItemXml(
+                '<p><img src="https://example.org/a.png" alt="a"/><img src="/a.png" alt="b"/><img src="../../a.png" alt="c"/><a href="#top">d</a><a href="?q=1">e</a></p>',
+              ),
+            ),
+          );
+
+          const based = '<div xml:base="media/"><p><img src=" a.png " alt="a"/></p></div>';
+          assert.deepStrictEqual(refusalsOf(yield* openReferencing(bodyItemXml(based))), [
+            missingReference(`${itemBody}/div/p/img`, "src", "items/media/a.png"),
+          ]);
+          acceptedOf(yield* openReferencing(bodyItemXml(based), { "items/media/a.png": "a" }));
+          acceptedOf(
+            yield* openReferencing(
+              bodyItemXml(
+                '<div xml:base="https://example.org/media/"><p><img src="a.png" alt="a"/></p></div>',
+              ),
+            ),
+          );
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openReferencing(
+                bodyItemXml('<p><img xml:base="../shared/" src="a.png" alt="a"/></p>'),
+              ),
+            ),
+            [missingReference(`${itemBody}/p/img`, "src", "shared/a.png")],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 file references E18: an item whose stylesheet href names no file the package holds is refused package-file-missing, check reference, at the href; held, it is accepted (reading 103 ("each one that resolves within the package names a file the manifest describes"))',
+      () =>
+        Effect.gen(function* stylesheetReference() {
+          const item = bodyItemXml(
+            "<p>a</p>",
+            '<qti-stylesheet href="../styles/a.css" type="text/css"/>',
+          );
+
+          assert.deepStrictEqual(refusalsOf(yield* openReferencing(item)), [
+            missingReference("qti-assessment-item/qti-stylesheet", "href", "styles/a.css"),
+          ]);
+          acceptedOf(yield* openReferencing(item, { "styles/a.css": "p {}" }));
+        }),
+    );
+
+    it.effect(
+      'align-54 file references E18: an item whose qti-interaction-modules primary-configuration names no file the package holds is refused package-file-missing, check reference, at the primary-configuration; held, it is accepted (reading 103 ("each one that resolves within the package names a file the manifest describes"))',
+      () =>
+        Effect.gen(function* configurationReference() {
+          const item = configuredItemXml("modules/config.js");
+
+          assert.deepStrictEqual(refusalsOf(yield* openReferencing(item)), [
+            missingReference(
+              `${itemBody}/qti-portable-custom-interaction/qti-interaction-modules`,
+              "primary-configuration",
+              "items/modules/config.js",
+            ),
+          ]);
+          acceptedOf(yield* openReferencing(item, { "items/modules/config.js": "{}" }));
+        }),
+    );
+
+    it.effect(
+      'align-54 file references E18: a test\'s item ref whose href names no file the package holds is refused both item-ref-unresolved, naming no item, and package-file-missing, check reference, naming no file (reading 103 ("each one that resolves within the package names a file the manifest describes"))',
+      () =>
+        Effect.gen(function* itemRefReference() {
+          const ref =
+            "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref";
+
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openBasedTest("", ["../items/a.xml", "../items/b.xml"], ["items/a.xml"]),
+            ),
+            [
+              {
+                detail: { href: "../items/b.xml", identifier: "b", path: "items/b.xml" },
+                document: fileLocation(location, "tests/t.xml"),
+                location: { kind: "path", path: `${ref}[2]` },
+                rule: "item-ref-unresolved",
+              },
+              missingReference(`${ref}[2]`, "href", "items/b.xml", "tests/t.xml"),
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      'align-54 file references E18: a test\'s item refs resolve through the xml:base in scope, so under a part whose xml:base names the items\' folder they name those items and none is item-ref-unresolved, and under an xml:base outside the package they name no path and no file reference is checked; the test is refused for the xml:base itself all the same, which no test element declares (reading 103 ("an xml:base is a base, resolved and never a file reference"); reading 90 ("an attribute its XSD does not declare is a data- attribute, or the document is refused"))',
+      () =>
+        Effect.gen(function* basedItemRefs() {
+          const ref =
+            "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref";
+          const undeclaredBase: Seen = {
+            detail: { attribute: "xml:base", element: "qti-test-part", reading: "90" },
+            document: fileLocation(location, "tests/t.xml"),
+            location: { kind: "path", path: "qti-assessment-test/qti-test-part/@xml:base" },
+            rule: "unknown-attribute",
+          };
+
+          assert.deepStrictEqual(
+            refusalsOf(yield* openBasedTest(' xml:base="../items/"', ["a.xml", "./b.xml"])),
+            [undeclaredBase],
+          );
+          assert.deepStrictEqual(
+            refusalsOf(
+              yield* openBasedTest(' xml:base="https://example.org/items/"', ["a.xml", "b.xml"]),
+            ),
+            [
+              ...[1, 2].map((index) => ({
+                detail: {
+                  href: index === 1 ? "a.xml" : "b.xml",
+                  identifier: index === 1 ? "a" : "b",
+                },
+                document: fileLocation(location, "tests/t.xml"),
+                location: { kind: "path" as const, path: `${ref}[${index}]` },
+                rule: "item-ref-unresolved",
+              })),
+              undeclaredBase,
+            ],
+          );
+        }),
+    );
+
+    it.effect(
+      "align-54 file references E38: an item and a test resource that name one path both describe its document, so each one's LOM identifier is compared with the document's identifier, whatever type the document is read as (reading 162 (\"the records of each item or test resource that names the path still describe the document\"))",
+      () =>
+        Effect.gen(function* everyNamingResource() {
+          const verdict = yield* openPackage(
+            location,
+            packageOf({
+              "doc.xml": itemXml("a"),
+              [manifestFile]: manifestXml(
+                describedXml("I", "imsqti_item_xmlv3p0", "doc.xml", lomIdentifiers("a")),
+                describedXml("T", "imsqti_test_xmlv3p0", "doc.xml", lomIdentifiers("other")),
+              ),
+            }),
+          );
+
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            pathTyped(2, "imsqti_test_xmlv3p0", "doc.xml"),
+            {
+              detail: {
+                identifier: "a",
+                metadata: "other",
+                path: "doc.xml",
+                reading: "62",
+                resource: "T",
+              },
+              document: fileLocation(location, manifestFile),
+              location: { kind: "path", path: `${generalAt(resourceAt(2))}/${lomStep}identifier` },
+              rule: "lom-identifier",
+            },
+          ]);
+        }),
+    );
   });
 
   describe("openPackage, a test that reads an item's context variable", () => {
@@ -4405,6 +4688,12 @@ describe("package/open.ts", () => {
               },
               rule: "item-ref-unresolved",
             },
+            missingReference(
+              "qti-assessment-test/qti-test-part/qti-assessment-section/qti-assessment-item-ref",
+              "href",
+              "items/none.xml",
+              "test.xml",
+            ),
           ]);
           assert.deepStrictEqual(
             besideMissing(

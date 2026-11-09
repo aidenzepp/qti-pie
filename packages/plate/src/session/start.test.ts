@@ -799,6 +799,53 @@ describe("startTest", () => {
   );
 
   it.effect(
+    'align-54 file references E18: startTest resolves an item ref against its test\'s location, the base openPackage resolves it through, since a test that writes an xml:base on any element from the test to the item ref is refused before a session can start (reading 103 ("an xml:base is a base, resolved and never a file reference"); reading 90 ("an attribute its XSD does not declare is a data- attribute, or the document is refused"))',
+    () =>
+      Effect.gen(function* basedItemRefs() {
+        const encoder = new TextEncoder();
+        const elements = [
+          "qti-assessment-test",
+          "qti-test-part",
+          "qti-assessment-section",
+          "qti-assessment-item-ref",
+        ];
+        const written = yield* Effect.all(
+          elements.map((element) => {
+            const based = testXml("based", [["first", "first.xml"]]).replace(
+              `<${element} `,
+              `<${element} xml:base="../items/" `,
+            );
+
+            return Effect.map(open(`d/tests/${element}.xml`, encoder.encode(based)), (verdict) =>
+              verdict.verdict === "refused"
+                ? verdict.refusals.flatMap((refusal) =>
+                    refusal.rule === "unknown-attribute" ? [refusal.detail] : [],
+                  )
+                : [],
+            );
+          }),
+        );
+
+        assert.deepStrictEqual(
+          written,
+          elements.map((element) => [{ attribute: "xml:base", element, reading: "90" }]),
+        );
+        assert.strictEqual(
+          outcomeName(
+            yield* startedFromPackage({
+              directory: "d",
+              directoryHref: "d",
+              item: "first.xml",
+              itemHref: "first.xml",
+              location: "pkgs/based",
+            }),
+          ),
+          "started",
+        );
+      }),
+  );
+
+  it.effect(
     "refuses a session instance checkInstance refuses, and an invalid now",
     () =>
       Effect.gen(function* brokenContext() {

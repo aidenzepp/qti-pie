@@ -33,9 +33,9 @@
  *     document (`info.txt:10759`, pantry's `structure-identifier`), given once however many tests
  *     reach it, and is left out of the reach, so the first wins; a section document placed twice
  *     gives its identifiers once;
- *   - Each item ref resolves against its own document's path to an item resource the manifest lists; a
- *     test's own item ref that does not is `item-ref-unresolved`, one that writes no identifier
- *     included (reading 155);
+ *   - Each item ref resolves through the `xml:base` in scope, or else against its own document's path,
+ *     to an item resource the manifest lists; a test's own item ref that does not is
+ *     `item-ref-unresolved`, one that writes no identifier included (reading 155);
  *   - Each dotted reference in the test, a name an expression reads, is judged by reading 48 ("a dotted
  *     reference is accepted when exactly one reading names a real item ref, test part or section and
  *     its variable") against the test's own variables, the items the item refs resolve to, their
@@ -73,7 +73,14 @@
  *     it, and the delivered test marks the processing that reads it (see below);
  * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
  *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
- *   62).
+ *   62), every such resource that names the path, whatever type its document is read as (reading
+ *   162);
+ * - Each file reference of each document read as a type plate judges, an attribute reading 103's
+ *   census names, that resolves through the `xml:base` in scope to a path inside the package names
+ *   a file the package holds or the manifest lists, or it is `package-file-missing` with `check:
+ *   "reference"` at the attribute (reading 103, "an xml:base is a base, resolved and never a file
+ *   reference"). An item ref's `href` is one of them, so one that names no such file is refused
+ *   both ways, `item-ref-unresolved` and `package-file-missing`.
  *
  * A resource with no `href` names no document (reading 93), so nothing of it is read. A document
  * resource whose `href` leads outside the package is refused by the manifest's own rules
@@ -97,9 +104,17 @@
  */
 import { Brand, Effect, Option, Result } from "effect";
 import type { Array as Arr } from "effect";
-import { resolveInside, schemePrefix } from "#plate/document/href.ts";
+import { resolveInside, schemePrefix, withoutQuery } from "#plate/document/href.ts";
 import { readSource } from "#plate/document/read.ts";
-import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
+import {
+  attributePath,
+  mathmlNamespace,
+  qtiNamespace,
+  ssmlNamespace,
+  walk,
+  xincludeNamespace,
+  xmlNamespace,
+} from "#plate/document/source.ts";
 import type {
   SourceAttribute,
   SourceDocument,
@@ -166,7 +181,10 @@ export interface PackageTest {
    * `<package location>/<path>`, which is the location `startTest` resolves the ref's `href` to,
    * by one rule on both sides: against the test's location (RFC 3986, section 5.2), each path
    * segment's percent escapes decoded, a malformed escape left as written, then its dot segments
-   * removed, and its query and fragment set aside.
+   * removed, and its query and fragment set aside. `openPackage` resolves an item ref through the
+   * `xml:base` in scope (reading 103), but a test `check` accepts holds none above an item ref, as
+   * no test element declares `xml:base` (reading 90), so for an accepted test the base is the
+   * test's location on both sides.
    */
   readonly items: ReadonlyMap<string, Accepted>;
   /**
@@ -424,6 +442,14 @@ const qti2Namespaces: ReadonlySet<string> = new Set(
  * test.
  */
 const lomBoundTypes: ReadonlySet<string> = new Set(["imsqti_item_xmlv3p0", "imsqti_test_xmlv3p0"]);
+
+/**
+ * The roots of the documents reading 62 ties to a resource's LOM metadata: the roots of
+ * {@link lomBoundTypes}, an item's and a test's.
+ */
+const lomBoundRoots: ReadonlySet<string> = new Set(
+  resourceRoots.flatMap(([type, root]) => (lomBoundTypes.has(type) ? [root] : [])),
+);
 
 /**
  * The kind of variable a variable stands as, the declaration kind of its declaration or, for a
@@ -776,19 +802,305 @@ const withheldFiles = (resource: ManifestResource): readonly string[] =>
   });
 
 /**
- * Resolve a reference a document makes against the document's own path through
- * {@link resolveInside}, by the rule the manifest resolves an `href` by and `startTest` an item
- * ref's.
- *
- * @param base The referring document's path from the package's root.
- * @param reference The reference as written.
- * @returns The path it names from the package's root; none for an absolute URI, a path from a
- *   host's root, or one whose `..` climbs above the package's root.
+ * A base a document's references resolve against: the segments of its path from the package's
+ * root, the last the one a reference replaces, or none for a base outside the package, against
+ * which every relative reference stays outside it.
  */
-const resolveReference = (base: string, reference: string): Option.Option<string> =>
+type Base = Option.Option<readonly string[]>;
+
+/**
+ * Resolve a reference a document makes against its base through {@link resolveInside}, by the
+ * rule the manifest resolves an `href` by and `startTest` an item ref's (reading 102).
+ *
+ * @param base The base in scope where the reference is written ({@link basesOf}).
+ * @param reference The reference, read by its attribute's whitespace class.
+ * @returns The path it names from the package's root; none for an absolute URI, a path from a
+ *   host's root, one whose `..` climbs above the package's root, and any reference under a base
+ *   outside the package.
+ */
+const resolveReference = (base: Base, reference: string): Option.Option<string> =>
   schemePrefix.test(reference)
     ? Option.none()
-    : Option.map(resolveInside(base.split("/"), reference), (segments) => segments.join("/"));
+    : base.pipe(
+        Option.flatMap((segments) => resolveInside(segments, reference)),
+        Option.map((segments) => segments.join("/")),
+      );
+
+/**
+ * Give an element's `xml:base`, as written.
+ *
+ * @param element The element.
+ * @returns Its `xml:base`, none when it has none.
+ */
+const xmlBaseOf = (element: SourceElement): Option.Option<string> =>
+  Option.fromUndefinedOr(
+    element.attributes.find(
+      (attribute) => attribute.namespace === xmlNamespace && attribute.local === "base",
+    )?.value,
+  );
+
+/**
+ * Give the base each element of a document resolves its references against (reading 103, "an
+ * `xml:base` is a base, resolved and never a file reference"): the innermost `xml:base` in scope,
+ * the element's own included, each resolved against the base above it, or else the document's own
+ * path.
+ *
+ * An `xml:base` is an `xs:anyURI`, read collapsed. One whose path is empty, a query or a fragment
+ * alone among them, resolves to the base above it (RFC 3986, section 5.2.2). One that is an
+ * absolute URI, starts with `/` or climbs above the package's root leaves the package, so every
+ * relative reference in its scope does too (reading 102).
+ *
+ * @param visits The visits of the document's elements, in document order, each parent before its
+ *   children.
+ * @param path The document's path from the package's root.
+ * @returns Each element's base.
+ * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.1
+ */
+const basesOf = (visits: readonly Visit[], path: string): ReadonlyMap<SourceElement, Base> => {
+  const own: Base = Option.some(path.split("/"));
+  const bases = new Map<SourceElement, Base>();
+  for (const { element, parent } of visits) {
+    const above = Option.match(parent, {
+      onNone: () => own,
+      onSome: (holder) => bases.get(holder) ?? own,
+    });
+    const written = Option.map(xmlBaseOf(element), collapse);
+    bases.set(
+      element,
+      Option.match(written, {
+        onNone: () => above,
+        onSome: (value) =>
+          withoutQuery(value) === ""
+            ? above
+            : Option.map(resolveReference(above, value), (resolved) => resolved.split("/")),
+      }),
+    );
+  }
+
+  return bases;
+};
+
+/**
+ * How a file reference's value is read before it is resolved, by its attribute's type (reading
+ * 102): an `xs:anyURI` collapses (`collapse`); HTML's `URLDType`, an `xs:normalizedString`, turns
+ * each tab, line feed and carriage return into a space (`replace`); an `xs:string`, `object@data`,
+ * keeps them (`preserve`). Each then sets aside the whitespace around it.
+ */
+type ReferenceSpace = "collapse" | "preserve" | "replace";
+
+/**
+ * One attribute that names a file of the package, as reading 103's census lists it: its local name,
+ * how its value is read, and whether its value is HTML's list of image candidate strings, each
+ * candidate's URL one reference.
+ */
+interface FileReference {
+  readonly local: string;
+  readonly space: ReferenceSpace;
+  readonly srcset: boolean;
+}
+
+/**
+ * Name an attribute of the census whose value is one reference.
+ *
+ * @param local The attribute's local name.
+ * @param space How its value is read.
+ * @returns The census entry.
+ */
+const referenceAttribute = (local: string, space: ReferenceSpace = "collapse"): FileReference => ({
+  local,
+  space,
+  srcset: false,
+});
+
+/**
+ * The census's attributes on QTI's elements, its HTML subset's and its own, by local name (reading
+ * 103): HTML's hyperlink, quotation sources and URL attributes, `source@srcset` among them; the
+ * `href` of a stylesheet and of the six refs; a module configuration; a response processing
+ * template's location; and an outcome's long interpretation. The types are the ASI XSD's:
+ * `object@data` is an `xs:string`, `audio`, `video`, `source` and `track`'s URLs a `URLDType`, the
+ * rest an `xs:anyURI`.
+ */
+const qtiReferences: ReadonlyMap<string, readonly FileReference[]> = new Map([
+  ["a", [referenceAttribute("href")]],
+  ["audio", [referenceAttribute("src", "replace")]],
+  ["blockquote", [referenceAttribute("cite")]],
+  ["img", [referenceAttribute("src"), referenceAttribute("longdesc")]],
+  ["object", [referenceAttribute("data", "preserve")]],
+  ["q", [referenceAttribute("cite")]],
+  ["qti-adaptive-engine-ref", [referenceAttribute("href")]],
+  ["qti-adaptive-settings-ref", [referenceAttribute("href")]],
+  ["qti-assessment-item-ref", [referenceAttribute("href")]],
+  ["qti-assessment-section-ref", [referenceAttribute("href")]],
+  ["qti-assessment-stimulus-ref", [referenceAttribute("href")]],
+  [
+    "qti-interaction-modules",
+    [referenceAttribute("primary-configuration"), referenceAttribute("secondary-configuration")],
+  ],
+  ["qti-metadata-ref", [referenceAttribute("href")]],
+  ["qti-outcome-declaration", [referenceAttribute("long-interpretation")]],
+  ["qti-response-processing", [referenceAttribute("template-location")]],
+  ["qti-stylesheet", [referenceAttribute("href")]],
+  ["qti-usagedata-ref", [referenceAttribute("href")]],
+  [
+    "source",
+    [
+      referenceAttribute("src", "replace"),
+      { local: "srcset", space: "replace", srcset: true } satisfies FileReference,
+    ],
+  ],
+  ["track", [referenceAttribute("src", "replace")]],
+  ["video", [referenceAttribute("src", "replace"), referenceAttribute("poster", "replace")]],
+]);
+
+/**
+ * The census's attributes of MathML's elements besides the `href` every one of them may carry, by
+ * local name (reading 103; MathML 3, sections 2.1.6 and 2.2.1).
+ */
+const mathmlReferences: ReadonlyMap<string, readonly FileReference[]> = new Map([
+  ["annotation", [referenceAttribute("src")]],
+  ["annotation-xml", [referenceAttribute("src")]],
+  ["math", [referenceAttribute("altimg"), referenceAttribute("cdgroup")]],
+  ["mglyph", [referenceAttribute("src")]],
+  ["share", [referenceAttribute("src")]],
+]);
+
+/**
+ * The census's attributes of SSML's elements, by local name (reading 103; SSML 1.1).
+ */
+const ssmlReferences: ReadonlyMap<string, readonly FileReference[]> = new Map([
+  ["audio", [referenceAttribute("src")]],
+  ["lexicon", [referenceAttribute("uri")]],
+]);
+
+/**
+ * Give the attributes of reading 103's census an element may carry: by its namespace and local
+ * name, `href` on every MathML element and on an XInclude `include`.
+ *
+ * @param element The element.
+ * @returns The attributes, none for an element the census does not name.
+ */
+const censusOf = (element: SourceElement): readonly FileReference[] => {
+  switch (element.namespace) {
+    case qtiNamespace: {
+      return qtiReferences.get(element.local) ?? [];
+    }
+    case mathmlNamespace: {
+      return [referenceAttribute("href"), ...(mathmlReferences.get(element.local) ?? [])];
+    }
+    case ssmlNamespace: {
+      return ssmlReferences.get(element.local) ?? [];
+    }
+    case xincludeNamespace: {
+      return element.local === "include" ? [referenceAttribute("href")] : [];
+    }
+    default: {
+      return [];
+    }
+  }
+};
+
+/**
+ * A carriage return, a line feed or a tab, each of which an `xs:normalizedString` reads as a space.
+ */
+const replacedWhitespace = /[\t\n\r]/gu;
+
+/**
+ * Give the references one census attribute's value makes, each read by the attribute's whitespace
+ * class (reading 102).
+ *
+ * A `srcset` is split at its commas into image candidates, and each candidate's URL is the text
+ * before its first whitespace. That is the stated limit of this reading of HTML's parsing
+ * algorithm, which lets a URL hold a comma not followed by whitespace; no official package has
+ * a `srcset` of more than one candidate (rule `db2ef322`, recorded here).
+ *
+ * @param reference The census attribute.
+ * @param value Its value, as written.
+ * @returns The references, none empty.
+ */
+const referencesIn = (reference: FileReference, value: string): readonly string[] => {
+  const read =
+    reference.space === "collapse"
+      ? collapse(value)
+      : trimXmlSpace(
+          reference.space === "replace" ? value.replaceAll(replacedWhitespace, " ") : value,
+        );
+
+  return reference.srcset
+    ? read.split(",").flatMap((candidate) => {
+        const [url = ""] = trimXmlSpace(candidate).split(xmlWhitespaceRun);
+
+        return url === "" ? [] : [url];
+      })
+    : [read];
+};
+
+/**
+ * Check each file reference of each document the package judges (E18, reading 103, "a document's
+ * file references are the attributes its vocabularies define as the location of a file, and each
+ * one that resolves within the package names a file the manifest describes; an xml:base is a
+ * base"), in the order the manifest first names each document and then in document order.
+ *
+ * Each attribute {@link censusOf} names is read ({@link referencesIn}) and resolved through the
+ * `xml:base` in scope ({@link basesOf}). One whose path is empty names its own document, and one
+ * that resolves outside the package names an external file, so neither is looked for. One that
+ * resolves to a path inside it that the package neither holds nor lists is `package-file-missing`
+ * with `check: "reference"` at the attribute, its detail the referring `document`'s path, the
+ * `attribute`, the `path` and the `reading`. A path the manifest lists that the package does not
+ * hold is `package-file-missing` at its listing already (`checkFiles`), so it is not given again.
+ *
+ * Only a written attribute is read: `qti-interaction-modules@primary-configuration`'s schema
+ * default, `modules/module_resolution.js`, names no file a document wrote, and is not looked for
+ * (rule `db2ef322`, a limit recorded here; no official package leaves it unwritten without the
+ * file). A document the reader cannot read is its own verdict's.
+ *
+ * @param documents The package's documents.
+ * @param held The paths of the files the package holds, in normal form.
+ * @param listed The paths of the files the manifest lists.
+ * @returns The refusals.
+ */
+const checkReferences = (
+  documents: ReadonlyMap<string, Document>,
+  held: ReadonlySet<string>,
+  listed: ReadonlySet<string>,
+): readonly Refusal[] =>
+  [...documents].flatMap(([path, { source, type }]) => {
+    if (!judgedTypes.has(type) || Result.isFailure(source)) {
+      return [];
+    }
+
+    const visits = [...walk(source.success)];
+    const bases = basesOf(visits, path);
+
+    return visits.flatMap(({ element, path: at }) =>
+      censusOf(element).flatMap((reference) =>
+        Option.toArray(attributeOf(element, reference.local)).flatMap((value) =>
+          referencesIn(reference, value).flatMap((written) => {
+            const target =
+              withoutQuery(written) === ""
+                ? Option.none()
+                : resolveReference(bases.get(element) ?? Option.none(), written);
+
+            return Option.toArray(target)
+              .filter((named) => !held.has(named) && !listed.has(named))
+              .map((named) =>
+                refuse(
+                  source.success.location,
+                  "package-file-missing",
+                  attributePath(at, { local: reference.local, namespace: "" }),
+                  {
+                    attribute: reference.local,
+                    check: "reference",
+                    document: path,
+                    path: named,
+                    reading: "103",
+                  },
+                ),
+              );
+          }),
+        ),
+      ),
+    );
+  });
 
 /**
  * Give the verdict on a document of the package from its reading: the reader's refusal as a
@@ -1001,7 +1313,9 @@ const checkRoots = (
 
 /**
  * Compare each item and test resource's own LOM metadata with its document's `identifier` and
- * `title` (reading 62).
+ * `title` (reading 62), every item and test resource that names a path, whatever type its document
+ * is read as (reading 162, "the records of each item or test resource that names the path still
+ * describe the document").
  *
  * Each `general` of the resource's LOM that gives identifier entries must give one equal to the
  * document's `identifier`, or the resource is `lom-identifier` at the `general`'s first
@@ -1010,8 +1324,9 @@ const checkRoots = (
  * detail names the `resource`, the document's `path`, its `identifier` or `title`, the first LOM
  * value as `metadata`, how many other values there are as `others` when there are any, and the
  * `reading`, each value collapsed. A `general` that gives neither is outside the rule, and so is a
- * document the reader cannot read, one whose root is not the one its type names (`checkRoots`
- * refuses it) and one that lacks the attribute (its own verdict refuses it).
+ * document the reader cannot read, one whose root is no item's or test's ({@link lomBoundRoots};
+ * `checkRoots` refuses a resource whose type it does not bear out) and one that lacks the attribute
+ * (its own verdict refuses it).
  *
  * @param manifest The manifest.
  * @param lom Each resource's LOM generals, keyed by its location.
@@ -1026,11 +1341,10 @@ const checkLom = (
   manifestLocation: string,
 ): readonly Refusal[] =>
   manifest.resources.flatMap((resource) => {
-    const expected = lomBoundTypes.has(resource.type) ? rootOfType.get(resource.type) : undefined;
     const path = Option.getOrUndefined(documentPath(resource));
     const source = path === undefined ? undefined : documents.get(path)?.source;
     if (
-      expected === undefined ||
+      !lomBoundTypes.has(resource.type) ||
       path === undefined ||
       source === undefined ||
       Result.isFailure(source)
@@ -1039,7 +1353,7 @@ const checkLom = (
     }
 
     const { root } = source.success;
-    if (root.namespace !== qtiNamespace || root.local !== expected) {
+    if (root.namespace !== qtiNamespace || !lomBoundRoots.has(root.local)) {
       return [];
     }
 
@@ -2314,10 +2628,13 @@ const replacingSections = (visits: readonly Visit[]): ReadonlySet<SourceElement>
  * missing `attribute`, the `href`, the `path` when there is one, and `reading: "155"`, and one that
  * resolves has its variable mappings and template defaults judged (`targets`). An item ref that
  * writes no `href` names nothing, and is the test's own verdict's (reading 155). Each `href` is
- * collapsed and resolved by {@link resolveReference}.
+ * collapsed and resolved by {@link resolveReference} against the `xml:base` in scope, or else the
+ * document's path ({@link basesOf}, reading 103), so one under an `xml:base` outside the package
+ * names no path inside it.
  *
  * @param source The document's source.
- * @param base The document's path, which its `href`s resolve against.
+ * @param base The document's path, which its `href`s resolve against where no `xml:base` is in
+ *   scope.
  * @param itemPaths The path of every item resource's document.
  * @returns What it holds.
  */
@@ -2327,6 +2644,7 @@ const structureIn = (
   itemPaths: ReadonlySet<string>,
 ): DocumentStructure => {
   const visits = [...walk(source)];
+  const bases = basesOf(visits, base);
   const replacing = replacingSections(visits);
   const identifiers: StructureIdentifier[] = [];
   const itemRefs: ResolvedItemRef[] = [];
@@ -2351,18 +2669,21 @@ const structureIn = (
       const written = collapse(href);
       sectionRefs.push(
         ...Option.toArray(
-          Option.map(resolveReference(base, written), (resolved) => ({
-            at: path,
-            element,
-            href: written,
-            path: resolved,
-            replaced: replacing.has(element),
-          })),
+          Option.map(
+            resolveReference(bases.get(element) ?? Option.none(), written),
+            (resolved) => ({
+              at: path,
+              element,
+              href: written,
+              path: resolved,
+              replaced: replacing.has(element),
+            }),
+          ),
         ),
       );
     } else if (href !== undefined && isQti(element, itemRefElements)) {
       const written = collapse(href);
-      const resolved = resolveReference(base, written);
+      const resolved = resolveReference(bases.get(element) ?? Option.none(), written);
       if (Option.isSome(resolved) && itemPaths.has(resolved.value)) {
         targets.push({ element, path: resolved.value });
         if (identifier !== undefined) {
@@ -4300,6 +4621,15 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
     ...testRefusals,
     ...sectionRefusals,
     ...underTests,
+    ...checkReferences(
+      documents,
+      new Set(held.keys()),
+      new Set(
+        manifest.resources.flatMap((resource) =>
+          resource.files.flatMap((file) => Option.toArray(file.path)),
+        ),
+      ),
+    ),
     ...verdicts.flatMap((verdict) => (verdict.verdict === "refused" ? verdict.refusals : [])),
   ];
   if (first !== undefined) {
