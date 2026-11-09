@@ -3518,7 +3518,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
  * resource lists beside `a.png`, and the web content resource's dependency, if any.
  */
 interface HrefCase {
-  readonly dependency: "R" | "W" | undefined;
+  readonly dependency: "R" | "R " | "W" | " W" | undefined;
   readonly file: string;
   readonly href: string;
 }
@@ -3526,10 +3526,11 @@ interface HrefCase {
 /**
  * The package hrefs' box: an item href plain, with launch parameters, with a fragment or with a
  * dot segment; an extra file listed twice, absent, percent-encoded, external by a scheme or by a
- * leading `/`, or with a dot segment; and no dependency, one on the item, or one on itself.
+ * leading `/`, or with a dot segment; and no dependency, one on the item, or one on itself, each
+ * reference written plain or with outer whitespace.
  */
 const hrefCases: Gen<HrefCase> = (source) => ({
-  dependency: source.draw(element(["R", "W", undefined] as const)),
+  dependency: source.draw(element(["R", "R ", "W", " W", undefined] as const)),
   file: source.draw(
     element([
       "a.png",
@@ -3559,12 +3560,14 @@ const hrefPackage = (input: HrefCase) => ({
 });
 
 /**
- * The breaches of each package law a case's reading names, counted by hand from the sources:
- * CP 1.2 §6.6.2 and reading 102 (an href's launch parameters and fragment are not its path; every
- * href resolves before a law reads it, so `./item.xml` names `item.xml`, `a%20b.png` names
- * `a b.png` and `img/./a.png` names `img/a.png`, neither an entry; a scheme or a leading `/` is
- * external), InterchangePackage (b) (a listed in-package file is an entry) and §6.11.5 B ii (a
- * dependency names a sibling, never its own resource). Nothing in the box is a stated limit.
+ * The breaches of each package law a case's reading names, counted by hand from the sources: CP 1.2
+ * §6.6.2 and reading 102 (an href's launch parameters and fragment are not its path; every href
+ * resolves before a law reads it, so `./item.xml` names `item.xml`, `a%20b.png` names `a b.png` and
+ * `img/./a.png` names `img/a.png`, neither an entry; a scheme or a leading `/` is external),
+ * InterchangePackage (b) (a listed in-package file is an entry) and §6.11.5 B ii (a dependency
+ * names a sibling, never its own resource; its `identifierref` is an `xs:IDREF`, a collapse type,
+ * so `" W"` names `W` and `"R "` names `R`, decision 457 (3)). Nothing in the box is a stated
+ * limit.
  *
  * @param input - The case.
  * @returns Each law's expected count.
@@ -3573,7 +3576,7 @@ const hrefExpected = (input: HrefCase) => ({
   "File exists": ["missing.png", "a%20b.png", "img/./a.png"].includes(input.file) ? 1 : 0,
   "Href form": 0,
   "Href listed": 0,
-  "Self dependency": input.dependency === "W" ? 1 : 0,
+  "Self dependency": input.dependency?.trim() === "W" ? 1 : 0,
 });
 
 describe("the package hrefs reading 102 and IMS Content Packaging 1.2 state, over generated packages", () => {
@@ -3582,12 +3585,12 @@ describe("the package hrefs reading 102 and IMS Content Packaging 1.2 state, ove
     (ctx) =>
       // Oracle: the specification as a checker, each law's count read off the case by hand from
       // CP 1.2 §6.6.2, InterchangePackage (b), §6.11.5 B ii and reading 102 (`hrefExpected`).
-      // Bound: every case of 4 item hrefs, 6 extra files and 3 dependencies, 72.
+      // Bound: every case of 4 item hrefs, 6 extra files and 5 dependencies, 120.
       searched(
         ctx,
         exhaust(
           {
-            box: "every case of 4 item hrefs, 6 extra files and 3 dependencies",
+            box: "every case of 4 item hrefs, 6 extra files and 5 dependencies",
             caseHang: lawCaseHang,
             coverage: requiredInSpace<"held" | "params" | "outside" | "missing" | "self">([
               "held",
@@ -3597,7 +3600,7 @@ describe("the package hrefs reading 102 and IMS Content Packaging 1.2 state, ove
               "self",
             ]),
             generator: hrefCases,
-            limit: 100,
+            limit: 120,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
