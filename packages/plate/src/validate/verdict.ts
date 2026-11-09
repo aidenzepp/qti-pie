@@ -66,10 +66,9 @@ import type { CpVersion, TestMark } from "#plate/vocabulary.ts";
 
 /**
  * Why a valid document is left unchecked: it holds MathML (reading 2) or SSML (reading 3), whose
- * validity plate cannot judge, an XInclude `include` in an item or a stimulus, whose inclusion
- * plate neither performs nor judges, an entity reference the reader kept unexpanded, or a root
- * that is not an item, a test, a section or a stimulus. `path` is the element or attribute at
- * issue.
+ * validity plate cannot judge, an XInclude `include`, whose inclusion plate neither performs nor
+ * judges (E23), an entity reference the reader kept unexpanded, or a root that is not an item, a
+ * test, a section or a stimulus. `path` is the element or attribute at issue.
  */
 export interface UncheckedReason {
   readonly path: string;
@@ -764,8 +763,13 @@ const complete = (built: Item, secured: Secured): Item => {
  * outside its namespace, each attribute whose value holds an unexpanded entity reference, and each
  * element with one among its children.
  *
- * In a test or a section an XInclude `include` is no reason: the test model marks it
- * `xi:include` and leaves it out, as it is never fetched.
+ * An XInclude `include` is a reason in every root, a test's and a section's as an item's (E23): an
+ * included fragment is judged in place, as its merged document holds it (reading 117), and plate
+ * never fetches the fragment, so it can judge neither the fragment nor the document that places
+ * it. No include is refused for its form (P4, the operator's ruling plate keeps): one with an
+ * `xpointer` or with `parse="text"`, which reading 85 ("an included fragment is read in place, as
+ * XML, with no `xpointer`") refuses, or with an external `href`, which reading 115 ("an include
+ * names a document of its package") refuses, is only a reason here.
  *
  * @param source A document whose root is in QTI's namespace.
  * @param kind The root's kind.
@@ -775,7 +779,6 @@ const uncheckedReasons = (
   source: SourceDocument,
   kind: VerdictKind,
 ): readonly UncheckedReason[] => {
-  const includes = kind !== "section" && kind !== "test";
   const reasons: UncheckedReason[] = [];
   for (const { element, parent, path } of walk(source)) {
     /**
@@ -800,7 +803,7 @@ const uncheckedReasons = (
       reasons.push({ path, reason: "ssml" });
     }
 
-    if (includes && island(xincludeNamespace)) {
+    if (island(xincludeNamespace)) {
       reasons.push({ path, reason: "xinclude" });
     }
 
@@ -1023,9 +1026,9 @@ const checkUndelivered = (source: SourceDocument, kind: "section" | "stimulus"):
  *    together and in that order, with no short-circuit: any one makes the document `refused`, with
  *    all of them. Each rule set judges only its own roots, and a document of no stated version
  *    earns none of the version's.
- * 3. A document holding MathML, SSML, an unexpanded entity reference, an XInclude `include` in
- *    anything but a test or a section, or a root other than an item, a test, a section or a
- *    stimulus, is `unchecked`, with every reason. It is never rendered.
+ * 3. A document holding MathML, SSML, an unexpanded entity reference, an XInclude `include` (E23,
+ *    whatever its form), or a root other than an item, a test, a section or a stimulus, is
+ *    `unchecked`, with every reason. It is never rendered.
  * 4. An item: each attribute only a wildcard admitted is removed and marked `attribute:<name>` (E3),
  *    and each URL attribute goes through `url.ts`: a kept value is written in its parsed form, and
  *    a dropped one goes, with its notice beside its element. The item is built from the secured

@@ -518,6 +518,36 @@ const collectingMaximum = (baseType: string): SourceDocument =>
   ]);
 
 /**
+ * Construct an XInclude `include` of `more.xml` whose fallback holds the given content.
+ *
+ * @param fallback The `xi:fallback`'s children, none for an include with no fallback.
+ * @returns The `xi:include`.
+ */
+const include = (...fallback: readonly SourceElement[]): SourceElement =>
+  el(
+    "include",
+    [attr("href", "more.xml")],
+    fallback.length === 0 ? [] : [el("fallback", [], fallback, xincludeNamespace)],
+    xincludeNamespace,
+  );
+
+/**
+ * An outcome rule setting the undeclared `NOPE`, which the processing rules refuse wherever they
+ * judge it.
+ */
+const setUndeclared = el("qti-set-outcome-value", [attr("identifier", "NOPE")], [integer("1")]);
+
+/**
+ * Construct `oneSection`'s test, its section holding one item ref, with outcome processing of the
+ * given children.
+ *
+ * @param rules The `qti-outcome-processing`'s children.
+ * @returns The test.
+ */
+const withOutcomeRules = (...rules: readonly SourceElement[]): SourceDocument =>
+  oneSection([itemRef("I1")], [], [el("qti-outcome-processing", [], rules)]);
+
+/**
  * Reduce refusals to what a test asserts: the rule, the path and the detail.
  *
  * @param source The document to check.
@@ -630,14 +660,34 @@ describe("checkTestRules", () => {
       assert.deepStrictEqual(judged(sectionDocument("S", [])), []);
     });
 
-    it("accepts a section holding only an item ref, a section, a section ref or an XInclude include", () => {
+    it("accepts a section holding only an item ref, a section or a section ref", () => {
       assert.deepStrictEqual(judged(oneSection([itemRef("I1")])), []);
       assert.deepStrictEqual(judged(oneSection([section("S2", [itemRef("I1")])])), []);
       assert.deepStrictEqual(judged(oneSection([sectionRef("R1")])), []);
+    });
+  });
+
+  describe("an XInclude include (E23: the verdict leaves a document holding one unchecked)", () => {
+    it("align-54 includes E23: gives no refusal for a section holding an include alone", () => {
+      assert.deepStrictEqual(judged(oneSection([include()])), []);
+    });
+
+    it("align-54 includes E23: judges nothing inside an include: a repeated item ref and an interaction in a rubric block in its fallback give no refusal", () => {
       assert.deepStrictEqual(
-        judged(oneSection([el("include", [attr("href", "more.xml")], [], xincludeNamespace)])),
+        judged(oneSection([itemRef("I1"), rubricBlock(choice), itemRef("I1")])).map(
+          (refused) => refused.rule,
+        ),
+        ["misplaced-element", "duplicate-identifier"],
+      );
+      assert.deepStrictEqual(
+        judged(oneSection([itemRef("I1"), include(rubricBlock(choice), itemRef("I1"))])),
         [],
       );
+    });
+
+    it("align-54 includes E23: judges nothing inside an include in outcome processing: an undeclared outcome its fallback sets gives no refusal", () => {
+      assert.isNotEmpty(judged(withOutcomeRules(setUndeclared)));
+      assert.deepStrictEqual(judged(withOutcomeRules(include(setUndeclared))), []);
     });
   });
 
