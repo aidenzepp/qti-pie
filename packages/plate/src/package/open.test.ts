@@ -2390,7 +2390,7 @@ const fewerPlacingParts = 20;
 /**
  * The parts placing one section document, and the pre-conditions of its one item ref, in the
  * hostile-size case, the size the gate's review measured at 7.5 s against 0.12 s. Its 640
- * placements of the document pass plate's assembly limit of 8 MiB placed, so it is refused.
+ * placements of the document pass plate's assembly limit of 4 MiB placed, so it is refused.
  */
 const hostilePlacingParts = 640;
 
@@ -3260,7 +3260,7 @@ const withinLimitHeap = 512 * 2 ** 20;
  * @returns The refusal's facts.
  */
 const limitRefused = (bound: "bytes" | "placements", reached: string): Seen => ({
-  detail: { bound, limit: bound === "bytes" ? "8388608" : "4096", reached },
+  detail: { bound, limit: bound === "bytes" ? "4194304" : "4096", reached },
   document: location,
   location: { kind: "document" },
   rule: "assembly-limit",
@@ -3539,7 +3539,7 @@ const largeDocumentPackage = (tests: number, refs: number): ReadonlyMap<string, 
  * @param size The section document's size, in bytes.
  * @returns The count reached, as the refusal's detail writes it.
  */
-const bytesReached = (size: number): string => String((Math.floor(8_388_608 / size) + 1) * size);
+const bytesReached = (size: number): string => String((Math.floor(4_194_304 / size) + 1) * size);
 
 /**
  * The files of a package with two tests, `t1.xml` and `t2.xml`, each of whose 32 test parts places
@@ -3592,9 +3592,9 @@ const twoTestsPackage = (
 };
 
 /**
- * The files of a package whose test `T` holds 512 test parts, each placing the section document
+ * The files of a package whose test `T` holds 256 test parts, each placing the section document
  * `sections/s.xml`, which holds one item ref and an XML comment that makes it exactly a size: at
- * 16,384 bytes, the parts place 8 MiB, the most plate's assembly limit admits.
+ * 16,384 bytes, the parts place 4 MiB, the most plate's assembly limit admits.
  *
  * @param size The section document's size, in bytes.
  * @returns The package's files.
@@ -3614,7 +3614,7 @@ const sizedPackage = (size: number): ReadonlyMap<string, Uint8Array> => {
       `${itemRefXml("I0", "../items/b.xml")}<!--${"x".repeat(size - unpadded.length)}-->`,
     ),
     "test.xml": `<qti-assessment-test xmlns="${qti}" identifier="T" title="T">${Array.from(
-      { length: 512 },
+      { length: 256 },
       (_, part) => partXml(`P${part}`, sectionRefXml(`H${part}`, "sections/s.xml")),
     ).join("")}</qti-assessment-test>`,
   });
@@ -3704,11 +3704,11 @@ const familyMembers: readonly FamilyMember[] = [
     past: () => readingHubPackage("tests", 64, 64),
   },
   {
-    at: () => largeDocumentPackage(8, 4451),
+    at: () => largeDocumentPackage(8, 2230),
     bound: "bytes",
     id: "N6",
     name: "tests placing one large document",
-    past: () => largeDocumentPackage(64, 561),
+    past: () => largeDocumentPackage(64, 281),
   },
 ];
 
@@ -7511,12 +7511,12 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
-      "align-54 r12 assembly limit: 512 placements of a section document of 16,384 bytes, 8 MiB placed, are accepted, and of one of 16,385 bytes refused naming the bytes bound at the 512th, 8,389,120 bytes",
+      "align-54 r12 assembly limit: 256 placements of a section document of 16,384 bytes, 4 MiB placed, are accepted, and of one of 16,385 bytes refused naming the bytes bound at the 256th, 4,194,560 bytes",
       () =>
         Effect.gen(function* placedBytes() {
           acceptedOf(yield* openPackage(location, sizedPackage(16_384)));
           assert.deepStrictEqual(refusalsOf(yield* openPackage(location, sizedPackage(16_385))), [
-            limitRefused("bytes", "8389120"),
+            limitRefused("bytes", "4194560"),
           ]);
         }),
       growthTimeoutMs,

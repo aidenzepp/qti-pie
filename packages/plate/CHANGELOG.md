@@ -430,7 +430,7 @@ M3.
     QTI, so that a hostile package cannot make its refusals too long to serialise. No corpus
     refusal carries a fact that long, so no wording moves.
   - `assembly-limit`: a package whose tests together place section documents more than 4,096
-    times, or place more than 8 MiB (8,388,608 bytes) of them, is refused with one refusal, and none
+    times, or place more than 4 MiB (4,194,304 bytes) of them, is refused with one refusal, and none
     of its tests is judged. A section document placed in two test parts, or in two tests, counts
     twice, and its bytes count each time. The refusal's detail names the `bound` passed,
     `placements` or `bytes`, its `limit` and the count `reached`. Whether a package is refused never

@@ -958,7 +958,7 @@ its last 511 characters around one `…`.
 
 To open packages you do not trust, call `openPackage` under a time limit too, as [Scoring](#scoring)
 says for `score`. A package whose tests together place section documents more than 4,096 times, or
-place more than 8 MiB of them, is refused `assembly-limit` before any test is judged
+place more than 4 MiB of them, is refused `assembly-limit` before any test is judged
 ([Limits](#limits)). Within that limit, a package built to be slow can still take seconds.
 
 An item ref may name an LTI link in place of an item ([reading 110](../../docs/spec-readings.md),
@@ -982,7 +982,7 @@ the row names.
 | Limit | Cause | What would lift it |
 | --- | --- | --- |
 | A document nested deeper than 256 elements is refused `reader-refused`, its `readerRule` `element-depth`, as crust refuses it. XML and QTI set no depth | The bound protects the recursive walks over a read document | Walks that keep their own stack, then a higher bound in crust's reader |
-| A package whose tests together place section documents more than 4,096 times, or place more than 8 MiB (8,388,608 bytes) of them, is refused `assembly-limit`, its `bound` `placements` or `bytes`, and none of its tests is judged. A section document placed in two test parts, or in two tests, counts twice, and its bytes count each time | A section document is judged once for each placement (readings 5 and 145), so the work follows the assembled tests, which test parts, tests and chains of section documents can make far larger than the package | The redesign that [issue #64](https://github.com/aidenzepp/qti-pie/issues/64) tracks: no placement for each test part, and a section document judged once across tests whose reaches agree |
+| A package whose tests together place section documents more than 4,096 times, or place more than 4 MiB (4,194,304 bytes) of them, is refused `assembly-limit`, its `bound` `placements` or `bytes`, and none of its tests is judged. A section document placed in two test parts, or in two tests, counts twice, and its bytes count each time | A section document is judged once for each placement (readings 5 and 145), so the work follows the assembled tests, which test parts, tests and chains of section documents can make far larger than the package | The redesign that [issue #64](https://github.com/aidenzepp/qti-pie/issues/64) tracks: no placement for each test part, and a section document judged once across tests whose reaches agree |
 | A section ref whose `href` leads outside the package is refused `package-path-outside`, check `remote-section` (reading 170) | plate never fetches a section, so it cannot assemble the test | Fetching the section when the package is opened |
 | A document that holds an `xi:include` is `unchecked`. A loop through includes is not seen, and the `xml:lang` of an included fragment asks for no LOM listing | plate never fetches an included fragment | Fetching each fragment and judging it in place |
 | Under an item ref that names an LTI link, a variable mapping's source and a name read through the ref are accepted unchecked (readings 106 and 110). The mapping's target is judged by reading 97 | The package declares nothing that a link reports | A source that lists the outcomes a link reports |
