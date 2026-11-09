@@ -98,7 +98,9 @@
  * ref or processing the package marks (see below), and `accepted` otherwise. Only an accepting
  * package's documents are delivered. A test is delivered with the model its document's own verdict
  * holds, except that each of its item refs that names an LTI link is marked `lti-link` at it and
- * left out, since plate launches no LTI link, and one whose processing reads, through an item ref,
+ * left out, since plate launches no LTI link, its outcome processing then `marked` with each
+ * outcome-only expression in it marked by its name, since such an expression would count the
+ * delivered items alone, and one whose processing reads, through an item ref,
  * an item's context variable or any variable of an LTI link is delivered with that processing
  * marked, `variable:<name>` at it: its outcome processing `marked`, and each template default that
  * reads one left out, so its template variable starts at its declared default. The test document's
@@ -4752,9 +4754,11 @@ const byDocument = <A>(
  *
  * Each test is delivered as its document's own verdict accepted it, unless one of its item refs
  * names an LTI link or its processing reads, through an item ref, a variable the engine holds no
- * value of. Each such item ref is then marked `lti-link` and left out (`withLtiLinks` in
- * `#plate/model/test.ts`), and each such processing marked (`withUnheldReads`), the outcome
- * processing `marked` and each template default that reads one left out.
+ * value of. Each such item ref is then marked `lti-link` and left out, with each expression of its
+ * outcome processing that counts over the test's items marked and that processing `marked`
+ * (`withLtiLinks` in `#plate/model/test.ts`, read from the test's document, which every judged
+ * document holds), and each such processing marked (`withUnheldReads`), the outcome processing
+ * `marked` and each template default that reads one left out.
  *
  * @param manifest The manifest.
  * @param documents The package's documents, every judged one accepted.
@@ -4807,9 +4811,13 @@ const contentsOf = (
     tests: byDocument(
       pathsOfType(manifest, "imsqti_test_xmlv3p0"),
       (path) =>
-        verdictAt(documents, path).pipe(
-          Option.flatMap(acceptedTest),
-          Option.map((test): PackageTest => {
+        Option.all([
+          verdictAt(documents, path).pipe(Option.flatMap(acceptedTest)),
+          Option.fromUndefinedOr(documents.get(path)).pipe(
+            Option.flatMap((document) => Result.getSuccess(document.source)),
+          ),
+        ]).pipe(
+          Option.map(([test, source]): PackageTest => {
             const links = tests.get(path)?.links ?? [];
             const reads = tests.get(path)?.reads ?? [];
 
@@ -4825,7 +4833,10 @@ const contentsOf = (
               test:
                 links.length === 0 && reads.length === 0
                   ? test
-                  : acceptMarkedTest(test, withUnheldReads(withLtiLinks(test.test, links), reads)),
+                  : acceptMarkedTest(
+                      test,
+                      withUnheldReads(withLtiLinks(test.test, links, source), reads),
+                    ),
             };
           }),
         ),

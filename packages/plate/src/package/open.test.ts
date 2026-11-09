@@ -4862,6 +4862,40 @@ describe("package/open.ts", () => {
     );
 
     it.effect(
+      "align-54 LOM languages E21: a test whose LTI ref is left out is delivered with each expression of its outcome processing that counts over its items marked at its own path, and the processing marked, while the document's own verdict runs it",
+      () =>
+        Effect.gen(function* linkedCounts() {
+          const verdict = yield* openPackage(
+            location,
+            ltiPackage(
+              `${settingTotal(`<qti-sum><qti-number-presented/>${oneFloat}</qti-sum>`)}${settingTotal(oneFloat)}${settingTotal('<qti-sum><qti-test-variables variable-identifier="SCORE"/></qti-sum>')}`,
+            ),
+          );
+          const { alone, delivered } = deliveredAndAlone(verdict);
+
+          assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
+          assert.deepStrictEqual(delivered.test.outcomeProcessing, { kind: "marked" });
+          assert.deepStrictEqual(
+            delivered.unsupported.map(({ feature, path: at }) => [feature, at]),
+            [
+              ["lti-link", ltiRefPath],
+              [
+                "qti-number-presented",
+                `${processingPath}/qti-set-outcome-value[1]/qti-sum/qti-number-presented`,
+              ],
+              [
+                "qti-test-variables",
+                `${processingPath}/qti-set-outcome-value[3]/qti-sum/qti-test-variables`,
+              ],
+            ],
+          );
+          assert.deepStrictEqual(delivered.unsupported, delivered.test.unsupported);
+          assert.strictEqual(alone.test.outcomeProcessing.kind, "runs");
+          assert.deepStrictEqual(alone.unsupported, []);
+        }),
+    );
+
+    it.effect(
       'align-54 LTI item ref E21: lti.SCORE, which no link declares, is refused undeclared-variable, as a read through it reaches only the item built-ins (reading 106 ("a prefixed reference reaches every built-in variable its item ref\'s item holds, `QTI_CONTEXT` among them"))',
       () =>
         Effect.gen(function* linkedDeclaration() {
