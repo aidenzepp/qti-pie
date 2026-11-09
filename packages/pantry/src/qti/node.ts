@@ -77,7 +77,8 @@ import {
   Position,
   SchemaVersion,
   SharedModelOf,
-  Symbol as ContentSymbol,
+  SymbolMember,
+  SymbolSetOf,
   TextDomain,
   TypeName,
   ValueDomainOf,
@@ -797,10 +798,13 @@ export const nodeLawsByName = {
           n.eq(positionOf(n), "0"),
           element(n),
           SharedModelOf.has(n.version, n.parentKind),
+          SymbolSetOf.has(SharedModelOf.at("model", n.version, n.parentKind), n.kind),
           n.eq(
             Compute.subset(
               Compute.singleton(n.state),
-              ContentSymbol.row(SharedModelOf.at("model", n.version, n.parentKind), n.kind),
+              SymbolMember.row(
+                SymbolSetOf.at("set", SharedModelOf.at("model", n.version, n.parentKind), n.kind),
+              ),
             ),
             true,
           ),

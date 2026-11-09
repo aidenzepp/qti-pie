@@ -195,3 +195,27 @@ export const admittedOf = <Parent extends string, Child extends string, Version 
     rowsAt(members, admission).map(({ child, position }) => ({ child, parent, position, version })),
   );
 };
+
+/**
+ * Spell the symbol sets `install.ts` declares out as the (model, kind, position) rows they state,
+ * the content grammar's `Symbol`: each pair's set (`SymbolSetOf`) with each of its positions
+ * (`SymbolMember`).
+ *
+ * @param symbolSetOf - `SymbolSetOf`, as installed.
+ * @param symbolSetOf.rows - Its rows.
+ * @param symbolMember - `SymbolMember`, as installed.
+ * @param symbolMember.rows - Its rows.
+ * @returns The rows, by pair in `SymbolSetOf`'s order.
+ */
+export const symbolRowsOf = <Kind extends string, Model extends string>(
+  symbolSetOf: {
+    readonly rows: readonly { readonly kind: Kind; readonly model: Model; readonly set: string }[];
+  },
+  symbolMember: { readonly rows: readonly { readonly position: string; readonly set: string }[] },
+): readonly { readonly kind: Kind; readonly model: Model; readonly position: string }[] => {
+  const members = Map.groupBy(symbolMember.rows, ({ set }) => set);
+
+  return symbolSetOf.rows.flatMap(({ kind, model, set }) =>
+    rowsAt(members, set).map(({ position }) => ({ kind, model, position })),
+  );
+};

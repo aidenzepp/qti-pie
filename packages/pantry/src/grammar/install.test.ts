@@ -14,7 +14,7 @@ import {
 } from "#pantry/grammar/expression.ts";
 import * as install from "#pantry/grammar/install.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
-import { admittedOf } from "#pantry/test/indexes.ts";
+import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 
 /**
  * The composed grammar, the generators' rows every declaration is compared with.
@@ -244,15 +244,6 @@ const comparisons: readonly Comparison[] = [
   },
   { expected: () => grammar.content.followMember.rows, name: "FollowMember" },
   { expected: () => grammar.content.sharedModelOf.rows, name: "SharedModelOf" },
-  {
-    expected: () =>
-      grammar.content.sharedModelPositions.rows.map(({ model, positions }) => ({
-        model,
-        positions: BigInt(positions),
-      })),
-    name: "SharedPositions",
-  },
-  { expected: () => grammar.content.symbol.rows, name: "Symbol" },
   { expected: () => grammar.ancestry.enters.rows, name: "Enters" },
   { expected: () => grammar.ancestry.banned.rows, name: "Banned" },
   { expected: () => grammar.ancestry.needs.rows, name: "Needs" },
@@ -637,6 +628,20 @@ describe("the installed relations", () => {
       keyedSet("Admission", key, grammar.admission.rows),
     );
     assert.isBelow(install.AdmissionIn.rows.length, grammar.admission.rows.length);
+  });
+
+  it("state Symbol as each (shared model, kind)'s symbol set and each set's positions: every (model, kind, position), and no other", () => {
+    // Oracle: the generator's `Symbol` rows, against the installed `SymbolSetOf` and `SymbolMember`
+    // spelled out (`symbolRowsOf`). N5 reads `SymbolMember.row(SymbolSetOf.at("set", m, k))`
+    // guarded by `SymbolSetOf.has(m, k)` where it read `Symbol.row(m, k)`, so the two agree
+    // exactly when these sets do.
+    const key = ["model", "kind", "position"];
+
+    assert.deepStrictEqual(
+      keyedSet("the symbol sets", key, symbolRowsOf(install.SymbolSetOf, install.SymbolMember)),
+      keyedSet("Symbol", key, grammar.content.symbol.rows),
+    );
+    assert.isBelow(install.SymbolMember.rows.length, grammar.content.symbol.rows.length);
   });
 
   it("make ContentModelOf total, CountedOf and BarredOf exactly today's Counted but its caps and ChildBarredBy, SharedModelOf exactly the shared families, and Capped exactly Counted's caps", () => {

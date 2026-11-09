@@ -16,9 +16,10 @@ import {
   IncludeParentKind,
   IncludeRoot,
   SharedModelOf,
-  Symbol as ContentSymbol,
+  SymbolMember,
+  SymbolSetOf,
 } from "#pantry/grammar/install.ts";
-import { admittedOf } from "#pantry/test/indexes.ts";
+import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 
 /**
  * The timeout, in milliseconds, that this file's slower tests state, each itself or through its
@@ -65,7 +66,10 @@ const lasts = new Set(
 /**
  * Each shared model's positions of a kind, as `model kind`.
  */
-const symbols = Map.groupBy(ContentSymbol.rows, (row) => `${row.model} ${row.kind}`);
+const symbols = Map.groupBy(
+  symbolRowsOf(SymbolSetOf, SymbolMember),
+  (row) => `${row.model} ${row.kind}`,
+);
 
 /**
  * Each family's admitted children with their position cells, by `version parent`.

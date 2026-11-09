@@ -44,8 +44,6 @@ const contentRelations = [
   "FollowSetOf",
   "FollowMember",
   "SharedModelOf",
-  "SharedPositions",
-  "Symbol",
 ] as const;
 
 // Wrap the closed-relation constructor and `automatonOf` with counters before the composition's

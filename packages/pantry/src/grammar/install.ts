@@ -14,17 +14,17 @@
  * builds the rows and the generators' tests review them.
  *
  * `FollowSetOf`, which states `Last` as its `ends`, is keyed by its automaton
- * ({@link ContentModel}), `FollowMember` by its follow set ({@link FollowSet}), and `Symbol` by its
- * shared model ({@link SharedModel}), as the content grammar generates them (`content.ts`): a
- * family reads its model through {@link ContentModelOf} or {@link SharedModelOf}, and a state its
+ * ({@link ContentModel}), `FollowMember` by its follow set ({@link FollowSet}), `SymbolSetOf` by
+ * its shared model ({@link SharedModel}) and `SymbolMember` by its symbol set ({@link SymbolSet}):
+ * a family reads its model through {@link ContentModelOf} or {@link SharedModelOf}, and a state its
  * set through {@link FollowSetOf}, so each is stated one to one.
  *
  * Where grizzle's surface differs from the generators' shapes, the declaration restates the
  * relation and says why:
  *
  * - A generator's dependent `fin` coordinate is a slot, `slot(closedId(Position), fin(O, n))`, over a
- *   count relation O over the model ({@link ModelPositions}, {@link SharedPositions}), so each
- *   model's block holds its own positions and no other's (README, "Closed relations").
+ *   count relation O over the model ({@link ModelPositions}), so each model's block holds its own
+ *   positions and no other's (README, "Closed relations").
  * - A lexical form's code is a `<Roster>Lexical` payload, and a one-position law a function over
  *   (version, parent) ({@link CountedOf}, {@link BarredOf}). A singleton set is no relation's row:
  *   a schema module writes `Compute.singleton(id)`, and a handle's membership in a set is
@@ -533,28 +533,9 @@ export const ModelPositions = closed.relation(
 );
 
 /**
- * `SharedPositions`: model → positions, the number of content positions of each shared model, its
- * start 0 included.
- */
-export const SharedPositions = closed.relation(
-  "SharedPositions",
-  { model: closedId(SharedModel), positions: natural },
-  ["model"],
-  grammar.content.sharedModelPositions.rows.map(({ model, positions }) => ({
-    model,
-    positions: BigInt(positions),
-  })),
-);
-
-/**
  * A content position of an automaton, a slot of its model's `ModelPositions` count.
  */
 const familyPosition = slot(closedId(Position), fin(ModelPositions, "positions"));
-
-/**
- * A content position of a shared model, a slot of its `SharedPositions` count.
- */
-const modelPosition = slot(closedId(Position), fin(SharedPositions, "positions"));
 
 // The content grammar (N5, N7).
 
@@ -641,19 +622,71 @@ export const SharedModelOf = closed.relation(
 );
 
 /**
- * `Symbol`: the set of (model, kind, position) where a shared model names the kind at the position,
- * so the state decides which (N5c). Each (version, parent) family reads its model through
- * `SharedModelOf`.
+ * The positions each shared model names each of its kinds at (the content grammar's `Symbol`), each
+ * distinct set of positions stated once (rule 0: identical facts are one fact), numbered from 0 in
+ * the order of the first (model, kind) that holds it: 3,282 (model, kind) pairs hold 333 sets.
+ * `SymbolSetOf` names each pair's set and `SymbolMember` each set's positions, so N5 reads a shared
+ * kind's positions as `SymbolMember.row(SymbolSetOf.at("set", model, kind))`.
  */
-export const Symbol = closed.relation(
-  "Symbol",
-  { kind: closedId(NodeKind), model: closedId(SharedModel), position: modelPosition },
-  ["model", "kind", "position"],
-  grammar.content.symbol.rows.map(({ kind, model, position }) => ({
-    kind: memberOf(grammar.kinds.nodeKind, kind),
-    model,
-    position,
-  })),
+const symbolSets = (() => {
+  const pairs = new Map<
+    string,
+    { readonly kind: Kind; readonly model: string; readonly positions: string[] }
+  >();
+  for (const { kind, model, position } of grammar.content.symbol.rows) {
+    pairs
+      .getOrInsertComputed(`${model} ${kind}`, () => ({
+        kind: memberOf(grammar.kinds.nodeKind, kind),
+        model,
+        positions: [],
+      }))
+      .positions.push(position);
+  }
+
+  const setOf = new Map<string, string>();
+  const members: { readonly position: string; readonly set: string }[] = [];
+  const rows = [...pairs.values()].map(({ kind, model, positions }) => {
+    const held = positions.toSorted((left, right) => Number(left) - Number(right));
+    const set = setOf.getOrInsertComputed(held.join(" "), () => {
+      const fresh = String(setOf.size);
+      members.push(...held.map((position) => ({ position, set: fresh })));
+
+      return fresh;
+    });
+
+    return { kind, model, set };
+  });
+
+  return { handles: [...setOf.values()], members, rows };
+})();
+
+/**
+ * The `SymbolSet` roster: every distinct set of positions a shared model names a kind at
+ * ({@link symbolSets}).
+ */
+export const SymbolSet = closed("SymbolSet", nonEmpty("SymbolSet", symbolSets.handles));
+
+/**
+ * `SymbolSetOf`: (model, kind) → set, the positions a shared model names the kind at, so the state
+ * decides which (N5c), for each kind several positions of the model name. Each (version, parent)
+ * family reads its model through `SharedModelOf`; a kind of no row is named at one position or
+ * none, which a law reads through `SymbolSetOf.has`.
+ */
+export const SymbolSetOf = closed.relation(
+  "SymbolSetOf",
+  { kind: closedId(NodeKind), model: closedId(SharedModel), set: closedId(SymbolSet) },
+  ["model", "kind"],
+  symbolSets.rows,
+);
+
+/**
+ * `SymbolMember`: the set of (set, position) where a symbol set holds the position.
+ */
+export const SymbolMember = closed.relation(
+  "SymbolMember",
+  { position: closedId(Position), set: closedId(SymbolSet) },
+  ["set", "position"],
+  symbolSets.members,
 );
 
 /**

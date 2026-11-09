@@ -42,9 +42,11 @@ import {
   Position,
   RootOfType,
   SharedModelOf,
-  Symbol as ContentSymbol,
+  SymbolMember,
+  SymbolSetOf,
   TextDomain,
 } from "#pantry/grammar/install.ts";
+import { symbolRowsOf } from "#pantry/test/indexes.ts";
 import { governorOf, ownContext } from "#pantry/import/fold.ts";
 import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
@@ -1187,7 +1189,7 @@ describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
               (row) => row.version === second["version"] && row.parent === second["parentKind"],
             )?.model;
             const symbolPositions = new Set<string>(
-              ContentSymbol.rows
+              symbolRowsOf(SymbolSetOf, SymbolMember)
                 .filter((row) => row.model === sharedModel && row.kind === "m:ci")
                 .map(({ position }) => position),
             );

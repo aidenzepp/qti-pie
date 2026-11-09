@@ -53,7 +53,7 @@ import { datumText } from "#pantry/test/predicates.ts";
 import type { Datum } from "#pantry/test/predicates.ts";
 import { hostRowsOf, judgedLaws } from "#pantry/test/host-judge.ts";
 import type { HostRow } from "#pantry/test/host-judge.ts";
-import { admittedOf } from "#pantry/test/indexes.ts";
+import { admittedOf, symbolRowsOf } from "#pantry/test/indexes.ts";
 import { checkOf, checkValueOf } from "#pantry/test/key-copies.ts";
 import { documentBreaches, lawNames, lawsOf, oracleRules, ruleOf } from "#pantry/test/oracle.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
@@ -133,10 +133,11 @@ const scratchSchema = () =>
       SchemaVersion: install.SchemaVersion,
       SharedModel: install.SharedModel,
       SharedModelOf: install.SharedModelOf,
-      SharedPositions: install.SharedPositions,
       StandInAttribute,
       StandInNamespace,
-      Symbol: install.Symbol,
+      SymbolMember: install.SymbolMember,
+      SymbolSet: install.SymbolSet,
+      SymbolSetOf: install.SymbolSetOf,
       TextDomain: install.TextDomain,
       TypeName: install.TypeName,
       ValueDomain: install.ValueDomain,
@@ -400,12 +401,12 @@ const sharedModelOf: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * `Symbol`'s rows as installed, by `<model> <kind>`: the positions a shared model names the kind
- * at.
+ * The installed symbol sets spelled out (`symbolRowsOf`), by `<model> <kind>`: the positions a
+ * shared model names the kind at.
  */
 const symbol: ReadonlyMap<string, readonly string[]> = (() => {
   const byKind = new Map<string, string[]>();
-  for (const { kind, model, position } of install.Symbol.rows) {
+  for (const { kind, model, position } of symbolRowsOf(install.SymbolSetOf, install.SymbolMember)) {
     const key = `${model} ${kind}`;
     byKind.set(key, [...(byKind.get(key) ?? []), position]);
   }
